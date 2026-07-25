@@ -228,7 +228,7 @@ function niceDate(iso) {
 function getCount(key) {
     var ctl = ('AbortController' in window) ? new AbortController() : null;
     var t = ctl ? setTimeout(function(){ ctl.abort(); }, 6000) : null;
-    return fetch(API + key, ctl ? { signal: ctl.signal } : {}).then(function(r) {
+    return fetch(API + key + '/', ctl ? { signal: ctl.signal } : {}).then(function(r) {
         if (t) clearTimeout(t);
         if (!r.ok) return 0;
         return r.json().then(function(j) { return j.count || 0; });
