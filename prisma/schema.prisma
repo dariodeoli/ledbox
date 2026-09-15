@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  ADMIN
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+}
+
+enum BillingUnit {
+  DAILY
+  SQUARE_METER_DAILY
+  EVENT
+}
+
+model AdminUser {
+  id                  String               @id
+  name                String
+  email               String               @unique
+  passwordHash        String
+  role                AdminRole            @default(ADMIN)
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  sessions            AdminSession[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model AdminSession {
+  id        String    @id
+  userId    String
+  jtiHash   String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Lead {
+  id        String     @id
+  name      String
+  phone     String
+  email     String
+  company   String?
+  ruc       String?
+  reason    String?
+  eventDate DateTime?
+  location  String?
+  message   String?
+  source    String     @default("website")
+  consentAt DateTime
+  status    LeadStatus @default(NEW)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  quoteRequests QuoteRequest[]
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+model QuoteRequest {
+  id             String      @id
+  leadId         String?
+  referenceTotal Int?
+  currency       String      @default("PYG")
+  durationDays   Int?
+  eventDate      DateTime?
+  location       String?
+  source         String      @default("website")
+  createdAt      DateTime    @default(now())
+  lead           Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  items          QuoteItem[]
+
+  @@index([leadId, createdAt])
+}
+
+model QuoteItem {
+  id             String       @id
+  quoteRequestId String
+  productSlug    String
+  productName    String
+  quantity       Int
+  duration       Int?
+  billingUnit    BillingUnit
+  unitPrice      Int?
+  subtotal       Int?
+  notes          String?
+  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+
+  @@index([quoteRequestId])
+}
+
+model RateLimitBucket {
+  id          String   @id
+  key         String   @unique
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@index([windowStart])
+}
