@@ -49,6 +49,8 @@ export function AdminLoginForm() {
       <span className="admin-card-index">01 / acceso</span>
       <h1 id="login-title" className="admin-title">Entrar<br /><span>al panel.</span></h1>
       <p className="admin-lede">Gestioná consultas, leads y cotizaciones de LedBox desde un espacio privado.</p>
+      <a className="admin-google-button" href="/api/auth/login/google"><span aria-hidden="true">G</span> Continuar con Google</a>
+      <div className="admin-divider" aria-hidden="true"><span>o ingresá con correo</span></div>
       <form className="admin-form" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}
         <div className="admin-field">
