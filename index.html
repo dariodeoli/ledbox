@@ -428,6 +428,9 @@ footer { position: relative; z-index: 1; padding: 50px 40px 60px; overflow: hidd
 .ft-links a:hover { color: var(--led); }
 .ft-div { height: 1px; background: var(--border); margin-bottom: 28px; }
 .ft-bottom { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); letter-spacing: .5px; }
+.ft-credit { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+.ft-credit a { color: inherit; text-decoration: none; transition: color .2s; }
+.ft-credit a:hover { color: var(--led); }
 .ft-bg {
     position: absolute; bottom: -40px; left: 50%; transform: translateX(-50%);
     font-family: var(--font-display);
@@ -893,6 +896,10 @@ body.has-sticky .wa-float { bottom: 82px; }
         <span>© 2026 LedBox Paraguay · Todos los derechos reservados</span>
         <span>Tecnología visual que impulsa tu marca</span>
         <span>Asunción, Paraguay · ledbox.online</span>
+    </div>
+    <div class="ft-credit">
+        <span>LedBox v1.1.0</span>
+        <span>Desarrollado por <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">owncoding.dev</a></span>
     </div>
     <div class="ft-bg">LEDBOX</div>
 </footer>
