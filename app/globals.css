@@ -546,6 +546,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field input, .admin-filters input, .admin-filters select { width:100%; min-height:48px; border:1px solid var(--border-2); border-radius:0; outline:none; background:var(--surface); color:var(--text); padding:12px 14px; font-size:16px; color-scheme:dark; transition:border-color .2s, box-shadow .2s; }
 .admin-field input:focus, .admin-filters input:focus, .admin-filters select:focus { border-color:var(--led); box-shadow:0 0 0 3px rgba(0,229,255,.1); }
 .admin-field input[aria-invalid="true"] { border-color:#ff5575; }
+.admin-google-button { display:flex; align-items:center; justify-content:center; gap:12px; width:100%; min-height:52px; margin:24px 0 18px; border:1px solid var(--border-2); border-radius:999px; color:var(--text); text-decoration:none; font-weight:700; background:rgba(255,255,255,.03); transition:border-color .2s, background .2s; }
+.admin-google-button:hover, .admin-google-button:focus-visible { border-color:var(--led); background:rgba(255,255,255,.07); }
+.admin-google-button span { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; color:#4285f4; background:#fff; font-weight:800; }
+.admin-divider { display:flex; align-items:center; gap:14px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:1.5px; }
+.admin-divider::before, .admin-divider::after { content:""; height:1px; flex:1; background:var(--border); }
 .admin-submit { justify-content:center; width:100%; margin-top:5px; min-height:52px; }
 .admin-submit:disabled, .admin-ghost-button:disabled { opacity:.55; cursor:wait; transform:none; }
 .admin-spinner { display:inline-block; width:15px; height:15px; margin-right:8px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; vertical-align:-2px; animation:admin-spin .7s linear infinite; }
