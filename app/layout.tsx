@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { publicConfig } from "@/lib/public-config";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ledbox.online"),
+  metadataBase: new URL(publicConfig.siteUrl),
   title: { default: "LedBox Paraguay — Pantallas LED y tecnología para eventos", template: "%s | LedBox Paraguay" },
   description: "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos en todo Paraguay.",
   keywords: ["alquiler pantallas LED Paraguay", "tótem touch", "kiosko touch", "pantallas para eventos", "LedBox"],

@@ -1,2 +1,3 @@
 import type { MetadataRoute } from "next";
-export default function sitemap(): MetadataRoute.Sitemap { return [{ url: "https://ledbox.online/", lastModified: new Date(), changeFrequency: "weekly", priority: 1 }]; }
+import { publicConfig } from "@/lib/public-config";
+export default function sitemap(): MetadataRoute.Sitemap { return [{ url: `${publicConfig.siteUrl}/`, lastModified: new Date(), changeFrequency: "weekly", priority: 1 }]; }

@@ -411,9 +411,11 @@ footer { position: relative; z-index: 1; padding: 50px 40px 60px; overflow: hidd
 #sticky-cta .x { background: none; border: none; color: var(--muted); font-size: 17px; padding: 4px 8px; cursor: pointer; font-family: var(--font-body); }
 #sticky-cta .x:hover { color: #fff; }
 body.has-sticky .wa-float { bottom: 82px; }
+body.has-sticky .cart-trigger { bottom: calc(82px + env(safe-area-inset-bottom)); }
+body.has-sticky .cart-trigger.has-items { bottom: calc(148px + env(safe-area-inset-bottom)); }
 
 /* ─── ANIM ─── */
-.rise { opacity: 0; transform: translateY(26px); transition: opacity .6s ease, transform .6s ease; }
+.rise { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s ease; }
 .rise.on { opacity: 1; transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -484,6 +486,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .lead-dialog .f-field input, .lead-dialog .f-field select, .lead-dialog .f-field textarea { border-color:var(--border-2); }
 .lead-dialog .btn-led { justify-self:start; margin-top:4px; }
 .honeypot { position:absolute; left:-9999px; opacity:0; }
+.form-error { color:#ff8f8f; font-size:12px; line-height:1.5; }
 .lead-success { text-align:center; padding:35px 10px 20px; }
 .lead-success > span { display:inline-grid; place-items:center; width:52px; height:52px; border:1px solid var(--led); color:var(--led); border-radius:50%; font-size:28px; }
 .lead-success h2 { margin-top:20px; }

@@ -6,9 +6,9 @@ import { LeadCaptureDialog } from "@/components/leads/LeadCaptureDialog";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { products, type Product } from "@/lib/catalog";
 import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
+import { publicConfig, whatsappUrl } from "@/lib/public-config";
 
-const WA = "595982029217";
-const whatsapp = (message: string) => `https://wa.me/${WA}?text=${encodeURIComponent(message)}`;
+const whatsapp = whatsappUrl;
 const services = [
   ["01", "Stands para eventos", "Planificación y construcción de espacios que hacen visible tu marca.", "Diseñamos →"],
   ["02", "Activaciones de marca", "Experiencias con tecnología, interacción y soporte en cada detalle.", "Activamos →"],
@@ -22,12 +22,25 @@ export default function HomePage() {
   const [leadOpen, setLeadOpen] = useState(false);
   const [navScrolled, setNavScrolled] = useState(false);
   const [stickyClosed, setStickyClosed] = useState(false);
+  const [stickyVisible, setStickyVisible] = useState(false);
 
-  useEffect(() => { const onScroll = () => setNavScrolled(window.scrollY > 40); window.addEventListener("scroll", onScroll, { passive: true }); return () => window.removeEventListener("scroll", onScroll); }, []);
+  useEffect(() => {
+    const onScroll = () => {
+      setNavScrolled(window.scrollY > 40);
+      setStickyVisible(window.scrollY > Math.min(520, window.innerHeight * 0.65));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => {
+    document.body.classList.toggle("has-sticky", stickyVisible && !stickyClosed);
+    return () => document.body.classList.remove("has-sticky");
+  }, [stickyClosed, stickyVisible]);
   const addProduct = (product: Product) => { setCart(current => { const existing = current.find(item => item.product.id === product.id); return existing ? current.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { product, quantity: 1, duration: 1 }]; }); setLeadOpen(true); };
   const openLead = () => setLeadOpen(true);
-  const productStructuredData = products.map(product => ({ "@type": "Product", name: product.name, description: product.description, image: `https://ledbox.online${product.image}`, brand: { "@type": "Brand", name: "LedBox Paraguay" }, offers: { "@type": "Offer", priceCurrency: "PYG", price: product.price, availability: "https://schema.org/InStock", url: "https://ledbox.online/#productos", priceSpecification: { "@type": "UnitPriceSpecification", priceCurrency: "PYG", price: product.price, unitText: product.unitLabel } } }));
-  const businessStructuredData = { "@context": "https://schema.org", "@graph": [{ "@type": "LocalBusiness", name: "LedBox Paraguay", description: "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos.", url: "https://ledbox.online/", telephone: "+595982029217", areaServed: { "@type": "Country", name: "Paraguay" }, sameAs: ["https://www.instagram.com/ledboxpy/"] }, ...productStructuredData] };
+  const productStructuredData = products.map(product => ({ "@type": "Product", name: product.name, description: product.description, image: `${publicConfig.siteUrl}${product.image}`, brand: { "@type": "Brand", name: "LedBox Paraguay" }, offers: { "@type": "Offer", priceCurrency: "PYG", price: product.price, availability: "https://schema.org/InStock", url: `${publicConfig.siteUrl}/#productos`, priceSpecification: { "@type": "UnitPriceSpecification", priceCurrency: "PYG", price: product.price, unitText: product.unitLabel } } }));
+  const businessStructuredData = { "@context": "https://schema.org", "@graph": [{ "@type": "LocalBusiness", name: "LedBox Paraguay", description: "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos.", url: `${publicConfig.siteUrl}/`, telephone: "+595982029217", areaServed: { "@type": "Country", name: "Paraguay" }, sameAs: ["https://www.instagram.com/ledboxpy/"] }, ...productStructuredData] };
   return <>
     <div className="led-grid-bg" aria-hidden="true" />
     <nav id="nav" className={navScrolled ? "scrolled" : ""} aria-label="Navegación principal">
@@ -55,7 +68,7 @@ export default function HomePage() {
     <footer><div className="ft-top"><a href="#hero" className="logo-link" aria-label="LedBox, volver al inicio"><Image className="logo-img" src="/assets/icon-192.png" alt="LedBox" width={192} height={192} /></a><div className="ft-links"><a href="#productos">Productos</a><a href="#servicios">Servicios</a><a href="#proceso">Proceso</a><a href="#contacto">Contacto</a><a href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer">Instagram</a></div></div><a className="ft-social" href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer" aria-label="Instagram @ledboxpy"><InstagramIcon /><span>Instagram · @ledboxpy</span></a><div className="ft-div" /><div className="ft-bottom"><span>© 2026 LedBox Paraguay · Todos los derechos reservados</span><span>Tecnología visual que impulsa tu marca</span><span>Asunción, Paraguay · ledbox.online</span></div><div className="ft-credit"><span>LedBox v2.0.0</span><span>Desarrollado por <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">owncoding.dev</a></span></div><div className="ft-bg" aria-hidden="true">LEDBOX</div></footer>
     <CartDrawer items={cart} onChange={setCart} onQuote={openLead} />
     <a href={whatsapp("Hola LedBox! Quiero más información.")} target="_blank" rel="noopener noreferrer" className="wa-float" aria-label="Abrir WhatsApp"><WhatsappIcon size={28} /></a>
-    {!stickyClosed && <div id="sticky-cta" role="complementary"><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}
+    {!stickyClosed && <div id="sticky-cta" className={stickyVisible ? "show" : ""} role="complementary" aria-label="Consultar disponibilidad" aria-hidden={!stickyVisible}><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}
     <LeadCaptureDialog open={leadOpen} items={cart} onClose={() => setLeadOpen(false)} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(businessStructuredData) }} />
   </>;

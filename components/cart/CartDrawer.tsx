@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatGs, type BillingUnit, type Product } from "@/lib/catalog";
+import { whatsappUrl } from "@/lib/public-config";
 
 type CartItem = { product: Product; quantity: number; duration: number };
-const WA = "595982029217";
 
 export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; onChange: (items: CartItem[]) => void; onQuote: () => void }) {
   const [open, setOpen] = useState(false);
@@ -24,7 +24,7 @@ export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; on
   const update = (id: string, patch: Partial<CartItem>) => onChange(items.map(item => item.product.id === id ? { ...item, ...patch } : item));
   const remove = (id: string) => onChange(items.filter(item => item.product.id !== id));
   const quoteText = items.length ? `Hola LedBox! Quiero cotizar este pedido:\n${items.map(item => `- ${item.quantity} × ${item.product.name}${item.product.unit === "event" ? "" : ` · ${item.duration} ${item.duration === 1 ? "día" : "días"}`} (${item.product.unitLabel})`).join("\n")}\n\nReferencia: ${formatGs(total)}\n\nPrecios de lista sujetos a confirmación según duración, cantidad, combinación, instalación y necesidades del evento.` : "Hola LedBox! Quiero consultar disponibilidad para mi evento.";
-  const quoteUrl = `https://wa.me/${WA}?text=${encodeURIComponent(quoteText)}`;
+  const quoteUrl = whatsappUrl(quoteText);
 
   return <>
     <button ref={triggerRef} className={`cart-trigger${count ? " has-items" : ""}`} type="button" aria-expanded={open} aria-controls="cart-panel" onClick={() => setOpen(true)}>

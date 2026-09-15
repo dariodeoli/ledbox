@@ -5,6 +5,28 @@ import { SignJWT, jwtVerify } from "jose";
 import { db } from "./db";
 import { authConfig, isAllowedAdminEmail, normalizeEmail, requireEnv } from "./config";
 
+export type PublicAdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN";
+};
+
+export type AuthenticatedAdmin = {
+  user: PublicAdminUser;
+  session: {
+    id: string;
+    userId: string;
+    expiresAt: Date;
+    revokedAt: Date | null;
+    createdAt: Date;
+  };
+};
+
+export function toPublicAdminUser(user: { id: string; name: string; email: string; role: "ADMIN" }): PublicAdminUser {
+  return { id: user.id, name: user.name, email: user.email, role: user.role };
+}
+
 function jwtSecret(): Uint8Array {
   return new TextEncoder().encode(process.env.JWT_SECRET || requireEnv("AUTH_SECRET"));
 }
@@ -64,7 +86,7 @@ export async function clearSessionCookie(): Promise<void> {
   });
 }
 
-export async function getAuthenticatedAdmin() {
+export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(authConfig.sessionCookieName)?.value;
   if (!token) return null;
@@ -78,7 +100,16 @@ export async function getAuthenticatedAdmin() {
       include: { user: true },
     });
     if (!session || !session.user.active || !isAllowedAdminEmail(session.user.email) || session.user.role !== "ADMIN") return null;
-    return { user: session.user, session };
+    return {
+      user: toPublicAdminUser(session.user),
+      session: {
+        id: session.id,
+        userId: session.userId,
+        expiresAt: session.expiresAt,
+        revokedAt: session.revokedAt,
+        createdAt: session.createdAt,
+      },
+    };
   } catch {
     return null;
   }
