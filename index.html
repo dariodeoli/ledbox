@@ -52,6 +52,10 @@
     {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de pantallas LED"}},
     {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de iPoster"}},
     {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de Tótem Touch y Kiosko Touch"}},
+    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de Tótem LED"}},
+    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de Cilindro LED"}},
+    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de Pantalla Multimedia Inteligente"}},
+    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Alquiler de Dispensador Inteligente"}},
     {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Planificación y construcción de stands"}},
     {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Coberturas digitales: video, reels y drone"}}
   ]
@@ -302,6 +306,7 @@ h2.sec-title .led { color: var(--led); }
     margin-bottom: 12px;
 }
 .prod p { font-size: 13px; color: var(--muted-2); line-height: 1.65; flex: 1; }
+.prod-spec { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; line-height: 1.6; color: var(--led); letter-spacing: .3px; }
 .prod ul { list-style: none; margin: 16px 0 22px; display: flex; flex-direction: column; gap: 7px; }
 .prod li { font-size: 12px; color: var(--text); display: flex; gap: 8px; align-items: flex-start; }
 .prod li::before { content: '▸'; color: var(--led); }
@@ -585,6 +590,7 @@ body.has-sticky .wa-float { bottom: 82px; }
             <div class="prod-num">P·01</div>
             <h3>Pantallas LED</h3>
             <p>Paneles modulares de alta resolución para escenarios, ferias y activaciones. Armamos la medida que tu evento necesita.</p>
+            <div class="prod-spec">P1.85 · medida modular · indoor / outdoor</div>
             <ul>
                 <li>Indoor & outdoor</li>
                 <li>Medidas modulares a pedido</li>
@@ -608,6 +614,7 @@ body.has-sticky .wa-float { bottom: 82px; }
             <div class="prod-num">P·02</div>
             <h3>iPoster</h3>
             <p>Póster digital vertical con ruedas: tu publicidad en movimiento, en full HD, donde está tu público.</p>
+            <div class="prod-spec">Pantalla vertical · medida según modelo · Full HD</div>
             <ul>
                 <li>Pantalla vertical full HD</li>
                 <li>Móvil — se reubica en segundos</li>
@@ -630,6 +637,7 @@ body.has-sticky .wa-float { bottom: 82px; }
             <div class="prod-num">P·03</div>
             <h3>Tótem Touch</h3>
             <p>Tótem interactivo de gran formato: catálogos, menús, juegos y experiencias táctiles para tu stand.</p>
+            <div class="prod-spec">Pantalla: 0,60 × 1,85 m · LCD: 43” · 1.080 × 1.920 px</div>
             <ul>
                 <li>Pantalla táctil de gran formato</li>
                 <li>Carga de contenido a medida</li>
@@ -651,12 +659,53 @@ body.has-sticky .wa-float { bottom: 82px; }
             <div class="prod-num">P·04</div>
             <h3>Kiosko Touch</h3>
             <p>Pantalla táctil giratoria con base: brochures digitales, formularios y presentaciones autoadministradas.</p>
+            <div class="prod-spec">Pantalla vertical · base circular · batería 4–6 h</div>
             <ul>
                 <li>Rotación vertical / horizontal</li>
                 <li>Navegación libre para el visitante</li>
                 <li>Perfecto para showrooms</li>
             </ul>
             <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Kiosko Touch." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+        </div>
+        <!-- Tótem LED -->
+        <div class="prod rise">
+            <span class="prod-tag">Alquiler</span>
+            <div class="prod-art"><svg width="90" height="175" viewBox="0 0 90 175" fill="none"><rect x="18" y="8" width="54" height="132" stroke="#00E5FF" stroke-width="2.5"/><path d="M28 20h34M28 34h34M28 48h34M28 62h34M28 76h34M28 90h34M28 104h34M28 118h34" stroke="#00E5FF" opacity=".45"/><line x1="45" y1="140" x2="45" y2="158" stroke="#555" stroke-width="3"/><ellipse cx="45" cy="162" rx="28" ry="6" stroke="#555" stroke-width="2"/></svg></div>
+            <div class="prod-num">P·05</div><h3>Tótem LED</h3>
+            <p>Display LED modular indoor para comunicación publicitaria, con configuración y traslado simples.</p>
+            <div class="prod-spec">0,64 × 1,90 m · P1.85 · 320 × 960 px · 2.500 nits</div>
+            <ul><li>Wi-Fi, USB, HDMI y RJ45</li><li>Conexión en serie para videowall</li><li>Maletín para hasta 2 unidades</li></ul>
+            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Tótem LED." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+        </div>
+        <!-- Cilindro LED -->
+        <div class="prod rise">
+            <span class="prod-tag">Alquiler</span>
+            <div class="prod-art"><svg width="120" height="175" viewBox="0 0 120 175" fill="none"><ellipse cx="60" cy="52" rx="42" ry="18" stroke="#00E5FF" stroke-width="2.5"/><path d="M18 52v55c0 10 84 10 84 0V52" stroke="#00E5FF" stroke-width="2.5"/><ellipse cx="60" cy="107" rx="42" ry="18" stroke="#00E5FF" stroke-width="2" opacity=".55"/><path d="M60 20V8M60 125v30" stroke="#555" stroke-width="3"/></svg></div>
+            <div class="prod-num">P·06</div><h3>Cilindro LED</h3>
+            <p>Pantalla LED colgante de visibilidad 360° para maximizar el impacto sin ocupar espacio en el suelo.</p>
+            <div class="prod-spec">0,32 m alto × 0,65 m diámetro · P1.85 · 1.033 × 162 px</div>
+            <ul><li>Visibilidad total de 360°</li><li>2.500 nits de brillo</li><li>Formato aéreo premium</li></ul>
+            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Cilindro LED." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+        </div>
+        <!-- Pantalla multimedia inteligente -->
+        <div class="prod rise">
+            <span class="prod-tag">Alquiler</span>
+            <div class="prod-art"><svg width="105" height="175" viewBox="0 0 105 175" fill="none"><rect x="18" y="10" width="69" height="108" rx="5" stroke="#00E5FF" stroke-width="2.5"/><rect x="25" y="18" width="55" height="91" fill="#00E5FF" opacity=".14"/><path d="M52 118v28M30 150h45" stroke="#555" stroke-width="3"/><circle cx="52" cy="45" r="12" stroke="#00E5FF" opacity=".8"/></svg></div>
+            <div class="prod-num">P·07</div><h3>Pantalla Multimedia</h3>
+            <p>Pantalla inteligente portátil para catálogos, presentaciones, proyección y experiencias digitales.</p>
+            <div class="prod-spec">21,5” · 1.920 × 1.080 px · Android 12 · 4–6 h de batería</div>
+            <ul><li>Touch capacitivo de 10 puntos</li><li>4 GB RAM · 64 GB internos</li><li>Ruedas y base de carga extraíble</li></ul>
+            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Pantalla Multimedia." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+        </div>
+        <!-- Dispensador inteligente -->
+        <div class="prod rise">
+            <span class="prod-tag">Alquiler</span>
+            <div class="prod-art"><svg width="90" height="175" viewBox="0 0 90 175" fill="none"><rect x="20" y="12" width="50" height="125" rx="6" stroke="#00E5FF" stroke-width="2.5"/><rect x="29" y="25" width="32" height="48" fill="#00E5FF" opacity=".14"/><circle cx="45" cy="49" r="10" stroke="#00E5FF"/><path d="M34 91h22M34 101h22M34 111h12" stroke="#00E5FF" opacity=".6"/><path d="M45 137v18M28 160h34" stroke="#555" stroke-width="3"/></svg></div>
+            <div class="prod-num">P·08</div><h3>Dispensador Inteligente</h3>
+            <p>Formato interactivo para presentar productos, información y promociones en puntos de alto tráfico.</p>
+            <div class="prod-spec">Ficha dimensional pendiente de confirmación en catálogo</div>
+            <ul><li>Comunicación visual autoadministrada</li><li>Formato para activaciones</li><li>Consultar disponibilidad y medidas</li></ul>
+            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Dispensador Inteligente." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
         </div>
     </div>
 </section>
@@ -796,6 +845,10 @@ body.has-sticky .wa-float { bottom: 82px; }
                         <option>Alquiler de iPoster</option>
                         <option>Alquiler de Tótem Touch</option>
                         <option>Alquiler de Kiosko Touch</option>
+                        <option>Alquiler de Tótem LED</option>
+                        <option>Alquiler de Cilindro LED</option>
+                        <option>Alquiler de Pantalla Multimedia</option>
+                        <option>Alquiler de Dispensador Inteligente</option>
                         <option>Stand para evento</option>
                         <option>Activación de marca</option>
                         <option>Cobertura digital (video / reels / drone)</option>
