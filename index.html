@@ -298,7 +298,28 @@ h2.sec-title .led { color: var(--led); }
     color: var(--led); border: 1px solid rgba(0,229,255,.35);
     padding: 4px 10px; background: var(--led-soft);
 }
-.prod-art { height: 190px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 26px; }
+
+.prod-art { height: 190px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; overflow: hidden; background: radial-gradient(circle, rgba(0,229,255,.08), transparent 65%); }
+.prod-art img { width: 100%; height: 100%; object-fit: cover; filter: saturate(.9) contrast(1.05); }
+.prod-price { margin-top: 14px; font-family: var(--font-display); font-size: 20px; color: var(--text); }
+.prod-price small { font: 10px var(--font-body); color: var(--muted); letter-spacing: 1px; }
+.prod-add { width: 100%; margin-top: 18px; padding: 12px 14px; border: 1px solid var(--led); background: transparent; color: var(--led); font: 600 11px var(--font-body); letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; transition: background .2s, color .2s; }
+.prod-add:hover { background: var(--led); color: #050505; }
+.catalog-note { max-width: 620px; margin: 0 0 30px auto; color: var(--muted); font-size: 12px; line-height: 1.6; border-left: 2px solid var(--led); padding-left: 16px; }
+.cart-panel { position: fixed; z-index: 30; right: 22px; bottom: 22px; width: min(390px, calc(100vw - 44px)); padding: 20px; background: #0b0d0e; border: 1px solid var(--led); box-shadow: 0 12px 45px #000; transform: translateY(calc(100% + 40px)); transition: transform .3s ease; }
+.cart-panel.open { transform: translateY(0); }
+.cart-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.cart-head strong { font-family: var(--font-display); font-size: 18px; }
+.cart-close { border:0; background:none; color:var(--muted); font-size:20px; cursor:pointer; }
+.cart-items { max-height:260px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
+.cart-item { display:grid; grid-template-columns:1fr auto; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.cart-item small { display:block; color:var(--muted); margin-top:4px; }
+.cart-remove { border:0; background:none; color:var(--muted); cursor:pointer; }
+.cart-total { display:flex; justify-content:space-between; margin:16px 0; color:var(--led); font-weight:600; }
+.cart-quote { display:block; text-align:center; padding:13px; background:var(--led); color:#050505; text-decoration:none; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+.cart-trigger { position:fixed; z-index:29; right:22px; bottom:22px; border:1px solid var(--led); background:#050505; color:var(--led); padding:13px 16px; font:600 11px var(--font-body); letter-spacing:1px; text-transform:uppercase; cursor:pointer; }
+.cart-trigger.has-items { bottom: 88px; }
+
 .prod-num { font-size: 11px; color: var(--muted); letter-spacing: 2px; margin-bottom: 8px; }
 .prod h3 {
     font-family: var(--font-display);
@@ -574,141 +595,77 @@ body.has-sticky .wa-float { bottom: 82px; }
         </div>
         <p class="sec-desc rise">Equipos propios, <strong>instalación y soporte técnico incluidos</strong>. Consultá disponibilidad para la fecha de tu evento.</p>
     </div>
+    <p class="catalog-note">Precios de lista orientativos. El valor final puede variar según la cantidad de días, la cantidad y combinación de equipos, instalación, traslado y necesidades del evento. Podemos armar combos a medida.</p>
     <div class="prod-grid">
-        <!-- Pantalla LED -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Pantalla modular por m²" data-price="480000" data-unit="por m² / día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art">
-                <svg width="150" height="170" viewBox="0 0 150 170" fill="none">
-                    <rect x="10" y="15" width="130" height="90" stroke="#00E5FF" stroke-width="2.5"/>
-                    <g stroke="#00E5FF" stroke-width="1" opacity=".45">
-                        <line x1="10" y1="37" x2="140" y2="37"/><line x1="10" y1="60" x2="140" y2="60"/><line x1="10" y1="83" x2="140" y2="83"/>
-                        <line x1="42" y1="15" x2="42" y2="105"/><line x1="75" y1="15" x2="75" y2="105"/><line x1="108" y1="15" x2="108" y2="105"/>
-                    </g>
-                    <line x1="55" y1="105" x2="45" y2="150" stroke="#555" stroke-width="2.5"/>
-                    <line x1="95" y1="105" x2="105" y2="150" stroke="#555" stroke-width="2.5"/>
-                    <line x1="30" y1="152" x2="120" y2="152" stroke="#555" stroke-width="3"/>
-                </svg>
-            </div>
+            <div class="prod-art"><img src="assets/products/pantalla-led.png" alt="Pantallas LED"></div>
             <div class="prod-num">P·01</div>
             <h3>Pantallas LED</h3>
-            <p>Paneles modulares de alta resolución para escenarios, ferias y activaciones. Armamos la medida que tu evento necesita.</p>
-            <div class="prod-spec">P1.85 · medida modular · indoor / outdoor</div>
-            <ul>
-                <li>Indoor & outdoor</li>
-                <li>Medidas modulares a pedido</li>
-                <li>Operación de contenido en vivo</li>
-            </ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de pantalla LED." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <p>Panel modular para escenarios, ferias y activaciones.</p>
+            <div class="prod-price">Gs. 480.000 <small>por m² / día</small></div>
+            <div class="prod-spec">0,50 × 1,00 m por módulo · P1.85</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- iPoster -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Tótem LED" data-price="950000" data-unit="por día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art">
-                <svg width="90" height="175" viewBox="0 0 90 175" fill="none">
-                    <rect x="20" y="8" width="50" height="140" rx="4" stroke="#00E5FF" stroke-width="2.5"/>
-                    <rect x="26" y="16" width="38" height="118" fill="#00E5FF" opacity=".14"/>
-                    <line x1="32" y1="40" x2="58" y2="40" stroke="#00E5FF" stroke-width="2" opacity=".8"/>
-                    <line x1="32" y1="52" x2="52" y2="52" stroke="#00E5FF" stroke-width="2" opacity=".5"/>
-                    <circle cx="27" cy="158" r="5" stroke="#555" stroke-width="2"/>
-                    <circle cx="63" cy="158" r="5" stroke="#555" stroke-width="2"/>
-                </svg>
-            </div>
+            <div class="prod-art"><img src="assets/products/totem-led.png" alt="Tótem LED"></div>
             <div class="prod-num">P·02</div>
-            <h3>iPoster</h3>
-            <p>Póster digital vertical con ruedas: tu publicidad en movimiento, en full HD, donde está tu público.</p>
-            <div class="prod-spec">Pantalla vertical · medida según modelo · Full HD</div>
-            <ul>
-                <li>Pantalla vertical full HD</li>
-                <li>Móvil — se reubica en segundos</li>
-                <li>Ideal para lobbies, ferias y locales</li>
-            </ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de iPoster." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <h3>Tótem LED</h3>
+            <p>Display LED vertical indoor para comunicación publicitaria.</p>
+            <div class="prod-price">Gs. 950.000 <small>por día</small></div>
+            <div class="prod-spec">0,64 × 1,90 m · 320 × 960 px · 2.500 nits</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- Tótem Touch -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Tótem Touch" data-price="1200000" data-unit="por día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art">
-                <svg width="90" height="175" viewBox="0 0 90 175" fill="none">
-                    <rect x="18" y="6" width="54" height="150" rx="3" stroke="#00E5FF" stroke-width="2.5"/>
-                    <rect x="25" y="14" width="40" height="126" fill="#00E5FF" opacity=".14"/>
-                    <circle cx="45" cy="70" r="16" stroke="#00E5FF" stroke-width="2" opacity=".8"/>
-                    <path d="M45 62v16M37 70h16" stroke="#00E5FF" stroke-width="2" opacity=".8"/>
-                    <rect x="10" y="156" width="70" height="8" stroke="#555" stroke-width="2"/>
-                </svg>
-            </div>
+            <div class="prod-art"><img src="assets/products/totem-touch.png" alt="Tótem Touch"></div>
             <div class="prod-num">P·03</div>
             <h3>Tótem Touch</h3>
-            <p>Tótem interactivo de gran formato: catálogos, menús, juegos y experiencias táctiles para tu stand.</p>
-            <div class="prod-spec">Pantalla: 0,60 × 1,85 m · LCD: 43” · 1.080 × 1.920 px</div>
-            <ul>
-                <li>Pantalla táctil de gran formato</li>
-                <li>Carga de contenido a medida</li>
-                <li>Interacción que atrae público</li>
-            </ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Tótem Touch." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <p>Experiencia táctil vertical para catálogos, menús y activaciones.</p>
+            <div class="prod-price">Gs. 1.200.000 <small>por día</small></div>
+            <div class="prod-spec">Pantalla 0,60 × 1,85 m · LCD 43” · 1.080 × 1.920 px</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- Kiosko Touch -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Kiosko Touch" data-price="1200000" data-unit="por día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art">
-                <svg width="110" height="175" viewBox="0 0 110 175" fill="none">
-                    <rect x="25" y="10" width="60" height="92" rx="5" stroke="#00E5FF" stroke-width="2.5"/>
-                    <rect x="31" y="17" width="48" height="78" fill="#00E5FF" opacity=".14"/>
-                    <line x1="55" y1="102" x2="55" y2="148" stroke="#555" stroke-width="3"/>
-                    <ellipse cx="55" cy="156" rx="28" ry="8" stroke="#555" stroke-width="2.5"/>
-                </svg>
-            </div>
+            <div class="prod-art"><img src="assets/products/kiosko-touch.png" alt="Kiosko Touch"></div>
             <div class="prod-num">P·04</div>
             <h3>Kiosko Touch</h3>
-            <p>Pantalla táctil giratoria con base: brochures digitales, formularios y presentaciones autoadministradas.</p>
+            <p>Kiosco interactivo para información, catálogos y registro.</p>
+            <div class="prod-price">Gs. 1.200.000 <small>por día</small></div>
             <div class="prod-spec">Pantalla vertical · base circular · batería 4–6 h</div>
-            <ul>
-                <li>Rotación vertical / horizontal</li>
-                <li>Navegación libre para el visitante</li>
-                <li>Perfecto para showrooms</li>
-            </ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Kiosko Touch." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- Tótem LED -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Pantalla Multimedia" data-price="1000000" data-unit="por día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art"><svg width="90" height="175" viewBox="0 0 90 175" fill="none"><rect x="18" y="8" width="54" height="132" stroke="#00E5FF" stroke-width="2.5"/><path d="M28 20h34M28 34h34M28 48h34M28 62h34M28 76h34M28 90h34M28 104h34M28 118h34" stroke="#00E5FF" opacity=".45"/><line x1="45" y1="140" x2="45" y2="158" stroke="#555" stroke-width="3"/><ellipse cx="45" cy="162" rx="28" ry="6" stroke="#555" stroke-width="2"/></svg></div>
-            <div class="prod-num">P·05</div><h3>Tótem LED</h3>
-            <p>Display LED modular indoor para comunicación publicitaria, con configuración y traslado simples.</p>
-            <div class="prod-spec">0,64 × 1,90 m · P1.85 · 320 × 960 px · 2.500 nits</div>
-            <ul><li>Wi-Fi, USB, HDMI y RJ45</li><li>Conexión en serie para videowall</li><li>Maletín para hasta 2 unidades</li></ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Tótem LED." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <div class="prod-art"><img src="assets/products/pantalla-multimedia.png" alt="Pantalla Multimedia"></div>
+            <div class="prod-num">P·05</div>
+            <h3>Pantalla Multimedia</h3>
+            <p>Pantalla inteligente portátil para presentaciones y contenido digital.</p>
+            <div class="prod-price">Gs. 1.000.000 <small>por día</small></div>
+            <div class="prod-spec">21,5” · Full HD · Android 12 · batería 4–6 h</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- Cilindro LED -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Cilindro LED" data-price="1500000" data-unit="por día">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art"><svg width="120" height="175" viewBox="0 0 120 175" fill="none"><ellipse cx="60" cy="52" rx="42" ry="18" stroke="#00E5FF" stroke-width="2.5"/><path d="M18 52v55c0 10 84 10 84 0V52" stroke="#00E5FF" stroke-width="2.5"/><ellipse cx="60" cy="107" rx="42" ry="18" stroke="#00E5FF" stroke-width="2" opacity=".55"/><path d="M60 20V8M60 125v30" stroke="#555" stroke-width="3"/></svg></div>
-            <div class="prod-num">P·06</div><h3>Cilindro LED</h3>
-            <p>Pantalla LED colgante de visibilidad 360° para maximizar el impacto sin ocupar espacio en el suelo.</p>
-            <div class="prod-spec">0,32 m alto × 0,65 m diámetro · P1.85 · 1.033 × 162 px</div>
-            <ul><li>Visibilidad total de 360°</li><li>2.500 nits de brillo</li><li>Formato aéreo premium</li></ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Cilindro LED." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <div class="prod-art"><img src="assets/products/cilindro-led.png" alt="Cilindro LED"></div>
+            <div class="prod-num">P·06</div>
+            <h3>Cilindro LED</h3>
+            <p>Pantalla colgante de visibilidad 360° para alto impacto.</p>
+            <div class="prod-price">Gs. 1.500.000 <small>por día</small></div>
+            <div class="prod-spec">0,32 m alto × 0,65 m diámetro · P1.85</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
-        <!-- Pantalla multimedia inteligente -->
-        <div class="prod rise">
+        <div class="prod rise" data-product="Dispensador Inteligente" data-price="650000" data-unit="por evento">
             <span class="prod-tag">Alquiler</span>
-            <div class="prod-art"><svg width="105" height="175" viewBox="0 0 105 175" fill="none"><rect x="18" y="10" width="69" height="108" rx="5" stroke="#00E5FF" stroke-width="2.5"/><rect x="25" y="18" width="55" height="91" fill="#00E5FF" opacity=".14"/><path d="M52 118v28M30 150h45" stroke="#555" stroke-width="3"/><circle cx="52" cy="45" r="12" stroke="#00E5FF" opacity=".8"/></svg></div>
-            <div class="prod-num">P·07</div><h3>Pantalla Multimedia</h3>
-            <p>Pantalla inteligente portátil para catálogos, presentaciones, proyección y experiencias digitales.</p>
-            <div class="prod-spec">21,5” · 1.920 × 1.080 px · Android 12 · 4–6 h de batería</div>
-            <ul><li>Touch capacitivo de 10 puntos</li><li>4 GB RAM · 64 GB internos</li><li>Ruedas y base de carga extraíble</li></ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Pantalla Multimedia." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
-        </div>
-        <!-- Dispensador inteligente -->
-        <div class="prod rise">
-            <span class="prod-tag">Alquiler</span>
-            <div class="prod-art"><svg width="90" height="175" viewBox="0 0 90 175" fill="none"><rect x="20" y="12" width="50" height="125" rx="6" stroke="#00E5FF" stroke-width="2.5"/><rect x="29" y="25" width="32" height="48" fill="#00E5FF" opacity=".14"/><circle cx="45" cy="49" r="10" stroke="#00E5FF"/><path d="M34 91h22M34 101h22M34 111h12" stroke="#00E5FF" opacity=".6"/><path d="M45 137v18M28 160h34" stroke="#555" stroke-width="3"/></svg></div>
-            <div class="prod-num">P·08</div><h3>Dispensador Inteligente</h3>
-            <p>Formato interactivo para presentar productos, información y promociones en puntos de alto tráfico.</p>
-            <div class="prod-spec">Ficha dimensional pendiente de confirmación en catálogo</div>
-            <ul><li>Comunicación visual autoadministrada</li><li>Formato para activaciones</li><li>Consultar disponibilidad y medidas</li></ul>
-            <a data-wa data-msg="Hola LedBox! Quiero cotizar alquiler de Dispensador Inteligente." target="_blank" rel="noopener" class="prod-cta">Cotizar →</a>
+            <div class="prod-art"><img src="assets/products/dispensador-inteligente.png" alt="Dispensador Inteligente"></div>
+            <div class="prod-num">P·07</div>
+            <h3>Dispensador Inteligente</h3>
+            <p>Equipo premium para activaciones y espacios de alto tráfico.</p>
+            <div class="prod-price">Gs. 650.000 <small>por evento</small></div>
+            <div class="prod-spec">Medida a confirmar · consultar disponibilidad</div>
+            <button class="prod-add" type="button">Agregar al pedido</button>
         </div>
     </div>
 </section>
@@ -904,6 +861,15 @@ body.has-sticky .wa-float { bottom: 82px; }
     <div class="ft-bg">LEDBOX</div>
 </footer>
 
+<!-- CARRITO DE COTIZACIÓN -->
+<button id="cart-trigger" class="cart-trigger" type="button">Pedido <span id="cart-count">0</span></button>
+<aside id="cart-panel" class="cart-panel" aria-label="Pedido de cotización">
+    <div class="cart-head"><strong>Tu pedido</strong><button id="cart-close" class="cart-close" type="button" aria-label="Cerrar pedido">×</button></div>
+    <div id="cart-items" class="cart-items"><p class="f-note">Agregá productos para preparar tu cotización.</p></div>
+    <div class="cart-total"><span>Referencia</span><span id="cart-total">Gs. 0</span></div>
+    <a id="cart-quote" class="cart-quote" href="#" target="_blank" rel="noopener">Cotizar por WhatsApp</a>
+</aside>
+
 <!-- STICKY CTA -->
 <div id="sticky-cta" role="complementary">
     <span class="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span>
@@ -973,6 +939,33 @@ var obs = new IntersectionObserver(function(entries) {
     entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('on'); });
 }, { threshold: .12 });
 document.querySelectorAll('.rise').forEach(function(el) { obs.observe(el); });
+
+// Pedido de cotización
+(function() {
+    var cart = [];
+    var panel = document.getElementById('cart-panel');
+    var trigger = document.getElementById('cart-trigger');
+    var items = document.getElementById('cart-items');
+    var count = document.getElementById('cart-count');
+    var total = document.getElementById('cart-total');
+    var quote = document.getElementById('cart-quote');
+    function money(n) { return 'Gs. ' + n.toLocaleString('es-PY'); }
+    function render() {
+        count.textContent = cart.reduce(function(a, x) { return a + x.qty; }, 0);
+        trigger.classList.toggle('has-items', cart.length > 0);
+        if (!cart.length) { items.innerHTML = '<p class="f-note">Agregá productos para preparar tu cotización.</p>'; total.textContent = money(0); quote.removeAttribute('href'); return; }
+        items.innerHTML = cart.map(function(x, i) { return '<div class="cart-item"><div><strong>' + x.name + '</strong><small>' + x.qty + ' × ' + money(x.price) + ' · ' + x.unit + '</small></div><button class="cart-remove" data-remove="' + i + '" type="button" aria-label="Quitar ' + x.name + '">×</button></div>'; }).join('');
+        var sum = cart.reduce(function(a, x) { return a + x.price * x.qty; }, 0);
+        total.textContent = money(sum) + ' ref.';
+        var text = 'Hola LedBox! Quiero cotizar este pedido:%0A' + cart.map(function(x) { return '- ' + x.qty + ' × ' + x.name + ' (' + x.unit + ')'; }).join('%0A') + '%0A%0APrecios de lista sujetos a confirmación según días, equipos y combo.';
+        quote.href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + text;
+        items.querySelectorAll('[data-remove]').forEach(function(btn) { btn.addEventListener('click', function() { cart.splice(Number(btn.dataset.remove), 1); render(); }); });
+    }
+    document.querySelectorAll('.prod-add').forEach(function(btn) { btn.addEventListener('click', function() { var card = btn.closest('.prod'); var found = cart.find(function(x) { return x.name === card.dataset.product; }); if (found) found.qty++; else cart.push({ name: card.dataset.product, price: Number(card.dataset.price), unit: card.dataset.unit, qty: 1 }); render(); panel.classList.add('open'); }); });
+    trigger.addEventListener('click', function() { panel.classList.toggle('open'); });
+    document.getElementById('cart-close').addEventListener('click', function() { panel.classList.remove('open'); });
+    render();
+})();
 
 // ==================================================================
 // MÉTRICAS (sin base de datos propia) — alimenta el panel /admin
