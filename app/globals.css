@@ -643,3 +643,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-dashboard-message { align-items:stretch; flex-direction:column; }
 }
 @media (prefers-reduced-motion: reduce) { .admin-spinner { animation:none; } }
+
+.not-found-page { min-height:100vh; display:grid; place-items:center; padding:24px; background:var(--bg); }
+.not-found-card { width:min(100%,560px); padding:clamp(30px,7vw,70px); text-align:center; background:rgba(11,13,14,.9); border:1px solid var(--border-2); border-top:2px solid var(--led); }
+.not-found-code { margin:16px 0 0; color:var(--led); font-size:clamp(70px,18vw,150px); line-height:.9; font-weight:900; letter-spacing:-.08em; }
+.not-found-card h1 { margin:22px 0 10px; }
+.not-found-card p:not(.not-found-code) { color:var(--muted); margin-bottom:28px; }
