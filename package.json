@@ -12,7 +12,6 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" },
   "dependencies": {
     "@prisma/client": "^6.16.2",
     "bcryptjs": "^3.0.2",
@@ -34,7 +33,5 @@
   "engines": {
     "node": ">=20.9.0"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  }
+  "prisma": { "seed": "tsx prisma/seed.ts" }
 }
