@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { AdminThemeToggle } from "./admin-theme";
 
@@ -8,10 +9,10 @@ export function AdminFrame({ children, eyebrow = "LedBox · Panel privado" }: { 
     <main className="admin-page">
       <div className="admin-grid" aria-hidden="true" />
       <div className="admin-brandbar">
-        <Link href="/" className="admin-brand" aria-label="LedBox · Panel privado">
+        <Link href="/" className="admin-brand" aria-label="EventOS · Panel privado">
           <BrandMark className="admin-brand-mark" size={30} />
           <span>
-            LEDBOX<span className="admin-brand-dot">.</span>
+            EventOS<span className="admin-brand-dot">.</span>
           </span>
         </Link>
         <div className="admin-brand-tools">
@@ -23,6 +24,7 @@ export function AdminFrame({ children, eyebrow = "LedBox · Panel privado" }: { 
         <p className="admin-kicker">{eyebrow}</p>
         {children}
       </div>
+      <AppFooter variant="app" className="app-footer--access" />
     </main>
   );
 }

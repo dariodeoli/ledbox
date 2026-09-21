@@ -1834,3 +1834,61 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .portal-form-actions { display: grid; grid-template-columns: 1fr; }
   .portal-pay-now { align-items: flex-start; }
 }
+
+/* ── Footer único de la app (issue #37) ──
+   La misma pieza en panel, demo, portal, pantallas de acceso y la landing de
+   EventOS; la versión sale de la fuente única. */
+.app-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--a-line); color: var(--a-muted); font-size: 11px; }
+.app-footer-text, .app-footer-credit { white-space: nowrap; }
+.app-footer-credit a { color: var(--a-muted-2); text-decoration: none; }
+.app-footer-credit a:hover { color: var(--a-accent); }
+.app-footer--panel { border-top: 0; padding: 8px 0 2px; }
+.app-footer--access { justify-content: center; border-top: 0; padding-top: 16px; }
+.app-footer--portal { border-top: 1px solid var(--line, #1b2733); padding: 12px 20px 18px; background: transparent; }
+@media (max-width: 640px) { .app-footer { justify-content: center; text-align: center; } }
+
+/* ── Landing de EventOS (issue #39) ── */
+.producto { min-height: 100vh; background: #05080a; color: #e8f4f8; font-family: var(--font-body, system-ui, sans-serif); }
+.producto-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 18px; padding: 12px 22px; border-bottom: 1px solid #12222a; background: rgba(5, 8, 10, .86); backdrop-filter: blur(8px); }
+.producto-brand { display: inline-flex; align-items: center; gap: 8px; font: 700 14px var(--font-display, system-ui); letter-spacing: .06em; }
+.producto-brand-mark { border-radius: 7px; }
+.producto-brand-dot { color: #00e5ff; }
+.producto-nav { display: flex; gap: 16px; margin-left: auto; font-size: 12.5px; }
+.producto-nav a { color: #9fb6c0; text-decoration: none; }
+.producto-nav a:hover { color: #e8f4f8; }
+.producto-actions { display: flex; gap: 8px; }
+.producto-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 14px; border: 1px solid #00e5ff; border-radius: 9px; background: #00e5ff; color: #04191d; font: 700 12.5px var(--font-body, system-ui); text-decoration: none; white-space: nowrap; }
+.producto-button--ghost { background: transparent; color: #e8f4f8; border-color: #26414b; }
+.producto-button:hover { filter: brightness(1.06); }
+.producto main { max-width: 1080px; margin: 0 auto; padding: 0 22px 40px; }
+.producto-hero { padding: 56px 0 20px; text-align: center; }
+.producto-kicker { margin: 0 0 12px; color: #00e5ff; font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+.producto-hero h1 { margin: 0 auto 14px; max-width: 22ch; font: 800 clamp(30px, 5.2vw, 52px)/1.05 var(--font-display, system-ui); }
+.producto-hero h1 span { color: #00e5ff; }
+.producto-lede { margin: 0 auto 22px; max-width: 62ch; color: #a9c0ca; font-size: 15px; line-height: 1.6; }
+.producto-cta { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.producto-note { margin: 12px 0 26px; color: #7b93a0; font-size: 12px; }
+.producto-hero-shot { width: 100%; height: auto; border: 1px solid #1b3a46; border-radius: 14px; box-shadow: 0 24px 60px -30px rgba(0, 229, 255, .35); }
+.producto-section { padding: 44px 0 6px; }
+.producto-section h2 { margin: 0 0 18px; font: 800 clamp(22px, 3vw, 32px)/1.15 var(--font-display, system-ui); }
+.producto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
+.producto-card { padding: 16px; border: 1px solid #14262e; border-radius: 12px; background: #081115; }
+.producto-card h3 { margin: 0 0 6px; font-size: 14.5px; }
+.producto-card p { margin: 0; color: #9fb6c0; font-size: 13px; line-height: 1.55; }
+.producto-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 12px; margin: 0 0 22px; padding: 0; list-style: none; }
+.producto-steps li { padding: 14px; border: 1px solid #14262e; border-radius: 12px; background: #081115; }
+.producto-step-number { display: block; margin-bottom: 6px; color: #00e5ff; font: 800 11px var(--font-display, system-ui); letter-spacing: .18em; }
+.producto-steps strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.producto-steps p { margin: 0; color: #9fb6c0; font-size: 13px; line-height: 1.5; }
+.producto-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 12px; }
+.producto-shots img { width: 100%; height: auto; border: 1px solid #14262e; border-radius: 12px; }
+.producto-faq details { padding: 12px 14px; border: 1px solid #14262e; border-radius: 12px; background: #081115; margin-bottom: 8px; }
+.producto-faq summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.producto-faq p { margin: 8px 0 0; color: #9fb6c0; font-size: 13px; line-height: 1.55; }
+.producto-final { text-align: center; }
+.producto-final p { color: #a9c0ca; }
+@media (max-width: 720px) {
+  .producto-nav { display: none; }
+  .producto-top { gap: 10px; }
+  .producto-actions { margin-left: auto; }
+}

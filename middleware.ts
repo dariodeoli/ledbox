@@ -19,6 +19,8 @@ import { publicConfig } from "@/lib/public-config";
 const ADMIN_URL = publicConfig.adminUrl;
 const CLIENT_URL = publicConfig.clientUrl;
 const DEMO_URL = publicConfig.demoUrl;
+const PRODUCT_URL = publicConfig.productUrl;
+const LEGACY_ADMIN_URL = publicConfig.legacyAdminUrl;
 
 function adminHost(): string {
   try {
@@ -44,6 +46,22 @@ function demoHost(): string {
   }
 }
 
+function productHost(): string {
+  try {
+    return new URL(PRODUCT_URL).host.toLowerCase();
+  } catch {
+    return "eventos.ledbox.online";
+  }
+}
+
+function legacyAdminHost(): string {
+  try {
+    return new URL(LEGACY_ADMIN_URL).host.toLowerCase();
+  } catch {
+    return "admin.ledbox.online";
+  }
+}
+
 function requestHost(request: NextRequest): string {
   const raw = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
   return raw.split(",")[0].trim().toLowerCase();
@@ -61,6 +79,22 @@ export function middleware(request: NextRequest) {
   const onAdminHost = requestHost(request) === adminHost();
   const onClientHost = requestHost(request) === clientHost();
   const onDemoHost = requestHost(request) === demoHost();
+  const onProductHost = requestHost(request) === productHost();
+
+  // Host viejo del panel (admin.ledbox.online): redirige al nuevo (app.ledbox.online).
+  if (requestHost(request) === legacyAdminHost()) {
+    return NextResponse.redirect(new URL(`${pathname}${search}`, ADMIN_URL), 308);
+  }
+
+  if (onProductHost) {
+    // Landing de ventas de EventOS (issue #39): la raíz del host la muestra.
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/producto";
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
 
   if (onAdminHost) {
     // Links viejos con /admin → ruta limpia equivalente.
@@ -100,10 +134,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Host público: el panel solo vive en el subdominio admin (en producción).
-  // La demo tiene su propio host: `ledbox.online/demo` va ahí.
+  // Host público: el panel solo vive en el subdominio de la app (en producción).
+  // La demo y la landing de EventOS tienen su propio host.
   if (process.env.NODE_ENV === "production" && pathname === "/demo") {
     return NextResponse.redirect(new URL("/", DEMO_URL), 308);
+  }
+  if (process.env.NODE_ENV === "production" && pathname === "/producto") {
+    return NextResponse.redirect(new URL("/", PRODUCT_URL), 308);
   }
   if (process.env.NODE_ENV === "production" && (legacyAdminPath || isAdminRoute(pathname))) {
     const clean = legacyAdminPath ? pathname.slice("/admin".length) || "/" : pathname;

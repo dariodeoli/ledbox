@@ -21,8 +21,9 @@ Cuatro superficies sobre la misma app, separadas por host:
 | Superficie | Producción | Rutas |
 | --- | --- | --- |
 | Sitio público | `ledbox.online` | `/` (catálogo, carrito, leads) |
-| Panel privado | `admin.ledbox.online` | `/login`, `/dashboard`, `/eventos`, `/finanzas`… sin prefijo `/admin` |
+| App de EventOS (panel) | `app.ledbox.online` | `/login`, `/dashboard`, `/eventos`, `/finanzas`… sin prefijo `/admin` |
 | Portal del cliente | `clientes.ledbox.online` | `/` (validador) y `/p/<código>` (presupuesto) |
+| Landing de EventOS | `eventos.ledbox.online` | `/` (venta del producto) |
 | Demo pública | `demo.ledbox.online` | `/` (demo con datos simulados, solo lectura) |
 
 Las páginas del panel son rutas raíz reales en `app/(admin)/*` (el route group no cambia la URL), el sitio público en `app/(public)/*` y el portal en `app/(portal)/*`. En el host admin, `/` muestra el dashboard; en el del cliente, el validador; en el de la demo, la demo. En el host público, `middleware.ts` redirige las rutas del panel al subdominio usando `lib/admin-routes.ts`, y `/demo` al host de la demo. Los dominios se definen en `lib/public-config.ts` (`NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ADMIN_URL`, `NEXT_PUBLIC_CLIENT_URL`, `NEXT_PUBLIC_DEMO_URL`) y los usa también el middleware (fuente única).
@@ -84,6 +85,12 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 - **Prepare (valida, no publica):** `npm run release:prepare` corre `typecheck` + `test:rules` (reglas puras y chequeo de fuente de campos) + `build`. Es el paso obligatorio antes de declarar una versión lista.
 - **Publish (publica):** el deploy lo hace Owncoding Hub/Coolify desde la rama viva; no hay script de publicación local. Al informar un deploy, decir la versión publicada y el estado real de cada frente, sin presentar local como publicado.
 - El flujo es simple a propósito: no hay release automatizado; la fuente única evita que la versión visible quede atrás de la publicada.
+
+## Deploy
+
+- `npm run release:prepare` valida (typecheck + tests + build) sin publicar.
+- `npm run deploy:patch` publica: sube el parche de versión, corre los checks, commitea `chore(release): vX.Y.Z`, pushea la rama de deploy y dispara el deploy del Hub (webhook + token desde el entorno o `~/.config/ledbox/deploy.env`, nunca del repo).
+- La versión visible sale de `package.json` (`lib/version.ts`) y se ve en el footer de todas las superficies.
 
 ## Migraciones en el deploy
 
