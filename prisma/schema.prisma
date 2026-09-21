@@ -25,6 +25,68 @@ enum BillingUnit {
   EVENT
 }
 
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Organization {
+  id          String                   @id
+  name        String
+  slug        String                   @unique
+  active      Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  memberships OrganizationMembership[]
+  leads       Lead[]
+  quotes      QuoteRequest[]
+
+  @@index([active, createdAt])
+}
+
+model AppUser {
+  id           String                   @id
+  name         String
+  email        String                   @unique
+  passwordHash String?
+  googleSub    String?                  @unique
+  active       Boolean                  @default(true)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  memberships  OrganizationMembership[]
+  sessions     AppSession[]
+
+  @@index([active, createdAt])
+}
+
+model OrganizationMembership {
+  id             String           @id
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AppUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, role])
+}
+
+model AppSession {
+  id        String    @id
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
 model AdminUser {
   id                  String               @id
   name                String
@@ -80,26 +142,32 @@ model Lead {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  quoteRequests QuoteRequest[]
+  quoteRequests  QuoteRequest[]
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([email])
+  @@index([organizationId, createdAt])
 }
 
 model QuoteRequest {
-  id             String      @id
+  id             String        @id
   leadId         String?
   referenceTotal Int?
-  currency       String      @default("PYG")
+  currency       String        @default("PYG")
   durationDays   Int?
   eventDate      DateTime?
   location       String?
-  source         String      @default("website")
-  createdAt      DateTime    @default(now())
-  lead           Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  source         String        @default("website")
+  createdAt      DateTime      @default(now())
+  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
   items          QuoteItem[]
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([leadId, createdAt])
+  @@index([organizationId, createdAt])
 }
 
 model QuoteItem {
