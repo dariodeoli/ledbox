@@ -194,6 +194,32 @@ export function statusTone(value: string | null | undefined): AdminTone {
   return TONES[value] ?? "neutral";
 }
 
+/** Estados de un equipo al retirar/devolver (source única para los formularios). */
+export const ITEM_CONDITIONS = ["Bueno", "Con detalles", "Dañado"] as const;
+
+/**
+ * Estado operativo de una asignación: `checkedOutAt`/`checkedInAt` mandan; los
+ * booleanos quedan como marca heredada de registros viejos sin fecha exacta.
+ */
+export function inventoryAssignmentState(assignment: {
+  checkedOut: boolean;
+  checkedIn: boolean;
+  checkedOutAt?: string | null;
+  checkedInAt?: string | null;
+}): { label: string; tone: AdminTone } {
+  if (assignment.checkedInAt || assignment.checkedIn) return { label: "Devuelto", tone: "ok" };
+  if (assignment.checkedOutAt || assignment.checkedOut) return { label: "Afuera", tone: "accent" };
+  return { label: "Asignado", tone: "info" };
+}
+
+/** Resumen de daños y faltantes para listas: `2 dañadas · 1 faltante`. */
+export function damageSummary(damaged: number, missing: number): string | null {
+  const parts: string[] = [];
+  if (damaged > 0) parts.push(`${damaged} dañada${damaged === 1 ? "" : "s"}`);
+  if (missing > 0) parts.push(`${missing} faltante${missing === 1 ? "" : "s"}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** Iniciales para el avatar del topbar (máximo dos letras). */
 export function initials(name: string | null | undefined): string {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);

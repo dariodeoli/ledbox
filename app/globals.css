@@ -684,6 +684,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-filter { height: 36px; max-width: 15rem; padding: 0 8px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); }
 .admin-filter:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 .admin-filter--cell { height: 30px; max-width: 9.5rem; font-size: 12px; }
+.admin-cell select.admin-filter { max-width: 100%; }
 .admin-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .admin-note { display: flex; align-items: center; gap: 8px; color: var(--a-muted-2); font-size: 12px; }
 .admin-note[data-tone="ok"] { color: var(--a-ok); }
@@ -737,6 +738,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-inline-form select, .admin-inline-form input { height: 34px; min-width: 0; padding: 0 8px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); }
 .admin-inline-form select { max-width: 12rem; }
 .admin-inline-form input[placeholder] { flex: 1 1 12rem; }
+.admin-inline-form .admin-qty-input { flex: 0 0 6rem; max-width: 6rem; }
 .admin-inline-form .admin-btn { margin-left: auto; }
 
 /* ── Tablas densas ──
@@ -764,7 +766,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--presupuestos { --presupuestos-cols: minmax(11rem, 1.5fr) minmax(9rem, 1.1fr) 4rem 7rem 7rem 7rem 7rem 7.5rem 6rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 71rem; }
 .admin-table--cobros { --cobros-cols: 8rem minmax(9rem, 1.2fr) minmax(9rem, 1.1fr) 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--cobros-cols); --admin-table-min: 52rem; }
 .admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 70rem; }
-.admin-table--inventario { --inventario-cols: minmax(12rem, 1.6fr) minmax(8rem, 1fr) 7.5rem 5.5rem 8rem 7.5rem 7rem; --admin-cols: var(--inventario-cols); --admin-table-min: 60rem; }
+.admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 8rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 65rem; }
+.admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(9rem, 1.4fr) 12.5rem 5rem 8rem 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
+.admin-table--evento-equipos { --evento-equipos-cols: minmax(9rem, 1.3fr) 5rem 12.5rem 8rem 8rem 6.5rem minmax(7rem, 1fr) 11rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 68rem; }
 .admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 5.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 69rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(10rem, 1.4fr) 9rem minmax(9rem, 1.1fr) minmax(9rem, 1.2fr) 7.5rem 6.5rem 5.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 61rem; }
 .admin-table--usuarios { --usuarios-cols: minmax(10rem, 1.2fr) minmax(12rem, 1.4fr) 8.5rem 6.5rem 7.5rem 5.5rem; --admin-cols: var(--usuarios-cols); --admin-table-min: 53rem; }

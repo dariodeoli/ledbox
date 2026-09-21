@@ -1,8 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatMoney, formatNumber, inventoryKindLabel, inventoryStatusLabel, statusTone } from "@/lib/admin-format";
+import {
+  damageSummary,
+  formatDateShort,
+  formatMoney,
+  formatNumber,
+  formatTime,
+  inventoryAssignmentState,
+  inventoryKindLabel,
+  inventoryStatusLabel,
+  statusTone,
+} from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import type { AdminInventoryItemRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -14,6 +25,7 @@ import {
   AdminFormPanel,
   AdminKpi,
   AdminNote,
+  AdminPanel,
   AdminRow,
   AdminSearchField,
   AdminSelect,
@@ -38,15 +50,27 @@ const STATUS_OPTIONS = [
   { value: "RETIRED", label: "Retirado" },
 ];
 
+const STATUS_PICK_OPTIONS = STATUS_OPTIONS.filter((option) => option.value !== "ALL");
+
 const EMPTY_FORM = { name: "", category: "", inventoryKind: "REUSABLE", quantity: "1" };
+
+/** Horas de salida/devolución en formato de tabla (es-PY, 24 h). */
+function stamp(value: string | null): string {
+  return value ? `${formatDateShort(value)} · ${formatTime(value)}` : "—";
+}
+
+/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00`. */
+function rangeStamp(start: string | null, end: string | null): string {
+  if (!start || !end) return "Sin fechas";
+  return `${formatDateShort(start)} ${formatTime(start)} → ${formatDateShort(end)} ${formatTime(end)}`;
+}
 
 export function InventarioModule() {
   const { role } = useAdminSession();
-  const resources = useAdminResource("/api/admin/resources", (payload) => ({
-    suppliers: payload.suppliers ?? [],
-    inventory: payload.inventory ?? [],
-    promoters: payload.promoters ?? [],
-  }));
+  const resources = useAdminResource(
+    "/api/admin/inventory",
+    (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
+  );
 
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("ALL");
@@ -56,9 +80,13 @@ export function InventarioModule() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
+  const [statusBusyId, setStatusBusyId] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [selectedId, setSelectedId] = useState("");
 
   const writable = canWriteOperations(role);
-  const inventory = useMemo(() => resources.data?.inventory ?? [], [resources.data]);
+  const inventory = useMemo(() => resources.data ?? [], [resources.data]);
+  const selected = useMemo(() => inventory.find((item) => item.id === selectedId) ?? null, [inventory, selectedId]);
 
   const rows = useMemo(
     () =>
@@ -74,11 +102,12 @@ export function InventarioModule() {
       inventory.reduce(
         (accumulator, item) => {
           accumulator.units += item.quantity;
-          accumulator.value += item.quantity * item.replacementCost;
-          if (item.status === "IN_USE" || item.status === "MAINTENANCE") accumulator.out += item.quantity;
+          accumulator.committed += item.availability.committedNow;
+          accumulator.available += item.availability.availableNow;
+          if (item.availability.overcommittedNow) accumulator.conflicts += 1;
           return accumulator;
         },
-        { units: 0, value: 0, out: 0 },
+        { units: 0, committed: 0, available: 0, conflicts: 0 },
       ),
     [inventory],
   );
@@ -88,6 +117,7 @@ export function InventarioModule() {
     setBusy(true);
     setFormError("");
     setNotice("");
+    // El alta de ítems vive en `/api/admin/resources` (contrato existente del panel).
     const result = await adminSend("/api/admin/resources", {
       kind: "inventory",
       name: form.name,
@@ -105,13 +135,37 @@ export function InventarioModule() {
     resources.reload();
   }
 
+  async function changeStatus(item: AdminInventoryItemRow, next: string) {
+    setStatusBusyId(item.id);
+    setStatusError("");
+    setNotice("");
+    const result = await adminSend("/api/admin/inventory", { kind: "status", id: item.id, status: next });
+    setStatusBusyId("");
+    if (!result.ok) {
+      setStatusError(result.error);
+      return;
+    }
+    setNotice(`«${item.name}» pasó a ${inventoryStatusLabel(next)}.`);
+    resources.reload();
+  }
+
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de inventario">
         <AdminKpi label="Ítems" value={formatNumber(inventory.length)} note="controlados" />
         <AdminKpi label="Unidades" value={formatNumber(totals.units)} note="en total" />
-        <AdminKpi label="Valor de reposición" value={formatMoney(totals.value)} note="a costo de reposición" tone="accent" />
-        <AdminKpi label="En uso o mantenimiento" value={formatNumber(totals.out)} note="fuera de disponible" tone={totals.out > 0 ? "warn" : "ok"} />
+        <AdminKpi
+          label="En eventos ahora"
+          value={formatNumber(totals.committed)}
+          note="unidades comprometidas"
+          tone={totals.committed > 0 ? "accent" : undefined}
+        />
+        <AdminKpi
+          label="Disponibles ahora"
+          value={formatNumber(totals.available)}
+          note={totals.conflicts > 0 ? `${formatNumber(totals.conflicts)} ítems en conflicto` : "libres para asignar"}
+          tone={totals.available === 0 || totals.conflicts > 0 ? "warn" : "ok"}
+        />
       </section>
 
       <AdminToolbar>
@@ -134,6 +188,7 @@ export function InventarioModule() {
       </AdminToolbar>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {statusError ? <AdminNote tone="error">{statusError}</AdminNote> : null}
 
       {writable && showForm ? (
         <AdminFormPanel
@@ -201,38 +256,155 @@ export function InventarioModule() {
               { label: "Categoría" },
               { label: "Tipo" },
               { label: "Cantidad", end: true },
+              { label: "Libres ahora", end: true },
               { label: "Reposición", end: true },
               { label: "Costo diario", end: true },
               { label: "Estado" },
+              { label: "Acciones", end: true },
             ]}
           >
-            {rows.map((item) => (
-              <AdminRow key={item.id}>
-                <AdminCell title={item.name}>
-                  <strong>{item.name}</strong>
-                  {item.sku ? <span className="admin-code"> · {item.sku}</span> : null}
-                </AdminCell>
-                <AdminCell title={item.category}>{item.category}</AdminCell>
-                <AdminCell>
-                  <AdminBadge tone={statusTone(item.kind)}>{inventoryKindLabel(item.kind)}</AdminBadge>
-                </AdminCell>
-                <AdminCell end title={`${formatNumber(item.quantity)} unidades`}>
-                  {formatNumber(item.quantity)}
-                </AdminCell>
-                <AdminCell end title={formatMoney(item.replacementCost)}>
-                  {formatMoney(item.replacementCost)}
-                </AdminCell>
-                <AdminCell end title={formatMoney(item.dailyCost)}>
-                  {formatMoney(item.dailyCost)}
-                </AdminCell>
-                <AdminCell>
-                  <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>
-                </AdminCell>
-              </AdminRow>
-            ))}
+            {rows.map((item) => {
+              const { availableNow, committedNow, overcommittedNow } = item.availability;
+              return (
+                <AdminRow key={item.id}>
+                  <AdminCell title={item.name}>
+                    <strong>{item.name}</strong>
+                    {item.sku ? <span className="admin-code"> · {item.sku}</span> : null}
+                  </AdminCell>
+                  <AdminCell title={item.category}>{item.category}</AdminCell>
+                  <AdminCell>
+                    <AdminBadge tone={statusTone(item.kind)}>{inventoryKindLabel(item.kind)}</AdminBadge>
+                  </AdminCell>
+                  <AdminCell end title={`${formatNumber(item.quantity)} unidades`}>
+                    {formatNumber(item.quantity)}
+                  </AdminCell>
+                  <AdminCell
+                    end
+                    title={`${formatNumber(availableNow)} libres de ${formatNumber(item.quantity)} · ${formatNumber(committedNow)} comprometidas ahora`}
+                  >
+                    <span className="admin-nowrap" data-tone={availableNow === 0 ? "warn" : undefined}>
+                      {formatNumber(availableNow)}
+                    </span>
+                    {overcommittedNow ? (
+                      <AdminBadge
+                        tone="danger"
+                        title="Hay más unidades asignadas a eventos vigentes que las que tiene el ítem."
+                      >
+                        Conflicto
+                      </AdminBadge>
+                    ) : null}
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(item.replacementCost)}>
+                    {formatMoney(item.replacementCost)}
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(item.dailyCost)}>
+                    {formatMoney(item.dailyCost)}
+                  </AdminCell>
+                  <AdminCell title={writable ? `Cambiar estado: ${item.name}` : `Estado: ${inventoryStatusLabel(item.status)}`}>
+                    {writable ? (
+                      <select
+                        className="admin-filter admin-filter--cell"
+                        value={item.status}
+                        disabled={statusBusyId === item.id}
+                        onChange={(event) => void changeStatus(item, event.target.value)}
+                        aria-label={`Cambiar estado: ${item.name}`}
+                        title={`Cambiar estado: ${item.name}`}
+                      >
+                        {STATUS_PICK_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>
+                    )}
+                  </AdminCell>
+                  <AdminCell end className="admin-cell--actions">
+                    <span className="admin-actions">
+                      <AdminButton
+                        icon="info"
+                        title={`Ver asignaciones: ${item.name}`}
+                        aria-label={`Ver asignaciones: ${item.name}`}
+                        onClick={() => setSelectedId((current) => (current === item.id ? "" : item.id))}
+                      />
+                    </span>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
           </AdminTable>
         )}
       </AdminDataState>
+
+      {selected ? (
+        <AdminPanel
+          title={`Asignaciones · ${selected.name}`}
+          meta={`${formatNumber(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} libres ahora`}
+          action={
+            <AdminButton
+              icon="close"
+              title="Cerrar asignaciones"
+              aria-label="Cerrar asignaciones"
+              onClick={() => setSelectedId("")}
+            />
+          }
+        >
+          {selected.assignments.length === 0 ? (
+            <AdminEmpty
+              icon="inventory"
+              title="Sin asignaciones"
+              hint="Los equipos se asignan a los eventos con cantidad y rango de fechas desde el módulo Eventos."
+            />
+          ) : (
+            <AdminTable
+              view="inventario-asignaciones"
+              label={`Asignaciones de ${selected.name}`}
+              columns={[
+                { label: "Evento" },
+                { label: "Rango" },
+                { label: "Cantidad", end: true },
+                { label: "Salida" },
+                { label: "Devolución" },
+                { label: "Estado" },
+                { label: "Daños" },
+              ]}
+            >
+              {selected.assignments.map((assignment) => {
+                const state = inventoryAssignmentState(assignment);
+                const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
+                const startsAt = assignment.startsAt ?? assignment.event.startsAt;
+                const endsAt = assignment.endsAt ?? assignment.event.endsAt ?? startsAt;
+                return (
+                  <AdminRow key={assignment.id}>
+                    <AdminCell title={assignment.event.name}>{assignment.event.name}</AdminCell>
+                    <AdminCell title={startsAt && endsAt ? rangeStamp(startsAt, endsAt) : "Sin fechas"}>
+                      {rangeStamp(startsAt, endsAt)}
+                    </AdminCell>
+                    <AdminCell end title={`${formatNumber(assignment.quantity)} unidades`}>
+                      {formatNumber(assignment.quantity)}
+                    </AdminCell>
+                    <AdminCell title={assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>
+                      {stamp(assignment.checkedOutAt)}
+                    </AdminCell>
+                    <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
+                      {stamp(assignment.checkedInAt)}
+                    </AdminCell>
+                    <AdminCell>
+                      <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
+                    </AdminCell>
+                    <AdminCell
+                      title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}
+                    >
+                      {damages ?? "—"}
+                    </AdminCell>
+                  </AdminRow>
+                );
+              })}
+            </AdminTable>
+          )}
+        </AdminPanel>
+      ) : null}
     </div>
   );
 }
