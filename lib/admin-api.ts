@@ -37,17 +37,34 @@ function invalidateSession(): void {
 export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: string; sessionInvalid?: boolean; aborted?: boolean };
 export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+export type AdminSendOptions = {
+  /**
+   * Idempotencia de la operación (issue #20): `true` genera una clave nueva por
+   * intento y la manda en `Idempotency-Key` —el reintento automático de red
+   * reutiliza la misma—; un string usa esa clave explícita (reintento manual).
+   */
+  idempotencyKey?: string | true;
+};
+
+/** Clave de idempotencia nueva (UUID del navegador; fallback sin `crypto`). */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `idem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   timeoutMs: number;
   signal?: AbortSignal | null;
+  /** Clave de idempotencia que viaja en el header (nunca en el body). */
+  idempotencyKey?: string;
 };
 
 type RequestOutcome = { status: number; payload: Record<string, unknown> };
 
 /** Ejecuta el request con timeout propio; `null` si fue abortado o no hubo conexión. */
-async function requestJson(path: string, { method = "GET", body, timeoutMs, signal }: RequestOptions): Promise<RequestOutcome | null> {
+async function requestJson(path: string, { method = "GET", body, timeoutMs, signal, idempotencyKey }: RequestOptions): Promise<RequestOutcome | null> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   const onExternalAbort = () => controller.abort();
@@ -55,12 +72,16 @@ async function requestJson(path: string, { method = "GET", body, timeoutMs, sign
     if (signal.aborted) controller.abort();
     else signal.addEventListener("abort", onExternalAbort);
   }
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   try {
     const response = await fetch(path, {
       method,
       cache: "no-store",
       signal: controller.signal,
-      ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     return { status: response.status, payload };
@@ -101,17 +122,54 @@ export async function adminApiGet<T = AdminApiResponse>(
 }
 
 /**
+ * Mutaciones idénticas en vuelo (mismo método, ruta y cuerpo) comparten la misma
+ * promesa: un doble clic real no dispara dos requests ni dos operaciones. El
+ * registro se limpia apenas la promesa se asienta.
+ */
+const inFlightMutations = new Map<string, Promise<AdminSendResult<unknown>>>();
+
+/**
  * Mutación del panel: limpia la caché de GET (antes y después) y devuelve el
  * error inline; 401/403 invalidan la sesión. `DELETE` va sin cuerpo (es el
  * borrado explícito del avatar; el resto de las bajas del panel siguen en POST).
+ *
+ * Con `idempotencyKey` manda la clave en `Idempotency-Key` y, si el request se
+ * queda sin respuesta (timeout o red), reintenta **una vez con la misma clave**:
+ * si el panel ya la había registrado, el reintento devuelve la misma respuesta y
+ * no duplica nada (issue #20).
  */
 export async function adminSend<T>(
   path: string,
   body: unknown,
   method: "POST" | "PATCH" | "DELETE" = "POST",
+  options: AdminSendOptions = {},
+): Promise<AdminSendResult<T>> {
+  const idempotencyKey = options.idempotencyKey === true ? newIdempotencyKey() : options.idempotencyKey;
+  const dedupeKey = `${method} ${path} ${JSON.stringify(body ?? null)}`;
+  const inFlight = inFlightMutations.get(dedupeKey);
+  if (inFlight) return inFlight as Promise<AdminSendResult<T>>;
+
+  const promise = sendMutation<T>(path, body, method, idempotencyKey);
+  inFlightMutations.set(dedupeKey, promise as Promise<AdminSendResult<unknown>>);
+  const release = () => {
+    if (inFlightMutations.get(dedupeKey) === promise) inFlightMutations.delete(dedupeKey);
+  };
+  void promise.then(release, release);
+  return promise;
+}
+
+async function sendMutation<T>(
+  path: string,
+  body: unknown,
+  method: "POST" | "PATCH" | "DELETE",
+  idempotencyKey?: string,
 ): Promise<AdminSendResult<T>> {
   clearAdminApiCache();
-  const outcome = await requestJson(path, { method, body, timeoutMs: SEND_TIMEOUT_MS });
+  let outcome = await requestJson(path, { method, body, timeoutMs: SEND_TIMEOUT_MS, idempotencyKey });
+  if (!outcome && idempotencyKey) {
+    // La respuesta se perdió: el reintento reutiliza la clave (misma operación).
+    outcome = await requestJson(path, { method, body, timeoutMs: SEND_TIMEOUT_MS, idempotencyKey });
+  }
   clearAdminApiCache();
   if (!outcome) return { ok: false, error: "No pudimos conectar con el panel." };
   if (outcome.status === 401 || outcome.status === 403) {

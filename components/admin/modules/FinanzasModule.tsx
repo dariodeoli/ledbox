@@ -824,7 +824,7 @@ export function FinanzasModule() {
     } else {
       payload.reference = form.reference || undefined;
     }
-    const result = await adminSend("/api/admin/finance", payload);
+    const result = await adminSend("/api/admin/finance", payload, "POST", { idempotencyKey: true });
     setBusy(false);
     if (!result.ok) {
       setFormError(result.error);
@@ -845,6 +845,7 @@ export function FinanzasModule() {
       "/api/admin/finance",
       { kind: "client", paymentId: payment.id, action },
       "PATCH",
+      { idempotencyKey: true },
     );
     setBusyId("");
     if (!result.ok) {
@@ -959,8 +960,8 @@ export function FinanzasModule() {
       active: accountForm.active,
     };
     const result = accountForm.id
-      ? await adminSend("/api/admin/treasury", { ...payload, accountId: accountForm.id }, "PATCH")
-      : await adminSend("/api/admin/treasury", payload);
+      ? await adminSend("/api/admin/treasury", { ...payload, accountId: accountForm.id }, "PATCH", { idempotencyKey: true })
+      : await adminSend("/api/admin/treasury", payload, "POST", { idempotencyKey: true });
     setAccountBusy(false);
     if (!result.ok) {
       setAccountError(result.error);
@@ -998,6 +999,7 @@ export function FinanzasModule() {
       "/api/admin/treasury",
       { kind: "account", accountId: account.id, active: !account.active },
       "PATCH",
+      { idempotencyKey: true },
     );
     setBusyId("");
     if (!result.ok) {
@@ -1028,7 +1030,7 @@ export function FinanzasModule() {
       notes: movementForm.notes.trim() || undefined,
     };
     if (movementForm.direction === "TRANSFER") payload.counterAccountId = movementForm.counterAccountId;
-    const result = await adminSend("/api/admin/treasury", payload);
+    const result = await adminSend("/api/admin/treasury", payload, "POST", { idempotencyKey: true });
     setMovementBusy(false);
     if (!result.ok) {
       setMovementError(result.error);
@@ -1069,7 +1071,7 @@ export function FinanzasModule() {
       method: expenseForm.method || undefined,
       receipt: expenseForm.receipt.trim() || undefined,
       notes: expenseForm.notes.trim() || undefined,
-    });
+    }, "POST", { idempotencyKey: true });
     setExpenseBusy(false);
     if (!result.ok) {
       setExpenseError(result.error);
@@ -1095,7 +1097,7 @@ export function FinanzasModule() {
   async function assignExpenseProject(expense: AdminExpenseRow, eventId: string) {
     setBusyId(`expense:${expense.id}`);
     setNotice(null);
-    const result = await adminSend("/api/admin/expenses", { expenseId: expense.id, eventId: eventId || null }, "PATCH");
+    const result = await adminSend("/api/admin/expenses", { expenseId: expense.id, eventId: eventId || null }, "PATCH", { idempotencyKey: true });
     setBusyId("");
     if (!result.ok) {
       setNotice({ tone: "error", text: result.error });
@@ -1185,7 +1187,7 @@ export function FinanzasModule() {
       date: payJob.date || undefined,
       method: payJob.method || undefined,
       receipt: payJob.receipt.trim() || undefined,
-    });
+    }, "POST", { idempotencyKey: true });
     setPayBusy(false);
     if (!result.ok) {
       setPayError(result.error);
