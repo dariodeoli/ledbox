@@ -898,6 +898,9 @@ const AUDIT_ACTION: Record<string, string> = {
   checkin: "Devolución",
   convert: "Convirtió",
   remind: "Recordó",
+  lock: "Bloqueó",
+  unlock: "Desbloqueó",
+  deny: "Falló",
 };
 
 const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
@@ -909,6 +912,9 @@ const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
   checkin: "info",
   convert: "accent",
   remind: "accent",
+  lock: "warn",
+  unlock: "ok",
+  deny: "danger",
 };
 
 const AUDIT_ENTITY: Record<string, string> = {
@@ -924,6 +930,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   EventTask: "Tarea",
   Promoter: "Promotora",
   AdminUser: "Usuario",
+  AdminSession: "Sesión del panel",
   Lead: "Lead",
   Organization: "Empresa",
   TreasuryAccount: "Cuenta de tesorería",

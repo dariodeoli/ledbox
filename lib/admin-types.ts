@@ -57,6 +57,25 @@ export type AdminSessionUser = {
   avatarUpdatedAt?: string | null;
 };
 
+/**
+ * Seguridad del panel por usuario (issue #21): si tiene PIN y su preferencia de
+ * auto-bloqueo. Viaja en la sesión (nunca el hash) para que el shell pueda
+ * dibujar la pantalla de bloqueo y armar el temporizador de inactividad.
+ */
+export type AdminSessionLock = {
+  hasPin: boolean;
+  pinUpdatedAt: string | null;
+  autoLockEnabled: boolean;
+  autoLockMinutes: number;
+};
+
+/** Estado del PIN propio que devuelve `/api/admin/profile/pin`. */
+export type AdminPinConfig = {
+  pin: { hasPin: boolean; updatedAt: string | null };
+  autoLock: { enabled: boolean; minutes: number; options?: readonly number[] };
+  hasPassword: boolean;
+};
+
 export type AdminOrganization = {
   id: string;
   name: string;
@@ -76,6 +95,9 @@ export type AdminSessionPayload = {
   organization?: AdminOrganization | null;
   organizations?: AdminOrganization[] | null;
   demo?: boolean | null;
+  /** Panel bloqueado por PIN (issue #21). */
+  locked?: boolean | null;
+  lock?: AdminSessionLock | null;
 };
 
 /** Cliente embebido en eventos/presupuestos/finanzas (relación `client: true`). */
@@ -966,6 +988,7 @@ export const AUDIT_ENTITIES = [
   "EventTask",
   "Promoter",
   "AdminUser",
+  "AdminSession",
   "Lead",
   "Organization",
   "TreasuryAccount",
@@ -975,8 +998,12 @@ export const AUDIT_ENTITIES = [
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 
-/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución, conversión y recordatorio al cliente. */
-export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind"] as const;
+/**
+ * Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución,
+ * conversión, recordatorio al cliente y bloqueo/desbloqueo/PIN fallido del panel
+ * (issue #21).
+ */
+export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind", "lock", "unlock", "deny"] as const;
 
 export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
 
@@ -1261,4 +1288,8 @@ export type AdminApiResponse = {
   /** Gastos del período con su cuenta, proyecto y proveedor (issue #27). */
   expenses?: AdminExpenseRow[];
   projects?: AdminExpenseProject[];
+  /** PIN y auto-bloqueo propios (`GET /api/admin/profile/pin`, issue #21). */
+  pin?: AdminPinConfig["pin"];
+  autoLock?: AdminPinConfig["autoLock"];
+  hasPassword?: boolean;
 };
