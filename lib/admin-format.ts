@@ -477,6 +477,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   task: "Tarea",
   supplier_due: "Proveedor",
   checklist: "Checklist",
+  reservation: "Reserva",
   collection: "Cobro",
   collection_due: "Cobro a plazo",
   lead: "Lead",

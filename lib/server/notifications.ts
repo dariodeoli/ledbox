@@ -25,6 +25,10 @@ import type {
  * - `portal_request`: solicitud del cliente en el portal sin resolver
  *   (`BudgetChangeRequest.status = pending`, issue #14); la fecha es el día en
  *   que el cliente la mandó y el aviso desaparece cuando el equipo la resuelve.
+ * - `reservation`: presupuesto aprobado con ítems vinculados al inventario cuya
+ *   reserva (issue #18) no quedó completa: falta el evento o sus fechas, o al
+ *   evento le faltan unidades reservadas. La fecha es la aprobación y el aviso
+ *   desaparece cuando la reserva queda completa o el ítem se desvincula.
  *
  * El calendario consume solo los tres primeros (`calendarAlerts`); los
  * vencimientos de cobro se suman como ítem propio en `/api/admin/calendar`. Las
@@ -375,6 +379,96 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
   });
 }
 
+/**
+ * Reservas pendientes (issue #18): presupuestos aprobados con ítems vinculados
+ * al inventario cuya reserva no quedó completa. El aviso nace de datos reales
+ * —el evento del presupuesto, sus fechas y las asignaciones del evento—, no de
+ * una marca guardada al aprobar, así que desaparece solo cuando la reserva se
+ * completa o el ítem se desvincula.
+ */
+async function reservationCandidates(organizationId: string): Promise<AdminNotification[]> {
+  const budgets = await db.budget.findMany({
+    where: { organizationId, status: "APPROVED", items: { some: { inventoryId: { not: null } } } },
+    orderBy: { approvedAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      title: true,
+      approvedAt: true,
+      createdAt: true,
+      client: { select: { name: true, company: true } },
+      event: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          setupAt: true,
+          startsAt: true,
+          strikeAt: true,
+          endsAt: true,
+          assignments: { select: { inventoryId: true, quantity: true } },
+        },
+      },
+      items: { where: { inventoryId: { not: null } }, select: { name: true, quantity: true, inventoryId: true } },
+    },
+  });
+
+  const candidates: AdminNotification[] = [];
+  for (const budget of budgets) {
+    const event = budget.event;
+    // Un evento cancelado ya no se reserva: no se avisa por él.
+    if (event?.status === "CANCELLED") continue;
+
+    // Unidades pedidas por artículo: la mayor si varios ítems apuntan al mismo
+    // (misma regla que la reserva automática).
+    const requested = new Map<string, { quantity: number; name: string }>();
+    for (const item of budget.items) {
+      if (!item.inventoryId) continue;
+      const current = requested.get(item.inventoryId);
+      if (current) current.quantity = Math.max(current.quantity, item.quantity);
+      else requested.set(item.inventoryId, { quantity: item.quantity, name: item.name });
+    }
+
+    const base = {
+      // La clave de deduplicación es `kind:entidad` por día: se distingue del
+      // aviso de cobro del mismo presupuesto agregando el sufijo del hecho.
+      id: `reservation:${budget.id}:stock`,
+      kind: "reservation" as const,
+      title: clientLabel(budget.client),
+      date: dayKeyOf(budget.approvedAt ?? budget.createdAt),
+      href: "/presupuestos",
+    };
+
+    if (!event) {
+      candidates.push({ ...base, level: "info", subtitle: joinParts([budget.title, "sin evento: no se puede reservar"]) });
+      continue;
+    }
+
+    const reserved = new Map<string, number>();
+    for (const assignment of event.assignments) {
+      reserved.set(assignment.inventoryId, (reserved.get(assignment.inventoryId) ?? 0) + assignment.quantity);
+    }
+    const missing = [...requested.entries()].flatMap(([inventoryId, wanted]) => {
+      const got = reserved.get(inventoryId) ?? 0;
+      return got < wanted.quantity ? [`${wanted.name}: ${got}/${wanted.quantity}`] : [];
+    });
+    if (missing.length === 0) continue;
+
+    // Sin fechas completas la reserva no se puede hacer: el aviso pide definirlas.
+    const missingDates = !event.startsAt && !event.setupAt
+      ? "sin fechas para reservar"
+      : !event.endsAt && !event.strikeAt
+        ? "sin fecha de fin para reservar"
+        : null;
+    candidates.push({
+      ...base,
+      level: missingDates ? "info" : "soon",
+      subtitle: joinParts([budget.title, event.name, missingDates ?? `reservado ${missing.join(" · ")}`]),
+    });
+  }
+  return candidates;
+}
+
 // ── Orden, deduplicación y recorte ──────────────────────────────────────────
 
 const LEVEL_ORDER: Record<AdminNotificationLevel, number> = { overdue: 0, soon: 1, info: 2 };
@@ -384,10 +478,11 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   task: 0,
   supplier_due: 1,
   checklist: 2,
-  collection_due: 3,
-  collection: 4,
-  lead: 5,
-  portal_request: 6,
+  reservation: 3,
+  collection_due: 4,
+  collection: 5,
+  lead: 6,
+  portal_request: 7,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */
@@ -449,12 +544,13 @@ export async function listAdminNotifications(
   organizationId: string,
   now = new Date(),
 ): Promise<{ notifications: AdminNotification[]; notificationCounts: AdminNotificationCounts }> {
-  const [core, extras, collections] = await Promise.all([
+  const [core, extras, collections, reservations] = await Promise.all([
     coreCandidates(organizationId, now),
     extraCandidates(organizationId, now),
     collectionDueCandidates(organizationId, now),
+    reservationCandidates(organizationId),
   ]);
-  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections]).sort(compareNotifications);
+  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections, ...reservations]).sort(compareNotifications);
   const notificationCounts: AdminNotificationCounts = { overdue: 0, soon: 0, info: 0, total: sorted.length };
   for (const notification of sorted) notificationCounts[notification.level] += 1;
   return { notifications: sorted.slice(0, NOTIFICATION_LIMIT), notificationCounts };
