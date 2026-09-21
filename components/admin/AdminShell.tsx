@@ -36,14 +36,15 @@ import {
   type AdminOrganization,
   type AdminOrganizationLogos,
   type AdminRole,
+  type AdminSessionLock,
   type AdminSessionUser,
 } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
-import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
+import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
 import { AdminOfflineBanner, AdminOfflineIndicator } from "./AdminOffline";
-import { adminApiGet, adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, clearAdminApiCache, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
 export type AdminSessionState = {
   user: AdminSessionUser | null;
@@ -52,6 +53,12 @@ export type AdminSessionState = {
   organizations: AdminOrganization[];
   /** Sesión de la demo pública (issue #14): el shell muestra el aviso de solo lectura. */
   demo: boolean;
+  /** Panel bloqueado por PIN (issue #21): se dibuja la pantalla de bloqueo y nada del panel detrás. */
+  locked: boolean;
+  /** Motivo del bloqueo vigente (para el texto de la pantalla). */
+  lockReason: "inactivity" | "manual";
+  /** Seguridad del usuario (PIN + preferencia de auto-bloqueo); `null` sin datos. */
+  lock: AdminSessionLock | null;
   loading: boolean;
   error: string;
   /** Vuelve a leer la sesión (lo usan perfil y empresa al guardar cambios). */
@@ -61,14 +68,21 @@ export type AdminSessionState = {
 /** Datos de sesión que viven en el estado del shell; `reload` se agrega al contexto. */
 type AdminSessionData = Omit<AdminSessionState, "reload">;
 
-const AdminSessionContext = createContext<AdminSessionState>({
+const EMPTY_SESSION: AdminSessionData = {
   user: null,
   role: null,
   organization: null,
   organizations: [],
   demo: false,
+  locked: false,
+  lockReason: "inactivity",
+  lock: null,
   loading: true,
   error: "",
+};
+
+const AdminSessionContext = createContext<AdminSessionState>({
+  ...EMPTY_SESSION,
   reload: () => {},
 });
 
@@ -113,11 +127,33 @@ function asOrganization(value: unknown): AdminOrganization | null {
   };
 }
 
+/** Seguridad del panel (issue #21): PIN configurado y preferencia de auto-bloqueo. */
+function asLockInfo(value: unknown): AdminSessionLock | null {
+  if (!isRecord(value)) return null;
+  return {
+    hasPin: value.hasPin === true,
+    pinUpdatedAt: typeof value.pinUpdatedAt === "string" ? value.pinUpdatedAt : null,
+    autoLockEnabled: value.autoLockEnabled !== false,
+    autoLockMinutes:
+      typeof value.autoLockMinutes === "number" && Number.isFinite(value.autoLockMinutes) && value.autoLockMinutes > 0
+        ? value.autoLockMinutes
+        : 10,
+  };
+}
+
 /**
  * `GET /api/admin/session` devuelve hoy `{ user: { user, session } }` y va a pasar a
  * `{ user, organization, organizations[] }`. Se leen las dos formas.
  */
-function pickSessionData(raw: unknown): { user: AdminSessionUser | null; organization: AdminOrganization | null; organizations: AdminOrganization[]; demo: boolean } {
+function pickSessionData(raw: unknown): {
+  user: AdminSessionUser | null;
+  organization: AdminOrganization | null;
+  organizations: AdminOrganization[];
+  demo: boolean;
+  locked: boolean;
+  lockReason: "inactivity" | "manual";
+  lock: AdminSessionLock | null;
+} {
   const outer = isRecord(raw) ? raw : {};
   const inner = isRecord(outer.user) && "user" in outer.user ? (outer.user as Record<string, unknown>) : outer;
   const user = asSessionUser(inner.user) ?? asSessionUser(outer.user);
@@ -129,7 +165,16 @@ function pickSessionData(raw: unknown): { user: AdminSessionUser | null; organiz
   const organizations = rawOrganizations.map(asOrganization).filter((organization): organization is AdminOrganization => Boolean(organization));
   const organization = asOrganization(inner.organization) ?? asOrganization(outer.organization) ?? organizations[0] ?? null;
   const demo = outer.demo === true || inner.demo === true;
-  return { user, organization, organizations, demo };
+  const lockReason = inner.lockReason === "manual" || outer.lockReason === "manual" ? "manual" : "inactivity";
+  return {
+    user,
+    organization,
+    organizations,
+    demo,
+    locked: outer.locked === true || inner.locked === true,
+    lockReason,
+    lock: asLockInfo(inner.lock) ?? asLockInfo(outer.lock),
+  };
 }
 
 /**
@@ -145,19 +190,17 @@ function isDemoEntryPath(): boolean {
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [session, setSession] = useState<AdminSessionData>({
-    user: null,
-    role: null,
-    organization: null,
-    organizations: [],
-    demo: false,
-    loading: true,
-    error: "",
-  });
+  const [session, setSession] = useState<AdminSessionData>(EMPTY_SESSION);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  // Bloqueo por PIN (issue #21): error/estado de la pantalla y canal entre pestañas.
+  const [lockError, setLockError] = useState("");
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockRequireLogin, setLockRequireLogin] = useState(false);
+  const lastActivityRef = useRef(Date.now());
+  const lockChannelRef = useRef<BroadcastChannel | null>(null);
 
   const loadSession = useCallback(async () => {
     setSession((current) => ({ ...current, loading: true, error: "" }));
@@ -180,13 +223,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       setSession((current) => ({ ...current, loading: false, error: result.error }));
       return;
     }
-    const { user, organization, organizations, demo } = pickSessionData(result.data);
+    const { user, organization, organizations, demo, locked, lockReason, lock } = pickSessionData(result.data);
     if (!user) {
       setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
       return;
     }
     const role = asAdminRole(user.role);
-    setSession({ user: { ...user, role }, role, organization, organizations, demo, loading: false, error: "" });
+    setSession({ user: { ...user, role }, role, organization, organizations, demo, locked, lockReason, lock, loading: false, error: "" });
   }, []);
 
   useEffect(() => {
@@ -229,6 +272,141 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     };
   }, [userMenuOpen]);
 
+  // ── Bloqueo por PIN y auto-bloqueo por inactividad (issue #21) ──────────────
+  const lockEligible = Boolean(session.user) && !session.demo && session.lock?.hasPin === true;
+  const autoLockMinutes = session.lock?.autoLockMinutes ?? 10;
+  const autoLockMs = lockEligible && session.lock?.autoLockEnabled ? Math.max(autoLockMinutes, 1) * 60_000 : 0;
+
+  /** Bloquea el panel: la pantalla tapa todo y el servidor marca la sesión. */
+  const lockPanel = useCallback(
+    (reason: "inactivity" | "manual") => {
+      if (!lockEligible || session.locked) return;
+      setSession((current) => (current.locked ? current : { ...current, locked: true, lockReason: reason }));
+      setLockError("");
+      setLockRequireLogin(false);
+      setMenuOpen(false);
+      setUserMenuOpen(false);
+      lockChannelRef.current?.postMessage({ type: "locked", reason });
+      // Best-effort: si el aviso al servidor no llega, el bloqueo local sigue y el
+      // desbloqueo igual valida el PIN contra el servidor.
+      void fetch("/api/admin/session/lock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      }).catch(() => {});
+    },
+    [lockEligible, session.locked],
+  );
+
+  /** Desbloquea con PIN: valida el servidor y limpia la caché para recargar datos. */
+  const unlockPanel = useCallback(async (pin: string) => {
+    setLockBusy(true);
+    setLockError("");
+    try {
+      const response = await fetch("/api/admin/session/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; requireLogin?: boolean };
+      if (!response.ok) {
+        setLockError(payload.error || "No pudimos validar el PIN.");
+        if (payload.requireLogin) setLockRequireLogin(true);
+        return;
+      }
+      clearAdminApiCache();
+      lastActivityRef.current = Date.now();
+      setSession((current) => ({ ...current, locked: false }));
+      setLockError("");
+      setLockRequireLogin(false);
+      lockChannelRef.current?.postMessage({ type: "unlocked" });
+    } catch {
+      setLockError("No pudimos conectar con el panel. Revisá tu conexión e intentá de nuevo.");
+    } finally {
+      setLockBusy(false);
+    }
+  }, []);
+
+  /** Login completo: cierra la sesión (o lo que quede de ella) y va al login. */
+  const fullLogin = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Aunque falle la limpieza, el camino al login sigue.
+    }
+    redirectToLogin();
+  }, []);
+
+  // Canal entre pestañas: bloquear o desbloquear en una se refleja en las demás.
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel("ledbox-admin-lock");
+    lockChannelRef.current = channel;
+    channel.onmessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; reason?: string } | null;
+      if (data?.type === "locked") {
+        setSession((current) =>
+          current.user && !current.demo && !current.locked
+            ? { ...current, locked: true, lockReason: data.reason === "manual" ? "manual" : "inactivity" }
+            : current,
+        );
+      } else if (data?.type === "unlocked") {
+        clearAdminApiCache();
+        setLockError("");
+        setLockRequireLogin(false);
+        setSession((current) => (current.locked ? { ...current, locked: false } : current));
+      }
+    };
+    return () => {
+      channel.close();
+      lockChannelRef.current = null;
+    };
+  }, []);
+
+  // Un 423 de cualquier endpoint (otra pestaña bloqueó la sesión) trae el bloqueo acá.
+  useEffect(() => {
+    function onLocked() {
+      setSession((current) =>
+        current.user && !current.demo && !current.locked ? { ...current, locked: true, lockReason: "inactivity" } : current,
+      );
+    }
+    window.addEventListener("ledbox:admin-locked", onLocked);
+    return () => window.removeEventListener("ledbox:admin-locked", onLocked);
+  }, []);
+
+  // Temporizador de inactividad: reloj propio y control al volver de dormido
+  // (visibilitychange/focus) para bloquear aunque la pestaña haya estado oculta.
+  useEffect(() => {
+    if (!autoLockMs || session.locked || session.loading) return;
+    lastActivityRef.current = Date.now();
+    let lastMark = 0;
+    function markActivity() {
+      const now = Date.now();
+      if (now - lastMark < 1000) return;
+      lastMark = now;
+      lastActivityRef.current = now;
+    }
+    function checkActivity() {
+      if (Date.now() - lastActivityRef.current >= autoLockMs) lockPanel("inactivity");
+    }
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastActivityRef.current >= autoLockMs) lockPanel("inactivity");
+      else lastActivityRef.current = Date.now();
+    }
+    const events: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "wheel", "touchstart"];
+    for (const name of events) window.addEventListener(name, markActivity, { passive: true });
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(checkActivity, 10_000);
+    return () => {
+      for (const name of events) window.removeEventListener(name, markActivity);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
+  }, [autoLockMs, session.locked, session.loading, lockPanel]);
+
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
   const canEditOrganization = canManageOrganization(session.role);
@@ -269,8 +447,25 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Con el panel bloqueado no se dibuja nada del shell: solo la pantalla de PIN.
+  const showLock = Boolean(session.user) && session.locked && !session.demo;
+  const lockAvatarSrc =
+    session.user?.avatarUpdatedAt ? adminAvatarUrl(session.user.id, session.user.avatarUpdatedAt) : null;
+
   return (
     <AdminSessionContext.Provider value={sessionValue}>
+      {showLock && session.user ? (
+        <AdminLockScreen
+          name={session.user.name}
+          avatarSrc={lockAvatarSrc}
+          autoLocked={session.lockReason === "inactivity"}
+          error={lockError}
+          busy={lockBusy}
+          requireLogin={lockRequireLogin}
+          onUnlock={unlockPanel}
+          onFullLogin={() => void fullLogin()}
+        />
+      ) : (
       <div className="admin-shell">
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
@@ -459,8 +654,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <Link className="admin-usermenu-item" role="menuitem" href="/perfil">
                         <AdminIcon name="user" size={15} />
                         <span>Mi perfil</span>
-                        <small>Nombre, contraseña y foto</small>
+                        <small>Nombre, contraseña, PIN y foto</small>
                       </Link>
+                      {lockEligible ? (
+                        <button
+                          type="button"
+                          className="admin-usermenu-item"
+                          role="menuitem"
+                          onClick={() => lockPanel("manual")}
+                        >
+                          <AdminIcon name="power" size={15} />
+                          <span>Bloquear panel</span>
+                          <small>Se reabre con tu PIN</small>
+                        </button>
+                      ) : null}
                       {canEditOrganization ? (
                         <Link className="admin-usermenu-item" role="menuitem" href="/empresa">
                           <AdminIcon name="building" size={15} />
@@ -523,6 +730,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
+      )}
     </AdminSessionContext.Provider>
   );
 }

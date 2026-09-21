@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   amountInput,
   DEFAULT_PHONE_COUNTRY,
@@ -11,6 +11,8 @@ import {
   normalizeSerial,
   parsePhone,
   percentInput,
+  PIN_MAX_DIGITS,
+  pinInput,
 } from "@/lib/field-rules";
 import { AdminIcon } from "./AdminIcons";
 
@@ -841,4 +843,177 @@ export function SearchField({
 /** Trampa anti-bot de los formularios de acceso: invisible, fuera del tabulado. */
 export function HoneypotField({ name = "website" }: { name?: string }) {
   return <input className="admin-honeypot" name={name} tabIndex={-1} autoComplete="off" aria-hidden="true" />;
+}
+
+/**
+ * PIN del panel (issue #21): 4–6 dígitos, **nunca visible** (sin ojo, siempre
+ * `type=password`), teclado numérico (`inputMode="numeric"`) y validación al
+ * completarlo (`autoSubmit` avisa al llegar al máximo). El valor que entrega ya
+ * viene limpio (`pinInput`, solo dígitos) y el API lo revalida.
+ *
+ * Los puntos son la parte visible; el `<input>` vive encima, transparente, para
+ * que el teclado del celular y el pegado funcionen igual. La pantalla de bloqueo
+ * le pasa su propio `inputRef` para que el teclado en pantalla no le robe el foco.
+ */
+export function PinField({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  length = PIN_MAX_DIGITS,
+  autoSubmit,
+  onComplete,
+  hint,
+  error,
+  wide,
+  required,
+  disabled,
+  autoFocus,
+  name,
+  id,
+  inputRef,
+}: {
+  label?: string;
+  ariaLabel?: string;
+  value: string;
+  onChange: (value: string) => void;
+  /** Máximo de dígitos que se pueden teclear (4–6). */
+  length?: number;
+  /** Al completar `length` dígitos llama a `onComplete` (validación inmediata). */
+  autoSubmit?: boolean;
+  onComplete?: (value: string) => void;
+  hint?: string;
+  error?: string | null;
+  wide?: boolean;
+  required?: boolean;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  name?: string;
+  id?: string;
+  /** Ref del `<input>` cuando el llamador necesita devolverle el foco (teclado en pantalla). */
+  inputRef?: React.Ref<HTMLInputElement>;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds(id);
+  const localRef = useRef<HTMLInputElement | null>(null);
+  const [focused, setFocused] = useState(false);
+
+  function assignRef(node: HTMLInputElement | null) {
+    localRef.current = node;
+    if (typeof inputRef === "function") inputRef(node);
+    else if (inputRef) (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
+  }
+
+  function emit(next: string) {
+    const digits = pinInput(next);
+    onChange(digits);
+    if (autoSubmit && digits.length === length) onComplete?.(digits);
+  }
+
+  return (
+    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+      <span className="admin-pin" data-focused={focused ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
+        <span className="admin-pin-dots" aria-hidden="true">
+          {Array.from({ length }, (_, index) => (
+            <span key={index} className="admin-pin-dot" data-filled={index < value.length ? "true" : undefined} />
+          ))}
+        </span>
+        <input
+          ref={assignRef}
+          id={fieldId}
+          name={name}
+          className="admin-pin-input"
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="[0-9]*"
+          maxLength={length}
+          value={value}
+          required={required}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          spellCheck={false}
+          aria-label={label ? undefined : (ariaLabel ?? "PIN")}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy(error, hint, hintId, errorId)}
+          onChange={(event) => emit(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+      </span>
+    </FieldChrome>
+  );
+}
+
+/**
+ * 2–5 opciones excluyentes: barra con `aria-pressed` (un solo control para
+ * catálogos chicos, sin select ni radios sueltos).
+ */
+export function SegmentedField({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  options,
+  hint,
+  error,
+  wide,
+  disabled,
+}: {
+  label?: string;
+  ariaLabel?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  hint?: string;
+  error?: string | null;
+  wide?: boolean;
+  disabled?: boolean;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds();
+  const labelId = `${fieldId}-label`;
+  const name = label ?? ariaLabel ?? "";
+  const message = error ? (
+    <span className="admin-field-error" id={errorId} role="alert">
+      {error}
+    </span>
+  ) : hint ? (
+    <span className="admin-field-hint" id={hintId}>
+      {hint}
+    </span>
+  ) : null;
+  return (
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"}>
+      {label ? (
+        <span className="admin-field-label" id={labelId}>
+          {label}
+        </span>
+      ) : (
+        <span className="admin-field-label" hidden>
+          {ariaLabel}
+        </span>
+      )}
+      <div
+        className="admin-segmented"
+        role="group"
+        aria-label={label ? undefined : name}
+        aria-labelledby={label ? labelId : undefined}
+        aria-describedby={describedBy(error, hint, hintId, errorId)}
+        aria-invalid={error ? true : undefined}
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className="admin-segmented-item"
+            aria-pressed={value === option.value}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {message}
+    </div>
+  );
 }

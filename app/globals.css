@@ -827,6 +827,58 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-logo-tone[data-tone="dark"] { background: #0a0e11; }
 .admin-logo-tone[data-tone="light"] { background: #f2f6f8; }
 
+/* ── PIN y auto-bloqueo (issue #21) ──
+   Pantalla de bloqueo que reemplaza todo el shell (nada del panel detrás), campo
+   de PIN con puntos y teclado numérico, y preferencia segmentada del panel. */
+.admin-lock { display: grid; place-items: center; min-height: 100vh; padding: 24px 16px; background: var(--a-bg); }
+.admin-lock-card { display: grid; gap: 14px; width: min(360px, 100%); padding: 22px 20px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-lock-head { display: grid; gap: 8px; }
+.admin-lock-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--a-text-strong); font: 12.5px var(--font-display); letter-spacing: 1.6px; }
+.admin-lock-title { color: var(--a-text-strong); font: 800 21px/1.15 var(--font-body); letter-spacing: -.01em; }
+.admin-lock-lede { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; }
+.admin-lock-user { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-bg-2); }
+.admin-lock-user-text { display: grid; gap: 1px; min-width: 0; }
+.admin-lock-user-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-lock-user-text small { color: var(--a-muted); font-size: 11px; }
+.admin-lock-form { display: grid; gap: 12px; }
+.admin-lock-full { display: grid; gap: 12px; }
+.admin-lock-link { border: 0; background: transparent; color: var(--a-muted); font: 600 11.5px var(--font-body); text-decoration: underline; cursor: pointer; }
+.admin-lock-link:hover { color: var(--a-accent); }
+
+/* Campo de PIN: los puntos son la parte visible; el input va encima, invisible,
+   para que el teclado del celular y el pegado funcionen igual. Nunca se muestra. */
+.admin-pin { position: relative; display: block; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); transition: border-color .15s, box-shadow .15s; }
+.admin-pin:focus-within, .admin-pin[data-focused="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-pin[data-disabled="true"] { opacity: .55; }
+.admin-pin:has(input[aria-invalid="true"]) { border-color: var(--a-danger); }
+.admin-pin-dots { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 46px; padding: 0 14px; }
+.admin-pin-dot { width: 12px; height: 12px; border: 1.5px solid var(--a-line-2); border-radius: 999px; }
+.admin-pin-dot[data-filled="true"] { border-color: var(--a-accent); background: var(--a-accent); }
+.admin-pin .admin-pin-input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; background: transparent; color: transparent; caret-color: transparent; opacity: 0; cursor: text; }
+
+/* Teclado numérico de la pantalla de bloqueo: teclas grandes para el dedo. */
+.admin-pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.admin-pin-pad-key { display: grid; place-items: center; min-height: 54px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); color: var(--a-text-strong); font: 600 19px var(--font-body); font-variant-numeric: tabular-nums; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.admin-pin-pad-key:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
+.admin-pin-pad-key:active:not(:disabled) { background: var(--a-accent-soft); }
+.admin-pin-pad-key:disabled { opacity: .45; cursor: not-allowed; }
+.admin-pin-pad-gap { border: 0; background: transparent; cursor: default; }
+.admin-pin-pad-del { color: var(--a-muted-2); }
+
+/* Preferencia segmentada 2–5 opciones (auto-bloqueo, issue #21). */
+.admin-segmented { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-segmented-item { padding: 7px 12px; border: 1px solid var(--a-line-2); border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .04em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.admin-segmented-item:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
+.admin-segmented-item[aria-pressed="true"] { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent-strong); }
+.admin-segmented-item:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 430px) {
+  .admin-lock { place-items: start center; padding: 16px 12px 24px; }
+  .admin-lock-card { padding: 18px 14px; }
+  .admin-pin-pad-key { min-height: 52px; font-size: 18px; }
+  .admin-pin-dots { gap: 10px; }
+}
+
 /* ── Diálogo del panel (issue #12) ──
    Primer diálogo del panel: overlay a pantalla completa y panel centrado.
    Contrato mínimo: rol dialog, foco al abrir, cierre con Escape y clic afuera. */
