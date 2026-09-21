@@ -19,9 +19,12 @@ import type {
  * - `supplier_due`: `SupplierJob.dueAt` de un trabajo abierto (ni pagado ni cancelado).
  * - `checklist`: evento próximo (ni cancelado ni finalizado) con tareas pendientes.
  * - `collection`: presupuesto aprobado con saldo, con la validez como fecha.
+ * - `collection_due`: cobro a plazo pendiente (`ClientPayment.status = PENDING`)
+ *   con `dueAt` vencido o dentro de los próximos 7 días (issue #16).
  * - `lead`: lead sin contactar (`Lead.status = NEW`).
  *
- * El calendario consume solo los tres primeros (`calendarAlerts`) y las
+ * El calendario consume solo los tres primeros (`calendarAlerts`); los
+ * vencimientos de cobro se suman como ítem propio en `/api/admin/calendar`. Las
  * notificaciones suman los informativos, deduplican por entidad y día, ordenan
  * por urgencia y recortan a `NOTIFICATION_LIMIT`.
  */
@@ -100,6 +103,13 @@ export function isValidDayKey(value: string): boolean {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+/** Clave `YYYY-MM-DD` corrida `days` días (negativo para ir hacia atrás). */
+export function shiftDayKey(dayKey: string, days: number): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
 }
 
 /** Último día del mes de una clave `YYYY-MM-DD`. */
@@ -295,6 +305,41 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
   return candidates;
 }
 
+/**
+ * Recordatorios de cobro (issue #16): cobros a plazo todavía pendientes con
+ * vencimiento vencido o dentro de los próximos 7 días. La fecha del aviso es el
+ * `dueAt` real y el nivel se resuelve por día de Asunción: un cobro que vence hoy
+ * se recuerda como próximo, no como vencido.
+ */
+async function collectionDueCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
+  const soonLimit = new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS);
+  const todayKey = dayKeyOf(now);
+  const pending = await db.clientPayment.findMany({
+    where: { organizationId, status: "PENDING", dueAt: { not: null, lte: soonLimit } },
+    orderBy: { dueAt: "asc" },
+    take: 50,
+    include: {
+      client: { select: { name: true, company: true } },
+      budget: { select: { title: true } },
+    },
+  });
+
+  return pending.flatMap((payment) => {
+    if (!payment.dueAt) return [];
+    return [
+      {
+        id: `collection_due:${payment.id}`,
+        kind: "collection_due" as const,
+        level: dayKeyOf(payment.dueAt) < todayKey ? ("overdue" as const) : ("soon" as const),
+        title: clientLabel(payment.client),
+        subtitle: joinParts([payment.budget?.title, payment.method, formatPyg(payment.amount)]),
+        date: dayKeyOf(payment.dueAt),
+        href: "/finanzas",
+      },
+    ];
+  });
+}
+
 // ── Orden, deduplicación y recorte ──────────────────────────────────────────
 
 const LEVEL_ORDER: Record<AdminNotificationLevel, number> = { overdue: 0, soon: 1, info: 2 };
@@ -304,8 +349,9 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   task: 0,
   supplier_due: 1,
   checklist: 2,
-  collection: 3,
-  lead: 4,
+  collection_due: 3,
+  collection: 4,
+  lead: 5,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */
@@ -367,11 +413,12 @@ export async function listAdminNotifications(
   organizationId: string,
   now = new Date(),
 ): Promise<{ notifications: AdminNotification[]; notificationCounts: AdminNotificationCounts }> {
-  const [core, extras] = await Promise.all([
+  const [core, extras, collections] = await Promise.all([
     coreCandidates(organizationId, now),
     extraCandidates(organizationId, now),
+    collectionDueCandidates(organizationId, now),
   ]);
-  const sorted = dedupeByEntityAndDay([...core, ...extras]).sort(compareNotifications);
+  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections]).sort(compareNotifications);
   const notificationCounts: AdminNotificationCounts = { overdue: 0, soon: 0, info: 0, total: sorted.length };
   for (const notification of sorted) notificationCounts[notification.level] += 1;
   return { notifications: sorted.slice(0, NOTIFICATION_LIMIT), notificationCounts };

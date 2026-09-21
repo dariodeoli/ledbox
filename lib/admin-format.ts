@@ -232,6 +232,57 @@ export function statusTone(value: string | null | undefined): AdminTone {
   return TONES[value] ?? "neutral";
 }
 
+// ── Cobros a plazo (issue #16) ──────────────────────────────────────────────
+// Estado del cobro de cliente (enum `ClientPaymentStatus`) y cuenta regresiva
+// del vencimiento, calculada por día de Asunción (nunca por la medianoche del
+// navegador): "cobramos en X días" / "vencido hace X días".
+
+const PAYMENT_STATUS: Record<string, string> = {
+  PENDING: "A cobrar",
+  RECEIVED: "Cobrado",
+  CANCELLED: "Anulado",
+};
+
+const PAYMENT_STATUS_TONES: Record<string, AdminTone> = {
+  PENDING: "warn",
+  RECEIVED: "ok",
+  CANCELLED: "danger",
+};
+
+export const paymentStatusLabel = (value: string | null | undefined) => label(PAYMENT_STATUS, value);
+
+export function paymentStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return PAYMENT_STATUS_TONES[value] ?? "neutral";
+}
+
+/** Días de calendario (Asunción) que faltan para un vencimiento; `null` si no hay fecha. */
+export function daysUntilDue(value: string | Date | null | undefined): number | null {
+  const due = dayKeyToUtcDate(value ? dayKeyOf(value) : null);
+  const today = dayKeyToUtcDate(dayKeyOf());
+  if (!due || !today) return null;
+  return Math.round((due.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Cuenta regresiva del cobro: "cobramos en 12 días" / "vencido hace 3 días". */
+export function collectionDueText(value: string | Date | null | undefined): string {
+  const days = daysUntilDue(value);
+  if (days === null) return "Sin vencimiento";
+  if (days === 0) return "cobramos hoy";
+  if (days === 1) return "cobramos mañana";
+  if (days === -1) return "vencido hace 1 día";
+  return days > 0 ? `cobramos en ${formatNumber(days)} días` : `vencido hace ${formatNumber(Math.abs(days))} días`;
+}
+
+/** Tono de la cuenta regresiva: vencido (rojo) o por vencer en 7 días (ámbar). */
+export function collectionDueTone(value: string | Date | null | undefined, days = 7): AdminTone | undefined {
+  const distance = daysUntilDue(value);
+  if (distance === null) return undefined;
+  if (distance < 0) return "danger";
+  if (distance <= days) return "warn";
+  return undefined;
+}
+
 // ── Portal del cliente (issue #12) ──────────────────────────────────────────
 // Estado de la aprobación del presupuesto tal como se ve en la lista del panel.
 
@@ -318,6 +369,7 @@ const CALENDAR_KIND: Record<string, string> = {
   event_end: "Fin de evento",
   strike: "Desmontaje",
   collection: "Cobro",
+  collection_due: "Vence cobro",
   supplier_due: "Vence proveedor",
   supplier_delivery: "Entrega proveedor",
   supplier_payment: "Pago proveedor",
@@ -396,6 +448,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   supplier_due: "Proveedor",
   checklist: "Checklist",
   collection: "Cobro",
+  collection_due: "Cobro a plazo",
   lead: "Lead",
 };
 
@@ -507,6 +560,10 @@ const AUDIT_FIELD: Record<string, string> = {
   method: "Medio de pago",
   reference: "Referencia",
   paidAt: "Pagado",
+  collectedAt: "Cobrado el",
+  invoiceNumber: "Nº de factura",
+  invoiceIssuedAt: "Emisión de factura",
+  chequeDate: "Fecha del cheque",
   category: "Categoría",
   kind: "Tipo de ítem",
   quantity: "Cantidad",
@@ -573,6 +630,7 @@ export function auditValueLabel(entity: string | null | undefined, field: string
   if (key === "status") {
     if (entity === "Event") return eventStatusLabel(text);
     if (entity === "Budget") return budgetStatusLabel(text);
+    if (entity === "ClientPayment") return paymentStatusLabel(text);
     if (entity === "SupplierJob") return jobStatusLabel(text);
     if (entity === "InventoryItem") return inventoryStatusLabel(text);
     if (entity === "Lead") return leadStatusLabel(text);
