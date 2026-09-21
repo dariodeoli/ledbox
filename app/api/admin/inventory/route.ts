@@ -5,6 +5,17 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import {
+  BLOCKED_INVENTORY_STATUSES,
+  EVENT_RANGE_SELECT,
+  assignmentRange,
+  availabilityForRange,
+  buildAvailability,
+  findSubstitutes,
+  loadAssignments,
+  parseDate,
+  rangeLabel,
+} from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,117 +25,23 @@ export const dynamic = "force-dynamic";
  *
  * - `GET` sin parámetros: ítems de la empresa con sus asignaciones y la
  *   disponibilidad de hoy (`committedNow` / `availableNow`).
- * - `GET ?inventoryId&startsAt&endsAt[&excludeId]`: disponibilidad del ítem en
- *   el rango pedido, con el detalle de las asignaciones que se solapan.
+ * - `GET ?startsAt&endsAt`: disponibilidad de todos los ítems **en ese rango**
+ *   (`availability.range`), además de la de hoy; es la vista por rango del
+ *   módulo de inventario.
+ * - `GET ?inventoryId&startsAt&endsAt[&excludeId]`: disponibilidad del ítem en el
+ *   rango pedido, con el detalle de las asignaciones que se solapan y los
+ *   **sustitutos** de la misma categoría con stock libre en el rango.
  * - `POST`: `status` (estado del ítem), `assignment` (alta/edición con
  *   validación de disponibilidad), `checkout` (salida), `checkin` (devolución
  *   con estado, daños y faltantes) y `assignment-delete`.
  *
- * La disponibilidad es server-side: se suman las asignaciones que se solapan
- * con el rango y nunca se permite asignar más unidades que las libres. Los
- * ítems en MAINTENANCE o RETIRED quedan bloqueados para asignar.
+ * La disponibilidad es server-side y vive en `lib/server/inventory-availability.ts`
+ * (fuente única): la usan este endpoint, la reserva automática al aprobar un
+ * presupuesto y los sustitutos. Nunca se permite asignar más unidades que las
+ * libres y los ítems en MAINTENANCE o RETIRED quedan bloqueados.
  */
 
 const INVENTORY_STATUSES: readonly InventoryStatus[] = ["AVAILABLE", "RESERVED", "IN_USE", "MAINTENANCE", "RETIRED"];
-const BLOCKED_STATUSES: readonly InventoryStatus[] = ["MAINTENANCE", "RETIRED"];
-const MAX_ASSIGNMENTS = 500;
-
-const EVENT_RANGE_SELECT = { id: true, name: true, startsAt: true, endsAt: true, setupAt: true, strikeAt: true } as const;
-
-type EventRangeRef = {
-  id: string;
-  name: string;
-  startsAt: Date | null;
-  endsAt: Date | null;
-  setupAt: Date | null;
-  strikeAt: Date | null;
-};
-
-type AssignmentRecord = {
-  id: string;
-  quantity: number;
-  startsAt: Date | null;
-  endsAt: Date | null;
-  event: EventRangeRef;
-};
-
-const rangeFormat = new Intl.DateTimeFormat("es-PY", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function rangeLabel(startsAt: Date, endsAt: Date): string {
-  return `${rangeFormat.format(startsAt)} → ${rangeFormat.format(endsAt)}`;
-}
-
-/** Rango efectivo de una asignación: el propio y, si falta, el del evento. */
-function assignmentRange(assignment: AssignmentRecord): { start: Date | null; end: Date | null } {
-  const start = assignment.startsAt ?? assignment.event.setupAt ?? assignment.event.startsAt;
-  const end = assignment.endsAt ?? assignment.event.strikeAt ?? assignment.event.endsAt ?? start;
-  return { start, end };
-}
-
-/** Solape inclusivo: un rango sin fechas se trata como abierto (conservador). */
-function overlaps(startA: Date | null, endA: Date | null, startB: Date, endB: Date): boolean {
-  if (endA && endA.getTime() < startB.getTime()) return false;
-  if (startA && startA.getTime() > endB.getTime()) return false;
-  return true;
-}
-
-async function loadAssignments(inventoryId: string, organizationId: string, excludeId?: string | null): Promise<AssignmentRecord[]> {
-  return db.eventInventory.findMany({
-    where: {
-      inventoryId,
-      event: { organizationId },
-      ...(excludeId ? { id: { not: excludeId } } : {}),
-    },
-    orderBy: { startsAt: "asc" },
-    take: MAX_ASSIGNMENTS,
-    include: { event: { select: EVENT_RANGE_SELECT } },
-  });
-}
-
-function buildAvailability(item: { id: string; name: string; quantity: number; status: InventoryStatus }, rows: AssignmentRecord[], startsAt: Date, endsAt: Date) {
-  const conflicts = rows
-    .filter((row) => {
-      const { start, end } = assignmentRange(row);
-      return overlaps(start, end, startsAt, endsAt);
-    })
-    .map((row) => {
-      const { start, end } = assignmentRange(row);
-      return {
-        id: row.id,
-        eventId: row.event.id,
-        eventName: row.event.name,
-        quantity: row.quantity,
-        startsAt: start,
-        endsAt: end,
-      };
-    });
-  const committed = conflicts.reduce((sum, conflict) => sum + conflict.quantity, 0);
-  const blocked = BLOCKED_STATUSES.includes(item.status);
-  return {
-    inventoryId: item.id,
-    name: item.name,
-    status: item.status,
-    total: item.quantity,
-    committed,
-    available: blocked ? 0 : Math.max(0, item.quantity - committed),
-    blocked,
-    startsAt,
-    endsAt,
-    conflicts,
-  };
-}
 
 export async function GET(request: Request) {
   const auth = await requireAdminContext();
@@ -141,8 +58,14 @@ export async function GET(request: Request) {
     if (!startsAt || !endsAt) return jsonError("Indicá el rango de fechas para calcular la disponibilidad.", 400);
     if (endsAt.getTime() < startsAt.getTime()) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
     const excludeId = url.searchParams.get("excludeId");
-    const rows = await loadAssignments(item.id, organizationId, excludeId);
-    return Response.json({ availability: buildAvailability(item, rows, startsAt, endsAt) });
+    const availability = await availabilityForRange({ organizationId, item, startsAt, endsAt, excludeId });
+    const substitutes = await findSubstitutes({
+      organizationId,
+      item: { id: item.id, category: item.category, status: item.status },
+      startsAt,
+      endsAt,
+    });
+    return Response.json({ availability, substitutes });
   }
 
   const items = await db.inventoryItem.findMany({ where: { organizationId }, orderBy: { name: "asc" }, take: 300 });
@@ -154,6 +77,12 @@ export async function GET(request: Request) {
         include: { event: { select: EVENT_RANGE_SELECT } },
       })
     : [];
+
+  // Rango opcional de la vista por rango (mismo cálculo compartido que la
+  // disponibilidad puntual). Si falta o es inválido, solo se devuelve "hoy".
+  const rangeStart = parseDate(url.searchParams.get("startsAt"));
+  const rangeEnd = parseDate(url.searchParams.get("endsAt"));
+  const range = rangeStart && rangeEnd && rangeEnd.getTime() >= rangeStart.getTime() ? { start: rangeStart, end: rangeEnd } : null;
 
   const now = new Date();
   const inventory = items.map((item) => {
@@ -167,7 +96,8 @@ export async function GET(request: Request) {
       return true;
     });
     const committedNow = activeNow.reduce((sum, row) => sum + row.quantity, 0);
-    const blocked = BLOCKED_STATUSES.includes(item.status);
+    const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+    const rangeAvailability = range ? buildAvailability(item, rows, range.start, range.end) : null;
     return {
       ...item,
       assignments: rows,
@@ -175,6 +105,16 @@ export async function GET(request: Request) {
         committedNow,
         availableNow: blocked ? 0 : Math.max(0, item.quantity - committedNow),
         overcommittedNow: committedNow > item.quantity,
+        range: rangeAvailability
+          ? {
+              startsAt: rangeAvailability.startsAt,
+              endsAt: rangeAvailability.endsAt,
+              committed: rangeAvailability.committed,
+              available: rangeAvailability.available,
+              overcommitted: rangeAvailability.committed > item.quantity,
+              conflicts: rangeAvailability.conflicts,
+            }
+          : null,
       },
     };
   });
@@ -230,7 +170,7 @@ export async function POST(request: Request) {
     if (!startsAt || !endsAt) return jsonError("Indicá el rango de fechas de la asignación (el evento todavía no tiene fechas).", 400);
     if (endsAt.getTime() < startsAt.getTime()) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
 
-    if (BLOCKED_STATUSES.includes(item.status)) {
+    if (BLOCKED_INVENTORY_STATUSES.includes(item.status)) {
       return jsonError(`«${item.name}» está ${item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
     }
 

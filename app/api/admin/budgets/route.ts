@@ -14,6 +14,9 @@ const MAX_TERMS = 600;
 const MAX_INSTALLMENTS = 12;
 const MAX_INSTALLMENT_LABEL = 60;
 
+/** Datos del artículo de inventario que el panel dibuja junto al ítem del presupuesto. */
+const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true, quantity: true, status: true } as const;
+
 /**
  * `GET /api/admin/budgets`: presupuestos de la empresa activa. Los escalares
  * incluyen el estado del portal (issue #12) — `publicToken`,
@@ -22,6 +25,9 @@ const MAX_INSTALLMENT_LABEL = 60;
  * (issue #14: `advanceAmount`, `paymentTerms`, `installmentsJson`).
  * `approvalIp` y `approvalUserAgent` quedan disponibles para el historial, pero
  * la lista no los dibuja. Nada de otra empresa entra en la respuesta.
+ *
+ * Los ítems viajan con su vínculo de inventario (`inventoryId` + el artículo
+ * embebido, issue #18): el panel muestra qué ítem reserva stock al aprobar.
  *
  * La misma respuesta trae `budgetRequests`: las solicitudes del portal
  * (issue #14) con su presupuesto embebido, para que el módulo muestre la cola
@@ -36,7 +42,12 @@ export async function GET() {
       where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 200,
-      include: { client: true, event: true, items: true, payments: true },
+      include: {
+        client: true,
+        event: true,
+        items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } },
+        payments: true,
+      },
     }),
     db.budgetChangeRequest.findMany({
       where: { organizationId },
@@ -75,6 +86,20 @@ export async function POST(request: Request) {
     if (!event) return jsonError("Event not found.", 404);
   }
   const rawItems = Array.isArray(body.items) ? body.items : [];
+  // Vínculo con inventario (issue #18): solo artículos de la empresa activa.
+  const inventoryIds = [...new Set(
+    rawItems.flatMap((item) => {
+      const value = item && typeof item === "object" ? (item as Record<string, unknown>).inventoryId : null;
+      return typeof value === "string" && value.trim() ? [value.trim()] : [];
+    }),
+  )];
+  const inventoryItems = inventoryIds.length > 0
+    ? await db.inventoryItem.findMany({ where: { id: { in: inventoryIds }, organizationId }, select: { id: true } })
+    : [];
+  const validInventoryIds = new Set(inventoryItems.map((item) => item.id));
+  if (inventoryIds.some((id) => !validInventoryIds.has(id))) {
+    return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
+  }
   const items = rawItems.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const value = item as Record<string, unknown>;
@@ -83,8 +108,9 @@ export async function POST(request: Request) {
     const days = Number(value.days || 1);
     const unitPrice = Number(value.unitPrice || 0);
     const costPrice = Number(value.costPrice || 0);
+    const inventoryId = typeof value.inventoryId === "string" && validInventoryIds.has(value.inventoryId.trim()) ? value.inventoryId.trim() : null;
     if (!name || !Number.isFinite(quantity) || !Number.isFinite(days) || !Number.isFinite(unitPrice)) return [];
-    return [{ id: randomUUID(), name, quantity: Math.max(1, quantity), days: Math.max(1, days), unitPrice: Math.max(0, unitPrice), costPrice: Math.max(0, costPrice), subtotal: Math.max(0, quantity * days * unitPrice) }];
+    return [{ id: randomUUID(), name, quantity: Math.max(1, quantity), days: Math.max(1, days), unitPrice: Math.max(0, unitPrice), costPrice: Math.max(0, costPrice), subtotal: Math.max(0, quantity * days * unitPrice), inventoryId }];
   });
   const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
   const discount = Math.max(0, Number(body.discount || 0));
@@ -105,7 +131,7 @@ export async function POST(request: Request) {
       notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
       items: { create: items },
     },
-    include: { client: true, event: true, items: true },
+    include: { client: true, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
   });
   await recordAudit({
     context: auth.context,
@@ -117,6 +143,9 @@ export async function POST(request: Request) {
       fields: {
         ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "validUntil", "eventId"]),
         items: budget.items.length,
+        ...(budget.items.some((item) => item.inventoryId)
+          ? { inventario: budget.items.filter((item) => item.inventory?.name).map((item) => `${item.name} → ${item.inventory?.name}`) }
+          : {}),
       },
     },
   });
@@ -149,10 +178,15 @@ function parseInstallments(raw: unknown): ParsedInstallments {
 }
 
 /**
- * `PATCH /api/admin/budgets` (issue #14): plan de pagos del presupuesto.
- * Anticipo (`advanceAmount`), condiciones (`paymentTerms`) y cuotas
- * (`installmentsJson`, forma `[{ label, amount, dueAt }]`). El anticipo más las
- * cuotas no pueden superar el total: el plan no promete más de lo que se cobra.
+ * `PATCH /api/admin/budgets` (issues #14 y #18).
+ *
+ * - `kind: "item-link"`: vincula (o desvincula con `inventoryId: null`) un ítem
+ *   del presupuesto con un artículo del inventario de la empresa activa. Solo el
+ *   vínculo reserva stock al aprobar; sin vínculo el ítem no toca el inventario.
+ * - Sin `kind`: plan de pagos del presupuesto. Anticipo (`advanceAmount`),
+ *   condiciones (`paymentTerms`) y cuotas (`installmentsJson`, forma
+ *   `[{ label, amount, dueAt }]`). El anticipo más las cuotas no pueden superar
+ *   el total: el plan no promete más de lo que se cobra.
  */
 export async function PATCH(request: Request) {
   const auth = await requireAdminContext("budgets.write");
@@ -161,6 +195,54 @@ export async function PATCH(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
   if (!budgetId) return jsonError("budgetId is required.", 400);
+
+  if (body.kind === "item-link") {
+    const itemId = typeof body.itemId === "string" ? body.itemId : "";
+    if (!itemId) return jsonError("itemId is required.", 400);
+    const rawInventoryId = typeof body.inventoryId === "string" ? body.inventoryId.trim() : "";
+    const budget = await db.budget.findFirst({
+      where: { id: budgetId, organizationId },
+      select: {
+        id: true,
+        title: true,
+        client: { select: { name: true, company: true } },
+        items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
+      },
+    });
+    if (!budget) return jsonError("Budget not found.", 404);
+    const item = budget.items.find((row) => row.id === itemId);
+    if (!item) return jsonError("El ítem no pertenece a este presupuesto.", 404);
+    const inventory = rawInventoryId
+      ? await db.inventoryItem.findFirst({ where: { id: rawInventoryId, organizationId }, select: { id: true, name: true } })
+      : null;
+    if (rawInventoryId && !inventory) return jsonError("El artículo de inventario no existe en esta empresa.", 404);
+    if (item.inventoryId === (inventory?.id ?? null)) {
+      return Response.json({ item: { id: item.id, inventoryId: item.inventoryId }, unchanged: true });
+    }
+    const updated = await db.budgetItem.update({
+      where: { id: item.id },
+      data: { inventoryId: inventory?.id ?? null },
+      select: { id: true, name: true, inventoryId: true, inventory: { select: INVENTORY_LINK_SELECT } },
+    });
+    await recordAudit({
+      context: auth.context,
+      action: "update",
+      entity: "Budget",
+      entityId: budget.id,
+      summary: inventory
+        ? `Vinculó «${item.name}» del presupuesto «${budget.title}» con «${inventory.name}» del inventario`
+        : `Quitó el vínculo con inventario de «${item.name}» del presupuesto «${budget.title}»`,
+      detail: {
+        changes: {
+          inventoryId: {
+            from: item.inventory?.name ?? null,
+            to: inventory?.name ?? null,
+          },
+        },
+      },
+    });
+    return Response.json({ item: updated });
+  }
 
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },

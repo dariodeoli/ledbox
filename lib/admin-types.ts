@@ -77,7 +77,16 @@ export type AdminClientRow = AdminClientRef & {
   _count: { events: number; budgets: number };
 };
 
-export type AdminEventRef = { id: string; name: string; startsAt: string | null; status: string };
+export type AdminEventRef = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  status: string;
+  /** Rango del evento (issue #18): lo usa la reserva de inventario; puede faltar en refs mínimas. */
+  setupAt?: string | null;
+  endsAt?: string | null;
+  strikeAt?: string | null;
+};
 
 export type AdminEventTask = {
   id: string;
@@ -132,6 +141,9 @@ export type AdminBudgetItem = {
   unitPrice: number;
   costPrice: number;
   subtotal: number;
+  /** Vínculo con inventario (issue #18): `null` = el ítem no reserva nada. */
+  inventoryId: string | null;
+  inventory: AdminInventoryLink | null;
 };
 
 /** Cuota del plan de pagos (issue #14); `dueAt` es `YYYY-MM-DD`. */
@@ -278,6 +290,8 @@ export type AdminBudgetPortalPayload = {
     revisionRequestedAt: string | null;
     revisionNote: string | null;
   };
+  /** Reserva automática al aprobar (issue #18); `null`/ausente si no se aprobó ahora. */
+  reservations?: AdminBudgetReservation | null;
   error?: string;
 };
 
@@ -325,6 +339,54 @@ export type AdminReminderRun = {
   /** Por qué no se envió nada: falta el proveedor o la empresa activa es la demo. */
   reason?: "missing_resend_api_key" | "demo_organization";
 };
+// ── Reserva automática al aprobar (issue #18) ────────────────────────────────
+// Contrato real de `reserveBudgetInventory`: qué se reservó, qué quedó pendiente
+// y qué alternativas hay. La UI solo lo dibuja.
+
+export type AdminReservationStatus =
+  | "created"
+  | "updated"
+  | "unchanged"
+  | "conflict"
+  | "blocked"
+  | "missing-event"
+  | "missing-range"
+  | "in-movement";
+
+export type AdminReservationOutcome = {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  inventoryId: string;
+  inventoryName: string;
+  inventorySku: string | null;
+  status: AdminReservationStatus;
+  reserved: number;
+  available: number;
+  total: number;
+  conflicts: Array<{
+    id: string;
+    eventId: string;
+    eventName: string;
+    quantity: number;
+    startsAt: string | null;
+    endsAt: string | null;
+  }>;
+  substitutes: AdminInventorySubstitute[];
+  reason: string | null;
+};
+
+export type AdminBudgetReservation = {
+  eventId: string | null;
+  eventName: string | null;
+  range: { startsAt: string; endsAt: string } | null;
+  outcomes: AdminReservationOutcome[];
+  requested: number;
+  reserved: number;
+  conflicts: number;
+  failed: boolean;
+};
+
 
 /** Ítem de pedido que llega con el lead desde el sitio (relación `quoteRequests.items`). */
 export type AdminLeadItem = {
@@ -512,10 +574,50 @@ export type AdminInventoryAvailability = {
   }>;
 };
 
+/** Artículo del inventario vinculado a un ítem del presupuesto (issue #18). */
+export type AdminInventoryLink = {
+  id: string;
+  name: string;
+  sku: string | null;
+  category: string;
+  quantity: number;
+  status: string;
+};
+
+/** Disponibilidad por rango de la vista de inventario (issue #18). */
+export type AdminInventoryRangeAvailability = {
+  startsAt: string;
+  endsAt: string;
+  committed: number;
+  available: number;
+  overcommitted: boolean;
+  /** Rangos comprometidos por equipo que se solapan con el rango pedido. */
+  conflicts: AdminInventoryAvailability["conflicts"];
+};
+
+/** Sustituto sugerido: misma categoría con stock libre en el rango (issue #18). */
+export type AdminInventorySubstitute = {
+  id: string;
+  name: string;
+  sku: string | null;
+  category: string;
+  status: string;
+  total: number;
+  committed: number;
+  available: number;
+  conflicts: number;
+};
+
 /** Ítem de `/api/admin/inventory`: incluye asignaciones y disponibilidad de hoy. */
 export type AdminInventoryItemRow = AdminInventoryRow & {
   assignments: AdminInventoryAssignmentRow[];
-  availability: { committedNow: number; availableNow: number; overcommittedNow: boolean };
+  availability: {
+    committedNow: number;
+    availableNow: number;
+    overcommittedNow: boolean;
+    /** Disponibilidad del rango pedido; `null` cuando la lista va sin rango. */
+    range?: AdminInventoryRangeAvailability | null;
+  };
 };
 
 export type AdminPromoterRow = {
@@ -665,7 +767,13 @@ export type AdminCalendarAlert = {
  * reales del panel. Los `kind` compartidos con el calendario se conservan tal cual.
  */
 export type AdminNotificationLevel = AdminCalendarAlertLevel | "info";
-export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "collection_due" | "lead" | "portal_request";
+export type AdminNotificationKind =
+  | AdminCalendarAlertKind
+  | "collection"
+  | "collection_due"
+  | "lead"
+  | "portal_request"
+  | "reservation";
 
 export type AdminNotification = {
   id: string;
@@ -809,6 +917,7 @@ export type AdminApiResponse = {
   suppliers?: AdminSupplierRow[];
   inventory?: Array<AdminInventoryRow | AdminInventoryItemRow>;
   availability?: AdminInventoryAvailability;
+  substitutes?: AdminInventorySubstitute[];
   promoters?: AdminPromoterRow[];
   users?: AdminUserRow[];
   auditLogs?: AdminAuditRow[];
