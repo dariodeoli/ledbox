@@ -45,7 +45,7 @@ export function AdminResetForm() {
     <section className="admin-card admin-card--narrow" aria-labelledby="reset-title">
       <span className="admin-card-index">03 / contraseña</span>
       <h1 id="reset-title" className="admin-title">Elegí una<br /><span>nueva clave.</span></h1>
-      {!token ? <AdminError message="Este enlace de recuperación no es válido." /> : success ? <div className="admin-success-block"><AdminSuccess>Contraseña actualizada correctamente.</AdminSuccess><p>Ya podés volver al panel e iniciar sesión con tu nueva contraseña.</p><Link href="/admin/login" className="btn-led admin-inline-link">Ir a iniciar sesión →</Link></div> : <>
+      {!token ? <AdminError message="Este enlace de recuperación no es válido." /> : success ? <div className="admin-success-block"><AdminSuccess>Contraseña actualizada correctamente.</AdminSuccess><p>Ya podés volver al panel e iniciar sesión con tu nueva contraseña.</p><Link href="/login" className="btn-led admin-inline-link">Ir a iniciar sesión →</Link></div> : <>
         <p className="admin-lede">Usá al menos 8 caracteres. El enlace vence en 30 minutos y solo puede usarse una vez.</p>
         <form className="admin-form" onSubmit={handleSubmit} noValidate>
           {error && <AdminError message={error} />}

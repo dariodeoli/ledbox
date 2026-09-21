@@ -37,15 +37,25 @@ enum OrganizationRole {
 }
 
 model Organization {
-  id          String                   @id
-  name        String
-  slug        String                   @unique
-  active      Boolean                  @default(true)
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
-  memberships OrganizationMembership[]
-  leads       Lead[]
-  quotes      QuoteRequest[]
+  id               String                   @id
+  name             String
+  slug             String                   @unique
+  active           Boolean                  @default(true)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  memberships      OrganizationMembership[]
+  adminMemberships AdminMembership[]
+  adminSessions    AdminSession[]
+  leads            Lead[]
+  quotes           QuoteRequest[]
+  clients          Client[]
+  events           Event[]
+  budgets          Budget[]
+  clientPayments   ClientPayment[]
+  suppliers        Supplier[]
+  supplierJobs     SupplierJob[]
+  inventoryItems   InventoryItem[]
+  promoters        Promoter[]
 
   @@index([active, createdAt])
 }
@@ -101,20 +111,42 @@ model AdminUser {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   sessions            AdminSession[]
+  memberships         AdminMembership[]
   passwordResetTokens PasswordResetToken[]
 }
 
+/// Membresía de un usuario del panel a una empresa (organización).
+/// El rol efectivo para permisos es el de la membresía; `AdminUser.role`
+/// queda como rol global de la cuenta y se copia acá al crear la membresía.
+model AdminMembership {
+  id             String       @id
+  adminUserId    String
+  organizationId String
+  role           AdminRole    @default(VIEWER)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  user           AdminUser    @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, organizationId])
+  @@index([organizationId, active])
+}
+
 model AdminSession {
-  id        String    @id
-  userId    String
-  jtiHash   String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
-  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String        @id
+  userId               String
+  activeOrganizationId String?
+  jtiHash              String        @unique
+  expiresAt            DateTime
+  revokedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  user                 AdminUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)
 
   @@index([userId, expiresAt])
   @@index([expiresAt])
+  @@index([activeOrganizationId])
 }
 
 model PasswordResetToken {
@@ -203,6 +235,7 @@ enum ClientType {
   FINAL
   RESELLER
 }
+
 enum EventStatus {
   DRAFT
   CONFIRMED
@@ -210,6 +243,7 @@ enum EventStatus {
   COMPLETED
   CANCELLED
 }
+
 enum CommercialStatus {
   DRAFT
   SENT
@@ -218,12 +252,14 @@ enum CommercialStatus {
   LOST
   CANCELLED
 }
+
 enum PaymentStatus {
   PENDING
   PARTIAL
   PAID
   CANCELLED
 }
+
 enum SupplierCategory {
   CARPENTRY
   GRAPHICS
@@ -234,6 +270,7 @@ enum SupplierCategory {
   STAFF
   OTHER
 }
+
 enum SupplierWorkStatus {
   PENDING
   CONTRACTED
@@ -245,11 +282,13 @@ enum SupplierWorkStatus {
   PAID
   CANCELLED
 }
+
 enum InventoryKind {
   REUSABLE
   CONSUMABLE
   DISPOSABLE
 }
+
 enum InventoryStatus {
   AVAILABLE
   RESERVED
@@ -257,6 +296,7 @@ enum InventoryStatus {
   MAINTENANCE
   RETIRED
 }
+
 enum EventTaskType {
   SETUP
   EVENT
@@ -266,48 +306,57 @@ enum EventTaskType {
 }
 
 model Client {
-  id           String       @id
-  type         ClientType   @default(FINAL)
-  name         String
-  company      String?
-  ruc          String?
-  email        String?
-  phone        String?
-  notes        String?
-  active       Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  events       Event[]
-  budgets      Budget[]
-  payments     ClientPayment[]
+  id             String          @id
+  organizationId String
+  type           ClientType      @default(FINAL)
+  name           String
+  company        String?
+  ruc            String?
+  email          String?
+  phone          String?
+  notes          String?
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events         Event[]
+  budgets        Budget[]
+  payments       ClientPayment[]
+
   @@index([type, active])
   @@index([createdAt])
+  @@index([organizationId, createdAt])
 }
 
 model Event {
-  id           String       @id
-  clientId     String
-  name         String
-  location     String?
-  setupAt      DateTime?
-  startsAt     DateTime?
-  endsAt       DateTime?
-  strikeAt     DateTime?
-  status       EventStatus  @default(DRAFT)
-  notes        String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budgets      Budget[]
-  assignments  EventInventory[]
-  tasks        EventTask[]
-  supplierJobs SupplierJob[]
+  id             String           @id
+  organizationId String
+  clientId       String
+  name           String
+  location       String?
+  setupAt        DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  strikeAt       DateTime?
+  status         EventStatus      @default(DRAFT)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budgets        Budget[]
+  assignments    EventInventory[]
+  tasks          EventTask[]
+  supplierJobs   SupplierJob[]
+
   @@index([startsAt, status])
   @@index([clientId, createdAt])
+  @@index([organizationId, startsAt])
 }
 
 model Budget {
   id             String           @id
+  organizationId String
   clientId       String
   eventId        String?
   title          String
@@ -320,58 +369,71 @@ model Budget {
   notes          String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
   items          BudgetItem[]
   payments       ClientPayment[]
+
   @@index([status, createdAt])
+  @@index([organizationId, createdAt])
 }
 
 model BudgetItem {
-  id          String   @id
-  budgetId    String
-  name        String
-  quantity    Int      @default(1)
-  days        Int      @default(1)
-  unitPrice   Int
-  costPrice   Int      @default(0)
-  subtotal    Int
-  notes       String?
-  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  id        String  @id
+  budgetId  String
+  name      String
+  quantity  Int     @default(1)
+  days      Int     @default(1)
+  unitPrice Int
+  costPrice Int     @default(0)
+  subtotal  Int
+  notes     String?
+  budget    Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
   @@index([budgetId])
 }
 
 model ClientPayment {
-  id          String        @id
-  clientId    String
-  budgetId    String?
-  amount      Int
-  paidAt      DateTime      @default(now())
-  method      String?
-  reference   String?
-  notes       String?
-  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budget      Budget?       @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  id             String       @id
+  organizationId String
+  clientId       String
+  budgetId       String?
+  amount         Int
+  paidAt         DateTime     @default(now())
+  method         String?
+  reference      String?
+  notes          String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budget         Budget?      @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+
   @@index([clientId, paidAt])
+  @@index([organizationId, paidAt])
 }
 
 model Supplier {
-  id          String           @id
-  name        String
-  company     String?
-  phone       String?
-  email       String?
-  category    SupplierCategory  @default(OTHER)
-  paymentTerms String?
-  notes       String?
-  active      Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  jobs        SupplierJob[]
+  id             String           @id
+  organizationId String
+  name           String
+  company        String?
+  phone          String?
+  email          String?
+  category       SupplierCategory @default(OTHER)
+  paymentTerms   String?
+  notes          String?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobs           SupplierJob[]
+
   @@index([category, active])
+  @@index([organizationId, name])
 }
 
 model SupplierJob {
   id             String             @id
+  organizationId String
   supplierId     String
   eventId        String?
   category       SupplierCategory   @default(OTHER)
@@ -385,55 +447,68 @@ model SupplierJob {
   paymentMethod  String?
   receipt        String?
   notes          String?
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   supplier       Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   event          Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
   @@index([status, dueAt])
   @@index([eventId])
+  @@index([organizationId, dueAt])
 }
 
 model InventoryItem {
-  id          String          @id
-  name        String
-  category    String
-  sku         String?         @unique
-  kind        InventoryKind   @default(REUSABLE)
-  status      InventoryStatus @default(AVAILABLE)
-  quantity    Int             @default(1)
-  replacementCost Int          @default(0)
-  dailyCost   Int             @default(0)
-  notes       String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  assignments EventInventory[]
+  id              String           @id
+  organizationId  String
+  name            String
+  category        String
+  sku             String?
+  kind            InventoryKind    @default(REUSABLE)
+  status          InventoryStatus  @default(AVAILABLE)
+  quantity        Int              @default(1)
+  replacementCost Int              @default(0)
+  dailyCost       Int              @default(0)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments     EventInventory[]
+
+  @@unique([organizationId, sku])
   @@index([status, category])
+  @@index([organizationId, name])
 }
 
 model EventInventory {
-  id          String        @id
-  eventId     String
-  inventoryId String
-  quantity    Int           @default(1)
-  checkedOut  Boolean       @default(false)
-  checkedIn   Boolean       @default(false)
+  id           String        @id
+  eventId      String
+  inventoryId  String
+  quantity     Int           @default(1)
+  checkedOut   Boolean       @default(false)
+  checkedIn    Boolean       @default(false)
   conditionOut String?
   conditionIn  String?
-  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  inventory   InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  inventory    InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
   @@unique([eventId, inventoryId])
 }
 
 model Promoter {
-  id          String   @id
-  name        String
-  phone       String?
-  email       String?
-  photoUrl    String?
-  specialties String?
-  active      Boolean  @default(true)
-  notes       String?
-  createdAt   DateTime @default(now())
-  tasks       EventTask[]
+  id             String       @id
+  organizationId String
+  name           String
+  phone          String?
+  email          String?
+  photoUrl       String?
+  specialties    String?
+  active         Boolean      @default(true)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks          EventTask[]
+
   @@index([active, name])
+  @@index([organizationId, name])
 }
 
 model EventTask {
@@ -447,5 +522,6 @@ model EventTask {
   notes       String?
   event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   promoter    Promoter?     @relation(fields: [promoterId], references: [id], onDelete: SetNull)
+
   @@index([dueAt, completedAt])
 }

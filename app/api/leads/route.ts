@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { BillingUnit } from "@prisma/client";
 import { db } from "@/lib/server/db";
-import { requireAdmin } from "@/lib/server/auth";
+import { requireAdminContext, resolveDefaultOrganizationId } from "@/lib/server/tenancy";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { isHoneypotTriggered, leadSchema, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -25,10 +25,15 @@ export async function POST(request: Request) {
   const eventDate = parseDate(parsed.data.eventDate);
   if (parsed.data.eventDate && eventDate === null) return jsonError("Invalid event date.", 400);
 
+  // La captura pública entra a la empresa por defecto (DEFAULT_ORGANIZATION_SLUG,
+  // fallback primera organización). La respuesta no cambia.
+  const organizationId = await resolveDefaultOrganizationId();
+
   const { honeypot: _honeypot, website: _website, products, eventDate: _rawEventDate, ...leadData } = parsed.data;
   const lead = await db.lead.create({
     data: {
       id: randomUUID(),
+      organizationId: organizationId ?? undefined,
       name: leadData.name,
       phone: leadData.phone,
       email: leadData.email.trim().toLowerCase(),
@@ -48,6 +53,7 @@ export async function POST(request: Request) {
       data: {
         id: randomUUID(),
         leadId: lead.id,
+        organizationId: organizationId ?? undefined,
         source: leadData.source || "website",
         eventDate: eventDate || undefined,
         location: leadData.location || undefined,
@@ -72,8 +78,13 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const auth = await requireAdmin();
-  if (!auth) return jsonError("Unauthorized", 401);
-  const leads = await db.lead.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { quoteRequests: true } });
+  const auth = await requireAdminContext();
+  if (!auth.ok) return auth.response;
+  const leads = await db.lead.findMany({
+    where: { organizationId: auth.context.organizationId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { quoteRequests: true },
+  });
   return Response.json({ leads });
 }
