@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import {
   budgetStatusLabel,
+  checklistProgress,
   dueTone,
   eventStatusLabel,
   formatCalendarDayShort,
@@ -13,6 +14,8 @@ import {
   formatMoney,
   formatNumber,
   formatTime,
+  isOverdue,
+  isUpcomingWithin,
   jobStatusLabel,
   notificationKindLabel,
   notificationLevelLabel,
@@ -20,7 +23,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { adminNavLabel, canWriteOperations } from "@/lib/admin-policy";
-import { collectedAmount, supplierJobBalance, type AdminOverview } from "@/lib/admin-types";
+import { collectedAmount, supplierJobBalance, type AdminEventTask, type AdminOverview } from "@/lib/admin-types";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -62,9 +65,25 @@ export function ResumenModule() {
     [operations.data],
   );
 
+  /** Tareas vencidas de todos los eventos: el checklist real, no el ideal. */
+  const overdueTasks = useMemo<Array<{ task: AdminEventTask; eventName: string }>>(
+    () =>
+      (operations.data ?? [])
+        .flatMap((event) => event.tasks.filter((task) => !task.completedAt && isOverdue(task.dueAt)).map((task) => ({ task, eventName: event.name })))
+        .sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999")),
+    [operations.data],
+  );
+
+  const pendingTotal = useMemo(
+    () => (operations.data ?? []).flatMap((event) => event.tasks).filter((task) => !task.completedAt).length,
+    [operations.data],
+  );
+
   const receivables = useMemo(
     () =>
       (budgets.data ?? [])
+        // Un presupuesto perdido o cancelado no es cobrable: no entra en "por cobrar".
+        .filter((budget) => budget.status !== "LOST" && budget.status !== "CANCELLED")
         // Solo los cobros marcados como cobrados descuentan saldo (issue #16):
         // un cobro a plazo pendiente o anulado todavía no es plata cobrada.
         .map((budget) => ({ budget, paid: collectedAmount(budget.payments) }))
@@ -189,29 +208,43 @@ export function ResumenModule() {
             <AdminTable
               view="resumen-eventos"
               label="Próximos eventos"
-              columns={[{ label: "Fecha" }, { label: "Evento" }, { label: "Cliente" }, { label: "Estado" }]}
+              columns={[{ label: "Fecha" }, { label: "Evento" }, { label: "Cliente" }, { label: "Checklist", end: true }, { label: "Estado" }]}
             >
-              {(overview.data?.upcoming ?? []).map((event) => (
-                <AdminRow key={event.id}>
-                  <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
-                    {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
-                  </AdminCell>
-                  <AdminCell title={`${event.name}${event.location ? ` · ${event.location}` : ""}`}>
-                    <strong>{event.name}</strong>
-                  </AdminCell>
-                  <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
-                  </AdminCell>
-                </AdminRow>
-              ))}
+              {(overview.data?.upcoming ?? []).map((event) => {
+                const progress = checklistProgress(event.tasks, { risk: isUpcomingWithin(event.startsAt) });
+                return (
+                  <AdminRow key={event.id}>
+                    <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
+                      {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
+                    </AdminCell>
+                    <AdminCell title={`${event.name}${event.location ? ` · ${event.location}` : ""}`}>
+                      <strong>{event.name}</strong>
+                    </AdminCell>
+                    <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
+                    <AdminCell title={progress.title}>
+                      {event.tasks.length === 0 ? (
+                        <span className="admin-muted">—</span>
+                      ) : (
+                        <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
+                      )}
+                    </AdminCell>
+                    <AdminCell>
+                      <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
+                    </AdminCell>
+                  </AdminRow>
+                );
+              })}
             </AdminTable>
           </AdminDataState>
         </AdminPanel>
 
         <AdminPanel
           title="Checklist pendiente"
-          meta={pendingTasks.length > 0 ? `${formatNumber(pendingTasks.length)} tareas` : undefined}
+          meta={
+            pendingTotal > 0
+              ? `${formatNumber(pendingTotal)} pendientes${overdueTasks.length > 0 ? ` · ${formatNumber(overdueTasks.length)} vencida${overdueTasks.length === 1 ? "" : "s"}` : ""}`
+              : undefined
+          }
           action={
             <Link className="admin-panel-link" href="/eventos">
               Ver checklist →
@@ -236,6 +269,49 @@ export function ResumenModule() {
               emptyHint="No quedan tareas pendientes en los eventos cargados."
               compact
             />
+          </AdminDataState>
+        </AdminPanel>
+
+        <AdminPanel
+          title="Tareas vencidas"
+          meta={overdueTasks.length > 0 ? `${formatNumber(overdueTasks.length)} sin cerrar` : undefined}
+          action={
+            <Link className="admin-panel-link" href="/eventos">
+              Ver eventos →
+            </Link>
+          }
+        >
+          <AdminDataState
+            loading={operations.loading}
+            error={operations.error}
+            onRetry={operations.reload}
+            empty={overdueTasks.length === 0}
+            emptyTitle="Sin tareas vencidas"
+            emptyHint="Ninguna tarea pendiente pasó su fecha de vencimiento."
+            rows={3}
+          >
+            <AdminTable
+              view="resumen-vencidas"
+              label="Tareas vencidas"
+              columns={[{ label: "Tarea" }, { label: "Evento" }, { label: "Vence", end: true }]}
+            >
+              {overdueTasks.slice(0, 6).map(({ task, eventName }) => (
+                <AdminRow key={task.id}>
+                  <AdminCell title={task.title}>
+                    <strong>{task.title}</strong>
+                  </AdminCell>
+                  <AdminCell title={eventName}>{eventName}</AdminCell>
+                  <AdminCell
+                    end
+                    title={task.dueAt ? `Venció el ${formatDateTime(task.dueAt)}` : "Sin fecha de vencimiento"}
+                  >
+                    <span className="admin-nowrap" data-tone="danger">
+                      {formatDateShort(task.dueAt)}
+                    </span>
+                  </AdminCell>
+                </AdminRow>
+              ))}
+            </AdminTable>
           </AdminDataState>
         </AdminPanel>
 
