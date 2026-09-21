@@ -3,7 +3,7 @@
  * Se declaran solo los campos que la UI consume; los payloads traen el resto de los escalares.
  */
 
-import type { AdminTone } from "./admin-format";
+import { isOverdue, type AdminTone } from "./admin-format";
 
 export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
 
@@ -86,6 +86,9 @@ export type AdminEventTask = {
   title: string;
   dueAt: string | null;
   completedAt: string | null;
+  /** Promotora asignada (issue #24): null si la tarea es del equipo. */
+  promoterId?: string | null;
+  promoter?: AdminPromoterRef | null;
 };
 
 export type AdminEventAssignmentMovement = {
@@ -166,6 +169,27 @@ export function isCollectedPayment(payment: Pick<AdminPayment, "status">): boole
 /** Monto realmente cobrado de una lista de cobros. */
 export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
   return payments.reduce((sum, payment) => (isCollectedPayment(payment) ? sum + payment.amount : sum), 0);
+}
+
+/**
+ * Deuda vencida derivada de los cobros reales (issue #24): solo los cobros
+ * pendientes (`PENDING`) con vencimiento pasado cuentan. No hay campo nuevo:
+ * sale del dato de finanzas, igual que el saldo de un presupuesto.
+ */
+export function overdueAmount(
+  payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status" | "dueAt">>,
+): number {
+  return payments.reduce(
+    (sum, payment) => (payment.status === "PENDING" && isOverdue(payment.dueAt) ? sum + payment.amount : sum),
+    0,
+  );
+}
+
+/** Cobros vencidos de una lista (cantidad), para el detalle del indicador. */
+export function overdueCount(
+  payments: ReadonlyArray<Pick<AdminPayment, "status" | "dueAt">>,
+): number {
+  return payments.filter((payment) => payment.status === "PENDING" && isOverdue(payment.dueAt)).length;
 }
 
 export type AdminBudgetRow = {
@@ -483,7 +507,27 @@ export type AdminPromoterRow = {
   specialties: string | null;
   active: boolean;
   createdAt: string;
+  /** Disponibilidad declarada (issue #24): `AVAILABLE`, `UNAVAILABLE` o `TO_DEFINE`. */
+  availability: string;
+  availabilityNote: string | null;
+  unavailableUntil: string | null;
 };
+
+/** Promotora embebida en una tarea de evento (el estado viaja con la relación). */
+export type AdminPromoterRef = Pick<
+  AdminPromoterRow,
+  "id" | "name" | "availability" | "availabilityNote" | "unavailableUntil"
+>;
+
+/** ¿La promotora puede tomar la tarea hoy? `TO_DEFINE` y `UNAVAILABLE` avisan. */
+export function promoterIsAvailable(promoter: Pick<AdminPromoterRow, "availability"> | null | undefined): boolean {
+  return !promoter || promoter.availability === "AVAILABLE";
+}
+
+/** Valores del enum `PromoterAvailability`: fuente única de los selectores del panel. */
+export const PROMOTER_AVAILABILITIES = ["AVAILABLE", "UNAVAILABLE", "TO_DEFINE"] as const;
+
+export type PromoterAvailabilityValue = (typeof PROMOTER_AVAILABILITIES)[number];
 
 export type AdminUserRow = {
   id: string;

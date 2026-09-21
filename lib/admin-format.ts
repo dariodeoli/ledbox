@@ -67,6 +67,18 @@ export function isDueSoon(value: string | Date | null | undefined, days = 7): bo
   return date.getTime() <= Date.now() + days * 86_400_000;
 }
 
+/**
+ * Hecho que cae en la ventana de aviso: dentro de los próximos `days` días
+ * (también lo que arrancó ayer y sigue vivo). Es la misma ventana que usan las
+ * notificaciones operativas, para que el riesgo del panel y el aviso coincidan.
+ */
+export function isUpcomingWithin(value: string | Date | null | undefined, days = 7): boolean {
+  const date = toDate(value);
+  if (!date) return false;
+  const now = Date.now();
+  return date.getTime() >= now - 86_400_000 && date.getTime() <= now + days * 86_400_000;
+}
+
 export function dueTone(value: string | Date | null | undefined, days = 7): AdminTone | undefined {
   return isDueSoon(value, days) ? "warn" : undefined;
 }
@@ -125,6 +137,16 @@ const TASK_TYPE: Record<string, string> = {
 const CLIENT_TYPE: Record<string, string> = {
   FINAL: "Cliente final",
   RESELLER: "Mayorista",
+};
+
+/**
+ * Disponibilidad de promotoras (issue #24): estado real, no bloquea la
+ * asignación. Mismas etiquetas y tonos en toda la app.
+ */
+const PROMOTER_AVAILABILITY: Record<string, string> = {
+  AVAILABLE: "Disponible",
+  UNAVAILABLE: "No disponible",
+  TO_DEFINE: "A definir",
 };
 
 const LEAD_STATUS: Record<string, string> = {
@@ -197,6 +219,8 @@ const TONES: Record<string, AdminTone> = {
   DISPOSABLE: "warn",
   FINAL: "neutral",
   RESELLER: "accent",
+  UNAVAILABLE: "danger",
+  TO_DEFINE: "warn",
   OWNER: "accent",
   ADMIN: "info",
   FINANCE: "ok",
@@ -226,10 +250,77 @@ export const leadSourceLabel = (value: string | null | undefined) => label(LEAD_
 export const billingUnitLabel = (value: string | null | undefined) => label(BILLING_UNIT, value);
 export const supplierCategoryLabel = (value: string | null | undefined) => label(SUPPLIER_CATEGORY, value);
 export const adminRoleLabel = (value: string | null | undefined) => label(ROLE, value);
+export const promoterAvailabilityLabel = (value: string | null | undefined) => label(PROMOTER_AVAILABILITY, value);
 
 export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
+}
+
+/** Tono de la disponibilidad de una promotora (fuente única con `statusTone`). */
+export function promoterAvailabilityTone(value: string | null | undefined): AdminTone {
+  return statusTone(value);
+}
+
+/**
+ * Detalle real de la disponibilidad: motivo y, si hay, hasta cuándo. Se usa en
+ * el `title` de la fila y en el aviso al asignar una promotora a una tarea.
+ */
+export function promoterAvailabilityDetail(
+  promoter:
+    | { availability: string; availabilityNote?: string | null; unavailableUntil?: string | null }
+    | null
+    | undefined,
+): string {
+  if (!promoter) return "";
+  const parts: string[] = [];
+  if (promoter.availability === "UNAVAILABLE" && promoter.unavailableUntil) {
+    parts.push(`hasta el ${formatDate(promoter.unavailableUntil)}`);
+  }
+  if (promoter.availabilityNote?.trim()) parts.push(promoter.availabilityNote.trim());
+  return parts.join(" · ");
+}
+
+// ── Avance real del checklist (issue #24) ───────────────────────────────────
+// El avance se cuenta sobre las tareas reales del evento: cumplidas, pendientes
+// y vencidas (`dueAt` pasado, día de Asunción). Un evento próximo sin ninguna
+// tarea cumplida queda señalizado como riesgo.
+
+export type ChecklistProgress = {
+  done: number;
+  total: number;
+  pending: number;
+  overdue: number;
+  /** Evento próximo con checklist cargado y 0 tareas cumplidas. */
+  atRisk: boolean;
+  tone: AdminTone;
+  /** Texto corto `2/4` para la celda. */
+  label: string;
+  /** Detalle completo para el `title`. */
+  title: string;
+};
+
+export function checklistProgress(
+  tasks: ReadonlyArray<{ completedAt: string | Date | null | undefined; dueAt?: string | Date | null | undefined }>,
+  options: { risk?: boolean } = {},
+): ChecklistProgress {
+  const total = tasks.length;
+  const done = tasks.filter((task) => Boolean(task.completedAt)).length;
+  const overdue = tasks.filter((task) => !task.completedAt && isOverdue(task.dueAt)).length;
+  const pending = total - done;
+  const atRisk = Boolean(options.risk) && total > 0 && done === 0;
+  const tone: AdminTone = atRisk ? "danger" : overdue > 0 ? "warn" : total > 0 && done === total ? "ok" : "neutral";
+  const parts = [`${done} de ${total} tareas cumplidas`];
+  if (pending > 0) parts.push(`${pending} pendiente${pending === 1 ? "" : "s"}`);
+  if (overdue > 0) parts.push(`${overdue} vencida${overdue === 1 ? "" : "s"}`);
+  if (atRisk) parts.push("evento próximo sin avance: riesgo");
+  return { done, total, pending, overdue, atRisk, tone, label: `${done}/${total}`, title: parts.join(" · ") };
+}
+
+/** Vencimiento ya pasado (día de Asunción, no la medianoche del navegador). */
+export function isOverdue(value: string | Date | null | undefined): boolean {
+  const days = daysUntilDue(value);
+  return days !== null && days < 0;
 }
 
 // ── Cobros a plazo (issue #16) ──────────────────────────────────────────────

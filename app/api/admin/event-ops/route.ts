@@ -7,6 +7,11 @@ import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Promotora embebida en una tarea: nombre y disponibilidad real (issue #24). */
+const promoterSelect = {
+  promoter: { select: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true } },
+} as const;
+
 export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
@@ -14,7 +19,11 @@ export async function GET() {
     where: { organizationId: auth.context.organizationId },
     orderBy: { startsAt: "asc" },
     take: 200,
-    include: { client: true, tasks: { orderBy: { dueAt: "asc" } }, assignments: { include: { inventory: true } } },
+    include: {
+      client: true,
+      tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
+      assignments: { include: { inventory: true } },
+    },
   });
   return Response.json({ events });
 }
@@ -30,6 +39,13 @@ export async function POST(request: Request) {
     if (typeof body.eventId !== "string" || typeof body.title !== "string") return jsonError("Event and title are required.", 400);
     const event = await db.event.findFirst({ where: { id: body.eventId, organizationId }, select: { id: true, name: true } });
     if (!event) return jsonError("Event not found.", 404);
+    // Promotora opcional (issue #24): se valida que sea de la empresa activa; la
+    // disponibilidad no bloquea la asignación, la app la avisa en el panel.
+    const promoterId = typeof body.promoterId === "string" && body.promoterId ? body.promoterId : null;
+    if (promoterId) {
+      const promoter = await db.promoter.findFirst({ where: { id: promoterId, organizationId }, select: { id: true } });
+      if (!promoter) return jsonError("Promoter not found.", 404);
+    }
     const task = await db.eventTask.create({
       data: {
         id: randomUUID(),
@@ -37,7 +53,9 @@ export async function POST(request: Request) {
         title: body.title.trim(),
         type: typeof body.type === "string" ? body.type as never : "EVENT",
         dueAt: typeof body.dueAt === "string" ? new Date(body.dueAt) : undefined,
+        promoterId,
       },
+      include: promoterSelect,
     });
     await recordAudit({
       context: auth.context,
@@ -45,7 +63,7 @@ export async function POST(request: Request) {
       entity: "EventTask",
       entityId: task.id,
       summary: `Agregó la tarea «${task.title}» al evento «${event.name}»`,
-      detail: { fields: { ...auditPick(task, ["title", "type", "dueAt"]), eventId: event.id } },
+      detail: { fields: { ...auditPick(task, ["title", "type", "dueAt", "promoterId"]), eventId: event.id } },
     });
     return Response.json({ task }, { status: 201 });
   }

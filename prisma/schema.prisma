@@ -340,6 +340,17 @@ enum EventTaskType {
   COLLECTION
 }
 
+/**
+ * Disponibilidad real de una promotora (issue #24): disponible, no disponible
+ * (con motivo y, si aplica, hasta cuándo) o a definir. No bloquea la asignación
+ * a una tarea: la app avisa con el estado real.
+ */
+enum PromoterAvailability {
+  AVAILABLE
+  UNAVAILABLE
+  TO_DEFINE
+}
+
 model Client {
   id             String          @id
   organizationId String
@@ -607,21 +618,26 @@ model EventInventory {
 }
 
 model Promoter {
-  id             String       @id
-  organizationId String
-  name           String
-  phone          String?
-  email          String?
-  photoUrl       String?
-  specialties    String?
-  active         Boolean      @default(true)
-  notes          String?
-  createdAt      DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  tasks          EventTask[]
+  id                String              @id
+  organizationId    String
+  name              String
+  phone             String?
+  email             String?
+  photoUrl          String?
+  specialties       String?
+  active            Boolean             @default(true)
+  notes             String?
+  /// Disponibilidad declarada (issue #24): default disponible para las existentes.
+  availability      PromoterAvailability @default(AVAILABLE)
+  availabilityNote  String?
+  unavailableUntil  DateTime?
+  createdAt         DateTime            @default(now())
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks             EventTask[]
 
   @@index([active, name])
   @@index([organizationId, name])
+  @@index([organizationId, availability])
 }
 
 model EventTask {
