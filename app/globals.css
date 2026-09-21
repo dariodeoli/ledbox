@@ -771,6 +771,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--evento-equipos { --evento-equipos-cols: minmax(9rem, 1.3fr) 5rem 12.5rem 8rem 8rem 6.5rem minmax(7rem, 1fr) 11rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 68rem; }
 .admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 5.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 69rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(10rem, 1.4fr) 9rem minmax(9rem, 1.1fr) minmax(9rem, 1.2fr) 7.5rem 6.5rem 5.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 61rem; }
+.admin-table--leads { --leads-cols: 5rem minmax(9.5rem, 1.4fr) minmax(10rem, 1.2fr) 5.5rem minmax(8rem, 1fr) minmax(7.5rem, 1fr) 7rem 6rem 7.5rem; --admin-cols: var(--leads-cols); --admin-table-min: 71.5rem; }
+.admin-table--leads-productos { --leads-productos-cols: minmax(11rem, 1.6fr) 5.5rem 7rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39rem; }
 .admin-table--usuarios { --usuarios-cols: minmax(10rem, 1.2fr) minmax(12rem, 1.4fr) 8.5rem 6.5rem 7.5rem 5.5rem; --admin-cols: var(--usuarios-cols); --admin-table-min: 53rem; }
 .admin-table--checklist { --checklist-cols: 9.5rem minmax(12rem, 1.8fr) minmax(9rem, 1.1fr) 7rem 6.5rem; --admin-cols: var(--checklist-cols); --admin-table-min: 47rem; }
 .admin-table--checklist-resumen { --checklist-resumen-cols: 7rem minmax(8.5rem, 1.5fr) minmax(6.5rem, 1fr) 5rem; --admin-cols: var(--checklist-resumen-cols); --admin-table-min: 29.5rem; }
@@ -851,6 +853,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-cal-alert-date { grid-column: 2; grid-row: 2; text-align: left; }
   .admin-cal-alert > .admin-icon { grid-column: 3; grid-row: 1; }
 }
+
+/* ── Detalle de lead (pipeline comercial) ── */
+.admin-detail { display: grid; gap: 12px; padding: 12px; }
+.admin-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 10px; }
+.admin-detail-item { display: grid; gap: 2px; min-width: 0; }
+.admin-detail-label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-detail-value { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
+.admin-detail-section { display: grid; gap: 6px; }
+.admin-detail-section-title { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.admin-detail-text { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+.admin-detail-quote { display: grid; gap: 6px; }
+.admin-detail-quote-meta { color: var(--a-muted); font-size: 11px; }
+.admin-detail-form { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
+.admin-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── Responsive ── */
 @media (min-width: 720px) {
