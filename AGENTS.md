@@ -48,6 +48,7 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 ## Verificación
 
 - `npm run typecheck` y `npm run build` (el build incluye `prisma generate`).
+- Migraciones: se aplican solas al build y al arranque del servidor (`scripts/migrate-deploy.mjs`); no hay paso manual en el deploy. No ejecutes migraciones contra la base de producción desde tu entorno; probalas siempre en un Postgres local.
 - `npx prisma validate` si se tocó el schema; `npx prisma format` opcional.
 - Postgres local para probar API/migraciones (sin tocar producción):
 
