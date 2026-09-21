@@ -6,6 +6,14 @@ import { jsonError, readJson } from "@/lib/server/http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * `GET /api/admin/budgets`: presupuestos de la empresa activa. Los escalares
+ * incluyen el estado del portal (issue #12) — `publicToken`,
+ * `publicTokenCreatedAt`, `approvedAt`, `approvedByName`, `approvalMethod`,
+ * `approvalNote`, `revisionRequestedAt` y `revisionNote`—; `approvalIp` y
+ * `approvalUserAgent` quedan disponibles para el historial, pero la lista no
+ * los dibuja. Nada de otra empresa entra en la respuesta.
+ */
 export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
