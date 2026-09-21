@@ -56,6 +56,7 @@ model Organization {
   supplierJobs     SupplierJob[]
   inventoryItems   InventoryItem[]
   promoters        Promoter[]
+  auditLogs        AuditLog[]
 
   @@index([active, createdAt])
 }
@@ -539,4 +540,27 @@ model EventTask {
   promoter    Promoter?     @relation(fields: [promoterId], references: [id], onDelete: SetNull)
 
   @@index([dueAt, completedAt])
+}
+
+/// Historial de cambios del panel: quién hizo qué sobre cada registro y con qué
+/// valores. El actor se guarda denormalizado (id + nombre + correo) para que la
+/// traza sobreviva a renombres o bajas de cuentas; `detail` guarda solo los
+/// campos tocados (`changes` con antes/después, `fields` en altas, `before` en bajas).
+model AuditLog {
+  id             String       @id
+  organizationId String
+  actorId        String
+  actorName      String
+  actorEmail     String
+  action         String
+  entity         String
+  entityId       String
+  summary        String
+  detail         Json?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([entity, entityId])
+  @@index([organizationId, actorId])
 }
