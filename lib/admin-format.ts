@@ -100,10 +100,6 @@ export function isUpcomingWithin(value: string | Date | null | undefined, days =
   return date.getTime() >= now - 86_400_000 && date.getTime() <= now + days * 86_400_000;
 }
 
-export function dueTone(value: string | Date | null | undefined, days = 7): AdminTone | undefined {
-  return isDueSoon(value, days) ? "warn" : undefined;
-}
-
 const EVENT_STATUS: Record<string, string> = {
   DRAFT: "Borrador",
   CONFIRMED: "Confirmado",
@@ -344,10 +340,70 @@ export function isOverdue(value: string | Date | null | undefined): boolean {
   return days !== null && days < 0;
 }
 
+// ── Cuánto falta (issue #25) ────────────────────────────────────────────────
+// Una sola cuenta regresiva para todas las listas y fichas: se calcula por día
+// de Asunción (nunca por la medianoche del navegador) y se escribe igual en todo
+// el panel. El portal y los mensajes al cliente usan la misma función con la voz
+// del cliente (`client`) y los lugares ajustados, la variante corta (`short`).
+
+/** Variante del texto: panel («faltan 3 días»), corta («en 3 d») o del cliente («vence en 3 días»). */
+export type CountdownVariant = "panel" | "short" | "client";
+
+const DAY_KEY_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Días de calendario de Asunción que faltan para una fecha: 0 = hoy, 1 = mañana,
+ * negativo = vencida. Acepta un ISO, un `Date` o una clave `YYYY-MM-DD` (que se
+ * toma como día puro, sin corrimiento de zona).
+ */
+export function countdownDays(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const dayKey = typeof value === "string" && DAY_KEY_FORMAT.test(value) ? value : dayKeyOf(value);
+  const target = dayKeyToUtcDate(dayKey);
+  const today = dayKeyToUtcDate(dayKeyOf());
+  if (!target || !today) return null;
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Texto único de la cuenta regresiva: «hoy» · «mañana» · «faltan N días» · «venció hace N días». */
+export function formatCountdown(value: string | Date | null | undefined, variant: CountdownVariant = "panel"): string {
+  const days = countdownDays(value);
+  if (days === null) return "—";
+  if (variant === "short") {
+    if (days === 0) return "hoy";
+    if (days === 1) return "mañana";
+    if (days === -1) return "ayer";
+    return days > 0 ? `en ${formatNumber(days)} d` : `hace ${formatNumber(Math.abs(days))} d`;
+  }
+  const plural = (count: number) => (count === 1 ? "día" : "días");
+  if (variant === "client") {
+    if (days === 0) return "vence hoy";
+    if (days === 1) return "vence mañana";
+    return days > 0
+      ? `vence en ${formatNumber(days)} ${plural(days)}`
+      : `venció hace ${formatNumber(Math.abs(days))} ${plural(Math.abs(days))}`;
+  }
+  if (days === 0) return "hoy";
+  if (days === 1) return "mañana";
+  return days > 0
+    ? `faltan ${formatNumber(days)} ${plural(days)}`
+    : `venció hace ${formatNumber(Math.abs(days))} ${plural(Math.abs(days))}`;
+}
+
+/**
+ * Tono único de la cuenta regresiva: rojo si venció, ámbar si vence dentro de
+ * `days` días (hoy incluido) y neutro si falta más.
+ */
+export function countdownTone(value: string | Date | null | undefined, days = 7): AdminTone {
+  const distance = countdownDays(value);
+  if (distance === null) return "neutral";
+  if (distance < 0) return "danger";
+  return distance <= days ? "warn" : "neutral";
+}
+
 // ── Cobros a plazo (issue #16) ──────────────────────────────────────────────
-// Estado del cobro de cliente (enum `ClientPaymentStatus`) y cuenta regresiva
-// del vencimiento, calculada por día de Asunción (nunca por la medianoche del
-// navegador): "cobramos en X días" / "vencido hace X días".
+// Estado del cobro de cliente (enum `ClientPaymentStatus`); la cuenta regresiva
+// del vencimiento es la misma del panel (issue #25).
 
 const PAYMENT_STATUS: Record<string, string> = {
   PENDING: "A cobrar",
@@ -370,29 +426,7 @@ export function paymentStatusTone(value: string | null | undefined): AdminTone {
 
 /** Días de calendario (Asunción) que faltan para un vencimiento; `null` si no hay fecha. */
 export function daysUntilDue(value: string | Date | null | undefined): number | null {
-  const due = dayKeyToUtcDate(value ? dayKeyOf(value) : null);
-  const today = dayKeyToUtcDate(dayKeyOf());
-  if (!due || !today) return null;
-  return Math.round((due.getTime() - today.getTime()) / 86_400_000);
-}
-
-/** Cuenta regresiva del cobro: "cobramos en 12 días" / "vencido hace 3 días". */
-export function collectionDueText(value: string | Date | null | undefined): string {
-  const days = daysUntilDue(value);
-  if (days === null) return "Sin vencimiento";
-  if (days === 0) return "cobramos hoy";
-  if (days === 1) return "cobramos mañana";
-  if (days === -1) return "vencido hace 1 día";
-  return days > 0 ? `cobramos en ${formatNumber(days)} días` : `vencido hace ${formatNumber(Math.abs(days))} días`;
-}
-
-/** Tono de la cuenta regresiva: vencido (rojo) o por vencer en 7 días (ámbar). */
-export function collectionDueTone(value: string | Date | null | undefined, days = 7): AdminTone | undefined {
-  const distance = daysUntilDue(value);
-  if (distance === null) return undefined;
-  if (distance < 0) return "danger";
-  if (distance <= days) return "warn";
-  return undefined;
+  return countdownDays(value);
 }
 
 // ── Portal del cliente (issue #12) ──────────────────────────────────────────
@@ -475,6 +509,27 @@ export function inventoryAssignmentState(assignment: {
   return { label: "Asignado", tone: "info" };
 }
 
+/**
+ * Fecha relevante de una asignación para la cuenta regresiva (issue #25): la
+ * salida mientras sigue asignada y la devolución cuando ya está afuera. Devuelve
+ * `null` si ya volvió (no hay nada que esperar) o si no tiene la fecha.
+ */
+export function inventoryAssignmentCountdown(assignment: {
+  checkedOut: boolean;
+  checkedIn: boolean;
+  checkedOutAt?: string | Date | null;
+  checkedInAt?: string | Date | null;
+  startsAt?: string | Date | null;
+  endsAt?: string | Date | null;
+}): { at: string | Date | null; title: string } | null {
+  const state = inventoryAssignmentState(assignment);
+  if (state.label === "Devuelto") return null;
+  if (state.label === "Afuera") {
+    return assignment.endsAt ? { at: assignment.endsAt, title: "Devolución pendiente" } : null;
+  }
+  return assignment.startsAt ? { at: assignment.startsAt, title: "Salida pendiente" } : null;
+}
+
 /** Resumen de daños y faltantes para listas: `2 dañadas · 1 faltante`. */
 export function damageSummary(damaged: number, missing: number): string | null {
   const parts: string[] = [];
@@ -521,7 +576,7 @@ export function paymentReminderMessage(input: PaymentReminderMessageInput): stri
     `Hola ${input.client}: te recordamos el pago pendiente.`,
     "",
     `• Monto: ${formatMoney(input.amount)}`,
-    `• Vencimiento: ${input.dueAt ? `${formatDate(input.dueAt)} · ${collectionDueText(input.dueAt)}` : "sin fecha"}`,
+    `• Vencimiento: ${input.dueAt ? `${formatDate(input.dueAt)} · ${formatCountdown(input.dueAt, "client")}` : "sin fecha"}`,
   ];
   if (input.invoiceNumber) lines.push(`• Factura: ${input.invoiceNumber}`);
   if (input.budgetTitle) lines.push(`• Presupuesto: ${input.budgetTitle}`);
@@ -683,18 +738,11 @@ function dayKeyOf(value: string | Date = new Date()): string {
 
 /**
  * Cuándo ocurre o pasó un día de Asunción, en texto corto: "hoy", "mañana",
- * "en 3 d", "hace 2 d". Se calcula contra el día de Asunción, no contra la
- * medianoche del navegador.
+ * "en 3 d", "hace 2 d". Delega en la cuenta regresiva compartida (issue #25)
+ * para que el calendario y los avisos no tengan un lenguaje propio.
  */
 export function formatDayWhen(dayKey: string | null | undefined): string {
-  const date = dayKeyToUtcDate(dayKey);
-  const today = dayKeyToUtcDate(dayKeyOf());
-  if (!date || !today) return "—";
-  const distance = Math.round((date.getTime() - today.getTime()) / 86_400_000);
-  if (distance === 0) return "hoy";
-  if (distance === 1) return "mañana";
-  if (distance === -1) return "ayer";
-  return distance > 0 ? `en ${formatNumber(distance)} d` : `hace ${formatNumber(Math.abs(distance))} d`;
+  return formatCountdown(dayKey, "short");
 }
 // ── Auditoría ───────────────────────────────────────────────────────────────
 
