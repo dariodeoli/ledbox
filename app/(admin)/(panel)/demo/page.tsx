@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
-import { AdminBadge, AdminEmpty, AdminKpi, AdminPanel } from "@/components/admin/AdminUI";
+import { AdminBadge, AdminCountdown, AdminEmpty, AdminKpi, AdminPanel } from "@/components/admin/AdminUI";
 import {
   auditActionLabel,
   auditActionTone,
@@ -348,7 +348,15 @@ export default async function DemoPage() {
                       {progress.label}
                     </AdminBadge>
                   ) : null}
-                  <span className="admin-notif-date">{event.setupAt ? `Montaje ${formatDate(event.setupAt)}` : ""}</span>
+                  <span className="admin-notif-date">
+                    {event.setupAt ? `Montaje ${formatDate(event.setupAt)}` : ""}
+                    <AdminCountdown
+                      value={event.startsAt}
+                      short
+                      className="admin-countdown--inline"
+                      title={`Cuánto falta para el inicio: ${event.name}`}
+                    />
+                  </span>
                   <AdminIcon name="arrow-right" size={14} />
                 </Link>
               );

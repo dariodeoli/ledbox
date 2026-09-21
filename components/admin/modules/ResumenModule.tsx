@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from "react";
 import {
   budgetStatusLabel,
   checklistProgress,
-  dueTone,
   eventStatusLabel,
   formatCalendarDayShort,
   formatDateShort,
@@ -28,6 +27,7 @@ import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminErrorState,
   AdminKpi,
@@ -214,8 +214,9 @@ export function ResumenModule() {
                 const progress = checklistProgress(event.tasks, { risk: isUpcomingWithin(event.startsAt) });
                 return (
                   <AdminRow key={event.id}>
-                    <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
+                    <AdminCell title={event.startsAt ? `${formatDateTime(event.startsAt)} · ${event.name}` : "Fecha a confirmar"}>
                       {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
+                      <AdminCountdown value={event.startsAt} short className="admin-countdown--inline" title={`Cuánto falta para el inicio: ${event.name}`} />
                     </AdminCell>
                     <AdminCell title={`${event.name}${event.location ? ` · ${event.location}` : ""}`}>
                       <strong>{event.name}</strong>
@@ -305,9 +306,8 @@ export function ResumenModule() {
                     end
                     title={task.dueAt ? `Venció el ${formatDateTime(task.dueAt)}` : "Sin fecha de vencimiento"}
                   >
-                    <span className="admin-nowrap" data-tone="danger">
-                      {formatDateShort(task.dueAt)}
-                    </span>
+                    <span className="admin-nowrap">{formatDateShort(task.dueAt)}</span>
+                    <AdminCountdown value={task.dueAt} short className="admin-countdown--inline" title={`Cuánto falta: ${task.title}`} />
                   </AdminCell>
                 </AdminRow>
               ))}
@@ -391,9 +391,8 @@ export function ResumenModule() {
                   </AdminCell>
                   <AdminCell title={job.event ? `${job.description} · ${job.event.name}` : job.description}>{job.description}</AdminCell>
                   <AdminCell title={job.dueAt ? `${formatDateTime(job.dueAt)} · ${jobStatusLabel(job.status)}` : "Sin fecha prevista"}>
-                    <span className="admin-nowrap" data-tone={dueTone(job.dueAt)}>
-                      {job.dueAt ? formatDateShort(job.dueAt) : "—"}
-                    </span>
+                    <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
+                    <AdminCountdown value={job.dueAt} short className="admin-countdown--inline" title={`Vencimiento del trabajo: ${job.description}`} />
                   </AdminCell>
                   <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(job.total)}`}>
                     <strong>{formatMoney(balance)}</strong>

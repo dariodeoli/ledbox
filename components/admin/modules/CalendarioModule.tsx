@@ -12,6 +12,7 @@ import {
   formatCalendarDayShort,
   formatCalendarMonth,
   formatCalendarWeekday,
+  formatDayWhen,
   formatMoney,
   formatNumber,
   formatTime,
@@ -391,7 +392,7 @@ export function CalendarioModule() {
         ) : (
           <div className="admin-cal-alerts">
             {alerts.slice(0, 8).map((alert) => (
-              <CalendarAlertLink key={alert.id} alert={alert} today={today} />
+              <CalendarAlertLink key={alert.id} alert={alert} />
             ))}
           </div>
         )}
@@ -403,9 +404,9 @@ export function CalendarioModule() {
   );
 }
 
-function CalendarAlertLink({ alert, today }: { alert: AdminCalendarAlert; today: string }) {
-  const distance = Math.round((dayKeyToUtc(alert.date).getTime() - dayKeyToUtc(today).getTime()) / DAY_MS);
-  const when = distance === 0 ? "hoy" : distance < 0 ? `hace ${formatNumber(Math.abs(distance))} d` : `en ${formatNumber(distance)} d`;
+function CalendarAlertLink({ alert }: { alert: AdminCalendarAlert }) {
+  // Mismo lenguaje de cuenta regresiva que el resto del panel (issue #25).
+  const when = formatDayWhen(alert.date);
   const label = `${calendarAlertLevelLabel(alert.level)} · ${calendarAlertKindLabel(alert.kind)}: ${alert.title}`;
   return (
     <Link className="admin-cal-alert" href={alert.href} data-level={alert.level} title={`${label} · ${formatCalendarDay(alert.date)} · ir al módulo`}>

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import {
-  dueTone,
   formatDateShort,
   formatDateTime,
   formatMoney,
@@ -26,6 +25,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
@@ -391,12 +391,15 @@ export function ProveedoresModule() {
               onChange={(value) => setJobForm({ ...jobForm, category: value })}
               options={CATEGORY_OPTIONS}
             />
-            <DateField
-              label="Vence"
-              hint="Fecha prevista de entrega"
-              value={jobForm.dueAt}
-              onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
-            />
+            <div className="admin-countdown-field">
+              <DateField
+                label="Vence"
+                hint="Fecha prevista de entrega"
+                value={jobForm.dueAt}
+                onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
+              />
+              <AdminCountdown value={jobForm.dueAt} title="Cuánto falta para el vencimiento del trabajo" />
+            </div>
             <TextField
               label="Trabajo / concepto"
               wide
@@ -471,12 +474,15 @@ export function ProveedoresModule() {
               onChange={(value) => setJobForm({ ...jobForm, category: value })}
               options={CATEGORY_OPTIONS}
             />
-            <DateField
-              label="Vence"
-              hint="Fecha prevista de entrega"
-              value={jobForm.dueAt}
-              onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
-            />
+            <div className="admin-countdown-field">
+              <DateField
+                label="Vence"
+                hint="Fecha prevista de entrega"
+                value={jobForm.dueAt}
+                onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
+              />
+              <AdminCountdown value={jobForm.dueAt} title="Cuánto falta para el vencimiento del trabajo" />
+            </div>
             <TextField
               label="Trabajo / concepto"
               wide
@@ -516,11 +522,14 @@ export function ProveedoresModule() {
               placeholder="Opcional"
             />
             {editingJob.deliveredAt ? (
-              <DateField
-                label="Fecha de entrega"
-                value={jobForm.deliveredAt}
-                onChange={(value) => setJobForm({ ...jobForm, deliveredAt: value })}
-              />
+              <div className="admin-countdown-field">
+                <DateField
+                  label="Fecha de entrega"
+                  value={jobForm.deliveredAt}
+                  onChange={(value) => setJobForm({ ...jobForm, deliveredAt: value })}
+                />
+                <AdminCountdown value={jobForm.deliveredAt} title="Entrega del proveedor" />
+              </div>
             ) : null}
             {editingJob.paidAt ? (
               <DateField
@@ -596,9 +605,14 @@ export function ProveedoresModule() {
                     <AdminCell
                       title={job.dueAt ? `${formatDateTime(job.dueAt)} · ${jobStatusLabel(job.status)}` : "Sin fecha prevista"}
                     >
-                      <span className="admin-nowrap" data-tone={open ? dueTone(job.dueAt) : undefined}>
-                        {job.dueAt ? formatDateShort(job.dueAt) : "—"}
-                      </span>
+                      <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
+                      {open ? (
+                        <AdminCountdown
+                          value={job.dueAt}
+                          className="admin-countdown--inline"
+                          title={`Cuánto falta para el vencimiento: ${job.description}`}
+                        />
+                      ) : null}
                     </AdminCell>
                     <AdminCell end title={`Total ${formatMoney(job.total)}`}>
                       {formatMoney(job.total)}
@@ -913,7 +927,12 @@ function JobStatusPanel({
           />
         </>
       ) : null}
-      {status === "DELIVERED" ? <DateField label="Fecha de entrega" value={deliveredAt} onChange={setDeliveredAt} /> : null}
+      {status === "DELIVERED" ? (
+        <div className="admin-countdown-field">
+          <DateField label="Fecha de entrega" value={deliveredAt} onChange={setDeliveredAt} />
+          <AdminCountdown value={deliveredAt} title="Entrega del proveedor" />
+        </div>
+      ) : null}
       {status === "PAID" ? <DateField label="Fecha de pago" value={paidAt} onChange={setPaidAt} /> : null}
       {status === "CANCELLED" ? <AdminNote>El trabajo queda cancelado y no se puede reactivar.</AdminNote> : null}
       {status === "BALANCE_PENDING" ? <AdminNote>Saldo que queda pendiente: {formatMoney(balance)}.</AdminNote> : null}

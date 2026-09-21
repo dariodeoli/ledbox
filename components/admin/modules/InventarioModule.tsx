@@ -7,6 +7,7 @@ import {
   formatMoney,
   formatNumber,
   formatTime,
+  inventoryAssignmentCountdown,
   inventoryAssignmentState,
   inventoryKindLabel,
   inventoryStatusLabel,
@@ -25,6 +26,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
@@ -636,6 +638,7 @@ export function InventarioModule() {
             >
               {selected.assignments.map((assignment) => {
                 const state = inventoryAssignmentState(assignment);
+                const countdown = inventoryAssignmentCountdown(assignment);
                 const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
                 const startsAt = assignment.startsAt ?? assignment.event.startsAt;
                 const endsAt = assignment.endsAt ?? assignment.event.endsAt ?? startsAt;
@@ -654,8 +657,16 @@ export function InventarioModule() {
                     <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
                       {stamp(assignment.checkedInAt)}
                     </AdminCell>
-                    <AdminCell>
+                    <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
                       <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
+                      {countdown ? (
+                        <AdminCountdown
+                          value={countdown.at}
+                          short
+                          className="admin-countdown--inline"
+                          title={`${countdown.title}: ${selected.name}`}
+                        />
+                      ) : null}
                     </AdminCell>
                     <AdminCell
                       title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDate, formatDateShort, isDueSoon, statusTone, taskTypeLabel } from "@/lib/admin-format";
 import type { AdminEventTask } from "@/lib/admin-types";
 import { AdminIcon } from "../AdminIcons";
-import { AdminBadge, AdminCell, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
+import { AdminBadge, AdminCell, AdminCountdown, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
 import { adminSend } from "@/lib/admin-api";
 
 export type ChecklistEntry = { task: AdminEventTask; eventName: string };
@@ -37,25 +37,39 @@ export function ChecklistTable({
           : [{ label: "Estado" }, { label: "Tarea" }, { label: "Evento" }, { label: "Tipo" }, { label: "Vence", end: true }]
       }
     >
-      {entries.map(({ task, eventName }) => (
-        <AdminRow key={task.id}>
-          <AdminCell>
-            <ChecklistToggle task={task} canToggle={canToggle} onChanged={onChanged} onError={onError} />
-          </AdminCell>
-          <AdminCell title={task.title}>
-            <strong>{task.title}</strong>
-          </AdminCell>
-          <AdminCell title={eventName}>{eventName}</AdminCell>
-          {compact ? null : (
+      {entries.map(({ task, eventName }) => {
+        const done = Boolean(task.completedAt);
+        return (
+          <AdminRow key={task.id}>
             <AdminCell>
-              <AdminBadge tone={statusTone(task.type)}>{taskTypeLabel(task.type)}</AdminBadge>
+              <ChecklistToggle task={task} canToggle={canToggle} onChanged={onChanged} onError={onError} />
             </AdminCell>
-          )}
-          <AdminCell end title={task.dueAt ? formatDate(task.dueAt) : "Sin fecha de vencimiento"}>
-            {task.dueAt ? formatDateShort(task.dueAt) : "—"}
-          </AdminCell>
-        </AdminRow>
-      ))}
+            <AdminCell title={task.title}>
+              <strong>{task.title}</strong>
+            </AdminCell>
+            <AdminCell title={eventName}>{eventName}</AdminCell>
+            {compact ? null : (
+              <AdminCell>
+                <AdminBadge tone={statusTone(task.type)}>{taskTypeLabel(task.type)}</AdminBadge>
+              </AdminCell>
+            )}
+            <AdminCell
+              end
+              title={task.dueAt ? `${formatDate(task.dueAt)}${done ? " · tarea cumplida" : ""}` : "Sin fecha de vencimiento"}
+            >
+              {task.dueAt ? formatDateShort(task.dueAt) : "—"}
+              {done ? null : (
+                <AdminCountdown
+                  value={task.dueAt}
+                  short={compact}
+                  className="admin-countdown--inline"
+                  title={`Vencimiento de la tarea: ${task.title}`}
+                />
+              )}
+            </AdminCell>
+          </AdminRow>
+        );
+      })}
     </AdminTable>
   );
 }
