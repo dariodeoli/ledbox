@@ -567,6 +567,37 @@ export function budgetChangeStatusTone(value: string | null | undefined): AdminT
   return BUDGET_CHANGE_STATUS_TONES[value] ?? "neutral";
 }
 
+// ── Cronología (issue #33) ──────────────────────────────────────────────────
+// Un tipo de hito por hecho real; la etiqueta es la misma en el panel, el
+// filtro y la versión cliente del portal. El tono viaja en cada hito (lo decide
+// la fuente con el resultado real), acá solo vive la etiqueta del tipo.
+
+const TIMELINE_KIND: Record<string, string> = {
+  created: "Alta",
+  updated: "Cambio",
+  status: "Estado",
+  sent: "Correo",
+  viewed: "Vista del portal",
+  request: "Solicitud",
+  request_resolved: "Respuesta",
+  approved: "Aprobación",
+  revision: "Cambios pedidos",
+  expected: "Pago esperado",
+  proof: "Comprobante",
+  payment: "Cobro",
+  treasury: "Tesorería",
+  inventory: "Reserva",
+  checkout: "Salida",
+  checkin: "Devolución",
+  task: "Tarea",
+  task_done: "Tarea cumplida",
+  event_date: "Fecha del evento",
+  cancelled: "Cancelación",
+  thanks: "Agradecimiento",
+};
+
+export const timelineKindLabel = (value: string | null | undefined) => label(TIMELINE_KIND, value);
+
 /** Estados de un equipo al retirar/devolver (source única para los formularios). */
 export const ITEM_CONDITIONS = ["Bueno", "Con detalles", "Dañado"] as const;
 

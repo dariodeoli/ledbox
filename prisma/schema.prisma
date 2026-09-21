@@ -572,6 +572,10 @@ model Budget {
   // link y se puede regenerar o revocar desde el panel.
   publicToken          String?               @unique
   publicTokenCreatedAt DateTime?
+  /// Primera vista del link del portal (issue #33): se sella una sola vez, la
+  /// primera vez que el cliente abre el presupuesto; los accesos posteriores no
+  /// la mueven. Es el hito real de la cronología y nunca se inventa.
+  viewedAt             DateTime?
   approvedAt           DateTime?
   approvedByName       String?
   approvalMethod       String?
