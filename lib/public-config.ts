@@ -1,6 +1,6 @@
 const DEFAULT_SITE_URL = "https://ledbox.online";
 const DEFAULT_ADMIN_URL = "https://admin.ledbox.online";
-const DEFAULT_CLIENT_URL = "https://cliente.ledbox.online";
+const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
 export const publicConfig = {
