@@ -769,7 +769,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 8rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 65rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(9rem, 1.4fr) 12.5rem 5rem 8rem 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 .admin-table--evento-equipos { --evento-equipos-cols: minmax(9rem, 1.3fr) 5rem 12.5rem 8rem 8rem 6.5rem minmax(7rem, 1fr) 11rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 68rem; }
-.admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 5.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 69rem; }
+.admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 7.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 71rem; }
+.admin-table--trabajos { --trabajos-cols: minmax(8.5rem, 1.1fr) minmax(9.5rem, 1.4fr) minmax(6.5rem, 1fr) 5.5rem 7.5rem 7.5rem 7.5rem 7.5rem 5.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 70.5rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(10rem, 1.4fr) 9rem minmax(9rem, 1.1fr) minmax(9rem, 1.2fr) 7.5rem 6.5rem 5.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 61rem; }
 .admin-table--leads { --leads-cols: 5rem minmax(9.5rem, 1.4fr) minmax(10rem, 1.2fr) 5.5rem minmax(8rem, 1fr) minmax(7.5rem, 1fr) 7rem 6rem 7.5rem; --admin-cols: var(--leads-cols); --admin-table-min: 71.5rem; }
 .admin-table--leads-productos { --leads-productos-cols: minmax(11rem, 1.6fr) 5.5rem 7rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39rem; }

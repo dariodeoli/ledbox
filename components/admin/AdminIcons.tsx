@@ -100,6 +100,18 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
   ),
   plus: <path d="M12 5v14M5 12h14" />,
   check: <path d="M5 12.8l4.6 4.6L19 6.6" />,
+  edit: (
+    <>
+      <path d="M4 20h4.2L19.4 8.8a2.1 2.1 0 0 0-3-3L5.2 16.9z" />
+      <path d="M14.8 5.4l3.8 3.8" />
+    </>
+  ),
+  "arrow-right": (
+    <>
+      <path d="M4 12h15" />
+      <path d="M13.5 6.5 19.5 12l-6 5.5" />
+    </>
+  ),
   alert: (
     <>
       <path d="M12 4l9 16H3z" />
