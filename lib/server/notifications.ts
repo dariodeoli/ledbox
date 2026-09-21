@@ -283,7 +283,9 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
         validUntil: true,
         createdAt: true,
         client: { select: { name: true, company: true } },
-        payments: { select: { amount: true } },
+        // Solo lo cobrado de verdad: un cobro a plazo pendiente no es plata cobrada
+        // (misma regla que el dashboard, la lista y la hoja impresa).
+        payments: { where: { status: "RECEIVED" }, select: { amount: true } },
       },
     }),
     db.budgetChangeRequest.findMany({
