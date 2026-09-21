@@ -274,12 +274,16 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           </AdminField>
           {mark ? (
             <div className="admin-bank-preview">
-              <span className="admin-bank-mark" style={{ background: mark.color }} aria-hidden="true">
-                {mark.initials}
-              </span>
+              {mark.asset ? (
+                <img className="admin-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
+              ) : (
+                <span className="admin-bank-mark" style={{ background: mark.color }} aria-hidden="true">
+                  {mark.initials}
+                </span>
+              )}
               <span>
                 <strong>{mark.label}</strong>
-                <small className="admin-cell-sub"> · monograma del banco hasta que haya logo versionado</small>
+                <small className="admin-cell-sub">{mark.asset ? " · logo oficial" : " · monograma hasta que haya logo versionado"}</small>
               </span>
             </div>
           ) : null}

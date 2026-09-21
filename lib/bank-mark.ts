@@ -39,16 +39,16 @@ type BankRecord = {
   asset?: string;
 };
 
-/** Bancos frecuentes de Paraguay: solo color e iniciales (los assets llegan después). */
+/** Bancos frecuentes de Paraguay: color e iniciales del monograma y asset del repo cuando existe. */
 const BANK_REGISTRY: Record<string, BankRecord> = {
   "banco continental": { label: "Banco Continental", color: "#0E8A4F" },
   continental: { label: "Banco Continental", color: "#0E8A4F" },
   "banco itau": { label: "Banco Itaú", color: "#EC7000" },
   itau: { label: "Banco Itaú", color: "#EC7000" },
   "itau paraguay": { label: "Banco Itaú Paraguay", color: "#EC7000" },
-  "banco ueno": { label: "Ueno Bank", color: "#6D2C91" },
-  ueno: { label: "Ueno Bank", color: "#6D2C91" },
-  "ueno bank": { label: "Ueno Bank", color: "#6D2C91" },
+  "banco ueno": { label: "Ueno Bank", color: "#2BD98E", asset: "/assets/banks/ueno.svg" },
+  ueno: { label: "Ueno Bank", color: "#2BD98E", asset: "/assets/banks/ueno.svg" },
+  "ueno bank": { label: "Ueno Bank", color: "#2BD98E", asset: "/assets/banks/ueno.svg" },
   "banco atlas": { label: "Banco Atlas", color: "#0B5AA4" },
   atlas: { label: "Banco Atlas", color: "#0B5AA4" },
   "banco familiar": { label: "Banco Familiar", color: "#D6002B" },

@@ -816,6 +816,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-bank-preview { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-bank-preview strong { color: var(--a-text-strong); font-size: 13px; }
 .admin-bank-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; color: #fff; font: 800 13px var(--font-body); letter-spacing: .04em; }
+.admin-bank-asset { height: 22px; width: auto; max-width: 150px; object-fit: contain; }
 .admin-dialog-facts { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-dialog-facts > div { display: grid; grid-template-columns: minmax(6.5rem, 8rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .admin-dialog-facts dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
@@ -1096,7 +1097,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .lbprint-pay-total { margin-left: auto; color: #5d6f78; font-size: 11px; }
 .lbprint-bank { display: flex; align-items: center; gap: 10px; }
 .lbprint-bank-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: #fff; font: 800 12px var(--font-body); letter-spacing: .04em; }
-.lbprint-bank-asset { width: 34px; height: 34px; border-radius: 8px; background: #fff; object-fit: contain; }
+.lbprint-bank-asset { height: 22px; width: auto; max-width: 150px; object-fit: contain; }
 .lbprint-bank-data { display: grid; gap: 1px; }
 .lbprint-bank-name { font-size: 12.5px; font-weight: 700; }
 .lbprint-bank-line { color: #35474f; font-size: 11.5px; }
@@ -1282,7 +1283,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .portal-pay-grid { display: grid; gap: 12px; }
 .portal-bank { display: flex; align-items: center; gap: 10px; }
 .portal-bank-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: #fff; font: 800 14px var(--font-body); letter-spacing: .04em; }
-.portal-bank-asset { width: 40px; height: 40px; border-radius: 10px; background: #fff; object-fit: contain; }
+.portal-bank-asset { height: 26px; width: auto; max-width: 170px; object-fit: contain; }
 .portal-bank-name { font-size: 14px; font-weight: 700; }
 .portal-facts--pay { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 .portal-pay-plan { display: grid; gap: 10px; }

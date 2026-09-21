@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 
@@ -8,6 +8,17 @@ const prisma = new PrismaClient();
 // 202609210001_admin_multiempresa). El slug también es el default de
 // DEFAULT_ORGANIZATION_SLUG para los endpoints públicos de leads y cotizaciones.
 const DEFAULT_ORGANIZATION = { id: 'org_ledbox', name: 'LedBox', slug: 'ledbox' } as const;
+
+// Datos de pago de la empresa (los administra OWNER/ADMIN desde el panel).
+// El seed los deja cargados solo si la empresa todavía no tiene ninguno: nunca
+// pisa lo que se haya configurado desde el panel.
+const PAYMENT_DETAILS = {
+  bank: 'Ueno Bank',
+  holder: 'Santiago Javier Rodas',
+  ruc: null,
+  account: '6191649354',
+  alias: 'c.i +595 982 029217',
+} as const;
 
 const admins = [
   { name: 'Dario Deoli', email: 'dariodeoli@gmail.com', passwordEnv: 'LEDBOX_ADMIN_DARIO_PASSWORD' },
@@ -20,8 +31,12 @@ const ADMIN_ALLOWLIST: ReadonlySet<string> = new Set(admins.map((admin) => admin
 async function main() {
   const organization = await prisma.organization.upsert({
     where: { slug: DEFAULT_ORGANIZATION.slug },
-    create: { ...DEFAULT_ORGANIZATION, active: true },
+    create: { ...DEFAULT_ORGANIZATION, active: true, paymentDetails: PAYMENT_DETAILS },
     update: { name: DEFAULT_ORGANIZATION.name, active: true },
+  });
+  await prisma.organization.updateMany({
+    where: { id: organization.id, paymentDetails: { equals: Prisma.DbNull } },
+    data: { paymentDetails: PAYMENT_DETAILS },
   });
 
   for (const admin of admins) {
