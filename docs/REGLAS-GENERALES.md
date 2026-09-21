@@ -55,7 +55,7 @@ Nunca un `<input>` suelto. Un objeto canónico por tipo:
 - Subida: PNG/JPG/WebP hasta 1 MiB (fotos de persona); validar MIME + magic bytes en cliente y servidor; recortar y comprimir antes de subir; borrado explícito (no se restaura solo).
 - Adjuntos: validación de contenido real, acceso autenticado y almacenamiento fuera del HTML público.
 - Logos/marcas externas: registro nombre → asset del repo (sin hotlinks) → vector compartido → monograma con iniciales y color.
-- Logo por tema: fondo oscuro → logo claro; fondo claro → logo oscuro. La empresa sube ambas variantes; en papel siempre la variante clara. La regla vive en un solo lugar (no se duplica por pantalla).
+- Logo por tema: fondo oscuro → logo claro; fondo claro → logo oscuro. La empresa sube ambas variantes; en papel siempre la variante clara. La regla vive en un solo lugar (`logoVariantForTheme`, `components/admin/AdminAvatar.tsx`; no se duplica por pantalla).
 
 ## 4. Tablas y listados
 
@@ -128,7 +128,8 @@ Nunca un `<input>` suelto. Un objeto canónico por tipo:
   Kit en `components/admin/AdminFields.tsx`, reglas puras en `lib/field-rules.ts` y aserción de fuente en `npm run check:fields` (falla con `<input>`/`<select>`/`<textarea>` sueltos o `type="number"`).
 - [x] Formatos: moneda/porcentaje/fechas/teléfonos normalizados.
   `MoneyField`/`NumberField`/`PercentField` y las reglas puras; teléfonos `+<código> <dígitos>` (default +595), correos en minúsculas y seriales en mayúsculas sin separadores.
-- [ ] Fotos: Avatar único con fallback; validación MIME+magic bytes. LedBox no usa avatares hoy (promotoras guarda `photoUrl` sin subida).
+- [x] Fotos: Avatar único con fallback; validación MIME+magic bytes.
+  `AdminAvatar`/`AdminOrgLogo` en `components/admin/AdminAvatar.tsx` son el único objeto de identidad (personas y empresas; nunca un `<img>` a mano); la subida (`AdminImageUpload`) recorta y comprime por canvas (`lib/identity-image.ts`) y valida por magic bytes en cliente y API. Los binarios viven en la base y se sirven solo con sesión (`/api/admin/users/avatars/[id]`, `/api/admin/organization/branding/logos/[variant]`); Promotoras usa su foto permitida (`photoUrl`) con el mismo objeto.
 - [ ] Tablas: alineadas, sin scroll horizontal, acciones a la vista. El panel denso ya usa plantillas de columnas por vista; queda la auditoría fina por módulo.
 - [x] Estados y avisos: un objeto por concepto; estados honestos.
   `AdminNote` (variantes `note`/`alert`), `AdminEmpty` y `AdminDataState` son los únicos objetos de aviso/estado inline del panel.

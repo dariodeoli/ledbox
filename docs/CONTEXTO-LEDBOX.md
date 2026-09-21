@@ -555,5 +555,6 @@ Lo que sigue ya está implementado e integrado (y en producción salvo lo indica
 - **Demo pública full** en `/demo`: datos simulados con eventos reales de Paraguay, ventana móvil y entrada al portal del cliente demo.
 - **Deploy**: migraciones automáticas al arrancar (`scripts/migrate-deploy.mjs`) y `/api/health` con estado de base y migraciones.
 - **Reglas generales obligatorias** en `docs/REGLAS-GENERALES.md`; adopción del kit de campos canónico en curso (issue #13).
+- **Perfil y empresa (issue #22, rama `feat/perfil-empresa`, pendiente de integrar)**: cada usuario edita su nombre, su contraseña (pidiendo la actual) y su foto; un OWNER/ADMIN edita el nombre de la empresa y sube el logo claro y el oscuro (en papel siempre el claro); en Equipo se editan nombre y correo de un usuario (al cambiar el correo se cierran sus sesiones). Todo con auditoría de actor real.
 
-Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/bloqueo por inactividad, avatares (la app no los usa hoy) y adjuntar comprobante de pago en el portal.
+Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/bloqueo por inactividad y adjuntar comprobante de pago en el portal.
