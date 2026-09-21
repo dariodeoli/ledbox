@@ -1,30 +1,64 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
-import { auditPick, recordAudit } from "@/lib/server/audit";
+import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
+import { isValidDayKey } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MAX_TERMS = 600;
+const MAX_INSTALLMENTS = 12;
+const MAX_INSTALLMENT_LABEL = 60;
 
 /**
  * `GET /api/admin/budgets`: presupuestos de la empresa activa. Los escalares
  * incluyen el estado del portal (issue #12) — `publicToken`,
  * `publicTokenCreatedAt`, `approvedAt`, `approvedByName`, `approvalMethod`,
- * `approvalNote`, `revisionRequestedAt` y `revisionNote`—; `approvalIp` y
- * `approvalUserAgent` quedan disponibles para el historial, pero la lista no
- * los dibuja. Nada de otra empresa entra en la respuesta.
+ * `approvalNote`, `revisionRequestedAt` y `revisionNote`— y el plan de pagos
+ * (issue #14: `advanceAmount`, `paymentTerms`, `installmentsJson`).
+ * `approvalIp` y `approvalUserAgent` quedan disponibles para el historial, pero
+ * la lista no los dibuja. Nada de otra empresa entra en la respuesta.
+ *
+ * La misma respuesta trae `budgetRequests`: las solicitudes del portal
+ * (issue #14) con su presupuesto embebido, para que el módulo muestre la cola
+ * de pendientes sin una segunda llamada.
  */
 export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
-  const budgets = await db.budget.findMany({
-    where: { organizationId: auth.context.organizationId },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-    include: { client: true, event: true, items: true, payments: true },
-  });
-  return Response.json({ budgets });
+  const { organizationId } = auth.context;
+  const [budgets, budgetRequests] = await Promise.all([
+    db.budget.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: { client: true, event: true, items: true, payments: true },
+    }),
+    db.budgetChangeRequest.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: {
+        budget: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            subtotal: true,
+            discount: true,
+            total: true,
+            client: { select: { name: true, company: true } },
+            items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  return Response.json({ budgets, budgetRequests });
 }
 
 export async function POST(request: Request) {
@@ -87,4 +121,119 @@ export async function POST(request: Request) {
     },
   });
   return Response.json({ budget }, { status: 201 });
+}
+
+type ParsedInstallments =
+  | { ok: true; value: Array<{ label: string; amount: number; dueAt: string }> }
+  | { ok: false; error: string };
+
+/** Cuotas del plan de pagos: etiqueta, monto entero y vencimiento real (`YYYY-MM-DD`). */
+function parseInstallments(raw: unknown): ParsedInstallments {
+  if (!Array.isArray(raw)) return { ok: false, error: "Las cuotas deben venir en una lista." };
+  if (raw.length > MAX_INSTALLMENTS) return { ok: false, error: `Podés cargar hasta ${MAX_INSTALLMENTS} cuotas.` };
+  const value: Array<{ label: string; amount: number; dueAt: string }> = [];
+  for (const [index, row] of raw.entries()) {
+    const position = index + 1;
+    if (!row || typeof row !== "object" || Array.isArray(row)) return { ok: false, error: `La cuota ${position} tiene un formato inválido.` };
+    const record = row as Record<string, unknown>;
+    const label = typeof record.label === "string" ? record.label.trim() : "";
+    if (!label) return { ok: false, error: `La cuota ${position} necesita una etiqueta.` };
+    if (label.length > MAX_INSTALLMENT_LABEL) return { ok: false, error: `La etiqueta de la cuota ${position} no puede superar los ${MAX_INSTALLMENT_LABEL} caracteres.` };
+    const amount = Number(record.amount);
+    if (!Number.isInteger(amount) || amount <= 0) return { ok: false, error: `El monto de la cuota ${position} debe ser un entero mayor a cero.` };
+    const dueAt = typeof record.dueAt === "string" ? record.dueAt.trim() : "";
+    if (!isValidDayKey(dueAt)) return { ok: false, error: `El vencimiento de la cuota ${position} no es una fecha válida.` };
+    value.push({ label, amount, dueAt });
+  }
+  return { ok: true, value };
+}
+
+/**
+ * `PATCH /api/admin/budgets` (issue #14): plan de pagos del presupuesto.
+ * Anticipo (`advanceAmount`), condiciones (`paymentTerms`) y cuotas
+ * (`installmentsJson`, forma `[{ label, amount, dueAt }]`). El anticipo más las
+ * cuotas no pueden superar el total: el plan no promete más de lo que se cobra.
+ */
+export async function PATCH(request: Request) {
+  const auth = await requireAdminContext("budgets.write");
+  if (!auth.ok) return auth.response;
+  const { organizationId } = auth.context;
+  const body = await readJson(request) as Record<string, unknown>;
+  const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
+  if (!budgetId) return jsonError("budgetId is required.", 400);
+
+  const budget = await db.budget.findFirst({
+    where: { id: budgetId, organizationId },
+    select: {
+      id: true,
+      title: true,
+      total: true,
+      advanceAmount: true,
+      paymentTerms: true,
+      installmentsJson: true,
+      client: { select: { name: true, company: true } },
+    },
+  });
+  if (!budget) return jsonError("Budget not found.", 404);
+
+  const data: Prisma.BudgetUpdateInput = {};
+  if (body.advanceAmount !== undefined) {
+    const advance = Number(body.advanceAmount);
+    if (!Number.isInteger(advance) || advance < 0) return jsonError("El anticipo debe ser un entero en guaraníes.", 400);
+    if (advance > budget.total) return jsonError("El anticipo no puede superar el total del presupuesto.", 400);
+    data.advanceAmount = advance;
+  }
+  if (body.paymentTerms !== undefined) {
+    const terms = typeof body.paymentTerms === "string" ? body.paymentTerms.trim() : "";
+    if (terms.length > MAX_TERMS) return jsonError(`Las condiciones de pago no pueden superar los ${MAX_TERMS} caracteres.`, 400);
+    data.paymentTerms = terms || null;
+  }
+  const storedInstallments = readStoredInstallments(budget.installmentsJson);
+  let installments = storedInstallments;
+  if (body.installmentsJson !== undefined) {
+    const parsed = parseInstallments(body.installmentsJson);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
+    installments = parsed.value;
+    data.installmentsJson = parsed.value as unknown as Prisma.InputJsonValue;
+  }
+
+  const advance = typeof data.advanceAmount === "number" ? data.advanceAmount : budget.advanceAmount;
+  const scheduled = installments.reduce((sum, installment) => sum + installment.amount, 0);
+  if (advance + scheduled > budget.total) {
+    return jsonError("El plan de pagos (anticipo más cuotas) no puede superar el total del presupuesto.", 400);
+  }
+
+  const changes = auditChanges(
+    { advanceAmount: budget.advanceAmount, paymentTerms: budget.paymentTerms, installments: storedInstallments.length },
+    { advanceAmount: advance, paymentTerms: data.paymentTerms === undefined ? budget.paymentTerms : data.paymentTerms, installments: installments.length },
+    ["advanceAmount", "paymentTerms", "installments"],
+  );
+  if (!changes) {
+    const current = await db.budget.findUnique({
+      where: { id: budget.id },
+      select: { id: true, advanceAmount: true, paymentTerms: true, installmentsJson: true, total: true },
+    });
+    return Response.json({ budget: current, unchanged: true });
+  }
+
+  const updated = await db.budget.update({
+    where: { id: budget.id },
+    data,
+    select: {
+      id: true,
+      advanceAmount: true,
+      paymentTerms: true,
+      installmentsJson: true,
+      total: true,
+    },
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "update",
+    entity: "Budget",
+    entityId: budget.id,
+    summary: `Definió el plan de pagos del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}»`,
+    detail: { changes },
+  });
+  return Response.json({ budget: updated });
 }
