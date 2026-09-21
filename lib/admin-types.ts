@@ -324,6 +324,108 @@ export type AdminPaymentRow = AdminPayment & {
   budget: { id: string; title: string; publicToken?: string | null } | null;
   /** Recordatorios enviados/abiertos de este cobro (issue #19), más recientes primero. */
   reminders: AdminPaymentReminder[];
+  /** Cuenta de tesorería del cobro (issue #27); `null` si se registró sin cuenta. */
+  treasuryAccount?: AdminTreasuryAccountRef | null;
+};
+
+// ── Tesorería por cuentas y gastos (issue #27) ──────────────────────────────
+// El saldo de una cuenta nunca se guarda: siempre se deriva del saldo inicial
+// declarado más los movimientos registrados. Estas listas son la fuente única
+// de los selectores del panel y espejan los enums del schema.
+
+/** Tipos de cuenta (`TreasuryAccountType`). */
+export const TREASURY_ACCOUNT_TYPES = ["CASH", "BANK", "CHEQUE", "OTHER"] as const;
+export type TreasuryAccountTypeValue = (typeof TREASURY_ACCOUNT_TYPES)[number];
+
+/** Direcciones de un movimiento (`TreasuryMovementDirection`). */
+export const TREASURY_DIRECTIONS = ["IN", "OUT", "TRANSFER"] as const;
+export type TreasuryDirectionValue = (typeof TREASURY_DIRECTIONS)[number];
+
+/** Origen de un movimiento (`TreasuryMovementOrigin`). */
+export const TREASURY_ORIGINS = ["client_payment", "supplier_job", "expense", "adjustment"] as const;
+export type TreasuryOriginValue = (typeof TREASURY_ORIGINS)[number];
+
+/** Categorías de gasto (`ExpenseCategory`). */
+export const EXPENSE_CATEGORIES = [
+  "TRANSPORT",
+  "FUEL",
+  "FOOD",
+  "MATERIALS",
+  "RENT",
+  "SERVICES",
+  "SALARIES",
+  "TOOLS",
+  "OTHER",
+] as const;
+export type ExpenseCategoryValue = (typeof EXPENSE_CATEGORIES)[number];
+
+/** Métodos de pago del panel: misma lista que valida el API de finanzas. */
+export const PAYMENT_METHODS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"] as const;
+
+/** Referencia mínima de una cuenta de tesorería dentro de otro registro. */
+export type AdminTreasuryAccountRef = { id: string; name: string; type: string };
+
+/** Cuenta de tesorería con su saldo derivado. */
+export type AdminTreasuryAccountRow = AdminTreasuryAccountRef & {
+  bank: string | null;
+  currency: string;
+  openingBalance: number;
+  sortOrder: number;
+  active: boolean;
+  /** Saldo inicial + entradas − salidas (y transferencias). No es saldo bancario. */
+  balance: number;
+};
+
+/** Totales por tipo de cuenta: los KPIs de tesorería. */
+export type AdminTreasurySummary = {
+  cash: number;
+  bank: number;
+  cheque: number;
+  other: number;
+  total: number;
+  accounts: number;
+  activeAccounts: number;
+};
+
+export type AdminTreasuryMovementRow = {
+  id: string;
+  direction: string;
+  amount: number;
+  occurredAt: string;
+  origin: string;
+  sourceId: string | null;
+  notes: string | null;
+  createdByName: string;
+  createdAt: string;
+  account: AdminTreasuryAccountRef;
+  counterAccount: AdminTreasuryAccountRef | null;
+  /** Hecho real que lo originó, ya resuelto por el API (cliente, proveedor o gasto). */
+  sourceLabel: string | null;
+};
+
+export type AdminExpenseRow = {
+  id: string;
+  date: string;
+  amount: number;
+  category: string;
+  description: string;
+  method: string | null;
+  receipt: string | null;
+  notes: string | null;
+  createdByName: string;
+  createdAt: string;
+  account: AdminTreasuryAccountRef;
+  /** Proyecto/evento asociado; `null` es "A definir" (se asigna desde la fila). */
+  event: AdminEventRef | null;
+  supplier: { id: string; name: string } | null;
+};
+
+/** Proyecto disponible para asociar un gasto (lista liviana del selector). */
+export type AdminExpenseProject = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  client: { id: string; name: string; company: string | null };
 };
 
 // ── Recordatorios de cobro (issue #19) ──────────────────────────────────────
@@ -767,6 +869,9 @@ export const AUDIT_ENTITIES = [
   "AdminUser",
   "Lead",
   "Organization",
+  "TreasuryAccount",
+  "TreasuryMovement",
+  "Expense",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -1040,4 +1145,11 @@ export type AdminApiResponse = {
   counts?: AdminOverview["counts"];
   finance?: AdminOverview["finance"];
   upcoming?: AdminOverview["upcoming"];
+  /** Tesorería (issue #27): cuentas con su saldo, movimientos del período y KPIs. */
+  accounts?: AdminTreasuryAccountRow[];
+  movements?: AdminTreasuryMovementRow[];
+  summary?: AdminTreasurySummary;
+  /** Gastos del período con su cuenta, proyecto y proveedor (issue #27). */
+  expenses?: AdminExpenseRow[];
+  projects?: AdminExpenseProject[];
 };

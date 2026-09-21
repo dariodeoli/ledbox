@@ -37,32 +37,35 @@ enum OrganizationRole {
 }
 
 model Organization {
-  id               String                   @id
-  name             String
-  slug             String                   @unique
-  active           Boolean                  @default(true)
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
+  id                String                   @id
+  name              String
+  slug              String                   @unique
+  active            Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
   /// Datos de pago de la empresa (issue #14): `{ bank, holder, ruc, account, alias }`.
   /// Solo OWNER/ADMIN los configuran y la API pública los entrega con el presupuesto aprobado.
-  paymentDetails   Json?
-  memberships      OrganizationMembership[]
-  adminMemberships AdminMembership[]
-  adminSessions    AdminSession[]
-  leads            Lead[]
-  quotes           QuoteRequest[]
-  clients          Client[]
-  events           Event[]
-  budgets          Budget[]
-  changeRequests   BudgetChangeRequest[]
-  clientPayments   ClientPayment[]
-  paymentReminders PaymentReminderLog[]
-  paymentProofs    BudgetPaymentProof[]
-  suppliers        Supplier[]
-  supplierJobs     SupplierJob[]
-  inventoryItems   InventoryItem[]
-  promoters        Promoter[]
-  auditLogs        AuditLog[]
+  paymentDetails    Json?
+  memberships       OrganizationMembership[]
+  adminMemberships  AdminMembership[]
+  adminSessions     AdminSession[]
+  leads             Lead[]
+  quotes            QuoteRequest[]
+  clients           Client[]
+  events            Event[]
+  budgets           Budget[]
+  changeRequests    BudgetChangeRequest[]
+  clientPayments    ClientPayment[]
+  paymentReminders  PaymentReminderLog[]
+  paymentProofs     BudgetPaymentProof[]
+  suppliers         Supplier[]
+  supplierJobs      SupplierJob[]
+  inventoryItems    InventoryItem[]
+  promoters         Promoter[]
+  auditLogs         AuditLog[]
+  treasuryAccounts  TreasuryAccount[]
+  treasuryMovements TreasuryMovement[]
+  expenses          Expense[]
 
   @@index([active, createdAt])
 }
@@ -417,6 +420,7 @@ model Event {
   assignments    EventInventory[]
   tasks          EventTask[]
   supplierJobs   SupplierJob[]
+  expenses       Expense[]
 
   @@index([startsAt, status])
   @@index([clientId, createdAt])
@@ -520,41 +524,46 @@ model BudgetChangeRequest {
 
 /**
  * Cobro de cliente: cobrado al momento o a plazo (issue #16).
- *
  * - `status`: `PENDING` (a cobrar), `RECEIVED` (cobrado) o `CANCELLED` (anulado).
  * - `paidAt`: fecha de pago; `null` mientras el cobro está pendiente (un cobro a
- *   plazo no es plata cobrada hasta que se marca).
+ * plazo no es plata cobrada hasta que se marca).
  * - `collectedAt`: fecha real del cobro (los registros viejos usan `paidAt`).
  * - `invoiceIssuedAt`/`invoiceNumber`: factura emitida; `dueAt` es el vencimiento
- *   de cobro (la emisión a 30 días se calcula: emisión + días).
+ * de cobro (la emisión a 30 días se calcula: emisión + días).
  * - `chequeDate`: fecha del cheque cuando el método es cheque.
  */
 model ClientPayment {
-  id              String              @id
-  organizationId  String
-  clientId        String
-  budgetId        String?
-  amount          Int
-  status          ClientPaymentStatus @default(RECEIVED)
-  paidAt          DateTime?
-  collectedAt     DateTime?
-  method          String?
-  reference       String?
-  invoiceNumber   String?
-  invoiceIssuedAt DateTime?
-  dueAt           DateTime?
-  chequeDate      DateTime?
-  notes           String?
-  createdAt       DateTime            @default(now())
-  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budget          Budget?             @relation(fields: [budgetId], references: [id], onDelete: SetNull)
-  reminders       PaymentReminderLog[]
-  proofs          BudgetPaymentProof[]
+  id                String               @id
+  organizationId    String
+  clientId          String
+  budgetId          String?
+  amount            Int
+  status            ClientPaymentStatus  @default(RECEIVED)
+  paidAt            DateTime?
+  collectedAt       DateTime?
+  method            String?
+  reference         String?
+  invoiceNumber     String?
+  invoiceIssuedAt   DateTime?
+  dueAt             DateTime?
+  chequeDate        DateTime?
+  notes             String?
+  createdAt         DateTime             @default(now())
+  /**
+   * Cuenta de tesorería donde entra el cobro (issue #27).
+   */
+  treasuryAccountId String?
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budget            Budget?              @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  treasuryAccount   TreasuryAccount?     @relation(fields: [treasuryAccountId], references: [id], onDelete: SetNull)
+  reminders         PaymentReminderLog[]
+  proofs            BudgetPaymentProof[]
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
   @@index([organizationId, status, dueAt])
+  @@index([treasuryAccountId])
 }
 
 /**
@@ -562,7 +571,6 @@ model ClientPayment {
  * canal y día de Asunción. El índice único es el candado de idempotencia (un
  * recordatorio por cobro y canal por día, aunque corra el despacho diario y el
  * envío manual a la vez); la corrida diaria sin cron se apoya en él.
- *
  * `sentAt` es el instante del intento y `status` su resultado real; `actorKind`
  * distingue al sistema (`system`) del equipo (`admin`) y la auditoría guarda el
  * actor con nombre y correo.
@@ -595,7 +603,6 @@ model PaymentReminderLog {
 
 /**
  * Comprobante de pago subido por el cliente desde el portal (issue #17).
- *
  * El binario vive en `data` (bytea): nunca es público — se sirve únicamente con
  * sesión del panel (`/api/admin/budgets/proofs/[id]`) — y `mime`/`size` guardan
  * el tipo real detectado por magic bytes y el tamaño ya comprimido. El
@@ -635,6 +642,7 @@ model Supplier {
   createdAt      DateTime         @default(now())
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   jobs           SupplierJob[]
+  expenses       Expense[]
 
   @@index([category, active])
   @@index([organizationId, name])
@@ -663,6 +671,155 @@ model SupplierJob {
   @@index([status, dueAt])
   @@index([eventId])
   @@index([organizationId, dueAt])
+}
+
+enum TreasuryAccountType {
+  CASH
+  BANK
+  CHEQUE
+  OTHER
+}
+
+/**
+ * Dirección de un movimiento de tesorería: entrada (`IN`), salida (`OUT`) o
+ * transferencia entre dos cuentas (`TRANSFER`, con `counterAccountId`).
+ */
+enum TreasuryMovementDirection {
+  IN
+  OUT
+  TRANSFER
+}
+
+/**
+ * Hecho que originó un movimiento: cobro de cliente (`client_payment`), pago o
+ * anticipo a proveedor (`supplier_job`), gasto (`expense`) o ajuste manual
+ * (`adjustment`). Con `sourceId` queda la traza al registro real.
+ */
+enum TreasuryMovementOrigin {
+  client_payment
+  supplier_job
+  expense
+  adjustment
+}
+
+/**
+ * Categorías de gasto (fuente única: mismo catálogo que el panel).
+ */
+enum ExpenseCategory {
+  TRANSPORT
+  FUEL
+  FOOD
+  MATERIALS
+  RENT
+  SERVICES
+  SALARIES
+  TOOLS
+  OTHER
+}
+
+/**
+ * Cuenta de tesorería de la empresa (issue #27): dónde vive la plata —efectivo,
+ * banco, cheques a cobrar—. El saldo **nunca** se guarda: se deriva del saldo
+ * inicial declarado (`openingBalance`) más los movimientos registrados, que es
+ * la única fuente real. `bank` es el nombre del banco para el logo/monograma
+ * (`lib/bank-mark.ts`); los cheques no llevan banco y las cuentas se ordenan
+ * con `sortOrder`.
+ */
+model TreasuryAccount {
+  id               String              @id
+  organizationId   String
+  name             String
+  type             TreasuryAccountType @default(CASH)
+  bank             String?
+  currency         String              @default("PYG")
+  openingBalance   Int                 @default(0)
+  sortOrder        Int                 @default(0)
+  active           Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  movements        TreasuryMovement[]  @relation("TreasuryMovementAccount")
+  counterMovements TreasuryMovement[]  @relation("TreasuryMovementCounterAccount")
+  clientPayments   ClientPayment[]
+  expenses         Expense[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active, sortOrder])
+}
+
+/**
+ * Movimiento de tesorería (issue #27): la plata que entra, sale o se mueve
+ * entre cuentas de la empresa. Se genera desde los hechos reales —cobro de
+ * cliente, pago/anticipo a proveedor, gasto— o desde un ajuste manual, y
+ * siempre queda auditado. El actor se guarda denormalizado (id + nombre +
+ * correo) para que la traza sobreviva a renombres o bajas de cuentas.
+ */
+model TreasuryMovement {
+  id               String                    @id
+  organizationId   String
+  accountId        String
+  /**
+   * Cuenta destino de una transferencia; `null` en entradas y salidas.
+   */
+  counterAccountId String?
+  direction        TreasuryMovementDirection
+  amount           Int
+  /**
+   * Fecha real del movimiento (día de Asunción, mediodía).
+   */
+  occurredAt       DateTime
+  origin           TreasuryMovementOrigin    @default(adjustment)
+  /**
+   * Id del hecho que lo generó (cobro, trabajo de proveedor o gasto).
+   */
+  sourceId         String?
+  notes            String?
+  createdById      String?
+  createdByName    String
+  createdByEmail   String?
+  createdAt        DateTime                  @default(now())
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account          TreasuryAccount           @relation("TreasuryMovementAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  counterAccount   TreasuryAccount?          @relation("TreasuryMovementCounterAccount", fields: [counterAccountId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, occurredAt])
+  @@index([accountId, occurredAt])
+  @@index([organizationId, origin, sourceId])
+}
+
+/**
+ * Gasto de la empresa (issue #27): carga rápida desde el panel y egreso real de
+ * una cuenta de tesorería (cada gasto genera su movimiento `OUT`). `eventId`
+ * nulo es "A definir" y se asigna después desde la fila; proveedor, método y
+ * comprobante son opcionales.
+ */
+model Expense {
+  id             String          @id
+  organizationId String
+  accountId      String
+  eventId        String?
+  supplierId     String?
+  date           DateTime
+  amount         Int
+  category       ExpenseCategory @default(OTHER)
+  description    String
+  method         String?
+  receipt        String?
+  notes          String?
+  createdById    String?
+  createdByName  String
+  createdByEmail String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        TreasuryAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  event          Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, date])
+  @@index([organizationId, category])
+  @@index([organizationId, eventId])
+  @@index([accountId, date])
 }
 
 model InventoryItem {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after } from "next/server";
+import { PAYMENT_METHODS } from "@/lib/admin-types";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -23,13 +24,15 @@ export const dynamic = "force-dynamic";
  * pasa a `RECEIVED` sellando la fecha real, `action: "cancel"` lo anula. Las
  * transiciones son monotónicas (solo desde `PENDING`) y cada una queda auditada.
  *
+ * Tesorería (issue #27): el cobro se registra en una cuenta (`treasuryAccountId`,
+ * por defecto la primera activa) y al cobrarse genera el movimiento de entrada.
+ * Sin cuentas cargadas el cobro sigue funcionando y no genera movimiento.
+ *
  * El `GET` es el primer uso del día del módulo y dispara el despacho diario de
  * recordatorios al cliente (issue #19) después de responder: idempotente por
  * cobro, canal y día (`PaymentReminderLog`), así que no hace falta cron externo.
  */
 
-/** Métodos de pago aceptados (catálogo cerrado del panel). */
-const PAYMENT_METHODS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"] as const;
 /** Métodos válidos para un cobro a plazo. */
 const TERM_METHODS = ["Transferencia", "Efectivo", "Cheque"] as const;
 /** Plazos ofrecidos en días desde la emisión de la factura. */
@@ -51,6 +54,29 @@ function readDayKey(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const key = raw.trim().slice(0, 10);
   return isValidDayKey(key) ? key : null;
+}
+
+// ── Tesorería del cobro (issue #27) ─────────────────────────────────────────
+// El cobro se registra en una cuenta (por defecto la primera activa) y al
+// cobrarse genera su movimiento de entrada. Sin cuentas cargadas el cobro sigue
+// funcionando igual y no se inventa ningún movimiento.
+
+const treasuryAccountSelect = { id: true, name: true, type: true } as const;
+
+/** Cuenta pedida en el body: `undefined` si no vino, `null` si no existe en la empresa. */
+async function requestedTreasuryAccount(organizationId: string, raw: unknown) {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  if (typeof raw !== "string") return null;
+  return db.treasuryAccount.findFirst({ where: { id: raw, organizationId }, select: treasuryAccountSelect });
+}
+
+/** Primera cuenta activa de la empresa: la cuenta por defecto del cobro. */
+async function firstActiveTreasuryAccount(organizationId: string) {
+  return db.treasuryAccount.findFirst({
+    where: { organizationId, active: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: treasuryAccountSelect,
+  });
 }
 
 export async function GET() {
@@ -80,6 +106,8 @@ export async function GET() {
         // Historial de recordatorios del cobro (issue #19) para el "enviado hoy"
         // de la fila y el detalle del cobro.
         reminders: { orderBy: { sentAt: "desc" }, take: 20 },
+        // Cuenta de tesorería del cobro (issue #27).
+        treasuryAccount: { select: treasuryAccountSelect },
       },
     }),
     db.supplierJob.findMany({
@@ -114,6 +142,11 @@ export async function POST(request: Request) {
     const budget = await db.budget.findFirst({ where: { id: budgetId, organizationId }, select: { id: true } });
     if (!budget) return jsonError("Budget not found.", 404);
   }
+
+  // Cuenta de tesorería del cobro (issue #27): la pedida o la primera activa.
+  const requestedAccount = await requestedTreasuryAccount(organizationId, body.treasuryAccountId);
+  if (requestedAccount === null) return jsonError("La cuenta no existe en esta empresa.", 404);
+  const treasuryAccount = requestedAccount ?? (await firstActiveTreasuryAccount(organizationId));
 
   // ── Cobro a plazo: a cobrar, con factura y/o cheque ───────────────────────
   if (body.status === "PENDING") {
@@ -153,6 +186,7 @@ export async function POST(request: Request) {
         invoiceIssuedAt: invoiceDayKey ? dayStart(invoiceDayKey) : null,
         dueAt: dayStart(dueDayKey),
         chequeDate: chequeDayKey ? dayStart(chequeDayKey) : null,
+        treasuryAccountId: treasuryAccount?.id ?? null,
       },
     });
     await recordAudit({
@@ -162,17 +196,20 @@ export async function POST(request: Request) {
       entityId: payment.id,
       summary: `Registró un cobro a plazo del cliente «${clientLabel(client)}»`,
       detail: {
-        fields: auditPick(payment, [
-          "clientId",
-          "budgetId",
-          "amount",
-          "status",
-          "method",
-          "invoiceNumber",
-          "invoiceIssuedAt",
-          "dueAt",
-          "chequeDate",
-        ]),
+        fields: {
+          ...auditPick(payment, [
+            "clientId",
+            "budgetId",
+            "amount",
+            "status",
+            "method",
+            "invoiceNumber",
+            "invoiceIssuedAt",
+            "dueAt",
+            "chequeDate",
+          ]),
+          treasuryAccountId: treasuryAccount?.id ?? null,
+        },
       },
     });
     return Response.json({ payment }, { status: 201 });
@@ -185,27 +222,57 @@ export async function POST(request: Request) {
   if (reference.length > MAX_REFERENCE) return jsonError(`La referencia no puede superar los ${MAX_REFERENCE} caracteres.`, 400);
 
   const now = new Date();
-  const payment = await db.clientPayment.create({
-    data: {
-      id: randomUUID(),
-      organizationId,
-      clientId: client.id,
-      budgetId: budgetId || undefined,
-      amount,
-      status: "RECEIVED",
-      paidAt: now,
-      collectedAt: now,
-      method: method ?? undefined,
-      reference: reference || undefined,
-    },
+  // Cobro + entrada de tesorería en una sola transacción: la plata cobrada entra
+  // a la cuenta elegida o no se registra el cobro.
+  const payment = await db.$transaction(async (tx) => {
+    const created = await tx.clientPayment.create({
+      data: {
+        id: randomUUID(),
+        organizationId,
+        clientId: client.id,
+        budgetId: budgetId || undefined,
+        amount,
+        status: "RECEIVED",
+        paidAt: now,
+        collectedAt: now,
+        method: method ?? undefined,
+        reference: reference || undefined,
+        treasuryAccountId: treasuryAccount?.id ?? null,
+      },
+    });
+    if (treasuryAccount) {
+      await tx.treasuryMovement.create({
+        data: {
+          id: randomUUID(),
+          organizationId,
+          accountId: treasuryAccount.id,
+          direction: "IN",
+          amount,
+          occurredAt: now,
+          origin: "client_payment",
+          sourceId: created.id,
+          createdById: auth.context.user.id,
+          createdByName: auth.context.user.name,
+          createdByEmail: auth.context.user.email,
+        },
+      });
+    }
+    return created;
   });
   await recordAudit({
     context: auth.context,
     action: "create",
     entity: "ClientPayment",
     entityId: payment.id,
-    summary: `Registró un cobro del cliente «${clientLabel(client)}»`,
-    detail: { fields: auditPick(payment, ["clientId", "budgetId", "amount", "method", "reference", "paidAt"]) },
+    summary: treasuryAccount
+      ? `Registró un cobro del cliente «${clientLabel(client)}» en «${treasuryAccount.name}»`
+      : `Registró un cobro del cliente «${clientLabel(client)}»`,
+    detail: {
+      fields: {
+        ...auditPick(payment, ["clientId", "budgetId", "amount", "method", "reference", "paidAt"]),
+        treasuryAccountId: treasuryAccount?.id ?? null,
+      },
+    },
   });
   return Response.json({ payment }, { status: 201 });
 }
@@ -221,6 +288,11 @@ export async function PATCH(request: Request) {
   const action = body.action === "collect" ? "collect" : body.action === "cancel" ? "cancel" : "";
   if (!paymentId || !action) return jsonError("paymentId and action are required.", 400);
 
+  // Cuenta de tesorería del cobro (issue #27): la pedida al cobrar manda sobre
+  // la del registro; sin ninguna, se usa la primera activa.
+  const requestedAccount = await requestedTreasuryAccount(organizationId, body.treasuryAccountId);
+  if (requestedAccount === null) return jsonError("La cuenta no existe en esta empresa.", 404);
+
   const payment = await db.clientPayment.findFirst({
     where: { id: paymentId, organizationId },
     include: { client: { select: { name: true, company: true } } },
@@ -231,21 +303,56 @@ export async function PATCH(request: Request) {
 
   if (action === "collect") {
     // Una sola escritura condicional: si otro usuario lo cobró antes, no se pisa.
+    // La entrada de tesorería nace en la misma transacción, una sola vez por
+    // cobro (el cambio de estado es el candado).
     const now = new Date();
-    const applied = await db.clientPayment.updateMany({
-      where: { id: payment.id, organizationId, status: "PENDING" },
-      data: { status: "RECEIVED", paidAt: now, collectedAt: now },
+    const accountId = requestedAccount?.id ?? payment.treasuryAccountId ?? (await firstActiveTreasuryAccount(organizationId))?.id ?? "";
+    const applied = await db.$transaction(async (tx) => {
+      const updated = await tx.clientPayment.updateMany({
+        where: { id: payment.id, organizationId, status: "PENDING" },
+        data: {
+          status: "RECEIVED",
+          paidAt: now,
+          collectedAt: now,
+          ...(requestedAccount ? { treasuryAccountId: requestedAccount.id } : {}),
+        },
+      });
+      if (updated.count === 0) return 0;
+      if (accountId) {
+        await tx.treasuryMovement.create({
+          data: {
+            id: randomUUID(),
+            organizationId,
+            accountId,
+            direction: "IN",
+            amount: payment.amount,
+            occurredAt: now,
+            origin: "client_payment",
+            sourceId: payment.id,
+            createdById: auth.context.user.id,
+            createdByName: auth.context.user.name,
+            createdByEmail: auth.context.user.email,
+          },
+        });
+      }
+      return updated.count;
     });
-    if (applied.count === 0) return jsonError("El cobro ya está cerrado.", 409);
+    if (applied === 0) return jsonError("El cobro ya está cerrado.", 409);
     await recordAudit({
       context: auth.context,
       action: "status",
       entity: "ClientPayment",
       entityId: payment.id,
       summary: `Marcó como cobrado el cobro a plazo de «${label}»`,
-      detail: { changes: { status: { from: "PENDING", to: "RECEIVED" }, collectedAt: { from: null, to: now } } },
+      detail: {
+        changes: { status: { from: "PENDING", to: "RECEIVED" }, collectedAt: { from: null, to: now } },
+        ...(accountId ? { fields: { treasuryAccountId: accountId } } : {}),
+      },
     });
-    const updated = await db.clientPayment.findUnique({ where: { id: payment.id } });
+    const updated = await db.clientPayment.findUnique({
+      where: { id: payment.id },
+      include: { treasuryAccount: { select: treasuryAccountSelect } },
+    });
     return Response.json({ payment: updated });
   }
 
