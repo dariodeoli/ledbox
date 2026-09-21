@@ -10,10 +10,11 @@ export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "
 export type AdminNavItem = { href: string; label: string; icon: AdminIconName; roles?: readonly AdminRole[] };
 export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
 
-/** Módulos restringidos: mismo criterio que el API (usuarios y empresa: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
+/** Módulos restringidos: mismo criterio que el API (usuarios, empresa y configuración: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/usuarios": ["OWNER", "ADMIN"],
   "/empresa": ["OWNER", "ADMIN"],
+  "/configuracion": ["OWNER", "ADMIN"],
 };
 
 /** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
@@ -50,6 +51,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Sistema",
     items: [
+      { href: "/configuracion", label: "Configuración", icon: "mail", roles: RESTRICTED_MODULES["/configuracion"] },
       { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
       { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
       { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },

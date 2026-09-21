@@ -817,6 +817,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-settings-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .admin-settings-readonly { display: grid; gap: 4px; min-width: 0; }
 .admin-settings-readonly .admin-detail-value { margin: 0; color: var(--a-text-strong); font-size: 13px; overflow-wrap: anywhere; }
+
+/* ── Configuración → Correo (issue #31) ──
+   La sección Correo vive con Empresa en Configuración: subtabs compartidos
+   (`admin-subtabs`, el objeto de subnavegación del panel) y el historial de
+   envíos en tabla densa con una fila por intento real del proveedor.
+   Ojo: la regla global del sitio público (`nav { position: fixed; … }`) aplica
+   a cualquier `<nav>`; acá se neutraliza explícitamente para que los subtabs
+   vivan en el flujo del panel y no encima de la barra superior. */
+.admin-subtabs { position: static; inset: auto; z-index: auto; display: flex; align-items: center; justify-content: flex-start; gap: 6px; flex-wrap: wrap; height: auto; padding: 0; border: 0; background: none; transition: none; }
+.admin-subtab { padding: 7px 13px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.admin-subtab:hover { border-color: var(--a-line-2); color: var(--a-text); }
+.admin-subtab[data-active="true"], .admin-subtab[aria-current="page"] { border-color: color-mix(in srgb, var(--a-accent) 48%, transparent); background: var(--a-accent-soft); color: var(--a-text-strong); }
 .admin-image-field { align-content: start; }
 .admin-image-body { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .admin-image-preview { display: inline-flex; align-items: center; justify-content: center; padding: 6px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); }
@@ -910,6 +922,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(9rem, 1.6fr) minmax(7.5rem, 1.2fr) 8.5rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 27rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 .admin-table--solicitudes { --solicitudes-cols: 10rem minmax(9rem, 1.2fr) minmax(13rem, 1.8fr) minmax(9rem, 1.2fr) 7.5rem 6rem 7rem; --admin-cols: var(--solicitudes-cols); --admin-table-min: 65rem; }
+/* Correo (issue #31): fecha, destinatario con su actor, tipo, asunto, estado y
+   motivo del fallo. Entra sin scroll horizontal en desktop; en mobile se desplaza. */
+.admin-table--correo { --correo-cols: 10.5rem minmax(12rem, 1.5fr) 8.5rem minmax(14rem, 1.8fr) 7rem minmax(12rem, 1.6fr); --admin-cols: var(--correo-cols); --admin-table-min: 66rem; }
 /* Tesorería y gastos (issue #27): cuentas con su saldo derivado, movimientos del
    período (con la cuenta y el hecho de origen) y gastos con el proyecto inline. */
 .admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
