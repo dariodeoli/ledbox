@@ -28,7 +28,7 @@ import {
   PAYMENT_PROOF_MIMES,
   paymentProofExtension,
 } from "@/lib/admin-types";
-import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest } from "@/lib/server/budget-portal";
+import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 
 /**
  * Vista pública del presupuesto (issue #12) con autogestión del cliente
@@ -63,6 +63,17 @@ const PROOF_STATUS: Record<PortalBudgetProof["status"], { label: string; tone: s
   received: { label: "Recibido", tone: "info" },
   collected: { label: "Cobrado", tone: "ok" },
   cancelled: { label: "Cobro anulado", tone: "danger" },
+};
+
+/**
+ * Estado visible de cada concepto del plan (issue #28), en voz del cliente:
+ * esperando la transferencia → comprobante en revisión → confirmado por LedBox.
+ */
+const EXPECTED_STATUS: Record<PortalExpectedPayment["status"], { label: string; tone: string }> = {
+  AWAITING: { label: "Esperando tu transferencia", tone: "warn" },
+  PROOF: { label: "Comprobante recibido, en revisión", tone: "info" },
+  CONFIRMED: { label: "Confirmado por LedBox", tone: "ok" },
+  CANCELLED: { label: "Cancelado", tone: "neutral" },
 };
 
 /** Nota del listado: explica el circuito o por qué el formulario no está disponible. */
@@ -263,9 +274,10 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   const [discountSent, setDiscountSent] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Comprobante de pago (issue #17).
+  // Comprobante de pago (issue #17) vinculado al concepto del plan (issue #28).
   const [proofName, setProofName] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofExpectedId, setProofExpectedId] = useState("");
   const [proofError, setProofError] = useState("");
   const [proofBusy, setProofBusy] = useState(false);
   const [proofSent, setProofSent] = useState(false);
@@ -300,6 +312,24 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   useEffect(() => {
     setDraft(Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])));
   }, [itemsSignature]); // eslint-disable-line react-hooks/exhaustive-deps -- el borrador solo depende de la firma de los ítems
+
+  // Conceptos del plan abiertos (issue #28): esperando transferencia o con
+  // comprobante en revisión. Alimentan la tabla de pagos y el selector del
+  // comprobante.
+  const openExpected = budget.expectedPayments.filter(
+    (expected) => expected.status === "AWAITING" || expected.status === "PROOF",
+  );
+  /** Concepto que corresponde transferir ahora: el primero abierto sin comprobante. */
+  const dueNowExpected = openExpected.find((expected) => expected.status === "AWAITING") ?? null;
+
+  // El concepto elegido sigue a los pagos abiertos: si hay uno solo, se
+  // preselecciona; cuando se confirma o desaparece, la selección se limpia.
+  const openExpectedSignature = openExpected.map((expected) => expected.id).join("|");  useEffect(() => {
+    setProofExpectedId((current) => {
+      if (current && openExpected.some((expected) => expected.id === current)) return current;
+      return openExpected.length === 1 ? openExpected[0]?.id ?? "" : "";
+    });
+  }, [openExpectedSignature]); // eslint-disable-line react-hooks/exhaustive-deps -- la selección solo depende de los conceptos abiertos
 
   const approvedAt = budget.approval.approvedAt ?? (justApproved ? new Date().toISOString() : null);
   const approvedByName = budget.approval.approvedByName ?? (justApproved ? name.trim() : null);
@@ -518,6 +548,7 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
       }
       const form = new FormData();
       form.append("name", proofName.trim());
+      if (proofExpectedId) form.append("expectedPaymentId", proofExpectedId);
       form.append(
         "file",
         new File([prepared.blob], `comprobante.${paymentProofExtension(prepared.mime)}`, {
@@ -691,7 +722,76 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
             </p>
           )}
 
-          {paymentPlan.installments.length > 0 || paymentPlan.terms ? (
+          {budget.expectedPayments.length > 0 ? (
+            <div className="portal-pay-plan">
+              <div className="portal-table-wrap">
+                <table className="portal-table portal-table--plan portal-table--expected">
+                  <caption className="portal-table-caption">Tus pagos</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Concepto</th>
+                      <th scope="col" className="portal-num">
+                        Monto
+                      </th>
+                      <th scope="col">Vencimiento</th>
+                      <th scope="col">Estado</th>
+                      <th scope="col">Cuenta destino</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {budget.expectedPayments.map((expected) => {
+                      const state = EXPECTED_STATUS[expected.status];
+                      const dueNow = dueNowExpected?.id === expected.id;
+                      return (
+                        <tr key={expected.id} data-status={expected.status}>
+                          <td>
+                            {expected.label}
+                            {dueNow ? <small className="portal-item-note">A transferir ahora</small> : null}
+                            {expected.status === "AWAITING" && expected.reviewNote ? (
+                              <small className="portal-expected-note">Observación: {expected.reviewNote}</small>
+                            ) : null}
+                          </td>
+                          <td className="portal-num">{formatMoney(expected.amount)}</td>
+                          <td>
+                            {dueLabel(expected.dueAt)}
+                            {expected.dueAt && expected.status !== "CONFIRMED" ? (
+                              <span className="portal-countdown" data-tone={countdownTone(expected.dueAt)}>
+                                {formatCountdown(expected.dueAt, "client")}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>
+                            <span className="portal-chip" data-tone={state.tone}>
+                              {state.label}
+                            </span>
+                            {expected.status === "CONFIRMED" && expected.confirmedAt ? (
+                              <small className="portal-expected-note">
+                                el {formatDateTime(expected.confirmedAt)}
+                                {expected.confirmedByName ? ` · por ${expected.confirmedByName}` : ""}
+                              </small>
+                            ) : null}
+                            {expected.status === "PROOF" ? (
+                              <small className="portal-expected-note">El equipo de LedBox lo revisa: no hace falta hacer nada más.</small>
+                            ) : null}
+                            {expected.status === "CANCELLED" ? (
+                              <small className="portal-expected-note">Ya no forma parte del plan de pagos.</small>
+                            ) : null}
+                          </td>
+                          <td>{expected.accountName ?? "Te la confirmamos al transferir"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {paymentPlan.pending > 0 ? (
+                <p className="portal-help">
+                  Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
+                </p>
+              ) : null}
+              {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
+            </div>
+          ) : paymentPlan.installments.length > 0 || paymentPlan.terms ? (
             <div className="portal-pay-plan">
               {paymentPlan.installments.length > 0 ? (
                 <div className="portal-table-wrap">
@@ -757,10 +857,33 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
             Enviar comprobante
           </h2>
           <p className="portal-card-lead">
-            Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Las fotos se comprimen
-            en tu navegador antes de subirse y el equipo de LedBox las revisa desde el panel.
+            Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago estás
+            comprobando para que quede vinculado a ese concepto; el equipo de LedBox lo revisa desde el panel.
           </p>
           <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
+            {openExpected.length > 0 ? (
+              <label className="portal-field" htmlFor="portal-proof-concept">
+                <span className="portal-field-label">¿Qué pago estás comprobando?</span>
+                <select
+                  id="portal-proof-concept"
+                  name="proof-concept"
+                  value={proofExpectedId}
+                  onChange={(event) => {
+                    setProofExpectedId(event.target.value);
+                    setProofSent(false);
+                  }}
+                  required
+                >
+                  <option value="">Elegí el concepto…</option>
+                  {openExpected.map((expected) => (
+                    <option key={expected.id} value={expected.id}>
+                      {expected.label} · {formatMoney(expected.amount)}
+                      {expected.status === "PROOF" ? " (en revisión)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <div className="portal-form-row">
               <label className="portal-field" htmlFor="portal-proof-name">
                 <span className="portal-field-label">Nombre y apellido</span>

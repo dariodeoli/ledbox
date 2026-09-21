@@ -761,6 +761,51 @@ export function treasuryDirectionTone(value: string | null | undefined): AdminTo
   return TREASURY_DIRECTION_TONES[value] ?? "neutral";
 }
 
+// ── Pagos esperados (issue #28) ─────────────────────────────────────────────
+// El estado real de cada concepto del plan. Lo esperado no es plata cobrada: la
+// UI muestra "por confirmar" aparte del cobrado y del disponible.
+
+const EXPECTED_STATUS: Record<string, string> = {
+  AWAITING: "Esperando transferencia",
+  PROOF: "Comprobante en revisión",
+  CONFIRMED: "Confirmado",
+  CANCELLED: "Cancelado",
+};
+
+const EXPECTED_STATUS_TONES: Record<string, AdminTone> = {
+  AWAITING: "warn",
+  PROOF: "info",
+  CONFIRMED: "ok",
+  CANCELLED: "neutral",
+};
+
+const EXPECTED_CONCEPT: Record<string, string> = {
+  advance: "Anticipo",
+  installment: "Cuota",
+  balance: "Saldo",
+};
+
+/** Estado del pago esperado con su tono; `Vencido` se agrega desde la fila. */
+export const expectedPaymentStatusLabel = (value: string | null | undefined) => label(EXPECTED_STATUS, value);
+export const expectedPaymentConceptLabel = (value: string | null | undefined) => label(EXPECTED_CONCEPT, value);
+
+export function expectedPaymentStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return EXPECTED_STATUS_TONES[value] ?? "neutral";
+}
+
+/** Concepto completo de una fila: «Anticipo», «Cuota 2» o «Saldo». */
+export function expectedPaymentConcept(row: {
+  concept: string;
+  label?: string | null;
+  installmentNumber?: number | null;
+}): string {
+  if (row.concept === "installment" && row.installmentNumber) return `Cuota ${row.installmentNumber}`;
+  if (row.concept === "advance") return "Anticipo";
+  if (row.concept === "balance") return "Saldo";
+  return row.label?.trim() || expectedPaymentConceptLabel(row.concept);
+}
+
 // ── Calendario operativo ────────────────────────────────────────────────────
 // Las vistas del calendario agrupan por día puro (`YYYY-MM-DD`); esos días se
 // formatean en UTC para que no se corran de fecha, mientras que las horas de
@@ -853,6 +898,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   reservation: "Reserva",
   collection: "Cobro",
   collection_due: "Cobro a plazo",
+  expected_due: "Pago esperado",
   lead: "Lead",
   portal_request: "Solicitud del portal",
   payment_proof: "Comprobante de pago",

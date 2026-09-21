@@ -3,6 +3,7 @@ import { recordAudit } from "@/lib/server/audit";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
+import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,11 @@ const MAX_NOTE = 1000;
  * rango del evento (issue #18). Un conflicto de disponibilidad no bloquea la
  * aprobación: queda auditado y la respuesta trae `reservations` para que el
  * panel muestre qué se reservó y qué quedó pendiente.
+ *
+ * Al aprobar también se generan los pagos esperados del plan (issue #28):
+ * anticipo, cuotas y saldo quedan como `ExpectedPayment` en `AWAITING` para que
+ * Finanzas los vea y confirme cuando el cliente transfiera. La sincronización es
+ * idempotente.
  */
 export async function POST(request: Request) {
   const auth = await requireAdminContext("budgets.write");
@@ -78,6 +84,13 @@ export async function POST(request: Request) {
         detail: { changes: { status: { from: budget.status, to: "APPROVED" }, approvalMethod: { from: null, to: "manual" } } },
       });
       reservations = await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context });
+      // Pagos esperados del plan (issue #28): idempotente y sin tocar lo confirmado.
+      await syncBudgetExpectedPayments({
+        organizationId,
+        budgetId: budget.id,
+        actor: auth.context,
+        reason: "aprobación manual",
+      });
     }
   } else {
     if (budget.approvedAt) return jsonError("El presupuesto ya está aprobado.", 409);

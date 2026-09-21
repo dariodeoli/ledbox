@@ -915,6 +915,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
 .admin-table--tesoreria-movimientos { --tesoreria-movimientos-cols: 6.5rem 7.5rem minmax(11rem, 1.4fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8.5rem; --admin-cols: var(--tesoreria-movimientos-cols); --admin-table-min: 60rem; }
 .admin-table--gastos { --gastos-cols: 5.5rem minmax(12rem, 1.7fr) 7.5rem minmax(9.5rem, 1.2fr) minmax(7.5rem, 1fr) minmax(7rem, 1fr) 8.5rem; --admin-cols: var(--gastos-cols); --admin-table-min: 62rem; }
+.admin-table--por-confirmar { --por-confirmar-cols: minmax(10rem, 1.4fr) 6.5rem 7.5rem minmax(7rem, 1fr) 7.5rem 7rem 8rem 12rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 68rem; }
 
 /* ── Vínculo con inventario (issue #18) ──
    El buscador vive dentro de la grilla de campos del alta y del diálogo de
@@ -991,6 +992,32 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-inline-form--gastos .admin-field { flex: 1 1 100%; }
   .admin-inline-form--gastos .admin-form-actions { width: 100%; margin-left: 0; }
   .admin-inline-form--gastos .admin-form-actions .admin-btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* ── Pagos esperados y confirmación en cuenta (issue #28) ──
+   La cola "Por confirmar" muestra lo que necesita acción (comprobante en
+   revisión o vencido sin comprobante) con la cuenta destino y el comprobante a
+   la vista; la trazabilidad del presupuesto se dibuja como línea de tiempo. */
+.admin-expected-note { margin: 8px 12px 0; }
+.admin-expected-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 10px 12px; }
+.admin-linkbtn { padding: 0; border: 0; background: none; color: var(--a-accent); font: 600 12.5px var(--font-body); text-align: left; text-decoration: underline; cursor: pointer; }
+.admin-linkbtn:hover { color: var(--a-accent-strong); }
+.admin-timeline { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-timeline-group { display: grid; gap: 6px; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-timeline-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-timeline-group-head strong { color: var(--a-text-strong); font-size: 12.5px; }
+.admin-timeline-group-head .admin-num { margin-left: auto; }
+.admin-timeline-step { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 6px 8px; border-left: 2px solid var(--a-line-2); border-radius: 0 var(--a-radius) var(--a-radius) 0; background: var(--a-panel); }
+.admin-timeline-step[data-tone="ok"] { border-left-color: var(--a-ok); }
+.admin-timeline-step[data-tone="info"] { border-left-color: var(--a-info); }
+.admin-timeline-step[data-tone="warn"] { border-left-color: var(--a-warn); }
+.admin-timeline-step[data-tone="danger"] { border-left-color: var(--a-danger); }
+.admin-timeline-when { color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-timeline-body { display: grid; gap: 2px; min-width: 0; }
+.admin-timeline-body strong { color: var(--a-text-strong); font-size: 12.5px; }
+.admin-timeline-body small { color: var(--a-muted-2); font-size: 11.5px; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .admin-timeline-step { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
 /* ── Auditoría: filtros, detalle desplegable y paginación ──
@@ -1525,7 +1552,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-field { display: grid; gap: 6px; }
 .portal-field-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .portal-field input, .portal-field textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
+.portal-field select { width: 100%; padding: 11px 12px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
 .portal-field input:focus, .portal-field textarea:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
+.portal-field select:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
 .portal-field input[aria-invalid="true"] { border-color: #ff6b85; }
 .portal-help { color: var(--muted-2); font-size: 12px; line-height: 1.5; }
 .portal-error { color: #ff8f9f; font-size: 12.5px; line-height: 1.5; }
@@ -1614,6 +1643,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-table--editor td:first-child { min-width: 12rem; }
 .portal-table-caption { margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-align: left; text-transform: uppercase; }
 .portal-table--plan { min-width: 24rem; }
+/* Pagos esperados (issue #28): el plan muestra el estado real de cada concepto,
+   la cuenta destino y la observación del equipo cuando la hay. */
+.portal-table--expected { min-width: 40rem; }
+.portal-table--expected td { vertical-align: top; }
+.portal-table--expected .portal-chip { margin-bottom: 4px; }
+.portal-expected-note { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
 .portal-card--pay { border-color: rgba(61, 220, 151, .35); }
 .portal-pay-now { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid rgba(61, 220, 151, .35); border-radius: 12px; background: rgba(61, 220, 151, .06); }
 .portal-pay-label { display: block; color: var(--muted-2); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }

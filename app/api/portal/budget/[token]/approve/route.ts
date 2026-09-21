@@ -5,6 +5,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
+import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,11 @@ const MAX_NOTE = 600;
  * inventario usando el rango del evento (issue #18). El conflicto de
  * disponibilidad no bloquea la aprobación: queda auditado con el actor real y
  * el equipo lo ve en los avisos del panel (nunca en la respuesta pública).
+ *
+ * Al aprobar también se generan los pagos esperados del plan (issue #28):
+ * anticipo, cuotas y saldo quedan como `ExpectedPayment` en `AWAITING` para que
+ * el portal muestre el estado real de cada concepto y Finanzas los confirme
+ * cuando el cliente transfiera.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const limited = await rateLimit(`portal:approve:${getClientIp(request)}`, 20);
@@ -89,6 +95,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       organizationId: budget.organizationId,
       budgetId: budget.id,
       context: portalAuditContext(budget.organizationId, name, budget.client?.email),
+    });
+    // Pagos esperados del plan (issue #28): el cliente ya puede ver el estado
+    // real de cada concepto en el portal y el equipo los confirma en Finanzas.
+    await syncBudgetExpectedPayments({
+      organizationId: budget.organizationId,
+      budgetId: budget.id,
+      actor: portalAuditContext(budget.organizationId, name, budget.client?.email),
+      reason: "aprobación del cliente",
     });
   }
   return Response.json({ budget: payload, alreadyApproved: updated.count === 0 });
