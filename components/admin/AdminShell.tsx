@@ -162,6 +162,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
+  /**
+   * Entrada a la demo: mientras no haya sesión, la campana de avisos no se monta
+   * (su 401 manda al login y competiría con la creación de la sesión demo).
+   */
+  const demoEntryPending = session.loading && !session.user && (pathname === "/demo" || pathname.startsWith("/demo/"));
 
   /** Sale de la demo: revoca la sesión demo, limpia la cookie y va al sitio. */
   const exitDemo = useCallback(async () => {
@@ -283,7 +288,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   DEMO
                 </Link>
               ) : null}
-              <AdminNotificationBell />
+              {demoEntryPending ? null : <AdminNotificationBell />}
               <AdminThemeToggle />
               <a
                 className="admin-btn admin-hide-sm"
