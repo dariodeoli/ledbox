@@ -1,8 +1,10 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
+import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import { db } from "./db";
 import { hashPassword } from "./auth";
-import { DAY_MS, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
+import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
 
 /**
  * Demo pública (issue #15): organización «LedBox Demo» con datos simulados.
@@ -25,6 +27,16 @@ import { DAY_MS, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
  *
  * Los datos son ficticios: las marcas y los eventos son referencias reales del
  * mercado paraguayo usadas como clientes simulados, con contactos inventados.
+ *
+ * La demo recorre el producto completo (issue #32): además de la agenda, los
+ * presupuestos, el inventario y las finanzas, siembra **tesorería por cuentas**
+ * (saldos derivados de movimientos reales, con una transferencia de cheque ya
+ * hecha), **gastos** (dos «A definir» sin proyecto), **pagos esperados**
+ * (comprobante en revisión, vencido sin comprobante y confirmado), **correos**
+ * (`MailLog`, incluido un fallo con su motivo), **invitaciones al equipo**
+ * (pendiente y aceptada) e **identidad** (logos claro/oscuro de la empresa y
+ * avatares del equipo, generados como PNG en el momento del alta). El usuario
+ * demo no tiene PIN ni auto-bloqueo: la demo no se bloquea sola.
  */
 
 export const DEMO_ORGANIZATION_ID = "org_demo";
@@ -143,6 +155,16 @@ function withoutId<T extends { id: string }>(row: T): Omit<T, "id"> {
   return rest;
 }
 
+/** Fila del dataset con `id` obligatorio (el alta idempotente lo escribe siempre). */
+type Seeded<T extends { id?: unknown }> = Omit<T, "id"> & { id: string };
+
+/** Fecha del dataset como `Date` (Prisma acepta `Date | string`; acá siempre es `Date`). */
+function dateOf(value: Date | string | null | undefined, fallback: Date): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === "string") return new Date(value);
+  return fallback;
+}
+
 const DEMO_ORGANIZATION: Prisma.OrganizationUncheckedCreateInput = {
   id: DEMO_ORGANIZATION_ID,
   name: DEMO_ORGANIZATION_NAME,
@@ -217,14 +239,26 @@ function clientContact(clientId: string): DemoAuditActor {
 
 // ── Eventos reales de Paraguay (mes/día reales; el año se proyecta a la ventana) ──
 //
-// Fechas confirmadas con fuentes públicas (jul-sep 2026): Expo Paraguay ARP
-// (11–26 jul), Expo eCommerce CAPACE (21 may), eCommerce Day (24 sep),
-// Expo Paraguay Brasil (11–13 nov), ExpoNegocios (30 sep–1 oct), Expo Real
-// Estate (23–24 jun), CADAM Motor Show (30 jul–9 ago), Cyberday CAPACE (2–4
-// nov), Hot Sale CAPACE (6–8 abr), Asunción Fashion Week Invierno (27–30 abr) y
-// Resort (7–11 oct) y Asunciónico (17–19 mar). Expo Itapúa y Expo Hogar no
-// publicaron fecha 2026: se ubican en su mes habitual (ago y sep) de forma
-// plausible.
+// Fechas confirmadas con fuentes públicas (relevamiento del 21-sep-2026):
+// Expo Paraguay ARP (11–26 jul, 43.ª edición), Expo eCommerce CAPACE (21 may),
+// eCommerce Day (24 sep, Auditorio del BCP), Expo Paraguay Brasil (11–13 nov),
+// ExpoNegocios (30 sep–1 oct), Expo Real Estate (23–24 jun), CADAM Motor Show
+// (30 jul–9 ago), Cyberday CAPACE (3–5 nov), Hot Sale CAPACE (6–8 abr),
+// Asunciónico (17–19 mar, Parque Olímpico), Expo Concepción (31 ago–6 sep),
+// WRC ueno Rally del Paraguay (27–30 ago, Encarnación), Fintech Iberoamérica
+// Summit (6 ago), Expo Capasu (10–11 sep), Expo Hogar (3–4 sep), Expo Itapúa
+// (6 ago), Asunción Fashion Week Invierno (27–30 abr) y Resort (7–11 oct),
+// Expo Amambay (10–18 oct), Gran Expo Guairá (21 oct–1 nov), Feria Agropecuaria
+// San Pedro (11–14 nov), Agroshow Copronar (18–20 nov), Agrodinámica (1–5 dic),
+// ChoppFest (7 nov, Colonia Independencia), FITPAR (16–18 oct), Navegistic
+// (6–8 oct), Feria Hogar del Chaco (9–11 oct), Exposur Itapúa (3–11 ene),
+// Tan Biónica (10 oct, Arena Asunción), Marco Antonio Solís (31 oct, Jockey
+// Club), Ed Sheeran (26 nov, La Nueva Olla), Gorillaz (1 dic, Jockey Club).
+// Expo Itapúa y Expo Hogar no publicaron fecha 2026: se ubican en su mes
+// habitual (ago y sep) de forma plausible.
+//
+// El cronograma cubre el año hasta el 31-dic-2026 y la ventana móvil (±6
+// meses) proyecta los anuales a su ocurrencia más cercana a HOY.
 
 type DemoRealEvent = {
   id: string;
@@ -241,20 +275,39 @@ type DemoRealEvent = {
 };
 
 const REAL_EVENTS: readonly DemoRealEvent[] = [
-  { id: "demo_event_asuncionico", clientId: "demo_client_cocacola", name: "Asunciónico", location: "Jockey Club Paraguayo, Asunción", month: 3, day: 17, days: 3, startsHour: 16, notes: "Festival de música: escenario principal, pantallas laterales y activación de marca." },
+  { id: "demo_event_asuncionico", clientId: "demo_client_cocacola", name: "Asunciónico", location: "Parque Olímpico, Asunción", month: 3, day: 17, days: 3, startsHour: 16, notes: "Festival de música: escenario principal, pantallas laterales y activación de marca." },
   { id: "demo_event_hot_sale", clientId: "demo_client_cellshop", name: "Hot Sale Paraguay · showroom", location: "Paseo La Galería, Asunción", month: 4, day: 6, days: 3, notes: "Showroom de la campaña de CAPACE: pantalla de ofertas y transmisión en vivo." },
   { id: "demo_event_afw_invierno", clientId: "demo_client_shopping", name: "Asunción Fashion Week · Invierno", location: "Distrito Perseverancia, Asunción", month: 4, day: 27, days: 4, startsHour: 20, notes: "Pasarela y showroom: pantalla de fondo, iluminación y contenido para redes." },
   { id: "demo_event_expo_ecommerce", clientId: "demo_client_samsung", name: "Expo eCommerce Paraguay", location: "Centro de Convenciones Paseo La Galería, Asunción", month: 5, day: 21, days: 1, notes: "Congreso de comercio electrónico de CAPACE; stand con demo de producto." },
   { id: "demo_event_real_estate", clientId: "demo_client_ueno", name: "Expo Real Estate Paraguay", location: "Centro de Convenciones de la Conmebol, Asunción", month: 6, day: 23, days: 2, notes: "Feria inmobiliaria: pantallas de sala, lanzamientos y tótems de consulta." },
   { id: "demo_event_expo_paraguay", clientId: "demo_client_tigo", name: "Expo Paraguay · ARP", location: "Predio Ferial ARP, Mariano Roque Alonso", month: 7, day: 11, days: 16, notes: "La muestra más grande del país: pabellón de marca, escenario y 16 días de operación." },
   { id: "demo_event_cadam", clientId: "demo_client_itau", name: "CADAM Motor Show", location: "Paseo La Galería (Nivel -3), Asunción", month: 7, day: 30, days: 11, notes: "Salón del automóvil: pantallas por marca, simuladores y financiación." },
-  { id: "demo_event_expo_itapua", clientId: "demo_client_trebol", name: "Expo Itapúa", location: "Costanera de Encarnación", month: 8, day: 6, days: 4, notes: "Feria regional del sur: stand institucional, degustación y escenario." },
-  { id: "demo_event_expo_hogar", clientId: "demo_client_vision", name: "Expo Hogar", location: "Centro de Convenciones, Asunción", month: 9, day: 3, days: 4, notes: "Feria de vivienda y hogar: simulador de créditos y ambientación de stands." },
-  { id: "demo_event_ecommerce_day", clientId: "demo_client_lg", name: "eCommerce Day Paraguay", location: "Centro de Convenciones Paseo La Galería, Asunción", month: 9, day: 24, days: 1, notes: "Jornada de ecommerce con demo de producto y contenido en vivo." },
+  // Agenda confirmada del segundo semestre (issue #32).
+  { id: "demo_event_fintech_summit", clientId: "demo_client_ueno", name: "Fintech Iberoamérica Summit", location: "Centro de Convenciones Paseo La Galería, Asunción", month: 8, day: 6, days: 1, notes: "Primera edición del encuentro fintech iberoamericano: pantalla de sala, streaming y tótems." },
+  { id: "demo_event_expo_itapua", clientId: "demo_client_trebol", name: "Expo Itapúa", location: "Costanera de Encarnación", month: 8, day: 6, days: 4, notes: "Feria regional del sur: stand institucional, degustación y escenario (fecha habitual, sin anuncio 2026)." },
+  { id: "demo_event_wrc_rally", clientId: "demo_client_ueno", name: "WRC ueno Rally del Paraguay", location: "Encarnación (parque de servicio y shakedown)", month: 8, day: 27, days: 4, startsHour: 9, notes: "Fecha mundialista del rally: pantallas de largada simbólica, fan zone y activaciones de marca." },
+  { id: "demo_event_expo_concepcion", clientId: "demo_client_claro", name: "Expo Concepción", location: "Campo de Exposiciones Nanawa, Concepción", month: 8, day: 31, days: 7, startsHour: 17, notes: "La fiesta del norte: pabellón de marca, escenario y activaciones durante la semana." },
+  { id: "demo_event_expo_hogar", clientId: "demo_client_vision", name: "Expo Hogar", location: "Centro de Convenciones, Asunción", month: 9, day: 3, days: 4, notes: "Feria de vivienda y hogar: simulador de créditos y ambientación de stands (fecha habitual, sin anuncio 2026)." },
+  { id: "demo_event_expo_capasu", clientId: "demo_client_superseis", name: "Expo Capasu", location: "Centro de Convenciones de la Conmebol, Asunción", month: 9, day: 10, days: 2, notes: "Feria del retail supermercadista: pantallas de sala, degustaciones y demo de producto." },
+  { id: "demo_event_ecommerce_day", clientId: "demo_client_lg", name: "eCommerce Day Paraguay", location: "Auditorio del Banco Central del Paraguay, Asunción", month: 9, day: 24, days: 1, notes: "Jornada de ecommerce con demo de producto y contenido en vivo." },
   { id: "demo_event_exponegocios", clientId: "demo_client_personal", name: "ExpoNegocios", location: "Centro de Eventos Paseo La Galería, Asunción", month: 9, day: 30, days: 2, notes: "Encuentro empresarial: pantalla principal, streaming y networking." },
+  { id: "demo_event_navegistic", clientId: "demo_client_itau", name: "Navegistic Intermodal", location: "Centro de Eventos Paseo La Galería, Asunción", month: 10, day: 6, days: 3, startsHour: 9, notes: "Feria de logística y comercio exterior: pantalla de sala y tótems de consulta." },
   { id: "demo_event_afw_resort", clientId: "demo_client_paseo", name: "Asunción Fashion Week · Resort", location: "Distrito Perseverancia, Asunción", month: 10, day: 7, days: 5, startsHour: 20, notes: "Edición Resort: pasarela, contenido vertical y showroom." },
-  { id: "demo_event_cyberday", clientId: "demo_client_nissei", name: "Cyberday Paraguay", location: "Paseo La Galería, Asunción", month: 11, day: 2, days: 3, notes: "Campaña de compras online de CAPACE con estudio de transmisión." },
+  { id: "demo_event_feria_hogar", clientId: "demo_client_cocacola", name: "Feria Hogar del Chaco", location: "Predio Pioneros del Chaco, Loma Plata", month: 10, day: 9, days: 3, notes: "Feria de hogar y familia en el Chaco: activación de marca, degustación y escenario." },
+  { id: "demo_event_tan_bionica", clientId: "demo_client_personal", name: "Tan Biónica · El Regreso", location: "Arena Asunción, Asunción", month: 10, day: 10, days: 1, startsHour: 21, notes: "Show internacional: pantallas de escenario, contenido vertical y activación de marca." },
+  { id: "demo_event_expo_amambay", clientId: "demo_client_claro", name: "Expo Amambay", location: "Campo de Exposiciones Marcos Paredes Ramírez, Pedro Juan Caballero", month: 10, day: 10, days: 9, startsHour: 17, notes: "Feria del norte en su 29.ª edición: pabellón de marca, escenario y conectividad." },
+  { id: "demo_event_fitpar", clientId: "demo_client_vision", name: "FITPAR · Feria Internacional de Turismo", location: "Centro de Convenciones Mariscal, Asunción", month: 10, day: 16, days: 3, notes: "Feria de turismo: pantallas de destinos, escenario cultural y activación de marca." },
+  { id: "demo_event_expo_guaira", clientId: "demo_client_vision", name: "Gran Expo Guairá", location: "Estancia San Jorge, Mbocayaty (Guairá)", month: 10, day: 21, days: 12, startsHour: 17, notes: "La muestra más grande del Guairá: escenario, pantallas y activaciones en el predio." },
+  { id: "demo_event_marco_solis", clientId: "demo_client_tigo", name: "Marco Antonio Solís · Tour Gratitud", location: "Jockey Club Paraguayo, Asunción", month: 10, day: 31, days: 1, startsHour: 20, notes: "Show internacional: pantallas laterales, streaming y activación de marca." },
+  { id: "demo_event_cyberday", clientId: "demo_client_nissei", name: "Cyberday Paraguay", location: "Paseo La Galería, Asunción", month: 11, day: 3, days: 3, notes: "Campaña de compras online de CAPACE con estudio de transmisión." },
+  { id: "demo_event_choppfest", clientId: "demo_client_cerveza", name: "ChoppFest · Club Deportivo Alemán", location: "Colonia Independencia, Guairá", month: 11, day: 7, days: 1, startsHour: 18, notes: "47.ª edición de la fiesta de la cerveza: escenario, pantallas y activación de marca." },
   { id: "demo_event_expo_brasil", clientId: "demo_client_claro", name: "Expo Paraguay Brasil", location: "Centro TASK · PTI, Hernandarias", month: 11, day: 11, days: 3, notes: "Rueda de negocios y feria binacional en Alto Paraná." },
+  { id: "demo_event_feria_san_pedro", clientId: "demo_client_cocacola", name: "Feria Agropecuaria San Pedro", location: "Predio Prof. Dr. Arsenio Vasconsellos, Santa Rosa del Aguaray", month: 11, day: 11, days: 4, notes: "Tercera edición de la feria del norte: activación de marca, degustación y pantallas." },
+  { id: "demo_event_agroshow", clientId: "demo_client_trebol", name: "Agroshow Copronar", location: "Naranjal, Alto Paraná", month: 11, day: 18, days: 3, startsHour: 8, notes: "26.ª edición del agroshow a campo abierto: stand institucional y degustación." },
+  { id: "demo_event_ed_sheeran", clientId: "demo_client_ueno", name: "Ed Sheeran · Loop Tour", location: "Estadio ueno La Nueva Olla, Asunción", month: 11, day: 26, days: 1, startsHour: 19, notes: "Primer show del artista en Paraguay: pantallas de estadio, contenido vertical y activación." },
+  { id: "demo_event_gorillaz", clientId: "demo_client_personal", name: "Gorillaz · The Mountain Tour", location: "Jockey Club Paraguayo, Asunción", month: 12, day: 1, days: 1, startsHour: 19, notes: "Show internacional: pantalla de escenario, streaming y activación de marca." },
+  { id: "demo_event_agrodinamica", clientId: "demo_client_trebol", name: "Agrodinámica", location: "Campo Demostrativo Cooperativa Colonias Unidas, Hohenau", month: 12, day: 1, days: 5, notes: "30 años de la muestra de Itapúa: stand institucional, degustación y pantallas de sala." },
+  { id: "demo_event_exposur_itapua", clientId: "demo_client_superseis", name: "Exposur Itapúa", location: "Centro Cívico Municipal, Encarnación", month: 1, day: 3, days: 9, startsHour: 17, notes: "Exposición del verano en Encarnación: pantalla de escenario, tótems y activación de marca." },
 ];
 
 const REAL_EVENTS_COUNT = REAL_EVENTS.length;
@@ -287,20 +340,6 @@ const RELATIVE_EVENTS: readonly DemoRelativeEvent[] = [
 ];
 
 const RELATIVE_EVENTS_COUNT = RELATIVE_EVENTS.length;
-
-/**
- * Mínimos del dataset simulado. El ancla del día se valida contra estos conteos
- * (y contra la agenda futura) para que una provisión interrumpida, un borrado o
- * una demo que se quedó sin eventos próximos se vuelva a completar sola. Si se
- * agregan filas al dataset, se suben estos números.
- */
-const DATASET_MINS = {
-  clients: CLIENTS.length,
-  events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
-  tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
-  budgets: 7,
-  audits: 20,
-} as const;
 
 // ── Inventario, promotoras y leads ──────────────────────────────────────────
 
@@ -378,6 +417,398 @@ const LEADS: readonly DemoLead[] = [
   { id: "demo_lead_sin_respuesta", name: "Marcelo Aquino", company: "Frigorífico Concepción", phone: "+595 983 664 220", email: "maquino@frigorifico.concepcion.demo", reason: "Feria regional", message: "Necesitamos pantallas para una feria regional en Concepción; ¿tienen disponibilidad en octubre?", status: "NEW", createdDaysAgo: 24, eventDateDays: 32, location: "Concepción", internalNotes: "Entró por el sitio hace semanas y nadie lo contactó todavía." },
 ];
 
+// ── Tesorería, gastos, correos e invitaciones (issues #27, #28, #30 y #31) ───
+//
+// La demo muestra el circuito completo del dinero: las cuentas con su saldo
+// **derivado** de movimientos reales, los gastos con su egreso (dos «A definir»,
+// sin proyecto, para que se vea la asignación desde la fila), los pagos
+// esperados del plan (comprobante en revisión, vencido sin comprobante y
+// confirmado con su cobro y movimiento), el historial de correos del proveedor y
+// las invitaciones al equipo. Todo se re-ancla a HOY en cada provisión.
+
+const DEMO_USER_AVATAR_INITIALS = "VD";
+
+/**
+ * Cuentas de tesorería (issue #27): el saldo no se guarda, sale del saldo
+ * inicial declarado más los movimientos. Los ids son los que usan los cobros,
+ * los gastos y los pagos esperados del dataset.
+ */
+const TREASURY_ACCOUNTS = [
+  { id: "demo_treasury_cash", name: "Efectivo", type: "CASH", bank: null, openingBalance: 1_500_000, sortOrder: 0 },
+  { id: "demo_treasury_ueno", name: "Ueno Bank", type: "BANK", bank: "Ueno Bank", openingBalance: 5_000_000, sortOrder: 1 },
+  { id: "demo_treasury_cheques", name: "Cheques a cobrar", type: "CHEQUE", bank: null, openingBalance: 0, sortOrder: 2 },
+] satisfies Array<{ id: string } & Omit<Prisma.TreasuryAccountUncheckedCreateInput, "id" | "organizationId" | "createdAt" | "updatedAt">>;
+
+/** Transferencia ya hecha: el cheque de la seña se cobró y la plata pasó a caja. */
+const DEMO_CHEQUE_TRANSFER_AMOUNT = 2_000_000;
+
+type DemoExpense = {
+  id: string;
+  accountId: string;
+  /** Evento asociado por rol; `null` = «A definir» (sin proyecto). */
+  eventRole: "next" | "second" | "inProgress" | "recentPast" | "longestPast" | null;
+  supplierId: string | null;
+  daysAgo: number;
+  hour: number;
+  amount: number;
+  category: "TRANSPORT" | "FUEL" | "FOOD" | "MATERIALS" | "RENT" | "SERVICES" | "SALARIES" | "TOOLS" | "OTHER";
+  description: string;
+  method: string | null;
+  receipt: string | null;
+  notes: string | null;
+};
+
+/**
+ * Gastos (issue #27): cada uno con su categoría, su cuenta y su egreso. Los dos
+ * sin `eventRole` quedan **«A definir»** a propósito, para que la demo muestre la
+ * asignación del proyecto desde la fila.
+ */
+const EXPENSES: readonly DemoExpense[] = [
+  { id: "demo_expense_generador", accountId: "demo_treasury_ueno", eventRole: "inProgress", supplierId: "demo_supplier_electricidad", daysAgo: 2, hour: 9, amount: 1_500_000, category: "RENT", description: "Alquiler de generador para el montaje", method: "Transferencia", receipt: "REC-9104", notes: "Cubre los días de montaje y desmontaje." },
+  { id: "demo_expense_jornales", accountId: "demo_treasury_ueno", eventRole: "inProgress", supplierId: null, daysAgo: 1, hour: 18, amount: 1_800_000, category: "SALARIES", description: "Jornales del equipo de montaje", method: "Transferencia", receipt: null, notes: null },
+  { id: "demo_expense_combustible", accountId: "demo_treasury_cash", eventRole: "next", supplierId: "demo_supplier_transporte", daysAgo: 3, hour: 8, amount: 850_000, category: "FUEL", description: "Combustible y peajes del traslado", method: "Efectivo", receipt: "REC-9099", notes: null },
+  { id: "demo_expense_viaticos", accountId: "demo_treasury_cash", eventRole: "recentPast", supplierId: null, daysAgo: 9, hour: 13, amount: 320_000, category: "FOOD", description: "Viáticos del equipo en el predio", method: "Efectivo", receipt: null, notes: null },
+  { id: "demo_expense_materiales", accountId: "demo_treasury_ueno", eventRole: "longestPast", supplierId: "demo_supplier_grafica", daysAgo: 12, hour: 10, amount: 1_240_000, category: "MATERIALS", description: "Vinilos y cartelería del pabellón", method: "Transferencia", receipt: "REC-9081", notes: "El remanente se usó en la activación siguiente." },
+  { id: "demo_expense_streaming", accountId: "demo_treasury_ueno", eventRole: "second", supplierId: "demo_supplier_audio", daysAgo: 5, hour: 11, amount: 600_000, category: "SERVICES", description: "Internet dedicado y streaming del evento", method: "Transferencia", receipt: null, notes: null },
+  // «A definir»: sin proyecto todavía (se asigna desde la fila en el panel).
+  { id: "demo_expense_herramientas", accountId: "demo_treasury_cash", eventRole: null, supplierId: null, daysAgo: 4, hour: 16, amount: 450_000, category: "TOOLS", description: "Herramientas de taller (llaves y prensas)", method: "Efectivo", receipt: "REC-9092", notes: "Compra de reposición; falta asignarla a un evento." },
+  { id: "demo_expense_cables", accountId: "demo_treasury_cash", eventRole: null, supplierId: null, daysAgo: 2, hour: 17, amount: 780_000, category: "MATERIALS", description: "Cables, fichas y conectores", method: "Efectivo", receipt: null, notes: "Sin proyecto todavía: se define al cerrar el mes." },
+];
+
+/**
+ * Correos del historial (`MailLog`, issue #30): el presupuesto enviado al
+ * cliente, un recordatorio de cobro, el correo de prueba y un fallo con su
+ * motivo, más la invitación al equipo. El asunto y el destinatario se construyen
+ * en la provisión, con los mismos formatos que los correos reales.
+ */
+type DemoMailLog = {
+  id: string;
+  category: "budget" | "reminder" | "test" | "invitation";
+  status: "sent" | "failed";
+  /** Correo del destinatario; se resuelve por rol del dataset. */
+  to: "pendingBudgetClient" | "moraClient" | "valeria" | "invited" | "demoUser";
+  subject: string;
+  error: string | null;
+  entity: string | null;
+  entityId: string | null;
+  actor: "sales" | "system";
+  daysAgo: number;
+  hour: number;
+  minute: number;
+};
+
+const MAIL_LOGS: readonly DemoMailLog[] = [
+  { id: "demo_mail_budget", category: "budget", status: "sent", to: "pendingBudgetClient", subject: "Presupuesto · LedBox Demo", error: null, entity: "Budget", entityId: "demo_budget_pendiente", actor: "sales", daysAgo: 6, hour: 9, minute: 22 },
+  { id: "demo_mail_reminder_mora_1", category: "reminder", status: "sent", to: "moraClient", subject: "Recordatorio de pago · Cuota 1 · LedBox Demo", error: null, entity: "ClientPayment", entityId: "demo_pay_mora_cuota_1", actor: "system", daysAgo: 2, hour: 8, minute: 5 },
+  { id: "demo_mail_test", category: "test", status: "sent", to: "valeria", subject: "Correo de prueba · LedBox Demo", error: null, entity: "Organization", entityId: DEMO_ORGANIZATION_ID, actor: "sales", daysAgo: 14, hour: 10, minute: 40 },
+  // Falló de verdad: sin dominio verificado el proveedor rechaza el envío.
+  { id: "demo_mail_reminder_mora_2", category: "reminder", status: "failed", to: "moraClient", subject: "Recordatorio de pago · Cuota 2 · LedBox Demo", error: "El dominio del remitente no está verificado en Resend (403): el recordatorio no salió.", entity: "ClientPayment", entityId: "demo_pay_mora_cuota_2", actor: "system", daysAgo: 1, hour: 8, minute: 5 },
+  { id: "demo_mail_invitation", category: "invitation", status: "sent", to: "invited", subject: "Invitación al equipo de LedBox Demo · LedBox", error: null, entity: "TeamInvitation", entityId: "demo_invitation_pending", actor: "sales", daysAgo: 1, hour: 11, minute: 15 },
+];
+
+/**
+ * Invitaciones al equipo (issue #31): una pendiente (con su correo simulado) y
+ * una aceptada que ya es miembro. El token solo se guarda hasheado, igual que en
+ * el flujo real.
+ */
+type DemoInvitation = {
+  id: string;
+  email: string;
+  role: "ADMIN" | "OPERATIONS" | "FINANCE" | "VIEWER";
+  status: "pending" | "accepted";
+  /** Token del link (solo vive acá para derivar su hash; nunca se guarda plano). */
+  token: string;
+  createdDaysAgo: number;
+  expiresInDays: number;
+  sentDaysAgo: number;
+  sentCount: number;
+  acceptedDaysAgo?: number;
+  acceptedBy?: { id: string; name: string };
+};
+
+const INVITATIONS: readonly DemoInvitation[] = [
+  {
+    id: "demo_invitation_pending",
+    email: "rocio.benitez@ledbox.demo",
+    role: "FINANCE",
+    status: "pending",
+    token: "D3M0-ROC1-9F7K-2QW4",
+    createdDaysAgo: 1,
+    expiresInDays: 12,
+    sentDaysAgo: 1,
+    sentCount: 1,
+  },
+  {
+    id: "demo_invitation_accepted",
+    email: "marco.ferreira@ledbox.demo",
+    role: "OPERATIONS",
+    status: "accepted",
+    token: "D3M0-MAR2-4X2B-8LQ6",
+    createdDaysAgo: 27,
+    expiresInDays: -20,
+    sentDaysAgo: 27,
+    sentCount: 2,
+    acceptedDaysAgo: 21,
+    acceptedBy: { id: "demo_user_marco", name: "Marco Ferreira" },
+  },
+];
+
+/** Quién invita en la demo: Valeria es ADMIN de la empresa (rol users.manage). */
+const DEMO_INVITER = { id: "demo_user_valeria", name: "Valeria Ortiz", email: "valeria.ortiz@ledbox.demo" };
+
+/**
+ * Equipo simulado de la empresa demo: dos colaboradores reales del dataset (los
+ * mismos actores de la auditoría) para que Usuarios, las invitaciones y los
+ * avatares tengan a quién apuntar. Son miembros solo de la empresa demo.
+ */
+const COLLABORATORS = [
+  { id: ACTORS.sales.id, name: ACTORS.sales.name, email: ACTORS.sales.email, role: "ADMIN", initials: "VO", accent: [0, 176, 186, 255] as Rgba },
+  { id: ACTORS.ops.id, name: ACTORS.ops.name, email: ACTORS.ops.email, role: "OPERATIONS", initials: "MF", accent: [122, 68, 220, 255] as Rgba },
+] satisfies Array<{ id: string; name: string; email: string; role: "ADMIN" | "OPERATIONS"; initials: string; accent: Rgba }>;
+
+// ── Identidad: logos y avatares de la demo (PNG generados, sin dependencias) ──
+
+type Rgba = readonly [number, number, number, number];
+
+/** Imagen binaria lista para Prisma (`Bytes`), con su tipo real. */
+type DemoImage = { mime: string; size: number; width: number; height: number; data: Uint8Array<ArrayBuffer> };
+
+type PixelCanvas = { width: number; height: number; pixels: Uint8Array };
+
+const IDENTITY_ACCENT: Rgba = [0, 214, 214, 255];
+const IDENTITY_INK: Rgba = [10, 14, 18, 255];
+const IDENTITY_LIGHT: Rgba = [235, 247, 249, 255];
+const IDENTITY_PAPER: Rgba = [248, 250, 252, 255];
+const IDENTITY_GREY: Rgba = [186, 196, 204, 255];
+const IDENTITY_OK: Rgba = [22, 163, 108, 255];
+
+/** Glifos 5×7 de las letras que usan el logo y los avatares. */
+const GLYPHS: Record<string, readonly string[]> = {
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  M: ["10001", "11011", "10101", "10001", "10001", "10001", "10001"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+};
+
+function newCanvas(width: number, height: number, fill: Rgba): PixelCanvas {
+  const pixels = new Uint8Array(width * height * 4);
+  for (let index = 0; index < width * height; index += 1) {
+    pixels[index * 4] = fill[0];
+    pixels[index * 4 + 1] = fill[1];
+    pixels[index * 4 + 2] = fill[2];
+    pixels[index * 4 + 3] = fill[3];
+  }
+  return { width, height, pixels };
+}
+
+function setPixel(canvas: PixelCanvas, x: number, y: number, color: Rgba): void {
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
+  const offset = (y * canvas.width + x) * 4;
+  canvas.pixels[offset] = color[0];
+  canvas.pixels[offset + 1] = color[1];
+  canvas.pixels[offset + 2] = color[2];
+  canvas.pixels[offset + 3] = color[3];
+}
+
+function fillRect(canvas: PixelCanvas, x: number, y: number, width: number, height: number, color: Rgba): void {
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) setPixel(canvas, x + column, y + row, color);
+  }
+}
+
+/** Diagonal de dos colores (fondo de los avatares). */
+function paintGradient(canvas: PixelCanvas, from: Rgba, to: Rgba): void {
+  const span = canvas.width + canvas.height;
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const ratio = (x + y) / span;
+      setPixel(canvas, x, y, [
+        Math.round(from[0] + (to[0] - from[0]) * ratio),
+        Math.round(from[1] + (to[1] - from[1]) * ratio),
+        Math.round(from[2] + (to[2] - from[2]) * ratio),
+        Math.round(from[3] + (to[3] - from[3]) * ratio),
+      ]);
+    }
+  }
+}
+
+/** Dibuja texto en mayúsculas con los glifos 5×7; devuelve el ancho usado. */
+function paintLetters(canvas: PixelCanvas, text: string, x: number, y: number, scale: number, tracking: number, color: Rgba): number {
+  let cursor = x;
+  for (const character of text) {
+    const glyph = GLYPHS[character];
+    if (!glyph) {
+      cursor += 5 * scale + tracking;
+      continue;
+    }
+    glyph.forEach((row, rowIndex) => {
+      [...row].forEach((bit, columnIndex) => {
+        if (bit === "1") fillRect(canvas, cursor + columnIndex * scale, y + rowIndex * scale, scale, scale, color);
+      });
+    });
+    cursor += 5 * scale + tracking;
+  }
+  return cursor - tracking - x;
+}
+
+function lettersWidth(text: string, scale: number, tracking: number): number {
+  return text.length * 5 * scale + (text.length - 1) * tracking;
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Uint8Array): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.byteLength);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), Buffer.from(data)]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+
+/** PNG RGBA (color type 6) sin filtros: deflate + CRC32, con `node:zlib`. */
+function encodePng(canvas: PixelCanvas): DemoImage {
+  const stride = canvas.width * 4;
+  const raw = Buffer.alloc((stride + 1) * canvas.height);
+  for (let y = 0; y < canvas.height; y += 1) {
+    raw[y * (stride + 1)] = 0;
+    Buffer.from(canvas.pixels.buffer, canvas.pixels.byteOffset + y * stride, stride).copy(raw, y * (stride + 1) + 1);
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(canvas.width, 0);
+  header.writeUInt32BE(canvas.height, 4);
+  header[8] = 8; // bits por canal
+  header[9] = 6; // RGBA
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(raw, { level: 9 })),
+    pngChunk("IEND", new Uint8Array()),
+  ]);
+  const data = new Uint8Array(png.byteLength);
+  data.set(png);
+  return { mime: "image/png", size: data.byteLength, width: canvas.width, height: canvas.height, data };
+}
+
+/** Logo de la empresa: «LED» en cyan y «BOX» en el color del tema, sobre transparente. */
+function buildLogoImage(variant: "light" | "dark"): DemoImage {
+  const canvas = newCanvas(480, 120, [0, 0, 0, 0]);
+  const scale = 12;
+  const tracking = 12;
+  const gap = 24;
+  const accent = variant === "light" ? IDENTITY_ACCENT : [0, 168, 178, 255] as Rgba;
+  const ink = variant === "light" ? IDENTITY_LIGHT : IDENTITY_INK;
+  const width = lettersWidth("LED", scale, tracking) + gap + lettersWidth("BOX", scale, tracking);
+  const x = Math.round((canvas.width - width) / 2);
+  const y = 14;
+  const afterLed = paintLetters(canvas, "LED", x, y, scale, tracking, accent) + x + gap;
+  paintLetters(canvas, "BOX", afterLed, y, scale, tracking, ink);
+  fillRect(canvas, x, y + 7 * scale + 8, width, 5, accent);
+  return encodePng(canvas);
+}
+
+/** Avatar del equipo: gradiente + iniciales en blanco. */
+function buildAvatarImage(initials: string, from: Rgba, to: Rgba): DemoImage {
+  const canvas = newCanvas(256, 256, IDENTITY_INK);
+  paintGradient(canvas, from, to);
+  const scale = 20;
+  const tracking = 20;
+  const width = lettersWidth(initials, scale, tracking);
+  const x = Math.round((canvas.width - width) / 2);
+  const y = Math.round((canvas.height - 7 * scale) / 2) + 6;
+  paintLetters(canvas, initials, x, y, scale, tracking, [255, 255, 255, 255]);
+  return encodePng(canvas);
+}
+
+/** Comprobante simulado del cliente: una página con encabezado y renglones. */
+function buildProofImage(): DemoImage {
+  const canvas = newCanvas(420, 560, IDENTITY_PAPER);
+  fillRect(canvas, 0, 0, canvas.width, 64, [0, 168, 178, 255]);
+  fillRect(canvas, 24, 18, 132, 12, [255, 255, 255, 235]);
+  fillRect(canvas, 24, 38, 84, 8, [255, 255, 255, 190]);
+  const rows = [120, 160, 200, 240, 296, 336, 376];
+  const widths = [300, 220, 340, 260, 180, 320, 240];
+  rows.forEach((row, index) => fillRect(canvas, 32, row, widths[index], 10, IDENTITY_GREY));
+  fillRect(canvas, 32, 200, 120, 10, IDENTITY_INK);
+  fillRect(canvas, 32, 296, 200, 14, IDENTITY_INK);
+  // Check verde: el importe y la acreditación.
+  fillRect(canvas, 300, 430, 24, 12, IDENTITY_OK);
+  fillRect(canvas, 324, 418, 24, 24, IDENTITY_OK);
+  fillRect(canvas, 348, 406, 36, 36, IDENTITY_OK);
+  fillRect(canvas, 32, 500, 356, 8, IDENTITY_GREY);
+  return encodePng(canvas);
+}
+
+type DemoIdentityImages = {
+  logoLight: DemoImage;
+  logoDark: DemoImage;
+  demoAvatar: DemoImage;
+  collaborators: Map<string, DemoImage>;
+  proof: DemoImage;
+};
+
+let identityImages: DemoIdentityImages | null = null;
+
+/** Imágenes de identidad de la demo (se generan una vez por proceso). */
+function demoIdentityImages(): DemoIdentityImages {
+  if (!identityImages) {
+    const collaborators = new Map<string, DemoImage>();
+    for (const collaborator of COLLABORATORS) {
+      collaborators.set(collaborator.id, buildAvatarImage(collaborator.initials, IDENTITY_INK, collaborator.accent));
+    }
+    identityImages = {
+      logoLight: buildLogoImage("light"),
+      logoDark: buildLogoImage("dark"),
+      demoAvatar: buildAvatarImage(DEMO_USER_AVATAR_INITIALS, IDENTITY_INK, IDENTITY_ACCENT),
+      collaborators,
+      proof: buildProofImage(),
+    };
+  }
+  return identityImages;
+}
+
+// ── Mínimos del dataset ─────────────────────────────────────────────────────
+
+/**
+ * Mínimos del dataset simulado. El ancla del día se valida contra estos conteos
+ * (y contra la agenda futura) para que una provisión interrumpida, un borrado o
+ * una demo que se quedó sin eventos próximos se vuelva a completar sola. Si se
+ * agregan filas al dataset, se suben estos números.
+ */
+const DATASET_MINS = {
+  clients: CLIENTS.length,
+  events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
+  tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
+  budgets: 7,
+  audits: 32,
+  treasuryAccounts: TREASURY_ACCOUNTS.length,
+  treasuryMovements: 16,
+  expenses: EXPENSES.length,
+  expectedPayments: 8,
+  invitations: INVITATIONS.length,
+  mailLogs: MAIL_LOGS.length,
+  logos: 2,
+} as const;
+
 // ── Alta idempotente ────────────────────────────────────────────────────────
 
 /**
@@ -416,6 +847,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
 
   // El usuario demo nunca inicia sesión con contraseña: la clave es aleatoria y
   // el único camino es `GET/POST /api/demo/session`. Su rol global es VIEWER.
+  // Tampoco tiene PIN ni auto-bloqueo (issue #32): la demo no se bloquea sola.
   const user = await db.adminUser.upsert({
     where: { email: DEMO_USER_EMAIL },
     create: {
@@ -425,8 +857,18 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
       passwordHash: await hashPassword(randomBytes(24).toString("base64url")),
       role: "VIEWER",
       active: true,
+      pinHash: null,
+      pinUpdatedAt: null,
+      autoLockEnabled: false,
     },
-    update: { name: DEMO_USER_NAME, role: "VIEWER", active: true },
+    update: {
+      name: DEMO_USER_NAME,
+      role: "VIEWER",
+      active: true,
+      pinHash: null,
+      pinUpdatedAt: null,
+      autoLockEnabled: false,
+    },
   });
 
   await db.adminMembership.upsert({
@@ -472,7 +914,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, events, tasks, budgets, audits, upcoming] = await Promise.all([
+  const [clients, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, logos, avatars] = await Promise.all([
     db.client.count({ where: { organizationId: organization.id } }),
     db.event.count({ where: { organizationId: organization.id } }),
     db.eventTask.count({ where: { event: { organizationId: organization.id } } }),
@@ -485,6 +927,14 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
         OR: [{ startsAt: { gte: now } }, { endsAt: { gte: now } }],
       },
     }),
+    db.treasuryAccount.count({ where: { organizationId: organization.id } }),
+    db.treasuryMovement.count({ where: { organizationId: organization.id } }),
+    db.expense.count({ where: { organizationId: organization.id } }),
+    db.expectedPayment.count({ where: { organizationId: organization.id } }),
+    db.teamInvitation.count({ where: { organizationId: organization.id } }),
+    db.mailLog.count({ where: { organizationId: organization.id } }),
+    db.organizationLogo.count({ where: { organizationId: organization.id } }),
+    db.adminUserAvatar.count({ where: { userId: { in: [DEMO_USER_ID, ...COLLABORATORS.map((collaborator) => collaborator.id)] } } }),
   ]);
   const complete =
     clients >= DATASET_MINS.clients &&
@@ -492,6 +942,14 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     tasks >= DATASET_MINS.tasks &&
     budgets >= DATASET_MINS.budgets &&
     audits >= DATASET_MINS.audits &&
+    treasuryAccounts >= DATASET_MINS.treasuryAccounts &&
+    treasuryMovements >= DATASET_MINS.treasuryMovements &&
+    expenses >= DATASET_MINS.expenses &&
+    expectedPayments >= DATASET_MINS.expectedPayments &&
+    invitations >= DATASET_MINS.invitations &&
+    mailLogs >= DATASET_MINS.mailLogs &&
+    logos >= DATASET_MINS.logos &&
+    avatars >= COLLABORATORS.length + 1 &&
     upcoming >= 3;
   if (!complete) return false;
   return dayKeyOf(organization.updatedAt) === dayKeyOf(new Date());
@@ -797,7 +1255,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     const soonest = at(base, 1, hour, minute);
     return candidate.getTime() > soonest.getTime() ? candidate : soonest;
   };
-  const jobsData: Prisma.SupplierJobUncheckedCreateInput[] = [
+  const jobsData: Array<Seeded<Prisma.SupplierJobUncheckedCreateInput>> = [
     { id: "demo_job_grafica", ...org, supplierId: "demo_supplier_grafica", eventId: next.id, category: "GRAPHICS", description: `Gráfica del stand · ${next.name}`, total: 2_400_000, advance: 1_200_000, status: "ADVANCE_PAID", dueAt: jobDue(next, 3, 12), notes: "Arte aprobado; retiran antes del montaje." },
     { id: "demo_job_escenario", ...org, supplierId: "demo_supplier_carpinteria", eventId: next.id, category: "CARPENTRY", description: `Escenario y mobiliario · ${next.name}`, total: 5_500_000, advance: 2_000_000, status: "IN_PRODUCTION", dueAt: jobDue(next, 2, 18), notes: "En taller; entrega el día previo al montaje." },
     { id: "demo_job_sonido", ...org, supplierId: "demo_supplier_audio", eventId: second.id, category: "AUDIOVISUAL", description: `Sonido e iluminación · ${second.name}`, total: 3_200_000, advance: 0, status: "CONTRACTED", dueAt: jobDue(second, 5, 9), notes: "Equipo reservado; falta la orden de compra." },
@@ -1117,24 +1575,34 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   ];
 
   // ── Cobros: los cobrados del mes y la cuota 1 del plan aprobado a plazo ──
+  // Cada cobro recibido declara **en qué cuenta entró** (issue #27): de ahí sale
+  // su movimiento de tesorería, que es lo que mueve el saldo derivado.
   const totalOf = (id: string) => budgetTotals.get(id) ?? 0;
   const paidOf = totalOf("demo_budget_cobrado");
   const planOf = (id: string) => budgetSeeds.find((budget) => budget.id === id)?.plan;
   const nextPlan = planOf("demo_budget_aprobado");
   const nextInstallment = nextPlan?.installments[0]?.amount ?? 0;
-  const received = (id: string, data: Omit<Prisma.ClientPaymentUncheckedCreateInput, "id" | "organizationId" | "status" | "collectedAt">) => ({
+  const received = (
+    id: string,
+    data: Omit<Prisma.ClientPaymentUncheckedCreateInput, "id" | "organizationId" | "status" | "collectedAt" | "treasuryAccountId">,
+    treasuryAccountId: string,
+  ) => ({
     id,
     ...org,
     ...data,
+    treasuryAccountId,
     status: "RECEIVED" as const,
     collectedAt: data.paidAt ?? null,
   });
-  const paymentsData: Prisma.ClientPaymentUncheckedCreateInput[] = [
-    received("demo_pay_cobrado_1", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: Math.round(paidOf / 2), paidAt: eventStart(longestPast, -10, 9, 40), method: "Transferencia", reference: "TRF-87990", notes: "Anticipo del cierre de feria." }),
-    received("demo_pay_cobrado_2", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: paidOf - Math.round(paidOf / 2), paidAt: eventStart(longestPast, 2, 17, 10), method: "Transferencia", reference: "TRF-88105", notes: "Cancelación total." }),
-    received("demo_pay_cambios", { clientId: third.clientId, budgetId: "demo_budget_cambios", amount: 2_000_000, paidAt: pastInstant(withinMonth(base, 8, 16, 0), now), method: "Cheque", reference: "CHQ-4471", notes: "Seña; el saldo se ajusta con los cambios pedidos." }),
-    received("demo_pay_aprobado", { clientId: next.clientId, budgetId: "demo_budget_aprobado", amount: nextPlan?.advance ?? 0, paidAt: pastInstant(withinMonth(base, 6, 15, 30), now), method: "Transferencia", reference: "TRF-88213", notes: "Anticipo del plan de pagos aprobado." }),
-    received("demo_pay_pendiente", { clientId: second.clientId, budgetId: "demo_budget_pendiente", amount: 4_000_000, paidAt: pastInstant(withinMonth(base, 3, 11, 0), now), method: "Efectivo", reference: "REC-1042", notes: "Seña para reservar los equipos." }),
+  const paymentsData: Array<Seeded<Prisma.ClientPaymentUncheckedCreateInput>> = [
+    received("demo_pay_cobrado_1", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: Math.round(paidOf / 2), paidAt: eventStart(longestPast, -10, 9, 40), method: "Transferencia", reference: "TRF-87990", notes: "Anticipo del cierre de feria." }, "demo_treasury_ueno"),
+    received("demo_pay_cobrado_2", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: paidOf - Math.round(paidOf / 2), paidAt: eventStart(longestPast, 2, 17, 10), method: "Transferencia", reference: "TRF-88105", notes: "Cancelación total." }, "demo_treasury_ueno"),
+    // La seña con cheque entra a «Cheques a cobrar» y después se cobra en
+    // efectivo: la transferencia ya hecha es la que mueve la plata a caja.
+    received("demo_pay_cambios", { clientId: third.clientId, budgetId: "demo_budget_cambios", amount: 2_000_000, paidAt: pastInstant(withinMonth(base, 8, 16, 0), now), method: "Cheque", reference: "CHQ-4471", notes: "Seña; el saldo se ajusta con los cambios pedidos." }, "demo_treasury_cheques"),
+    received("demo_pay_aprobado", { clientId: next.clientId, budgetId: "demo_budget_aprobado", amount: nextPlan?.advance ?? 0, paidAt: pastInstant(withinMonth(base, 6, 15, 30), now), method: "Transferencia", reference: "TRF-88213", notes: "Anticipo del plan de pagos aprobado." }, "demo_treasury_ueno"),
+    // Seña del presupuesto pendiente: cheque a vencer, todavía en cartera.
+    received("demo_pay_pendiente", { clientId: second.clientId, budgetId: "demo_budget_pendiente", amount: 4_000_000, paidAt: pastInstant(withinMonth(base, 3, 11, 0), now), method: "Cheque", reference: "CHQ-4488", chequeDate: at(base, 26, 12, 0), notes: "Seña para reservar los equipos; cheque a vencer." }, "demo_treasury_cheques"),
     // Cobro a plazo (issue #16): la cuota 1 del plan aprobado, con vencimiento
     // próximo; se re-ancla a hoy en cada provisión.
     {
@@ -1163,7 +1631,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       method: "Transferencia",
       reference: "TRF-87942",
       notes: "Anticipo del 40% con la orden de trabajo.",
-    }),
+    }, "demo_treasury_ueno"),
     {
       id: "demo_pay_mora_cheque",
       ...org,
@@ -1209,6 +1677,401 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       invoiceIssuedAt: pastInstant(at(base, -21, 9, 0), now),
       notes: "Cuota 2 vencida: el cliente pidió refinanciar.",
     },
+  ];
+
+  // ── Gastos (issue #27): cada uno con su categoría, su cuenta y su egreso.
+  // Los dos sin proyecto quedan «A definir» a propósito. ──
+  const eventByRole = { next, second, inProgress, recentPast, longestPast } as const;
+  const expensesData: Array<Seeded<Prisma.ExpenseUncheckedCreateInput>> = EXPENSES.map((expense) => ({
+    id: expense.id,
+    ...org,
+    accountId: expense.accountId,
+    eventId: expense.eventRole ? eventByRole[expense.eventRole].id : null,
+    supplierId: expense.supplierId,
+    date: at(base, -expense.daysAgo, 0, 0),
+    amount: expense.amount,
+    category: expense.category,
+    description: expense.description,
+    method: expense.method,
+    receipt: expense.receipt,
+    notes: expense.notes,
+    createdById: ACTORS.ops.id,
+    createdByName: ACTORS.ops.name,
+    createdByEmail: ACTORS.ops.email,
+    createdAt: at(base, -expense.daysAgo, expense.hour, 0),
+  }));
+
+  // ── Tesorería (issue #27): las cuentas viven de sus movimientos. Cada
+  // movimiento nace de un hecho real del dataset —cobro recibido, pago o
+  // anticipo a un proveedor, gasto— o de la transferencia del cheque ya cobrado
+  // en efectivo; el saldo se deriva, nunca se guarda. ──
+  const clientLabelOf = (clientId: string) => {
+    const client = CLIENT_BY_ID.get(clientId);
+    return client ? clientLabel({ name: client.name, company: client.company }) : "Cliente";
+  };
+  const supplierNameOf = (supplierId: string | null) => SUPPLIERS.find((supplier) => supplier.id === supplierId)?.name ?? "Proveedor";
+  const movement = (
+    id: string,
+    accountId: string,
+    direction: "IN" | "OUT" | "TRANSFER",
+    amount: number,
+    occurredAt: Date,
+    origin: "client_payment" | "supplier_job" | "expense" | "adjustment",
+    sourceId: string | null,
+    label: string | null,
+    ref: string | null,
+    options?: { counterAccountId?: string; notes?: string | null },
+  ): Seeded<Prisma.TreasuryMovementUncheckedCreateInput> => ({
+    id,
+    ...org,
+    accountId,
+    counterAccountId: options?.counterAccountId ?? null,
+    direction,
+    amount,
+    occurredAt,
+    origin,
+    sourceId,
+    // Snapshot del hecho (issue #20): la etiqueta del momento manda en la lista.
+    sourceSnapshot:
+      label && origin !== "adjustment"
+        ? ({ kind: origin, label, amount, ref } as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull,
+    notes: options?.notes ?? null,
+    createdById: ACTORS.sales.id,
+    createdByName: ACTORS.sales.name,
+    createdByEmail: ACTORS.sales.email,
+    createdAt: occurredAt,
+  });
+  const treasuryMovementsData: Array<Seeded<Prisma.TreasuryMovementUncheckedCreateInput>> = [
+    // Entradas: cada cobro recibido, en la cuenta que declara.
+    ...paymentsData
+      .filter((payment) => payment.status === "RECEIVED" && payment.treasuryAccountId)
+      .map((payment) =>
+        movement(
+          `demo_tm_${payment.id}`,
+          payment.treasuryAccountId as string,
+          "IN",
+          payment.amount,
+          dateOf(payment.paidAt, base),
+          "client_payment",
+          payment.id,
+          clientLabelOf(payment.clientId),
+          payment.reference ?? payment.method ?? null,
+          { notes: payment.notes ?? null },
+        ),
+      ),
+    // Salidas: anticipos y pagos a proveedores ya hechos (monto = anticipo real).
+    ...jobsData
+      .filter((job) => (job.advance ?? 0) > 0)
+      .map((job) =>
+        movement(
+          `demo_tm_${job.id}`,
+          "demo_treasury_ueno",
+          "OUT",
+          job.advance ?? 0,
+          pastInstant(dateOf(job.paidAt ?? job.deliveredAt ?? job.dueAt, base), now),
+          "supplier_job",
+          job.id,
+          `${supplierNameOf(job.supplierId)} · ${job.description}`,
+          job.receipt ?? job.paymentMethod ?? null,
+        ),
+      ),
+    // Salidas: cada gasto carga su egreso (el gasto y su movimiento no se separan).
+    ...expensesData.map((expense) =>
+      movement(
+        `demo_tm_${expense.id}`,
+        expense.accountId,
+        "OUT",
+        expense.amount,
+        dateOf(expense.date, base),
+        "expense",
+        expense.id,
+        expense.description,
+        expense.receipt ?? expense.method ?? null,
+      ),
+    ),
+    // La transferencia ya hecha: el cheque de la seña se cobró y la plata pasó a caja.
+    movement(
+      "demo_tm_transfer_cheque",
+      "demo_treasury_cheques",
+      "TRANSFER",
+      DEMO_CHEQUE_TRANSFER_AMOUNT,
+      pastInstant(at(base, -4, 11, 15), now),
+      "adjustment",
+      null,
+      null,
+      null,
+      { counterAccountId: "demo_treasury_cash", notes: "Cheque cobrado en efectivo: se acredita en caja." },
+    ),
+  ];
+
+  // ── Pagos esperados del plan (issue #28): comprobante en revisión, vencido sin
+  // comprobante y confirmado con su cobro y movimiento. Los montos y los
+  // vencimientos salen del plan real de cada presupuesto. ──
+  const paymentById = new Map(paymentsData.map((payment) => [payment.id, payment]));
+  const paidAtOf = (id: string) => dateOf(paymentById.get(id)?.paidAt, at(base, -5, 12, 0));
+  const dayOf = (date: Date) => dayStart(dayKeyOf(date));
+  const proofImage = demoIdentityImages().proof;
+  const proofsData: Prisma.BudgetPaymentProofUncheckedCreateInput[] = [
+    {
+      id: "demo_proof_mora_cuota_1",
+      organizationId,
+      budgetId: "demo_budget_mora",
+      paymentId: null,
+      uploadedByName: clientContact(recentPast.clientId).name,
+      mime: proofImage.mime,
+      size: proofImage.size,
+      data: proofImage.data,
+      createdAt: at(base, -3, 10, 45),
+    },
+  ];
+  const expectedPaymentsData: Prisma.ExpectedPaymentUncheckedCreateInput[] = [
+    {
+      id: "demo_expected_aprobado_advance",
+      ...org,
+      budgetId: "demo_budget_aprobado",
+      concept: "advance",
+      slot: "advance",
+      installmentNumber: null,
+      label: "Anticipo",
+      amount: nextPlan?.advance ?? 0,
+      dueAt: dayOf(paidAtOf("demo_pay_aprobado")),
+      status: "CONFIRMED",
+      expectedAccountId: "demo_treasury_ueno",
+      paymentId: "demo_pay_aprobado",
+      confirmedAt: paidAtOf("demo_pay_aprobado"),
+      confirmedById: ACTORS.sales.id,
+      confirmedByName: ACTORS.sales.name,
+      confirmedByEmail: ACTORS.sales.email,
+      notes: "Anticipo del plan aprobado, confirmado en Ueno Bank.",
+      createdAt: at(base, -6, 9, 20),
+    },
+    {
+      id: "demo_expected_aprobado_cuota_1",
+      ...org,
+      budgetId: "demo_budget_aprobado",
+      concept: "installment",
+      slot: "installment:1",
+      installmentNumber: 1,
+      label: "Cuota 1 · saldo",
+      amount: nextPlan?.installments[0]?.amount ?? 0,
+      dueAt: at(base, 21, 0, 0),
+      status: "AWAITING",
+      expectedAccountId: "demo_treasury_ueno",
+      notes: "Cuota 1 del plan; el cobro a plazo ya está emitido.",
+      createdAt: at(base, -6, 9, 20),
+    },
+    {
+      id: "demo_expected_aprobado_cuota_2",
+      ...org,
+      budgetId: "demo_budget_aprobado",
+      concept: "installment",
+      slot: "installment:2",
+      installmentNumber: 2,
+      label: "Cuota 2 · saldo final",
+      amount: nextPlan?.installments[1]?.amount ?? 0,
+      dueAt: at(base, 45, 0, 0),
+      status: "AWAITING",
+      expectedAccountId: "demo_treasury_ueno",
+      createdAt: at(base, -6, 9, 20),
+    },
+    {
+      id: "demo_expected_mora_advance",
+      ...org,
+      budgetId: "demo_budget_mora",
+      concept: "advance",
+      slot: "advance",
+      installmentNumber: null,
+      label: "Anticipo",
+      amount: 3_000_000,
+      dueAt: dayOf(paidAtOf("demo_pay_mora_anticipo")),
+      status: "CONFIRMED",
+      expectedAccountId: "demo_treasury_ueno",
+      paymentId: "demo_pay_mora_anticipo",
+      confirmedAt: paidAtOf("demo_pay_mora_anticipo"),
+      confirmedById: ACTORS.sales.id,
+      confirmedByName: ACTORS.sales.name,
+      confirmedByEmail: ACTORS.sales.email,
+      notes: "Anticipo del 40% cobrado con la orden de trabajo.",
+      createdAt: eventStart(recentPast, -12, 9, 0),
+    },
+    // El cliente subió el comprobante y todavía no se confirmó: el equipo lo
+    // está revisando (el importe no coincide con la cuota).
+    {
+      id: "demo_expected_mora_cuota_1",
+      ...org,
+      budgetId: "demo_budget_mora",
+      concept: "installment",
+      slot: "installment:1",
+      installmentNumber: 1,
+      label: "Cuota 1 · saldo",
+      amount: 4_000_000,
+      dueAt: at(base, -14, 0, 0),
+      status: "PROOF",
+      expectedAccountId: "demo_treasury_ueno",
+      proofId: "demo_proof_mora_cuota_1",
+      notes: "El comprobante llegó desde el portal y quedó en revisión; el importe no coincide con la cuota (faltan Gs. 150.000).",
+      createdAt: eventStart(recentPast, -12, 9, 0),
+    },
+    // Vencida y sin comprobante: la deuda vencida real del cliente.
+    {
+      id: "demo_expected_mora_cuota_2",
+      ...org,
+      budgetId: "demo_budget_mora",
+      concept: "installment",
+      slot: "installment:2",
+      installmentNumber: 2,
+      label: "Cuota 2 · saldo final",
+      amount: 4_000_000,
+      dueAt: at(base, -5, 0, 0),
+      status: "AWAITING",
+      expectedAccountId: "demo_treasury_ueno",
+      notes: "Vencida y sin comprobante: el cliente pidió refinanciar.",
+      createdAt: eventStart(recentPast, -12, 9, 0),
+    },
+    {
+      id: "demo_expected_cobrado_advance",
+      ...org,
+      budgetId: "demo_budget_cobrado",
+      concept: "advance",
+      slot: "advance",
+      installmentNumber: null,
+      label: "Anticipo",
+      amount: 6_250_000,
+      dueAt: dayOf(paidAtOf("demo_pay_cobrado_1")),
+      status: "CONFIRMED",
+      expectedAccountId: "demo_treasury_ueno",
+      paymentId: "demo_pay_cobrado_1",
+      confirmedAt: paidAtOf("demo_pay_cobrado_1"),
+      confirmedById: ACTORS.sales.id,
+      confirmedByName: ACTORS.sales.name,
+      confirmedByEmail: ACTORS.sales.email,
+      notes: "Anticipo del 50% cobrado antes del montaje.",
+      createdAt: eventStart(longestPast, -18, 9, 30),
+    },
+    {
+      id: "demo_expected_cobrado_balance",
+      ...org,
+      budgetId: "demo_budget_cobrado",
+      concept: "balance",
+      slot: "balance",
+      installmentNumber: null,
+      label: "Saldo contra entrega",
+      amount: 6_250_000,
+      dueAt: dayOf(paidAtOf("demo_pay_cobrado_2")),
+      status: "CONFIRMED",
+      expectedAccountId: "demo_treasury_ueno",
+      paymentId: "demo_pay_cobrado_2",
+      confirmedAt: paidAtOf("demo_pay_cobrado_2"),
+      confirmedById: ACTORS.sales.id,
+      confirmedByName: ACTORS.sales.name,
+      confirmedByEmail: ACTORS.sales.email,
+      notes: "Saldo contra entrega en el predio.",
+      createdAt: eventStart(longestPast, -18, 9, 30),
+    },
+  ];
+
+  // ── Historial de correos (issue #30): presupuesto enviado, recordatorio,
+  // prueba, un fallo con su motivo y la invitación. ──
+  const pendingBudget = budgetsData.find((budget) => budget.id === "demo_budget_pendiente");
+  const pendingBudgetSeed = budgetSeeds.find((budget) => budget.id === "demo_budget_pendiente");
+  const moraClient = clientContact(recentPast.clientId);
+  const moraClientRecord = CLIENT_BY_ID.get(recentPast.clientId);
+  const moraDue1 = at(base, -14, 0, 0);
+  const moraDue2 = at(base, -5, 0, 0);
+  const moraBudgetTitle = budgetSeeds.find((budget) => budget.id === "demo_budget_mora")?.title ?? "Presupuesto";
+  /** Cuenta regresiva del vencimiento, con el mismo texto que el recordatorio real. */
+  const dueCountdown = (dueAt: Date) => {
+    const days = Math.round((dayStart(dayKeyOf(dueAt)).getTime() - dayStart(dayKeyOf(base)).getTime()) / DAY_MS);
+    return days === 0 ? "vence hoy" : days === 1 ? "vence mañana" : days === -1 ? "venció ayer" : days > 0 ? `vence en ${formatNumber(days)} días` : `venció hace ${formatNumber(Math.abs(days))} días`;
+  };
+  // Los recordatorios del dataset son de pagos esperados: el concepto del asunto
+  // es el mismo que arma el envío real (`<concepto> del presupuesto «…»`).
+  const reminderSubject = (label: string, dueAt: Date) =>
+    `Recordatorio de pago · ${label} del presupuesto «${moraBudgetTitle}» · ${dueCountdown(dueAt)} el ${formatDate(dueAt)}`;
+  const mailSubjects: Record<string, string> = {
+    demo_mail_budget: `Presupuesto «${pendingBudgetSeed?.title ?? "Presupuesto"}» · ${formatMoney(pendingBudget?.total ?? 0)}${
+      pendingBudgetSeed?.validUntil ? ` · válido hasta el ${formatDate(pendingBudgetSeed.validUntil)}` : ""
+    }`,
+    demo_mail_reminder_mora_1: reminderSubject("Cuota 1 · saldo", moraDue1),
+    demo_mail_reminder_mora_2: reminderSubject("Cuota 2 · saldo final", moraDue2),
+  };
+  const mailRecipients: Record<DemoMailLog["to"], string> = {
+    pendingBudgetClient: secondContact.email,
+    moraClient: moraClient.email,
+    valeria: DEMO_INVITER.email,
+    invited: "rocio.benitez@ledbox.demo",
+    demoUser: DEMO_USER_EMAIL,
+  };
+  const mailLogsData: Prisma.MailLogUncheckedCreateInput[] = MAIL_LOGS.map((log) => {
+    const actor = log.actor === "system" ? { id: "system", name: "Recordatorios automáticos", email: null } : { ...ACTORS.sales, email: ACTORS.sales.email };
+    return {
+      id: log.id,
+      organizationId,
+      category: log.category,
+      status: log.status,
+      to: mailRecipients[log.to],
+      subject: mailSubjects[log.id] ?? log.subject,
+      error: log.error,
+      providerId: log.status === "sent" ? `demo-${log.id}` : null,
+      entity: log.entity,
+      entityId: log.entityId,
+      actorId: actor.id,
+      actorName: actor.name,
+      actorEmail: actor.email,
+      sentAt: at(base, -log.daysAgo, log.hour, log.minute),
+      createdAt: at(base, -log.daysAgo, log.hour, log.minute),
+    };
+  });
+  // Bitácora del recordatorio (issue #19): un envío por cobro, canal y día.
+  const reminderLogsData: Prisma.PaymentReminderLogUncheckedCreateInput[] = [
+    {
+      id: "demo_reminder_mora_cuota_1",
+      organizationId,
+      paymentId: "demo_pay_mora_cuota_1",
+      expectedPaymentId: "demo_expected_mora_cuota_1",
+      targetKey: "expected:demo_expected_mora_cuota_1",
+      channel: "email",
+      status: "sent",
+      to: moraClient.email,
+      dayKey: dayKeyOf(at(base, -2, 8, 5)),
+      subject: mailSubjects.demo_mail_reminder_mora_1,
+      actorKind: "system",
+      actorId: null,
+      actorName: "Recordatorios automáticos",
+      actorEmail: null,
+      sentAt: at(base, -2, 8, 5),
+      createdAt: at(base, -2, 8, 5),
+    },
+  ];
+
+  // ── Invitaciones al equipo (issue #31) ──
+  const invitationsData: Prisma.TeamInvitationUncheckedCreateInput[] = INVITATIONS.map((invitation) => ({
+    id: invitation.id,
+    ...org,
+    email: invitation.email,
+    role: invitation.role,
+    // El token plano solo vive en el link del correo: acá se guarda su hash.
+    tokenHash: createHash("sha256").update(invitation.token).digest("hex"),
+    status: invitation.status,
+    invitedById: DEMO_INVITER.id,
+    invitedByName: DEMO_INVITER.name,
+    invitedByEmail: DEMO_INVITER.email,
+    expiresAt: at(base, invitation.expiresInDays, 9, 0),
+    lastSentAt: at(base, -invitation.sentDaysAgo, 9, 0),
+    sentCount: invitation.sentCount,
+    acceptedAt: invitation.acceptedDaysAgo === undefined ? null : at(base, -invitation.acceptedDaysAgo, 10, 30),
+    acceptedById: invitation.acceptedBy?.id ?? null,
+    acceptedByName: invitation.acceptedBy?.name ?? null,
+    createdAt: at(base, -invitation.createdDaysAgo, 9, 0),
+  }));
+
+  // ── Identidad de la demo (issue #32): logos de la empresa y avatares del
+  // equipo, para que el shell y la sección Empresa no caigan al monograma. ──
+  const images = demoIdentityImages();
+  const logosData: Prisma.OrganizationLogoUncheckedCreateInput[] = [
+    { id: "demo_logo_light", organizationId, variant: "light", mime: images.logoLight.mime, size: images.logoLight.size, width: images.logoLight.width, height: images.logoLight.height, data: images.logoLight.data, createdAt: at(base, -30, 10, 0) },
+    { id: "demo_logo_dark", organizationId, variant: "dark", mime: images.logoDark.mime, size: images.logoDark.size, width: images.logoDark.width, height: images.logoDark.height, data: images.logoDark.data, createdAt: at(base, -30, 10, 0) },
   ];
 
   // ── Inventario y asignaciones (una con salida y devolución con daño) ──
@@ -1277,6 +2140,42 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       // Un solo provisor a la vez (dos visitantes simultáneos no se pisan).
       await tx.$queryRawUnsafe("select pg_advisory_xact_lock(724150114)::text as locked");
       await wipeDemoData(tx, organizationId);
+      // Equipo simulado de la demo (los actores de la auditoría): miembros solo
+      // de esta empresa, con su avatar. Se borran en cada wipe y se recrean acá.
+      const collaboratorsHash = await hashPassword(randomBytes(24).toString("base64url"));
+      for (const collaborator of COLLABORATORS) {
+        await tx.adminUser.create({
+          data: {
+            id: collaborator.id,
+            name: collaborator.name,
+            email: collaborator.email,
+            passwordHash: collaboratorsHash,
+            role: collaborator.role,
+            active: true,
+            autoLockEnabled: false,
+          },
+        });
+        await tx.adminMembership.create({
+          data: {
+            id: `demo_membership_${collaborator.id}`,
+            adminUserId: collaborator.id,
+            organizationId,
+            role: collaborator.role,
+            active: true,
+          },
+        });
+        const avatar = images.collaborators.get(collaborator.id);
+        if (avatar) {
+          await tx.adminUserAvatar.create({
+            data: { id: `demo_avatar_${collaborator.id}`, userId: collaborator.id, mime: avatar.mime, size: avatar.size, width: avatar.width, height: avatar.height, data: avatar.data },
+          });
+        }
+      }
+      await tx.adminUserAvatar.upsert({
+        where: { userId: DEMO_USER_ID },
+        create: { id: "demo_avatar_visitor", userId: DEMO_USER_ID, mime: images.demoAvatar.mime, size: images.demoAvatar.size, width: images.demoAvatar.width, height: images.demoAvatar.height, data: images.demoAvatar.data },
+        update: { mime: images.demoAvatar.mime, size: images.demoAvatar.size, width: images.demoAvatar.width, height: images.demoAvatar.height, data: images.demoAvatar.data },
+      });
       await tx.client.createMany({ data: clientsData });
       await tx.event.createMany({ data: eventsData });
       await tx.promoter.createMany({ data: promotersData });
@@ -1285,7 +2184,19 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.supplierJob.createMany({ data: jobsData });
       await tx.budget.createMany({ data: budgetsData });
       await tx.budgetItem.createMany({ data: budgetItemsData });
+      // Las cuentas van antes que los cobros y los gastos: todos las referencian.
+      await tx.treasuryAccount.createMany({
+        data: TREASURY_ACCOUNTS.map((account) => ({ ...account, organizationId, currency: "PYG", active: true, createdAt: at(base, -40, 9, 0) })),
+      });
       await tx.clientPayment.createMany({ data: paymentsData });
+      await tx.treasuryMovement.createMany({ data: treasuryMovementsData });
+      await tx.expense.createMany({ data: expensesData });
+      await tx.budgetPaymentProof.createMany({ data: proofsData });
+      await tx.expectedPayment.createMany({ data: expectedPaymentsData });
+      await tx.teamInvitation.createMany({ data: invitationsData });
+      await tx.mailLog.createMany({ data: mailLogsData });
+      await tx.paymentReminderLog.createMany({ data: reminderLogsData });
+      await tx.organizationLogo.createMany({ data: logosData });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.eventInventory.createMany({ data: assignmentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
@@ -1300,10 +2211,13 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
 
 /**
  * Borra los datos operativos de la organización demo (en orden de FKs) para que
- * el dataset salga canónico. La organización, el usuario demo y sus sesiones no
- * se tocan.
+ * el dataset salga canónico. La organización y el usuario demo no se tocan; las
+ * sesiones demo se limpian aparte.
  */
 async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
+  await tx.paymentReminderLog.deleteMany({ where: { organizationId } });
+  await tx.budgetPaymentProof.deleteMany({ where: { organizationId } });
+  await tx.expectedPayment.deleteMany({ where: { organizationId } });
   await tx.eventInventory.deleteMany({ where: { event: { organizationId } } });
   await tx.eventTask.deleteMany({ where: { event: { organizationId } } });
   await tx.clientPayment.deleteMany({ where: { organizationId } });
@@ -1313,12 +2227,25 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.quoteItem.deleteMany({ where: { quoteRequest: { organizationId } } });
   await tx.quoteRequest.deleteMany({ where: { organizationId } });
   await tx.lead.deleteMany({ where: { organizationId } });
+  await tx.expense.deleteMany({ where: { organizationId } });
+  await tx.treasuryMovement.deleteMany({ where: { organizationId } });
   await tx.supplierJob.deleteMany({ where: { organizationId } });
   await tx.event.deleteMany({ where: { organizationId } });
   await tx.supplier.deleteMany({ where: { organizationId } });
   await tx.client.deleteMany({ where: { organizationId } });
   await tx.inventoryItem.deleteMany({ where: { organizationId } });
   await tx.promoter.deleteMany({ where: { organizationId } });
+  await tx.treasuryAccount.deleteMany({ where: { organizationId } });
+  await tx.teamInvitation.deleteMany({ where: { organizationId } });
+  await tx.mailLog.deleteMany({ where: { organizationId } });
+  await tx.organizationLogo.deleteMany({ where: { organizationId } });
+  // Equipo simulado: la membresía primero y la cuenta después (no pertenecen a
+  // ninguna otra empresa, así que borrarlas no toca datos reales). La membresía
+  // del usuario demo no se toca: es la que habilita su sesión de solo lectura.
+  await tx.adminMembership.deleteMany({ where: { organizationId, adminUserId: { not: DEMO_USER_ID } } });
+  for (const collaborator of COLLABORATORS) {
+    await tx.adminUser.deleteMany({ where: { id: collaborator.id } });
+  }
   await tx.auditLog.deleteMany({ where: { organizationId } });
 }
 
@@ -1327,7 +2254,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
 type AuditRow = {
   id: string;
   actor: DemoAuditActor;
-  action: "create" | "update" | "delete" | "status" | "checkout" | "checkin" | "convert";
+  action: "create" | "update" | "delete" | "status" | "checkout" | "checkin" | "convert" | "remind" | "send";
   entity: string;
   entityId: string;
   summary: string;
@@ -1355,7 +2282,167 @@ function buildAuditTrail(organizationId: string, base: Date, context: AuditConte
   const moraClient = CLIENT_BY_ID.get(context.recentPast.clientId);
   const nextContact = clientContact(context.next.clientId);
   const thirdContact = clientContact(context.third.clientId);
+  const pendingBudgetTitle = `Alquiler de pantallas ${context.second.name}`;
+  const moraBudgetTitle = `Alquiler de pantallas ${context.recentPast.name}`;
   const rows: AuditRow[] = [
+    // Dinero y equipo (issues #27, #28, #30 y #31): cuentas de tesorería,
+    // movimientos, gastos, pagos esperados, correos e invitaciones.
+    {
+      id: "demo_audit_treasury_cash",
+      actor: sales,
+      action: "create",
+      entity: "TreasuryAccount",
+      entityId: "demo_treasury_cash",
+      summary: "Creó la cuenta de tesorería «Efectivo»",
+      days: -40,
+      hour: 9,
+      minute: 35,
+      detail: { fields: { name: "Efectivo", type: "CASH", currency: "PYG", openingBalance: 1_500_000 } },
+    },
+    {
+      id: "demo_audit_treasury_ueno",
+      actor: sales,
+      action: "create",
+      entity: "TreasuryAccount",
+      entityId: "demo_treasury_ueno",
+      summary: "Creó la cuenta de tesorería «Ueno Bank»",
+      days: -40,
+      hour: 9,
+      minute: 40,
+      detail: { fields: { name: "Ueno Bank", type: "BANK", bank: "Ueno Bank", openingBalance: 5_000_000 } },
+    },
+    {
+      id: "demo_audit_treasury_cheques",
+      actor: sales,
+      action: "create",
+      entity: "TreasuryAccount",
+      entityId: "demo_treasury_cheques",
+      summary: "Creó la cuenta de tesorería «Cheques a cobrar»",
+      days: -40,
+      hour: 9,
+      minute: 42,
+      detail: { fields: { name: "Cheques a cobrar", type: "CHEQUE", openingBalance: 0 } },
+    },
+    {
+      id: "demo_audit_treasury_transfer",
+      actor: sales,
+      action: "create",
+      entity: "TreasuryMovement",
+      entityId: "demo_tm_transfer_cheque",
+      summary: "Registró la transferencia de tesorería «Cheques a cobrar» → «Efectivo»",
+      days: -4,
+      hour: 11,
+      minute: 15,
+      detail: { fields: { direction: "TRANSFER", amount: 2_000_000, notes: "Cheque cobrado en efectivo: se acredita en caja." } },
+    },
+    {
+      id: "demo_audit_job_pago_grafica",
+      actor: sales,
+      action: "create",
+      entity: "TreasuryMovement",
+      entityId: "demo_tm_demo_job_grafica",
+      summary: "Pagó 1.200.000 Gs. al proveedor «Gráfica La Colmena» desde «Ueno Bank»",
+      days: -5,
+      hour: 15,
+      minute: 20,
+      detail: { fields: { direction: "OUT", amount: 1_200_000, origin: "supplier_job", jobId: "demo_job_grafica" } },
+    },
+    {
+      id: "demo_audit_expense_generador",
+      actor: ops,
+      action: "create",
+      entity: "Expense",
+      entityId: "demo_expense_generador",
+      summary: "Cargó el gasto «Alquiler de generador para el montaje» desde «Ueno Bank»",
+      days: -2,
+      hour: 9,
+      minute: 10,
+      detail: { fields: { amount: 1_500_000, category: "RENT", accountId: "demo_treasury_ueno", eventId: context.inProgress.id } },
+    },
+    {
+      id: "demo_audit_expense_cables",
+      actor: ops,
+      action: "create",
+      entity: "Expense",
+      entityId: "demo_expense_cables",
+      summary: "Cargó el gasto «Cables, fichas y conectores» desde «Efectivo»",
+      days: -2,
+      hour: 17,
+      minute: 5,
+      detail: { fields: { amount: 780_000, category: "MATERIALS", accountId: "demo_treasury_cash", eventId: null } },
+    },
+    {
+      id: "demo_audit_expense_asignado",
+      actor: ops,
+      action: "update",
+      entity: "Expense",
+      entityId: "demo_expense_combustible",
+      summary: "Editó el gasto «Combustible y peajes del traslado»",
+      days: -1,
+      hour: 12,
+      minute: 40,
+      detail: { changes: { eventId: { from: null, to: context.next.id } }, fields: { event: context.next.name } },
+    },
+    {
+      id: "demo_audit_expected_confirm",
+      actor: sales,
+      action: "status",
+      entity: "ExpectedPayment",
+      entityId: "demo_expected_aprobado_advance",
+      summary: `Confirmó el pago esperado «Anticipo» de «${nextClient?.company ?? ""}» en «Ueno Bank»`,
+      days: -5,
+      hour: 15,
+      minute: 32,
+      detail: { changes: { status: { from: "AWAITING", to: "CONFIRMED" } }, fields: { amount: 9_234_000, account: "Ueno Bank", paymentId: "demo_pay_aprobado" } },
+    },
+    {
+      id: "demo_audit_mail_budget",
+      actor: sales,
+      action: "send",
+      entity: "Budget",
+      entityId: "demo_budget_pendiente",
+      summary: `Envió por correo el presupuesto «${pendingBudgetTitle}» a «${CLIENT_BY_ID.get(context.second.clientId)?.company ?? ""}» (${clientContact(context.second.clientId).email})`,
+      days: -6,
+      hour: 9,
+      minute: 22,
+      detail: { fields: { category: "budget", status: "sent", portalCode: "D3M9-F3R4-A2PY-Q7SC-K4VT" } },
+    },
+    {
+      id: "demo_audit_reminder_mora",
+      actor: sales,
+      action: "remind",
+      entity: "ExpectedPayment",
+      entityId: "demo_expected_mora_cuota_1",
+      summary: `Envió el recordatorio de pago por email a «${moraClient?.company ?? ""}» (Cuota 1 · saldo del presupuesto «${moraBudgetTitle}»)`,
+      days: -2,
+      hour: 8,
+      minute: 5,
+      detail: { fields: { channel: "email", status: "sent", amount: 4_000_000, to: clientContact(context.recentPast.clientId).email } },
+    },
+    {
+      id: "demo_audit_invitation_sent",
+      actor: sales,
+      action: "create",
+      entity: "TeamInvitation",
+      entityId: "demo_invitation_pending",
+      summary: "Invitó a «rocio.benitez@ledbox.demo» a sumarse al equipo como Finance",
+      days: -1,
+      hour: 11,
+      minute: 15,
+      detail: { fields: { email: "rocio.benitez@ledbox.demo", role: "FINANCE", status: "sent" } },
+    },
+    {
+      id: "demo_audit_invitation_accepted",
+      actor: ops,
+      action: "status",
+      entity: "TeamInvitation",
+      entityId: "demo_invitation_accepted",
+      summary: "Aceptó la invitación y se sumó a «LedBox Demo» como Operations",
+      days: -21,
+      hour: 10,
+      minute: 30,
+      detail: { fields: { email: "marco.ferreira@ledbox.demo", role: "OPERATIONS", via: "password" } },
+    },
     // Casos difíciles (issue #24): disponibilidad, cheque rechazado, faltante y
     // atraso de proveedor, con el mismo formato de historial que las mutaciones
     // reales del panel (antes/después).
