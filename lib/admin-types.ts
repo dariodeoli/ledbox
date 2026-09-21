@@ -26,6 +26,8 @@ export type AdminIconName =
   | "search"
   | "plus"
   | "check"
+  | "edit"
+  | "arrow-right"
   | "alert"
   | "power"
   | "mail"
@@ -140,6 +142,7 @@ export type AdminPaymentRow = AdminPayment & { client: AdminClientRef; budget: {
 export type AdminSupplierJobRow = {
   id: string;
   description: string;
+  category: string;
   total: number;
   advance: number;
   status: string;
@@ -147,6 +150,8 @@ export type AdminSupplierJobRow = {
   deliveredAt: string | null;
   paidAt: string | null;
   paymentMethod: string | null;
+  receipt: string | null;
+  notes: string | null;
   supplier: { id: string; name: string; phone: string | null; category: string };
   event: AdminEventRef | null;
 };
@@ -161,7 +166,79 @@ export type AdminSupplierRow = {
   paymentTerms: string | null;
   notes: string | null;
   active: boolean;
+  _count?: { jobs: number };
 };
+
+/** Categorías del enum `SupplierCategory`: fuente única para los selectores del panel. */
+export const SUPPLIER_CATEGORIES = [
+  "CARPENTRY",
+  "GRAPHICS",
+  "ELECTRICITY",
+  "TRANSPORT",
+  "FURNITURE",
+  "AUDIOVISUAL",
+  "STAFF",
+  "OTHER",
+] as const;
+
+export type SupplierCategoryValue = (typeof SUPPLIER_CATEGORIES)[number];
+
+/** Estados del trabajo de proveedor (enum `SupplierWorkStatus`). */
+export const SUPPLIER_JOB_STATUSES = [
+  "PENDING",
+  "CONTRACTED",
+  "ADVANCE_PENDING",
+  "ADVANCE_PAID",
+  "IN_PRODUCTION",
+  "DELIVERED",
+  "BALANCE_PENDING",
+  "PAID",
+  "CANCELLED",
+] as const;
+
+export type SupplierJobStatus = (typeof SUPPLIER_JOB_STATUSES)[number];
+
+/**
+ * Máquina de estados del trabajo de proveedor (fuente única: la valida el API y la
+ * dibuja la UI). Solo se avanza a un estado siguiente válido; `CANCELLED` corta desde
+ * cualquier estado abierto y los terminales (`PAID`, `CANCELLED`) no se reabren.
+ * Reglas de montos que aplica el API: `ADVANCE_PENDING`/`ADVANCE_PAID` exigen
+ * anticipo > 0 y `BALANCE_PENDING` exige saldo > 0.
+ */
+export const SUPPLIER_JOB_TRANSITIONS: Record<SupplierJobStatus, readonly SupplierJobStatus[]> = {
+  PENDING: ["CONTRACTED", "CANCELLED"],
+  CONTRACTED: ["ADVANCE_PENDING", "ADVANCE_PAID", "IN_PRODUCTION", "CANCELLED"],
+  ADVANCE_PENDING: ["ADVANCE_PAID", "CONTRACTED", "CANCELLED"],
+  ADVANCE_PAID: ["IN_PRODUCTION", "CANCELLED"],
+  IN_PRODUCTION: ["DELIVERED", "CANCELLED"],
+  DELIVERED: ["BALANCE_PENDING", "PAID", "CANCELLED"],
+  BALANCE_PENDING: ["PAID", "CANCELLED"],
+  PAID: [],
+  CANCELLED: [],
+};
+
+export function supplierJobTransitions(status: string): readonly SupplierJobStatus[] {
+  return SUPPLIER_JOB_TRANSITIONS[status as SupplierJobStatus] ?? [];
+}
+
+/** Transiciones válidas para un trabajo concreto: aplica la máquina y las reglas de montos. */
+export function supplierJobNextStatuses(job: { total: number; advance: number; status: string }): readonly SupplierJobStatus[] {
+  return supplierJobTransitions(job.status).filter((next) => {
+    if (next === "ADVANCE_PENDING" || next === "ADVANCE_PAID") return job.advance > 0;
+    if (next === "BALANCE_PENDING") return job.total - job.advance > 0;
+    return true;
+  });
+}
+
+export function isSupplierJobOpen(status: string): boolean {
+  return status !== "PAID" && status !== "CANCELLED";
+}
+
+/** Saldo pendiente real de un trabajo: 0 si está pagado o cancelado; si no, total − anticipo. */
+export function supplierJobBalance(job: { total: number; advance: number; status: string }): number {
+  if (!isSupplierJobOpen(job.status)) return 0;
+  return Math.max(0, job.total - job.advance);
+}
 
 export type AdminInventoryRow = {
   id: string;
@@ -227,6 +304,7 @@ export type AdminApiResponse = {
   budgets?: AdminBudgetRow[];
   clientPayments?: AdminPaymentRow[];
   supplierJobs?: AdminSupplierJobRow[];
+  jobs?: AdminSupplierJobRow[];
   suppliers?: AdminSupplierRow[];
   inventory?: AdminInventoryRow[];
   promoters?: AdminPromoterRow[];
