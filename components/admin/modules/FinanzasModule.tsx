@@ -8,6 +8,9 @@ import {
   datePeriodLabel,
   datePeriodQuery,
   expenseCategoryLabel,
+  expectedPaymentConcept,
+  expectedPaymentStatusLabel,
+  expectedPaymentStatusTone,
   formatCountdown,
   formatDate,
   formatDateShort,
@@ -38,18 +41,22 @@ import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   collectedAmount,
   EXPENSE_CATEGORIES,
+  expectedPaymentNeedsAction,
   groupProofsByBudget,
   isCollectedPayment,
   PAYMENT_METHODS,
   supplierJobBalance,
   TREASURY_ACCOUNT_TYPES,
   type AdminBudgetPaymentProofRow,
+  type AdminExpectedPaymentRow,
+  type AdminExpectedPaymentSummary,
   type AdminExpenseRow,
   type AdminPaymentReminder,
   type AdminPaymentRow,
   type AdminReminderRun,
   type AdminSupplierJobRow,
   type AdminTreasuryAccountRow,
+  type AdminTreasuryAccountRef,
   type AdminTreasuryMovementRow,
   type AdminTreasurySummary,
 } from "@/lib/admin-types";
@@ -73,7 +80,7 @@ import {
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextField } from "../AdminFields";
+import { DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { BudgetProofDialog } from "./PresupuestosModule";
 
@@ -115,6 +122,15 @@ const EMPTY_TREASURY_SUMMARY: AdminTreasurySummary = {
   total: 0,
   accounts: 0,
   activeAccounts: 0,
+};
+
+/** Totales de pagos esperados (issue #28): vacío honesto mientras carga. */
+const EMPTY_EXPECTED_SUMMARY: AdminExpectedPaymentSummary = {
+  awaiting: { count: 0, total: 0 },
+  proof: { count: 0, total: 0 },
+  overdue: { count: 0, total: 0 },
+  confirmed: { count: 0, total: 0 },
+  pending: { count: 0, total: 0 },
 };
 
 /** Id del campo de monto de la carga rápida: vuelve el foco al guardar y seguir. */
@@ -477,6 +493,389 @@ function PaymentRemindersDialog({
   );
 }
 
+// ── Pagos esperados (issue #28) ─────────────────────────────────────────────
+// La cola «Por confirmar» y su trazabilidad. Confirmar registra el cobro y la
+// entrada en la cuenta elegida en una sola operación; observar deja el motivo
+// visible para el cliente en el portal.
+
+type ExpectedReviewSubmit =
+  | { kind: "confirm"; accountId: string; date: string; reference: string }
+  | { kind: "reject"; note: string };
+
+/**
+ * Diálogo de confirmación u observación de un pago esperado. Confirmar exige la
+ * cuenta de tesorería donde entró la plata (y permite la fecha real y la
+ * referencia); observar exige el motivo. Mismo contrato de diálogo del panel.
+ */
+function ExpectedReviewDialog({
+  row,
+  mode,
+  accounts,
+  busy,
+  error,
+  onViewProof,
+  onSubmit,
+  onClose,
+}: {
+  row: AdminExpectedPaymentRow;
+  mode: "confirm" | "reject";
+  accounts: AdminTreasuryAccountRow[];
+  busy: boolean;
+  error: string;
+  onViewProof: (() => void) | null;
+  onSubmit: (payload: ExpectedReviewSubmit) => void;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [accountId, setAccountId] = useState(
+    row.expectedAccount && accounts.some((account) => account.id === row.expectedAccount?.id)
+      ? row.expectedAccount.id
+      : accounts[0]?.id ?? "",
+  );
+  const [date, setDate] = useState(todayDayKey());
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const label = row.budget.client.company || row.budget.client.name;
+  const concept = expectedPaymentConcept(row);
+  const confirming = mode === "confirm";
+  const canSubmit = confirming ? Boolean(accountId) && !busy : note.trim().length > 0 && !busy;
+
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="admin-dialog admin-dialog--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${confirming ? "Confirmar" : "Observar"} ${concept} de ${label}`}
+      >
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">
+            {confirming ? "Confirmar en cuenta" : "Observar / rechazar"} · {concept}
+          </h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+
+        <dl className="admin-dialog-facts">
+          <div>
+            <dt>Cliente</dt>
+            <dd>{label}</dd>
+          </div>
+          <div>
+            <dt>Presupuesto</dt>
+            <dd>{row.budget.title}</dd>
+          </div>
+          <div>
+            <dt>Monto</dt>
+            <dd>{formatMoney(row.amount)}</dd>
+          </div>
+          <div>
+            <dt>Vencimiento</dt>
+            <dd>
+              {row.dueAt ? (
+                <>
+                  {formatDate(row.dueAt)}
+                  <AdminCountdown value={row.dueAt} className="admin-countdown--inline" title="Vencimiento del pago esperado" />
+                </>
+              ) : (
+                "Sin fecha"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Cuenta destino esperada</dt>
+            <dd>{row.expectedAccount?.name ?? "Sin cuenta asignada"}</dd>
+          </div>
+          <div>
+            <dt>Comprobante</dt>
+            <dd>
+              {row.proof ? (
+                onViewProof ? (
+                  <button type="button" className="admin-linkbtn" onClick={onViewProof}>
+                    Ver el comprobante ({formatDateTime(row.proof.createdAt)})
+                  </button>
+                ) : (
+                  `Recibido el ${formatDateTime(row.proof.createdAt)}`
+                )
+              ) : (
+                "Sin comprobante: confirmá solo si la plata está en la cuenta."
+              )}
+            </dd>
+          </div>
+          {row.payment?.id ? (
+            <div>
+              <dt>Cobro vinculado</dt>
+              <dd>
+                {paymentStatusLabel(row.payment.status)}
+                {row.payment.reference ? ` · ${row.payment.reference}` : ""}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+
+        {row.reviewNote ? (
+          <AdminNote>Observación anterior enviada al cliente: {row.reviewNote}</AdminNote>
+        ) : null}
+
+        {confirming ? (
+          <div className="admin-expected-form">
+            <SelectField
+              label="Cuenta de tesorería"
+              hint="Donde entró la plata: mueve el disponible"
+              value={accountId}
+              onChange={setAccountId}
+              options={
+                accounts.length > 0
+                  ? accounts.map((account) => ({
+                      value: account.id,
+                      label: `${account.name} · ${treasuryAccountTypeLabel(account.type)}`,
+                    }))
+                  : [{ value: "", label: "Sin cuentas de tesorería" }]
+              }
+            />
+            <DateField label="Fecha del cobro" value={date} onChange={setDate} />
+            <TextField
+              label="Referencia"
+              hint="Opcional: Nº de transferencia o recibo"
+              maxLength={120}
+              value={reference}
+              onChange={setReference}
+              placeholder="TRF-…"
+            />
+          </div>
+        ) : (
+          <TextAreaField
+            label="Motivo de la observación"
+            hint="El cliente lo ve en el portal y puede volver a subir el comprobante"
+            required
+            maxLength={1000}
+            rows={3}
+            value={note}
+            onChange={setNote}
+            placeholder="Ej.: el comprobante muestra un monto menor al de la cuota"
+          />
+        )}
+
+        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+
+        {confirming ? (
+          <p className="admin-dialog-text">
+            Confirmar crea el cobro <strong>{formatMoney(row.amount)}</strong> como cobrado y la entrada en la cuenta
+            elegida en la misma operación, y vincula el comprobante. Si el cobro ya existía, se cobra ese registro: no se
+            duplica.
+          </p>
+        ) : null}
+
+        <div className="admin-dialog-foot">
+          <AdminButton type="button" disabled={busy} onClick={onClose}>
+            Volver
+          </AdminButton>
+          <span className="admin-dialog-spacer" />
+          <AdminButton
+            variant="primary"
+            icon={confirming ? "check" : "alert"}
+            busy={busy}
+            disabled={!canSubmit || busy}
+            onClick={() =>
+              confirming
+                ? onSubmit({ kind: "confirm", accountId, date, reference: reference.trim() })
+                : onSubmit({ kind: "reject", note: note.trim() })
+            }
+          >
+            {confirming ? "Confirmar en cuenta" : "Enviar observación"}
+          </AdminButton>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+type TimelineStep = { key: string; when: string | null; title: string; detail: string | null; tone: string };
+
+/** Pasos reales de un pago esperado: plan → comprobante → observación → confirmación. */
+function expectedTimelineSteps(row: AdminExpectedPaymentRow): TimelineStep[] {
+  const steps: TimelineStep[] = [
+    {
+      key: `${row.id}:plan`,
+      when: row.createdAt,
+      title: "Pago esperado del plan",
+      detail: `${expectedPaymentConcept(row)} · ${formatMoney(row.amount)}${row.dueAt ? ` · vence el ${formatDate(row.dueAt)}` : ""}`,
+      tone: "neutral",
+    },
+  ];
+  if (row.proof) {
+    steps.push({
+      key: `${row.id}:proof`,
+      when: row.proof.createdAt,
+      title: "Comprobante recibido",
+      detail: `${row.proof.uploadedByName} subió el comprobante desde el portal`,
+      tone: "info",
+    });
+  }
+  if (row.reviewNote && row.reviewedAt) {
+    steps.push({
+      key: `${row.id}:review`,
+      when: row.reviewedAt,
+      title: "Observado por LedBox",
+      detail: `${row.reviewedByName ?? "El equipo"}: ${row.reviewNote}`,
+      tone: "warn",
+    });
+  }
+  if (row.status === "CONFIRMED" && row.confirmedAt) {
+    steps.push({
+      key: `${row.id}:confirmed`,
+      when: row.confirmedAt,
+      title: `Confirmado en «${row.expectedAccount?.name ?? "la cuenta"}»`,
+      detail: [
+        row.confirmedByName ? `por ${row.confirmedByName}` : null,
+        row.payment ? `cobro ${paymentStatusLabel(row.payment.status)}` : null,
+        row.payment?.reference ? `referencia ${row.payment.reference}` : null,
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(" · "),
+      tone: "ok",
+    });
+  }
+  if (row.status === "CANCELLED" && row.cancelledAt) {
+    steps.push({
+      key: `${row.id}:cancelled`,
+      when: row.cancelledAt,
+      title: "Cancelado",
+      detail: "El concepto salió del plan de pagos",
+      tone: "danger",
+    });
+  }
+  return steps;
+}
+
+/**
+ * Trazabilidad completa de un presupuesto (issue #28): aprobación → pagos
+ * esperados → comprobantes → confirmaciones en cuenta, con actor y fecha
+ * reales. Se pide el presupuesto entero (incluye lo ya confirmado y cancelado).
+ */
+function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [rows, setRows] = useState<AdminExpectedPaymentRow[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    let active = true;
+    void adminApiGet<{ expectedPayments?: AdminExpectedPaymentRow[] }>(
+      `/api/admin/finance/expected?budgetId=${encodeURIComponent(row.budget.id)}`,
+      { fallbackError: "No pudimos cargar la trazabilidad." },
+    ).then((result) => {
+      if (!active) return;
+      if (!result.ok) {
+        setError(result.error);
+        setRows([]);
+        return;
+      }
+      setRows(result.data.expectedPayments ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [row.budget.id]);
+
+  const budget = rows?.[0]?.budget ?? row.budget;
+  const label = budget.client.company || budget.client.name;
+
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Trazabilidad de ${budget.title}`}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">Trazabilidad · {budget.title}</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+
+        <p className="admin-dialog-text">
+          {label} · total {formatMoney(budget.total)} · {rows?.length ?? 0}{" "}
+          {(rows?.length ?? 0) === 1 ? "concepto" : "conceptos"} del plan
+        </p>
+
+        <ol className="admin-timeline">
+          <li className="admin-timeline-step" data-tone={budget.approvedAt ? "ok" : "neutral"}>
+            <span className="admin-timeline-when">{budget.approvedAt ? formatDateTime(budget.approvedAt) : "Sin aprobar"}</span>
+            <span className="admin-timeline-body">
+              <strong>Presupuesto aprobado</strong>
+              <small>
+                {[
+                  budget.approvedByName ? `por ${budget.approvedByName}` : null,
+                  budget.approvalMethod === "digital" ? "desde el portal del cliente" : budget.approvalMethod === "manual" ? "desde el panel" : null,
+                ]
+                  .filter((part): part is string => Boolean(part))
+                  .join(" · ") || "—"}
+              </small>
+            </span>
+          </li>
+          {(rows ?? []).map((expected) => (
+            <li className="admin-timeline-group" key={expected.id}>
+              <header className="admin-timeline-group-head">
+                <strong>{expectedPaymentConcept(expected)}</strong>
+                <span className="admin-num">{formatMoney(expected.amount)}</span>
+                <AdminBadge tone={expectedPaymentStatusTone(expected.status)}>{expectedPaymentStatusLabel(expected.status)}</AdminBadge>
+              </header>
+              <ol className="admin-timeline">
+                {expectedTimelineSteps(expected).map((step) => (
+                  <li className="admin-timeline-step" key={step.key} data-tone={step.tone}>
+                    <span className="admin-timeline-when">{step.when ? formatDateTime(step.when) : "—"}</span>
+                    <span className="admin-timeline-body">
+                      <strong>{step.title}</strong>
+                      {step.detail ? <small>{step.detail}</small> : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          ))}
+        </ol>
+
+        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+        {rows === null ? <p className="admin-dialog-text">Cargando la trazabilidad…</p> : null}
+
+        <div className="admin-dialog-foot">
+          <span className="admin-dialog-spacer" />
+          <AdminButton onClick={onClose}>Cerrar</AdminButton>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function FinanzasModule() {
   const { role } = useAdminSession();
   const finance = useAdminResource("/api/admin/finance", (payload) => ({
@@ -503,6 +902,19 @@ export function FinanzasModule() {
   // cobro pendiente, con "Marcar cobrado" a un clic.
   const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
   const [proofDialog, setProofDialog] = useState<AdminPaymentRow | null>(null);
+  /** Visor de comprobante abierto desde la cola de pagos esperados. */
+  const [expectedProof, setExpectedProof] = useState<{ row: AdminExpectedPaymentRow; proof: AdminBudgetPaymentProofRow } | null>(null);
+
+  // Pagos esperados (issue #28): cola "Por confirmar", confirmación en cuenta y
+  // trazabilidad del presupuesto.
+  const expected = useAdminResource("/api/admin/finance/expected", (payload) => ({
+    rows: payload.expectedPayments ?? [],
+    summary: payload.expectedSummary ?? EMPTY_EXPECTED_SUMMARY,
+  }));
+  const [expectedReview, setExpectedReview] = useState<{ row: AdminExpectedPaymentRow; mode: "confirm" | "reject" } | null>(null);
+  const [expectedTimeline, setExpectedTimeline] = useState<AdminExpectedPaymentRow | null>(null);
+  const [expectedBusy, setExpectedBusy] = useState(false);
+  const [expectedError, setExpectedError] = useState("");
 
   // ── Tesorería y gastos (issue #27) ────────────────────────────────────────
   // El período es uno solo para los movimientos y los gastos; las cuentas se
@@ -677,6 +1089,27 @@ export function FinanzasModule() {
     [jobs, query],
   );
 
+  // ── Pagos esperados (issue #28) ───────────────────────────────────────────
+  const expectedRows = useMemo(() => expected.data?.rows ?? [], [expected.data]);
+  const expectedSummary = expected.data?.summary ?? EMPTY_EXPECTED_SUMMARY;
+  /** Cola "Por confirmar": comprobantes en revisión + vencidos sin comprobante. */
+  const expectedQueue = useMemo(
+    () =>
+      expectedRows
+        .filter((row) => expectedPaymentNeedsAction(row))
+        .filter((row) =>
+          matchesQuery(query, [
+            row.budget.client.company,
+            row.budget.client.name,
+            row.budget.title,
+            row.label,
+            row.expectedAccount?.name,
+          ]),
+        )
+        .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
+    [expectedRows, query],
+  );
+
   const totals = useMemo(() => {
     const collected = collectedAmount(payments);
     const collectedCount = payments.filter(isCollectedPayment).length;
@@ -689,17 +1122,20 @@ export function FinanzasModule() {
   }, [payments, jobs]);
 
   // Comprobantes del portal (issue #17): una sola consulta de metadatos por
-  // carga de finanzas; el visor filtra por el presupuesto del cobro.
+  // carga de finanzas; el visor filtra por el presupuesto del cobro o del pago
+  // esperado. La firma suma los presupuestos de la cola "Por confirmar" (issue
+  // #28) para que el comprobante esté a la vista sin otra consulta.
   const proofSignature = useMemo(
     () =>
       [
-        ...new Set(
-          payments
+        ...new Set([
+          ...payments
             .map((payment) => payment.budget?.id)
             .filter((id): id is string => Boolean(id)),
-        ),
+          ...(expected.data?.rows ?? []).map((row) => row.budget.id),
+        ]),
       ].join(","),
-    [payments],
+    [payments, expected.data],
   );
   useEffect(() => {
     if (!proofSignature) {
@@ -938,6 +1374,82 @@ export function FinanzasModule() {
   async function collectFromProofDialog(payment: AdminPaymentRow) {
     await closeCollection(payment, "collect");
     setProofDialog(null);
+  }
+
+  // ── Confirmación y observación de pagos esperados (issue #28) ─────────────
+
+  /** Comprobante vinculado al pago esperado, con los metadatos ya cargados. */
+  function expectedProofOf(row: AdminExpectedPaymentRow): AdminBudgetPaymentProofRow | null {
+    if (!row.proof) return null;
+    return (proofsByBudget[row.budget.id] ?? []).find((proof) => proof.id === row.proof?.id) ?? null;
+  }
+
+  /**
+   * Confirma el pago esperado en la cuenta elegida (el API crea el cobro
+   * RECEIVED y el movimiento en una sola transacción) u observa con un motivo
+   * que el cliente ve en el portal. Idempotente: reintentar no duplica.
+   */
+  async function submitExpectedReview(payload: ExpectedReviewSubmit) {
+    if (!expectedReview) return;
+    const row = expectedReview.row;
+    const label = row.budget.client.company || row.budget.client.name;
+    const concept = expectedPaymentConcept(row);
+    setExpectedBusy(true);
+    setExpectedError("");
+    setNotice(null);
+
+    let failure = "";
+    let alreadyConfirmed = false;
+    let movementSkipped = false;
+    if (payload.kind === "confirm") {
+      const result = await adminSend<{ alreadyConfirmed?: boolean; movementCreated?: boolean }>(
+        "/api/admin/finance/expected",
+        {
+          kind: "confirm",
+          expectedPaymentId: row.id,
+          accountId: payload.accountId || undefined,
+          date: payload.date || undefined,
+          reference: payload.reference || undefined,
+        },
+      );
+      if (!result.ok) failure = result.error;
+      else {
+        alreadyConfirmed = Boolean(result.data.alreadyConfirmed);
+        movementSkipped = result.data.movementCreated === false;
+      }
+    } else {
+      const result = await adminSend<{ expectedPayment?: AdminExpectedPaymentRow }>("/api/admin/finance/expected", {
+        kind: "reject",
+        expectedPaymentId: row.id,
+        note: payload.note,
+      });
+      if (!result.ok) failure = result.error;
+    }
+
+    setExpectedBusy(false);
+    if (failure) {
+      setExpectedError(failure);
+      return;
+    }
+    setExpectedReview(null);
+    if (payload.kind === "confirm") {
+      const accountName = accounts.find((account) => account.id === payload.accountId)?.name ?? "la cuenta";
+      setNotice({
+        tone: "ok",
+        text: alreadyConfirmed
+          ? `«${concept}» de ${label} ya estaba confirmado: no se duplicó nada.`
+          : `«${concept}» de ${label} confirmado en «${accountName}»${
+              movementSkipped
+                ? ": el cobro ya estaba registrado y no se duplicó el movimiento."
+                : ": el cobro quedó cobrado y el disponible subió."
+            }`,
+      });
+    } else {
+      setNotice({ tone: "ok", text: `Observación enviada a ${label}: el motivo se ve en el portal.` });
+    }
+    expected.reload();
+    finance.reload();
+    treasury.reload();
   }
 
   // ── Tesorería (issue #27) ─────────────────────────────────────────────────
@@ -1221,6 +1733,16 @@ export function FinanzasModule() {
           note={pendingMeta}
           tone={totals.overdue > 0 ? "danger" : totals.pendingCount > 0 ? "warn" : undefined}
         />
+        <AdminKpi
+          label="Por confirmar"
+          value={formatMoney(expectedSummary.pending.total)}
+          note={
+            expectedSummary.pending.count > 0
+              ? `${formatNumber(expectedSummary.proof.count)} con comprobante${expectedSummary.overdue.count > 0 ? ` · ${formatNumber(expectedSummary.overdue.count)} vencidos` : ""}`
+              : "pagos esperados con comprobante o vencidos"
+          }
+          tone={expectedSummary.overdue.count > 0 ? "danger" : expectedSummary.proof.count > 0 ? "warn" : undefined}
+        />
         <AdminKpi label="Anticipos pagados" value={formatMoney(totals.advances)} note="a proveedores" />
         <AdminKpi
           label="Saldo por pagar"
@@ -1418,6 +1940,155 @@ export function FinanzasModule() {
           )}
         </AdminFormPanel>
       ) : null}
+
+      <AdminPanel
+        title="Por confirmar"
+        meta={
+          expectedSummary.pending.count > 0
+            ? `${formatNumber(expectedSummary.pending.count)} ${expectedSummary.pending.count === 1 ? "pago esperado" : "pagos esperados"} · ${formatMoney(expectedSummary.pending.total)}`
+            : undefined
+        }
+      >
+        <p className="admin-note admin-expected-note">
+          <AdminIcon name="info" size={14} />
+          <span>
+            Los pagos esperados <strong>no</strong> cuentan como cobrados: el cliente transfiere y sube el comprobante
+            (queda <em>en revisión</em>) o el pago se atrasa (<em>vencido</em>). Al confirmar en una cuenta de tesorería se
+            registra el cobro y la entrada, y recién ahí sube el disponible.{" "}
+            {expectedSummary.awaiting.count > 0 ? (
+              <>
+                Además hay {formatNumber(expectedSummary.awaiting.count)} concepto(s) del plan esperando su fecha por{" "}
+                {formatMoney(expectedSummary.awaiting.total)}.
+              </>
+            ) : null}
+          </span>
+        </p>
+        <AdminDataState
+          loading={expected.loading}
+          error={expected.error}
+          onRetry={expected.reload}
+          empty={expectedQueue.length === 0}
+          emptyTitle={expectedRows.length === 0 ? "Sin pagos esperados" : "Nada por confirmar"}
+          emptyHint={
+            expectedRows.length === 0
+              ? "Al aprobar un presupuesto con plan de pagos se generan acá el anticipo, las cuotas y el saldo."
+              : "No hay comprobantes en revisión ni pagos vencidos sin comprobante: el plan está al día."
+          }
+          rows={3}
+        >
+          <AdminTable
+            view="por-confirmar"
+            label="Pagos esperados por confirmar"
+            columns={[
+              { label: "Cliente" },
+              { label: "Concepto" },
+              { label: "Vence" },
+              { label: "Cuenta" },
+              { label: "Comprobante" },
+              { label: "Estado" },
+              { label: "Monto", end: true },
+              { label: "Acciones", end: true },
+            ]}
+          >
+            {expectedQueue.map((row) => {
+              const label = row.budget.client.company || row.budget.client.name;
+              const concept = expectedPaymentConcept(row);
+              const overdue = row.status === "AWAITING";
+              const proof = expectedProofOf(row);
+              return (
+                <AdminRow key={row.id}>
+                  <AdminCell title={`${label} · ${row.budget.title} · presupuesto ${row.budget.id.slice(0, 8)}`}>
+                    <strong>{label}</strong>
+                    <small className="admin-cell-sub"> · {row.budget.title}</small>
+                  </AdminCell>
+                  <AdminCell title={`${concept}${row.dueAt ? ` · vence el ${formatDate(row.dueAt)}` : ""}`}>
+                    {concept}
+                  </AdminCell>
+                  <AdminCell
+                    title={row.dueAt ? `Vence el ${formatDate(row.dueAt)} · ${formatCountdown(row.dueAt)}` : "Sin fecha de vencimiento"}
+                  >
+                    <span className="admin-nowrap">{row.dueAt ? formatDateShort(row.dueAt) : "—"}</span>
+                    {row.dueAt ? (
+                      <AdminCountdown value={row.dueAt} className="admin-countdown--inline" title={`Cuánto falta: ${concept} de ${label}`} />
+                    ) : null}
+                  </AdminCell>
+                  <AdminCell
+                    title={
+                      row.expectedAccount
+                        ? `Cuenta esperada: ${row.expectedAccount.name} (se puede cambiar al confirmar)`
+                        : "Sin cuenta destino: elegí la cuenta al confirmar"
+                    }
+                  >
+                    {row.expectedAccount?.name ?? <span className="admin-muted">—</span>}
+                  </AdminCell>
+                  <AdminCell end>
+                    {row.proof ? (
+                      <AdminButton
+                        icon="eye"
+                        title={`Ver el comprobante de ${label} (${concept})`}
+                        aria-label={`Ver el comprobante de ${label} (${concept})`}
+                        onClick={() => proof && setExpectedProof({ row, proof })}
+                      />
+                    ) : (
+                      <span className="admin-muted">Sin comprobante</span>
+                    )}
+                  </AdminCell>
+                  <AdminCell>
+                    {overdue ? (
+                      <AdminBadge tone="danger" title="Vencido sin comprobante: reclamá la transferencia">
+                        Vencido
+                      </AdminBadge>
+                    ) : (
+                      <AdminBadge tone={expectedPaymentStatusTone(row.status)} title={expectedPaymentStatusLabel(row.status)}>
+                        En revisión
+                      </AdminBadge>
+                    )}
+                  </AdminCell>
+                  <AdminCell end title={`Monto ${formatMoney(row.amount)}`}>
+                    <strong>{formatMoney(row.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell end>
+                    <span className="admin-actions">
+                      <AdminButton
+                        icon="clock"
+                        title={`Ver la trazabilidad del presupuesto «${row.budget.title}»`}
+                        aria-label={`Ver la trazabilidad del presupuesto «${row.budget.title}»`}
+                        onClick={() => setExpectedTimeline(row)}
+                      />
+                      {writable ? (
+                        <AdminButton
+                          icon="alert"
+                          disabled={Boolean(expectedBusy)}
+                          title={`Observar / rechazar: ${concept} de ${label}`}
+                          aria-label={`Observar / rechazar: ${concept} de ${label}`}
+                          onClick={() => {
+                            setExpectedError("");
+                            setExpectedReview({ row, mode: "reject" });
+                          }}
+                        />
+                      ) : null}
+                      {writable ? (
+                        <AdminButton
+                          variant="primary"
+                          disabled={Boolean(expectedBusy)}
+                          title={`Confirmar en cuenta: ${concept} de ${label} (${formatMoney(row.amount)})`}
+                          aria-label={`Confirmar en cuenta: ${concept} de ${label}`}
+                          onClick={() => {
+                            setExpectedError("");
+                            setExpectedReview({ row, mode: "confirm" });
+                          }}
+                        >
+                          Confirmar
+                        </AdminButton>
+                      ) : null}
+                    </span>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+        </AdminDataState>
+      </AdminPanel>
 
       <AdminPanel
         title="Tesorería"
@@ -2443,6 +3114,47 @@ export function FinanzasModule() {
           onClose={() => setProofDialog(null)}
           onCollect={writable ? () => void collectFromProofDialog(proofDialog) : undefined}
           collectBusy={busyId === `collect:${proofDialog.id}`}
+        />
+      ) : null}
+
+      {expectedReview ? (
+        <ExpectedReviewDialog
+          row={expectedReview.row}
+          mode={expectedReview.mode}
+          accounts={activeAccounts}
+          busy={expectedBusy}
+          error={expectedError}
+          onViewProof={
+            expectedProofOf(expectedReview.row)
+              ? () => {
+                  const linked = expectedProofOf(expectedReview.row);
+                  if (linked) setExpectedProof({ row: expectedReview.row, proof: linked });
+                }
+              : null
+          }
+          onSubmit={(payload) => void submitExpectedReview(payload)}
+          onClose={() => {
+            setExpectedReview(null);
+            setExpectedError("");
+          }}
+        />
+      ) : null}
+
+      {expectedTimeline ? (
+        <ExpectedTimelineDialog row={expectedTimeline} onClose={() => setExpectedTimeline(null)} />
+      ) : null}
+
+      {expectedProof ? (
+        <BudgetProofDialog
+          title={`Comprobante · ${expectedPaymentConcept(expectedProof.row)}`}
+          subtitle={[
+            expectedProof.row.budget.title,
+            expectedProof.row.budget.client.company || expectedProof.row.budget.client.name,
+            formatMoney(expectedProof.row.amount),
+            `subido por ${expectedProof.proof.uploadedByName}`,
+          ].join(" · ")}
+          proofs={[expectedProof.proof]}
+          onClose={() => setExpectedProof(null)}
         />
       ) : null}
     </div>
