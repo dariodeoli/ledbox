@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   budgetApprovalLabel,
   budgetApprovalMethodLabel,
   budgetApprovalTone,
+  budgetChangeKindLabel,
+  budgetChangeStatusLabel,
+  budgetChangeStatusTone,
   budgetStatusLabel,
   formatDate,
   formatDateTime,
@@ -13,16 +16,102 @@ import {
   formatNumber,
   statusTone,
 } from "@/lib/admin-format";
-import type { PortalBudget } from "@/lib/server/budget-portal";
+import { bankMark } from "@/lib/bank-mark";
+import type { PortalBudget, PortalBudgetRequest } from "@/lib/server/budget-portal";
 
 /**
- * Vista pública del presupuesto (issue #12): detalle, totales, condiciones y
- * las dos acciones del cliente —aprobar con nombre + consentimiento, o pedir
- * cambios con un comentario—. Sin login: el código del link es la credencial.
+ * Vista pública del presupuesto (issue #12) con autogestión del cliente
+ * (issue #14): el cliente ajusta cantidades y días con el precio unitario fijo
+ * y ve el total en vivo, pide una rebaja, sigue el estado de sus solicitudes y,
+ * una vez aprobado, ve el monto a transferir con los datos de pago de la empresa.
  *
- * La aprobación es única: si ya está aprobado, el bloque de acciones no se
- * dibuja y solo se muestra la evidencia registrada.
+ * Nada se aplica solo: las propuestas quedan pendientes y el equipo las acepta
+ * o rechaza desde el panel. La aprobación sigue siendo única y con evidencia.
  */
+
+type DraftItem = { quantity: number; days: number };
+
+const MAX_QUANTITY = 999;
+const MAX_DAYS = 365;
+const MAX_NOTE = 600;
+
+function clampInt(value: string, max: number): number {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return 1;
+  return Math.min(max, Math.max(1, Number(digits)));
+}
+
+/** Fecha corta de una clave `YYYY-MM-DD` o de un ISO, sin corrimiento de zona. */
+function dueLabel(dueAt: string | null): string {
+  if (!dueAt) return "Sin fecha";
+  return formatDate(/^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? `${dueAt}T12:00:00.000Z` : dueAt);
+}
+
+/** Resumen legible de lo que pidió el cliente en una solicitud (sin repetir el motivo). */
+function requestSummary(request: PortalBudgetRequest): string | null {
+  if (request.kind === "items") {
+    if (request.items.length === 0) return "Propuesta de ítems";
+    return request.items
+      .map((item) =>
+        item.quantity === item.previousQuantity && item.days === item.previousDays
+          ? `${item.name} sin cambios`
+          : `${item.name}: ${formatNumber(item.previousQuantity)} × ${formatNumber(item.previousDays)} d → ${formatNumber(item.quantity)} × ${formatNumber(item.days)} d`,
+      )
+      .join(" · ");
+  }
+  if (request.kind === "discount" && request.discount) {
+    const asked = request.discount.type === "percent" ? `${request.discount.value} %` : formatMoney(request.discount.value);
+    return `Rebaja pedida: ${asked} (${formatMoney(request.discount.amount)}) · descuento actual ${formatMoney(request.discount.previousAmount)}`;
+  }
+  // El pedido de cambios libre ya se lee en el motivo: no se repite como resumen.
+  return null;
+}
+
+function Stepper({
+  value,
+  max,
+  label,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  label: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <span className="portal-stepper">
+      <button
+        type="button"
+        className="portal-step"
+        onClick={() => onChange(Math.max(1, value - 1))}
+        disabled={value <= 1}
+        aria-label={`Restar uno a ${label}`}
+        title={`Restar uno a ${label}`}
+      >
+        −
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={String(value)}
+        onChange={(event) => onChange(clampInt(event.target.value, max))}
+        aria-label={`${label} (1 a ${max})`}
+      />
+      <button
+        type="button"
+        className="portal-step"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+        aria-label={`Sumar uno a ${label}`}
+        title={`Sumar uno a ${label}`}
+      >
+        +
+      </button>
+    </span>
+  );
+}
+
 export function PortalBudgetView({ budget, token }: { budget: PortalBudget; token: string }) {
   const router = useRouter();
 
@@ -39,8 +128,27 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
   const [requesting, setRequesting] = useState(false);
   const [justRequested, setJustRequested] = useState<null | { at: string; note: string }>(null);
 
+  // Autogestión (issue #14): borrador de ítems, rebaja y datos de contacto.
+  const [draft, setDraft] = useState<Record<string, DraftItem>>(() =>
+    Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])),
+  );
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [itemsNote, setItemsNote] = useState("");
+  const [itemsError, setItemsError] = useState("");
+  const [itemsSending, setItemsSending] = useState(false);
+  const [itemsSent, setItemsSent] = useState(false);
+  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountNote, setDiscountNote] = useState("");
+  const [discountError, setDiscountError] = useState("");
+  const [discountSending, setDiscountSending] = useState(false);
+  const [discountSent, setDiscountSent] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const approvedRef = useRef<HTMLElement | null>(null);
   const revisionRef = useRef<HTMLElement | null>(null);
+  const proposalRef = useRef<HTMLElement | null>(null);
 
   const approved = Boolean(budget.approval.approvedAt) || Boolean(justApproved);
   const revisionPending = !approved && (Boolean(budget.approval.revisionRequestedAt) || Boolean(justRequested));
@@ -53,6 +161,16 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
   useEffect(() => {
     if (justRequested) revisionRef.current?.focus();
   }, [justRequested]);
+  useEffect(() => {
+    if (itemsSent) proposalRef.current?.focus();
+  }, [itemsSent]);
+
+  // El borrador sigue los ítems reales: cuando el equipo aplica la propuesta,
+  // el portal se refresca y los valores de partida son los nuevos.
+  const itemsSignature = budget.items.map((item) => `${item.id}:${item.quantity}:${item.days}`).join("|");
+  useEffect(() => {
+    setDraft(Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])));
+  }, [itemsSignature]); // eslint-disable-line react-hooks/exhaustive-deps -- el borrador solo depende de la firma de los ítems
 
   const approvedAt = budget.approval.approvedAt ?? (justApproved ? new Date().toISOString() : null);
   const approvedByName = budget.approval.approvedByName ?? (justApproved ? name.trim() : null);
@@ -66,6 +184,29 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
     : revisionPending
       ? "CAMBIOS_SOLICITADOS"
       : "PENDIENTE";
+
+  const itemsChanged = useMemo(
+    () =>
+      budget.items.some((item) => {
+        const current = draft[item.id];
+        return Boolean(current) && (current.quantity !== item.quantity || current.days !== item.days);
+      }),
+    [budget.items, draft],
+  );
+
+  const proposedSubtotal = useMemo(
+    () =>
+      budget.items.reduce((sum, item) => {
+        const current = draft[item.id] ?? { quantity: item.quantity, days: item.days };
+        return sum + item.unitPrice * current.quantity * current.days;
+      }, 0),
+    [budget.items, draft],
+  );
+  const proposedTotal = Math.max(0, proposedSubtotal - budget.discount);
+
+  const pendingRequests = budget.requests.filter((request) => request.status === "pending");
+  const paymentPlan = budget.paymentPlan;
+  const mark = bankMark(budget.paymentDetails?.bank);
 
   async function approve(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,6 +269,105 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
     }
   }
 
+  function updateDraft(id: string, patch: Partial<DraftItem>) {
+    setDraft((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+    setItemsSent(false);
+  }
+
+  async function sendProposal(kind: "items" | "discount", event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const isItems = kind === "items";
+    const setError = isItems ? setItemsError : setDiscountError;
+    const note = isItems ? itemsNote : discountNote;
+    const setSending = isItems ? setItemsSending : setDiscountSending;
+    setError("");
+    if (contactName.trim().length < 3) {
+      setError("Ingresá tu nombre y apellido.");
+      return;
+    }
+    if (!note.trim()) {
+      setError("Contanos el motivo de tu pedido.");
+      return;
+    }
+
+    let body: Record<string, unknown> = {
+      kind,
+      name: contactName.trim(),
+      email: contactEmail.trim() || undefined,
+      note: note.trim(),
+    };
+    if (isItems) {
+      if (!itemsChanged) {
+        setError("Cambiá alguna cantidad o días antes de enviar la propuesta.");
+        return;
+      }
+      body = {
+        ...body,
+        items: budget.items.map((item) => ({
+          id: item.id,
+          quantity: draft[item.id]?.quantity ?? item.quantity,
+          days: draft[item.id]?.days ?? item.days,
+        })),
+      };
+    } else {
+      const raw = discountType === "percent" ? discountValue.replace(",", ".").trim() : discountValue.replace(/\D/g, "");
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value <= 0) {
+        setError(discountType === "percent" ? "Ingresá un porcentaje mayor a cero." : "Ingresá un monto mayor a cero.");
+        return;
+      }
+      body = { ...body, discount: { type: discountType, value } };
+    }
+
+    setSending(true);
+    try {
+      const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/propose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setError(payload?.error || "No pudimos enviar tu solicitud. Probá de nuevo.");
+        return;
+      }
+      if (isItems) {
+        setItemsSent(true);
+        setItemsNote("");
+      } else {
+        setDiscountSent(true);
+        setDiscountNote("");
+        setDiscountValue("");
+      }
+      router.refresh();
+    } catch {
+      setError("No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function copyPaymentDetails() {
+    if (!budget.paymentDetails) return;
+    const details = budget.paymentDetails;
+    const lines = [
+      `Banco: ${details.bank ?? "—"}`,
+      details.holder ? `Titular: ${details.holder}` : null,
+      details.ruc ? `RUC: ${details.ruc}` : null,
+      details.account ? `Cuenta: ${details.account}` : null,
+      details.alias ? `Alias: ${details.alias}` : null,
+      paymentPlan.dueNow ? `Monto a transferir ahora: ${formatMoney(paymentPlan.dueNow.amount)}` : null,
+      `Presupuesto Nº ${budget.reference}`,
+    ].filter((line): line is string => Boolean(line));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <article className="portal-budget">
       <header className="portal-budget-head">
@@ -147,6 +387,11 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
           <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
             {budgetApprovalLabel(approvalState)}
           </span>
+          {pendingRequests.length > 0 ? (
+            <span className="portal-chip" data-tone="warn">
+              {formatNumber(pendingRequests.length)} {pendingRequests.length === 1 ? "solicitud pendiente" : "solicitudes pendientes"}
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -182,10 +427,151 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
             Pediste cambios
           </h2>
           <p>
-            Recibimos tu comentario{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox actualiza el
-            presupuesto y te avisa; mientras tanto podés aprobarlo con el detalle actual.
+            Recibimos tu comentario{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox lo revisa y
+            te responde; mientras tanto podés aprobar el presupuesto con el detalle actual o proponer los ajustes con el
+            editor.
           </p>
           {revisionText ? <blockquote className="portal-banner-quote">{revisionText}</blockquote> : null}
+        </section>
+      ) : null}
+
+      {approved && paymentPlan.dueNow ? (
+        <section className="portal-card portal-card--pay" aria-labelledby="portal-pay">
+          <h2 className="portal-card-title" id="portal-pay">
+            Pago
+          </h2>
+          <div className="portal-pay-now">
+            <div>
+              <span className="portal-pay-label">{paymentPlan.dueNow.label}</span>
+              <strong className="portal-pay-amount portal-num">{formatMoney(paymentPlan.dueNow.amount)}</strong>
+            </div>
+            <span className="portal-pay-total portal-num">Total del presupuesto: {formatMoney(budget.total)}</span>
+          </div>
+
+          {budget.paymentDetails ? (
+            <div className="portal-pay-grid">
+              <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
+                {mark?.asset ? (
+                  <img className="portal-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
+                ) : (
+                  <span className="portal-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
+                    {mark?.initials ?? "B"}
+                  </span>
+                )}
+                <span className="portal-bank-name">{mark?.label ?? "Datos de pago"}</span>
+              </div>
+              <dl className="portal-facts portal-facts--pay">
+                <div>
+                  <dt>Titular</dt>
+                  <dd>{budget.paymentDetails.holder || "—"}</dd>
+                </div>
+                <div>
+                  <dt>RUC</dt>
+                  <dd>{budget.paymentDetails.ruc || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Cuenta</dt>
+                  <dd>{budget.paymentDetails.account || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Alias</dt>
+                  <dd>{budget.paymentDetails.alias || "—"}</dd>
+                </div>
+              </dl>
+              <button type="button" className="portal-btn" onClick={() => void copyPaymentDetails()}>
+                {copied ? "Datos copiados" : "Copiar datos de pago"}
+              </button>
+              <p className="portal-help" aria-live="polite">
+                {copied
+                  ? "Los datos quedaron en el portapapeles para pegarlos donde los necesites."
+                  : "Transferí el monto indicado y enviá el comprobante al equipo de LedBox."}
+              </p>
+            </div>
+          ) : (
+            <p className="portal-help">
+              El equipo de LedBox todavía no cargó los datos bancarios de esta empresa. Escribinos y te los pasamos para
+              completar el pago.
+            </p>
+          )}
+
+          {paymentPlan.installments.length > 0 || paymentPlan.terms ? (
+            <div className="portal-pay-plan">
+              {paymentPlan.installments.length > 0 ? (
+                <div className="portal-table-wrap">
+                  <table className="portal-table portal-table--plan">
+                    <caption className="portal-table-caption">Plan de pagos</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Cuota</th>
+                        <th scope="col" className="portal-num">
+                          Monto
+                        </th>
+                        <th scope="col">Vencimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentPlan.advanceAmount > 0 ? (
+                        <tr>
+                          <td>Anticipo (a transferir ahora)</td>
+                          <td className="portal-num">{formatMoney(paymentPlan.advanceAmount)}</td>
+                          <td>Con la aprobación</td>
+                        </tr>
+                      ) : null}
+                      {paymentPlan.installments.map((installment, index) => (
+                        <tr key={`${installment.label}-${index}`}>
+                          <td>
+                            {installment.label}
+                            {paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
+                          </td>
+                          <td className="portal-num">{formatMoney(installment.amount)}</td>
+                          <td>{dueLabel(installment.dueAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {paymentPlan.pending > 0 ? (
+                <p className="portal-help">
+                  Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
+                </p>
+              ) : null}
+              {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {budget.requests.length > 0 ? (
+        <section className="portal-card" aria-labelledby="portal-requests">
+          <h2 className="portal-card-title" id="portal-requests">
+            Tus solicitudes
+          </h2>
+          <ul className="portal-requests">
+            {budget.requests.map((request) => (
+              <li key={request.id} className="portal-request" data-status={request.status}>
+                <div className="portal-request-head">
+                  <span className="portal-chip" data-tone={budgetChangeStatusTone(request.status)}>
+                    {budgetChangeStatusLabel(request.status)}
+                  </span>
+                  <strong className="portal-request-kind">{budgetChangeKindLabel(request.kind)}</strong>
+                  <span className="portal-request-when">{formatDateTime(request.createdAt)}</span>
+                </div>
+                {requestSummary(request) ? <p className="portal-request-summary">{requestSummary(request)}</p> : null}
+                {request.note ? <p className="portal-request-note">Motivo: {request.note}</p> : null}
+                {request.status !== "pending" && request.responseNote ? (
+                  <p className="portal-request-response">
+                    Respuesta del equipo{request.resolvedByName ? ` (${request.resolvedByName})` : ""}
+                    {request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}: {request.responseNote}
+                  </p>
+                ) : request.status === "accepted" ? (
+                  <p className="portal-request-response">
+                    El equipo aplicó tu pedido{request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}.
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
@@ -249,6 +635,251 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
           </div>
         </div>
       </section>
+
+      {!approved && budget.items.length > 0 ? (
+        <section className="portal-card portal-card--action" aria-labelledby="portal-editor" ref={proposalRef} tabIndex={-1}>
+          <h2 className="portal-card-title" id="portal-editor">
+            Ajustá tu presupuesto
+          </h2>
+          <p className="portal-card-lead">
+            Cambiá cantidades y días: el precio unitario queda fijo. Vas a ver el total en vivo y podés enviarnos tu
+            propuesta para que la revise el equipo.
+          </p>
+
+          <div className="portal-table-wrap">
+            <table className="portal-table portal-table--editor">
+              <thead>
+                <tr>
+                  <th scope="col">Producto / servicio</th>
+                  <th scope="col" className="portal-num">
+                    Cantidad
+                  </th>
+                  <th scope="col" className="portal-num">
+                    Días
+                  </th>
+                  <th scope="col" className="portal-num">
+                    Precio unitario
+                  </th>
+                  <th scope="col" className="portal-num">
+                    Subtotal
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {budget.items.map((item) => {
+                  const current = draft[item.id] ?? { quantity: item.quantity, days: item.days };
+                  const changed = current.quantity !== item.quantity || current.days !== item.days;
+                  return (
+                    <tr key={item.id} data-changed={changed ? "true" : undefined}>
+                      <td>
+                        {item.name}
+                        {changed ? (
+                          <small className="portal-item-note">
+                            Antes: {formatNumber(item.quantity)} × {formatNumber(item.days)} d
+                          </small>
+                        ) : null}
+                      </td>
+                      <td className="portal-num">
+                        <Stepper
+                          value={current.quantity}
+                          max={MAX_QUANTITY}
+                          label={`Cantidad de ${item.name}`}
+                          onChange={(quantity) => updateDraft(item.id, { quantity })}
+                        />
+                      </td>
+                      <td className="portal-num">
+                        <Stepper
+                          value={current.days}
+                          max={MAX_DAYS}
+                          label={`Días de ${item.name}`}
+                          onChange={(days) => updateDraft(item.id, { days })}
+                        />
+                      </td>
+                      <td className="portal-num">{formatMoney(item.unitPrice)}</td>
+                      <td className="portal-num">
+                        <strong>{formatMoney(item.unitPrice * current.quantity * current.days)}</strong>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="portal-totals">
+            <div className="portal-total-row">
+              <span>Subtotal propuesto</span>
+              <span className="portal-num">{formatMoney(proposedSubtotal)}</span>
+            </div>
+            {budget.discount > 0 ? (
+              <div className="portal-total-row">
+                <span>Descuento vigente</span>
+                <span className="portal-num">− {formatMoney(budget.discount)}</span>
+              </div>
+            ) : null}
+            <div className="portal-total-row portal-total-row--strong">
+              <span>Total estimado</span>
+              <span className="portal-num">{formatMoney(proposedTotal)}</span>
+            </div>
+          </div>
+
+          <form className="portal-form" onSubmit={(event) => void sendProposal("items", event)}>
+            <div className="portal-form-row">
+              <label className="portal-field" htmlFor="portal-contact-name">
+                <span className="portal-field-label">Nombre y apellido</span>
+                <input
+                  id="portal-contact-name"
+                  name="contact-name"
+                  value={contactName}
+                  onChange={(event) => setContactName(event.target.value)}
+                  maxLength={120}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label className="portal-field" htmlFor="portal-contact-email">
+                <span className="portal-field-label">Correo (opcional)</span>
+                <input
+                  id="portal-contact-email"
+                  name="contact-email"
+                  type="email"
+                  value={contactEmail}
+                  onChange={(event) => setContactEmail(event.target.value)}
+                  maxLength={200}
+                  autoComplete="email"
+                />
+              </label>
+            </div>
+            <label className="portal-field" htmlFor="portal-items-note">
+              <span className="portal-field-label">Motivo de tu propuesta</span>
+              <textarea
+                id="portal-items-note"
+                name="items-note"
+                value={itemsNote}
+                onChange={(event) => setItemsNote(event.target.value)}
+                maxLength={MAX_NOTE}
+                rows={3}
+                required
+                placeholder="Ej.: necesito una pantalla más y un día menos de alquiler"
+              />
+            </label>
+            {itemsError ? (
+              <p className="portal-error" role="alert">
+                {itemsError}
+              </p>
+            ) : null}
+            {itemsSent ? (
+              <p className="portal-ok" role="status">
+                Recibimos tu propuesta. El equipo la revisa y te responde por este mismo link.
+              </p>
+            ) : null}
+            <div className="portal-form-actions">
+              <button
+                type="button"
+                className="portal-btn"
+                onClick={() => {
+                  setDraft(Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])));
+                  setItemsSent(false);
+                }}
+              >
+                Restablecer
+              </button>
+              <button
+                className="portal-btn portal-btn--primary"
+                type="submit"
+                disabled={itemsSending || !itemsChanged}
+                aria-busy={itemsSending || undefined}
+              >
+                {itemsSending ? "Enviando propuesta…" : "Enviar propuesta"}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
+      {!approved ? (
+        <section className="portal-card portal-card--action" aria-labelledby="portal-discount">
+          <h2 className="portal-card-title" id="portal-discount">
+            Pedir una rebaja
+          </h2>
+          <p className="portal-card-lead">
+            Contanos qué descuento necesitás y por qué. El equipo puede aceptarlo, responderte con una contra-oferta o
+            rechazarlo con una nota.
+          </p>
+          <form className="portal-form" onSubmit={(event) => void sendProposal("discount", event)}>
+            <div className="portal-form-row portal-form-row--discount">
+              <label className="portal-field" htmlFor="portal-discount-value">
+                <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
+                <input
+                  id="portal-discount-value"
+                  name="discount-value"
+                  inputMode={discountType === "percent" ? "decimal" : "numeric"}
+                  value={discountValue}
+                  onChange={(event) => setDiscountValue(event.target.value)}
+                  maxLength={discountType === "percent" ? 6 : 12}
+                  placeholder={discountType === "percent" ? "Ej.: 10" : "Ej.: 500000"}
+                  required
+                />
+              </label>
+              <div className="portal-field portal-field--choice" role="group" aria-label="Tipo de descuento">
+                <span className="portal-field-label">Tipo</span>
+                <div className="portal-segmented">
+                  <button
+                    type="button"
+                    className="portal-segment"
+                    data-active={discountType === "percent" ? "true" : undefined}
+                    aria-pressed={discountType === "percent"}
+                    onClick={() => {
+                      setDiscountType("percent");
+                      setDiscountValue("");
+                    }}
+                  >
+                    Porcentaje
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-segment"
+                    data-active={discountType === "amount" ? "true" : undefined}
+                    aria-pressed={discountType === "amount"}
+                    onClick={() => {
+                      setDiscountType("amount");
+                      setDiscountValue("");
+                    }}
+                  >
+                    Monto
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label className="portal-field" htmlFor="portal-discount-note">
+              <span className="portal-field-label">Motivo del pedido</span>
+              <textarea
+                id="portal-discount-note"
+                name="discount-note"
+                value={discountNote}
+                onChange={(event) => setDiscountNote(event.target.value)}
+                maxLength={MAX_NOTE}
+                rows={3}
+                required
+                placeholder="Ej.: somos una ONG y el evento es benéfico"
+              />
+            </label>
+            {discountError ? (
+              <p className="portal-error" role="alert">
+                {discountError}
+              </p>
+            ) : null}
+            {discountSent ? (
+              <p className="portal-ok" role="status">
+                Recibimos tu pedido de rebaja. El equipo te responde por este mismo link.
+              </p>
+            ) : null}
+            <button className="portal-btn" type="submit" disabled={discountSending} aria-busy={discountSending || undefined}>
+              {discountSending ? "Enviando pedido…" : "Solicitar rebaja"}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section className="portal-card" aria-labelledby="portal-facts">
         <h2 className="portal-card-title" id="portal-facts">
@@ -346,8 +977,8 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
             Pedir cambios
           </h2>
           <p className="portal-card-lead">
-            Si necesitás ajustar ítems, fechas o montos, dejá tu comentario y el equipo de LedBox te responde con una
-            versión nueva.
+            Si necesitás algo que no se resuelve con cantidades o días, dejá tu comentario y el equipo de LedBox te
+            responde con una versión nueva.
           </p>
           <form className="portal-form" onSubmit={requestRevision}>
             <label className="portal-field" htmlFor="portal-revision-name">

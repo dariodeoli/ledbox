@@ -130,6 +130,9 @@ export type AdminBudgetItem = {
   subtotal: number;
 };
 
+/** Cuota del plan de pagos (issue #14); `dueAt` es `YYYY-MM-DD`. */
+export type AdminBudgetInstallment = { label: string; amount: number; dueAt: string | null };
+
 export type AdminPayment = {
   id: string;
   amount: number;
@@ -154,6 +157,10 @@ export type AdminBudgetRow = {
   event: AdminEventRef | null;
   items: AdminBudgetItem[];
   payments: AdminPayment[];
+  /** Plan de pagos (issue #14): anticipo, condiciones y cuotas. */
+  advanceAmount: number;
+  paymentTerms: string | null;
+  installmentsJson: AdminBudgetInstallment[] | null;
   /** Portal del cliente (issue #12): token público y evidencia de la aprobación. */
   publicToken: string | null;
   publicTokenCreatedAt: string | null;
@@ -163,6 +170,62 @@ export type AdminBudgetRow = {
   approvalNote: string | null;
   revisionRequestedAt: string | null;
   revisionNote: string | null;
+};
+
+// ── Solicitudes del portal (issue #14) ──────────────────────────────────────
+// El cliente propone cantidades/días o pide una rebaja; el equipo acepta
+// (aplicándola al presupuesto) o rechaza con nota. `changes` es el pedido de
+// cambios libre del issue #12, que ahora también se resuelve desde la cola.
+
+export type AdminBudgetChangeKind = "items" | "discount" | "changes";
+export type AdminBudgetChangeStatus = "pending" | "accepted" | "rejected";
+
+export type AdminBudgetRequestItem = { id: string; quantity: number; days: number };
+export type AdminBudgetRequestDiscount = { type: "percent" | "amount"; value: number; amount: number };
+export type AdminBudgetRequestPayload = {
+  items?: AdminBudgetRequestItem[];
+  discount?: AdminBudgetRequestDiscount;
+  comment?: string;
+};
+
+export type AdminBudgetRequestRow = {
+  id: string;
+  budgetId: string;
+  kind: AdminBudgetChangeKind;
+  status: AdminBudgetChangeStatus;
+  payload: AdminBudgetRequestPayload;
+  note: string | null;
+  requestedByName: string;
+  requestedByEmail: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
+  responseNote: string | null;
+  budget: {
+    id: string;
+    title: string;
+    status: string;
+    subtotal: number;
+    discount: number;
+    total: number;
+    /** Referencia mínima del cliente (el API de solicitudes solo manda nombre y empresa). */
+    client: Pick<AdminClientRef, "name" | "company">;
+    items: Array<Pick<AdminBudgetItem, "id" | "name" | "quantity" | "days" | "unitPrice">>;
+  };
+};
+
+/** Datos de pago de la empresa (issue #14); `null` en los campos sin cargar. */
+export type AdminPaymentDetails = {
+  bank: string | null;
+  holder: string | null;
+  ruc: string | null;
+  account: string | null;
+  alias: string | null;
+};
+
+export type AdminBudgetPlanPayload = {
+  budget?: Pick<AdminBudgetRow, "id" | "advanceAmount" | "paymentTerms" | "installmentsJson" | "total">;
+  error?: string;
 };
 
 export type AdminBudgetApprovalState = "PENDIENTE" | "APROBADO_DIGITAL" | "APROBADO_MANUAL" | "CAMBIOS_SOLICITADOS";
@@ -422,6 +485,7 @@ export const AUDIT_ENTITIES = [
   "Promoter",
   "AdminUser",
   "Lead",
+  "Organization",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -531,7 +595,7 @@ export type AdminCalendarAlert = {
  * reales del panel. Los `kind` compartidos con el calendario se conservan tal cual.
  */
 export type AdminNotificationLevel = AdminCalendarAlertLevel | "info";
-export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "lead";
+export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "lead" | "portal_request";
 
 export type AdminNotification = {
   id: string;
@@ -645,6 +709,7 @@ export type AdminApiResponse = {
   leads?: AdminLeadRow[];
   events?: AdminEventRow[];
   budgets?: AdminBudgetRow[];
+  budgetRequests?: AdminBudgetRequestRow[];
   clientPayments?: AdminPaymentRow[];
   supplierJobs?: AdminSupplierJobRow[];
   jobs?: AdminSupplierJobRow[];

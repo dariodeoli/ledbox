@@ -264,6 +264,36 @@ export const BUDGET_APPROVAL_METHOD: Record<string, string> = {
 
 export const budgetApprovalMethodLabel = (value: string | null | undefined) => label(BUDGET_APPROVAL_METHOD, value);
 
+// ── Solicitudes del portal (issue #14) ──────────────────────────────────────
+// Mismas etiquetas que la cola del panel; los valores reales del enum viven en
+// `BudgetChangeKind`/`BudgetChangeStatus` (Prisma) y viajan tal cual al API.
+
+const BUDGET_CHANGE_KIND: Record<string, string> = {
+  items: "Propuesta de ítems",
+  discount: "Pedido de rebaja",
+  changes: "Pedido de cambios",
+};
+
+const BUDGET_CHANGE_STATUS: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptada",
+  rejected: "Rechazada",
+};
+
+const BUDGET_CHANGE_STATUS_TONES: Record<string, AdminTone> = {
+  pending: "warn",
+  accepted: "ok",
+  rejected: "danger",
+};
+
+export const budgetChangeKindLabel = (value: string | null | undefined) => label(BUDGET_CHANGE_KIND, value);
+export const budgetChangeStatusLabel = (value: string | null | undefined) => label(BUDGET_CHANGE_STATUS, value);
+
+export function budgetChangeStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return BUDGET_CHANGE_STATUS_TONES[value] ?? "neutral";
+}
+
 /** Estados de un equipo al retirar/devolver (source única para los formularios). */
 export const ITEM_CONDITIONS = ["Bueno", "Con detalles", "Dañado"] as const;
 
@@ -397,6 +427,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   checklist: "Checklist",
   collection: "Cobro",
   lead: "Lead",
+  portal_request: "Solicitud del portal",
 };
 
 export const notificationLevelLabel = (value: string | null | undefined) => label(NOTIFICATION_LEVEL, value);
@@ -470,6 +501,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   Promoter: "Promotora",
   AdminUser: "Usuario",
   Lead: "Lead",
+  Organization: "Empresa",
 };
 
 const AUDIT_FIELD: Record<string, string> = {
@@ -500,6 +532,12 @@ const AUDIT_FIELD: Record<string, string> = {
   discount: "Descuento",
   total: "Total",
   costEstimate: "Costo estimado",
+  advanceAmount: "Anticipo",
+  installments: "Cuotas",
+  bank: "Banco",
+  holder: "Titular",
+  account: "Cuenta",
+  alias: "Alias",
   unitPrice: "Precio unitario",
   costPrice: "Costo unitario",
   validUntil: "Válido hasta",
@@ -542,6 +580,7 @@ const AUDIT_MONEY_FIELDS: ReadonlySet<string> = new Set([
   "discount",
   "total",
   "costEstimate",
+  "advanceAmount",
   "amount",
   "advance",
   "replacementCost",
@@ -582,7 +621,7 @@ export function auditValueLabel(entity: string | null | undefined, field: string
   if (key === "type" && entity === "EventTask") return taskTypeLabel(text);
   if (key === "kind") return inventoryKindLabel(text);
   if (key === "category") return supplierCategoryLabel(text);
-  if (key === "items" || key === "itemCount") return numberFormat.format(Number(text) || 0);
+  if (key === "items" || key === "itemCount" || key === "installments") return numberFormat.format(Number(text) || 0);
   if (AUDIT_MONEY_FIELDS.has(key)) {
     const amount = Number(text);
     return Number.isFinite(amount) ? formatMoney(amount) : text;

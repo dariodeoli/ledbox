@@ -43,6 +43,9 @@ model Organization {
   active           Boolean                  @default(true)
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
+  /// Datos de pago de la empresa (issue #14): `{ bank, holder, ruc, account, alias }`.
+  /// Solo OWNER/ADMIN los configuran y la API pública los entrega con el presupuesto aprobado.
+  paymentDetails   Json?
   memberships      OrganizationMembership[]
   adminMemberships AdminMembership[]
   adminSessions    AdminSession[]
@@ -51,6 +54,7 @@ model Organization {
   clients          Client[]
   events           Event[]
   budgets          Budget[]
+  changeRequests   BudgetChangeRequest[]
   clientPayments   ClientPayment[]
   suppliers        Supplier[]
   supplierJobs     SupplierJob[]
@@ -258,6 +262,22 @@ enum CommercialStatus {
   CANCELLED
 }
 
+/// Motivo de una solicitud del cliente desde el portal (issue #14).
+/// `changes` es el pedido de cambios libre del issue #12 y comparte el mismo
+/// circuito de resolución (aceptar o rechazar con nota) que ítems y rebaja.
+enum BudgetChangeKind {
+  items
+  discount
+  changes
+}
+
+/// Ciclo de vida de una solicitud del portal: pendiente → aceptada o rechazada.
+enum BudgetChangeStatus {
+  pending
+  accepted
+  rejected
+}
+
 enum PaymentStatus {
   PENDING
   PARTIAL
@@ -360,22 +380,27 @@ model Event {
 }
 
 model Budget {
-  id                   String           @id
+  id                   String                @id
   organizationId       String
   clientId             String
   eventId              String?
   title                String
-  status               CommercialStatus @default(DRAFT)
-  subtotal             Int              @default(0)
-  discount             Int              @default(0)
-  total                Int              @default(0)
-  costEstimate         Int              @default(0)
+  status               CommercialStatus      @default(DRAFT)
+  subtotal             Int                   @default(0)
+  discount             Int                   @default(0)
+  total                Int                   @default(0)
+  costEstimate         Int                   @default(0)
   validUntil           DateTime?
   notes                String?
+  // Plan de pagos (issue #14): anticipo y cuotas visibles en el portal.
+  // `installmentsJson` guarda `[{ label, amount, dueAt }]` (dueAt `YYYY-MM-DD`).
+  advanceAmount        Int                   @default(0)
+  paymentTerms         String?
+  installmentsJson     Json?
   // Portal del cliente (issue #12): token público del presupuesto y evidencia
   // de la aprobación digital o manual. El token es la única credencial del
   // link y se puede regenerar o revocar desde el panel.
-  publicToken          String?          @unique
+  publicToken          String?               @unique
   publicTokenCreatedAt DateTime?
   approvedAt           DateTime?
   approvedByName       String?
@@ -385,13 +410,14 @@ model Budget {
   approvalNote         String?
   revisionRequestedAt  DateTime?
   revisionNote         String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client               Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  event                Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client               Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  event                Event?                @relation(fields: [eventId], references: [id], onDelete: SetNull)
   items                BudgetItem[]
   payments             ClientPayment[]
+  changeRequests       BudgetChangeRequest[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -410,6 +436,35 @@ model BudgetItem {
   budget    Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
   @@index([budgetId])
+}
+
+/// Solicitud del cliente desde el portal (issue #14): propuesta de ítems,
+/// pedido de rebaja o pedido de cambios (issue #12). El cliente solo ajusta
+/// cantidades y días —los precios unitarios son fijos— o propone un descuento;
+/// el equipo la acepta (aplicándola al presupuesto) o la rechaza con una nota.
+/// `payload` (forma documentada):
+///   kind `items`:    `{ items: [{ id, name, quantity, days }] }`
+///   kind `discount`: `{ discount: { type: "percent" | "amount", value, amount } }`
+///   kind `changes`:  `{ comment: string }`
+model BudgetChangeRequest {
+  id               String             @id
+  organizationId   String
+  budgetId         String
+  kind             BudgetChangeKind
+  status           BudgetChangeStatus @default(pending)
+  payload          Json
+  note             String?
+  requestedByName  String
+  requestedByEmail String?
+  createdAt        DateTime           @default(now())
+  resolvedAt       DateTime?
+  resolvedByName   String?
+  responseNote     String?
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  budget           Budget             @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, createdAt])
+  @@index([budgetId, createdAt])
 }
 
 model ClientPayment {

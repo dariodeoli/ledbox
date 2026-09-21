@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/server/db";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalBudgetOpen } from "@/lib/server/budget-portal";
@@ -56,9 +58,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     },
   });
 
+  // Issue #14: el pedido de cambios también entra a la cola de solicitudes del
+  // panel, así se resuelve con aceptar o rechazar (y el cliente ve la respuesta).
+  const actorName = name || budget.client?.company?.trim() || budget.client?.name || "Cliente (portal)";
+  const pending = await db.budgetChangeRequest.findFirst({
+    where: { budgetId: budget.id, kind: "changes", status: "pending" },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const requestData = {
+    payload: { comment: note } as Prisma.InputJsonObject,
+    note,
+    requestedByName: actorName,
+    createdAt: new Date(),
+  };
+  if (pending) {
+    await db.budgetChangeRequest.update({ where: { id: pending.id }, data: requestData });
+  } else {
+    await db.budgetChangeRequest.create({
+      data: {
+        id: randomUUID(),
+        organizationId: budget.organizationId,
+        budgetId: budget.id,
+        kind: "changes",
+        status: "pending",
+        ...requestData,
+      },
+    });
+  }
+
   const payload = await loadPublicBudget(code);
   if (!payload) return jsonError("No encontramos ese presupuesto.", 404);
-  const actorName = name || budget.client?.company?.trim() || budget.client?.name || "Cliente (portal)";
   await recordAudit({
     context: portalAuditContext(budget.organizationId, actorName, budget.client?.email),
     action: "status",

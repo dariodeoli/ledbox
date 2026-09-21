@@ -20,6 +20,9 @@ import type {
  * - `checklist`: evento próximo (ni cancelado ni finalizado) con tareas pendientes.
  * - `collection`: presupuesto aprobado con saldo, con la validez como fecha.
  * - `lead`: lead sin contactar (`Lead.status = NEW`).
+ * - `portal_request`: solicitud del cliente en el portal sin resolver
+ *   (`BudgetChangeRequest.status = pending`, issue #14); la fecha es el día en
+ *   que el cliente la mandó y el aviso desaparece cuando el equipo la resuelve.
  *
  * El calendario consume solo los tres primeros (`calendarAlerts`) y las
  * notificaciones suman los informativos, deduplican por entidad y día, ordenan
@@ -224,15 +227,23 @@ async function coreCandidates(organizationId: string, now: Date): Promise<AdminN
   return candidates;
 }
 
+/** Cómo se nombra cada solicitud del portal en el feed de avisos. */
+const PORTAL_REQUEST_KIND: Record<string, string> = {
+  items: "propuesta de ítems",
+  discount: "pedido de rebaja",
+  changes: "pedido de cambios",
+};
+
 /**
- * Hechos informativos que solo muestra el módulo de avisos: leads sin contactar y
- * presupuestos aprobados con saldo. La fecha del cobro es la validez del
- * presupuesto (`validUntil`) y, si no tiene, el día en que se cargó.
+ * Hechos informativos que solo muestra el módulo de avisos: leads sin contactar,
+ * presupuestos aprobados con saldo y solicitudes del portal sin resolver. La
+ * fecha del cobro es la validez del presupuesto (`validUntil`) y, si no tiene,
+ * el día en que se cargó; la de una solicitud, el día en que la mandó el cliente.
  */
 async function extraCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
   const soonKey = dayKeyOf(new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS));
   const todayKey = dayKeyOf(now);
-  const [leads, budgets] = await Promise.all([
+  const [leads, budgets, portalRequests] = await Promise.all([
     db.lead.findMany({
       where: { organizationId, status: "NEW" },
       orderBy: { createdAt: "asc" },
@@ -251,6 +262,18 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
         createdAt: true,
         client: { select: { name: true, company: true } },
         payments: { select: { amount: true } },
+      },
+    }),
+    db.budgetChangeRequest.findMany({
+      where: { organizationId, status: "pending" },
+      orderBy: { createdAt: "asc" },
+      take: NOTIFICATION_LIMIT,
+      select: {
+        id: true,
+        kind: true,
+        createdAt: true,
+        requestedByName: true,
+        budget: { select: { title: true, client: { select: { name: true, company: true } } } },
       },
     }),
   ]);
@@ -292,6 +315,18 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
     });
   }
 
+  for (const request of portalRequests) {
+    candidates.push({
+      id: `portal_request:${request.id}`,
+      kind: "portal_request",
+      level: "info",
+      title: clientLabel(request.budget.client),
+      subtitle: joinParts([request.budget.title, PORTAL_REQUEST_KIND[request.kind] ?? "Solicitud del portal"]),
+      date: dayKeyOf(request.createdAt),
+      href: "/presupuestos",
+    });
+  }
+
   return candidates;
 }
 
@@ -306,6 +341,7 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   checklist: 2,
   collection: 3,
   lead: 4,
+  portal_request: 5,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */

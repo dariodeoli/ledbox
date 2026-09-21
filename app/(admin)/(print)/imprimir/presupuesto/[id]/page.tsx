@@ -9,8 +9,10 @@ import {
   formatMoney,
   formatNumber,
 } from "@/lib/admin-format";
+import { bankMark } from "@/lib/bank-mark";
 import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
+import { parsePaymentDetails, paymentPlanOf } from "@/lib/server/budget-portal";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { PrintAmount, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
@@ -21,6 +23,12 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Presupuesto", robots: { index: false, follow: false } };
 
+/** Vencimiento de una cuota (`YYYY-MM-DD`), dibujado como día puro. */
+function dueDateLabel(dueAt: string | null): string {
+  if (!dueAt) return "Sin fecha";
+  return formatDate(/^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? `${dueAt}T12:00:00.000Z` : dueAt);
+}
+
 /**
  * Presupuesto imprimible (PDF vía `window.print()`).
  * Solo lectura y filtrado por la empresa activa: un presupuesto de otra empresa
@@ -29,6 +37,8 @@ export const metadata: Metadata = { title: "Presupuesto", robots: { index: false
  * Issue #12: la hoja suma el QR del portal del cliente con el código visible
  * (solo si el presupuesto tiene link público) y la evidencia de la aprobación
  * cuando ya fue aprobado (digital o manual).
+ * Issue #14: con el presupuesto aprobado, la hoja suma el monto a transferir
+ * (plan de pagos) y los datos bancarios de la empresa con la marca del banco.
  */
 export default async function PresupuestoImprimiblePage({ params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminContext();
@@ -42,6 +52,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
       event: true,
       items: { orderBy: { name: "asc" } },
       payments: { orderBy: { paidAt: "asc" } },
+      organization: { select: { paymentDetails: true } },
     },
   });
   if (!budget) notFound();
@@ -52,6 +63,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const reference = `Nº ${budgetReference(budget.id)}`;
   const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken) : null;
   const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
+  const plan = paymentPlanOf(budget);
+  const details = parsePaymentDetails(budget.organization.paymentDetails);
+  const mark = bankMark(details?.bank);
 
   return (
     <>
@@ -196,6 +210,68 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
             <PrintField label="Notas" value={budget.notes || "Sin notas adicionales."} wide />
           </div>
         </PrintSection>
+
+        {budget.approvedAt && plan.dueNow ? (
+          <PrintSection title="Pago">
+            <div className="lbprint-pay">
+              <div className="lbprint-pay-now">
+                <span className="lbprint-label">{plan.dueNow.label} · a transferir ahora</span>
+                <strong className="lbprint-pay-amount lbprint-num">{formatMoney(plan.dueNow.amount)}</strong>
+                <span className="lbprint-pay-total lbprint-num">de {formatMoney(budget.total)}</span>
+              </div>
+              {details ? (
+                <div className="lbprint-bank">
+                  {mark?.asset ? (
+                    <img className="lbprint-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
+                  ) : (
+                    <span className="lbprint-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
+                      {mark?.initials ?? "B"}
+                    </span>
+                  )}
+                  <div className="lbprint-bank-data">
+                    <span className="lbprint-bank-name">{mark?.label ?? details.bank ?? "Datos de pago"}</span>
+                    {details.holder ? <span className="lbprint-bank-line">Titular: {details.holder}</span> : null}
+                    {details.ruc ? <span className="lbprint-bank-line">RUC: {details.ruc}</span> : null}
+                    {details.account ? <span className="lbprint-bank-line">Cuenta: {details.account}</span> : null}
+                    {details.alias ? <span className="lbprint-bank-line">Alias: {details.alias}</span> : null}
+                  </div>
+                </div>
+              ) : (
+                <p className="lbprint-note">La empresa todavía no cargó sus datos bancarios en el panel.</p>
+              )}
+            </div>
+            {plan.installments.length > 0 ? (
+              <table className="lbprint-table lbprint-table--plan">
+                <thead>
+                  <tr>
+                    <th scope="col">Cuota</th>
+                    <th scope="col" className="lbprint-num">
+                      Monto
+                    </th>
+                    <th scope="col">Vencimiento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plan.advanceAmount > 0 ? (
+                    <tr>
+                      <td>Anticipo (a transferir ahora)</td>
+                      <td className="lbprint-num">{formatMoney(plan.advanceAmount)}</td>
+                      <td>Con la aprobación</td>
+                    </tr>
+                  ) : null}
+                  {plan.installments.map((installment, index) => (
+                    <tr key={`${installment.label}-${index}`}>
+                      <td>{installment.label}</td>
+                      <td className="lbprint-num">{formatMoney(installment.amount)}</td>
+                      <td>{dueDateLabel(installment.dueAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {plan.terms ? <p className="lbprint-note">{plan.terms}</p> : null}
+          </PrintSection>
+        ) : null}
 
         {portalUrl && portalQr ? (
           <PrintSection title="Aprobación online">
