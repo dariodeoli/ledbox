@@ -36,6 +36,7 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 - Montos `Int` en PYG sin decimales (`Intl.NumberFormat("es-PY")`), fechas/horas es-PY en 24 h (`hourCycle: "h23"`), `tabular-nums` + `nowrap` en montos, fechas y códigos.
 - Responsive real: sidebar colapsable en mobile, listas con scroll horizontal silencioso, formularios usables a 360 px.
 - Un solo componente/estilo por tipo; CSS en `app/globals.css` (sin estilos inline salvo valores dinámicos); no agregar librerías de UI.
+- Los pipelines por estado usan el **tablero único** `AdminBoard` con `AdminViewSwitch` (vista lista/tablero recordada por usuario, arrastre HTML5 + "Mover a…", optimismo con revert); no crear tableros paralelos por módulo.
 - Los datos que se muestran salen del API real; no inventar estados ni métricas.
 
 ## Datos y API
