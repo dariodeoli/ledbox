@@ -11,10 +11,20 @@ export const metadata: Metadata = { title: "Presupuesto", robots: { index: false
 /**
  * Vista pública de un presupuesto por código de link (issue #12).
  * Un código inválido, revocado o inexistente no revela nada: 404.
+ *
+ * `?demo=1` (issue #29) es el marcador que deja `GET /api/portal/demo` al entrar
+ * por el ejemplo: muestra el aviso de datos simulados. Los links reales no lo
+ * llevan y no cambian en nada.
  */
-export default async function PortalBudgetPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default async function PortalBudgetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ demo?: string | string[] }>;
+}) {
+  const [{ token }, search] = await Promise.all([params, searchParams]);
   const budget = await loadPublicBudget(token);
   if (!budget) notFound();
-  return <PortalBudgetView budget={budget} token={token} />;
+  return <PortalBudgetView budget={budget} token={token} demo={search.demo === "1"} />;
 }

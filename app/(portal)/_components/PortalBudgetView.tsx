@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   budgetApprovalLabel,
@@ -42,6 +43,10 @@ import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest } from "@/lib
  *
  * Nada se aplica solo: las propuestas quedan pendientes y el equipo las acepta
  * o rechaza desde el panel. La aprobación sigue siendo única y con evidencia.
+ *
+ * Con `demo` (issue #29, entrada por `GET /api/portal/demo`) muestra arriba el
+ * aviso de datos simulados con la vuelta a la portada; los links reales no lo
+ * llevan y no cambian en nada.
  */
 
 type DraftItem = { quantity: number; days: number };
@@ -224,7 +229,7 @@ function Stepper({
   );
 }
 
-export function PortalBudgetView({ budget, token }: { budget: PortalBudget; token: string }) {
+export function PortalBudgetView({ budget, token, demo = false }: { budget: PortalBudget; token: string; demo?: boolean }) {
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -541,6 +546,18 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
 
   return (
     <article className="portal-budget">
+      {demo ? (
+        <section className="portal-banner portal-banner--demo" aria-labelledby="portal-demo">
+          <h2 className="portal-banner-title" id="portal-demo">
+            Presupuesto de ejemplo · datos simulados
+          </h2>
+          <p className="portal-banner-note">
+            Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios y podés probar la
+            autogestión sin compromiso. <Link href="/portal">Volver a la portada</Link>.
+          </p>
+        </section>
+      ) : null}
+
       <header className="portal-budget-head">
         <p className="portal-kicker">Presupuesto Nº {budget.reference}</p>
         <h1 className="portal-budget-title">{budget.title}</h1>

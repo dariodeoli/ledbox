@@ -1336,6 +1336,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .portal-title span { color: var(--led); }
 .portal-lead { max-width: 56ch; color: var(--muted-2); font-size: 14.5px; line-height: 1.6; }
 .portal-code { display: grid; gap: 10px; margin-top: 4px; padding: 16px; border: 1px solid var(--border-2); border-radius: 14px; background: var(--surface); }
+.portal-code-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal-field { display: grid; gap: 6px; }
 .portal-field-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .portal-field input, .portal-field textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
@@ -1393,6 +1394,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .portal-banner { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--border-2); border-radius: 14px; background: var(--surface); }
 .portal-banner--ok { border-color: rgba(61, 220, 151, .4); background: rgba(61, 220, 151, .07); }
 .portal-banner--warn { border-color: rgba(245, 196, 81, .4); background: rgba(245, 196, 81, .07); }
+.portal-banner--demo { border-color: rgba(0, 229, 255, .45); background: var(--led-soft); }
+.portal-banner--demo .portal-banner-title { color: var(--led); }
+.portal-banner--demo a { color: var(--led); text-decoration: none; }
+.portal-banner--demo a:hover { text-decoration: underline; }
 .portal-banner-title { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; text-transform: uppercase; }
 .portal-banner-note { color: var(--muted-2); font-size: 13px; }
 .portal-banner-quote { margin: 0; padding-left: 12px; border-left: 2px solid var(--border-2); color: var(--muted-2); font-size: 13px; white-space: pre-wrap; }

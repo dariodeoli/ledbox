@@ -384,15 +384,19 @@ const LEADS: readonly DemoLead[] = [
  * Asegura la organización demo, el usuario demo y los datos simulados, y
  * devuelve el destino de la sesión demo. Es idempotente y re-ancla el dataset a
  * hoy (una vez por día o cuando la agenda quedó sin eventos futuros).
+ *
+ * Con `reset` se re-siembra aunque el dataset esté fresco: lo usa la entrada al
+ * presupuesto de ejemplo (issue #29) cuando una visita anterior lo aprobó y la
+ * demo se quedó sin el caso de autogestión.
  */
-export async function ensureDemoData(): Promise<DemoSessionTarget> {
+export async function ensureDemoData(options?: { reset?: boolean }): Promise<DemoSessionTarget> {
   const base = todayBase();
 
   // El ancla del dataset es el `updatedAt` de la organización demo. Se lee ANTES
   // de tocar la organización para que una provisión a medias no se marque como
   // completa.
   let organization = await db.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG } });
-  const fresh = organization ? await demoDataIsFresh(organization) : false;
+  const fresh = organization && !options?.reset ? await demoDataIsFresh(organization) : false;
   if (!organization) {
     organization = await db.organization.create({ data: DEMO_ORGANIZATION });
   } else if (organization.name !== DEMO_ORGANIZATION_NAME || !organization.active) {
@@ -491,6 +495,35 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     upcoming >= 3;
   if (!complete) return false;
   return dayKeyOf(organization.updatedAt) === dayKeyOf(new Date());
+}
+
+// ── Presupuesto de ejemplo del portal (issue #29) ───────────────────────────
+
+/**
+ * Presupuesto de la demo que abre la portada del portal: el de autogestión
+ * (link público activo, `SENT`, sin aprobar), para poder ajustar ítems, pedir
+ * rebaja y enviar propuesta. El id es el que siembra el dataset de acá abajo.
+ */
+export const DEMO_PORTAL_BUDGET_ID = "demo_budget_pendiente";
+
+/**
+ * Devuelve el presupuesto de ejemplo solo si sigue abierto para la autogestión
+ * (sin aprobar y en un estado en juego, el mismo criterio que usa la demo del
+ * panel); si no, `null` para que la entrada al ejemplo re-siembre el dataset.
+ */
+export async function loadDemoPortalBudget(
+  organizationId: string,
+): Promise<{ id: string; title: string; publicToken: string | null } | null> {
+  return db.budget.findFirst({
+    where: {
+      id: DEMO_PORTAL_BUDGET_ID,
+      organizationId,
+      publicToken: { not: null },
+      approvedAt: null,
+      status: { in: ["SENT", "NEGOTIATING"] },
+    },
+    select: { id: true, title: true, publicToken: true },
+  });
 }
 
 // ── Dataset ─────────────────────────────────────────────────────────────────
