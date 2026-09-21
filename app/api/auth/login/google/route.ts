@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const state = randomBytes(24).toString("base64url");
   const redirectUri = `${siteUrl.replace(/\/$/, "")}/api/auth/callback/google`;
   const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", scope: "openid email profile", state, prompt: "select_account" });
-  const response = Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-  response.headers.append("Set-Cookie", `ledbox_google_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
-  return response;
+  const headers = new Headers({ Location: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+  headers.append("Set-Cookie", `ledbox_google_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
+  return new Response(null, { status: 302, headers });
 }

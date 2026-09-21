@@ -22,8 +22,8 @@ export async function GET(request: Request) {
   const user = await db.adminUser.findUnique({ where: { email } });
   if (!user || !user.active || user.role !== "ADMIN") return Response.redirect(`${loginUrl}?error=google_not_allowed`);
   const session = await createSession({ id: user.id, email: user.email, role: "ADMIN" });
-  const response = Response.redirect(`${siteUrl.replace(/\/$/, "")}/admin`);
-  response.headers.append("Set-Cookie", `ledbox_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
-  response.headers.append("Set-Cookie", `ledbox_session=${session.jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${session.expiresAt.toUTCString()}`);
-  return response;
+  const headers = new Headers({ Location: `${siteUrl.replace(/\/$/, "")}/admin` });
+  headers.append("Set-Cookie", `ledbox_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  headers.append("Set-Cookie", `ledbox_session=${session.jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${session.expiresAt.toUTCString()}`);
+  return new Response(null, { status: 302, headers });
 }
