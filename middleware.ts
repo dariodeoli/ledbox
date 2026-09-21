@@ -8,17 +8,28 @@ import { isAdminRoute } from "@/lib/admin-routes";
  * - Las páginas del panel son rutas raíz reales dentro de `app/(admin)/*`
  *   (`/login`, `/eventos`, `/finanzas`, …); no hay prefijo /admin.
  * - En el host admin, `/` muestra el dashboard (`app/(admin)/dashboard`).
+ * - En el host del cliente (portal del cliente, issue #12), `/` muestra el
+ *   validador de presupuestos (`app/(portal)/portal`).
  * - En el host público, las rutas del panel se redirigen al subdominio admin.
  * - `/admin/*` (links viejos) se canonicaliza a la ruta limpia.
  */
 
 const ADMIN_URL = (process.env.NEXT_PUBLIC_ADMIN_URL || "https://admin.ledbox.online").replace(/\/+$/, "");
+const CLIENT_URL = (process.env.NEXT_PUBLIC_CLIENT_URL || "https://cliente.ledbox.online").replace(/\/+$/, "");
 
 function adminHost(): string {
   try {
     return new URL(ADMIN_URL).host.toLowerCase();
   } catch {
     return "admin.ledbox.online";
+  }
+}
+
+function clientHost(): string {
+  try {
+    return new URL(CLIENT_URL).host.toLowerCase();
+  } catch {
+    return "cliente.ledbox.online";
   }
 }
 
@@ -37,6 +48,7 @@ export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const legacyAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const onAdminHost = requestHost(request) === adminHost();
+  const onClientHost = requestHost(request) === clientHost();
 
   if (onAdminHost) {
     // Links viejos con /admin → ruta limpia equivalente.
@@ -48,6 +60,18 @@ export function middleware(request: NextRequest) {
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
+
+  if (onClientHost) {
+    // Portal del cliente (issue #12): la raíz muestra el validador de
+    // presupuestos (`app/(portal)/portal`); el resto de rutas pasa igual. La
+    // reescritura es directa, así que no vuelve a entrar al middleware (sin bucle).
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal";
       return NextResponse.rewrite(url);
     }
     return NextResponse.next();
