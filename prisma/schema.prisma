@@ -59,6 +59,7 @@ model Organization {
   clientPayments    ClientPayment[]
   paymentReminders  PaymentReminderLog[]
   paymentProofs     BudgetPaymentProof[]
+  mailLogs          MailLog[]
   suppliers         Supplier[]
   supplierJobs      SupplierJob[]
   inventoryItems    InventoryItem[]
@@ -977,4 +978,66 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([entity, entityId])
   @@index([organizationId, actorId])
+}
+
+/**
+ * Categoría de un correo (issue #31): `reset` (contraseña), `reminder`
+ * (recordatorio de cobro), `budget` (presupuesto enviado al cliente), `test`
+ * (prueba de configuración) e `invitation` (invitaciones al equipo, cuando
+ * lleguen). Es la misma taxonomía del asunto y del historial del panel.
+ */
+enum MailCategory {
+  reset
+  reminder
+  budget
+  test
+  invitation
+}
+
+/** Estado real de un envío: `sending` mientras viaja, `sent` o `failed` (con su motivo). */
+enum MailStatus {
+  sending
+  sent
+  failed
+}
+
+/**
+ * Historial de correos de la app (verificación de envío del panel).
+ *
+ * Una fila por **intento real** con el proveedor: destinatario, categoría,
+ * asunto, estado y el motivo del fallo tal como lo devolvió Resend (o el id del
+ * mensaje aceptado). Es la decisión de diseño del issue #31 frente a reutilizar
+ * `AuditLog`: la auditoría cuenta *quién hizo qué* con textos recortados, y el
+ * historial de correo necesita consultar por estado/categoría/fecha con el error
+ * crudo del proveedor. Los registros `skipped` (sin `RESEND_API_KEY` o sin
+ * destinatario) no se guardan: no hubo intento.
+ *
+ * `PaymentReminderLog` sigue siendo la bitácora del recordatorio (un envío por
+ * cobro y día, con WhatsApp); `MailLog` es transversal a todos los correos.
+ * `organizationId` es opcional: un reset de contraseña de una cuenta sin empresa
+ * no pertenece a ninguna empresa y no aparece en su historial.
+ */
+model MailLog {
+  id             String       @id
+  organizationId String?
+  category       MailCategory
+  status         MailStatus   @default(sending)
+  to             String
+  subject        String
+  /// Motivo del fallo devuelto por el proveedor (recortado a 300 caracteres).
+  error          String?
+  /// Id del mensaje en Resend, para verificar la entrega.
+  providerId     String?
+  /// Entidad relacionada (por ejemplo `Budget` o `ClientPayment`) y su id.
+  entity         String?
+  entityId       String?
+  actorId        String?
+  actorName      String?
+  actorEmail     String?
+  sentAt         DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([category, createdAt])
 }

@@ -7,6 +7,7 @@ import { parsePaymentDetails, type PortalBudgetPaymentDetails } from "./budget-p
 import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { dayKeyOf, dayStart, shiftDayKey } from "./notifications";
+import { renderMail, renderMailText, type MailRow } from "./mail";
 import { emailConfigured, sendReminderEmail } from "./resend";
 
 /**
@@ -90,14 +91,6 @@ export function clientLabel(client: { name: string; company: string | null }): s
   return client.company?.trim() || client.name;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 /** Concepto del cobro para asuntos y resúmenes: factura, presupuesto o cuota. */
 function reminderConcept(input: { invoiceNumber: string | null; budgetTitle: string | null }): string {
   if (input.invoiceNumber) return `factura ${input.invoiceNumber}`;
@@ -118,6 +111,8 @@ function clientDueText(dueAt: Date): string {
 export type PaymentReminderEmail = {
   subject: string;
   html: string;
+  /** Alternativa en texto plano (misma información). */
+  text: string;
 };
 
 export type PaymentReminderEmailInput = {
@@ -132,9 +127,10 @@ export type PaymentReminderEmailInput = {
 };
 
 /**
- * Plantilla del recordatorio: número de factura o presupuesto, monto,
- * vencimiento con su cuenta regresiva, link del portal y datos de pago de la
- * empresa cuando están cargados. Sin link no se inventa uno.
+ * Recordatorio con la plantilla única de correo: número de factura o
+ * presupuesto, monto, vencimiento con su cuenta regresiva, link del portal y
+ * datos de pago de la empresa cuando están cargados. Sin link no se inventa uno.
+ * Los textos clave se mantienen respecto de la versión anterior.
  */
 export function buildPaymentReminderEmail(input: PaymentReminderEmailInput): PaymentReminderEmail {
   const due = formatDate(input.dueAt);
@@ -142,52 +138,36 @@ export function buildPaymentReminderEmail(input: PaymentReminderEmailInput): Pay
   const dueText = clientDueText(input.dueAt);
   const subject = `Recordatorio de pago · ${concept} · ${dueText || "vence"} el ${due}`;
 
-  const rows: string[] = [
-    `<tr><td style="padding:2px 12px 2px 0;color:#5b6672">Monto</td><td style="padding:2px 0;font-weight:600;white-space:nowrap">${escapeHtml(formatMoney(input.amount))}</td></tr>`,
-    `<tr><td style="padding:2px 12px 2px 0;color:#5b6672">Vencimiento</td><td style="padding:2px 0;font-weight:600;white-space:nowrap">${escapeHtml([due, dueText].filter(Boolean).join(" · "))}</td></tr>`,
+  const rows: MailRow[] = [
+    { label: "Monto", value: formatMoney(input.amount), strong: true },
+    { label: "Vencimiento", value: [due, dueText].filter(Boolean).join(" · "), strong: true },
   ];
-  if (input.invoiceNumber) {
-    rows.push(
-      `<tr><td style="padding:2px 12px 2px 0;color:#5b6672">Factura</td><td style="padding:2px 0;font-weight:600">${escapeHtml(input.invoiceNumber)}</td></tr>`,
-    );
-  }
-  if (input.budgetTitle) {
-    rows.push(
-      `<tr><td style="padding:2px 12px 2px 0;color:#5b6672">Presupuesto</td><td style="padding:2px 0;font-weight:600">${escapeHtml(input.budgetTitle)}</td></tr>`,
-    );
-  }
+  if (input.invoiceNumber) rows.push({ label: "Factura", value: input.invoiceNumber });
+  if (input.budgetTitle) rows.push({ label: "Presupuesto", value: input.budgetTitle });
 
   const details = input.paymentDetails;
-  const detailsLine = details
-    ? [
-        details.bank ? `Banco: ${details.bank}` : null,
-        details.holder ? `Titular: ${details.holder}` : null,
-        details.account ? `Cuenta: ${details.account}` : null,
-        details.alias ? `Alias: ${details.alias}` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(" · ")
-    : "";
+  if (details) {
+    if (details.bank) rows.push({ label: "Banco", value: details.bank });
+    if (details.holder) rows.push({ label: "Titular", value: details.holder });
+    if (details.account) rows.push({ label: "Cuenta", value: details.account });
+    if (details.alias) rows.push({ label: "Alias", value: details.alias });
+  }
 
-  const html = [
-    `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.6;color:#101418">`,
-    `<p>Hola ${escapeHtml(clientLabel(input.client))}:</p>`,
-    `<p>Te escribimos de ${escapeHtml(input.organizationName)} para recordarte un pago pendiente.</p>`,
-    `<table cellpadding="0" cellspacing="0" style="margin:0 0 14px;font-size:15px">${rows.join("")}</table>`,
-    input.portalUrl
-      ? `<p><a href="${input.portalUrl}" style="display:inline-block;padding:9px 14px;border-radius:8px;background:#101418;color:#ffffff;text-decoration:none;font-weight:700">Ver el detalle y pagar en el portal</a></p><p style="color:#5b6672;font-size:13px">O copiá este link: ${escapeHtml(input.portalUrl)}</p>`
-      : "",
-    detailsLine
-      ? `<p><strong>Datos de pago</strong><br>${escapeHtml(detailsLine)}</p>`
-      : "",
-    `<p>Si ya abonaste este pago, ignorá este mensaje.</p>`,
-    `<p>Gracias,<br>${escapeHtml(input.organizationName)}</p>`,
-    `</div>`,
-  ]
-    .filter(Boolean)
-    .join("");
+  const content = {
+    title: `Recordatorio de pago · ${dueText || `vence el ${due}`}`,
+    intro: [
+      `Hola ${clientLabel(input.client)}:`,
+      `Te escribimos de ${input.organizationName} para recordarte un pago pendiente.`,
+    ],
+    rows,
+    cta: input.portalUrl ? { label: "Ver el detalle y pagar en el portal", url: input.portalUrl } : null,
+    note: "Si ya abonaste este pago, ignorá este mensaje.",
+    preheader: `${formatMoney(input.amount)} · ${dueText || `vence el ${due}`}`,
+    organization: input.organizationName,
+    reason: `el equipo de ${input.organizationName} te recuerda un pago pendiente`,
+  };
 
-  return { subject, html };
+  return { subject, html: renderMail(content), text: renderMailText(content) };
 }
 
 /** Link del portal del cobro: el del presupuesto asociado, si tiene token activo. */
@@ -318,7 +298,15 @@ export async function sendPaymentReminderEmail(input: {
     },
   };
   try {
-    await sendReminderEmail({ to, subject: content.subject, html: content.html });
+    await sendReminderEmail({
+      to,
+      subject: content.subject,
+      html: content.html,
+      text: content.text,
+      organizationId: organization.id,
+      paymentId: payment.id,
+      actor: { id: actor.user.id, name: actor.user.name, email: actor.user.email },
+    });
     reminder = await db.paymentReminderLog.update({
       where: { id: reminder.id },
       data: { status: "sent", error: null },
