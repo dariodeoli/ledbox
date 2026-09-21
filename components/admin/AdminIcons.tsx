@@ -177,6 +177,20 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M4.5 17.4V19A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-1.6" />
     </>
   ),
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M4 4.5l16 15" />
+      <path d="M9.9 6.2A9.6 9.6 0 0 1 12 5.8c6 0 9.5 6.2 9.5 6.2a17 17 0 0 1-3.2 4.1" />
+      <path d="M6.1 8.2A17.2 17.2 0 0 0 2.5 12s3.5 6.2 9.5 6.2a9.3 9.3 0 0 0 4-.9" />
+      <path d="M9.6 10.2a3 3 0 0 0 4.2 4.2" />
+    </>
+  ),
 };
 
 export function AdminIcon({ name, size = 16 }: { name: AdminIconName; size?: number }) {

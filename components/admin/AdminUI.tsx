@@ -11,17 +11,17 @@ export function AdminSpinner({ label = "Cargando" }: { label?: string }) {
 
 export function AdminError({ message }: { message: string }) {
   return (
-    <p className="admin-alert admin-alert--error" role="alert">
+    <AdminNote tone="error" variant="alert">
       {message}
-    </p>
+    </AdminNote>
   );
 }
 
 export function AdminSuccess({ children }: { children: React.ReactNode }) {
   return (
-    <p className="admin-alert admin-alert--success" role="status">
+    <AdminNote tone="ok" variant="alert">
       {children}
-    </p>
+    </AdminNote>
   );
 }
 
@@ -78,7 +78,23 @@ export function AdminBadge({ tone = "neutral", title, children }: { tone?: Admin
   );
 }
 
-export function AdminNote({ children, tone }: { children: React.ReactNode; tone?: "ok" | "error" }) {
+/** Aviso inline único del panel: `note` en formularios y bloques, `alert` en las tarjetas de acceso. */
+export function AdminNote({
+  children,
+  tone,
+  variant = "note",
+}: {
+  children: React.ReactNode;
+  tone?: "ok" | "error";
+  variant?: "note" | "alert";
+}) {
+  if (variant === "alert") {
+    return (
+      <p className={tone === "error" ? "admin-alert admin-alert--error" : "admin-alert admin-alert--success"} role={tone === "error" ? "alert" : "status"}>
+        {children}
+      </p>
+    );
+  }
   return (
     <p className="admin-note" role={tone === "error" ? "alert" : "status"} data-tone={tone}>
       {children}
@@ -243,14 +259,31 @@ export function AdminSelect({
   onChange,
   label,
   options,
+  className,
+  title,
+  disabled,
+  required,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   options: Array<{ value: string; label: string }>;
+  /** Clase del control; sin ella usa el filtro estándar (`admin-filter`). */
+  className?: string;
+  title?: string;
+  disabled?: boolean;
+  required?: boolean;
 }) {
   return (
-    <select className="admin-filter" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label}>
+    <select
+      className={className ?? "admin-filter"}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={label}
+      title={title}
+      disabled={disabled}
+      required={required}
+    >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
