@@ -49,6 +49,7 @@ model Organization {
   memberships      OrganizationMembership[]
   adminMemberships AdminMembership[]
   adminSessions    AdminSession[]
+  logos            OrganizationLogo[]
   leads            Lead[]
   quotes           QuoteRequest[]
   clients          Client[]
@@ -80,6 +81,14 @@ model AppUser {
   sessions     AppSession[]
 
   @@index([active, createdAt])
+}
+
+/// Variante del logo de la empresa (issue #22): `light` (para fondos oscuros) y
+/// `dark` (para fondos claros). La regla que decide cuál se usa vive en un solo
+/// lugar (`components/admin/AdminAvatar.tsx`); en papel siempre va la clara.
+enum OrganizationLogoVariant {
+  light
+  dark
 }
 
 model OrganizationMembership {
@@ -120,6 +129,7 @@ model AdminUser {
   sessions            AdminSession[]
   memberships         AdminMembership[]
   passwordResetTokens PasswordResetToken[]
+  avatar              AdminUserAvatar?
 }
 
 /// Membresía de un usuario del panel a una empresa (organización).
@@ -166,6 +176,43 @@ model PasswordResetToken {
   user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+/// Avatar del panel (issue #22): un binario por usuario, en la base igual que
+/// los comprobantes de pago. Nunca es público: se sirve solo con sesión desde
+/// `/api/admin/users/avatars/[id]`. `width`/`height` guardan el recorte cuadrado
+/// que ya hizo el navegador (canvas, sin librerías) para no re-calcularlo.
+model AdminUserAvatar {
+  id        String    @id
+  userId    String    @unique
+  mime      String
+  size      Int
+  width     Int?
+  height    Int?
+  data      Bytes
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Logo de la empresa por tema (issue #22): una fila por variante (`light` y
+/// `dark`). El binario vive en la base y se sirve con sesión desde
+/// `/api/admin/organization/branding/logos/[variant]`; en papel siempre se usa
+/// la variante clara y sin logo queda el monograma `LB`.
+model OrganizationLogo {
+  id             String                  @id
+  organizationId String
+  variant        OrganizationLogoVariant
+  mime           String
+  size           Int
+  width          Int?
+  height         Int?
+  data           Bytes
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, variant])
 }
 
 model Lead {

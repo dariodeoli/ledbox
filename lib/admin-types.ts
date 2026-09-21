@@ -41,11 +41,30 @@ export type AdminIconName =
   | "print"
   | "download"
   | "eye"
-  | "eye-off";
+  | "eye-off"
+  | "user"
+  | "building"
+  | "chevron-down"
+  | "upload"
+  | "trash";
 
-export type AdminSessionUser = { id: string; name: string; email: string; role: AdminRole };
+export type AdminSessionUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  /** Avatar subido (issue #22): `null` = el chip dibuja las iniciales. */
+  avatarUpdatedAt?: string | null;
+};
 
-export type AdminOrganization = { id: string; name: string; slug?: string | null; role?: string | null };
+export type AdminOrganization = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  role?: string | null;
+  /** Logo por tema (issue #22): `null` en cada variante que falta. */
+  logos?: AdminOrganizationLogos;
+};
 
 /**
  * `GET /api/admin/session`. Contrato objetivo `{ user, organization, organizations[] }`; el API
@@ -466,7 +485,6 @@ export type AdminBudgetPaymentProofRow = {
   size: number;
   createdAt: string;
 };
-
 /** Comprobantes agrupados por presupuesto (índice que consumen Presupuestos y Finanzas). */
 export function groupProofsByBudget(
   proofs: readonly AdminBudgetPaymentProofRow[],
@@ -475,6 +493,83 @@ export function groupProofsByBudget(
   for (const proof of proofs) (grouped[proof.budgetId] ??= []).push(proof);
   return grouped;
 }
+
+// ── Imagen de identidad: avatar de persona y logo de empresa (issue #22) ─────
+// Las dos superficies comparten las mismas reglas: JPG, PNG o WebP de hasta
+// 1 MB, ya recortados y comprimidos en el navegador (canvas, sin librerías). El
+// tipo real sale SIEMPRE del contenido —nunca del MIME declarado ni de la
+// extensión—, así un PDF o un ejecutable renombrado se rechaza en el cliente y
+// otra vez en el API. Los binarios viven en la base y se sirven solo con sesión.
+
+/** Tope de la imagen de identidad: 1 MB (el navegador la comprime antes de subir). */
+export const IDENTITY_IMAGE_MAX_BYTES = 1024 * 1024;
+
+/** Tipos aceptados por el avatar y el logo; el servidor decide por contenido. */
+export const IDENTITY_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type IdentityImageMime = (typeof IDENTITY_IMAGE_MIMES)[number];
+
+/** Firma real de una imagen de identidad (JPG, PNG o WebP); `null` si no lo es. */
+export function detectIdentityImageMime(bytes: Uint8Array): IdentityImageMime | null {
+  const mime = detectPaymentProofMime(bytes);
+  return mime && mime !== "application/pdf" ? mime : null;
+}
+
+/** Extensión canónica del archivo servido (nombre del avatar y del logo). */
+export function identityImageExtension(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  return "jpg";
+}
+
+/**
+ * Variantes del logo de empresa (enum `OrganizationLogoVariant`). La regla que
+ * decide cuál se usa vive en un solo lugar (`components/admin/AdminAvatar.tsx`):
+ * fondo oscuro → variante clara; fondo claro y papel → variante oscura.
+ */
+export const LOGO_VARIANTS = ["light", "dark"] as const;
+export type LogoVariant = (typeof LOGO_VARIANTS)[number];
+
+export function isLogoVariant(value: string): value is LogoVariant {
+  return (LOGO_VARIANTS as readonly string[]).includes(value);
+}
+
+/** Cuándo se subió cada variante; `null` = la empresa todavía no la subió. */
+export type AdminOrganizationLogos = Record<LogoVariant, string | null>;
+
+function versionQuery(version: string | Date | null | undefined): string {
+  const value = version instanceof Date ? version.toISOString() : version;
+  return value ? `?v=${encodeURIComponent(value)}` : "";
+}
+
+/** URL del avatar de un usuario; se sirve con sesión y `version` corta la caché. */
+export function adminAvatarUrl(userId: string, version?: string | Date | null): string {
+  return `/api/admin/users/avatars/${encodeURIComponent(userId)}${versionQuery(version)}`;
+}
+
+/** URL del logo de la empresa para una variante; se sirve con sesión. */
+export function organizationLogoUrl(variant: LogoVariant, version?: string | Date | null): string {
+  return `/api/admin/organization/branding/logos/${variant}${versionQuery(version)}`;
+}
+
+/**
+ * Perfil propio (`GET /api/admin/profile`): el correo es la identidad de acceso
+ * y no se edita desde acá; `hasPassword` distingue las cuentas con contraseña de
+ * las que entran solo con Google.
+ */
+export type AdminProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  hasPassword: boolean;
+  avatarUpdatedAt: string | null;
+};
+
+/** Marca de la empresa (`GET /api/admin/organization/branding`). */
+export type AdminOrganizationBranding = {
+  organization: { id: string; name: string; slug: string };
+  logos: AdminOrganizationLogos;
+};
 
 
 /** Ítem de pedido que llega con el lead desde el sitio (relación `quoteRequests.items`). */
@@ -714,6 +809,8 @@ export type AdminPromoterRow = {
   name: string;
   phone: string | null;
   email: string | null;
+  /** Foto permitida de la promotora (issue #22): la dibuja el avatar único; sin foto, iniciales. */
+  photoUrl: string | null;
   specialties: string | null;
   active: boolean;
   createdAt: string;
@@ -746,6 +843,8 @@ export type AdminUserRow = {
   role: AdminRole;
   active: boolean;
   createdAt: string;
+  /** Avatar subido (issue #22); `null` = iniciales. */
+  avatarUpdatedAt: string | null;
 };
 
 /**
@@ -998,6 +1097,11 @@ export type AdminMonthlyReport = {
   issuedAt: string;
   /** Empresa activa (nombre real de la organización). */
   organization: string;
+  /**
+   * Logo de la empresa para la hoja (issue #22): siempre la variante clara,
+   * servida con sesión; `null` deja el monograma `LB`.
+   */
+  logo: string | null;
   totals: AdminMonthlyReportTotals;
   events: AdminMonthlyReportEventRow[];
   collections: AdminMonthlyReportCollectionRow[];
@@ -1012,6 +1116,11 @@ export type AdminApiResponse = {
   notifications?: AdminNotification[];
   notificationCounts?: AdminNotificationCounts;
   error?: string;
+  /** Perfil propio (`GET /api/admin/profile`). */
+  profile?: AdminProfile;
+  /** Marca de la empresa (`GET /api/admin/organization/branding`). */
+  organization?: AdminOrganizationBranding["organization"];
+  logos?: AdminOrganizationLogos;
   clients?: AdminClientRow[];
   leads?: AdminLeadRow[];
   events?: AdminEventRow[];

@@ -39,12 +39,27 @@ export const FIELD_MESSAGES = {
   amount: "Ingresá un monto válido en guaraníes.",
   amountLimit: "El monto supera el máximo permitido.",
   percent: "Ingresá un porcentaje entre 0 y 100.",
+  name: "Ingresá un nombre de 2 a 120 caracteres.",
   required: "Este campo es obligatorio.",
 } as const;
 
 /** Deja solo dígitos (cantidades, días, códigos numéricos). */
 export function digitsOnly(value: string): string {
   return (value ?? "").replace(/\D/g, "");
+}
+
+/** Nombre de persona como se guarda: sin espacios de más (el límite es `FIELD_LIMITS.name`). */
+export function normalizePersonName(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+export function personNameValid(value: string | null | undefined): boolean {
+  const name = normalizePersonName(value);
+  return name.length >= 2 && name.length <= FIELD_LIMITS.name;
+}
+
+export function personNameError(value: string | null | undefined): string | null {
+  return personNameValid(value) ? null : FIELD_MESSAGES.name;
 }
 
 /** Limpia un pegado de monto PYG: símbolos, espacios y separadores fuera. */
