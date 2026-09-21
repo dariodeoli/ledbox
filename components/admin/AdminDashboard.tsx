@@ -1,103 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminError, AdminFrame, AdminSpinner } from "./AdminFrame";
 
-type User = { id: string; name: string; email: string; role: string };
-type Lead = { id: string; name: string; phone: string; email: string; company: string | null; ruc: string | null; reason: string | null; eventDate: string | null; location: string | null; message: string | null; source: string; status: "NEW" | "CONTACTED" | "QUOTED" | "WON" | "LOST"; createdAt: string; quoteRequests?: Array<{ id: string; createdAt: string; items?: unknown[] }> };
-type StatusFilter = "ALL" | Lead["status"];
-
-const STATUS_LABELS: Record<StatusFilter, string> = { ALL: "Todos", NEW: "Nuevos", CONTACTED: "Contactados", QUOTED: "Cotizados", WON: "Ganados", LOST: "Perdidos" };
-
-function formatDate(value: string | null) {
-  if (!value) return "Sin fecha";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Fecha no disponible" : new Intl.DateTimeFormat("es-PY", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
-function whatsappHref(phone: string, name: string) {
-  const digits = phone.replace(/\D/g, "");
-  return `https://wa.me/${digits}?text=${encodeURIComponent(`Hola ${name}, te contactamos desde LedBox por tu consulta.`)}`;
-}
+type Overview = { counts: Record<string, number>; finance: { totalReceivable: number; totalPayable: number; committedCash: number }; upcoming: Array<{ id: string; name: string; location: string | null; startsAt: string | null; status: string; client: { name: string; company: string | null }; assignments: Array<{ quantity: number; inventory: { name: string } }>; tasks: Array<{ title: string; completedAt: string | null }> }> };
+type Client = { id: string; name: string; company: string | null; type: string; email: string | null; phone: string | null; ruc: string | null; _count: { events: number; budgets: number } };
+type Event = { id: string; name: string; location: string | null; startsAt: string | null; status: string; client: Client };
+type Resources = { suppliers: Array<{ id: string; name: string; category: string; phone: string | null }>; inventory: Array<{ id: string; name: string; category: string; kind: string; quantity: number; status: string }>; promoters: Array<{ id: string; name: string; phone: string | null; specialties: string | null }> };
+const money = (n: number) => new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 }).format(n);
+const date = (v?: string | null) => v ? new Intl.DateTimeFormat("es-PY", { dateStyle: "medium", timeStyle: "short" }).format(new Date(v)) : "Fecha a confirmar";
 
 export function AdminDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [filter, setFilter] = useState<StatusFilter>("ALL");
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const sessionResponse = await fetch("/api/admin/session", { cache: "no-store" });
-      if (sessionResponse.status === 401) {
-        router.replace("/admin/login");
-        return;
-      }
-      if (!sessionResponse.ok) throw new Error("session");
-      const session = await sessionResponse.json() as { user?: User };
-      if (!session.user) {
-        router.replace("/admin/login");
-        return;
-      }
-      setUser(session.user);
-      const leadsResponse = await fetch("/api/leads", { cache: "no-store" });
-      if (leadsResponse.status === 401) {
-        router.replace("/admin/login");
-        return;
-      }
-      if (!leadsResponse.ok) throw new Error("leads");
-      const data = await leadsResponse.json() as { leads?: Lead[] };
-      setLeads(data.leads || []);
-    } catch {
-      setError("No pudimos cargar los leads. Revisá la conexión y probá nuevamente.");
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
-
-  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
-
-  async function logout() {
-    setLoggingOut(true);
-    try { await fetch("/api/auth/logout", { method: "POST" }); } finally { router.replace("/admin/login"); router.refresh(); }
-  }
-
-  const filteredLeads = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return leads.filter((lead) => {
-      const matchesStatus = filter === "ALL" || lead.status === filter;
-      const searchable = [lead.name, lead.email, lead.phone, lead.company, lead.ruc, lead.reason, lead.location].filter(Boolean).join(" ").toLowerCase();
-      return matchesStatus && (!normalized || searchable.includes(normalized));
-    });
-  }, [filter, leads, query]);
-
-  const newCount = leads.filter((lead) => lead.status === "NEW").length;
-  const quotedCount = leads.filter((lead) => lead.status === "QUOTED").length;
-
-  return <AdminFrame eyebrow="LedBox · Leads & cotizaciones">
-    <div className="admin-dashboard">
-      <header className="admin-dashboard-head">
-        <div><span className="admin-card-index">Workspace / overview</span><h1 className="admin-title admin-title--dashboard">Consultas<br /><span>recibidas.</span></h1><p className="admin-lede">{user ? <>Hola, {user.name}. Este es el pulso comercial de LedBox.</> : "Cargando tu espacio privado…"}</p></div>
-        <div className="admin-dashboard-actions"><Link href="/" className="admin-ghost-button">Ver sitio ↗</Link><button type="button" className="admin-ghost-button" onClick={logout} disabled={loggingOut}>{loggingOut ? "Saliendo…" : "Cerrar sesión"}</button></div>
-      </header>
-      {error && <div className="admin-dashboard-message"><AdminError message={error} /><button type="button" className="admin-retry" onClick={() => void loadDashboard()}>Reintentar</button></div>}
-      <section className="admin-stats" aria-label="Resumen de leads"><div className="admin-stat"><span>Total</span><strong>{loading ? "—" : leads.length}</strong><small>consultas registradas</small></div><div className="admin-stat admin-stat--active"><span>Nuevos</span><strong>{loading ? "—" : newCount}</strong><small>requieren seguimiento</small></div><div className="admin-stat"><span>Cotizados</span><strong>{loading ? "—" : quotedCount}</strong><small>con propuesta enviada</small></div></section>
-      <section className="admin-leads-section" aria-labelledby="leads-title"><div className="admin-section-heading"><div><span className="admin-card-index">Inbox / {filteredLeads.length}</span><h2 id="leads-title">Leads recientes</h2></div><div className="admin-filters"><label className="sr-only" htmlFor="lead-search">Buscar leads</label><input id="lead-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar…" /><label className="sr-only" htmlFor="lead-status">Filtrar por estado</label><select id="lead-status" value={filter} onChange={(event) => setFilter(event.target.value as StatusFilter)}>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
-        {loading ? <div className="admin-loading-panel"><AdminSpinner label="Cargando leads" /><span>Cargando consultas…</span></div> : filteredLeads.length === 0 ? <div className="admin-empty"><span className="admin-empty-icon">∅</span><h3>{leads.length === 0 ? "Todavía no hay consultas." : "No hay coincidencias."}</h3><p>{leads.length === 0 ? "Cuando alguien complete el formulario, su consulta aparecerá acá." : "Probá con otro texto o estado."}</p></div> : <div className="admin-lead-list">{filteredLeads.map((lead) => <LeadRow key={lead.id} lead={lead} />)}</div>}
-      </section>
-      <p className="admin-dashboard-note">Los precios y datos de cada consulta se guardan como referencia. Confirmá disponibilidad, fechas y alcance antes de enviar una propuesta final.</p>
-    </div>
-  </AdminFrame>;
+  const [overview, setOverview] = useState<Overview | null>(null); const [clients, setClients] = useState<Client[]>([]); const [events, setEvents] = useState<Event[]>([]); const [resources, setResources] = useState<Resources | null>(null); const [tab, setTab] = useState("overview"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [user, setUser] = useState<{ name: string } | null>(null);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const session = await fetch("/api/admin/session", { cache: "no-store" }); if (session.status === 401) return router.replace("/admin/login"); setUser((await session.json()).user); const [o, c, e, r] = await Promise.all([fetch("/api/admin/overview"), fetch("/api/admin/clients"), fetch("/api/admin/events"), fetch("/api/admin/resources")]); if ([o, c, e, r].some((x) => x.status === 401)) return router.replace("/admin/login"); setOverview(await o.json()); setClients((await c.json()).clients || []); setEvents((await e.json()).events || []); setResources(await r.json()); } catch { setError("No pudimos cargar el centro de operaciones."); } finally { setLoading(false); } }, [router]);
+  useEffect(() => { void load(); }, [load]);
+  async function logout() { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/admin/login"); router.refresh(); }
+  if (loading) return <AdminFrame><div className="admin-loading-panel"><AdminSpinner label="Cargando panel" /><span>Cargando centro de operaciones…</span></div></AdminFrame>;
+  return <AdminFrame eyebrow="LedBox · Centro de operaciones"><div className="admin-dashboard"><header className="admin-dashboard-head"><div><span className="admin-card-index">Workspace / operaciones</span><h1 className="admin-title admin-title--dashboard">Todo bajo<br /><span>control.</span></h1><p className="admin-lede">{user ? `Hola, ${user.name}.` : "Panel privado"} Eventos, clientes, alquileres, costos y rentabilidad en un solo lugar.</p></div><div className="admin-dashboard-actions"><Link href="/" className="admin-ghost-button">Ver sitio ↗</Link><button className="admin-ghost-button" onClick={logout}>Cerrar sesión</button></div></header>{error && <AdminError message={error} />}<nav className="admin-tabs" aria-label="Módulos"><button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Resumen</button><button className={tab === "events" ? "active" : ""} onClick={() => setTab("events")}>Eventos</button><button className={tab === "clients" ? "active" : ""} onClick={() => setTab("clients")}>Clientes</button><button className={tab === "resources" ? "active" : ""} onClick={() => setTab("resources")}>Inventario</button><button className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>Proveedores</button><button className={tab === "promoters" ? "active" : ""} onClick={() => setTab("promoters")}>Promotoras</button></nav>{tab === "overview" && <OverviewPanel overview={overview} events={events} />}{tab === "events" && <EventsPanel events={events} clients={clients} reload={load} />}{tab === "clients" && <ClientsPanel clients={clients} reload={load} />}{tab === "resources" && <ResourcesPanel resources={resources} />}{tab === "suppliers" && <SimpleResource title="Proveedores" rows={resources?.suppliers.map((x) => `${x.name} · ${x.category} · ${x.phone || "sin contacto"}`) || []} />}{tab === "promoters" && <SimpleResource title="Promotoras activas" rows={resources?.promoters.map((x) => `${x.name} · ${x.specialties || "perfil general"} · ${x.phone || "sin contacto"}`) || []} />}</div></AdminFrame>;
 }
-
-function LeadRow({ lead }: { lead: Lead }) {
-  return <article className="admin-lead-row"><div className="admin-lead-main"><div className="admin-lead-meta"><span className={`admin-status admin-status--${lead.status.toLowerCase()}`}>{STATUS_LABELS[lead.status]}</span><time dateTime={lead.createdAt}>{formatDate(lead.createdAt)}</time></div><h3>{lead.name}</h3><p className="admin-lead-contact"><a href={`mailto:${lead.email}`}>{lead.email}</a><span>·</span><a href={`tel:${lead.phone}`}>{lead.phone}</a>{lead.company && <><span>·</span><span>{lead.company}</span></>}</p>{(lead.reason || lead.location || lead.eventDate) && <p className="admin-lead-context">{[lead.reason, lead.location, lead.eventDate && `Evento: ${formatDate(lead.eventDate)}`].filter(Boolean).join(" · ")}</p>}{lead.message && <p className="admin-lead-message">{lead.message}</p>}</div><div className="admin-lead-actions"><a href={whatsappHref(lead.phone, lead.name)} target="_blank" rel="noopener noreferrer" className="admin-action admin-action--primary">WhatsApp ↗</a><a href={`mailto:${lead.email}?subject=${encodeURIComponent("Tu consulta para LedBox")}`} className="admin-action">Email</a></div></article>;
-}
+function OverviewPanel({ overview, events }: { overview: Overview | null; events: Event[] }) { if (!overview) return null; const c = overview.counts; return <><section className="admin-stats admin-stats--wide"><Stat label="Clientes activos" value={c.clients} note="finales y revendedores" /><Stat label="Eventos" value={c.events} note="operación completa" /><Stat label="Por cobrar" value={money(overview.finance.totalReceivable)} note="ventas aprobadas" /><Stat label="Por pagar" value={money(overview.finance.totalPayable)} note="proveedores comprometidos" /></section><section className="admin-module-grid"><div className="admin-module"><span className="admin-card-index">Esta semana</span><h2>Próximos eventos</h2>{events.slice(0, 5).map((e) => <div className="admin-event-mini" key={e.id}><strong>{e.name}</strong><span>{e.client.company || e.client.name} · {date(e.startsAt)}</span><small>{e.location || "Ubicación a confirmar"} · {e.status}</small></div>)}{events.length === 0 && <p className="admin-muted">No hay eventos cargados todavía.</p>}</div><div className="admin-module"><span className="admin-card-index">Pipeline</span><h2>Qué mirar hoy</h2><div className="admin-check-row"><b>{c.leads}</b><span>leads nuevos por contactar</span></div><div className="admin-check-row"><b>{c.budgets}</b><span>presupuestos activos</span></div><div className="admin-check-row"><b>{c.inventory}</b><span>ítems de inventario controlados</span></div><div className="admin-check-row"><b>{c.suppliers}</b><span>proveedores disponibles</span></div></div></section></>; }
+function Stat({ label, value, note }: { label: string; value: string | number; note: string }) { return <div className="admin-stat"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
+function EventsPanel({ events, clients, reload }: { events: Event[]; clients: Client[]; reload: () => void }) { const [form, setForm] = useState({ clientId: "", name: "", location: "", startsAt: "" }); const [saving, setSaving] = useState(false); async function submit(e: React.FormEvent) { e.preventDefault(); setSaving(true); await fetch("/api/admin/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(form) }); setForm({ clientId: "", name: "", location: "", startsAt: "" }); setSaving(false); reload(); } return <Module title="Eventos y calendario" subtitle="Montaje · evento · desmontaje · checklist"><form className="admin-quick-form" onSubmit={submit}><select required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}><option value="">Cliente…</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}</select><input required placeholder="Nombre del evento" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input placeholder="Lugar" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /><input type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /><button className="btn-led" disabled={saving}>{saving ? "Guardando…" : "Agregar evento"}</button></form><div className="admin-table">{events.map((e) => <div className="admin-table-row" key={e.id}><strong>{e.name}</strong><span>{e.client.company || e.client.name}</span><span>{date(e.startsAt)}</span><span>{e.location || "Sin lugar"}</span><b>{e.status}</b></div>)}</div></Module>; }
+function ClientsPanel({ clients, reload }: { clients: Client[]; reload: () => void }) { const [form, setForm] = useState({ name: "", company: "", type: "FINAL", phone: "", email: "", ruc: "" }); async function submit(e: React.FormEvent) { e.preventDefault(); await fetch("/api/admin/clients", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(form) }); setForm({ name: "", company: "", type: "FINAL", phone: "", email: "", ruc: "" }); reload(); } return <Module title="Clientes y oportunidades" subtitle="Clientes finales · mayoristas · revendedores"><form className="admin-quick-form" onSubmit={submit}><input required placeholder="Nombre / responsable" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input placeholder="Empresa" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="FINAL">Cliente final</option><option value="RESELLER">Mayorista / revendedor</option></select><input placeholder="Teléfono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /><input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /><input placeholder="RUC" value={form.ruc} onChange={(e) => setForm({ ...form, ruc: e.target.value })} /><button className="btn-led">Registrar cliente</button></form><div className="admin-table">{clients.map((c) => <div className="admin-table-row" key={c.id}><strong>{c.company || c.name}</strong><span>{c.type === "RESELLER" ? "Revendedor" : "Final"}</span><span>{c.phone || "Sin teléfono"}</span><span>{c._count.events} eventos · {c._count.budgets} presupuestos</span></div>)}</div></Module>; }
+function ResourcesPanel({ resources }: { resources: Resources | null }) { return <Module title="Inventario y equipos" subtitle="Reutilizable · consumible · descartable · disponibilidad"><div className="admin-table">{resources?.inventory.map((x) => <div className="admin-table-row" key={x.id}><strong>{x.name}</strong><span>{x.category}</span><span>{x.kind}</span><span>cantidad: {x.quantity}</span><b>{x.status}</b></div>)}</div></Module>; }
+function SimpleResource({ title, rows }: { title: string; rows: string[] }) { return <Module title={title} subtitle="Base operativa LEDBOX"><div className="admin-table">{rows.map((row) => <div className="admin-table-row" key={row}><strong>{row}</strong></div>)}{rows.length === 0 && <p className="admin-muted">Todavía no hay registros.</p>}</div></Module>; }
+function Module({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <section className="admin-module admin-module--full"><span className="admin-card-index">Módulo / gestión</span><h2>{title}</h2><p className="admin-muted">{subtitle}</p>{children}</section>; }

@@ -194,3 +194,254 @@ model RateLimitBucket {
 
   @@index([windowStart])
 }
+
+enum ClientType {
+  FINAL
+  RESELLER
+}
+enum EventStatus {
+  DRAFT
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+enum CommercialStatus {
+  DRAFT
+  SENT
+  NEGOTIATING
+  APPROVED
+  LOST
+  CANCELLED
+}
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+}
+enum SupplierCategory {
+  CARPENTRY
+  GRAPHICS
+  ELECTRICITY
+  TRANSPORT
+  FURNITURE
+  AUDIOVISUAL
+  STAFF
+  OTHER
+}
+enum SupplierWorkStatus {
+  PENDING
+  CONTRACTED
+  ADVANCE_PENDING
+  ADVANCE_PAID
+  IN_PRODUCTION
+  DELIVERED
+  BALANCE_PENDING
+  PAID
+  CANCELLED
+}
+enum InventoryKind {
+  REUSABLE
+  CONSUMABLE
+  DISPOSABLE
+}
+enum InventoryStatus {
+  AVAILABLE
+  RESERVED
+  IN_USE
+  MAINTENANCE
+  RETIRED
+}
+enum EventTaskType {
+  SETUP
+  EVENT
+  STRIKE
+  PAYMENT
+  COLLECTION
+}
+
+model Client {
+  id           String       @id
+  type         ClientType   @default(FINAL)
+  name         String
+  company      String?
+  ruc          String?
+  email        String?
+  phone        String?
+  notes        String?
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  events       Event[]
+  budgets      Budget[]
+  payments     ClientPayment[]
+  @@index([type, active])
+  @@index([createdAt])
+}
+
+model Event {
+  id           String       @id
+  clientId     String
+  name         String
+  location     String?
+  setupAt      DateTime?
+  startsAt     DateTime?
+  endsAt       DateTime?
+  strikeAt     DateTime?
+  status       EventStatus  @default(DRAFT)
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budgets      Budget[]
+  assignments  EventInventory[]
+  tasks        EventTask[]
+  supplierJobs SupplierJob[]
+  @@index([startsAt, status])
+  @@index([clientId, createdAt])
+}
+
+model Budget {
+  id             String           @id
+  clientId       String
+  eventId        String?
+  title          String
+  status         CommercialStatus @default(DRAFT)
+  subtotal       Int              @default(0)
+  discount       Int              @default(0)
+  total          Int              @default(0)
+  costEstimate   Int              @default(0)
+  validUntil     DateTime?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  items          BudgetItem[]
+  payments       ClientPayment[]
+  @@index([status, createdAt])
+}
+
+model BudgetItem {
+  id          String   @id
+  budgetId    String
+  name        String
+  quantity    Int      @default(1)
+  days        Int      @default(1)
+  unitPrice   Int
+  costPrice   Int      @default(0)
+  subtotal    Int
+  notes       String?
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  @@index([budgetId])
+}
+
+model ClientPayment {
+  id          String        @id
+  clientId    String
+  budgetId    String?
+  amount      Int
+  paidAt      DateTime      @default(now())
+  method      String?
+  reference   String?
+  notes       String?
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budget      Budget?       @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  @@index([clientId, paidAt])
+}
+
+model Supplier {
+  id          String           @id
+  name        String
+  company     String?
+  phone       String?
+  email       String?
+  category    SupplierCategory  @default(OTHER)
+  paymentTerms String?
+  notes       String?
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  jobs        SupplierJob[]
+  @@index([category, active])
+}
+
+model SupplierJob {
+  id             String             @id
+  supplierId     String
+  eventId        String?
+  category       SupplierCategory   @default(OTHER)
+  description    String
+  total          Int
+  advance        Int                @default(0)
+  status         SupplierWorkStatus @default(PENDING)
+  dueAt          DateTime?
+  deliveredAt    DateTime?
+  paidAt         DateTime?
+  paymentMethod  String?
+  receipt        String?
+  notes          String?
+  supplier       Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  event          Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  @@index([status, dueAt])
+  @@index([eventId])
+}
+
+model InventoryItem {
+  id          String          @id
+  name        String
+  category    String
+  sku         String?         @unique
+  kind        InventoryKind   @default(REUSABLE)
+  status      InventoryStatus @default(AVAILABLE)
+  quantity    Int             @default(1)
+  replacementCost Int          @default(0)
+  dailyCost   Int             @default(0)
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  assignments EventInventory[]
+  @@index([status, category])
+}
+
+model EventInventory {
+  id          String        @id
+  eventId     String
+  inventoryId String
+  quantity    Int           @default(1)
+  checkedOut  Boolean       @default(false)
+  checkedIn   Boolean       @default(false)
+  conditionOut String?
+  conditionIn  String?
+  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  inventory   InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  @@unique([eventId, inventoryId])
+}
+
+model Promoter {
+  id          String   @id
+  name        String
+  phone       String?
+  email       String?
+  photoUrl    String?
+  specialties String?
+  active      Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  tasks       EventTask[]
+  @@index([active, name])
+}
+
+model EventTask {
+  id          String        @id
+  eventId     String
+  promoterId  String?
+  type        EventTaskType
+  title       String
+  dueAt       DateTime?
+  completedAt DateTime?
+  notes       String?
+  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  promoter    Promoter?     @relation(fields: [promoterId], references: [id], onDelete: SetNull)
+  @@index([dueAt, completedAt])
+}
