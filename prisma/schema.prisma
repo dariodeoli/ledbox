@@ -15,6 +15,19 @@ enum AdminRole {
   VIEWER
 }
 
+/**
+ * Ciclo de vida de una invitación al equipo (issue #31): `pending` es la única
+ * vigente; `accepted` cuando la persona la aceptó, `revoked` si el equipo la
+ * cortó y `expired` cuando pasó el vencimiento. Reenviar reusa la fila y vuelve
+ * a `pending`.
+ */
+enum TeamInvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
 enum LeadStatus {
   NEW
   CONTACTED
@@ -70,6 +83,7 @@ model Organization {
   treasuryMovements TreasuryMovement[]
   expenses          Expense[]
   idempotencyKeys   IdempotencyKey[]
+  teamInvitations   TeamInvitation[]
 
   @@index([active, createdAt])
 }
@@ -154,6 +168,49 @@ model AdminMembership {
 
   @@unique([adminUserId, organizationId])
   @@index([organizationId, active])
+}
+
+/// Invitación por correo al equipo de una empresa (issue #31).
+///
+/// - Una sola fila por correo + empresa (`@@unique([organizationId, email])`):
+///   invitar de nuevo **actualiza** la existente (token nuevo, vencimiento
+///   extendido y estado `pending`) en lugar de acumular invitaciones.
+/// - El token del link es aleatorio y no enumerable (`randomInt` sobre el
+///   alfabeto sin caracteres ambiguos, el mismo criterio que el código del
+///   portal público) y se guarda solo como hash SHA-256: si se pierde el link,
+///   se reenvía (token nuevo) y el viejo muere.
+/// - El rol se valida server-side contra los roles asignables: una invitación
+///   nunca otorga OWNER.
+/// - Quién invitó se guarda denormalizado para que la traza sobreviva a bajas.
+model TeamInvitation {
+  id             String               @id
+  organizationId String
+  /// Correo normalizado (minúsculas) del invitado.
+  email          String
+  role           AdminRole            @default(VIEWER)
+  /// SHA-256 del token del link; el token plano solo viaja en el correo.
+  tokenHash      String               @unique
+  status         TeamInvitationStatus @default(pending)
+  invitedById    String?
+  invitedByName  String
+  invitedByEmail String?
+  expiresAt      DateTime
+  /// Último intento de envío real del correo (lo dibuja la lista del panel).
+  lastSentAt     DateTime?
+  /// Intentos de envío registrados para esta fila (alta + reenvíos).
+  sentCount      Int                  @default(0)
+  acceptedAt     DateTime?
+  acceptedById   String?
+  acceptedByName String?
+  revokedAt      DateTime?
+  revokedByName  String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status, expiresAt])
+  @@index([email])
 }
 
 model AdminSession {
