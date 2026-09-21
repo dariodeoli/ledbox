@@ -16,6 +16,13 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M8 3v4M16 3v4M3 10.5h18" />
     </>
   ),
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M8 3v4M16 3v4M3 10.5h18" />
+      <path d="M8.6 14.2h1.6M13.8 14.2h1.6M8.6 17.6h1.6M13.8 17.6h1.6" />
+    </>
+  ),
   clients: (
     <>
       <circle cx="9" cy="8" r="3.2" />
@@ -23,6 +30,7 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M16 10.8a3 3 0 1 0 0-5.6M18 19.8a5.4 5.4 0 0 0-2.8-4.6" />
     </>
   ),
+  leads: <path d="M4 5h16l-6.2 7.2V20l-3.6-2v-5.8z" />,
   budgets: (
     <>
       <path d="M6 3h8l4 4v14H6z" />
