@@ -14,7 +14,9 @@ import {
 } from "@/lib/admin-format";
 import { adminNavGroups } from "@/lib/admin-policy";
 import type { AdminAuditDetail } from "@/lib/admin-types";
-import { portalBudgetUrl, publicConfig } from "@/lib/public-config";import { getAuthenticatedAdmin } from "@/lib/server/auth";
+import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
+import { qrSvg } from "@/lib/qr";
+import { getAuthenticatedAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { DEMO_ORGANIZATION_NAME, isDemoOrganizationId } from "@/lib/server/demo-data";
 import { dayKeyOf, listAdminNotifications } from "@/lib/server/notifications";
@@ -93,6 +95,7 @@ export default async function DemoPage() {
 
   const modules = adminNavGroups("VIEWER").flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
   const portalUrl = portalBudget?.publicToken ? portalBudgetUrl(portalBudget.publicToken) : null;
+  const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
 
   return (
     <div className="admin-module-page admin-demo-page">
@@ -102,12 +105,18 @@ export default async function DemoPage() {
           {DEMO_ORGANIZATION_NAME} <span>·</span> panel completo con datos simulados
         </h2>
         <p className="admin-demo-lede">
-          Estás en una copia de trabajo del panel, con clientes, eventos, presupuestos, inventario y finanzas ficticios
-          generados para que veas cómo funciona LedBox. La sesión es automática, no hay registro y todo el panel es de
+          Estás en una copia de trabajo del panel, con ferias, clientes, presupuestos, inventario y finanzas simulados
+          sobre el calendario real de eventos del Paraguay. La sesión es automática, no hay registro y todo el panel es de
           <strong> solo lectura</strong>: no se guardan cambios ni se toca información real.
         </p>
         <div className="admin-demo-actions">
-          <Link className="admin-btn admin-btn--primary" href="/dashboard">
+          {portalUrl ? (
+            <a className="admin-btn admin-btn--primary" href={portalUrl} target="_blank" rel="noreferrer" title="Abrir el portal del cliente con el presupuesto aprobado de la demo">
+              <AdminIcon name="external" size={15} />
+              <span>Ver portal del cliente</span>
+            </a>
+          ) : null}
+          <Link className="admin-btn" href="/dashboard">
             <AdminIcon name="overview" size={15} />
             <span>Ir al resumen</span>
           </Link>
@@ -128,8 +137,9 @@ export default async function DemoPage() {
           </form>
         </div>
         <p className="admin-demo-footnote">
-          Los datos son ficticios y se re-anclan a hoy cada vez que entrás. Para salir de la demo usá «Salir de la demo»
-          en el aviso superior.
+          Las ferias y marcas que aparecen son referencias reales del mercado paraguayo usadas como datos simulados, con
+          contactos inventados; las fechas del calendario se re-anclan a hoy cada vez que entrás. Para salir de la demo usá
+          «Salir de la demo» en el aviso superior.
         </p>
       </section>
 
@@ -274,14 +284,20 @@ export default async function DemoPage() {
               Un presupuesto de la demo está aprobado desde el portal con su evidencia (nombre, fecha, IP y comentario).
               {portalBudget ? ` «${portalBudget.title}»` : ""}
             </p>
-            {portalUrl && portalBudget?.publicToken ? (
-              <>
-                <p className="admin-demo-code">{portalBudget.publicToken}</p>
-                <a className="admin-btn" href={portalUrl} target="_blank" rel="noreferrer">
-                  <AdminIcon name="external" size={15} />
-                  <span>Abrir el portal (demo)</span>
-                </a>
-              </>
+            {portalUrl && portalQr && portalBudget?.publicToken ? (
+              <div className="admin-demo-portal">
+                <div className="admin-demo-qr" aria-hidden="true" dangerouslySetInnerHTML={{ __html: portalQr }} />
+                <div className="admin-demo-portal-data">
+                  <p className="admin-demo-code">{portalBudget.publicToken}</p>
+                  <p className="admin-demo-portal-link" title={portalUrl}>
+                    {portalUrl.replace(/^https?:\/\//, "")}
+                  </p>
+                  <a className="admin-btn admin-btn--primary" href={portalUrl} target="_blank" rel="noreferrer">
+                    <AdminIcon name="external" size={15} />
+                    <span>Ver portal del cliente</span>
+                  </a>
+                </div>
+              </div>
             ) : null}
           </div>
           <div className="admin-demo-resource">

@@ -983,6 +983,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-demo-resource h3 { margin: 0; color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
 .admin-demo-resource p { margin: 0; color: var(--a-muted-2); font-size: 12px; line-height: 1.55; }
 .admin-demo-code { color: var(--a-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; overflow-wrap: anywhere; }
+.admin-demo-portal { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.admin-demo-qr { display: grid; place-items: center; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: #fff; }
+.admin-demo-qr svg { display: block; width: 116px; height: auto; }
+.admin-demo-portal-data { display: grid; gap: 6px; justify-items: start; min-width: min(100%, 16rem); }
+.admin-demo-portal-link { margin: 0; color: var(--a-muted-2); font-size: 11.5px; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
   .admin-demo-banner { flex-wrap: wrap; padding: 8px 12px; }
   .admin-demo-banner-text span { display: none; }
