@@ -3,6 +3,8 @@
  * Se declaran solo los campos que la UI consume; los payloads traen el resto de los escalares.
  */
 
+import type { AdminTone } from "./admin-format";
+
 export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
 
 export type AdminIconName =
@@ -219,8 +221,55 @@ export type AdminOverview = {
   }>;
 };
 
+/** Calendario operativo (`GET /api/admin/calendar?from&to`): marcador sobre un hecho real. */
+export type AdminCalendarItemKind =
+  | "setup"
+  | "event"
+  | "event_end"
+  | "strike"
+  | "collection"
+  | "supplier_due"
+  | "supplier_delivery"
+  | "supplier_payment"
+  | "task";
+
+export type AdminCalendarItem = {
+  id: string;
+  kind: AdminCalendarItemKind;
+  /** Día de Asunción del hecho (`YYYY-MM-DD`); es la clave con la que agrupa la vista. */
+  date: string;
+  /** Instante real del hecho (ISO). */
+  at: string;
+  /** Fin del rango real, solo para eventos de varios días. */
+  endAt: string | null;
+  endDate: string | null;
+  title: string;
+  subtitle: string | null;
+  href: string;
+  tone: AdminTone;
+  /** Enum real de la entidad (estado del evento o del trabajo, tipo de tarea) para el badge. */
+  tag: string | null;
+  amount: number | null;
+};
+
+export type AdminCalendarAlertLevel = "overdue" | "soon";
+export type AdminCalendarAlertKind = "task" | "supplier_due" | "checklist";
+
+export type AdminCalendarAlert = {
+  id: string;
+  level: AdminCalendarAlertLevel;
+  kind: AdminCalendarAlertKind;
+  title: string;
+  subtitle: string | null;
+  /** Día de Asunción del vencimiento (`YYYY-MM-DD`). */
+  date: string;
+  href: string;
+};
+
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
+  items?: AdminCalendarItem[];
+  alerts?: AdminCalendarAlert[];
   error?: string;
   clients?: AdminClientRow[];
   events?: AdminEventRow[];

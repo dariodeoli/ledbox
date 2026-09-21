@@ -1,16 +1,20 @@
 /**
  * Formatos y etiquetas del panel (fuente única).
- * Montos en PYG sin decimales; fechas y horas es-PY en 24 h (`hourCycle: "h23"`).
+ * Montos en PYG sin decimales; fechas y horas es-PY en 24 h (`hourCycle: "h23"`)
+ * y en la zona de la empresa (`America/Asuncion`), así el servidor y el
+ * navegador dibujan el mismo día.
  */
 
 export type AdminTone = "neutral" | "accent" | "ok" | "warn" | "danger" | "info";
 
+const TIME_ZONE = "America/Asuncion";
+
 const moneyFormat = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
 const numberFormat = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
-const dateFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric" });
-const dateShortFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short" });
-const dateTimeFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const timeFormat = new Intl.DateTimeFormat("es-PY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dateFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short", year: "numeric" });
+const dateShortFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short" });
+const dateTimeFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const timeFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 function toDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
@@ -210,3 +214,77 @@ export function whatsappHref(phone: string | null | undefined): string | null {
   const international = digits.startsWith("595") ? digits : digits.startsWith("0") ? `595${digits.slice(1)}` : `595${digits}`;
   return `https://wa.me/${international}`;
 }
+
+// ── Calendario operativo ────────────────────────────────────────────────────
+// Las vistas del calendario agrupan por día puro (`YYYY-MM-DD`); esos días se
+// formatean en UTC para que no se corran de fecha, mientras que las horas de
+// cada hecho salen de `formatTime` (zona de la empresa).
+
+const CALENDAR_KIND: Record<string, string> = {
+  setup: "Montaje",
+  event: "Evento",
+  event_end: "Fin de evento",
+  strike: "Desmontaje",
+  collection: "Cobro",
+  supplier_due: "Vence proveedor",
+  supplier_delivery: "Entrega proveedor",
+  supplier_payment: "Pago proveedor",
+  task: "Tarea",
+};
+
+const CALENDAR_ALERT_KIND: Record<string, string> = {
+  task: "Tarea",
+  supplier_due: "Proveedor",
+  checklist: "Checklist",
+};
+
+const CALENDAR_ALERT_LEVEL: Record<string, string> = {
+  overdue: "Atrasado",
+  soon: "Próximo",
+};
+
+export const calendarKindLabel = (value: string | null | undefined) => label(CALENDAR_KIND, value);
+export const calendarAlertKindLabel = (value: string | null | undefined) => label(CALENDAR_ALERT_KIND, value);
+export const calendarAlertLevelLabel = (value: string | null | undefined) => label(CALENDAR_ALERT_LEVEL, value);
+
+function dayKeyToUtcDate(dayKey: string | null | undefined): Date | null {
+  if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return null;
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+const calendarWeekdayFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", weekday: "long" });
+const calendarWeekdayShortFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", weekday: "short" });
+const calendarMonthFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", month: "long", year: "numeric" });
+const calendarDayFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
+const calendarDayShortFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", day: "2-digit", month: "short" });
+
+/** Día de la semana de una clave `YYYY-MM-DD` (ej.: "lunes"). */
+export function formatCalendarWeekday(dayKey: string | null | undefined): string {
+  const date = dayKeyToUtcDate(dayKey);
+  return date ? calendarWeekdayFormat.format(date) : "—";
+}
+
+/** Mes y año de una clave `YYYY-MM-DD` (ej.: "septiembre 2026"). */
+export function formatCalendarMonth(dayKey: string | null | undefined): string {
+  const date = dayKeyToUtcDate(dayKey);
+  return date ? calendarMonthFormat.format(date) : "—";
+}
+
+/** Día completo de una clave `YYYY-MM-DD` (ej.: "lunes, 21 de septiembre"). */
+export function formatCalendarDay(dayKey: string | null | undefined): string {
+  const date = dayKeyToUtcDate(dayKey);
+  return date ? calendarDayFormat.format(date) : "—";
+}
+
+/** Día corto de una clave `YYYY-MM-DD` (ej.: "21 sept"). */
+export function formatCalendarDayShort(dayKey: string | null | undefined): string {
+  const date = dayKeyToUtcDate(dayKey);
+  return date ? calendarDayShortFormat.format(date) : "—";
+}
+
+/** Encabezado de la grilla mensual: lunes primero (1-ene-2024 fue lunes). */
+export const CALENDAR_WEEKDAYS: readonly string[] = Array.from({ length: 7 }, (_, index) =>
+  calendarWeekdayShortFormat.format(new Date(Date.UTC(2024, 0, 1 + index))).replace(/\.$/, ""),
+);
