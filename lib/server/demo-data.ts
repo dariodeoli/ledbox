@@ -32,7 +32,7 @@ export const DEMO_USER_NAME = "Visitante demo";
 
 export const DEMO_MEMBERSHIP_ID = "demo_visitor_membership";
 
-/** Asunción no aplica horario de verano desde 2024: el offset es fijo. */
+/** ¿La empresa activa es la demo? (fuente única del slug en toda la app) */
 export function isDemoOrganizationSlug(slug: string | null | undefined): boolean {
   return slug === DEMO_ORGANIZATION_SLUG;
 }
