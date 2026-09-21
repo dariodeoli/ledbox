@@ -37,6 +37,7 @@ import type {
 import { AdminIcon } from "./AdminIcons";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
+import { AdminOfflineBanner, AdminOfflineIndicator } from "./AdminOffline";
 import { adminApiGet, adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
 export type AdminSessionState = {
@@ -303,6 +304,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 </Link>
               ) : null}
               {demoEntryPending ? null : <AdminNotificationBell />}
+              <AdminOfflineIndicator />
               <AdminThemeToggle />
               <a
                 className="admin-btn admin-hide-sm"
@@ -365,6 +367,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <AdminErrorState message={session.error} onRetry={() => void loadSession()} />
             </div>
           ) : null}
+
+          <AdminOfflineBanner />
 
           <main className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
 

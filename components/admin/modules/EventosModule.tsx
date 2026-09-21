@@ -8,6 +8,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatNumber,
+  formatSince,
   formatTime,
   inventoryAssignmentCountdown,
   inventoryAssignmentState,
@@ -56,6 +57,8 @@ import {
   TextField,
 } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
+import { useOfflineQueue } from "../AdminOffline";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
 
 const STATUS_OPTIONS = [
@@ -105,6 +108,13 @@ function rangeStamp(start: string | null, end: string | null): string {
 
 const BLOCKED_INVENTORY_STATUSES = ["MAINTENANCE", "RETIRED"];
 
+/** Motivo honesto del marcador de una acción de campo en cola (issue #23). */
+function movementQueueTitle(action: OfflineAction): string {
+  return action.status === "failed"
+    ? `No se pudo subir: ${action.error ?? "sin motivo informado"}. Reintentá desde el indicador de sincronización.`
+    : `Guardada en este equipo ${formatSince(action.createdAt)}: se sube al volver la señal.`;
+}
+
 /** Evento próximo (ventana de aviso de 7 días) sin tareas cumplidas: riesgo. */
 function isUpcomingEvent(event: AdminEventRow): boolean {
   if (event.status === "CANCELLED" || event.status === "COMPLETED") return false;
@@ -127,6 +137,7 @@ function promoterOptions(promoters: AdminPromoterRow[]): Array<{ value: string; 
 
 export function EventosModule() {
   const { role } = useAdminSession();
+  const { actions: queuedActions, fieldAction } = useOfflineQueue();
   const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
   const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
   const inventoryResource = useAdminResource(
@@ -414,8 +425,13 @@ export function EventosModule() {
     }
     setMovementBusy(true);
     setMovementError("");
-    const result = await adminSend("/api/admin/inventory",
-      movement.mode === "checkout"
+    const checkout = movement.mode === "checkout";
+    const damages = damageSummary(damagedQuantity, missingQuantity);
+    // Mismo contrato que el panel online; sin conexión el provider lo guarda en la cola local.
+    const result = await fieldAction({
+      kind: checkout ? "inventory-checkout" : "inventory-checkin",
+      path: "/api/admin/inventory",
+      body: checkout
         ? {
             kind: "checkout",
             id: movement.assignment.id,
@@ -431,20 +447,27 @@ export function EventosModule() {
             missingQuantity,
             damageNotes: movementForm.notes || undefined,
           },
-    );
+      summary: `${checkout ? "Salida" : "Devolución"} de «${movement.assignment.inventory.name}» (${formatNumber(
+        movement.assignment.quantity,
+      )} u.)${!checkout && damages ? ` · ${damages}` : ""}`,
+      detail: `Evento: ${equipmentEvent?.name ?? "sin evento"}`,
+    });
     setMovementBusy(false);
     if (!result.ok) {
       setMovementError(result.error);
       return;
     }
+    const label = checkout ? "Salida" : "Devolución";
     setAssignNotice(
-      movement.mode === "checkout"
-        ? `Salida registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`
-        : `Devolución registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`,
+      result.queued
+        ? `Sin conexión: la ${label.toLowerCase()} quedó guardada en este equipo y se sube al volver la señal.`
+        : `${label} registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`,
     );
     setMovement(null);
-    operations.reload();
-    inventoryResource.reload();
+    if (!result.queued) {
+      operations.reload();
+      inventoryResource.reload();
+    }
   }
 
   async function removeAssignment(assignment: AdminEventAssignment) {
@@ -819,11 +842,22 @@ export function EventosModule() {
                 ]}
               >
                 {assignments.map((assignment) => {
-                  const state = inventoryAssignmentState(assignment);
+                  // Acción de campo en cola (issue #23): el estado mostrado refleja la
+                  // intención local y el badge "Sin subir" avisa que falta confirmación.
+                  const queuedMovement = queuedActionForAssignment(queuedActions, assignment.id);
+                  const queuedOut = queuedMovement?.kind === "inventory-checkout" ? queuedMovement : null;
+                  const queuedBack = queuedMovement?.kind === "inventory-checkin" ? queuedMovement : null;
+                  const state = inventoryAssignmentState(
+                    queuedMovement
+                      ? queuedOut
+                        ? { ...assignment, checkedOut: true, checkedOutAt: assignment.checkedOutAt ?? queuedMovement.createdAt }
+                        : { ...assignment, checkedIn: true, checkedInAt: assignment.checkedInAt ?? queuedMovement.createdAt }
+                      : assignment,
+                  );
                   const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
                   const countdown = inventoryAssignmentCountdown(assignment);
-                  const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut);
-                  const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn);
+                  const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut || queuedOut);
+                  const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn || queuedBack);
                   const startsAt = assignment.startsAt ?? equipmentEvent.setupAt ?? equipmentEvent.startsAt;
                   const endsAt = assignment.endsAt ?? equipmentEvent.strikeAt ?? equipmentEvent.endsAt ?? startsAt;
                   return (
@@ -838,11 +872,23 @@ export function EventosModule() {
                       <AdminCell title={startsAt && endsAt ? rangeStamp(startsAt, endsAt) : "Sin fechas"}>
                         {rangeStamp(startsAt, endsAt)}
                       </AdminCell>
-                      <AdminCell title={assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>
-                        {stamp(assignment.checkedOutAt)}
+                      <AdminCell title={queuedOut ? movementQueueTitle(queuedOut) : assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>
+                        {queuedOut ? (
+                          <AdminBadge tone={queuedOut.status === "failed" ? "danger" : "warn"} title={movementQueueTitle(queuedOut)}>
+                            {queuedOut.status === "failed" ? "Falló" : "Sin subir"}
+                          </AdminBadge>
+                        ) : (
+                          stamp(assignment.checkedOutAt)
+                        )}
                       </AdminCell>
-                      <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
-                        {stamp(assignment.checkedInAt)}
+                      <AdminCell title={queuedBack ? movementQueueTitle(queuedBack) : assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
+                        {queuedBack ? (
+                          <AdminBadge tone={queuedBack.status === "failed" ? "danger" : "warn"} title={movementQueueTitle(queuedBack)}>
+                            {queuedBack.status === "failed" ? "Falló" : "Sin subir"}
+                          </AdminBadge>
+                        ) : (
+                          stamp(assignment.checkedInAt)
+                        )}
                       </AdminCell>
                       <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
                         <AdminBadge tone={state.tone}>{state.label}</AdminBadge>

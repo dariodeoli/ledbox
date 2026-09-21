@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sin conexión · Panel LedBox</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#05080a" />
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #050606;
+        color: #e9eff2;
+        font-family: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { width: min(100%, 460px); border: 1px solid #28333a; border-top: 2px solid #00e5ff; border-radius: 14px; background: #0b1013; padding: 28px 24px; }
+      .brand { font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #7d8c96; }
+      .brand strong { color: #fff; }
+      .brand span { color: #00e5ff; }
+      h1 { margin: 14px 0 10px; font-size: clamp(26px, 7vw, 34px); line-height: 1.05; text-transform: uppercase; }
+      p { color: #b6c3ca; font-size: 14px; line-height: 1.6; }
+      p + p { margin-top: 10px; }
+      .notice { margin-top: 18px; padding: 12px; border: 1px solid rgba(245, 196, 81, .35); border-radius: 10px; background: rgba(245, 196, 81, .08); color: #f5c451; font-size: 13px; }
+      .queue { margin-top: 16px; padding: 12px; border: 1px solid #28333a; border-radius: 10px; background: #111719; color: #b6c3ca; font-size: 13px; }
+      .queue strong { color: #fff; font-variant-numeric: tabular-nums; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+      button, a.button {
+        display: inline-flex; align-items: center; gap: 8px;
+        min-height: 38px; padding: 0 14px;
+        border: 1px solid #28333a; border-radius: 9px;
+        background: #111719; color: #e9eff2;
+        font: 600 13px inherit; text-decoration: none; cursor: pointer;
+      }
+      button.primary { border-color: transparent; background: #00e5ff; color: #04161a; }
+      footer { margin-top: 18px; color: #7d8c96; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="brand"><strong>LEDBOX</strong><span>.</span> · Panel privado</p>
+      <h1>Sin conexión</h1>
+      <p>
+        No pudimos alcanzar el panel y esta pantalla todavía no tenía una copia guardada en el equipo. No hay datos
+        frescos para mostrar: no vamos a inventar totales ni estados.
+      </p>
+      <p class="notice">
+        Las tareas del checklist y la salida/devolución de equipos que registres quedan guardadas en este equipo y se
+        suben solas cuando vuelva la señal. Nada se marca como listo sin la confirmación del servidor.
+      </p>
+      <p class="queue" id="queue-summary" hidden></p>
+      <div class="actions">
+        <button type="button" class="primary" onclick="window.location.reload()">Reintentar</button>
+        <a class="button" href="/dashboard">Ir al resumen</a>
+      </div>
+      <footer>LedBox · Operación</footer>
+    </main>
+    <script>
+      // Resumen honesto de la cola local: cuántas acciones de campo quedaron sin subir.
+      (function () {
+        try {
+          var raw = window.localStorage.getItem("ledbox-offline-mirror");
+          if (!raw) return;
+          var data = JSON.parse(raw);
+          var toUpload = Number(data && data.toUpload) || 0;
+          var failed = Number(data && data.failed) || 0;
+          if (toUpload === 0 && failed === 0) return;
+          var node = document.getElementById("queue-summary");
+          var parts = [];
+          if (toUpload > 0) parts.push("<strong>" + toUpload + "</strong> sin subir");
+          if (failed > 0) parts.push("<strong>" + failed + "</strong> fallida" + (failed === 1 ? "" : "s") + " con motivo");
+          node.innerHTML = "Acciones de campo en este equipo: " + parts.join(" · ") + ".";
+          node.hidden = false;
+        } catch (error) {
+          // Sin dato local no se muestra nada; la página sigue siendo honesta.
+        }
+      })();
+    </script>
+  </body>
+</html>
