@@ -766,6 +766,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-inline-form select { max-width: 12rem; }
 .admin-inline-form input[placeholder] { flex: 1 1 12rem; }
 .admin-inline-form .admin-qty-input { flex: 0 0 6rem; max-width: 6rem; }
+.admin-inline-form .admin-pay-amount { flex: 0 0 9rem; max-width: 9rem; }
 .admin-inline-form .admin-btn { margin-left: auto; }
 
 /* ── Diálogo del panel (issue #12) ──
@@ -825,7 +826,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    día, monto, comprobante del portal y acciones. Fila compacta: entra sin
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(12rem, 1.6fr) minmax(9.5rem, 1.1fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8rem 7.5rem 6.5rem 12rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 74rem; }
-.admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 70rem; }
+.admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem 7rem; --admin-cols: var(--pagar-cols); --admin-table-min: 77rem; }
 .admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 9.5rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 66.5rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(9rem, 1.4fr) 12.5rem 5rem 8rem 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
@@ -851,6 +852,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(9rem, 1.6fr) minmax(7.5rem, 1.2fr) 5.5rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 24rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 .admin-table--solicitudes { --solicitudes-cols: 10rem minmax(9rem, 1.2fr) minmax(13rem, 1.8fr) minmax(9rem, 1.2fr) 7.5rem 6rem 7rem; --admin-cols: var(--solicitudes-cols); --admin-table-min: 65rem; }
+/* Tesorería y gastos (issue #27): cuentas con su saldo derivado, movimientos del
+   período (con la cuenta y el hecho de origen) y gastos con el proyecto inline. */
+.admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
+.admin-table--tesoreria-movimientos { --tesoreria-movimientos-cols: 6.5rem 7.5rem minmax(11rem, 1.4fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8.5rem; --admin-cols: var(--tesoreria-movimientos-cols); --admin-table-min: 60rem; }
+.admin-table--gastos { --gastos-cols: 5.5rem minmax(12rem, 1.7fr) 7.5rem minmax(9.5rem, 1.2fr) minmax(7.5rem, 1fr) minmax(7rem, 1fr) 8.5rem; --admin-cols: var(--gastos-cols); --admin-table-min: 62rem; }
 
 /* ── Vínculo con inventario (issue #18) ──
    El buscador vive dentro de la grilla de campos del alta y del diálogo de
@@ -902,6 +908,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-proof-frame { display: grid; place-items: center; min-height: 7rem; max-height: 38vh; overflow: auto; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); }
 .admin-proof-image { display: block; max-width: 100%; max-height: 36vh; }
 .admin-proof-pdf { width: 100%; height: 38vh; border: 0; border-radius: var(--a-radius); background: #fff; }
+
+/* ── Tesorería y gastos (issue #27) ──
+   Los KPIs de disponible van dentro del panel de tesorería; las cuentas muestran
+   el banco con su marca (`lib/bank-mark.ts`) y la carga rápida de gastos es un
+   formulario inline con dos salidas: guardar y guardar/cargar otro. */
+.admin-kpis--treasury { padding: 10px 12px 0; }
+.admin-treasury-formula { margin: 8px 12px 0; }
+.admin-treasury-bank { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.admin-treasury-bank .admin-bank-mark { width: 22px; height: 22px; border-radius: 6px; font-size: 9px; }
+.admin-treasury-bank .admin-bank-asset { height: 16px; max-width: 84px; }
+.admin-treasury-delta[data-tone="in"] { color: var(--a-ok); font-weight: 700; }
+.admin-treasury-delta[data-tone="out"] { color: var(--a-danger); font-weight: 700; }
+.admin-treasury-delta[data-tone="move"] { color: var(--a-info); font-weight: 700; }
+.admin-inline-form--gastos .admin-field { flex: 0 1 10rem; }
+.admin-inline-form--gastos .admin-gasto-money { flex: 0 0 10rem; max-width: 10rem; }
+.admin-inline-form--gastos .admin-gasto-identity { flex: 1 1 16rem; }
+.admin-inline-form--gastos .admin-gasto-money .admin-field input { width: 100%; }
+.admin-inline-form--gastos .admin-gasto-identity .admin-field input { width: 100%; }
+.admin-inline-form--gastos .admin-form-actions { display: flex; gap: 8px; margin-left: auto; }
+.admin-inline-form--gastos .admin-form-actions .admin-btn { margin-left: 0; }
+.admin-toolbar--panel { padding: 10px 12px; border-bottom: 1px solid var(--a-line); }
+@media (max-width: 420px) {
+  .admin-inline-form--gastos .admin-field { flex: 1 1 100%; }
+  .admin-inline-form--gastos .admin-form-actions { width: 100%; margin-left: 0; }
+  .admin-inline-form--gastos .admin-form-actions .admin-btn { flex: 1 1 auto; justify-content: center; }
+}
 
 /* ── Auditoría: filtros, detalle desplegable y paginación ──
    La fecha del filtro es un campo propio (etiqueta arriba, input compacto) y el
