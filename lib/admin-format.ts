@@ -563,6 +563,125 @@ export function isTodayAsuncion(value: string | Date | null | undefined): boolea
   return date ? dayKeyOf(date) === dayKeyOf() : false;
 }
 
+// ── Períodos de las listas (issue #27) ──────────────────────────────────────
+// Un solo catálogo de períodos para los filtros de movimientos y gastos: el
+// rango sale de días de Asunción (`YYYY-MM-DD`) y siempre incluye hoy.
+
+export const DATE_PERIODS = ["this-month", "last-month", "last-30", "this-year", "all"] as const;
+export type DatePeriodValue = (typeof DATE_PERIODS)[number];
+
+const DATE_PERIOD_LABEL: Record<string, string> = {
+  "this-month": "Este mes",
+  "last-month": "Mes pasado",
+  "last-30": "Últimos 30 días",
+  "this-year": "Este año",
+  all: "Todo",
+};
+
+export const datePeriodLabel = (value: string | null | undefined) => label(DATE_PERIOD_LABEL, value);
+
+/** Día de Asunción de hoy (`YYYY-MM-DD`) para los valores por defecto de un formulario. */
+export function todayDayKey(): string {
+  return dayKeyOf();
+}
+
+function utcDayKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Rango de días de Asunción de un período; `null` en "todo" (sin filtro). */
+export function datePeriodRange(period: string): { from: string; to: string } | null {
+  const todayKey = dayKeyOf();
+  const today = dayKeyToUtcDate(todayKey);
+  if (!today) return null;
+  switch (period) {
+    case "this-month":
+      return { from: `${todayKey.slice(0, 7)}-01`, to: todayKey };
+    case "last-month": {
+      const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+      const last = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+      return { from: utcDayKey(first), to: utcDayKey(last) };
+    }
+    case "last-30":
+      return { from: utcDayKey(new Date(today.getTime() - 29 * 86_400_000)), to: todayKey };
+    case "this-year":
+      return { from: `${todayKey.slice(0, 4)}-01-01`, to: todayKey };
+    default:
+      return null;
+  }
+}
+
+/** Query de período para los GET del panel (`?from=…&to=…`); vacío en "todo". */
+export function datePeriodQuery(period: string): string {
+  const range = datePeriodRange(period);
+  if (!range) return "";
+  return `?from=${range.from}&to=${range.to}`;
+}
+
+// ── Tesorería y gastos (issue #27) ──────────────────────────────────────────
+// Etiquetas del catálogo real de cuentas, movimientos y gastos; los valores
+// viven en `lib/admin-types.ts` (fuente única de los selectores).
+
+const TREASURY_ACCOUNT_TYPE: Record<string, string> = {
+  CASH: "Efectivo",
+  BANK: "Banco",
+  CHEQUE: "Cheques a cobrar",
+  OTHER: "Otra",
+};
+
+const TREASURY_ACCOUNT_TYPE_TONES: Record<string, AdminTone> = {
+  CASH: "ok",
+  BANK: "info",
+  CHEQUE: "warn",
+  OTHER: "neutral",
+};
+
+const TREASURY_DIRECTION: Record<string, string> = {
+  IN: "Entrada",
+  OUT: "Salida",
+  TRANSFER: "Transferencia",
+};
+
+const TREASURY_DIRECTION_TONES: Record<string, AdminTone> = {
+  IN: "ok",
+  OUT: "danger",
+  TRANSFER: "info",
+};
+
+const TREASURY_ORIGIN: Record<string, string> = {
+  client_payment: "Cobro de cliente",
+  supplier_job: "Pago a proveedor",
+  expense: "Gasto",
+  adjustment: "Ajuste",
+};
+
+const EXPENSE_CATEGORY: Record<string, string> = {
+  TRANSPORT: "Transporte",
+  FUEL: "Combustible",
+  FOOD: "Comida",
+  MATERIALS: "Materiales",
+  RENT: "Alquiler",
+  SERVICES: "Servicios",
+  SALARIES: "Sueldos",
+  TOOLS: "Herramientas",
+  OTHER: "Otros",
+};
+
+export const treasuryAccountTypeLabel = (value: string | null | undefined) => label(TREASURY_ACCOUNT_TYPE, value);
+export const treasuryDirectionLabel = (value: string | null | undefined) => label(TREASURY_DIRECTION, value);
+export const treasuryOriginLabel = (value: string | null | undefined) => label(TREASURY_ORIGIN, value);
+export const expenseCategoryLabel = (value: string | null | undefined) => label(EXPENSE_CATEGORY, value);
+
+export function treasuryAccountTypeTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return TREASURY_ACCOUNT_TYPE_TONES[value] ?? "neutral";
+}
+
+export function treasuryDirectionTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return TREASURY_DIRECTION_TONES[value] ?? "neutral";
+}
+
 // ── Calendario operativo ────────────────────────────────────────────────────
 // Las vistas del calendario agrupan por día puro (`YYYY-MM-DD`); esos días se
 // formatean en UTC para que no se corran de fecha, mientras que las horas de
@@ -735,6 +854,9 @@ const AUDIT_ENTITY: Record<string, string> = {
   AdminUser: "Usuario",
   Lead: "Lead",
   Organization: "Empresa",
+  TreasuryAccount: "Cuenta de tesorería",
+  TreasuryMovement: "Movimiento de tesorería",
+  Expense: "Gasto",
 };
 
 const AUDIT_FIELD: Record<string, string> = {
@@ -812,6 +934,17 @@ const AUDIT_FIELD: Record<string, string> = {
   clientCreated: "Cliente creado",
   newAccount: "Cuenta nueva",
   fromLeadId: "Lead de origen",
+  currency: "Moneda",
+  openingBalance: "Saldo inicial",
+  sortOrder: "Orden",
+  direction: "Dirección",
+  occurredAt: "Fecha del movimiento",
+  origin: "Origen",
+  sourceId: "Registro de origen",
+  accountId: "Cuenta",
+  counterAccountId: "Cuenta destino",
+  createdByName: "Registrado por",
+  date: "Fecha",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */
@@ -827,6 +960,7 @@ const AUDIT_MONEY_FIELDS: ReadonlySet<string> = new Set([
   "dailyCost",
   "unitPrice",
   "costPrice",
+  "openingBalance",
 ]);
 
 export const auditActionLabel = (value: string | null | undefined) => label(AUDIT_ACTION, value);
@@ -860,6 +994,10 @@ export function auditValueLabel(entity: string | null | undefined, field: string
   if (key === "role") return adminRoleLabel(text);
   if (key === "type" && entity === "Client") return clientTypeLabel(text);
   if (key === "type" && entity === "EventTask") return taskTypeLabel(text);
+  if (key === "type" && entity === "TreasuryAccount") return treasuryAccountTypeLabel(text);
+  if (key === "direction") return treasuryDirectionLabel(text);
+  if (key === "origin") return treasuryOriginLabel(text);
+  if (key === "category" && entity === "Expense") return expenseCategoryLabel(text);
   if (key === "kind") return inventoryKindLabel(text);
   if (key === "category") return supplierCategoryLabel(text);
   if (key === "items" || key === "itemCount" || key === "installments") return numberFormat.format(Number(text) || 0);
