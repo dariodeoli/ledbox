@@ -9,7 +9,6 @@ import {
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
   budgetStatusLabel,
-  dueTone,
   formatBytes,
   formatDateShort,
   formatDateTime,
@@ -43,6 +42,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
@@ -1369,9 +1369,12 @@ export function PresupuestosModule() {
                     </small>
                   </AdminCell>
                   <AdminCell title={budget.validUntil ? `Vence el ${formatDateShort(budget.validUntil)}` : "Sin vencimiento"}>
-                    <span className="admin-nowrap" data-tone={dueTone(budget.validUntil)}>
-                      {budget.validUntil ? formatDateShort(budget.validUntil) : "—"}
-                    </span>
+                    <span className="admin-nowrap">{budget.validUntil ? formatDateShort(budget.validUntil) : "—"}</span>
+                    <AdminCountdown
+                      value={budget.validUntil}
+                      className="admin-countdown--inline"
+                      title={`Validez de la oferta: ${budget.title}`}
+                    />
                   </AdminCell>
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
@@ -1750,18 +1753,24 @@ export function PresupuestosModule() {
                     })
                   }
                 />
-                <DateField
-                  label="Vencimiento"
-                  value={installment.dueAt}
-                  onChange={(value) =>
-                    setPlan({
-                      ...plan,
-                      installments: plan.installments.map((row, position) =>
-                        position === index ? { ...row, dueAt: value } : row,
-                      ),
-                    })
-                  }
-                />
+                <div className="admin-countdown-field">
+                  <DateField
+                    label="Vencimiento"
+                    value={installment.dueAt}
+                    onChange={(value) =>
+                      setPlan({
+                        ...plan,
+                        installments: plan.installments.map((row, position) =>
+                          position === index ? { ...row, dueAt: value } : row,
+                        ),
+                      })
+                    }
+                  />
+                  <AdminCountdown
+                    value={installment.dueAt}
+                    title={`Cuota ${index + 1}: cuánto falta para el vencimiento`}
+                  />
+                </div>
                 <AdminButton
                   icon="close"
                   title={`Quitar la cuota ${index + 1}`}

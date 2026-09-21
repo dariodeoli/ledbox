@@ -9,6 +9,7 @@ import {
   formatDateTime,
   formatNumber,
   formatTime,
+  inventoryAssignmentCountdown,
   inventoryAssignmentState,
   isOverdue,
   isUpcomingWithin,
@@ -32,6 +33,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
@@ -556,6 +558,7 @@ export function EventosModule() {
           label="Eventos"
           columns={[
             { label: "Fecha" },
+            { label: "Falta" },
             { label: "Evento" },
             { label: "Cliente" },
             { label: "Lugar" },
@@ -569,10 +572,28 @@ export function EventosModule() {
             const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
             const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
             const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
+            const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
             return (
               <AdminRow key={event.id}>
                 <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
                   {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
+                </AdminCell>
+                <AdminCell
+                  title={
+                    event.status === "IN_PROGRESS"
+                      ? `En curso: ${event.name}`
+                      : event.startsAt
+                        ? `Inicio: ${formatDateTime(event.startsAt)}`
+                        : "Fecha a confirmar"
+                  }
+                >
+                  {event.status === "IN_PROGRESS" ? (
+                    <AdminBadge tone="info">En curso</AdminBadge>
+                  ) : closed || !event.startsAt ? (
+                    <span className="admin-muted">—</span>
+                  ) : (
+                    <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
+                  )}
                 </AdminCell>
                 <AdminCell title={event.name}>
                   <strong>{event.name}</strong>
@@ -800,6 +821,7 @@ export function EventosModule() {
                 {assignments.map((assignment) => {
                   const state = inventoryAssignmentState(assignment);
                   const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
+                  const countdown = inventoryAssignmentCountdown(assignment);
                   const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut);
                   const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn);
                   const startsAt = assignment.startsAt ?? equipmentEvent.setupAt ?? equipmentEvent.startsAt;
@@ -822,8 +844,16 @@ export function EventosModule() {
                       <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
                         {stamp(assignment.checkedInAt)}
                       </AdminCell>
-                      <AdminCell>
+                      <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
                         <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
+                        {countdown ? (
+                          <AdminCountdown
+                            value={countdown.at}
+                            short
+                            className="admin-countdown--inline"
+                            title={`${countdown.title}: ${assignment.inventory.name}`}
+                          />
+                        ) : null}
                       </AdminCell>
                       <AdminCell
                         title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}

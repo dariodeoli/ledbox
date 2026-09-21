@@ -1,5 +1,5 @@
 import type { AdminIconName } from "@/lib/admin-types";
-import { whatsappHref, type AdminTone } from "@/lib/admin-format";
+import { countdownTone, formatCountdown, whatsappHref, type AdminTone } from "@/lib/admin-format";
 import { AdminIcon } from "./AdminIcons";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 
@@ -74,6 +74,40 @@ export function AdminBadge({ tone = "neutral", title, children }: { tone?: Admin
   return (
     <span className="admin-badge" data-tone={tone} title={title}>
       {children}
+    </span>
+  );
+}
+
+/**
+ * Cuánto falta para una fecha, con el texto y el tono compartidos (issue #25).
+ * Es el único chip de cuenta regresiva del panel: «faltan 3 días» · «venció hace
+ * 2 días» · «hoy» · «mañana»; `short` para columnas ajustadas («en 3 d»).
+ * Sin fecha no dibuja nada: el llamador decide si muestra «—».
+ */
+export function AdminCountdown({
+  value,
+  short,
+  title,
+  className,
+}: {
+  value: string | Date | null | undefined;
+  /** Texto corto («en 3 d» / «hace 2 d») para lugares ajustados. */
+  short?: boolean;
+  /** Tooltip propio; sin él explica la cuenta regresiva. */
+  title?: string;
+  /** Clase extra (`admin-countdown--inline` agrega la separación del dato vecino). */
+  className?: string;
+}) {
+  if (!value) return null;
+  const text = formatCountdown(value, short ? "short" : "panel");
+  if (text === "—") return null;
+  return (
+    <span
+      className={className ? `admin-countdown ${className}` : "admin-countdown"}
+      data-tone={countdownTone(value)}
+      title={title ?? `Cuánto falta: ${text}`}
+    >
+      {text}
     </span>
   );
 }

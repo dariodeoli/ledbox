@@ -10,7 +10,9 @@ import {
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
   budgetStatusLabel,
+  countdownTone,
   formatBytes,
+  formatCountdown,
   formatDate,
   formatDateTime,
   formatMoney,
@@ -547,7 +549,16 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
         </p>
         <p className="portal-budget-meta">
           Emitido el {formatDateTime(budget.createdAt)} ·{" "}
-          {budget.validUntil ? `Válido hasta el ${formatDate(budget.validUntil)}` : "Sin fecha de vencimiento"}
+          {budget.validUntil ? (
+            <>
+              Válido hasta el {formatDate(budget.validUntil)}
+              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                {formatCountdown(budget.validUntil, "client")}
+              </span>
+            </>
+          ) : (
+            "Sin fecha de vencimiento"
+          )}
         </p>
         <div className="portal-budget-chips">
           <span className="portal-chip" data-tone={statusTone(budget.status)}>
@@ -693,7 +704,14 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
                             {paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
                           </td>
                           <td className="portal-num">{formatMoney(installment.amount)}</td>
-                          <td>{dueLabel(installment.dueAt)}</td>
+                          <td>
+                            {dueLabel(installment.dueAt)}
+                            {installment.dueAt ? (
+                              <span className="portal-countdown" data-tone={countdownTone(installment.dueAt)}>
+                                {formatCountdown(installment.dueAt, "client")}
+                              </span>
+                            ) : null}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

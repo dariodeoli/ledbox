@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  collectionDueText,
-  collectionDueTone,
-  dueTone,
+  countdownTone,
+  formatCountdown,
   formatDate,
   formatDateShort,
   formatDateTime,
@@ -43,6 +42,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
@@ -215,7 +215,18 @@ function PaymentRemindersDialog({
           <div>
             <dt>Vencimiento</dt>
             <dd>
-              {payment.dueAt ? `${formatDate(payment.dueAt)} · ${collectionDueText(payment.dueAt)}` : "Sin vencimiento"}
+              {payment.dueAt ? (
+                <>
+                  {formatDate(payment.dueAt)}
+                  <AdminCountdown
+                    value={payment.dueAt}
+                    className="admin-countdown--inline"
+                    title="Cobro a plazo: cuánto falta para el vencimiento"
+                  />
+                </>
+              ) : (
+                "Sin vencimiento"
+              )}
             </dd>
           </div>
           <div>
@@ -408,7 +419,7 @@ export function FinanzasModule() {
     const collectedCount = payments.filter(isCollectedPayment).length;
     const pending = payments.filter((payment) => payment.status === "PENDING");
     const pendingTotal = pending.reduce((sum, payment) => sum + payment.amount, 0);
-    const overdue = pending.filter((payment) => collectionDueTone(payment.dueAt) === "danger").length;
+    const overdue = pending.filter((payment) => countdownTone(payment.dueAt) === "danger").length;
     const advances = jobs.reduce((sum, job) => sum + job.advance, 0);
     const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
     return { collected, collectedCount, pendingTotal, pendingCount: pending.length, overdue, advances, payable };
@@ -489,7 +500,7 @@ export function FinanzasModule() {
             csvDay(payment.invoiceIssuedAt),
             payment.method ?? "",
             csvDay(payment.chequeDate),
-            collectionDueText(payment.dueAt),
+            formatCountdown(payment.dueAt),
             payment.amount,
           ]),
           ["", "", "", "", "", "", "", "Total", total],
@@ -925,12 +936,14 @@ export function FinanzasModule() {
                     )}
                   </AdminCell>
                   <AdminCell
-                    title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)} · ${collectionDueText(payment.dueAt)}` : "Sin vencimiento de cobro"}
+                    title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)} · ${formatCountdown(payment.dueAt)}` : "Sin vencimiento de cobro"}
                   >
-                    <span className="admin-nowrap" data-tone={collectionDueTone(payment.dueAt)}>
-                      {payment.dueAt ? formatDateShort(payment.dueAt) : "—"}
-                    </span>
-                    {payment.dueAt ? <small className="admin-cell-sub"> · {collectionDueText(payment.dueAt)}</small> : null}
+                    <span className="admin-nowrap">{payment.dueAt ? formatDateShort(payment.dueAt) : "—"}</span>
+                    <AdminCountdown
+                      value={payment.dueAt}
+                      className="admin-countdown--inline"
+                      title={`Cuánto falta para el vencimiento: ${label}`}
+                    />
                   </AdminCell>
                   <AdminCell title={payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : payment.method || "Sin método"}>
                     {payment.method || "—"}
@@ -1157,9 +1170,14 @@ export function FinanzasModule() {
                   <AdminCell title={job.description}>{job.description}</AdminCell>
                   <AdminCell title={job.event?.name || "Sin evento asociado"}>{job.event?.name || "—"}</AdminCell>
                   <AdminCell title={job.dueAt ? `Vence el ${formatDateShort(job.dueAt)}` : "Sin fecha prevista"}>
-                    <span className="admin-nowrap" data-tone={settled ? undefined : dueTone(job.dueAt)}>
-                      {job.dueAt ? formatDateShort(job.dueAt) : "—"}
-                    </span>
+                    <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
+                    {settled ? null : (
+                      <AdminCountdown
+                        value={job.dueAt}
+                        className="admin-countdown--inline"
+                        title={`Cuánto falta para el vencimiento: ${job.description}`}
+                      />
+                    )}
                   </AdminCell>
                   <AdminCell end title={formatMoney(job.total)}>
                     {formatMoney(job.total)}

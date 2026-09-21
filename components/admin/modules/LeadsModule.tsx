@@ -19,6 +19,7 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminIconLink,
@@ -242,7 +243,15 @@ export function LeadsModule() {
                     {[lead.phone, lead.email].filter(Boolean).join(" · ")}
                   </AdminCell>
                   <AdminCell title={`Origen: ${leadSourceLabel(lead.source)}`}>{leadSourceLabel(lead.source)}</AdminCell>
-                  <AdminCell title={eventLabel || "El lead no cargó fecha ni lugar del evento"}>{eventLabel || "—"}</AdminCell>
+                  <AdminCell title={eventLabel || "El lead no cargó fecha ni lugar del evento"}>
+                    {eventLabel || "—"}
+                    <AdminCountdown
+                      value={lead.eventDate}
+                      short
+                      className="admin-countdown--inline"
+                      title={`Evento de ${name}: cuánto falta`}
+                    />
+                  </AdminCell>
                   <AdminCell title={lead.reason || "Sin motivo indicado"}>{lead.reason || "—"}</AdminCell>
                   <AdminCell
                     end
@@ -315,7 +324,14 @@ export function LeadsModule() {
               </div>
               <div className="admin-detail-item">
                 <dt className="admin-detail-label">Fecha del evento</dt>
-                <dd className="admin-detail-value">{selected.eventDate ? formatDate(selected.eventDate) : "Sin fecha"}</dd>
+                <dd className="admin-detail-value">
+                  {selected.eventDate ? formatDate(selected.eventDate) : "Sin fecha"}
+                  <AdminCountdown
+                    value={selected.eventDate}
+                    className="admin-countdown--inline"
+                    title={`Evento de ${selected.name}: cuánto falta`}
+                  />
+                </dd>
               </div>
               <div className="admin-detail-item">
                 <dt className="admin-detail-label">Ubicación</dt>
