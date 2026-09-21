@@ -15,7 +15,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteOperations } from "@/lib/admin-policy";
-import type { AdminOverview } from "@/lib/admin-types";
+import { supplierJobBalance, type AdminOverview } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -70,7 +70,7 @@ export function ResumenModule() {
   const payables = useMemo(
     () =>
       (finance.data?.jobs ?? [])
-        .map((job) => ({ job, balance: job.total - job.advance }))
+        .map((job) => ({ job, balance: supplierJobBalance(job) }))
         .filter((row) => row.balance > 0)
         .sort((a, b) => b.balance - a.balance)
         .slice(0, 6),

@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { dueTone, formatDateShort, formatDateTime, formatMoney, formatNumber, formatTime, jobStatusLabel, statusTone } from "@/lib/admin-format";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
+import { supplierJobBalance } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -25,14 +27,8 @@ import { adminSend, useAdminResource } from "../use-admin-data";
 const METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
 
 const EMPTY_FORM = {
-  kind: "client",
   clientId: "",
-  supplierId: "",
-  eventId: "",
   amount: "",
-  total: "",
-  advance: "",
-  description: "",
   method: "Transferencia",
   reference: "",
 };
@@ -44,12 +40,6 @@ export function FinanzasModule() {
     jobs: payload.supplierJobs ?? [],
   }));
   const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
-  const resources = useAdminResource("/api/admin/resources", (payload) => ({
-    suppliers: payload.suppliers ?? [],
-    inventory: payload.inventory ?? [],
-    promoters: payload.promoters ?? [],
-  }));
-  const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? []);
 
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -74,9 +64,7 @@ export function FinanzasModule() {
   const totals = useMemo(() => {
     const collected = payments.reduce((sum, payment) => sum + payment.amount, 0);
     const advances = jobs.reduce((sum, job) => sum + job.advance, 0);
-    const payable = jobs
-      .filter((job) => job.status !== "PAID" && job.status !== "CANCELLED")
-      .reduce((sum, job) => sum + Math.max(0, job.total - job.advance), 0);
+    const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
     return { collected, advances, payable };
   }, [payments, jobs]);
 
@@ -85,30 +73,20 @@ export function FinanzasModule() {
     setBusy(true);
     setFormError("");
     setNotice("");
-    const result =
-      form.kind === "client"
-        ? await adminSend("/api/admin/finance", {
-            kind: "client",
-            clientId: form.clientId,
-            amount: Number(form.amount),
-            method: form.method || undefined,
-            reference: form.reference || undefined,
-          })
-        : await adminSend("/api/admin/finance", {
-            kind: "supplier",
-            supplierId: form.supplierId,
-            eventId: form.eventId || undefined,
-            description: form.description,
-            total: Number(form.total),
-            advance: Number(form.advance) || 0,
-          });
+    const result = await adminSend("/api/admin/finance", {
+      kind: "client",
+      clientId: form.clientId,
+      amount: Number(form.amount),
+      method: form.method || undefined,
+      reference: form.reference || undefined,
+    });
     setBusy(false);
     if (!result.ok) {
       setFormError(result.error);
       return;
     }
-    setNotice(form.kind === "client" ? "Cobro registrado." : "Trabajo de proveedor registrado.");
-    setForm({ ...EMPTY_FORM, kind: form.kind });
+    setNotice("Cobro registrado.");
+    setForm({ ...EMPTY_FORM });
     finance.reload();
   }
 
@@ -138,7 +116,7 @@ export function FinanzasModule() {
             }}
             aria-expanded={showForm}
           >
-            Registrar movimiento
+            Registrar cobro
           </AdminButton>
         ) : null}
       </AdminToolbar>
@@ -147,114 +125,51 @@ export function FinanzasModule() {
 
       {writable && showForm ? (
         <AdminFormPanel
-          title="Nuevo movimiento"
-          submitLabel="Registrar"
+          title="Nuevo cobro de cliente"
+          submitLabel="Registrar cobro"
           onSubmit={submit}
           onCancel={() => setShowForm(false)}
           busy={busy}
           status={formError}
         >
-          <AdminField label="Tipo de movimiento">
-            <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })}>
-              <option value="client">Cobro de cliente</option>
-              <option value="supplier">Trabajo de proveedor</option>
+          <AdminField label="Cliente">
+            <select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}>
+              <option value="">Elegí un cliente…</option>
+              {(clients.data ?? []).map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.company || client.name}
+                </option>
+              ))}
             </select>
           </AdminField>
-          {form.kind === "client" ? (
-            <>
-              <AdminField label="Cliente">
-                <select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}>
-                  <option value="">Elegí un cliente…</option>
-                  {(clients.data ?? []).map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.company || client.name}
-                    </option>
-                  ))}
-                </select>
-              </AdminField>
-              <AdminField label="Monto cobrado" hint="En guaraníes">
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={form.amount}
-                  onChange={(event) => setForm({ ...form, amount: event.target.value })}
-                  inputMode="numeric"
-                />
-              </AdminField>
-              <AdminField label="Método">
-                <select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>
-                  {METHOD_OPTIONS.map((method) => (
-                    <option key={method} value={method}>
-                      {method}
-                    </option>
-                  ))}
-                </select>
-              </AdminField>
-              <AdminField label="Referencia" hint="Nº de transferencia o recibo">
-                <input
-                  maxLength={80}
-                  value={form.reference}
-                  onChange={(event) => setForm({ ...form, reference: event.target.value })}
-                  placeholder="Opcional"
-                />
-              </AdminField>
-            </>
-          ) : (
-            <>
-              <AdminField label="Proveedor">
-                <select required value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}>
-                  <option value="">Elegí un proveedor…</option>
-                  {(resources.data?.suppliers ?? []).map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-              </AdminField>
-              <AdminField label="Evento" hint="Opcional">
-                <select value={form.eventId} onChange={(event) => setForm({ ...form, eventId: event.target.value })}>
-                  <option value="">Sin evento asociado</option>
-                  {(events.data ?? []).map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </AdminField>
-              <AdminField label="Trabajo / concepto" wide>
-                <input
-                  required
-                  maxLength={160}
-                  value={form.description}
-                  onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  placeholder="Ej.: Estructura y gráfica de stand"
-                />
-              </AdminField>
-              <AdminField label="Costo total" hint="En guaraníes">
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={form.total}
-                  onChange={(event) => setForm({ ...form, total: event.target.value })}
-                  inputMode="numeric"
-                />
-              </AdminField>
-              <AdminField label="Anticipo" hint="Opcional">
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.advance}
-                  onChange={(event) => setForm({ ...form, advance: event.target.value })}
-                  inputMode="numeric"
-                />
-              </AdminField>
-            </>
-          )}
+          <AdminField label="Monto cobrado" hint="En guaraníes">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              required
+              value={form.amount}
+              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              inputMode="numeric"
+            />
+          </AdminField>
+          <AdminField label="Método">
+            <select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>
+              {METHOD_OPTIONS.map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </select>
+          </AdminField>
+          <AdminField label="Referencia" hint="Nº de transferencia o recibo">
+            <input
+              maxLength={80}
+              value={form.reference}
+              onChange={(event) => setForm({ ...form, reference: event.target.value })}
+              placeholder="Opcional"
+            />
+          </AdminField>
         </AdminFormPanel>
       ) : null}
 
@@ -304,14 +219,22 @@ export function FinanzasModule() {
         </AdminDataState>
       </AdminPanel>
 
-      <AdminPanel title="Cuentas por pagar" meta={`${formatNumber(filteredJobs.length)} trabajos`}>
+      <AdminPanel
+        title="Cuentas por pagar"
+        meta={`${formatNumber(filteredJobs.length)} trabajos`}
+        action={
+          <Link className="admin-panel-link" href="/proveedores">
+            Gestionar en Proveedores →
+          </Link>
+        }
+      >
         <AdminDataState
           loading={finance.loading}
           error={finance.error}
           onRetry={finance.reload}
           empty={filteredJobs.length === 0}
           emptyTitle="Sin trabajos de proveedor"
-          emptyHint="Cargá el trabajo contratado para seguir costo, anticipo y saldo."
+          emptyHint="Los trabajos se cargan y avanzan en Proveedores; acá ves el costo, el anticipo y el saldo."
           rows={4}
         >
           <AdminTable
@@ -329,7 +252,8 @@ export function FinanzasModule() {
             ]}
           >
             {filteredJobs.map((job) => {
-              const balance = job.total - job.advance;
+              const balance = supplierJobBalance(job);
+              const settled = job.status === "PAID" || job.status === "CANCELLED";
               return (
                 <AdminRow key={job.id}>
                   <AdminCell title={job.supplier.name}>
@@ -338,7 +262,7 @@ export function FinanzasModule() {
                   <AdminCell title={job.description}>{job.description}</AdminCell>
                   <AdminCell title={job.event?.name || "Sin evento asociado"}>{job.event?.name || "—"}</AdminCell>
                   <AdminCell title={job.dueAt ? `Vence el ${formatDateShort(job.dueAt)}` : "Sin fecha prevista"}>
-                    <span className="admin-nowrap" data-tone={job.status === "PAID" ? undefined : dueTone(job.dueAt)}>
+                    <span className="admin-nowrap" data-tone={settled ? undefined : dueTone(job.dueAt)}>
                       {job.dueAt ? formatDateShort(job.dueAt) : "—"}
                     </span>
                   </AdminCell>
@@ -348,7 +272,7 @@ export function FinanzasModule() {
                   <AdminCell end title={formatMoney(job.advance)}>
                     {formatMoney(job.advance)}
                   </AdminCell>
-                  <AdminCell end title={formatMoney(balance)}>
+                  <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(job.total)}`}>
                     <strong>{formatMoney(balance)}</strong>
                   </AdminCell>
                   <AdminCell>
