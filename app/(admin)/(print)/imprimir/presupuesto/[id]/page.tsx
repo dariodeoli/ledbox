@@ -1,6 +1,16 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { budgetStatusLabel, formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/admin-format";
+import {
+  budgetApprovalMethodLabel,
+  budgetReference,
+  budgetStatusLabel,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+} from "@/lib/admin-format";
+import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
+import { qrSvg } from "@/lib/qr";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { PrintAmount, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
@@ -11,15 +21,14 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Presupuesto", robots: { index: false, follow: false } };
 
-/** Referencia corta y estable para el documento (deriva del id real). */
-function shortReference(id: string): string {
-  return id.replace(/-/g, "").slice(0, 8).toUpperCase();
-}
-
 /**
  * Presupuesto imprimible (PDF vía `window.print()`).
  * Solo lectura y filtrado por la empresa activa: un presupuesto de otra empresa
  * no existe para esta sesión (`notFound`).
+ *
+ * Issue #12: la hoja suma el QR del portal del cliente con el código visible
+ * (solo si el presupuesto tiene link público) y la evidencia de la aprobación
+ * cuando ya fue aprobado (digital o manual).
  */
 export default async function PresupuestoImprimiblePage({ params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminContext();
@@ -40,7 +49,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const balance = budget.total - paid;
   const issuedAt = formatDateTime(budget.createdAt);
-  const reference = `Nº ${shortReference(budget.id)}`;
+  const reference = `Nº ${budgetReference(budget.id)}`;
+  const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken) : null;
+  const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
 
   return (
     <>
@@ -186,15 +197,53 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
           </div>
         </PrintSection>
 
+        {portalUrl && portalQr ? (
+          <PrintSection title="Aprobación online">
+            <div className="lbprint-portal">
+              <div className="lbprint-portal-qr" aria-hidden="true" dangerouslySetInnerHTML={{ __html: portalQr }} />
+              <div className="lbprint-portal-data">
+                <p className="lbprint-portal-code">{budget.publicToken}</p>
+                <PrintField label="Link del presupuesto" value={portalUrl} wide />
+                <p className="lbprint-note">
+                  Escaneá el QR o entrá a {publicConfig.clientUrl.replace(/^https?:\/\//, "")} con el código para ver el detalle
+                  y aprobar el presupuesto online. El link es personal del cliente y puede revocarse desde el panel.
+                </p>
+              </div>
+            </div>
+          </PrintSection>
+        ) : null}
+
         <PrintSection title="Aceptación del cliente">
-          <p className="lbprint-note">
-            La firma de este documento aprueba el detalle, los montos y las condiciones del presupuesto {reference}.
-          </p>
-          <div className="lbprint-sign">
-            <span className="lbprint-sign-box">Firma</span>
-            <span className="lbprint-sign-box">Aclaración</span>
-            <span className="lbprint-sign-box">Fecha</span>
-          </div>
+          {budget.approvedAt ? (
+            <>
+              <p className="lbprint-note">
+                Presupuesto aprobado por {budget.approvedByName || "el cliente"} el {formatDateTime(budget.approvedAt)} (
+                {budgetApprovalMethodLabel(budget.approvalMethod).toLowerCase()}).
+              </p>
+              <div className="lbprint-grid">
+                <PrintField label="Aprobado por" value={budget.approvedByName || "—"} />
+                <PrintField label="Fecha y hora" value={formatDateTime(budget.approvedAt)} />
+                <PrintField label="Vía" value={budgetApprovalMethodLabel(budget.approvalMethod)} />
+                {budget.approvalNote ? <PrintField label="Comentario" value={budget.approvalNote} wide /> : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="lbprint-note">
+                La firma de este documento aprueba el detalle, los montos y las condiciones del presupuesto {reference}.
+              </p>
+              <div className="lbprint-sign">
+                <span className="lbprint-sign-box">Firma</span>
+                <span className="lbprint-sign-box">Aclaración</span>
+                <span className="lbprint-sign-box">Fecha</span>
+              </div>
+            </>
+          )}
+          {!budget.approvedAt && budget.revisionRequestedAt ? (
+            <p className="lbprint-note">
+              El cliente pidió cambios el {formatDateTime(budget.revisionRequestedAt)}: {budget.revisionNote || "sin comentario"}.
+            </p>
+          ) : null}
         </PrintSection>
 
         <PrintFooter note={`Presupuesto ${reference}`} />

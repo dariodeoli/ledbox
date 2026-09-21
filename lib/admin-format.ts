@@ -52,6 +52,14 @@ export function formatTime(value: string | Date | null | undefined): string {
   return date ? timeFormat.format(date) : "—";
 }
 
+/** Referencia corta y estable del presupuesto para documentos y links (deriva del id real). */
+export function budgetReference(id: string | null | undefined): string {
+  return String(id ?? "")
+    .replace(/-/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+}
+
 /** Vencido o a punto de vencer (dentro de los próximos `days` días). */
 export function isDueSoon(value: string | Date | null | undefined, days = 7): boolean {
   const date = toDate(value);
@@ -223,6 +231,38 @@ export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
 }
+
+// ── Portal del cliente (issue #12) ──────────────────────────────────────────
+// Estado de la aprobación del presupuesto tal como se ve en la lista del panel.
+
+const BUDGET_APPROVAL: Record<string, string> = {
+  PENDIENTE: "Pendiente",
+  APROBADO_DIGITAL: "Aprobado digital",
+  APROBADO_MANUAL: "Aprobado manual",
+  CAMBIOS_SOLICITADOS: "Cambios solicitados",
+};
+
+const BUDGET_APPROVAL_TONES: Record<string, AdminTone> = {
+  PENDIENTE: "neutral",
+  APROBADO_DIGITAL: "ok",
+  APROBADO_MANUAL: "ok",
+  CAMBIOS_SOLICITADOS: "warn",
+};
+
+export const budgetApprovalLabel = (value: string | null | undefined) => label(BUDGET_APPROVAL, value);
+
+export function budgetApprovalTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return BUDGET_APPROVAL_TONES[value] ?? "neutral";
+}
+
+/** Cómo se registró la aprobación: por el portal (cliente) o desde el panel (equipo). */
+export const BUDGET_APPROVAL_METHOD: Record<string, string> = {
+  digital: "Portal del cliente",
+  manual: "Panel",
+};
+
+export const budgetApprovalMethodLabel = (value: string | null | undefined) => label(BUDGET_APPROVAL_METHOD, value);
 
 /** Estados de un equipo al retirar/devolver (source única para los formularios). */
 export const ITEM_CONDITIONS = ["Bueno", "Con detalles", "Dañado"] as const;

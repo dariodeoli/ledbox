@@ -1,8 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { budgetStatusLabel, dueTone, formatDateShort, formatMoney, formatNumber, statusTone } from "@/lib/admin-format";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  budgetApprovalLabel,
+  budgetApprovalMethodLabel,
+  budgetApprovalTone,
+  budgetStatusLabel,
+  dueTone,
+  formatDateShort,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+  statusTone,
+} from "@/lib/admin-format";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
+import { budgetApprovalState, type AdminBudgetPortalPayload, type AdminBudgetRow } from "@/lib/admin-types";
+import { portalBudgetUrl } from "@/lib/public-config";
+import { qrDataUrl } from "@/lib/qr";
+import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -35,6 +50,61 @@ const STATUS_OPTIONS = [
 
 const EMPTY_FORM = { clientId: "", eventId: "", title: "", item: "", quantity: "1", days: "1", unitPrice: "", costPrice: "" };
 
+type ApprovalDecision = "approve" | "request_revision";
+
+/** Resumen textual del estado del portal, para el `title` de la celda. */
+function portalSummary(budget: AdminBudgetRow): string {
+  const state = budgetApprovalState(budget);
+  const link = budget.publicToken ? "Link activo" : "Sin link público";
+  if (state === "APROBADO_DIGITAL" || state === "APROBADO_MANUAL") {
+    const via = state === "APROBADO_MANUAL" ? "aprobación manual del panel" : "aprobación digital del cliente";
+    const when = budget.approvedAt ? formatDateTime(budget.approvedAt) : "sin fecha";
+    const note = budget.approvalNote ? ` · Nota: ${budget.approvalNote}` : "";
+    return `${budgetApprovalLabel(state)} (${via}) · ${budget.approvedByName || "—"} · ${when}${note} · ${link}`;
+  }
+  if (state === "CAMBIOS_SOLICITADOS") {
+    const when = budget.revisionRequestedAt ? formatDateTime(budget.revisionRequestedAt) : "sin fecha";
+    return `Cambios solicitados el ${when}: ${budget.revisionNote || "sin comentario"} · ${link}`;
+  }
+  return `Pendiente de aprobación · ${link}`;
+}
+
+/**
+ * Diálogo del módulo (issue #12). El panel todavía no tiene un primitivo de
+ * diálogo: acá vive el primero, con el contrato mínimo (rol dialog, foco al
+ * abrir, cierre con Escape y clic afuera).
+ */
+function ModuleDialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">{title}</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export function PresupuestosModule() {
   const { role } = useAdminSession();
   const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? []);
@@ -49,9 +119,18 @@ export function PresupuestosModule() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // Portal del cliente (issue #12): diálogo de link/QR y diálogo de aprobación.
+  const [portalBudget, setPortalBudget] = useState<AdminBudgetRow | null>(null);
+  const [qr, setQr] = useState("");
+  const [approval, setApproval] = useState<{ budget: AdminBudgetRow; decision: ApprovalDecision } | null>(null);
+  const [note, setNote] = useState("");
+  const [dialogBusy, setDialogBusy] = useState(false);
+  const [dialogError, setDialogError] = useState("");
+
   const writable = canWriteFinance(role);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const eventOptions = useMemo(() => events.data ?? [], [events.data]);
+  const portalToken = portalBudget?.publicToken ?? null;
 
   const rows = useMemo(() => {
     const list = budgets.data ?? [];
@@ -74,6 +153,23 @@ export function PresupuestosModule() {
       { quoted: 0, paid: 0, receivable: 0, margin: 0 },
     );
   }, [budgets.data]);
+
+  // El QR se arma en el navegador con la URL pública del presupuesto abierto.
+  useEffect(() => {
+    let active = true;
+    setQr("");
+    if (!portalBudget?.publicToken) return;
+    qrDataUrl(portalBudgetUrl(portalBudget.publicToken), 240)
+      .then((url) => {
+        if (active) setQr(url);
+      })
+      .catch(() => {
+        if (active) setQr("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [portalBudget]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,6 +197,79 @@ export function PresupuestosModule() {
     }
     setForm(EMPTY_FORM);
     setNotice(`Presupuesto «${form.title}» creado.`);
+    budgets.reload();
+  }
+
+  function openPortal(budget: AdminBudgetRow) {
+    setDialogError("");
+    setPortalBudget(budget);
+  }
+
+  function openApproval(budget: AdminBudgetRow, decision: ApprovalDecision) {
+    setDialogError("");
+    setNote("");
+    setApproval({ budget, decision });
+  }
+
+  async function copyPortalLink(budget: AdminBudgetRow) {
+    if (!budget.publicToken) return;
+    const url = portalBudgetUrl(budget.publicToken);
+    try {
+      await navigator.clipboard.writeText(url);
+      setNotice(`Link copiado: ${url}`);
+    } catch {
+      setNotice(`No pudimos copiar automáticamente; el link es ${url}`);
+    }
+  }
+
+  async function submitPortalAction(action: "generate" | "revoke") {
+    if (!portalBudget) return;
+    setDialogBusy(true);
+    setDialogError("");
+    const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets/token", {
+      budgetId: portalBudget.id,
+      action,
+    });
+    setDialogBusy(false);
+    if (!result.ok) {
+      setDialogError(result.error);
+      return;
+    }
+    const updated = result.data.budget;
+    if (updated) setPortalBudget({ ...portalBudget, ...updated });
+    setNotice(
+      action === "generate"
+        ? `Link del portal generado para «${portalBudget.title}». El link anterior dejó de funcionar.`
+        : `Link del portal revocado para «${portalBudget.title}».`,
+    );
+    budgets.reload();
+  }
+
+  async function submitApproval() {
+    if (!approval) return;
+    if (approval.decision === "request_revision" && !note.trim()) {
+      setDialogError("Indicá qué cambios se piden.");
+      return;
+    }
+    setDialogBusy(true);
+    setDialogError("");
+    const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets/approval", {
+      budgetId: approval.budget.id,
+      decision: approval.decision,
+      note: note.trim() || undefined,
+    });
+    setDialogBusy(false);
+    if (!result.ok) {
+      setDialogError(result.error);
+      return;
+    }
+    setNotice(
+      approval.decision === "approve"
+        ? `Aprobación manual registrada para «${approval.budget.title}».`
+        : `Pedido de cambios registrado para «${approval.budget.title}».`,
+    );
+    setApproval(null);
+    setNote("");
     budgets.reload();
   }
 
@@ -245,6 +414,7 @@ export function PresupuestosModule() {
               { label: "Saldo", end: true },
               { label: "Margen", end: true },
               { label: "Estado" },
+              { label: "Portal" },
               { label: "Vence" },
               { label: "Acciones", end: true },
             ]}
@@ -253,6 +423,9 @@ export function PresupuestosModule() {
               const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
               const balance = budget.total - paid;
               const margin = budget.total - budget.costEstimate;
+              const approvalState = budgetApprovalState(budget);
+              const approved = approvalState === "APROBADO_DIGITAL" || approvalState === "APROBADO_MANUAL";
+              const open = budget.status !== "LOST" && budget.status !== "CANCELLED";
               return (
                 <AdminRow key={budget.id}>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
@@ -278,6 +451,10 @@ export function PresupuestosModule() {
                   <AdminCell>
                     <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
                   </AdminCell>
+                  <AdminCell title={portalSummary(budget)}>
+                    <AdminBadge tone={budgetApprovalTone(approvalState)}>{budgetApprovalLabel(approvalState)}</AdminBadge>
+                    <small className="admin-cell-sub"> · {budget.publicToken ? "Link activo" : "Sin link"}</small>
+                  </AdminCell>
                   <AdminCell title={budget.validUntil ? `Vence el ${formatDateShort(budget.validUntil)}` : "Sin vencimiento"}>
                     <span className="admin-nowrap" data-tone={dueTone(budget.validUntil)}>
                       {budget.validUntil ? formatDateShort(budget.validUntil) : "—"}
@@ -291,6 +468,45 @@ export function PresupuestosModule() {
                         label={`Imprimir presupuesto: ${budget.title}`}
                         external
                       />
+                      {budget.publicToken ? (
+                        <>
+                          <AdminIconLink
+                            href={portalBudgetUrl(budget.publicToken)}
+                            icon="external"
+                            label={`Ver el portal del presupuesto: ${budget.title}`}
+                            external
+                          />
+                          <AdminButton
+                            icon="download"
+                            title={`Copiar el link del portal: ${budget.title}`}
+                            aria-label={`Copiar el link del portal: ${budget.title}`}
+                            onClick={() => void copyPortalLink(budget)}
+                          />
+                        </>
+                      ) : null}
+                      <AdminButton
+                        title={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
+                        aria-label={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
+                        onClick={() => openPortal(budget)}
+                      >
+                        QR
+                      </AdminButton>
+                      {writable && open && !approved ? (
+                        <>
+                          <AdminButton
+                            icon="check"
+                            title={`Aprobar manualmente: ${budget.title}`}
+                            aria-label={`Aprobar manualmente: ${budget.title}`}
+                            onClick={() => openApproval(budget, "approve")}
+                          />
+                          <AdminButton
+                            icon="alert"
+                            title={`Pedir cambios: ${budget.title}`}
+                            aria-label={`Pedir cambios: ${budget.title}`}
+                            onClick={() => openApproval(budget, "request_revision")}
+                          />
+                        </>
+                      ) : null}
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -299,6 +515,95 @@ export function PresupuestosModule() {
           </AdminTable>
         )}
       </AdminDataState>
+
+      {portalBudget ? (
+        <ModuleDialog title={`Portal del cliente · ${portalBudget.title}`} onClose={() => setPortalBudget(null)}>
+          {portalToken ? (
+            <>
+              <div className="admin-dialog-qr">
+                {qr ? (
+                  <img src={qr} alt={`QR del presupuesto ${portalBudget.title} en el portal del cliente`} width={240} height={240} />
+                ) : (
+                  <span className="admin-spinner" role="status" aria-label="Generando QR" />
+                )}
+              </div>
+              <p className="admin-dialog-code">{portalToken}</p>
+              <AdminField label="Link del portal" wide>
+                <input readOnly value={portalBudgetUrl(portalToken)} onFocus={(event) => event.target.select()} />
+              </AdminField>
+              <p className="admin-dialog-text">
+                Escaneá el QR o compartí el link: el cliente ve este presupuesto —y solo este— y puede aprobarlo o pedir
+                cambios.
+              </p>
+            </>
+          ) : (
+            <p className="admin-dialog-text">
+              Este presupuesto todavía no tiene link público. Generá uno para imprimir el QR y habilitar la aprobación
+              online.
+            </p>
+          )}
+          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
+          <div className="admin-dialog-foot">
+            {portalToken ? (
+              <>
+                <AdminButton
+                  icon="download"
+                  title="Copiar el link del portal"
+                  aria-label="Copiar el link del portal"
+                  onClick={() => void copyPortalLink(portalBudget)}
+                />
+                <AdminButton
+                  icon="external"
+                  title="Abrir el portal en una pestaña nueva"
+                  aria-label="Abrir el portal en una pestaña nueva"
+                  onClick={() => window.open(portalBudgetUrl(portalToken), "_blank", "noopener,noreferrer")}
+                />
+              </>
+            ) : null}
+            <span className="admin-dialog-spacer" />
+            {portalToken ? (
+              <AdminButton icon="power" onClick={() => void submitPortalAction("revoke")} disabled={dialogBusy}>
+                Revocar link
+              </AdminButton>
+            ) : null}
+            <AdminButton variant="primary" icon="refresh" busy={dialogBusy} onClick={() => void submitPortalAction("generate")}>
+              {portalToken ? "Regenerar link" : "Generar link"}
+            </AdminButton>
+          </div>
+        </ModuleDialog>
+      ) : null}
+
+      {approval ? (
+        <ModuleDialog
+          title={approval.decision === "approve" ? `Aprobar manualmente · ${approval.budget.title}` : `Pedir cambios · ${approval.budget.title}`}
+          onClose={() => setApproval(null)}
+        >
+          <p className="admin-dialog-text">
+            {approval.decision === "approve"
+              ? `Se registra la aprobación a nombre de ${approval.budget.client.company || approval.budget.client.name}, con tu usuario y la fecha actual. Si ya hay una aprobación registrada, no se pisa.`
+              : "El cliente no ve el cambio hasta que le compartas la versión actualizada; queda registrado en el presupuesto."}
+          </p>
+          <AdminField label={approval.decision === "approve" ? "Nota (opcional)" : "¿Qué cambios se piden?"} wide>
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={1000}
+              rows={4}
+              required={approval.decision === "request_revision"}
+              placeholder={approval.decision === "approve" ? "Ej.: aprobado por teléfono, coordina con Santiago" : "Ej.: sumar un día más y cambiar el lugar"}
+            />
+          </AdminField>
+          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
+          <div className="admin-dialog-foot">
+            <AdminButton onClick={() => setApproval(null)} disabled={dialogBusy}>
+              Cancelar
+            </AdminButton>
+            <AdminButton variant="primary" icon="check" busy={dialogBusy} onClick={() => void submitApproval()}>
+              {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
+            </AdminButton>
+          </div>
+        </ModuleDialog>
+      ) : null}
     </div>
   );
 }

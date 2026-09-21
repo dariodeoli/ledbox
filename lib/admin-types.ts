@@ -154,6 +154,42 @@ export type AdminBudgetRow = {
   event: AdminEventRef | null;
   items: AdminBudgetItem[];
   payments: AdminPayment[];
+  /** Portal del cliente (issue #12): token público y evidencia de la aprobación. */
+  publicToken: string | null;
+  publicTokenCreatedAt: string | null;
+  approvedAt: string | null;
+  approvedByName: string | null;
+  approvalMethod: string | null;
+  approvalNote: string | null;
+  revisionRequestedAt: string | null;
+  revisionNote: string | null;
+};
+
+export type AdminBudgetApprovalState = "PENDIENTE" | "APROBADO_DIGITAL" | "APROBADO_MANUAL" | "CAMBIOS_SOLICITADOS";
+
+/** Estado del portal de un presupuesto (mismo criterio que el API público). */
+export function budgetApprovalState(
+  budget: Pick<AdminBudgetRow, "approvedAt" | "approvalMethod" | "revisionRequestedAt">,
+): AdminBudgetApprovalState {
+  if (budget.approvedAt) return budget.approvalMethod === "manual" ? "APROBADO_MANUAL" : "APROBADO_DIGITAL";
+  if (budget.revisionRequestedAt) return "CAMBIOS_SOLICITADOS";
+  return "PENDIENTE";
+}
+
+/** Respuesta de `POST /api/admin/budgets/token` y `POST /api/admin/budgets/approval`. */
+export type AdminBudgetPortalPayload = {
+  budget?: {
+    id: string;
+    publicToken: string | null;
+    publicTokenCreatedAt: string | null;
+    approvedAt: string | null;
+    approvedByName: string | null;
+    approvalMethod: string | null;
+    approvalNote: string | null;
+    revisionRequestedAt: string | null;
+    revisionNote: string | null;
+  };
+  error?: string;
 };
 
 export type AdminPaymentRow = AdminPayment & { client: AdminClientRef; budget: { id: string; title: string } | null };
