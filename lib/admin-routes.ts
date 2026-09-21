@@ -24,6 +24,9 @@ export const ADMIN_ROUTES = [
   "/auditoria",
   "/demo",
   "/imprimir",
+  // Aceptación pública de una invitación al equipo (issue #31): es del panel
+  // (sin sesión) y vive en el host admin, como el login y la recuperación.
+  "/invitacion",
 ] as const;
 
 export function isAdminRoute(pathname: string): boolean {
