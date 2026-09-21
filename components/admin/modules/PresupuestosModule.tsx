@@ -14,7 +14,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
-import { budgetApprovalState, type AdminBudgetPortalPayload, type AdminBudgetRow } from "@/lib/admin-types";
+import { budgetApprovalState, collectedAmount, type AdminBudgetPortalPayload, type AdminBudgetRow } from "@/lib/admin-types";
 import { portalBudgetUrl } from "@/lib/public-config";
 import { qrDataUrl } from "@/lib/qr";
 import { AdminIcon } from "../AdminIcons";
@@ -143,7 +143,9 @@ export function PresupuestosModule() {
     const list = budgets.data ?? [];
     return list.reduce(
       (accumulator, budget) => {
-        const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
+        // Solo los cobros cobrados descuentan saldo (issue #16): un cobro a plazo
+        // pendiente o anulado todavía no es plata cobrada.
+        const paid = collectedAmount(budget.payments);
         accumulator.quoted += budget.total;
         accumulator.paid += paid;
         accumulator.receivable += Math.max(0, budget.total - paid);
@@ -420,7 +422,7 @@ export function PresupuestosModule() {
             ]}
           >
             {rows.map((budget) => {
-              const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
+              const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
               const margin = budget.total - budget.costEstimate;
               const approvalState = budgetApprovalState(budget);

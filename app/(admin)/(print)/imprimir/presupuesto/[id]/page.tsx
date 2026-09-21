@@ -41,7 +41,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
       client: true,
       event: true,
       items: { orderBy: { name: "asc" } },
-      payments: { orderBy: { paidAt: "asc" } },
+      // Solo los cobros cobrados (issue #16): un cobro a plazo pendiente no es
+      // plata cobrada y no se imprime como pago del presupuesto.
+      payments: { where: { status: "RECEIVED" }, orderBy: { paidAt: "asc" } },
     },
   });
   if (!budget) notFound();
