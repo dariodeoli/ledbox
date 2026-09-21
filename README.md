@@ -70,8 +70,18 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 | `npm run build` | `prisma generate`, build standalone y copia de `public` y `.next/static` |
 | `npm start` | Arranca el server standalone |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run test:rules` | Reglas puras de campos (`node --test` + `tsx`) y chequeo de fuente del kit |
+| `npm run check:fields` | Falla si quedan inputs sueltos o `type="number"` en el panel |
+| `npm run release:prepare` | Validación previa a publicar: typecheck + tests + build |
 | `npm run prisma:migrate` / `prisma:deploy` | Migraciones en desarrollo / producción |
 | `npm run prisma:seed` | Crea los admins iniciales (allowlist) |
+
+## Versión, prepare y publish
+
+- La versión vive en `package.json` y no se duplica: `lib/version.ts` la expone como `APP_VERSION` y el pie del panel la muestra (`v<versión>`).
+- **Prepare (valida, no publica):** `npm run release:prepare` corre `typecheck` + `test:rules` (reglas puras y chequeo de fuente de campos) + `build`. Es el paso obligatorio antes de declarar una versión lista.
+- **Publish (publica):** el deploy lo hace Owncoding Hub/Coolify desde la rama viva; no hay script de publicación local. Al informar un deploy, decir la versión publicada y el estado real de cada frente, sin presentar local como publicado.
+- El flujo es simple a propósito: no hay release automatizado; la fuente única evita que la versión visible quede atrás de la publicada.
 
 ## Migraciones en el deploy
 

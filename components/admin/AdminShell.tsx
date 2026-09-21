@@ -16,6 +16,7 @@ import {
   notificationTone,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
+import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
 import type {
   AdminNotification,
   AdminNotificationCounts,
@@ -277,6 +278,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ) : null}
 
           <main className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
+
+          <footer className="admin-main-foot">
+            <span>LedBox · Panel privado</span>
+            <strong title={`Versión de la app: ${APP_VERSION}`}>{APP_VERSION_LABEL}</strong>
+          </footer>
         </div>
       </div>
     </AdminSessionContext.Provider>
