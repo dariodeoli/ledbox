@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 export const runtime = "nodejs";
 export async function GET(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  const siteUrl = new URL(request.url).origin;
   if (!clientId) return new Response("Google login is not configured.", { status: 503 });
   const state = randomBytes(24).toString("base64url");
   const redirectUri = `${siteUrl.replace(/\/$/, "")}/api/auth/callback/google`;

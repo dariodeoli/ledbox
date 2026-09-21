@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const url = new URL(request.url), code = url.searchParams.get("code"), state = url.searchParams.get("state");
   const savedState = (await cookies()).get("ledbox_google_state")?.value;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || url.origin, loginUrl = `${siteUrl.replace(/\/$/, "")}/admin/login`;
+  const siteUrl = url.origin, loginUrl = `${siteUrl.replace(/\/$/, "")}/admin/login`;
   if (!code || !state || !savedState || state !== savedState) return Response.redirect(`${loginUrl}?error=google_state`);
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) return Response.redirect(`${loginUrl}?error=google_unconfigured`);
   const redirectUri = `${siteUrl.replace(/\/$/, "")}/api/auth/callback/google`;
