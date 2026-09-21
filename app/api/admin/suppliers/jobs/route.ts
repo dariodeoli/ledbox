@@ -4,6 +4,7 @@ import { jobStatusLabel } from "@/lib/admin-format";
 import {
   isSupplierJobOpen,
   supplierJobNextStatuses,
+  supplierJobStatusBehind,
   supplierJobTransitions,
   SUPPLIER_CATEGORIES,
   SUPPLIER_JOB_STATUSES,
@@ -14,6 +15,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { withIdempotency } from "@/lib/server/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +28,13 @@ export const dynamic = "force-dynamic";
  * - `PATCH` edita datos, pagos y estado (`finance.write`), validando la máquina de
  *   estados de `lib/admin-types.ts`: sin saltos inválidos, anticipo > 0 para los
  *   estados de anticipo y saldo > 0 para `BALANCE_PENDING`.
+ *
+ * Idempotencia y monotonicidad (issue #20): ambas mutaciones pasan por
+ * `withIdempotency` (`suppliers-jobs:POST` / `suppliers-jobs:PATCH`) con la
+ * clave del cliente —repetir la misma clave devuelve la misma respuesta y no
+ * crea ni paga dos veces— y un pedido atrasado (reintento o request fuera de
+ * orden que pide un estado ya pasado) devuelve el trabajo actual sin cambios y
+ * sin auditar. Los estados terminales (`PAID`, `CANCELLED`) no se reabren.
  *
  * Todo se filtra por `organizationId`; un trabajo, proveedor o evento de otra
  * empresa responde 404.
@@ -111,55 +120,61 @@ export async function POST(request: Request) {
   const { organizationId } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
 
-  if (typeof body.supplierId !== "string") return jsonError("Supplier is required.", 400);
-  const description = typeof body.description === "string" ? body.description.trim() : "";
-  if (description.length < 2) return jsonError("Job description is required.", 400);
-  const total = toInteger(body.total);
-  if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
-  const advance = body.advance === undefined ? 0 : toInteger(body.advance);
-  if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
-  if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
+  return withIdempotency({ request, organizationId, scope: "suppliers-jobs:POST", body }, async (tx) => {
+    if (typeof body.supplierId !== "string") return jsonError("Supplier is required.", 400);
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    if (description.length < 2) return jsonError("Job description is required.", 400);
+    const total = toInteger(body.total);
+    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
+    const advance = body.advance === undefined ? 0 : toInteger(body.advance);
+    if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
+    if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
 
-  const supplier = await db.supplier.findFirst({ where: { id: body.supplierId, organizationId }, select: { id: true, category: true, name: true } });
-  if (!supplier) return jsonError("Supplier not found.", 404);
+    const supplier = await tx.supplier.findFirst({ where: { id: body.supplierId, organizationId }, select: { id: true, category: true, name: true } });
+    if (!supplier) return jsonError("Supplier not found.", 404);
 
-  const eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : "";
-  if (eventId) {
-    const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
-    if (!event) return jsonError("Event not found.", 404);
-  }
+    const eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : "";
+    if (eventId) {
+      const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
+      if (!event) return jsonError("Event not found.", 404);
+    }
 
-  const dueAt = parseDate(body.dueAt);
-  if (dueAt && !dueAt.ok) return jsonError("Invalid due date.", 400);
+    const dueAt = parseDate(body.dueAt);
+    if (dueAt && !dueAt.ok) return jsonError("Invalid due date.", 400);
 
-  const job = await db.supplierJob.create({
-    data: {
-      id: randomUUID(),
-      organizationId,
-      supplierId: supplier.id,
-      eventId: eventId || null,
-      category: isCategory(body.category) ? body.category : supplier.category,
-      description: description.slice(0, MAX.description),
-      total,
-      advance,
-      dueAt: dueAt?.value ?? null,
-      notes: optionalText(body.notes, MAX.notes) ?? null,
-      paymentMethod: optionalText(body.paymentMethod, MAX.method) ?? null,
-      receipt: optionalText(body.receipt, MAX.receipt) ?? null,
-      // Un trabajo que nace con anticipo ya pagado arranca en ADVANCE_PAID.
-      status: advance > 0 ? "ADVANCE_PAID" : "PENDING",
-    },
-    include: jobInclude,
+    const job = await tx.supplierJob.create({
+      data: {
+        id: randomUUID(),
+        organizationId,
+        supplierId: supplier.id,
+        eventId: eventId || null,
+        category: isCategory(body.category) ? body.category : supplier.category,
+        description: description.slice(0, MAX.description),
+        total,
+        advance,
+        dueAt: dueAt?.value ?? null,
+        notes: optionalText(body.notes, MAX.notes) ?? null,
+        paymentMethod: optionalText(body.paymentMethod, MAX.method) ?? null,
+        receipt: optionalText(body.receipt, MAX.receipt) ?? null,
+        // Un trabajo que nace con anticipo ya pagado arranca en ADVANCE_PAID.
+        status: advance > 0 ? "ADVANCE_PAID" : "PENDING",
+      },
+      include: jobInclude,
+    });
+    return {
+      status: 201,
+      body: { job },
+      afterCommit: () =>
+        recordAudit({
+          context: auth.context,
+          action: "create",
+          entity: "SupplierJob",
+          entityId: job.id,
+          summary: `Cargó el trabajo «${job.description}» del proveedor «${supplier.name}»`,
+          detail: { fields: auditPick(job, JOB_AUDIT_FIELDS) },
+        }),
+    };
   });
-  await recordAudit({
-    context: auth.context,
-    action: "create",
-    entity: "SupplierJob",
-    entityId: job.id,
-    summary: `Cargó el trabajo «${job.description}» del proveedor «${supplier.name}»`,
-    detail: { fields: auditPick(job, JOB_AUDIT_FIELDS) },
-  });
-  return Response.json({ job }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -169,95 +184,110 @@ export async function PATCH(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   if (typeof body.id !== "string") return jsonError("Job id is required.", 400);
 
-  const job = await db.supplierJob.findFirst({ where: { id: body.id, organizationId } });
-  if (!job) return jsonError("Job not found.", 404);
-  const closed = !isSupplierJobOpen(job.status);
+  return withIdempotency({ request, organizationId, scope: "suppliers-jobs:PATCH", body }, async (tx) => {
+    const job = await tx.supplierJob.findFirst({ where: { id: body.id as string, organizationId }, include: jobInclude });
+    if (!job) return jsonError("Job not found.", 404);
+    const closed = !isSupplierJobOpen(job.status);
 
-  const nextStatus = body.status === undefined ? undefined : isJobStatus(body.status) ? body.status : null;
-  if (nextStatus === null) return jsonError("Invalid job status.", 400);
-  const transition = nextStatus !== undefined && nextStatus !== job.status;
+    const nextStatus = body.status === undefined ? undefined : isJobStatus(body.status) ? body.status : null;
+    if (nextStatus === null) return jsonError("Invalid job status.", 400);
+    const transition = nextStatus !== undefined && nextStatus !== job.status;
 
-  const total = body.total === undefined ? job.total : toInteger(body.total);
-  if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
-  const advance = body.advance === undefined ? job.advance : toInteger(body.advance);
-  if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
-
-  if (closed && (transition || body.total !== undefined || body.advance !== undefined)) {
-    return jsonError("A paid or cancelled job cannot change its status, total or advance.", 400);
-  }
-  const resultingStatus = nextStatus ?? job.status;
-  if ((resultingStatus === "ADVANCE_PENDING" || resultingStatus === "ADVANCE_PAID") && advance <= 0) {
-    return jsonError("The advance must be greater than zero.", 400);
-  }
-  if (resultingStatus === "BALANCE_PENDING" && total - advance <= 0) {
-    return jsonError("The job has no pending balance.", 400);
-  }
-  if (transition && nextStatus) {
-    if (!supplierJobTransitions(job.status).includes(nextStatus)) {
-      return jsonError(`Invalid transition from ${job.status} to ${nextStatus}.`, 400);
+    // Monotonicidad (issue #20): un pedido atrasado —fuera de la máquina y por
+    // detrás del avance actual— devuelve el trabajo tal como está, sin escribir
+    // ni auditar. Los estados terminales nunca se reabren ni retroceden.
+    if (transition && nextStatus && !supplierJobTransitions(job.status).includes(nextStatus) && supplierJobStatusBehind(job.status, nextStatus)) {
+      return { status: 200, body: { job, unchanged: true } };
     }
-    if (!supplierJobNextStatuses({ total, advance, status: job.status }).includes(nextStatus)) {
-      return jsonError(
-        nextStatus === "BALANCE_PENDING"
-          ? "The job has no pending balance."
-          : "The advance must be greater than zero.",
-        400,
-      );
+
+    const total = body.total === undefined ? job.total : toInteger(body.total);
+    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
+    const advance = body.advance === undefined ? job.advance : toInteger(body.advance);
+    if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
+
+    if (closed && (transition || body.total !== undefined || body.advance !== undefined)) {
+      return jsonError("A paid or cancelled job cannot change its status, total or advance.", 400);
     }
-  }
-
-  const description = body.description === undefined ? undefined : typeof body.description === "string" ? body.description.trim() : "";
-  if (description !== undefined && description.length < 2) return jsonError("Job description is required.", 400);
-  if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
-
-  let eventId: string | null | undefined;
-  if (body.eventId !== undefined) {
-    eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : null;
-    if (eventId) {
-      const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
-      if (!event) return jsonError("Event not found.", 404);
+    const resultingStatus = nextStatus ?? job.status;
+    if ((resultingStatus === "ADVANCE_PENDING" || resultingStatus === "ADVANCE_PAID") && advance <= 0) {
+      return jsonError("The advance must be greater than zero.", 400);
     }
-  }
+    if (resultingStatus === "BALANCE_PENDING" && total - advance <= 0) {
+      return jsonError("The job has no pending balance.", 400);
+    }
+    if (transition && nextStatus) {
+      if (!supplierJobTransitions(job.status).includes(nextStatus)) {
+        return jsonError(`Invalid transition from ${job.status} to ${nextStatus}.`, 400);
+      }
+      if (!supplierJobNextStatuses({ total, advance, status: job.status }).includes(nextStatus)) {
+        return jsonError(
+          nextStatus === "BALANCE_PENDING"
+            ? "The job has no pending balance."
+            : "The advance must be greater than zero.",
+          400,
+        );
+      }
+    }
 
-  const dueAt = parseDate(body.dueAt);
-  if (dueAt && !dueAt.ok) return jsonError("Invalid due date.", 400);
-  const deliveredAt = parseDate(body.deliveredAt);
-  if (deliveredAt && !deliveredAt.ok) return jsonError("Invalid delivery date.", 400);
-  const paidAt = parseDate(body.paidAt);
-  if (paidAt && !paidAt.ok) return jsonError("Invalid payment date.", 400);
+    const description = body.description === undefined ? undefined : typeof body.description === "string" ? body.description.trim() : "";
+    if (description !== undefined && description.length < 2) return jsonError("Job description is required.", 400);
+    if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
 
-  const data: Prisma.SupplierJobUpdateInput = {};
-  if (description !== undefined) data.description = description.slice(0, MAX.description);
-  if (body.category !== undefined && isCategory(body.category)) data.category = body.category;
-  if (body.eventId !== undefined) data.event = eventId ? { connect: { id: eventId } } : { disconnect: true };
-  if (body.total !== undefined) data.total = total;
-  if (body.advance !== undefined) data.advance = advance;
-  if (dueAt) data.dueAt = dueAt.value;
-  if (deliveredAt) data.deliveredAt = deliveredAt.value;
-  if (paidAt) data.paidAt = paidAt.value;
-  if (body.paymentMethod !== undefined) data.paymentMethod = optionalText(body.paymentMethod, MAX.method);
-  if (body.receipt !== undefined) data.receipt = optionalText(body.receipt, MAX.receipt);
-  if (body.notes !== undefined) data.notes = optionalText(body.notes, MAX.notes);
-  if (transition && nextStatus) {
-    data.status = nextStatus;
-    // Sellos de tiempo reales: entrega y pago se fechan solos si no se indicó fecha.
-    if (nextStatus === "DELIVERED" && !deliveredAt?.value && !job.deliveredAt) data.deliveredAt = new Date();
-    if (nextStatus === "PAID" && !paidAt?.value && !job.paidAt) data.paidAt = new Date();
-  }
+    let eventId: string | null | undefined;
+    if (body.eventId !== undefined) {
+      eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : null;
+      if (eventId) {
+        const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
+        if (!event) return jsonError("Event not found.", 404);
+      }
+    }
 
-  const updated = await db.supplierJob.update({ where: { id: job.id }, data, include: jobInclude });
-  const changes = auditChanges(job, updated, JOB_AUDIT_FIELDS);
-  if (changes) {
-    await recordAudit({
-      context: auth.context,
-      action: "status" in changes ? "status" : "update",
-      entity: "SupplierJob",
-      entityId: job.id,
-      summary: "status" in changes
-        ? `Cambió el estado del trabajo «${updated.description}» a ${jobStatusLabel(updated.status)}`
-        : `Editó el trabajo «${updated.description}» del proveedor «${updated.supplier.name}»`,
-      detail: { changes },
-    });
-  }
-  return Response.json({ job: updated });
+    const dueAt = parseDate(body.dueAt);
+    if (dueAt && !dueAt.ok) return jsonError("Invalid due date.", 400);
+    const deliveredAt = parseDate(body.deliveredAt);
+    if (deliveredAt && !deliveredAt.ok) return jsonError("Invalid delivery date.", 400);
+    const paidAt = parseDate(body.paidAt);
+    if (paidAt && !paidAt.ok) return jsonError("Invalid payment date.", 400);
+
+    const data: Prisma.SupplierJobUpdateInput = {};
+    if (description !== undefined) data.description = description.slice(0, MAX.description);
+    if (body.category !== undefined && isCategory(body.category)) data.category = body.category;
+    if (body.eventId !== undefined) data.event = eventId ? { connect: { id: eventId } } : { disconnect: true };
+    if (body.total !== undefined) data.total = total;
+    if (body.advance !== undefined) data.advance = advance;
+    if (dueAt) data.dueAt = dueAt.value;
+    if (deliveredAt) data.deliveredAt = deliveredAt.value;
+    if (paidAt) data.paidAt = paidAt.value;
+    if (body.paymentMethod !== undefined) data.paymentMethod = optionalText(body.paymentMethod, MAX.method);
+    if (body.receipt !== undefined) data.receipt = optionalText(body.receipt, MAX.receipt);
+    if (body.notes !== undefined) data.notes = optionalText(body.notes, MAX.notes);
+    if (transition && nextStatus) {
+      data.status = nextStatus;
+      // Sellos de tiempo reales: entrega y pago se fechan solos si no se indicó fecha.
+      if (nextStatus === "DELIVERED" && !deliveredAt?.value && !job.deliveredAt) data.deliveredAt = new Date();
+      if (nextStatus === "PAID" && !paidAt?.value && !job.paidAt) data.paidAt = new Date();
+    }
+
+    const updated = await tx.supplierJob.update({ where: { id: job.id }, data, include: jobInclude });
+    const changes = auditChanges(job, updated, JOB_AUDIT_FIELDS);
+    return {
+      status: 200,
+      body: { job: updated },
+      ...(changes
+        ? {
+            afterCommit: () =>
+              recordAudit({
+                context: auth.context,
+                action: "status" in changes ? "status" : "update",
+                entity: "SupplierJob",
+                entityId: job.id,
+                summary: "status" in changes
+                  ? `Cambió el estado del trabajo «${updated.description}» a ${jobStatusLabel(updated.status)}`
+                  : `Editó el trabajo «${updated.description}» del proveedor «${updated.supplier.name}»`,
+                detail: { changes },
+              }),
+          }
+        : {}),
+    };
+  });
 }

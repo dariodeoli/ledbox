@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import {
   EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
@@ -8,6 +9,8 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { withIdempotency } from "@/lib/server/idempotency";
+import { movementSourceSnapshot } from "@/lib/server/finance-snapshots";
 import { dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
@@ -23,10 +26,17 @@ export const dynamic = "force-dynamic";
  *   el gasto siempre sale de una cuenta real (la pedida o la primera activa).
  * - `PATCH` edita el gasto (por ejemplo, asignarle el proyecto que quedó "A
  *   definir" desde la fila) y mantiene sincronizado su movimiento cuando cambia
- *   el monto, la cuenta o la fecha.
+ *   el monto, la cuenta, la fecha o su descripción.
+ *
+ * Idempotencia y snapshots (issue #20): ambas mutaciones pasan por
+ * `withIdempotency` (`expenses:POST` / `expenses:PATCH`) con la clave del
+ * cliente; repetir la misma clave devuelve la misma respuesta y no duplica el
+ * gasto ni su egreso. El movimiento guarda su `sourceSnapshot` (descripción,
+ * monto y referencia del gasto del momento) y el `PATCH` lo refresca cuando el
+ * gasto se corrige: el gasto es el hecho mismo, no una referencia externa.
  *
  * Todo se filtra por `organizationId`, exige `finance.write` (VIEWER solo lee),
- * queda auditado y no cruza datos entre empresas.
+ * queda auditado una sola vez por operación y no cruza datos entre empresas.
  */
 
 const MAX_AMOUNT = 99_000_000_000;
@@ -101,11 +111,26 @@ function dayRange(params: URLSearchParams): { from?: Date; to?: Date } | null {
 }
 
 /** Primera cuenta activa de la empresa: la cuenta por defecto de un gasto. */
-async function firstActiveAccount(organizationId: string) {
-  return db.treasuryAccount.findFirst({
+async function firstActiveAccount(tx: Prisma.TransactionClient, organizationId: string) {
+  return tx.treasuryAccount.findFirst({
     where: { organizationId, active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: accountSelect,
+  });
+}
+
+/** Snapshot del hecho que originó el egreso: el gasto tal como quedó guardado. */
+function expenseSnapshot(expense: {
+  description: string;
+  amount: number;
+  method?: string | null;
+  receipt?: string | null;
+}) {
+  return movementSourceSnapshot({
+    kind: "expense",
+    label: expense.description,
+    amount: expense.amount,
+    ref: expense.receipt ?? expense.method ?? null,
   });
 }
 
@@ -152,43 +177,46 @@ export async function POST(request: Request) {
   const { organizationId, user } = auth.context;
   const body = (await readJson(request)) as Record<string, unknown>;
 
-  const description = typeof body.description === "string" ? body.description.trim() : "";
-  if (description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
-  const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-  if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
-  if (!isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
-  const category = body.category;
+  return withIdempotency({ request, organizationId, scope: "expenses:POST", body }, async (tx) => {
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    if (description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
+    const amount = toInteger(body.amount, 1, MAX_AMOUNT);
+    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+    if (!isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
+    const category = body.category;
 
-  const requestedAccountId = typeof body.accountId === "string" && body.accountId ? body.accountId : "";
-  const account = requestedAccountId
-    ? await db.treasuryAccount.findFirst({ where: { id: requestedAccountId, organizationId }, select: accountSelect })
-    : await firstActiveAccount(organizationId);
-  if (!account) {
-    return jsonError(
-      requestedAccountId ? "La cuenta no existe en esta empresa." : "Creá una cuenta de tesorería antes de cargar el gasto.",
-      requestedAccountId ? 404 : 400,
-    );
-  }
+    const requestedAccountId = typeof body.accountId === "string" && body.accountId ? body.accountId : "";
+    const account = requestedAccountId
+      ? await tx.treasuryAccount.findFirst({ where: { id: requestedAccountId, organizationId }, select: accountSelect })
+      : await firstActiveAccount(tx, organizationId);
+    if (!account) {
+      return jsonError(
+        requestedAccountId ? "La cuenta no existe en esta empresa." : "Creá una cuenta de tesorería antes de cargar el gasto.",
+        requestedAccountId ? 404 : 400,
+      );
+    }
 
-  const dayKey = readDayKey(body.date);
-  if (dayKey === null) return jsonError("La fecha del gasto tiene que ser un día válido (AAAA-MM-DD).", 400);
-  const date = dayStart(dayKey ?? dayKeyOf(new Date()));
+    const dayKey = readDayKey(body.date);
+    if (dayKey === null) return jsonError("La fecha del gasto tiene que ser un día válido (AAAA-MM-DD).", 400);
+    const date = dayStart(dayKey ?? dayKeyOf(new Date()));
 
-  const eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : "";
-  if (eventId) {
-    const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
-    if (!event) return jsonError("El proyecto no existe en esta empresa.", 404);
-  }
-  const supplierId = typeof body.supplierId === "string" && body.supplierId ? body.supplierId : "";
-  if (supplierId) {
-    const supplier = await db.supplier.findFirst({ where: { id: supplierId, organizationId }, select: { id: true } });
-    if (!supplier) return jsonError("El proveedor no existe en esta empresa.", 404);
-  }
-  const method = optionalText(body.method, MAX_METHOD);
-  if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
+    const eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : "";
+    if (eventId) {
+      const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
+      if (!event) return jsonError("El proyecto no existe en esta empresa.", 404);
+    }
+    const supplierId = typeof body.supplierId === "string" && body.supplierId ? body.supplierId : "";
+    if (supplierId) {
+      const supplier = await tx.supplier.findFirst({ where: { id: supplierId, organizationId }, select: { id: true } });
+      if (!supplier) return jsonError("El proveedor no existe en esta empresa.", 404);
+    }
+    const method = optionalText(body.method, MAX_METHOD);
+    if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
 
-  const [expense, movement] = await db.$transaction(async (tx) => {
-    const created = await tx.expense.create({
+    // El egreso nace en la misma transacción que el gasto, ya vinculado a su id
+    // real: sin movimiento el saldo de la cuenta mentiría. El snapshot congela
+    // la etiqueta del hecho en el movimiento (issue #20).
+    const expense = await tx.expense.create({
       data: {
         id: randomUUID(),
         organizationId,
@@ -208,9 +236,7 @@ export async function POST(request: Request) {
       },
       include: expenseInclude,
     });
-    // El egreso nace en la misma transacción que el gasto, ya vinculado a su id
-    // real: sin movimiento el saldo de la cuenta mentiría.
-    const createdMovement = await tx.treasuryMovement.create({
+    const movement = await tx.treasuryMovement.create({
       data: {
         id: randomUUID(),
         organizationId,
@@ -219,25 +245,29 @@ export async function POST(request: Request) {
         amount,
         occurredAt: date,
         origin: "expense",
-        sourceId: created.id,
+        sourceId: expense.id,
+        sourceSnapshot: expenseSnapshot(expense),
         createdById: user.id,
         createdByName: user.name,
         createdByEmail: user.email,
       },
       select: { id: true },
     });
-    return [created, createdMovement] as const;
-  });
 
-  await recordAudit({
-    context: auth.context,
-    action: "create",
-    entity: "Expense",
-    entityId: expense.id,
-    summary: `Cargó el gasto «${expense.description}» desde «${account.name}»`,
-    detail: { fields: { ...auditPick(expense, EXPENSE_AUDIT_FIELDS), movementId: movement.id } },
+    return {
+      status: 201,
+      body: { expense },
+      afterCommit: () =>
+        recordAudit({
+          context: auth.context,
+          action: "create",
+          entity: "Expense",
+          entityId: expense.id,
+          summary: `Cargó el gasto «${expense.description}» desde «${account.name}»`,
+          detail: { fields: { ...auditPick(expense, EXPENSE_AUDIT_FIELDS), movementId: movement.id } },
+        }),
+    };
   });
-  return Response.json({ expense }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -248,89 +278,104 @@ export async function PATCH(request: Request) {
 
   const expenseId = typeof body.expenseId === "string" ? body.expenseId : "";
   if (!expenseId) return jsonError("Falta el gasto.", 400);
-  const expense = await db.expense.findFirst({ where: { id: expenseId, organizationId } });
-  if (!expense) return jsonError("El gasto no existe en esta empresa.", 404);
 
-  const description = body.description === undefined
-    ? undefined
-    : typeof body.description === "string"
-      ? body.description.trim()
-      : "";
-  if (description !== undefined && description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
-  const amount = body.amount === undefined ? expense.amount : toInteger(body.amount, 1, MAX_AMOUNT);
-  if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
-  if (body.category !== undefined && !isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
+  return withIdempotency({ request, organizationId, scope: "expenses:PATCH", body }, async (tx) => {
+    const expense = await tx.expense.findFirst({ where: { id: expenseId, organizationId } });
+    if (!expense) return jsonError("El gasto no existe en esta empresa.", 404);
 
-  let accountId = expense.accountId;
-  if (body.accountId !== undefined) {
-    if (typeof body.accountId !== "string" || !body.accountId) return jsonError("Elegí la cuenta del gasto.", 400);
-    const account = await db.treasuryAccount.findFirst({ where: { id: body.accountId, organizationId }, select: { id: true } });
-    if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
-    accountId = account.id;
-  }
+    const description = body.description === undefined
+      ? undefined
+      : typeof body.description === "string"
+        ? body.description.trim()
+        : "";
+    if (description !== undefined && description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
+    const amount = body.amount === undefined ? expense.amount : toInteger(body.amount, 1, MAX_AMOUNT);
+    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+    if (body.category !== undefined && !isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
 
-  const dayKey = readDayKey(body.date);
-  if (dayKey === null) return jsonError("La fecha del gasto tiene que ser un día válido (AAAA-MM-DD).", 400);
-  const date = dayKey ? dayStart(dayKey) : expense.date;
-
-  let eventId: string | null = expense.eventId;
-  if (body.eventId !== undefined) {
-    eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : null;
-    if (eventId) {
-      const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
-      if (!event) return jsonError("El proyecto no existe en esta empresa.", 404);
+    let accountId = expense.accountId;
+    if (body.accountId !== undefined) {
+      if (typeof body.accountId !== "string" || !body.accountId) return jsonError("Elegí la cuenta del gasto.", 400);
+      const account = await tx.treasuryAccount.findFirst({ where: { id: body.accountId, organizationId }, select: { id: true } });
+      if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
+      accountId = account.id;
     }
-  }
-  let supplierId: string | null = expense.supplierId;
-  if (body.supplierId !== undefined) {
-    supplierId = typeof body.supplierId === "string" && body.supplierId ? body.supplierId : null;
-    if (supplierId) {
-      const supplier = await db.supplier.findFirst({ where: { id: supplierId, organizationId }, select: { id: true } });
-      if (!supplier) return jsonError("El proveedor no existe en esta empresa.", 404);
+
+    const dayKey = readDayKey(body.date);
+    if (dayKey === null) return jsonError("La fecha del gasto tiene que ser un día válido (AAAA-MM-DD).", 400);
+    const date = dayKey ? dayStart(dayKey) : expense.date;
+
+    let eventId: string | null = expense.eventId;
+    if (body.eventId !== undefined) {
+      eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : null;
+      if (eventId) {
+        const event = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
+        if (!event) return jsonError("El proyecto no existe en esta empresa.", 404);
+      }
     }
-  }
-  const method = optionalText(body.method, MAX_METHOD);
-  if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
+    let supplierId: string | null = expense.supplierId;
+    if (body.supplierId !== undefined) {
+      supplierId = typeof body.supplierId === "string" && body.supplierId ? body.supplierId : null;
+      if (supplierId) {
+        const supplier = await tx.supplier.findFirst({ where: { id: supplierId, organizationId }, select: { id: true } });
+        if (!supplier) return jsonError("El proveedor no existe en esta empresa.", 404);
+      }
+    }
+    const method = optionalText(body.method, MAX_METHOD);
+    if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
 
-  const updated = await db.expense.update({
-    where: { id: expense.id },
-    data: {
-      ...(description !== undefined ? { description: description.slice(0, MAX_DESCRIPTION) } : {}),
-      ...(body.amount !== undefined ? { amount } : {}),
-      ...(body.category !== undefined ? { category: body.category } : {}),
-      accountId,
-      eventId,
-      supplierId,
-      date,
-      ...(body.method !== undefined ? { method: typeof method === "string" ? method : null } : {}),
-      ...(body.receipt !== undefined ? { receipt: optionalText(body.receipt, MAX_RECEIPT) ?? null } : {}),
-      ...(body.notes !== undefined ? { notes: optionalText(body.notes, MAX_NOTES) ?? null } : {}),
-    },
-    include: expenseInclude,
-  });
-
-  // El egreso acompaña al gasto: monto, cuenta y fecha siempre coinciden.
-  const movement = await db.treasuryMovement.findFirst({
-    where: { organizationId, origin: "expense", sourceId: expense.id },
-    select: { id: true },
-  });
-  if (movement) {
-    await db.treasuryMovement.update({
-      where: { id: movement.id },
-      data: { amount: updated.amount, accountId: updated.accountId, occurredAt: updated.date },
+    const updated = await tx.expense.update({
+      where: { id: expense.id },
+      data: {
+        ...(description !== undefined ? { description: description.slice(0, MAX_DESCRIPTION) } : {}),
+        ...(body.amount !== undefined ? { amount } : {}),
+        ...(body.category !== undefined ? { category: body.category } : {}),
+        accountId,
+        eventId,
+        supplierId,
+        date,
+        ...(body.method !== undefined ? { method: typeof method === "string" ? method : null } : {}),
+        ...(body.receipt !== undefined ? { receipt: optionalText(body.receipt, MAX_RECEIPT) ?? null } : {}),
+        ...(body.notes !== undefined ? { notes: optionalText(body.notes, MAX_NOTES) ?? null } : {}),
+      },
+      include: expenseInclude,
     });
-  }
 
-  const changes = auditChanges(expense, updated, EXPENSE_AUDIT_FIELDS);
-  if (changes) {
-    await recordAudit({
-      context: auth.context,
-      action: "update",
-      entity: "Expense",
-      entityId: expense.id,
-      summary: `Editó el gasto «${updated.description}»`,
-      detail: { changes },
+    // El egreso acompaña al gasto: monto, cuenta, fecha y etiqueta siempre
+    // coinciden (el gasto es el hecho mismo, no una referencia externa).
+    const movement = await tx.treasuryMovement.findFirst({
+      where: { organizationId, origin: "expense", sourceId: expense.id },
+      select: { id: true },
     });
-  }
-  return Response.json({ expense: updated });
+    if (movement) {
+      await tx.treasuryMovement.update({
+        where: { id: movement.id },
+        data: {
+          amount: updated.amount,
+          accountId: updated.accountId,
+          occurredAt: updated.date,
+          sourceSnapshot: expenseSnapshot(updated),
+        },
+      });
+    }
+
+    const changes = auditChanges(expense, updated, EXPENSE_AUDIT_FIELDS);
+    return {
+      status: 200,
+      body: { expense: updated },
+      ...(changes
+        ? {
+            afterCommit: () =>
+              recordAudit({
+                context: auth.context,
+                action: "update",
+                entity: "Expense",
+                entityId: expense.id,
+                summary: `Editó el gasto «${updated.description}»`,
+                detail: { changes },
+              }),
+          }
+        : {}),
+    };
+  });
 }

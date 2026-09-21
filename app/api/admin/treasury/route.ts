@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import {
   PAYMENT_METHODS,
   TREASURY_ACCOUNT_TYPES,
@@ -9,6 +10,8 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { withIdempotency } from "@/lib/server/idempotency";
+import { movementSourceSnapshot, parseMovementSourceSnapshot } from "@/lib/server/finance-snapshots";
 import { clientLabel, dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
@@ -27,8 +30,16 @@ export const dynamic = "force-dynamic";
  *   descuenta del saldo y actualiza el anticipo del trabajo.
  * - `PATCH` edita una cuenta (`kind: "account"`), incluida su baja lógica.
  *
- * Todo se filtra por `organizationId`, exige `finance.write` (VIEWER solo lee)
- * y queda auditado. Una cuenta de otra empresa responde 404.
+ * Idempotencia y snapshots (issue #20): cada mutación pasa por
+ * `withIdempotency` con su `scope` —repetir la misma clave devuelve la misma
+ * respuesta y no duplica cuentas, movimientos, pagos ni anticipos— y todo
+ * movimiento nacido de un hecho real guarda su `sourceSnapshot` (etiqueta,
+ * monto y referencia del momento). La lista prefiere ese snapshot y solo cae a
+ * la fuente viva en los movimientos anteriores a la migración.
+ *
+ * Todo se filtra por `organizationId`, exige `finance.write` (VIEWER solo lee),
+ * queda auditado una sola vez por operación y no cruza datos entre empresas.
+ * Una cuenta de otra empresa responde 404.
  */
 
 const MAX_AMOUNT = 99_000_000_000;
@@ -100,8 +111,8 @@ function dayRange(params: URLSearchParams): { from?: Date; to?: Date } | null {
 }
 
 /** Primera cuenta activa de la empresa: la cuenta por defecto de un movimiento. */
-async function firstActiveAccount(organizationId: string) {
-  return db.treasuryAccount.findFirst({
+async function firstActiveAccount(tx: Prisma.TransactionClient, organizationId: string) {
+  return tx.treasuryAccount.findFirst({
     where: { organizationId, active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: accountSelect,
@@ -109,16 +120,20 @@ async function firstActiveAccount(organizationId: string) {
 }
 
 /** Cuenta de la empresa pedida en el body; `undefined` si no vino. */
-async function requestedAccount(organizationId: string, raw: unknown) {
+async function requestedAccount(tx: Prisma.TransactionClient, organizationId: string, raw: unknown) {
   if (raw === undefined || raw === null || raw === "") return undefined;
   if (typeof raw !== "string") return null;
-  return db.treasuryAccount.findFirst({
+  return tx.treasuryAccount.findFirst({
     where: { id: raw, organizationId },
     select: accountSelect,
   });
 }
 
-/** Etiquetas del hecho real que originó cada movimiento (cobro, trabajo o gasto). */
+/**
+ * Etiquetas vivas del hecho real que originó cada movimiento (cobro, trabajo o
+ * gasto). Es solo el respaldo de los movimientos anteriores a los snapshots
+ * (issue #20): los nuevos traen su etiqueta congelada en `sourceSnapshot`.
+ */
 async function resolveSourceLabels(
   organizationId: string,
   movements: ReadonlyArray<{ origin: string; sourceId: string | null }>,
@@ -193,7 +208,7 @@ export async function GET(request: Request) {
     }),
   ]);
 
-  const sourceLabels = await resolveSourceLabels(organizationId, movements);
+  const liveLabels = await resolveSourceLabels(organizationId, movements);
 
   /** Saldo derivado: saldo inicial + entradas − salidas ± transferencias. */
   function balanceOf(accountId: string): number {
@@ -232,7 +247,11 @@ export async function GET(request: Request) {
     accounts: accountRows,
     summary,
     movements: movements.map((movement) => {
-      const label = movement.sourceId ? sourceLabels.get(`${movement.origin}:${movement.sourceId}`) : null;
+      // La etiqueta congelada del hecho manda; los movimientos viejos caen a la
+      // fuente viva (issue #20).
+      const snapshot = parseMovementSourceSnapshot(movement.sourceSnapshot);
+      const live = movement.sourceId ? liveLabels.get(`${movement.origin}:${movement.sourceId}`) : null;
+      const label = snapshot?.label ?? live ?? null;
       return {
         id: movement.id,
         direction: movement.direction,
@@ -257,146 +276,160 @@ export async function POST(request: Request) {
   const { organizationId, user } = auth.context;
   const body = (await readJson(request)) as Record<string, unknown>;
   const kind = typeof body.kind === "string" ? body.kind : "";
-
-  // ── Alta de cuenta ────────────────────────────────────────────────────────
-  if (kind === "account") {
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    if (name.length < 2) return jsonError("El nombre de la cuenta es obligatorio.", 400);
-    if (body.type !== undefined && !isAccountType(body.type)) {
-      return jsonError("El tipo de cuenta es CASH, BANK, CHEQUE u OTHER.", 400);
-    }
-    const type: TreasuryAccountTypeValue = isAccountType(body.type) ? body.type : "CASH";
-    const openingBalance = body.openingBalance === undefined ? 0 : toInteger(body.openingBalance, 0, MAX_AMOUNT);
-    if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
-    const sortOrder = body.sortOrder === undefined ? 0 : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
-    if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
-    const bank = type === "BANK" ? (optionalText(body.bank, MAX_BANK) ?? null) : null;
-
-    const duplicate = await db.treasuryAccount.findFirst({ where: { organizationId, name }, select: { id: true } });
-    if (duplicate) return jsonError(`Ya existe una cuenta llamada «${name}».`, 409);
-
-    const account = await db.treasuryAccount.create({
-      data: {
-        id: randomUUID(),
-        organizationId,
-        name: name.slice(0, MAX_NAME),
-        type,
-        bank,
-        currency: "PYG",
-        openingBalance,
-        sortOrder,
-        active: body.active === undefined ? true : body.active === true,
-      },
-    });
-    await recordAudit({
-      context: auth.context,
-      action: "create",
-      entity: "TreasuryAccount",
-      entityId: account.id,
-      summary: `Creó la cuenta de tesorería «${account.name}»`,
-      detail: { fields: auditPick(account, ACCOUNT_AUDIT_FIELDS) },
-    });
-    return Response.json({ account }, { status: 201 });
+  if (kind !== "account" && kind !== "movement" && kind !== "supplier-payment") {
+    return jsonError("Unknown treasury entry.", 400);
   }
 
-  // ── Movimiento manual: entrada, salida o transferencia ────────────────────
-  if (kind === "movement") {
-    const direction = body.direction === "IN" ? "IN" : body.direction === "OUT" ? "OUT" : body.direction === "TRANSFER" ? "TRANSFER" : null;
-    if (!direction) return jsonError("Elegí el tipo de movimiento: entrada, salida o transferencia.", 400);
-    const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+  return withIdempotency(
+    { request, organizationId, scope: `treasury:POST:${kind}`, body },
+    async (tx) => {
+      // ── Alta de cuenta ────────────────────────────────────────────────────────
+      if (kind === "account") {
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        if (name.length < 2) return jsonError("El nombre de la cuenta es obligatorio.", 400);
+        if (body.type !== undefined && !isAccountType(body.type)) {
+          return jsonError("El tipo de cuenta es CASH, BANK, CHEQUE u OTHER.", 400);
+        }
+        const type: TreasuryAccountTypeValue = isAccountType(body.type) ? body.type : "CASH";
+        const openingBalance = body.openingBalance === undefined ? 0 : toInteger(body.openingBalance, 0, MAX_AMOUNT);
+        if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
+        const sortOrder = body.sortOrder === undefined ? 0 : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
+        if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
+        const bank = type === "BANK" ? (optionalText(body.bank, MAX_BANK) ?? null) : null;
 
-    const account = await requestedAccount(organizationId, body.accountId);
-    if (account === undefined) return jsonError("Elegí la cuenta del movimiento.", 400);
-    if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
+        const duplicate = await tx.treasuryAccount.findFirst({ where: { organizationId, name }, select: { id: true } });
+        if (duplicate) return jsonError(`Ya existe una cuenta llamada «${name}».`, 409);
 
-    let counterAccount: { id: string; name: string; type: string } | null = null;
-    if (direction === "TRANSFER") {
-      const requested = await requestedAccount(organizationId, body.counterAccountId);
-      if (requested === undefined) return jsonError("Elegí la cuenta destino de la transferencia.", 400);
-      if (!requested) return jsonError("La cuenta destino no existe en esta empresa.", 404);
-      if (requested.id === account.id) return jsonError("La cuenta destino tiene que ser distinta de la cuenta origen.", 400);
-      counterAccount = requested;
-    }
+        const account = await tx.treasuryAccount.create({
+          data: {
+            id: randomUUID(),
+            organizationId,
+            name: name.slice(0, MAX_NAME),
+            type,
+            bank,
+            currency: "PYG",
+            openingBalance,
+            sortOrder,
+            active: body.active === undefined ? true : body.active === true,
+          },
+        });
+        return {
+          status: 201,
+          body: { account },
+          afterCommit: () =>
+            recordAudit({
+              context: auth.context,
+              action: "create",
+              entity: "TreasuryAccount",
+              entityId: account.id,
+              summary: `Creó la cuenta de tesorería «${account.name}»`,
+              detail: { fields: auditPick(account, ACCOUNT_AUDIT_FIELDS) },
+            }),
+        };
+      }
 
-    const dayKey = readDayKey(body.date);
-    if (dayKey === null) return jsonError("La fecha del movimiento tiene que ser un día válido (AAAA-MM-DD).", 400);
-    const occurredAt = dayStart(dayKey ?? dayKeyOf(new Date()));
-    const notes = optionalText(body.notes, MAX_NOTES);
+      // ── Movimiento manual: entrada, salida o transferencia ────────────────────
+      if (kind === "movement") {
+        const direction = body.direction === "IN" ? "IN" : body.direction === "OUT" ? "OUT" : body.direction === "TRANSFER" ? "TRANSFER" : null;
+        if (!direction) return jsonError("Elegí el tipo de movimiento: entrada, salida o transferencia.", 400);
+        const amount = toInteger(body.amount, 1, MAX_AMOUNT);
+        if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
 
-    const movement = await db.treasuryMovement.create({
-      data: {
-        id: randomUUID(),
-        organizationId,
-        accountId: account.id,
-        counterAccountId: counterAccount?.id ?? null,
-        direction,
-        amount,
-        occurredAt,
-        origin: "adjustment",
-        notes: typeof notes === "string" ? notes : null,
-        createdById: user.id,
-        createdByName: user.name,
-        createdByEmail: user.email,
-      },
-      include: movementInclude,
-    });
-    const action = direction === "TRANSFER" ? "Registró la transferencia" : direction === "IN" ? "Registró la entrada" : "Registró la salida";
-    const route = counterAccount ? `«${account.name}» → «${counterAccount.name}»` : `«${account.name}»`;
-    await recordAudit({
-      context: auth.context,
-      action: "create",
-      entity: "TreasuryMovement",
-      entityId: movement.id,
-      summary: `${action} de tesorería ${route}`,
-      detail: { fields: auditPick(movement, MOVEMENT_AUDIT_FIELDS) },
-    });
-    return Response.json({ movement }, { status: 201 });
-  }
+        const account = await requestedAccount(tx, organizationId, body.accountId);
+        if (account === undefined) return jsonError("Elegí la cuenta del movimiento.", 400);
+        if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
 
-  // ── Pago o anticipo a un trabajo de proveedor ─────────────────────────────
-  if (kind === "supplier-payment") {
-    const jobId = typeof body.jobId === "string" ? body.jobId : "";
-    if (!jobId) return jsonError("Elegí el trabajo del proveedor.", 400);
-    const job = await db.supplierJob.findFirst({
-      where: { id: jobId, organizationId },
-      include: { supplier: { select: { id: true, name: true } } },
-    });
-    if (!job) return jsonError("Trabajo de proveedor no encontrado.", 404);
-    if (job.status === "PAID" || job.status === "CANCELLED") return jsonError("El trabajo ya está cerrado: no admite pagos.", 409);
+        let counterAccount: { id: string; name: string; type: string } | null = null;
+        if (direction === "TRANSFER") {
+          const requested = await requestedAccount(tx, organizationId, body.counterAccountId);
+          if (requested === undefined) return jsonError("Elegí la cuenta destino de la transferencia.", 400);
+          if (!requested) return jsonError("La cuenta destino no existe en esta empresa.", 404);
+          if (requested.id === account.id) return jsonError("La cuenta destino tiene que ser distinta de la cuenta origen.", 400);
+          counterAccount = requested;
+        }
 
-    const balance = Math.max(0, job.total - job.advance);
-    if (balance <= 0) return jsonError("El trabajo no tiene saldo pendiente.", 409);
-    const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
-    if (amount > balance) return jsonError(`El monto no puede superar el saldo pendiente (${balance} Gs.).`, 400);
+        const dayKey = readDayKey(body.date);
+        if (dayKey === null) return jsonError("La fecha del movimiento tiene que ser un día válido (AAAA-MM-DD).", 400);
+        const occurredAt = dayStart(dayKey ?? dayKeyOf(new Date()));
+        const notes = optionalText(body.notes, MAX_NOTES);
 
-    const requested = await requestedAccount(organizationId, body.accountId);
-    if (requested === null) return jsonError("La cuenta no existe en esta empresa.", 404);
-    const account = requested ?? (await firstActiveAccount(organizationId));
-    if (!account) return jsonError("Creá una cuenta de tesorería antes de registrar el pago.", 400);
+        const movement = await tx.treasuryMovement.create({
+          data: {
+            id: randomUUID(),
+            organizationId,
+            accountId: account.id,
+            counterAccountId: counterAccount?.id ?? null,
+            direction,
+            amount,
+            occurredAt,
+            origin: "adjustment",
+            notes: typeof notes === "string" ? notes : null,
+            createdById: user.id,
+            createdByName: user.name,
+            createdByEmail: user.email,
+          },
+          include: movementInclude,
+        });
+        const action = direction === "TRANSFER" ? "Registró la transferencia" : direction === "IN" ? "Registró la entrada" : "Registró la salida";
+        const route = counterAccount ? `«${account.name}» → «${counterAccount.name}»` : `«${account.name}»`;
+        return {
+          status: 201,
+          body: { movement },
+          afterCommit: () =>
+            recordAudit({
+              context: auth.context,
+              action: "create",
+              entity: "TreasuryMovement",
+              entityId: movement.id,
+              summary: `${action} de tesorería ${route}`,
+              detail: { fields: auditPick(movement, MOVEMENT_AUDIT_FIELDS) },
+            }),
+        };
+      }
 
-    const dayKey = readDayKey(body.date);
-    if (dayKey === null) return jsonError("La fecha del pago tiene que ser un día válido (AAAA-MM-DD).", 400);
-    const occurredAt = dayStart(dayKey ?? dayKeyOf(new Date()));
-    const method = optionalText(body.method, 60);
-    if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
-    const receipt = optionalText(body.receipt, MAX_RECEIPT);
-    const notes = optionalText(body.notes, MAX_NOTES);
+      // ── Pago o anticipo a un trabajo de proveedor ─────────────────────────────
+      const jobId = typeof body.jobId === "string" ? body.jobId : "";
+      if (!jobId) return jsonError("Elegí el trabajo del proveedor.", 400);
+      const job = await tx.supplierJob.findFirst({
+        where: { id: jobId, organizationId },
+        include: { supplier: { select: { id: true, name: true } } },
+      });
+      if (!job) return jsonError("Trabajo de proveedor no encontrado.", 404);
+      if (job.status === "PAID" || job.status === "CANCELLED") {
+        return jsonError("El trabajo ya está cerrado: no admite pagos.", 409);
+      }
 
-    // Estado del trabajo: solo se avanza a un estado válido de la máquina; si el
-    // pago no habilita una transición, el trabajo queda como está (se gestiona en
-    // Proveedores) y el anticipo igual queda registrado.
-    const nextAdvance = job.advance + amount;
-    const nextStatuses = supplierJobNextStatuses({ total: job.total, advance: nextAdvance, status: job.status });
-    const status = nextAdvance >= job.total && nextStatuses.includes("PAID")
-      ? "PAID"
-      : nextStatuses.includes("ADVANCE_PAID")
-        ? "ADVANCE_PAID"
-        : job.status;
+      const balance = Math.max(0, job.total - job.advance);
+      if (balance <= 0) return jsonError("El trabajo no tiene saldo pendiente.", 409);
+      const amount = toInteger(body.amount, 1, MAX_AMOUNT);
+      if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+      if (amount > balance) return jsonError(`El monto no puede superar el saldo pendiente (${balance} Gs.).`, 400);
 
-    const [movement, updatedJob] = await db.$transaction([
-      db.treasuryMovement.create({
+      const requested = await requestedAccount(tx, organizationId, body.accountId);
+      if (requested === null) return jsonError("La cuenta no existe en esta empresa.", 404);
+      const account = requested ?? (await firstActiveAccount(tx, organizationId));
+      if (!account) return jsonError("Creá una cuenta de tesorería antes de registrar el pago.", 400);
+
+      const dayKey = readDayKey(body.date);
+      if (dayKey === null) return jsonError("La fecha del pago tiene que ser un día válido (AAAA-MM-DD).", 400);
+      const occurredAt = dayStart(dayKey ?? dayKeyOf(new Date()));
+      const method = optionalText(body.method, 60);
+      if (method && !(PAYMENT_METHODS as readonly string[]).includes(method)) return jsonError("Método de pago desconocido.", 400);
+      const receipt = optionalText(body.receipt, MAX_RECEIPT);
+      const notes = optionalText(body.notes, MAX_NOTES);
+
+      // Estado del trabajo: solo se avanza a un estado válido de la máquina; si el
+      // pago no habilita una transición, el trabajo queda como está (se gestiona en
+      // Proveedores) y el anticipo igual queda registrado.
+      const nextAdvance = job.advance + amount;
+      const nextStatuses = supplierJobNextStatuses({ total: job.total, advance: nextAdvance, status: job.status });
+      const status = nextAdvance >= job.total && nextStatuses.includes("PAID")
+        ? "PAID"
+        : nextStatuses.includes("ADVANCE_PAID")
+          ? "ADVANCE_PAID"
+          : job.status;
+
+      const movement = await tx.treasuryMovement.create({
         data: {
           id: randomUUID(),
           organizationId,
@@ -406,14 +439,22 @@ export async function POST(request: Request) {
           occurredAt,
           origin: "supplier_job",
           sourceId: job.id,
+          // Snapshot del trabajo pagado (issue #20): proveedor y descripción del
+          // momento, para que un cambio posterior no reescriba la historia.
+          sourceSnapshot: movementSourceSnapshot({
+            kind: "supplier_job",
+            label: `${job.supplier.name} · ${job.description}`,
+            amount,
+            ref: (typeof receipt === "string" ? receipt : null) ?? method ?? null,
+          }),
           notes: typeof notes === "string" ? notes : null,
           createdById: user.id,
           createdByName: user.name,
           createdByEmail: user.email,
         },
         include: movementInclude,
-      }),
-      db.supplierJob.update({
+      });
+      const updatedJob = await tx.supplierJob.update({
         where: { id: job.id },
         data: {
           advance: nextAdvance,
@@ -422,29 +463,31 @@ export async function POST(request: Request) {
           ...(typeof receipt === "string" ? { receipt } : {}),
         },
         select: { id: true, status: true, advance: true, total: true, paidAt: true },
-      }),
-    ]);
+      });
 
-    await recordAudit({
-      context: auth.context,
-      action: "create",
-      entity: "TreasuryMovement",
-      entityId: movement.id,
-      summary: `Pagó ${amount} Gs. al proveedor «${job.supplier.name}» desde «${account.name}»`,
-      detail: {
-        fields: {
-          ...auditPick(movement, MOVEMENT_AUDIT_FIELDS),
-          jobId: job.id,
-          jobDescription: job.description,
-          jobStatus: updatedJob.status,
-          jobAdvance: updatedJob.advance,
-        },
-      },
-    });
-    return Response.json({ movement, job: updatedJob }, { status: 201 });
-  }
-
-  return jsonError("Unknown treasury entry.", 400);
+      return {
+        status: 201,
+        body: { movement, job: updatedJob },
+        afterCommit: () =>
+          recordAudit({
+            context: auth.context,
+            action: "create",
+            entity: "TreasuryMovement",
+            entityId: movement.id,
+            summary: `Pagó ${amount} Gs. al proveedor «${job.supplier.name}» desde «${account.name}»`,
+            detail: {
+              fields: {
+                ...auditPick(movement, MOVEMENT_AUDIT_FIELDS),
+                jobId: job.id,
+                jobDescription: job.description,
+                jobStatus: updatedJob.status,
+                jobAdvance: updatedJob.advance,
+              },
+            },
+          }),
+      };
+    },
+  );
 }
 
 export async function PATCH(request: Request) {
@@ -456,57 +499,66 @@ export async function PATCH(request: Request) {
 
   const accountId = typeof body.accountId === "string" ? body.accountId : "";
   if (!accountId) return jsonError("Falta la cuenta.", 400);
-  const account = await db.treasuryAccount.findFirst({ where: { id: accountId, organizationId } });
-  if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
 
-  const name = body.name === undefined ? undefined : typeof body.name === "string" ? body.name.trim() : "";
-  if (name !== undefined && name.length < 2) return jsonError("El nombre de la cuenta es obligatorio.", 400);
-  if (body.type !== undefined && !isAccountType(body.type)) {
-    return jsonError("El tipo de cuenta es CASH, BANK, CHEQUE u OTHER.", 400);
-  }
-  const nextType = isAccountType(body.type) ? body.type : account.type;
-  const openingBalance = body.openingBalance === undefined ? account.openingBalance : toInteger(body.openingBalance, 0, MAX_AMOUNT);
-  if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
-  const sortOrder = body.sortOrder === undefined ? account.sortOrder : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
-  if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
-  if (body.active !== undefined && typeof body.active !== "boolean") return jsonError("El estado activo tiene que ser verdadero o falso.", 400);
+  return withIdempotency({ request, organizationId, scope: "treasury:PATCH:account", body }, async (tx) => {
+    const account = await tx.treasuryAccount.findFirst({ where: { id: accountId, organizationId } });
+    if (!account) return jsonError("La cuenta no existe en esta empresa.", 404);
 
-  if (name && name !== account.name) {
-    const duplicate = await db.treasuryAccount.findFirst({
-      where: { organizationId, name, id: { not: account.id } },
-      select: { id: true },
+    const name = body.name === undefined ? undefined : typeof body.name === "string" ? body.name.trim() : "";
+    if (name !== undefined && name.length < 2) return jsonError("El nombre de la cuenta es obligatorio.", 400);
+    if (body.type !== undefined && !isAccountType(body.type)) {
+      return jsonError("El tipo de cuenta es CASH, BANK, CHEQUE u OTHER.", 400);
+    }
+    const nextType = isAccountType(body.type) ? body.type : account.type;
+    const openingBalance = body.openingBalance === undefined ? account.openingBalance : toInteger(body.openingBalance, 0, MAX_AMOUNT);
+    if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
+    const sortOrder = body.sortOrder === undefined ? account.sortOrder : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
+    if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
+    if (body.active !== undefined && typeof body.active !== "boolean") return jsonError("El estado activo tiene que ser verdadero o falso.", 400);
+
+    if (name && name !== account.name) {
+      const duplicate = await tx.treasuryAccount.findFirst({
+        where: { organizationId, name, id: { not: account.id } },
+        select: { id: true },
+      });
+      if (duplicate) return jsonError(`Ya existe una cuenta llamada «${name}».`, 409);
+    }
+    const bank = nextType === "BANK"
+      ? body.bank === undefined
+        ? account.bank
+        : optionalText(body.bank, MAX_BANK) ?? null
+      : null;
+
+    const updated = await tx.treasuryAccount.update({
+      where: { id: account.id },
+      data: {
+        ...(name !== undefined ? { name: name.slice(0, MAX_NAME) } : {}),
+        ...(body.type !== undefined ? { type: nextType } : {}),
+        ...(body.type !== undefined || body.bank !== undefined ? { bank } : {}),
+        ...(body.openingBalance !== undefined ? { openingBalance } : {}),
+        ...(body.sortOrder !== undefined ? { sortOrder } : {}),
+        ...(body.active !== undefined ? { active: body.active as boolean } : {}),
+      },
     });
-    if (duplicate) return jsonError(`Ya existe una cuenta llamada «${name}».`, 409);
-  }
-  const bank = nextType === "BANK"
-    ? body.bank === undefined
-      ? account.bank
-      : optionalText(body.bank, MAX_BANK) ?? null
-    : null;
-
-  const updated = await db.treasuryAccount.update({
-    where: { id: account.id },
-    data: {
-      ...(name !== undefined ? { name: name.slice(0, MAX_NAME) } : {}),
-      ...(body.type !== undefined ? { type: nextType } : {}),
-      ...(body.type !== undefined || body.bank !== undefined ? { bank } : {}),
-      ...(body.openingBalance !== undefined ? { openingBalance } : {}),
-      ...(body.sortOrder !== undefined ? { sortOrder } : {}),
-      ...(body.active !== undefined ? { active: body.active as boolean } : {}),
-    },
+    const changes = auditChanges(account, updated, ACCOUNT_AUDIT_FIELDS);
+    return {
+      status: 200,
+      body: { account: updated },
+      ...(changes
+        ? {
+            afterCommit: () =>
+              recordAudit({
+                context: auth.context,
+                action: "active" in changes ? "status" : "update",
+                entity: "TreasuryAccount",
+                entityId: account.id,
+                summary: "active" in changes
+                  ? `${updated.active ? "Activó" : "Desactivó"} la cuenta de tesorería «${updated.name}»`
+                  : `Editó la cuenta de tesorería «${updated.name}»`,
+                detail: { changes },
+              }),
+          }
+        : {}),
+    };
   });
-  const changes = auditChanges(account, updated, ACCOUNT_AUDIT_FIELDS);
-  if (changes) {
-    await recordAudit({
-      context: auth.context,
-      action: "active" in changes ? "status" : "update",
-      entity: "TreasuryAccount",
-      entityId: account.id,
-      summary: "active" in changes
-        ? `${updated.active ? "Activó" : "Desactivó"} la cuenta de tesorería «${updated.name}»`
-        : `Editó la cuenta de tesorería «${updated.name}»`,
-      detail: { changes },
-    });
-  }
-  return Response.json({ account: updated });
 }

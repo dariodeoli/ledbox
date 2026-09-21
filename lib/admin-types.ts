@@ -814,6 +814,37 @@ export function isSupplierJobOpen(status: string): boolean {
   return status !== "PAID" && status !== "CANCELLED";
 }
 
+/**
+ * Orden del flujo de avance de un trabajo (issue #20): sirve para reconocer
+ * pedidos atrasados —un reintento o un request fuera de orden que pide un estado
+ * que el trabajo ya pasó— y responder el estado actual sin cambios. `CANCELLED`
+ * va al final: un trabajo cancelado no vuelve atrás.
+ */
+const SUPPLIER_JOB_STATUS_RANK: Record<SupplierJobStatus, number> = {
+  PENDING: 0,
+  CONTRACTED: 1,
+  ADVANCE_PENDING: 2,
+  ADVANCE_PAID: 3,
+  IN_PRODUCTION: 4,
+  DELIVERED: 5,
+  BALANCE_PENDING: 6,
+  PAID: 7,
+  CANCELLED: 8,
+};
+
+/**
+ * `true` si `next` es un pedido atrasado para un trabajo en `current`: no está
+ * entre las transiciones válidas y su avance es anterior (por ejemplo, un
+ * reintento que pide `CONTRACTED` cuando el trabajo ya está `IN_PRODUCTION`).
+ * Es la regla de monotonicidad que aplica el API; la UI no la usa.
+ */
+export function supplierJobStatusBehind(current: string, next: string): boolean {
+  const currentRank = SUPPLIER_JOB_STATUS_RANK[current as SupplierJobStatus];
+  const nextRank = SUPPLIER_JOB_STATUS_RANK[next as SupplierJobStatus];
+  if (currentRank === undefined || nextRank === undefined) return false;
+  return nextRank < currentRank;
+}
+
 /** Saldo pendiente real de un trabajo: 0 si está pagado o cancelado; si no, total − anticipo. */
 export function supplierJobBalance(job: { total: number; advance: number; status: string }): number {
   if (!isSupplierJobOpen(job.status)) return 0;
