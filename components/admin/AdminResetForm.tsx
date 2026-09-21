@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AdminError, AdminFrame, AdminSpinner, AdminSuccess } from "./AdminFrame";
+import { AdminError, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { AdminFrame } from "./AdminFrame";
 
 export function AdminResetForm() {
   const searchParams = useSearchParams();

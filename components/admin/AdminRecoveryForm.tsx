@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { AdminError, AdminFrame, AdminSpinner, AdminSuccess } from "./AdminFrame";
+import { AdminError, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { AdminFrame } from "./AdminFrame";
 
 export function AdminRecoveryForm() {
   const [email, setEmail] = useState("");

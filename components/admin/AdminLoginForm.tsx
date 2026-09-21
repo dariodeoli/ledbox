@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminError, AdminFrame, AdminSpinner } from "./AdminFrame";
+import { AdminError, AdminSpinner } from "./AdminUI";
+import { AdminFrame } from "./AdminFrame";
 
 async function responseMessage(response: Response, fallback: string) {
   try {
