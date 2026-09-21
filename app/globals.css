@@ -1311,6 +1311,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-demo-audit { grid-template-columns: auto minmax(0, 1fr) auto; border-left-color: var(--a-accent); }
 .admin-demo-event:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
 .admin-demo-audit > .admin-icon, .admin-demo-event > .admin-icon { color: var(--a-muted); }
+.admin-demo-amount { justify-self: end; color: var(--a-text-strong); font: 700 12px var(--font-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.admin-demo-amount[data-direction="IN"] { color: var(--a-ok); }
+.admin-demo-amount[data-direction="OUT"] { color: var(--a-danger); }
+.admin-demo-amount[data-direction="TRANSFER"] { color: var(--a-info); }
+.admin-demo-list--flush { padding: 0; }
 .admin-demo-panel-note { margin: 0; padding: 0 10px 10px; color: var(--a-muted); font-size: 10.5px; line-height: 1.45; }
 
 .admin-demo-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 8px; padding: 10px; }
