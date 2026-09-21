@@ -1,16 +1,20 @@
 /**
  * Formatos y etiquetas del panel (fuente única).
- * Montos en PYG sin decimales; fechas y horas es-PY en 24 h (`hourCycle: "h23"`).
+ * Montos en PYG sin decimales; fechas y horas es-PY en 24 h (`hourCycle: "h23"`)
+ * y en la zona de la empresa (`America/Asuncion`), así el servidor y el
+ * navegador dibujan el mismo día.
  */
 
 export type AdminTone = "neutral" | "accent" | "ok" | "warn" | "danger" | "info";
 
+const TIME_ZONE = "America/Asuncion";
+
 const moneyFormat = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
 const numberFormat = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
-const dateFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric" });
-const dateShortFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short" });
-const dateTimeFormat = new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const timeFormat = new Intl.DateTimeFormat("es-PY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const dateFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short", year: "numeric" });
+const dateShortFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short" });
+const dateTimeFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const timeFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 function toDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
