@@ -23,3 +23,8 @@ export {
   type BudgetMailInput,
   type BudgetMailItem,
 } from "./budget";
+export {
+  buildInvitationMail,
+  type InvitationMailContent,
+  type InvitationMailInput,
+} from "./invitation";

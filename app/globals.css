@@ -630,6 +630,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-google-button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; margin: 18px 0 14px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-weight: 700; text-decoration: none; transition: border-color .15s, color .15s; }
 .admin-google-button:hover, .admin-google-button:focus-visible { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-google-button span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #4285f4; font-weight: 800; }
+/* Invitación al equipo (issue #31): ficha de la invitación + Google + formulario,
+   todo dentro de la misma tarjeta de acceso. */
+.admin-card .admin-facts { margin-bottom: 14px; }
+.admin-invitation-google { margin: 14px 0 12px; }
+.admin-invitation-blocked { margin: 14px 0 16px; }
 .admin-divider { display: flex; align-items: center; gap: 12px; color: var(--a-muted); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .admin-divider::before, .admin-divider::after { content: ""; flex: 1; height: 1px; background: var(--a-line); }
 .admin-root .btn-led { padding: 12px 20px; border-radius: 8px; clip-path: none; box-shadow: none; font-size: 12px; letter-spacing: .1em; }
@@ -977,6 +982,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Correo (issue #30): fecha, destinatario con su actor, tipo, asunto, estado y
    motivo del fallo. Entra sin scroll horizontal en desktop; en mobile se desplaza. */
 .admin-table--correo { --correo-cols: 10.5rem minmax(12rem, 1.5fr) 8.5rem minmax(14rem, 1.8fr) 7rem minmax(12rem, 1.6fr); --admin-cols: var(--correo-cols); --admin-table-min: 66rem; }
+/* Invitaciones al equipo (issue #31): correo, rol, quién invita, vencimiento con
+   cuenta regresiva, último envío real y acciones compactas. */
+.admin-table--invitaciones { --invitaciones-cols: minmax(12rem, 1.6fr) 8.5rem minmax(9rem, 1.1fr) 10rem 8rem 5.5rem; --admin-cols: var(--invitaciones-cols); --admin-table-min: 55rem; }
 /* Tesorería y gastos (issue #27): cuentas con su saldo derivado, movimientos del
    período (con la cuenta y el hecho de origen) y gastos con el proyecto inline. */
 .admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
@@ -1010,10 +1018,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-bank-preview strong { color: var(--a-text-strong); font-size: 13px; }
 .admin-bank-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; color: #fff; font: 800 13px var(--font-body); letter-spacing: .04em; }
 .admin-bank-asset { height: 22px; width: auto; max-width: 150px; object-fit: contain; }
-.admin-dialog-facts { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
-.admin-dialog-facts > div { display: grid; grid-template-columns: minmax(6.5rem, 8rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
-.admin-dialog-facts dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.admin-dialog-facts dd { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
+/* Ficha de datos de un registro: la usan los diálogos del panel y la página de
+   aceptación de invitaciones (mismo objeto, un solo estilo). */
+.admin-facts, .admin-dialog-facts { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-facts > div, .admin-dialog-facts > div { display: grid; grid-template-columns: minmax(6.5rem, 8rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.admin-facts dt, .admin-dialog-facts dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.admin-facts dd, .admin-dialog-facts dd { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
 .admin-dialog-table { display: grid; gap: 0; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); overflow: hidden; }
 .admin-dialog-table-head, .admin-dialog-table-row { display: grid; grid-template-columns: minmax(8rem, 1.4fr) 6rem minmax(8rem, 1.1fr) 7rem; gap: 8px; align-items: center; padding: 7px 10px; }
 .admin-dialog-table-head { border-bottom: 1px solid var(--a-line); color: var(--a-muted); font-size: 9.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }

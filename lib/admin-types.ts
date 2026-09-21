@@ -1084,6 +1084,54 @@ export type AdminUserRow = {
   avatarUpdatedAt: string | null;
 };
 
+// ── Invitaciones al equipo (issue #31) ──────────────────────────────────────
+// Contrato de `app/api/admin/invitations` y de la página pública de aceptación.
+// `status` es el estado real: una invitación pendiente con el vencimiento pasado
+// se muestra `expired` (misma derivación en el API y en la página).
+
+export type AdminInvitationStatus = "pending" | "accepted" | "revoked" | "expired";
+
+/** Estado de la cuenta invitada: si ya existe, si está activa y si ya es miembro. */
+export type AdminInvitationAccountState = {
+  exists: boolean;
+  active: boolean;
+  /** La cuenta ya es miembro (activa o no) de la empresa que invita. */
+  alreadyMember: boolean;
+};
+
+/** Invitación por aceptar que lista el panel (Equipo). */
+export type AdminTeamInvitation = {
+  id: string;
+  email: string;
+  role: AdminRole;
+  status: AdminInvitationStatus;
+  invitedByName: string;
+  invitedByEmail: string | null;
+  expiresAt: string;
+  lastSentAt: string | null;
+  /** Intentos de envío registrados (alta + reenvíos). */
+  sentCount: number;
+  createdAt: string;
+  /** Resultado del último correo (historial `MailLog`); `null` sin intentos. */
+  lastMail: AdminMailLogStatus | null;
+};
+
+/** Resultado del último envío de correo, sin el detalle del historial completo. */
+export type AdminMailLogStatus = { status: string; error: string | null; sentAt: string };
+
+/** Vista pública de la invitación para la página de aceptación. */
+export type AdminInvitationPublicView = {
+  status: AdminInvitationStatus;
+  email: string;
+  role: AdminRole;
+  organization: string;
+  invitedByName: string;
+  expiresAt: string;
+  account: AdminInvitationAccountState;
+  /** ¿Se puede aceptar ahora? (pendiente, vigente y sin membresía previa) */
+  canAccept: boolean;
+};
+
 /**
  * Entidades auditables: fuente única del nombre que se guarda en `AuditLog.entity`
  * y del filtro de `/api/admin/audit`. Solo se registran mutaciones (nunca lecturas).
@@ -1103,6 +1151,7 @@ export const AUDIT_ENTITIES = [
   "Promoter",
   "AdminUser",
   "AdminSession",
+  "TeamInvitation",
   "Lead",
   "Organization",
   "TreasuryAccount",
@@ -1388,6 +1437,8 @@ export type AdminApiResponse = {
   substitutes?: AdminInventorySubstitute[];
   promoters?: AdminPromoterRow[];
   users?: AdminUserRow[];
+  /** Invitaciones por aceptar de la empresa activa (issue #31). */
+  invitations?: AdminTeamInvitation[];
   auditLogs?: AdminAuditRow[];
   auditActors?: AdminAuditActor[];
   auditTotal?: number;

@@ -20,11 +20,20 @@ export function whatsappUrl(message: string): string {
 
 // ── Código público del presupuesto (issue #12) ─────────────────────────────
 // El código es la única credencial del link: alfabeto sin caracteres ambiguos
-// (nada de 0/1/I/L/O) y 20 caracteres (100 bits) en grupos de cuatro para poder
+// (nada de 0/1/I/O) y 20 caracteres (100 bits) en grupos de cuatro para poder
 // dictarlo por teléfono. Se genera en el servidor; acá viven el link público y
 // la normalización que comparten el portal, el panel y la hoja impresa.
 
-export const BUDGET_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+/**
+ * Alfabeto de los tokens públicos (el código del presupuesto y el token de
+ * invitación al equipo): sin los caracteres que se confunden con dígitos
+ * (nada de 0/1/I/O).
+ */
+export const UNAMBIGUOUS_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/** Alfabeto del código del presupuesto (alias del alfabeto público único). */
+export const BUDGET_CODE_ALPHABET = UNAMBIGUOUS_ALPHABET;
+
 const BUDGET_CODE_LENGTH = 20;
 
 /** Link público de un presupuesto en el portal del cliente. */
@@ -52,4 +61,34 @@ export function normalizeBudgetCode(input: string | null | undefined): string | 
     if (!BUDGET_CODE_ALPHABET.includes(char)) return null;
   }
   return formatBudgetCode(compact);
+}
+
+// ── Token de invitación al equipo (issue #31) ──────────────────────────────
+// El token del link de invitación es la única credencial de la página pública
+// de aceptación: mismo alfabeto sin caracteres ambiguos que el código del
+// presupuesto y 24 caracteres (120 bits), largo suficiente para que no se
+// enumere. Se genera en el servidor (`lib/server/invitations.ts`); acá viven el
+// link y la normalización que comparten la página, el API y el correo.
+
+export const INVITATION_TOKEN_LENGTH = 24;
+
+/**
+ * Token de invitación canónico (mayúsculas, sin separadores) o `null` si no
+ * tiene la forma esperada. Acepta el link completo, el path o el token suelto.
+ */
+export function normalizeInvitationToken(input: string | null | undefined): string | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+  const fromUrl = raw.match(/\/invitacion\/([^/?#\s]+)/i)?.[1] ?? raw;
+  const token = fromUrl.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (token.length !== INVITATION_TOKEN_LENGTH) return null;
+  for (const char of token) {
+    if (!UNAMBIGUOUS_ALPHABET.includes(char)) return null;
+  }
+  return token;
+}
+
+/** Link público de aceptación de una invitación al equipo (host del panel). */
+export function invitationAcceptUrl(token: string): string {
+  return `${publicConfig.adminUrl}/invitacion/${token}`;
 }

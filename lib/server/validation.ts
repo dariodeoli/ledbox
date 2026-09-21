@@ -19,6 +19,19 @@ export const resetPasswordSchema = z.object({
   website: honeypot,
 });
 
+/**
+ * Aceptación de una invitación al equipo (issue #31). La contraseña se exige
+ * recién en la capa de aceptación (cuenta nueva o verificación de la existente),
+ * así el mensaje del error es específico y no el genérico de validación.
+ */
+export const acceptInvitationSchema = z.object({
+  token: z.string().trim().min(8).max(80),
+  name: z.string().trim().max(120).optional().or(z.literal("")),
+  password: z.string().max(128).optional().or(z.literal("")),
+  honeypot,
+  website: honeypot,
+});
+
 const productSchema = z.object({
   productId: z.string().trim().min(1).max(120).optional(),
   productSlug: z.string().trim().min(1).max(120).optional(),

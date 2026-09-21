@@ -320,6 +320,31 @@ export function mailStatusTone(value: string | null | undefined): AdminTone {
   return MAIL_STATUS_TONES[value] ?? "neutral";
 }
 
+// ── Invitaciones al equipo (issue #31) ──────────────────────────────────────
+// Estado real de la invitación (enum `TeamInvitationStatus`); el mismo texto y
+// tono en la lista del panel y en la página de aceptación.
+
+const INVITATION_STATUS: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptada",
+  revoked: "Revocada",
+  expired: "Vencida",
+};
+
+const INVITATION_STATUS_TONES: Record<string, AdminTone> = {
+  pending: "warn",
+  accepted: "ok",
+  revoked: "danger",
+  expired: "danger",
+};
+
+export const invitationStatusLabel = (value: string | null | undefined) => label(INVITATION_STATUS, value);
+
+export function invitationStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return INVITATION_STATUS_TONES[value] ?? "neutral";
+}
+
 export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
@@ -1006,6 +1031,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   Promoter: "Promotora",
   AdminUser: "Usuario",
   AdminSession: "Sesión del panel",
+  TeamInvitation: "Invitación",
   Lead: "Lead",
   Organization: "Empresa",
   TreasuryAccount: "Cuenta de tesorería",
@@ -1104,6 +1130,11 @@ const AUDIT_FIELD: Record<string, string> = {
   counterAccountId: "Cuenta destino",
   createdByName: "Registrado por",
   date: "Fecha",
+  invitedByName: "Invitado por",
+  expiresAt: "Vence",
+  sentCount: "Envíos",
+  lastSentAt: "Último envío",
+  via: "Ingreso",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */

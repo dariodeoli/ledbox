@@ -1,6 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { getPublicOrigin } from "@/lib/server/public-origin";
 export const runtime = "nodejs";
+/**
+ * Inicio del flujo de Google del panel. Con `?invitation=<token>` (issue #31)
+ * además deja el token en su propia cookie para que el callback acepte esa
+ * invitación con la identidad verificada de Google.
+ */
 export async function GET(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const siteUrl = getPublicOrigin(request);
@@ -10,5 +15,12 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", scope: "openid email profile", state, prompt: "select_account" });
   const headers = new Headers({ Location: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
   headers.append("Set-Cookie", `ledbox_google_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
+  const invitation = new URL(request.url).searchParams.get("invitation");
+  if (invitation) {
+    headers.append(
+      "Set-Cookie",
+      `ledbox_google_invitation=${encodeURIComponent(invitation)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`,
+    );
+  }
   return new Response(null, { status: 302, headers });
 }
