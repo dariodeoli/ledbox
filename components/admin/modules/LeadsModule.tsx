@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   billingUnitLabel,
   formatDate,
@@ -13,8 +13,9 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
-import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { canWriteClients, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
+import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import {
   AdminBadge,
   AdminButton,
@@ -51,6 +52,9 @@ const STATUS_OPTIONS = [
   { value: "WON", label: "Ganado" },
   { value: "LOST", label: "Perdido" },
 ];
+
+/** Tablero kanban: una columna por estado del pipeline (sin máquina de estados). */
+const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }));
 
 /** Total de un ítem: subtotal del sitio o precio unitario por cantidad y días. */
 function itemTotal(item: AdminLeadItem): number | null {
@@ -97,18 +101,67 @@ export function LeadsModule() {
   const [converting, setConverting] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [notice, setNotice] = useState("");
+  const [boardError, setBoardError] = useState("");
+  const [view, setView] = useAdminModuleView("leads");
 
-  const writable = canWrite(role);
+  const writable = canWriteClients(role);
   const list = useMemo(() => leads.data ?? [], [leads.data]);
 
-  const rows = useMemo(
+  const searched = useMemo(
     () =>
-      list
-        .filter((lead) => (status === "ALL" ? true : lead.status === status))
-        .filter((lead) =>
-          matchesQuery(query, [lead.name, lead.company, lead.email, lead.phone, lead.ruc, lead.reason, lead.location, lead.message]),
-        ),
-    [list, query, status],
+      list.filter((lead) =>
+        matchesQuery(query, [lead.name, lead.company, lead.email, lead.phone, lead.ruc, lead.reason, lead.location, lead.message]),
+      ),
+    [list, query],
+  );
+
+  const rows = useMemo(
+    () => searched.filter((lead) => (status === "ALL" ? true : lead.status === status)),
+    [searched, status],
+  );
+
+  // Movimiento del tablero: PATCH real, optimista con revert si el API rechaza.
+  const moveLead = useCallback(async (lead: AdminLeadRow, nextStatus: string) => {
+    setBoardError("");
+    const result = await adminSend<LeadMutation>("/api/leads", { id: lead.id, status: nextStatus }, "PATCH");
+    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
+  }, []);
+  const board = useAdminBoardMove({ rows: list, move: moveLead, onError: setBoardError });
+
+  const boardCards = useMemo<AdminBoardCardData[]>(
+    () =>
+      board.rows.map((lead) => {
+        const name = lead.company || lead.name;
+        const items = leadItemCount(lead);
+        const estimated = leadEstimatedTotal(lead);
+        const eventLabel = [lead.eventDate ? formatDateShort(lead.eventDate) : null, lead.location || null].filter(Boolean).join(" · ");
+        return {
+          id: lead.id,
+          status: lead.status,
+          title: name,
+          subtitle: [lead.company ? lead.name : null, lead.phone].filter(Boolean).join(" · ") || lead.email,
+          amount: estimated,
+          amountNote: estimated === null ? null : "estimado",
+          date: lead.eventDate,
+          dateTitle: `Evento de ${lead.name}: cuánto falta`,
+          detail:
+            [items === 0 ? "Sin pedido del sitio" : `${formatNumber(items)} ítems pedidos`, lead.reason || null, eventLabel || null]
+              .filter(Boolean)
+              .join(" · "),
+          actions: (
+            <>
+              <AdminButton
+                icon="info"
+                onClick={() => openDetail(lead)}
+                aria-label={`Ver detalle del lead: ${lead.name}`}
+                title={`Ver detalle del lead: ${lead.name}`}
+              />
+              <AdminWhatsappLink phone={lead.phone} name={lead.name} />
+            </>
+          ),
+        };
+      }),
+    [board.rows],
   );
 
   const selected = useMemo(() => list.find((lead) => lead.id === selectedId) ?? null, [list, selectedId]);
@@ -189,10 +242,14 @@ export function LeadsModule() {
           label="Buscar leads"
           placeholder="Buscar por nombre, empresa, contacto o motivo…"
         />
-        <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_FILTER_OPTIONS} />
+        {view === "list" ? (
+          <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_FILTER_OPTIONS} />
+        ) : null}
+        <AdminViewSwitch view={view} onChange={setView} label="Vista de leads" />
       </AdminToolbar>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       <AdminDataState
         loading={leads.loading}
@@ -202,7 +259,20 @@ export function LeadsModule() {
         emptyTitle="Todavía no hay leads"
         emptyHint="Cuando alguien pida una cotización desde el sitio, el lead entra acá con su pedido y datos de contacto."
       >
-        {rows.length === 0 ? (
+        {view === "board" ? (
+          searched.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+          ) : (
+            <AdminBoard
+              label="Leads"
+              columns={BOARD_COLUMNS}
+              cards={boardCards}
+              canMove={writable}
+              movingIds={board.movingIds}
+              onMove={writable ? board.moveTo : undefined}
+            />
+          )
+        ) : rows.length === 0 ? (
           <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : (
           <AdminTable

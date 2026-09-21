@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   damageSummary,
   eventStatusLabel,
@@ -29,6 +29,7 @@ import {
   type AdminPromoterRow,
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import {
   AdminBadge,
   AdminButton,
@@ -74,6 +75,9 @@ const TASK_TYPE_OPTIONS = [
   { value: "PAYMENT", label: "Pago" },
   { value: "COLLECTION", label: "Cobro" },
 ];
+
+/** Tablero kanban: una columna por estado del evento (set de estados, sin máquina). */
+const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.slice(1).map((option) => ({ value: option.value, label: option.label }));
 
 const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", startsAt: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
@@ -138,6 +142,7 @@ export function EventosModule() {
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [view, setView] = useAdminModuleView("eventos");
   const [taskFilter, setTaskFilter] = useState("PENDING");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_EVENT_FORM);
@@ -148,6 +153,7 @@ export function EventosModule() {
   const [taskError, setTaskError] = useState("");
   const [taskNotice, setTaskNotice] = useState("");
   const [checklistError, setChecklistError] = useState("");
+  const [boardError, setBoardError] = useState("");
 
   const [equipmentEventId, setEquipmentEventId] = useState("");
   const [assignForm, setAssignForm] = useState(EMPTY_ASSIGN_FORM);
@@ -174,11 +180,16 @@ export function EventosModule() {
   const assignments = equipmentEvent?.assignments ?? [];
   const assignedUnits = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
 
+  /** Búsqueda compartida por lista y tablero: el filtro de estado es de la lista. */
+  const searched = useMemo(
+    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.client.company, event.client.name, event.status])),
+    [events, query],
+  );
+
   const rows = useMemo(() => {
     const now = Date.now();
-    return events
+    return searched
       .filter((event) => (status === "ALL" ? true : event.status === status))
-      .filter((event) => matchesQuery(query, [event.name, event.location, event.client.company, event.client.name, event.status]))
       .sort((a, b) => {
         const aTime = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
         const bTime = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
@@ -187,7 +198,43 @@ export function EventosModule() {
         if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
         return aUpcoming ? aTime - bTime : bTime - aTime;
       });
-  }, [events, query, status]);
+  }, [searched, status]);
+
+  // Tablero (issue #26): columnas por estado; el movimiento pega el PATCH real.
+  const moveEvent = useCallback(async (event: AdminEventRow, nextStatus: string) => {
+    setBoardError("");
+    const result = await adminSend("/api/admin/events", { id: event.id, status: nextStatus }, "PATCH");
+    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
+  }, []);
+  const board = useAdminBoardMove({ rows: events, move: moveEvent, onError: setBoardError });
+
+  const boardCards = useMemo<AdminBoardCardData[]>(
+    () =>
+      board.rows.map((event) => {
+        const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
+        const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
+        const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
+        return {
+          id: event.id,
+          status: event.status,
+          title: event.name,
+          subtitle: [event.client.company || event.client.name, event.location || null].filter(Boolean).join(" · "),
+          date: closed ? null : event.startsAt,
+          dateTitle: `Cuánto falta para el inicio: ${event.name}`,
+          badges: event.tasks.length > 0 ? [{ label: `Checklist ${progress.label}`, tone: progress.tone, title: progress.title }] : [],
+          detail: `${formatNumber(units)} equipo${units === 1 ? "" : "s"} asignado${units === 1 ? "" : "s"}`,
+          actions: (
+            <AdminIconLink
+              href={`/imprimir/evento/${event.id}`}
+              icon="print"
+              label={`Imprimir orden de trabajo: ${event.name}`}
+              external
+            />
+          ),
+        };
+      }),
+    [board.rows],
+  );
 
   const checklistEntries = useMemo<ChecklistEntry[]>(() => {
     const all = events.flatMap((event) => event.tasks.map((task) => ({ task, eventName: event.name })));
@@ -486,7 +533,10 @@ export function EventosModule() {
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
-        <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        {view === "list" ? (
+          <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        ) : null}
+        <AdminViewSwitch view={view} onChange={setView} label="Vista de eventos" />
         {writable ? (
           <AdminButton
             variant="primary"
@@ -545,6 +595,8 @@ export function EventosModule() {
         </AdminFormPanel>
       ) : null}
 
+      {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
+
       <AdminDataState
         loading={operations.loading}
         error={operations.error}
@@ -553,83 +605,100 @@ export function EventosModule() {
         emptyTitle="Todavía no hay eventos"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
       >
-        <AdminTable
-          view="eventos"
-          label="Eventos"
-          columns={[
-            { label: "Fecha" },
-            { label: "Falta" },
-            { label: "Evento" },
-            { label: "Cliente" },
-            { label: "Lugar" },
-            { label: "Equipos", end: true },
-            { label: "Checklist", end: true },
-            { label: "Estado" },
-            { label: "Acciones", end: true },
-          ]}
-        >
-          {rows.map((event) => {
-            const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
-            const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
-            const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
-            const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
-            return (
-              <AdminRow key={event.id}>
-                <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
-                  {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
-                </AdminCell>
-                <AdminCell
-                  title={
-                    event.status === "IN_PROGRESS"
-                      ? `En curso: ${event.name}`
-                      : event.startsAt
-                        ? `Inicio: ${formatDateTime(event.startsAt)}`
-                        : "Fecha a confirmar"
-                  }
-                >
-                  {event.status === "IN_PROGRESS" ? (
-                    <AdminBadge tone="info">En curso</AdminBadge>
-                  ) : closed || !event.startsAt ? (
-                    <span className="admin-muted">—</span>
-                  ) : (
-                    <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
-                  )}
-                </AdminCell>
-                <AdminCell title={event.name}>
-                  <strong>{event.name}</strong>
-                </AdminCell>
-                <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
-                <AdminCell title={event.location || "Sin lugar definido"}>{event.location || "—"}</AdminCell>
-                <AdminCell end title={equipmentNames || "Sin equipos asignados"}>
-                  {formatNumber(units)}
-                </AdminCell>
-                <AdminCell end title={progress.title}>
-                  {event.tasks.length === 0 ? (
-                    <span className="admin-muted">—</span>
-                  ) : (
-                    <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
-                  )}
-                </AdminCell>
-                <AdminCell>
-                  <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
-                </AdminCell>
-                <AdminCell end className="admin-cell--actions">
-                  <span className="admin-actions">
-                    <AdminIconLink
-                      href={`/imprimir/evento/${event.id}`}
-                      icon="print"
-                      label={`Imprimir orden de trabajo: ${event.name}`}
-                      external
-                    />
-                  </span>
-                </AdminCell>
-              </AdminRow>
-            );
-          })}
-        </AdminTable>
-        {rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
-        ) : null}
+        {view === "board" ? (
+          searched.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+          ) : (
+            <AdminBoard
+              label="Eventos"
+              columns={BOARD_COLUMNS}
+              cards={boardCards}
+              canMove={writable}
+              movingIds={board.movingIds}
+              onMove={writable ? board.moveTo : undefined}
+            />
+          )
+        ) : (
+          <>
+            <AdminTable
+              view="eventos"
+              label="Eventos"
+              columns={[
+                { label: "Fecha" },
+                { label: "Falta" },
+                { label: "Evento" },
+                { label: "Cliente" },
+                { label: "Lugar" },
+                { label: "Equipos", end: true },
+                { label: "Checklist", end: true },
+                { label: "Estado" },
+                { label: "Acciones", end: true },
+              ]}
+            >
+              {rows.map((event) => {
+                const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
+                const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
+                const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
+                const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
+                return (
+                  <AdminRow key={event.id}>
+                    <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
+                      {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
+                    </AdminCell>
+                    <AdminCell
+                      title={
+                        event.status === "IN_PROGRESS"
+                          ? `En curso: ${event.name}`
+                          : event.startsAt
+                            ? `Inicio: ${formatDateTime(event.startsAt)}`
+                            : "Fecha a confirmar"
+                      }
+                    >
+                      {event.status === "IN_PROGRESS" ? (
+                        <AdminBadge tone="info">En curso</AdminBadge>
+                      ) : closed || !event.startsAt ? (
+                        <span className="admin-muted">—</span>
+                      ) : (
+                        <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
+                      )}
+                    </AdminCell>
+                    <AdminCell title={event.name}>
+                      <strong>{event.name}</strong>
+                    </AdminCell>
+                    <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
+                    <AdminCell title={event.location || "Sin lugar definido"}>{event.location || "—"}</AdminCell>
+                    <AdminCell end title={equipmentNames || "Sin equipos asignados"}>
+                      {formatNumber(units)}
+                    </AdminCell>
+                    <AdminCell end title={progress.title}>
+                      {event.tasks.length === 0 ? (
+                        <span className="admin-muted">—</span>
+                      ) : (
+                        <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
+                      )}
+                    </AdminCell>
+                    <AdminCell>
+                      <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
+                    </AdminCell>
+                    <AdminCell end className="admin-cell--actions">
+                      <span className="admin-actions">
+                        <AdminIconLink
+                          href={`/imprimir/evento/${event.id}`}
+                          icon="print"
+                          label={`Imprimir orden de trabajo: ${event.name}`}
+                          external
+                        />
+                      </span>
+                    </AdminCell>
+                  </AdminRow>
+                );
+              })}
+            </AdminTable>
+            {rows.length === 0 ? (
+              <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+            ) : null}
+          </>
+        )}
       </AdminDataState>
 
       <AdminPanel
