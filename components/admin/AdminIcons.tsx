@@ -31,6 +31,14 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
     </>
   ),
   leads: <path d="M4 5h16l-6.2 7.2V20l-3.6-2v-5.8z" />,
+  audit: (
+    <>
+      <path d="M7 4h8.5L19 7.5V20H7z" />
+      <path d="M15.5 4v3.5H19" />
+      <path d="M9.8 13.6l1.7 1.8 3-3.6" />
+      <path d="M9.8 17.6h4.4" />
+    </>
+  ),
   budgets: (
     <>
       <path d="M6 3h8l4 4v14H6z" />
