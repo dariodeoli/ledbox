@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { portalBudgetUrl } from "@/lib/public-config";
 import type {
   AdminCalendarAlert,
   AdminCalendarAlertKind,
@@ -20,7 +21,8 @@ import type {
  * - `checklist`: evento próximo (ni cancelado ni finalizado) con tareas pendientes.
  * - `collection`: presupuesto aprobado con saldo, con la validez como fecha.
  * - `collection_due`: cobro a plazo pendiente (`ClientPayment.status = PENDING`)
- *   con `dueAt` vencido o dentro de los próximos 7 días (issue #16).
+ *   con `dueAt` vencido o dentro de los próximos 7 días (issue #16); incluye los
+ *   datos del recordatorio por WhatsApp (issue #19).
  * - `lead`: lead sin contactar (`Lead.status = NEW`).
  * - `portal_request`: solicitud del cliente en el portal sin resolver
  *   (`BudgetChangeRequest.status = pending`, issue #14); la fecha es el día en
@@ -345,6 +347,11 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
  * vencimiento vencido o dentro de los próximos 7 días. La fecha del aviso es el
  * `dueAt` real y el nivel se resuelve por día de Asunción: un cobro que vence hoy
  * se recuerda como próximo, no como vencido.
+ *
+ * Issue #19: cada aviso viaja con los datos reales del cobro (teléfono del
+ * cliente, monto, vencimiento, factura, presupuesto y link del portal) para que
+ * la campana pueda abrir el recordatorio prellenado por WhatsApp; sin teléfono
+ * no hay acción y el aviso queda igual.
  */
 async function collectionDueCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
   const soonLimit = new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS);
@@ -354,22 +361,34 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
     orderBy: { dueAt: "asc" },
     take: 50,
     include: {
-      client: { select: { name: true, company: true } },
-      budget: { select: { title: true } },
+      client: { select: { name: true, company: true, phone: true } },
+      budget: { select: { title: true, publicToken: true } },
     },
   });
 
   return pending.flatMap((payment) => {
     if (!payment.dueAt) return [];
+    const label = clientLabel(payment.client);
     return [
       {
         id: `collection_due:${payment.id}`,
         kind: "collection_due" as const,
         level: dayKeyOf(payment.dueAt) < todayKey ? ("overdue" as const) : ("soon" as const),
-        title: clientLabel(payment.client),
+        title: label,
         subtitle: joinParts([payment.budget?.title, payment.method, formatPyg(payment.amount)]),
         date: dayKeyOf(payment.dueAt),
         href: "/finanzas",
+        reminder: payment.client.phone
+          ? {
+              phone: payment.client.phone,
+              client: label,
+              amount: payment.amount,
+              dueAt: payment.dueAt.toISOString(),
+              invoiceNumber: payment.invoiceNumber,
+              budgetTitle: payment.budget?.title ?? null,
+              portalUrl: payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken) : null,
+            }
+          : null,
       },
     ];
   });

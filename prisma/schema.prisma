@@ -56,6 +56,7 @@ model Organization {
   budgets          Budget[]
   changeRequests   BudgetChangeRequest[]
   clientPayments   ClientPayment[]
+  paymentReminders PaymentReminderLog[]
   suppliers        Supplier[]
   supplierJobs     SupplierJob[]
   inventoryItems   InventoryItem[]
@@ -295,6 +296,27 @@ enum ClientPaymentStatus {
   CANCELLED
 }
 
+/**
+ * Canal de un recordatorio de cobro al cliente (issue #19): correo (Resend) o
+ * WhatsApp (mensaje prellenado que el equipo abre desde el panel).
+ */
+enum PaymentReminderChannel {
+  email
+  whatsapp
+}
+
+/**
+ * Estado de un recordatorio: `sending` mientras viaja, `sent` si el proveedor lo
+ * aceptó, `failed` si el envío falló y `opened` cuando el equipo abrió el
+ * mensaje de WhatsApp (el envío lo confirma el equipo, no la app).
+ */
+enum PaymentReminderStatus {
+  sending
+  sent
+  failed
+  opened
+}
+
 enum SupplierCategory {
   CARPENTRY
   GRAPHICS
@@ -508,10 +530,47 @@ model ClientPayment {
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   budget          Budget?             @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  reminders       PaymentReminderLog[]
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
   @@index([organizationId, status, dueAt])
+}
+
+/**
+ * Recordatorio de cobro enviado al cliente (issue #19): una fila por cobro,
+ * canal y día de Asunción. El índice único es el candado de idempotencia (un
+ * recordatorio por cobro y canal por día, aunque corra el despacho diario y el
+ * envío manual a la vez); la corrida diaria sin cron se apoya en él.
+ *
+ * `sentAt` es el instante del intento y `status` su resultado real; `actorKind`
+ * distingue al sistema (`system`) del equipo (`admin`) y la auditoría guarda el
+ * actor con nombre y correo.
+ */
+model PaymentReminderLog {
+  id             String                 @id
+  organizationId String
+  paymentId      String
+  channel        PaymentReminderChannel
+  status         PaymentReminderStatus  @default(sending)
+  to             String
+  /** Día de Asunción (`YYYY-MM-DD`) al que pertenece el recordatorio. */
+  dayKey         String
+  subject        String?
+  /** Motivo del fallo, para el historial y la auditoría. */
+  error          String?
+  actorKind      String                 @default("system")
+  actorId        String?
+  actorName      String?
+  actorEmail     String?
+  sentAt         DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payment        ClientPayment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, channel, dayKey])
+  @@index([organizationId, sentAt])
+  @@index([organizationId, dayKey])
 }
 
 model Supplier {
