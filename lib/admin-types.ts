@@ -447,6 +447,81 @@ export type AdminExpenseProject = {
   client: { id: string; name: string; company: string | null };
 };
 
+// ── Pagos esperados y confirmación en cuenta (issue #28) ────────────────────
+// Espejo de `ExpectedPayment`: el dinero que el plan del presupuesto promete y
+// que solo cuenta como cobrado al confirmarse en una cuenta de tesorería.
+
+/** Concepto del plan (`ExpectedPaymentConcept`). */
+export const EXPECTED_PAYMENT_CONCEPTS = ["advance", "installment", "balance"] as const;
+export type ExpectedPaymentConceptValue = (typeof EXPECTED_PAYMENT_CONCEPTS)[number];
+
+/** Estado del pago esperado (`ExpectedPaymentStatus`). */
+export const EXPECTED_PAYMENT_STATUSES = ["AWAITING", "PROOF", "CONFIRMED", "CANCELLED"] as const;
+export type ExpectedPaymentStatusValue = (typeof EXPECTED_PAYMENT_STATUSES)[number];
+
+export type AdminExpectedPaymentRow = {
+  id: string;
+  concept: string;
+  installmentNumber: number | null;
+  label: string;
+  amount: number;
+  dueAt: string | null;
+  status: string;
+  /** Observación del equipo (el cliente ve el motivo en el portal). */
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+  confirmedAt: string | null;
+  confirmedByName: string | null;
+  confirmedByEmail: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  budget: {
+    id: string;
+    title: string;
+    total: number;
+    status: string;
+    approvedAt: string | null;
+    approvedByName: string | null;
+    approvalMethod: string | null;
+    publicToken: string | null;
+    client: AdminClientRef;
+  };
+  /** Cuenta destino esperada; `null` cuando la empresa todavía no tiene cuentas. */
+  expectedAccount: (AdminTreasuryAccountRef & { bank: string | null }) | null;
+  /** Comprobante del portal vinculado (solo metadatos; el archivo va aparte). */
+  proof: { id: string; uploadedByName: string; mime: string; size: number; createdAt: string } | null;
+  /** Cobro real confirmado (o su espera), con la cuenta donde entró. */
+  payment: {
+    id: string;
+    status: string;
+    collectedAt: string | null;
+    paidAt: string | null;
+    method: string | null;
+    reference: string | null;
+    treasuryAccountId: string | null;
+  } | null;
+};
+
+export type AdminExpectedPaymentAmount = { count: number; total: number };
+
+/** Totales honestos de los pagos esperados: lo por confirmar va aparte de lo cobrado. */
+export type AdminExpectedPaymentSummary = {
+  awaiting: AdminExpectedPaymentAmount;
+  proof: AdminExpectedPaymentAmount;
+  overdue: AdminExpectedPaymentAmount;
+  confirmed: AdminExpectedPaymentAmount;
+  /** Necesita acción: comprobantes en revisión + vencidos sin comprobante. */
+  pending: AdminExpectedPaymentAmount;
+};
+
+/** ¿Necesita acción hoy? Con comprobante en revisión o vencido sin comprobante. */
+export function expectedPaymentNeedsAction(row: Pick<AdminExpectedPaymentRow, "status" | "dueAt">): boolean {
+  if (row.status === "PROOF") return true;
+  return row.status === "AWAITING" && isOverdue(row.dueAt);
+}
+
 // ── Recordatorios de cobro (issue #19) ──────────────────────────────────────
 // Espejo de `PaymentReminderLog`: una fila por cobro, canal y día de Asunción.
 // `email` lo manda Resend (status `sent`/`failed`); `whatsapp` registra que el
@@ -476,7 +551,12 @@ export type AdminPaymentReminder = {
 export type AdminReminderRun = {
   /** Día de Asunción de la corrida (`YYYY-MM-DD`). */
   dayKey: string;
+  /** Destinatarios en la ventana: cobros a plazo + pagos esperados (issue #28). */
   candidates: number;
+  /** Cobros pendientes dentro de la ventana. */
+  paymentCandidates?: number;
+  /** Pagos esperados en `AWAITING` dentro de la ventana (issue #28). */
+  expectedCandidates?: number;
   sent: number;
   failed: number;
   skipped: number;
@@ -958,6 +1038,7 @@ export const AUDIT_ENTITIES = [
   "Event",
   "Budget",
   "BudgetPaymentProof",
+  "ExpectedPayment",
   "ClientPayment",
   "Supplier",
   "SupplierJob",
@@ -1085,6 +1166,7 @@ export type AdminNotificationKind =
   | AdminCalendarAlertKind
   | "collection"
   | "collection_due"
+  | "expected_due"
   | "lead"
   | "portal_request"
   | "reservation"
@@ -1261,4 +1343,8 @@ export type AdminApiResponse = {
   /** Gastos del período con su cuenta, proyecto y proveedor (issue #27). */
   expenses?: AdminExpenseRow[];
   projects?: AdminExpenseProject[];
+  /** Pagos esperados del plan con su cuenta destino y comprobante (issue #28). */
+  expectedPayments?: AdminExpectedPaymentRow[];
+  /** Totales de pagos esperados: por confirmar, vencidos y confirmados (issue #28). */
+  expectedSummary?: AdminExpectedPaymentSummary;
 };

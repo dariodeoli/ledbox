@@ -6,6 +6,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { isValidDayKey } from "@/lib/server/notifications";
+import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -285,12 +286,23 @@ export async function PATCH(request: Request) {
     return jsonError("El plan de pagos (anticipo más cuotas) no puede superar el total del presupuesto.", 400);
   }
 
+  // El plan se compara completo (etiqueta, monto y vencimiento de cada cuota):
+  // cambiar solo una fecha también es un cambio de plan —la sincronización de
+  // pagos esperados y la auditoría tienen que verlo—.
+  const installmentsSignature = (rows: Array<{ label: string; amount: number; dueAt: string | null }>) =>
+    rows.map((row) => `${row.label} ${row.amount} ${row.dueAt ?? "sin fecha"}`).join(" · ") || "sin cuotas";
+  const nextTerms = data.paymentTerms === undefined ? budget.paymentTerms : data.paymentTerms;
   const changes = auditChanges(
-    { advanceAmount: budget.advanceAmount, paymentTerms: budget.paymentTerms, installments: storedInstallments.length },
-    { advanceAmount: advance, paymentTerms: data.paymentTerms === undefined ? budget.paymentTerms : data.paymentTerms, installments: installments.length },
-    ["advanceAmount", "paymentTerms", "installments"],
-  );
-  if (!changes) {
+    { advanceAmount: budget.advanceAmount, paymentTerms: budget.paymentTerms },
+    { advanceAmount: advance, paymentTerms: nextTerms },
+    ["advanceAmount", "paymentTerms"],
+  ) ?? {};
+  const storedSignature = installmentsSignature(storedInstallments);
+  const nextSignature = installmentsSignature(installments);
+  if (storedSignature !== nextSignature) {
+    changes.installments = { from: storedSignature, to: nextSignature };
+  }
+  if (Object.keys(changes).length === 0) {
     const current = await db.budget.findUnique({
       where: { id: budget.id },
       select: { id: true, advanceAmount: true, paymentTerms: true, installmentsJson: true, total: true },
@@ -316,6 +328,14 @@ export async function PATCH(request: Request) {
     entityId: budget.id,
     summary: `Definió el plan de pagos del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}»`,
     detail: { changes },
+  });
+  // El plan cambió: se sincronizan los pagos esperados (issue #28). Un
+  // presupuesto sin aprobar no genera nada; lo confirmado nunca se pisa.
+  await syncBudgetExpectedPayments({
+    organizationId,
+    budgetId: budget.id,
+    actor: auth.context,
+    reason: "cambio de plan de pagos",
   });
   return Response.json({ budget: updated });
 }

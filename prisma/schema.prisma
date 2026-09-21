@@ -57,6 +57,7 @@ model Organization {
   budgets           Budget[]
   changeRequests    BudgetChangeRequest[]
   clientPayments    ClientPayment[]
+  expectedPayments  ExpectedPayment[]
   paymentReminders  PaymentReminderLog[]
   paymentProofs     BudgetPaymentProof[]
   suppliers         Supplier[]
@@ -514,6 +515,8 @@ model Budget {
   payments             ClientPayment[]
   changeRequests       BudgetChangeRequest[]
   paymentProofs        BudgetPaymentProof[]
+  /// Pagos esperados del plan (issue #28): anticipo, cuotas y saldo.
+  expectedPayments     ExpectedPayment[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -606,6 +609,8 @@ model ClientPayment {
   treasuryAccount   TreasuryAccount?     @relation(fields: [treasuryAccountId], references: [id], onDelete: SetNull)
   reminders         PaymentReminderLog[]
   proofs            BudgetPaymentProof[]
+  /// Pago esperado que se confirmó con este cobro (issue #28); 1:1 opcional.
+  expectedPayment   ExpectedPayment?
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
@@ -625,7 +630,17 @@ model ClientPayment {
 model PaymentReminderLog {
   id             String                 @id
   organizationId String
-  paymentId      String
+  /// Cobro de cliente recordado; `null` cuando el recordatorio es de un pago esperado.
+  paymentId      String?
+  /// Pago esperado recordado (issue #28); `null` cuando es de un cobro de cliente.
+  expectedPaymentId String?
+  /**
+   * Clave única del destinatario del recordatorio: `client:<paymentId>` o
+   * `expected:<expectedPaymentId>`. Es el candado de idempotencia (un
+   * recordatorio por destinatario, canal y día) y sobrevive a que `paymentId`
+   * sea nulo en los recordatorios de pagos esperados.
+   */
+  targetKey      String
   channel        PaymentReminderChannel
   status         PaymentReminderStatus  @default(sending)
   to             String
@@ -641,11 +656,14 @@ model PaymentReminderLog {
   sentAt         DateTime               @default(now())
   createdAt      DateTime               @default(now())
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  payment        ClientPayment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment        ClientPayment?         @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  expectedPayment ExpectedPayment?      @relation(fields: [expectedPaymentId], references: [id], onDelete: SetNull)
 
+  @@unique([targetKey, channel, dayKey])
   @@unique([paymentId, channel, dayKey])
   @@index([organizationId, sentAt])
   @@index([organizationId, dayKey])
+  @@index([expectedPaymentId])
 }
 
 /**
@@ -670,8 +688,92 @@ model BudgetPaymentProof {
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   budget         Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   payment        ClientPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  /// Pago esperado al que el cliente vinculó este comprobante (issue #28).
+  expectedPayment ExpectedPayment?
 
   @@index([organizationId, budgetId, createdAt])
+  @@index([paymentId])
+}
+
+enum ExpectedPaymentConcept {
+  advance
+  installment
+  balance
+}
+
+/**
+ * Estado de un pago esperado (issue #28): `AWAITING` esperando la transferencia,
+ * `PROOF` con comprobante del cliente en revisión, `CONFIRMED` confirmado en una
+ * cuenta de tesorería y `CANCELLED` cuando el plan dejó de incluir el concepto.
+ * Solo la confirmación mueve el dinero: los esperados no cuentan como cobrados.
+ */
+enum ExpectedPaymentStatus {
+  AWAITING
+  PROOF
+  CONFIRMED
+  CANCELLED
+}
+
+/**
+ * Pago esperado de un presupuesto aprobado (issue #28): el dinero que el plan
+ * de pagos promete y que todavía **no** es un cobro. Se genera y sincroniza
+ * desde el plan (`advanceAmount` + `installmentsJson` + saldo) al aprobar el
+ * presupuesto o al cambiarlo, con una ranura estable por concepto (`slot`:
+ * `advance`, `installment:N` o `balance`) que es el candado de idempotencia:
+ * repetir la sincronización no duplica ni pisa lo confirmado.
+ *
+ * - `amount`/`dueAt`/`label` salen del plan; la cuenta destino esperada
+ *   (`expectedAccountId`) es de tesorería y se puede cambiar al confirmar.
+ * - El comprobante del portal (`proofId`, issue #17) se vincula al subirlo y
+ *   deja el pago en `PROOF`; `reviewNote` guarda la observación del equipo, que
+ *   el cliente ve en el portal.
+ * - Confirmar crea (o cobra) el `ClientPayment` y su `TreasuryMovement` de
+ *   entrada en la misma transacción y sella `confirmedAt`/`confirmedBy…`.
+ */
+model ExpectedPayment {
+  id                String               @id
+  organizationId    String
+  budgetId          String
+  concept           ExpectedPaymentConcept
+  /// Ranura estable del concepto dentro del plan: `advance`, `installment:N` o `balance`.
+  slot              String
+  /// Número de cuota (1..n) cuando el concepto es una cuota; `null` en anticipo y saldo.
+  installmentNumber Int?
+  /** Etiqueta visible del concepto (ej.: «Anticipo», «Cuota 2»). */
+  label             String
+  amount            Int
+  dueAt             DateTime?
+  status            ExpectedPaymentStatus @default(AWAITING)
+  /// Cuenta de tesorería donde se espera que entre la plata.
+  expectedAccountId String?
+  /// Comprobante del cliente vinculado (issue #17); 1:1 opcional.
+  proofId           String?              @unique
+  /// Cobro que confirmó este pago (issue #28); 1:1 opcional.
+  paymentId         String?              @unique
+  /** Observación del equipo (el cliente ve el motivo en el portal). */
+  reviewNote        String?
+  reviewedAt        DateTime?
+  reviewedByName    String?
+  confirmedAt       DateTime?
+  confirmedById     String?
+  confirmedByName   String?
+  confirmedByEmail  String?
+  cancelledAt       DateTime?
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  budget            Budget               @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  expectedAccount   TreasuryAccount?     @relation("ExpectedPaymentAccount", fields: [expectedAccountId], references: [id], onDelete: SetNull)
+  proof             BudgetPaymentProof?  @relation(fields: [proofId], references: [id], onDelete: SetNull)
+  payment           ClientPayment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  reminders         PaymentReminderLog[]
+
+  @@unique([budgetId, slot])
+  @@index([organizationId, status, dueAt])
+  @@index([budgetId, createdAt])
+  @@index([expectedAccountId])
+  @@index([proofId])
   @@index([paymentId])
 }
 
@@ -788,6 +890,7 @@ model TreasuryAccount {
   movements        TreasuryMovement[]  @relation("TreasuryMovementAccount")
   counterMovements TreasuryMovement[]  @relation("TreasuryMovementCounterAccount")
   clientPayments   ClientPayment[]
+  expectedPayments ExpectedPayment[]    @relation("ExpectedPaymentAccount")
   expenses         Expense[]
 
   @@unique([organizationId, name])
