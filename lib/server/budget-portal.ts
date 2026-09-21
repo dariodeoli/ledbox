@@ -16,6 +16,9 @@ import { budgetReference } from "@/lib/admin-format";
  *
  * Los datos de pago de la empresa (`Organization.paymentDetails`) solo se
  * entregan cuando el presupuesto está aprobado; antes no viajan al navegador.
+ *
+ * Los comprobantes de pago (issue #17) viajan solo como metadatos: el binario
+ * queda en el panel y se sirve únicamente con sesión.
  */
 
 const CODE_LENGTH = 20;
@@ -57,6 +60,25 @@ export type PortalBudgetPaymentDetails = {
   account: string | null;
   alias: string | null;
 };
+
+/**
+ * Estado visible de un comprobante subido por el cliente (issue #17): llegó
+ * (`received`), el cobro vinculado ya se marcó cobrado (`collected`) o el cobro
+ * se anuló (`cancelled`). El portal nunca sirve el archivo: solo sus metadatos.
+ */
+export type PortalBudgetProofStatus = "received" | "collected" | "cancelled";
+
+export type PortalBudgetProof = {
+  id: string;
+  uploadedByName: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+  status: PortalBudgetProofStatus;
+};
+
+/** Regla del comprobante en el portal (documentada en `portalProofUpload`). */
+export type PortalProofUpload = { allowed: boolean; reason: string | null };
 
 export type PortalBudgetRequestKind = "items" | "discount" | "changes";
 export type PortalBudgetRequestStatus = "pending" | "accepted" | "rejected";
@@ -119,6 +141,10 @@ export type PortalBudget = {
   paymentPlan: PortalBudgetPaymentPlan;
   /** Solo con el presupuesto aprobado; antes es `null`. */
   paymentDetails: PortalBudgetPaymentDetails | null;
+  /** Comprobantes ya subidos (metadatos; el archivo se ve solo en el panel). */
+  proofs: PortalBudgetProof[];
+  /** Si el portal habilita el formulario de comprobante y por qué no. */
+  proofUpload: PortalProofUpload;
   requests: PortalBudgetRequest[];
   approval: {
     state: PortalBudgetApprovalState;
@@ -159,6 +185,31 @@ export const PORTAL_MAX_DAYS = 365;
 export const PORTAL_MAX_NOTE = 600;
 export const PORTAL_MAX_NAME = 120;
 export const PORTAL_MAX_REQUESTS = 20;
+export const PORTAL_MAX_PROOFS = 20;
+
+/**
+ * Regla del comprobante de pago (issue #17), decidida y documentada acá:
+ * el cliente puede subirlo mientras el presupuesto siga en juego
+ * (`portalBudgetOpen`: ni perdido ni cancelado) y haya algo que pagar — el
+ * presupuesto está aprobado (digital o manual) o existe al menos un cobro a
+ * plazo pendiente (`ClientPayment.status = PENDING`). Fuera de esa ventana el
+ * portal no dibuja el formulario y el API responde 409; el motivo viaja en la
+ * misma vista para que el estado sea honesto.
+ */
+export function portalProofUpload(budget: {
+  status: string;
+  approvedAt: Date | null;
+  pendingPayments: number;
+}): PortalProofUpload {
+  if (!portalBudgetOpen(budget.status)) {
+    return { allowed: false, reason: "Este presupuesto ya no está disponible." };
+  }
+  if (budget.approvedAt || budget.pendingPayments > 0) return { allowed: true, reason: null };
+  return {
+    allowed: false,
+    reason: "Todavía no recibimos este pago: el comprobante se habilita con el presupuesto aprobado o con un cobro a plazo pendiente.",
+  };
+}
 
 type BudgetForPortal = {
   id: string;
@@ -183,6 +234,17 @@ type BudgetForPortal = {
   client: { name: string; company: string | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; notes: string | null }>;
+  /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
+  payments: Array<{ id: string; amount: number }>;
+  /** Comprobantes ya subidos, sin el binario (el archivo nunca sale del panel). */
+  paymentProofs: Array<{
+    id: string;
+    uploadedByName: string;
+    mime: string;
+    size: number;
+    createdAt: Date;
+    payment: { status: string } | null;
+  }>;
   changeRequests: Array<{
     id: string;
     kind: string;
@@ -377,6 +439,24 @@ export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     paymentDetails: approved ? parsePaymentDetails(budget.organization.paymentDetails) : null,
+    proofs: budget.paymentProofs.map((proof) => ({
+      id: proof.id,
+      uploadedByName: proof.uploadedByName,
+      mime: proof.mime,
+      size: proof.size,
+      createdAt: proof.createdAt.toISOString(),
+      status:
+        proof.payment?.status === "RECEIVED"
+          ? "collected"
+          : proof.payment?.status === "CANCELLED"
+            ? "cancelled"
+            : "received",
+    })),
+    proofUpload: portalProofUpload({
+      status: budget.status,
+      approvedAt: budget.approvedAt,
+      pendingPayments: budget.payments.length,
+    }),
     requests: budget.changeRequests.map((request) => requestView(budget, request)),
     approval: {
       state: approvalState(budget),
@@ -396,6 +476,19 @@ const portalInclude = {
   event: { select: { name: true, location: true, startsAt: true } },
   items: { orderBy: { name: "asc" } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
+  payments: { where: { status: "PENDING" }, select: { id: true, amount: true } },
+  paymentProofs: {
+    orderBy: { createdAt: "desc" },
+    take: PORTAL_MAX_PROOFS,
+    select: {
+      id: true,
+      uploadedByName: true,
+      mime: true,
+      size: true,
+      createdAt: true,
+      payment: { select: { status: true } },
+    },
+  },
 } as const;
 
 /** Presupuesto público por código de link; `null` si no existe o no tiene token. */

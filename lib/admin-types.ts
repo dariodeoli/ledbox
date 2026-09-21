@@ -281,6 +281,71 @@ export type AdminBudgetPortalPayload = {
   error?: string;
 };
 
+// ── Comprobantes de pago (issue #17) ────────────────────────────────────────
+// Reglas puras del adjunto, compartidas por el portal (front y API) y el panel:
+// tope de tamaño, tipos aceptados y detección por magic bytes. El tipo real del
+// archivo sale SIEMPRE del contenido —nunca del MIME declarado ni de la
+// extensión—, así un ejecutable renombrado a .jpg se rechaza.
+
+/** Tope del comprobante: 2 MB (las fotos se comprimen en el navegador antes de subir). */
+export const PAYMENT_PROOF_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Tipos aceptados por el portal; el servidor decide por contenido, no por este valor. */
+export const PAYMENT_PROOF_MIMES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+export type PaymentProofMime = (typeof PAYMENT_PROOF_MIMES)[number];
+
+function asciiAt(bytes: Uint8Array, offset: number, length: number): string {
+  return String.fromCharCode(...bytes.slice(offset, offset + length));
+}
+
+/** Firma real del archivo: JPG, PNG, WebP (`RIFF…WEBP`) o PDF (`%PDF-`). */
+export function detectPaymentProofMime(bytes: Uint8Array): PaymentProofMime | null {
+  const startsWith = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
+  if (startsWith(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (bytes.length >= 12 && asciiAt(bytes, 0, 4) === "RIFF" && asciiAt(bytes, 8, 4) === "WEBP") return "image/webp";
+  if (startsWith(0x25, 0x50, 0x44, 0x46, 0x2d)) return "application/pdf";
+  return null;
+}
+
+/** Extensión canónica del comprobante (el archivo servido la usa en su nombre). */
+export function paymentProofExtension(mime: string): string {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  return "jpg";
+}
+
+/** Nombre ASCII del archivo servido con sesión: `comprobante-<ref>-<AAAAMMDD-HHmm>.<ext>`. */
+export function paymentProofFileName(mime: string, createdAt: string | Date, reference: string): string {
+  const date = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  const stamp = Number.isNaN(date.getTime())
+    ? ""
+    : date.toISOString().slice(0, 16).replace(/[-:T]/g, "");
+  const ref = String(reference ?? "").trim().toUpperCase();
+  return `comprobante-${ref}${stamp ? `-${stamp}` : ""}.${paymentProofExtension(mime)}`;
+}
+
+/** Comprobante sin el binario: es lo que devuelve `GET /api/admin/budgets/proofs`. */
+export type AdminBudgetPaymentProofRow = {
+  id: string;
+  budgetId: string;
+  paymentId: string | null;
+  uploadedByName: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+};
+
+/** Comprobantes agrupados por presupuesto (índice que consumen Presupuestos y Finanzas). */
+export function groupProofsByBudget(
+  proofs: readonly AdminBudgetPaymentProofRow[],
+): Record<string, AdminBudgetPaymentProofRow[]> {
+  const grouped: Record<string, AdminBudgetPaymentProofRow[]> = {};
+  for (const proof of proofs) (grouped[proof.budgetId] ??= []).push(proof);
+  return grouped;
+}
+
 export type AdminPaymentRow = AdminPayment & { client: AdminClientRef; budget: { id: string; title: string } | null };
 
 /** Ítem de pedido que llega con el lead desde el sitio (relación `quoteRequests.items`). */
@@ -502,6 +567,7 @@ export const AUDIT_ENTITIES = [
   "Client",
   "Event",
   "Budget",
+  "BudgetPaymentProof",
   "ClientPayment",
   "Supplier",
   "SupplierJob",
@@ -622,7 +688,7 @@ export type AdminCalendarAlert = {
  * reales del panel. Los `kind` compartidos con el calendario se conservan tal cual.
  */
 export type AdminNotificationLevel = AdminCalendarAlertLevel | "info";
-export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "collection_due" | "lead" | "portal_request";
+export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "collection_due" | "lead" | "portal_request" | "payment_proof";
 
 export type AdminNotification = {
   id: string;
@@ -737,6 +803,7 @@ export type AdminApiResponse = {
   events?: AdminEventRow[];
   budgets?: AdminBudgetRow[];
   budgetRequests?: AdminBudgetRequestRow[];
+  proofs?: AdminBudgetPaymentProofRow[];
   clientPayments?: AdminPaymentRow[];
   supplierJobs?: AdminSupplierJobRow[];
   jobs?: AdminSupplierJobRow[];
