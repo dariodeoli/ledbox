@@ -381,11 +381,74 @@ export function initials(name: string | null | undefined): string {
 }
 
 /** Link de mensajería con el teléfono normalizado sin signos (números locales asumen Paraguay). */
-export function whatsappHref(phone: string | null | undefined): string | null {
+export function whatsappHref(phone: string | null | undefined, message?: string | null): string | null {
   const digits = String(phone || "").replace(/\D/g, "");
   if (digits.length < 8) return null;
   const international = digits.startsWith("595") ? digits : digits.startsWith("0") ? `595${digits.slice(1)}` : `595${digits}`;
-  return `https://wa.me/${international}`;
+  const text = String(message ?? "").trim();
+  return text ? `https://wa.me/${international}?text=${encodeURIComponent(text)}` : `https://wa.me/${international}`;
+}
+
+// ── Recordatorios de cobro (issue #19) ─────────────────────────────────────
+// Texto prellenado del WhatsApp y etiquetas del historial. El mensaje se arma
+// acá (una sola vez) y lo usan Finanzas y la campana de avisos.
+
+export type PaymentReminderMessageInput = {
+  client: string;
+  amount: number;
+  dueAt: string | Date | null;
+  invoiceNumber?: string | null;
+  budgetTitle?: string | null;
+  /** Link del portal del presupuesto asociado; sin link, el mensaje no lo inventa. */
+  portalUrl?: string | null;
+};
+
+/** Mensaje prellenado del recordatorio de cobro: monto, vencimiento y link del portal. */
+export function paymentReminderMessage(input: PaymentReminderMessageInput): string {
+  const lines = [
+    `Hola ${input.client}: te recordamos el pago pendiente.`,
+    "",
+    `• Monto: ${formatMoney(input.amount)}`,
+    `• Vencimiento: ${input.dueAt ? `${formatDate(input.dueAt)} · ${collectionDueText(input.dueAt)}` : "sin fecha"}`,
+  ];
+  if (input.invoiceNumber) lines.push(`• Factura: ${input.invoiceNumber}`);
+  if (input.budgetTitle) lines.push(`• Presupuesto: ${input.budgetTitle}`);
+  if (input.portalUrl) lines.push("", `Podés ver el detalle y los datos de pago en el portal: ${input.portalUrl}`);
+  lines.push("", "LedBox");
+  return lines.join("\n");
+}
+
+const REMINDER_CHANNEL: Record<string, string> = {
+  email: "Email",
+  whatsapp: "WhatsApp",
+};
+
+const REMINDER_STATUS: Record<string, string> = {
+  sending: "En curso",
+  sent: "Enviado",
+  failed: "Falló",
+  opened: "Abierto en WhatsApp",
+};
+
+const REMINDER_STATUS_TONES: Record<string, AdminTone> = {
+  sending: "info",
+  sent: "ok",
+  failed: "danger",
+  opened: "accent",
+};
+
+export const reminderChannelLabel = (value: string | null | undefined) => label(REMINDER_CHANNEL, value);
+export const reminderStatusLabel = (value: string | null | undefined) => label(REMINDER_STATUS, value);
+
+export function reminderStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return REMINDER_STATUS_TONES[value] ?? "neutral";
+}
+
+/** ¿El valor cae en el día de Asunción de hoy? (para el "enviado hoy" del recordatorio). */
+export function isTodayAsuncion(value: string | Date | null | undefined): boolean {
+  const date = toDate(value);
+  return date ? dayKeyOf(date) === dayKeyOf() : false;
 }
 
 // ── Calendario operativo ────────────────────────────────────────────────────
@@ -529,6 +592,7 @@ const AUDIT_ACTION: Record<string, string> = {
   checkout: "Salida",
   checkin: "Devolución",
   convert: "Convirtió",
+  remind: "Recordó",
 };
 
 const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
@@ -539,6 +603,7 @@ const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
   checkout: "accent",
   checkin: "info",
   convert: "accent",
+  remind: "accent",
 };
 
 const AUDIT_ENTITY: Record<string, string> = {

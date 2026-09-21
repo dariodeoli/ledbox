@@ -4,7 +4,15 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
-import { adminModuleVisible, adminNavGroups, adminNavLabel, asAdminRole, isAdminNavActive } from "@/lib/admin-policy";
+import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
+import {
+  adminModuleVisible,
+  adminNavGroups,
+  adminNavLabel,
+  asAdminRole,
+  canWriteFinance,
+  isAdminNavActive,
+} from "@/lib/admin-policy";
 import {
   adminRoleLabel,
   formatCalendarDayShort,
@@ -14,6 +22,8 @@ import {
   notificationKindLabel,
   notificationLevelLabel,
   notificationTone,
+  paymentReminderMessage,
+  whatsappHref,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
 import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
@@ -27,7 +37,7 @@ import type {
 import { AdminIcon } from "./AdminIcons";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
-import { adminApiGet, redirectToLogin, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
 export type AdminSessionState = {
   user: AdminSessionUser | null;
@@ -398,31 +408,57 @@ export function useAdminNotifications() {
   }));
 }
 
-/** Aviso con enlace a su módulo; el nivel real define el tono y el borde. */
-function AdminNotificationItem({ notification }: { notification: AdminNotification }) {
+/**
+ * Aviso del feed. El cuerpo enlaza a su módulo; cuando el aviso trae los datos
+ * de un cobro a plazo con teléfono (issue #19), suma la acción de WhatsApp con
+ * el mensaje prellenado (monto, vencimiento y link del portal) y deja la
+ * constancia del día en el historial del cobro. `VIEWER` nunca ve la acción.
+ */
+function AdminNotificationItem({ notification, writable }: { notification: AdminNotification; writable: boolean }) {
   const level = notificationLevelLabel(notification.level);
   const kind = notificationKindLabel(notification.kind);
   const when = `${formatCalendarDayShort(notification.date)} · ${formatDayWhen(notification.date)}`;
+  const reminder = writable ? notification.reminder ?? null : null;
+  const whatsappLink = reminder ? whatsappHref(reminder.phone, paymentReminderMessage(reminder)) : null;
+  const paymentId = notification.id.startsWith("collection_due:")
+    ? notification.id.slice("collection_due:".length)
+    : "";
+  const title = `${level} · ${kind}: ${notification.title}${notification.subtitle ? ` · ${notification.subtitle}` : ""} · ${when} · Ir a ${adminNavLabel(notification.href)}`;
+
+  /** Best-effort: el mensaje se abre igual aunque el registro del día falle. */
+  function rememberWhatsapp() {
+    if (!paymentId) return;
+    void adminSend("/api/admin/reminders", { paymentId, channel: "whatsapp" });
+  }
+
   return (
-    <Link
-      className="admin-notif-item"
-      href={notification.href}
-      data-level={notification.level}
-      title={`${level} · ${kind}: ${notification.title}${notification.subtitle ? ` · ${notification.subtitle}` : ""} · ${when} · Ir a ${adminNavLabel(notification.href)}`}
-    >
+    <div className="admin-notif-item" data-level={notification.level}>
       <AdminBadge tone={notificationTone(notification.level)}>{level}</AdminBadge>
-      <span className="admin-notif-main">
+      <Link className="admin-notif-main" href={notification.href} title={title}>
         <span className="admin-notif-title">{notification.title}</span>
         <span className="admin-notif-sub">
           {kind}
           {notification.subtitle ? ` · ${notification.subtitle}` : ""}
         </span>
-      </span>
+      </Link>
       <span className="admin-notif-date" title={when}>
         {when}
       </span>
+      {whatsappLink && reminder ? (
+        <a
+          className="admin-iconbtn"
+          href={whatsappLink}
+          target="_blank"
+          rel="noreferrer"
+          title={`Recordar por WhatsApp: ${reminder.client}`}
+          aria-label={`Recordar por WhatsApp: ${reminder.client}`}
+          onClick={rememberWhatsapp}
+        >
+          <WhatsappIcon size={15} />
+        </a>
+      ) : null}
       <AdminIcon name="arrow-right" size={14} />
-    </Link>
+    </div>
   );
 }
 
@@ -434,6 +470,7 @@ function AdminNotificationItem({ notification }: { notification: AdminNotificati
  */
 function AdminNotificationBell() {
   const pathname = usePathname();
+  const { role } = useAdminSession();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const feed = useAdminNotifications();
@@ -522,7 +559,7 @@ function AdminNotificationBell() {
             <ul className="admin-notif-list">
               {notifications.map((notification) => (
                 <li key={notification.id}>
-                  <AdminNotificationItem notification={notification} />
+                  <AdminNotificationItem notification={notification} writable={canWriteFinance(role)} />
                 </li>
               ))}
             </ul>

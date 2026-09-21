@@ -281,7 +281,50 @@ export type AdminBudgetPortalPayload = {
   error?: string;
 };
 
-export type AdminPaymentRow = AdminPayment & { client: AdminClientRef; budget: { id: string; title: string } | null };
+export type AdminPaymentRow = AdminPayment & {
+  client: AdminClientRef;
+  budget: { id: string; title: string; publicToken?: string | null } | null;
+  /** Recordatorios enviados/abiertos de este cobro (issue #19), más recientes primero. */
+  reminders: AdminPaymentReminder[];
+};
+
+// ── Recordatorios de cobro (issue #19) ──────────────────────────────────────
+// Espejo de `PaymentReminderLog`: una fila por cobro, canal y día de Asunción.
+// `email` lo manda Resend (status `sent`/`failed`); `whatsapp` registra que el
+// equipo abrió el mensaje prellenado (status `opened`).
+
+export type AdminReminderChannel = "email" | "whatsapp";
+export type AdminReminderStatus = "sending" | "sent" | "failed" | "opened";
+
+export type AdminPaymentReminder = {
+  id: string;
+  paymentId: string;
+  channel: AdminReminderChannel;
+  status: AdminReminderStatus;
+  /** Destino real: correo del cliente o teléfono. */
+  to: string;
+  /** Día de Asunción (`YYYY-MM-DD`) del recordatorio. */
+  dayKey: string;
+  subject: string | null;
+  error: string | null;
+  actorKind: string;
+  actorName: string | null;
+  actorEmail: string | null;
+  sentAt: string;
+};
+
+/** Resumen real de una corrida de recordatorios (`POST /api/admin/reminders/run`). */
+export type AdminReminderRun = {
+  /** Día de Asunción de la corrida (`YYYY-MM-DD`). */
+  dayKey: string;
+  candidates: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  alreadySentToday: number;
+  /** Por qué no se envió nada: falta el proveedor o la empresa activa es la demo. */
+  reason?: "missing_resend_api_key" | "demo_organization";
+};
 
 /** Ítem de pedido que llega con el lead desde el sitio (relación `quoteRequests.items`). */
 export type AdminLeadItem = {
@@ -516,8 +559,8 @@ export const AUDIT_ENTITIES = [
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 
-/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución y conversión. */
-export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert"] as const;
+/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución, conversión y recordatorio al cliente. */
+export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind"] as const;
 
 export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
 
@@ -633,6 +676,24 @@ export type AdminNotification = {
   /** Día de Asunción del hecho (`YYYY-MM-DD`); es la fecha real, no el día de consulta. */
   date: string;
   href: string;
+  /**
+   * Recordatorio por WhatsApp (issue #19): llega solo en los avisos de cobro a
+   * plazo con teléfono del cliente, con los datos reales del cobro y el link del
+   * portal para que la campana abra el mensaje prellenado.
+   */
+  reminder?: AdminNotificationReminder | null;
+};
+
+/** Datos reales de un recordatorio desde la campana (issue #19). */
+export type AdminNotificationReminder = {
+  phone: string;
+  client: string;
+  amount: number;
+  /** Vencimiento real del cobro (ISO). */
+  dueAt: string;
+  invoiceNumber: string | null;
+  budgetTitle: string | null;
+  portalUrl: string | null;
 };
 
 /** Totales reales del feed (sin el recorte) para el contador de la campana. */
@@ -738,6 +799,11 @@ export type AdminApiResponse = {
   budgets?: AdminBudgetRow[];
   budgetRequests?: AdminBudgetRequestRow[];
   clientPayments?: AdminPaymentRow[];
+  /** Recordatorio recién enviado/registrado (respuesta de `/api/admin/reminders`). */
+  reminder?: AdminPaymentReminder | null;
+  alreadySentToday?: boolean;
+  /** Resumen de la corrida forzada de recordatorios (`/api/admin/reminders/run`). */
+  result?: AdminReminderRun;
   supplierJobs?: AdminSupplierJobRow[];
   jobs?: AdminSupplierJobRow[];
   suppliers?: AdminSupplierRow[];

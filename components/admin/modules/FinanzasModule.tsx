@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collectionDueText,
   collectionDueTone,
@@ -12,14 +12,29 @@ import {
   formatMoney,
   formatNumber,
   formatTime,
+  isTodayAsuncion,
   jobStatusLabel,
+  paymentReminderMessage,
   paymentStatusLabel,
   paymentStatusTone,
+  reminderChannelLabel,
+  reminderStatusLabel,
+  reminderStatusTone,
   statusTone,
+  whatsappHref,
 } from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
-import { collectedAmount, isCollectedPayment, supplierJobBalance, type AdminPaymentRow } from "@/lib/admin-types";
+import {
+  collectedAmount,
+  isCollectedPayment,
+  supplierJobBalance,
+  type AdminPaymentReminder,
+  type AdminPaymentRow,
+  type AdminReminderRun,
+} from "@/lib/admin-types";
+import { portalBudgetUrl } from "@/lib/public-config";
+import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
 import { useAdminSession } from "../AdminShell";
 import { AdminIcon } from "../AdminIcons";
 import {
@@ -84,6 +99,219 @@ const EMPTY_PAYMENT_FORM: PaymentForm = {
 
 type Notice = { tone: "ok" | "error"; text: string };
 
+// ── Recordatorios de cobro (issue #19) ──────────────────────────────────────
+// Un cobro recibe como máximo un recordatorio por canal y día (lo garantiza el
+// índice único del API). La fila muestra el estado de hoy y el detalle del cobro
+// guarda el historial completo.
+
+/** Recordatorio de hoy de un canal (día de Asunción, igual que el API). */
+function reminderToday(payment: AdminPaymentRow, channel: "email" | "whatsapp"): AdminPaymentReminder | undefined {
+  return (payment.reminders ?? []).find(
+    (reminder) => reminder.channel === channel && isTodayAsuncion(reminder.sentAt),
+  );
+}
+
+/** Link del mensaje prellenado al teléfono del cliente; `null` sin teléfono válido. */
+function paymentWhatsappHref(payment: AdminPaymentRow): string | null {
+  return whatsappHref(
+    payment.client.phone,
+    paymentReminderMessage({
+      client: payment.client.company || payment.client.name,
+      amount: payment.amount,
+      dueAt: payment.dueAt,
+      invoiceNumber: payment.invoiceNumber,
+      budgetTitle: payment.budget?.title ?? null,
+      portalUrl: payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken) : null,
+    }),
+  );
+}
+
+/** Fecha y hora corta del panel para el historial (`21 sept · 14:32`). */
+function reminderStamp(value: string): string {
+  return `${formatDateShort(value)} · ${formatTime(value)}`;
+}
+
+/** Título del estado de hoy en la columna Recordatorio. */
+function reminderCellTitle(payment: AdminPaymentRow): string {
+  const email = reminderToday(payment, "email");
+  const whatsapp = reminderToday(payment, "whatsapp");
+  const parts: string[] = [];
+  if (email) {
+    const when = reminderStamp(email.sentAt);
+    parts.push(
+      email.status === "sent"
+        ? `Recordatorio por email enviado hoy (${when}) a ${email.to}`
+        : email.status === "failed"
+          ? `El recordatorio por email de hoy falló (${when}): ${email.error ?? "error del proveedor"}`
+          : `Recordatorio por email en curso (${when})`,
+    );
+  }
+  if (whatsapp) parts.push(`WhatsApp abierto hoy (${reminderStamp(whatsapp.sentAt)})`);
+  return parts.length > 0 ? parts.join(" · ") : "Sin recordatorio hoy";
+}
+
+/**
+ * Diálogo del cobro: resumen real, acciones de recordatorio y el historial de
+ * envíos (canal, destino, estado, actor y fecha en 24 h). Mismo contrato de
+ * diálogo del panel que Presupuestos: foco al abrir, cierre con Escape y clic
+ * afuera.
+ */
+function PaymentRemindersDialog({
+  payment,
+  writable,
+  busyId,
+  onEmail,
+  onWhatsapp,
+  onClose,
+}: {
+  payment: AdminPaymentRow;
+  writable: boolean;
+  busyId: string;
+  onEmail: (payment: AdminPaymentRow) => void;
+  onWhatsapp: (payment: AdminPaymentRow) => void;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const label = payment.client.company || payment.client.name;
+  const emailToday = reminderToday(payment, "email");
+  const whatsappToday = reminderToday(payment, "whatsapp");
+  const whatsappLink = paymentWhatsappHref(payment);
+  const reminders = payment.reminders ?? [];
+  const emailDoneToday = emailToday?.status === "sent";
+
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Recordatorios de ${label}`}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">Recordatorios · {label}</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+
+        <dl className="admin-dialog-facts">
+          <div>
+            <dt>Monto</dt>
+            <dd>{formatMoney(payment.amount)}</dd>
+          </div>
+          <div>
+            <dt>Vencimiento</dt>
+            <dd>
+              {payment.dueAt ? `${formatDate(payment.dueAt)} · ${collectionDueText(payment.dueAt)}` : "Sin vencimiento"}
+            </dd>
+          </div>
+          <div>
+            <dt>Factura</dt>
+            <dd>{payment.invoiceNumber || "Sin factura emitida"}</dd>
+          </div>
+          <div>
+            <dt>Presupuesto</dt>
+            <dd>{payment.budget?.title || "Sin presupuesto asociado"}</dd>
+          </div>
+          <div>
+            <dt>Contacto</dt>
+            <dd>
+              {[payment.client.email || "sin correo", payment.client.phone || "sin teléfono"].join(" · ")}
+            </dd>
+          </div>
+          <div>
+            <dt>Portal</dt>
+            <dd>{payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken) : "El presupuesto no tiene link del portal"}</dd>
+          </div>
+        </dl>
+
+        {writable ? (
+          <div className="admin-dialog-actions">
+            <AdminButton
+              icon="mail"
+              busy={busyId === `email:${payment.id}`}
+              disabled={Boolean(busyId) || emailDoneToday || !payment.client.email}
+              title={
+                !payment.client.email
+                  ? "El cliente no tiene correo cargado"
+                  : emailDoneToday
+                    ? `Ya se envió hoy a ${emailToday?.to}`
+                    : `Recordar por email: ${label}`
+              }
+              onClick={() => onEmail(payment)}
+            >
+              {emailDoneToday ? "Enviado hoy" : "Recordar por email"}
+            </AdminButton>
+            {whatsappLink ? (
+              <a
+                className="admin-btn"
+                href={whatsappLink}
+                target="_blank"
+                rel="noreferrer"
+                data-done={whatsappToday ? "true" : undefined}
+                title={
+                  whatsappToday
+                    ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
+                    : `Recordar por WhatsApp: ${label}`
+                }
+                aria-label={`Recordar por WhatsApp: ${label}`}
+                onClick={() => onWhatsapp(payment)}
+              >
+                <WhatsappIcon size={15} />
+                <span>Recordar por WhatsApp</span>
+              </a>
+            ) : (
+              <span className="admin-muted">El cliente no tiene teléfono cargado</span>
+            )}
+          </div>
+        ) : null}
+
+        <p className="admin-dialog-text">
+          Historial de recordatorios del cobro (máximo uno por canal y día; los repetidos no se envían de nuevo).
+        </p>
+        {reminders.length === 0 ? (
+          <AdminEmpty title="Sin recordatorios" hint="Todavía no se envió ni abrió ningún recordatorio para este cobro." />
+        ) : (
+          <ul className="admin-reminder-list">
+            {reminders.map((reminder) => (
+              <li className="admin-reminder-item" key={reminder.id}>
+                <AdminBadge tone={reminderStatusTone(reminder.status)}>{reminderStatusLabel(reminder.status)}</AdminBadge>
+                <span className="admin-reminder-main">
+                  <strong title={`${reminderChannelLabel(reminder.channel)} · ${reminder.to}`}>
+                    {reminderChannelLabel(reminder.channel)} · {reminder.to}
+                  </strong>
+                  <small>
+                    {reminder.actorName || "Sistema"} · {formatDateTime(reminder.sentAt)}
+                  </small>
+                  {reminder.error ? <small className="admin-reminder-error">{reminder.error}</small> : null}
+                </span>
+                <span className="admin-reminder-when" title={formatDateTime(reminder.sentAt)}>
+                  {reminderStamp(reminder.sentAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="admin-dialog-foot">
+          <span className="admin-dialog-spacer" />
+          <AdminButton onClick={onClose}>Cerrar</AdminButton>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function FinanzasModule() {
   const { role } = useAdminSession();
   const finance = useAdminResource("/api/admin/finance", (payload) => ({
@@ -100,11 +328,22 @@ export function FinanzasModule() {
   const [busyId, setBusyId] = useState("");
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Recordatorios de cobro (issue #19): envío por email, apertura de WhatsApp y
+  // detalle del cobro con su historial.
+  const [reminderBusyId, setReminderBusyId] = useState("");
+  const [remindersFor, setRemindersFor] = useState("");
+  const [runningReminders, setRunningReminders] = useState(false);
 
   const writable = canWriteFinance(role);
+  const canRunReminders = role === "OWNER" || role === "ADMIN";
   const payments = useMemo(() => finance.data?.payments ?? [], [finance.data]);
   const jobs = useMemo(() => finance.data?.jobs ?? [], [finance.data]);
   const term = form.mode === "term";
+  /** Cobro abierto en el detalle de recordatorios (siempre con los datos frescos). */
+  const reminderDetail = useMemo(
+    () => payments.find((payment) => payment.id === remindersFor) ?? null,
+    [payments, remindersFor],
+  );
 
   /** Presupuestos del cliente elegido (el presupuesto es opcional). */
   const clientBudgets = useMemo(
@@ -305,6 +544,82 @@ export function FinanzasModule() {
     finance.reload();
   }
 
+  /**
+   * Recordatorio por email del cobro (issue #19). El API decide: si ya hay uno
+   * de hoy responde `alreadySentToday` (sin duplicar) y si el envío falla queda
+   * el motivo real. El panel refresca para ver el estado y el historial.
+   */
+  async function remindByEmail(payment: AdminPaymentRow) {
+    const label = payment.client.company || payment.client.name;
+    setReminderBusyId(`email:${payment.id}`);
+    setNotice(null);
+    setFormError("");
+    const result = await adminSend<{ reminder?: AdminPaymentReminder; alreadySentToday?: boolean }>(
+      "/api/admin/reminders",
+      { paymentId: payment.id, channel: "email" },
+    );
+    setReminderBusyId("");
+    if (!result.ok) {
+      setNotice({ tone: "error", text: result.error });
+      return;
+    }
+    const reminder = result.data.reminder;
+    if (reminder?.status === "failed") {
+      setNotice({
+        tone: "error",
+        text: `No se pudo enviar el recordatorio a ${reminder.to}: ${reminder.error ?? "error del proveedor"}.`,
+      });
+    } else if (result.data.alreadySentToday) {
+      setNotice({ tone: "ok", text: `Ya se envió un recordatorio hoy a ${reminder?.to ?? label}: no se duplica.` });
+    } else {
+      setNotice({ tone: "ok", text: `Recordatorio enviado a ${reminder?.to ?? label} con el link del portal.` });
+    }
+    finance.reload();
+  }
+
+  /** Abre WhatsApp con el mensaje prellenado y deja constancia del día (sin APIs externas). */
+  function remindByWhatsapp(payment: AdminPaymentRow) {
+    setReminderBusyId(`whatsapp:${payment.id}`);
+    void adminSend("/api/admin/reminders", { paymentId: payment.id, channel: "whatsapp" }).then((result) => {
+      setReminderBusyId("");
+      if (result.ok) finance.reload();
+    });
+  }
+
+  /** Fuerza la corrida diaria (OWNER/ADMIN): mismo despacho idempotente del primer uso. */
+  async function runReminders() {
+    setRunningReminders(true);
+    setNotice(null);
+    const result = await adminSend<{ result?: AdminReminderRun }>("/api/admin/reminders/run", {});
+    setRunningReminders(false);
+    if (!result.ok) {
+      setNotice({ tone: "error", text: result.error });
+      return;
+    }
+    const summary = result.data.result;
+    if (!summary) {
+      setNotice({ tone: "error", text: "No pudimos leer el resultado de la corrida." });
+      return;
+    }
+    if (summary.reason === "missing_resend_api_key") {
+      setNotice({ tone: "error", text: "Falta configurar RESEND_API_KEY: los recordatorios por email están deshabilitados." });
+    } else if (summary.reason === "demo_organization") {
+      setNotice({ tone: "ok", text: "La demo es de solo lectura: no envía recordatorios." });
+    } else {
+      const parts = [
+        `${formatNumber(summary.sent)} enviados`,
+        `${formatNumber(summary.alreadySentToday)} ya enviados hoy`,
+        `${formatNumber(summary.skipped)} sin correo`,
+      ];
+      if (summary.failed > 0) parts.push(`${formatNumber(summary.failed)} fallidos`);
+      setNotice({
+        tone: summary.failed > 0 ? "error" : "ok",
+        text: `Recordatorios de hoy: ${parts.join(" · ")} (${formatNumber(summary.candidates)} cobros en la ventana de 7 días).`,
+      });
+    }
+    finance.reload();
+  }
+
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de finanzas">
@@ -349,6 +664,18 @@ export function FinanzasModule() {
             <span>Reporte mensual</span>
           </Link>
         </span>
+        {canRunReminders ? (
+          <AdminButton
+            icon="mail"
+            busy={runningReminders}
+            disabled={Boolean(busyId) || runningReminders}
+            onClick={() => void runReminders()}
+            title="Enviar ahora los recordatorios de cobros vencidos o por vencer en 7 días (un máximo por cobro y día)"
+            aria-label="Enviar los recordatorios de hoy"
+          >
+            Recordatorios de hoy
+          </AdminButton>
+        ) : null}
         {writable ? (
           <AdminButton
             variant="primary"
@@ -511,48 +838,109 @@ export function FinanzasModule() {
             columns={[
               { label: "Cliente" },
               { label: "Factura" },
-              { label: "Emisión" },
-              { label: "Vence" },
-              { label: "Cobro" },
+              { label: "Vencimiento" },
               { label: "Método" },
-              { label: "Cheque" },
+              { label: "Recordatorio" },
               { label: "Monto", end: true },
               { label: "Acciones", end: true },
             ]}
           >
             {pendingPayments.map((payment) => {
               const label = payment.client.company || payment.client.name;
+              const emailToday = reminderToday(payment, "email");
+              const whatsappToday = reminderToday(payment, "whatsapp");
+              const whatsappLink = paymentWhatsappHref(payment);
+              const emailDoneToday = emailToday?.status === "sent";
               return (
                 <AdminRow key={payment.id}>
                   <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
                     <strong>{label}</strong>
                     {payment.budget ? <small className="admin-cell-sub"> · {payment.budget.title}</small> : null}
                   </AdminCell>
-                  <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
-                    <span className="admin-code">{payment.invoiceNumber || "—"}</span>
+                  <AdminCell
+                    title={
+                      payment.invoiceNumber
+                        ? `Factura ${payment.invoiceNumber}${payment.invoiceIssuedAt ? ` · emitida el ${formatDate(payment.invoiceIssuedAt)}` : ""}`
+                        : "Sin factura emitida"
+                    }
+                  >
+                    {payment.invoiceNumber ? (
+                      <>
+                        <span className="admin-code">{payment.invoiceNumber}</span>
+                        {payment.invoiceIssuedAt ? (
+                          <small className="admin-cell-sub"> · {formatDateShort(payment.invoiceIssuedAt)}</small>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
                   </AdminCell>
-                  <AdminCell title={payment.invoiceIssuedAt ? `Emitida el ${formatDate(payment.invoiceIssuedAt)}` : "Sin factura emitida"}>
-                    {payment.invoiceIssuedAt ? formatDateShort(payment.invoiceIssuedAt) : "—"}
-                  </AdminCell>
-                  <AdminCell title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)}` : "Sin vencimiento de cobro"}>
+                  <AdminCell
+                    title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)} · ${collectionDueText(payment.dueAt)}` : "Sin vencimiento de cobro"}
+                  >
                     <span className="admin-nowrap" data-tone={collectionDueTone(payment.dueAt)}>
                       {payment.dueAt ? formatDateShort(payment.dueAt) : "—"}
                     </span>
+                    {payment.dueAt ? <small className="admin-cell-sub"> · {collectionDueText(payment.dueAt)}</small> : null}
                   </AdminCell>
-                  <AdminCell title={payment.dueAt ? `Vencimiento ${formatDate(payment.dueAt)}` : "Sin vencimiento de cobro"}>
-                    <span className="admin-nowrap" data-tone={collectionDueTone(payment.dueAt)}>
-                      {collectionDueText(payment.dueAt)}
-                    </span>
+                  <AdminCell title={payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : payment.method || "Sin método"}>
+                    {payment.method || "—"}
+                    {payment.chequeDate ? <small className="admin-cell-sub"> · cheque {formatDateShort(payment.chequeDate)}</small> : null}
                   </AdminCell>
-                  <AdminCell>{payment.method || "—"}</AdminCell>
-                  <AdminCell title={payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : "Sin cheque"}>
-                    <span className="admin-nowrap">{payment.chequeDate ? formatDateShort(payment.chequeDate) : "—"}</span>
+                  <AdminCell title={reminderCellTitle(payment)}>
+                    {emailToday ? (
+                      <AdminBadge tone={reminderStatusTone(emailToday.status)}>
+                        {emailToday.status === "sending" ? "En curso" : `${reminderStatusLabel(emailToday.status)} hoy`}
+                      </AdminBadge>
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
                   </AdminCell>
                   <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
                     <strong>{formatMoney(payment.amount)}</strong>
                   </AdminCell>
                   <AdminCell end>
                     <span className="admin-actions">
+                      {writable ? (
+                        <AdminButton
+                          icon="mail"
+                          busy={reminderBusyId === `email:${payment.id}`}
+                          disabled={Boolean(busyId) || Boolean(reminderBusyId) || emailDoneToday || !payment.client.email}
+                          title={
+                            !payment.client.email
+                              ? `Sin correo cargado: ${label}`
+                              : emailDoneToday
+                                ? `Ya se envió hoy a ${emailToday?.to}`
+                                : `Recordar por email: ${label}`
+                          }
+                          aria-label={`Recordar por email: ${label}`}
+                          onClick={() => void remindByEmail(payment)}
+                        />
+                      ) : null}
+                      {writable && whatsappLink ? (
+                        <a
+                          className="admin-iconbtn"
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          data-done={whatsappToday ? "true" : undefined}
+                          title={
+                            whatsappToday
+                              ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
+                              : `Recordar por WhatsApp: ${label}`
+                          }
+                          aria-label={`Recordar por WhatsApp: ${label}`}
+                          onClick={() => remindByWhatsapp(payment)}
+                        >
+                          <WhatsappIcon size={15} />
+                        </a>
+                      ) : null}
+                      <AdminButton
+                        icon="clock"
+                        title={`Historial de recordatorios: ${label}`}
+                        aria-label={`Historial de recordatorios: ${label}`}
+                        onClick={() => setRemindersFor(payment.id)}
+                      />
                       {writable ? (
                         <AdminButton
                           icon="check"
@@ -572,7 +960,6 @@ export function FinanzasModule() {
                           onClick={() => closeCollection(payment, "cancel")}
                         />
                       ) : null}
-                      {!writable ? <span className="admin-muted">—</span> : null}
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -732,6 +1119,17 @@ export function FinanzasModule() {
           {filteredJobs.length === 0 ? <AdminEmpty title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
         </AdminDataState>
       </AdminPanel>
+
+      {reminderDetail ? (
+        <PaymentRemindersDialog
+          payment={reminderDetail}
+          writable={writable}
+          busyId={reminderBusyId}
+          onEmail={(payment) => void remindByEmail(payment)}
+          onWhatsapp={remindByWhatsapp}
+          onClose={() => setRemindersFor("")}
+        />
+      ) : null}
     </div>
   );
 }
