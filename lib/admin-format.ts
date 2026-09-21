@@ -52,6 +52,21 @@ export function formatTime(value: string | Date | null | undefined): string {
   return date ? timeFormat.format(date) : "—";
 }
 
+/**
+ * Hace cuánto pasó un instante: "recién", "hace 4 min", "hace 2 h" y, pasado el
+ * día, la fecha completa (`17-sept. · 08:40`, 24 h). Lo usa la cola offline para
+ * mostrar cuándo se guardó y cuándo se subió cada acción de campo.
+ */
+export function formatSince(value: string | Date | null | undefined, now = Date.now()): string {
+  const date = toDate(value);
+  if (!date) return "—";
+  const elapsed = now - date.getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 60_000) return "recién";
+  if (elapsed < 3_600_000) return `hace ${formatNumber(Math.floor(elapsed / 60_000))} min`;
+  if (elapsed < 86_400_000) return `hace ${formatNumber(Math.floor(elapsed / 3_600_000))} h`;
+  return `${formatDateShort(date)} · ${formatTime(date)}`;
+}
+
 const FILE_SIZE_FORMAT = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 });
 
 /** Tamaño de un archivo legible: bytes, kB y MB (1,2 MB). */
