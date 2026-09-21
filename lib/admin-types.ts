@@ -8,7 +8,9 @@ export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
 export type AdminIconName =
   | "overview"
   | "events"
+  | "calendar"
   | "clients"
+  | "leads"
   | "budgets"
   | "finance"
   | "inventory"

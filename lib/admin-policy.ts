@@ -21,12 +21,14 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     items: [
       { href: "/dashboard", label: "Resumen", icon: "overview" },
       { href: "/eventos", label: "Eventos", icon: "events" },
+      { href: "/calendario", label: "Calendario", icon: "calendar" },
     ],
   },
   {
     label: "Comercial",
     items: [
       { href: "/clientes", label: "Clientes", icon: "clients" },
+      { href: "/leads", label: "Leads", icon: "leads" },
       { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
       { href: "/finanzas", label: "Finanzas", icon: "finance" },
     ],
