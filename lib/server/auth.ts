@@ -124,6 +124,12 @@ export async function requireAdmin() {
   return getAuthenticatedAdmin();
 }
 
+export async function requireAdminRole(roles: Array<PublicAdminUser["role"]>) {
+  const auth = await getAuthenticatedAdmin();
+  if (!auth || !roles.includes(auth.user.role)) return null;
+  return auth;
+}
+
 export async function revokeCurrentSession(): Promise<void> {
   const auth = await getAuthenticatedAdmin();
   if (auth) await db.adminSession.update({ where: { id: auth.session.id }, data: { revokedAt: new Date() } });

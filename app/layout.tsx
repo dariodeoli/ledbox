@@ -14,6 +14,12 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "LedBox Paraguay — Tecnología visual", description: "Pantallas LED, tótems y experiencias visuales para eventos.", images: ["/assets/og-image.png"] },
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/assets/favicon-32.png", sizes: "32x32", type: "image/png" }], apple: "/assets/apple-touch-icon.png" },
   manifest: "/manifest.webmanifest",
+  category: "business",
+  formatDetection: { telephone: true, email: true, address: true },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
+  verification: process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : undefined,
 };
+
+export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#050606" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="es"><body>{children}</body></html>; }
