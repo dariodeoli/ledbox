@@ -245,6 +245,56 @@ export function AdminFormPanel({
   );
 }
 
+/**
+ * Diálogo único del panel: overlay a pantalla completa y panel centrado.
+ * Contrato mínimo: rol dialog, foco al abrir, cierre con Escape y clic afuera.
+ * `wide` para las tablas chicas y `ficha` para la ficha 360 del cliente
+ * (issue #34), que necesita ancho para sus listas.
+ */
+export function AdminDialog({
+  title,
+  onClose,
+  size = "default",
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  size?: "default" | "wide" | "ficha";
+  children: React.ReactNode;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const classes = ["admin-dialog"];
+  if (size === "wide") classes.push("admin-dialog--wide");
+  if (size === "ficha") classes.push("admin-dialog--ficha");
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className={classes.join(" ")} role="dialog" aria-modal="true" aria-label={title}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">{title}</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export function AdminSelect({
   value,
   onChange,

@@ -902,6 +902,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(2, 6, 8, .72); backdrop-filter: blur(3px); overflow-y: auto; }
 .admin-dialog { display: grid; gap: 12px; width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 14px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
 .admin-dialog--wide { width: min(680px, 100%); }
+/* Ficha 360 del cliente (issue #34): más ancho para las listas de hechos. */
+.admin-dialog--ficha { width: min(1040px, 100%); }
 .admin-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .admin-dialog-title { color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
 .admin-dialog-text { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; }
@@ -915,6 +917,20 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    Acciones del detalle del cobro e historial de envíos: una fila por canal y
    día, con estado real (`sent`/`failed`/`opened`), destino, actor y hora en 24 h. */
 .admin-dialog-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Ficha 360 del cliente (issue #34) ──
+   El detalle del cliente dentro del diálogo: identidad y contacto, KPIs de
+   contratación y las tres listas de hechos (presupuestos, eventos y cobros).
+   Cada lista usa su plantilla de columnas (`.admin-table--cliente-*`), así el
+   encabezado y las filas comparten la misma grilla. */
+.admin-client-head { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-client-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-client-name { color: var(--a-text-strong); font: 700 15px/1.2 var(--font-body); }
+.admin-client-person { color: var(--a-muted); font-size: 12px; }
+.admin-client-contact { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; color: var(--a-muted-2); font-size: 12px; }
+.admin-client-contact > span { min-width: 0; overflow-wrap: anywhere; }
+.admin-client-contact .admin-actions { margin-left: auto; }
+.admin-client-history { display: grid; gap: 12px; }
 .admin-iconbtn[data-done="true"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 36%, transparent); }
 .admin-reminder-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
 .admin-reminder-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
@@ -944,7 +960,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 @keyframes admin-skeleton { to { background-position: -200% 0; } }
 
 /* Plantillas de columnas por vista */
-.admin-table--clientes { --clientes-cols: minmax(10rem, 1.5fr) minmax(9rem, 1.1fr) 8rem 6.5rem 5rem 7rem 8rem 6rem 5.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 65rem; }
+/* Clientes con la ficha 360 (issue #34): contratado y última actividad entran
+   al lugar del RUC (que sigue en el título de la fila, la ficha y la búsqueda).
+   El ancho mínimo entra sin scroll horizontal en desktop (1440). */
+.admin-table--clientes { --clientes-cols: minmax(7.5rem, 1.5fr) minmax(6rem, 1.1fr) 6.5rem 8rem 4.5rem 5.5rem 8rem 9rem 4.5rem 5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 63.5rem; }
 .admin-table--eventos { --eventos-cols: 8rem 8.5rem minmax(11rem, 1.6fr) minmax(8rem, 1.1fr) minmax(6rem, 1fr) 4.5rem 5rem 6.5rem 7rem; --admin-cols: var(--eventos-cols); --admin-table-min: 69.5rem; }
 .admin-table--presupuestos { --presupuestos-cols: minmax(10.5rem, 1.5fr) minmax(8.5rem, 1.1fr) 4rem 6.5rem 6rem 6rem 6rem 7.5rem minmax(8rem, 1.1fr) 12rem 13rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 94rem; }
 .admin-table--cobros { --cobros-cols: 8rem minmax(9rem, 1.2fr) minmax(9rem, 1.1fr) 8rem 8rem 7rem minmax(7rem, 1fr) 7rem; --admin-cols: var(--cobros-cols); --admin-table-min: 69rem; }
@@ -990,6 +1009,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
 .admin-table--tesoreria-movimientos { --tesoreria-movimientos-cols: 6.5rem 7.5rem minmax(11rem, 1.4fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8.5rem; --admin-cols: var(--tesoreria-movimientos-cols); --admin-table-min: 60rem; }
 .admin-table--gastos { --gastos-cols: 5.5rem minmax(12rem, 1.7fr) 7.5rem minmax(9.5rem, 1.2fr) minmax(7.5rem, 1fr) minmax(7rem, 1fr) 8.5rem; --admin-cols: var(--gastos-cols); --admin-table-min: 62rem; }
+/* Ficha 360 del cliente (issue #34): presupuestos con su cobro, eventos con el
+   checklist y cobros con su vencimiento. Entran sin scroll en el diálogo. */
+.admin-table--cliente-presupuestos { --cliente-presupuestos-cols: 6.5rem minmax(12rem, 2fr) 8rem 9rem 9rem; --admin-cols: var(--cliente-presupuestos-cols); --admin-table-min: 48rem; }
+.admin-table--cliente-eventos { --cliente-eventos-cols: 7.5rem minmax(14rem, 2fr) 8rem 7rem; --admin-cols: var(--cliente-eventos-cols); --admin-table-min: 39rem; }
+.admin-table--cliente-pagos { --cliente-pagos-cols: 7.5rem minmax(12rem, 2fr) 7.5rem 9rem 7.5rem; --admin-cols: var(--cliente-pagos-cols); --admin-table-min: 46.5rem; }
 .admin-table--por-confirmar { --por-confirmar-cols: minmax(10rem, 1.4fr) 6.5rem 7.5rem minmax(7rem, 1fr) 7.5rem 7rem 8rem 12rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 68rem; }
 
 /* ── Vínculo con inventario (issue #18) ──
