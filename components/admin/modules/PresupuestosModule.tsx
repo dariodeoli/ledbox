@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   budgetApprovalLabel,
   budgetApprovalMethodLabel,
@@ -38,6 +38,7 @@ import { portalBudgetUrl } from "@/lib/public-config";
 import { qrDataUrl } from "@/lib/qr";
 import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
+import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import {
   AdminBadge,
   AdminButton,
@@ -67,6 +68,9 @@ const STATUS_OPTIONS = [
   { value: "LOST", label: "Perdido" },
   { value: "CANCELLED", label: "Cancelado" },
 ];
+
+/** Tablero kanban: una columna por estado comercial (set de estados, sin máquina). */
+const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.slice(1).map((option) => ({ value: option.value, label: option.label }));
 
 const EMPTY_FORM = {
   clientId: "",
@@ -732,6 +736,8 @@ export function PresupuestosModule() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
+  const [boardError, setBoardError] = useState("");
+  const [view, setView] = useAdminModuleView("presupuestos");
 
   // Portal del cliente (issue #12): diálogo de link/QR y diálogo de aprobación.
   const [portalBudget, setPortalBudget] = useState<AdminBudgetRow | null>(null);
@@ -775,6 +781,65 @@ export function PresupuestosModule() {
       .filter((budget) => (status === "ALL" ? true : budget.status === status))
       .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]));
   }, [budgetRows, query, status]);
+
+  // Tablero (issue #26): el estado vive en las columnas, así que la búsqueda se
+  // aplica sin el filtro de estado. El movimiento pega el PATCH real del API.
+  const searched = useMemo(
+    () => budgetRows.filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name])),
+    [budgetRows, query],
+  );
+
+  const moveBudget = useCallback(async (budget: AdminBudgetRow, nextStatus: string) => {
+    setBoardError("");
+    const result = await adminSend("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
+    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
+  }, []);
+  const board = useAdminBoardMove({ rows: budgetRows, move: moveBudget, onError: setBoardError });
+
+  const boardCards = useMemo<AdminBoardCardData[]>(
+    () =>
+      board.rows.map((budget) => {
+        const paid = collectedAmount(budget.payments);
+        const balance = budget.total - paid;
+        const approvalState = budgetApprovalState(budget);
+        return {
+          id: budget.id,
+          status: budget.status,
+          title: budget.title,
+          subtitle: [budget.client.company || budget.client.name, budget.event?.name ?? null].filter(Boolean).join(" · "),
+          amount: budget.total,
+          amountNote: balance > 0 ? `saldo ${formatMoney(balance)}` : "cobrado",
+          date: budget.validUntil,
+          dateTitle: `Validez de la oferta: ${budget.title}`,
+          badges: [
+            {
+              label: budgetApprovalLabel(approvalState),
+              tone: budgetApprovalTone(approvalState),
+              title: portalSummary(budget),
+            },
+          ],
+          detail: `${formatNumber(budget.items.length)} ítem${budget.items.length === 1 ? "" : "s"} · cobrado ${formatMoney(paid)}`,
+          actions: (
+            <>
+              <AdminIconLink
+                href={`/imprimir/presupuesto/${budget.id}`}
+                icon="print"
+                label={`Imprimir presupuesto: ${budget.title}`}
+                external
+              />
+              <AdminButton
+                title={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
+                aria-label={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
+                onClick={() => openPortal(budget)}
+              >
+                QR
+              </AdminButton>
+            </>
+          ),
+        };
+      }),
+    [board.rows],
+  );
 
   const totals = useMemo(() => {
     return budgetRows.reduce(
@@ -1099,7 +1164,10 @@ export function PresupuestosModule() {
           label="Buscar presupuestos"
           placeholder="Buscar por título, cliente o evento…"
         />
-        <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        {view === "list" ? (
+          <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        ) : null}
+        <AdminViewSwitch view={view} onChange={setView} label="Vista de presupuestos" />
         {canManagePayments ? (
           <AdminButton
             icon="finance"
@@ -1126,6 +1194,7 @@ export function PresupuestosModule() {
       </AdminToolbar>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       {writable && showForm ? (
         <AdminFormPanel
@@ -1294,7 +1363,20 @@ export function PresupuestosModule() {
         emptyTitle="Todavía no hay presupuestos"
         emptyHint="Creá un presupuesto para seguir venta, costos, margen y cobros."
       >
-        {rows.length === 0 ? (
+        {view === "board" ? (
+          searched.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+          ) : (
+            <AdminBoard
+              label="Presupuestos"
+              columns={BOARD_COLUMNS}
+              cards={boardCards}
+              canMove={writable}
+              movingIds={board.movingIds}
+              onMove={writable ? board.moveTo : undefined}
+            />
+          )
+        ) : rows.length === 0 ? (
           <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : (
           <AdminTable

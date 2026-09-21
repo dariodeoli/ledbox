@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   formatDateShort,
   formatDateTime,
@@ -14,6 +14,7 @@ import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   isSupplierJobOpen,
   supplierJobBalance,
+  supplierJobNextStatuses,
   supplierJobTransitions,
   SUPPLIER_CATEGORIES,
   SUPPLIER_JOB_STATUSES,
@@ -21,6 +22,7 @@ import {
   type AdminSupplierRow,
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import {
   AdminBadge,
   AdminButton,
@@ -66,6 +68,9 @@ const JOB_STATUS_OPTIONS = [
   { value: "OPEN", label: "Abiertos" },
   ...SUPPLIER_JOB_STATUSES.map((value) => ({ value, label: jobStatusLabel(value) })),
 ];
+
+/** Tablero kanban de trabajos: una columna por estado real de la máquina del API. */
+const JOB_BOARD_COLUMNS: AdminBoardColumn[] = SUPPLIER_JOB_STATUSES.map((value) => ({ value, label: jobStatusLabel(value) }));
 
 type SupplierForm = {
   id: string;
@@ -142,6 +147,7 @@ export function ProveedoresModule() {
 
   const [query, setQuery] = useState("");
   const [jobStatus, setJobStatus] = useState("ALL");
+  const [jobsView, setJobsView] = useAdminModuleView("trabajos");
   const [supplierForm, setSupplierForm] = useState<SupplierForm | null>(null);
   const [supplierBusy, setSupplierBusy] = useState(false);
   const [supplierError, setSupplierError] = useState("");
@@ -149,6 +155,7 @@ export function ProveedoresModule() {
   const [jobForm, setJobForm] = useState<JobForm>(EMPTY_JOB);
   const [jobBusy, setJobBusy] = useState(false);
   const [jobError, setJobError] = useState("");
+  const [boardError, setBoardError] = useState("");
   const [notice, setNotice] = useState("");
 
   const writable = canWriteFinance(role);
@@ -161,13 +168,19 @@ export function ProveedoresModule() {
     [suppliers, query],
   );
 
+  /** Búsqueda compartida por lista y tablero: el filtro de estado es de la lista. */
+  const searchedJobs = useMemo(
+    () =>
+      jobs.filter((job) =>
+        matchesQuery(query, [job.supplier.name, job.event?.name, job.description, jobStatusLabel(job.status), supplierCategoryLabel(job.category)]),
+      ),
+    [jobs, query],
+  );
+
   const jobRows = useMemo(
     () =>
-      jobs
+      searchedJobs
         .filter((job) => (jobStatus === "ALL" ? true : jobStatus === "OPEN" ? isSupplierJobOpen(job.status) : job.status === jobStatus))
-        .filter((job) =>
-          matchesQuery(query, [job.supplier.name, job.event?.name, job.description, jobStatusLabel(job.status), supplierCategoryLabel(job.category)]),
-        )
         .sort((a, b) => {
           const openDifference = (isSupplierJobOpen(a.status) ? 0 : 1) - (isSupplierJobOpen(b.status) ? 0 : 1);
           if (openDifference !== 0) return openDifference;
@@ -176,7 +189,60 @@ export function ProveedoresModule() {
           if (aDue !== bDue) return aDue - bDue;
           return a.description.localeCompare(b.description, "es");
         }),
-    [jobs, jobStatus, query],
+    [searchedJobs, jobStatus],
+  );
+
+  // Tablero de trabajos: respeta la máquina de estados del API (`supplierJobNextStatuses`);
+  // el drag/menú solo ofrece transiciones reales y el API revalida.
+  const moveJob = useCallback(async (job: AdminSupplierJobRow, nextStatus: string) => {
+    setBoardError("");
+    const result = await adminSend("/api/admin/suppliers/jobs", { id: job.id, status: nextStatus }, "PATCH");
+    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
+  }, []);
+  const board = useAdminBoardMove({ rows: jobs, move: moveJob, onError: setBoardError });
+
+  const boardCards = useMemo<AdminBoardCardData[]>(
+    () =>
+      board.rows.map((job) => {
+        const balance = supplierJobBalance(job);
+        const open = isSupplierJobOpen(job.status);
+        const paymentDetail = [job.paymentMethod, job.receipt ? `comprobante ${job.receipt}` : null].filter(Boolean).join(" · ");
+        return {
+          id: job.id,
+          status: job.status,
+          title: job.description,
+          subtitle: [job.supplier.name, job.event?.name ?? null].filter(Boolean).join(" · "),
+          amount: balance,
+          amountNote: `de ${formatMoney(job.total)}`,
+          date: open ? job.dueAt : null,
+          dateTitle: `Cuánto falta para el vencimiento: ${job.description}`,
+          detail: open
+            ? [paymentDetail || null, `anticipo ${formatMoney(job.advance)}`].filter(Boolean).join(" · ")
+            : "Trabajo cerrado: no admite más cambios",
+          targets: supplierJobNextStatuses(job),
+          actions: (
+            <>
+              {writable && open && supplierJobTransitions(job.status).length > 0 ? (
+                <AdminButton
+                  icon="arrow-right"
+                  title={`Avanzar estado: ${job.description}`}
+                  aria-label={`Avanzar estado: ${job.description}`}
+                  onClick={() => openJobStatus(job)}
+                />
+              ) : null}
+              {writable ? (
+                <AdminButton
+                  icon="edit"
+                  title={`Editar trabajo: ${job.description}`}
+                  aria-label={`Editar trabajo: ${job.description}`}
+                  onClick={() => openJobEdit(job)}
+                />
+              ) : null}
+            </>
+          ),
+        };
+      }),
+    [board.rows, writable],
   );
 
   const totals = useMemo(() => {
@@ -336,20 +402,26 @@ export function ProveedoresModule() {
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar proveedores y trabajos" placeholder="Buscar por proveedor, trabajo, evento o rubro…" />
-        <AdminSelect value={jobStatus} onChange={setJobStatus} label="Filtrar trabajos por estado" options={JOB_STATUS_OPTIONS} />
+        {jobsView === "list" ? (
+          <AdminSelect value={jobStatus} onChange={setJobStatus} label="Filtrar trabajos por estado" options={JOB_STATUS_OPTIONS} />
+        ) : null}
       </AdminToolbar>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       <AdminPanel
         title="Trabajos por evento"
         meta={`${formatNumber(jobRows.length)} de ${formatNumber(jobs.length)}`}
         action={
-          writable ? (
-            <AdminButton variant="primary" icon="plus" onClick={openJobCreate} aria-expanded={jobPanel?.mode === "create"}>
-              Nuevo trabajo
-            </AdminButton>
-          ) : null
+          <span className="admin-panel-actions">
+            <AdminViewSwitch view={jobsView} onChange={setJobsView} label="Vista de trabajos" />
+            {writable ? (
+              <AdminButton variant="primary" icon="plus" onClick={openJobCreate} aria-expanded={jobPanel?.mode === "create"}>
+                Nuevo trabajo
+              </AdminButton>
+            ) : null}
+          </span>
         }
       >
         {jobError && jobPanel === null ? <AdminNote tone="error">{jobError}</AdminNote> : null}
@@ -570,9 +642,22 @@ export function ProveedoresModule() {
           emptyTitle="Sin trabajos de proveedor"
           emptyHint="Cargá el trabajo contratado para seguir el anticipo, la entrega y el saldo."
         >
-          {jobRows.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+        {jobsView === "board" ? (
+          searchedJobs.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
+            <AdminBoard
+              label="Trabajos de proveedores"
+              columns={JOB_BOARD_COLUMNS}
+              cards={boardCards}
+              canMove={writable}
+              movingIds={board.movingIds}
+              onMove={writable ? board.moveTo : undefined}
+            />
+          )
+        ) : jobRows.length === 0 ? (
+          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+        ) : (
             <AdminTable
               view="trabajos"
               label="Trabajos de proveedores"

@@ -1233,6 +1233,60 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-demo-exit { margin-left: auto; }
 }
 
+/* ── Tableros kanban (issue #26) ──
+   Un solo tablero para todos los módulos: columnas por estado con su tono y
+   contador, tarjetas con identidad y dato clave, arrastre nativo y «Mover a…»
+   como alternativa accesible. El scroll horizontal es silencioso y con
+   `scroll-snap` en pantallas chicas; la página nunca desborda. */
+.admin-viewswitch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--a-line-2); border-radius: 9px; background: var(--a-bg-2); }
+.admin-viewswitch-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--a-muted-2); font: 700 10.5px var(--font-body); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; transition: background .15s, color .15s; }
+.admin-viewswitch-btn:hover { color: var(--a-accent); }
+.admin-viewswitch-btn[aria-pressed="true"] { background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-board-wrap { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 4px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.admin-board-wrap::-webkit-scrollbar { display: none; }
+.admin-panel .admin-board-wrap { padding: 0 10px 10px; }
+.admin-board { display: flex; align-items: stretch; gap: 10px; width: max-content; min-width: 100%; }
+.admin-board-col { display: flex; flex-direction: column; gap: 7px; flex: 0 0 var(--a-board-col, 16.5rem); width: var(--a-board-col, 16.5rem); min-height: 9.5rem; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-bg-2); scroll-snap-align: start; transition: border-color .15s, background .15s; }
+.admin-board-col[data-over="true"] { border-color: var(--a-accent); background: var(--a-accent-soft); }
+.admin-board-col-head { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+.admin-board-col-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--a-muted); }
+.admin-board-col[data-tone="accent"] .admin-board-col-dot { background: var(--a-accent); }
+.admin-board-col[data-tone="info"] .admin-board-col-dot { background: var(--a-info); }
+.admin-board-col[data-tone="ok"] .admin-board-col-dot { background: var(--a-ok); }
+.admin-board-col[data-tone="warn"] .admin-board-col-dot { background: var(--a-warn); }
+.admin-board-col[data-tone="danger"] .admin-board-col-dot { background: var(--a-danger); }
+.admin-board-col-title { color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+.admin-board-col-count { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-board-cards { display: grid; align-content: start; gap: 7px; flex: 1 1 auto; }
+.admin-board-col-empty { padding: 12px 0; color: var(--a-muted); font-size: 11px; text-align: center; }
+.admin-board-card { display: grid; gap: 5px; padding: 8px 9px; border: 1px solid var(--a-line); border-left: 3px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel); transition: border-color .15s; }
+.admin-board-col[data-tone="accent"] .admin-board-card { border-left-color: var(--a-accent); }
+.admin-board-col[data-tone="info"] .admin-board-card { border-left-color: var(--a-info); }
+.admin-board-col[data-tone="ok"] .admin-board-card { border-left-color: var(--a-ok); }
+.admin-board-col[data-tone="warn"] .admin-board-card { border-left-color: var(--a-warn); }
+.admin-board-col[data-tone="danger"] .admin-board-card { border-left-color: var(--a-danger); }
+.admin-board-card[draggable="true"] { cursor: grab; }
+.admin-board-card[draggable="true"]:active { cursor: grabbing; }
+.admin-board-card:hover { border-color: var(--a-line-2); }
+.admin-board-card[data-moving="true"] { opacity: .55; }
+.admin-board-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.admin-board-card-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.admin-board-card-actions { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.admin-board-card-actions .admin-btn { height: 26px; min-height: 26px; padding: 0 7px; font-size: 10px; }
+.admin-board-card-actions .admin-btn--only-icon { width: 26px; }
+.admin-board-card-actions .admin-iconbtn { width: 26px; height: 26px; }
+.admin-board-card-sub { overflow: hidden; color: var(--a-muted-2); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-board-card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.admin-board-card-facts { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.admin-board-card-amount { color: var(--a-text-strong); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-board-card-date { display: inline-flex; align-items: center; gap: 5px; color: var(--a-muted); font-size: 10.5px; }
+.admin-board-card-detail { overflow: hidden; color: var(--a-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-board-card-move { display: flex; }
+.admin-board-move { width: 100%; max-width: none; height: 28px; font-size: 11.5px; }
+@media (max-width: 720px) {
+  .admin-board { --a-board-col: min(78vw, 16.5rem); }
+}
+
 /* ── Responsive ── */
 @media (min-width: 720px) {
   .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }

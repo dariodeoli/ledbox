@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import { CommercialStatus, type Prisma } from "@prisma/client";
+import { budgetStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -178,8 +179,12 @@ function parseInstallments(raw: unknown): ParsedInstallments {
 }
 
 /**
- * `PATCH /api/admin/budgets` (issues #14 y #18).
+ * `PATCH /api/admin/budgets` (issues #14, #18 y #26).
  *
+ * - `status`: estado comercial desde el tablero (issue #26). Set idempotente,
+ *   con la capacidad `budgets.write` y auditoría; no toca la aprobación del
+ *   portal (`approvedAt`/`approvalMethod`): la evidencia de aprobación sigue
+ *   siendo del flujo de `/api/admin/budgets/approval` y del portal.
  * - `kind: "item-link"`: vincula (o desvincula con `inventoryId: null`) un ítem
  *   del presupuesto con un artículo del inventario de la empresa activa. Solo el
  *   vínculo reserva stock al aprobar; sin vínculo el ítem no toca el inventario.
@@ -195,6 +200,33 @@ export async function PATCH(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
   if (!budgetId) return jsonError("budgetId is required.", 400);
+
+  if (body.status !== undefined) {
+    const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
+    if (!Object.values(CommercialStatus).includes(status as CommercialStatus)) return jsonError("Invalid budget status.", 400);
+    const budget = await db.budget.findFirst({
+      where: { id: budgetId, organizationId },
+      select: { id: true, title: true, status: true, client: { select: { name: true, company: true } } },
+    });
+    if (!budget) return jsonError("Budget not found.", 404);
+    if (budget.status === status) {
+      return Response.json({ budget: { id: budget.id, status: budget.status }, unchanged: true });
+    }
+    const updated = await db.budget.update({
+      where: { id: budget.id },
+      data: { status: status as CommercialStatus },
+      select: { id: true, status: true },
+    });
+    await recordAudit({
+      context: auth.context,
+      action: "status",
+      entity: "Budget",
+      entityId: budget.id,
+      summary: `Cambió el estado del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}» a ${budgetStatusLabel(updated.status)}`,
+      detail: { changes: { status: { from: budget.status, to: updated.status } } },
+    });
+    return Response.json({ budget: updated });
+  }
 
   if (body.kind === "item-link") {
     const itemId = typeof body.itemId === "string" ? body.itemId : "";

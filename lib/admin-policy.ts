@@ -104,6 +104,14 @@ export function canWriteOperations(role: AdminRole | null | undefined): boolean 
   return role === "OWNER" || role === "ADMIN" || role === "OPERATIONS";
 }
 
+/**
+ * Cartera comercial: mismo alcance que `clients.write` en el API (`/api/leads`
+ * PATCH). FINANCE no mueve leads, así que tampoco ve acciones de pipeline.
+ */
+export function canWriteClients(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN" || role === "OPERATIONS";
+}
+
 export function canManageUsers(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN";
 }
