@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   if (body.kind !== "client") return jsonError("Unknown finance entry.", 400);
   if (typeof body.clientId !== "string" || !Number.isFinite(Number(body.amount)) || Number(body.amount) <= 0) return jsonError("Client and positive amount are required.", 400);
-  const client = await db.client.findFirst({ where: { id: body.clientId, organizationId }, select: { id: true } });
+  const client = await db.client.findFirst({ where: { id: body.clientId, organizationId }, select: { id: true, name: true } });
   if (!client) return jsonError("Client not found.", 404);
   const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
   if (budgetId) {
@@ -51,6 +52,14 @@ export async function POST(request: Request) {
       method: typeof body.method === "string" ? body.method : undefined,
       reference: typeof body.reference === "string" ? body.reference : undefined,
     },
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "ClientPayment",
+    entityId: payment.id,
+    summary: `Registró un cobro del cliente «${client.name}»`,
+    detail: { fields: auditPick(payment, ["clientId", "budgetId", "amount", "method", "reference", "paidAt"]) },
   });
   return Response.json({ payment }, { status: 201 });
 }

@@ -395,3 +395,208 @@ export function formatDayWhen(dayKey: string | null | undefined): string {
   if (distance === -1) return "ayer";
   return distance > 0 ? `en ${formatNumber(distance)} d` : `hace ${formatNumber(Math.abs(distance))} d`;
 }
+// ── Auditoría ───────────────────────────────────────────────────────────────
+
+const AUDIT_ACTION: Record<string, string> = {
+  create: "Creó",
+  update: "Editó",
+  delete: "Eliminó",
+  status: "Cambió estado",
+  checkout: "Salida",
+  checkin: "Devolución",
+  convert: "Convirtió",
+};
+
+const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
+  create: "ok",
+  update: "info",
+  delete: "danger",
+  status: "warn",
+  checkout: "accent",
+  checkin: "info",
+  convert: "accent",
+};
+
+const AUDIT_ENTITY: Record<string, string> = {
+  Client: "Cliente",
+  Event: "Evento",
+  Budget: "Presupuesto",
+  ClientPayment: "Cobro",
+  Supplier: "Proveedor",
+  SupplierJob: "Trabajo de proveedor",
+  InventoryItem: "Inventario",
+  EventInventory: "Asignación de equipo",
+  EventTask: "Tarea",
+  Promoter: "Promotora",
+  AdminUser: "Usuario",
+  Lead: "Lead",
+};
+
+const AUDIT_FIELD: Record<string, string> = {
+  name: "Nombre",
+  company: "Empresa",
+  type: "Tipo",
+  email: "Correo",
+  phone: "Teléfono",
+  ruc: "RUC",
+  notes: "Notas",
+  active: "Activo",
+  status: "Estado",
+  role: "Rol",
+  title: "Título",
+  location: "Lugar",
+  startsAt: "Inicio",
+  endsAt: "Fin",
+  setupAt: "Montaje",
+  strikeAt: "Desmontaje",
+  clientId: "Cliente",
+  eventId: "Evento",
+  budgetId: "Presupuesto",
+  supplierId: "Proveedor",
+  inventoryId: "Ítem",
+  items: "Ítems",
+  itemCount: "Ítems",
+  subtotal: "Subtotal",
+  discount: "Descuento",
+  total: "Total",
+  costEstimate: "Costo estimado",
+  unitPrice: "Precio unitario",
+  costPrice: "Costo unitario",
+  validUntil: "Válido hasta",
+  amount: "Monto",
+  method: "Medio de pago",
+  reference: "Referencia",
+  paidAt: "Pagado",
+  category: "Categoría",
+  kind: "Tipo de ítem",
+  quantity: "Cantidad",
+  replacementCost: "Reposición",
+  dailyCost: "Costo diario",
+  specialties: "Especialidades",
+  paymentTerms: "Condiciones de pago",
+  description: "Descripción",
+  advance: "Anticipo",
+  dueAt: "Vencimiento",
+  deliveredAt: "Entrega",
+  paymentMethod: "Medio de pago",
+  receipt: "Comprobante",
+  checkedOut: "Salida registrada",
+  checkedOutAt: "Fecha de salida",
+  checkedIn: "Devolución registrada",
+  checkedInAt: "Fecha de devolución",
+  conditionOut: "Estado al retirar",
+  conditionIn: "Estado al devolver",
+  damagedQuantity: "Dañadas",
+  missingQuantity: "Faltantes",
+  damageNotes: "Notas de daños",
+  completedAt: "Completada",
+  internalNotes: "Notas internas",
+  clientCreated: "Cliente creado",
+  newAccount: "Cuenta nueva",
+  fromLeadId: "Lead de origen",
+};
+
+/** Campos cuyo valor se dibuja como monto (PYG entero). */
+const AUDIT_MONEY_FIELDS: ReadonlySet<string> = new Set([
+  "subtotal",
+  "discount",
+  "total",
+  "costEstimate",
+  "amount",
+  "advance",
+  "replacementCost",
+  "dailyCost",
+  "unitPrice",
+  "costPrice",
+]);
+
+export const auditActionLabel = (value: string | null | undefined) => label(AUDIT_ACTION, value);
+export const auditEntityLabel = (value: string | null | undefined) => label(AUDIT_ENTITY, value);
+
+export function auditActionTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return AUDIT_ACTION_TONES[value] ?? "neutral";
+}
+
+/** Etiqueta legible del campo tocado; los nombres desconocidos se muestran tal cual. */
+export function auditFieldLabel(field: string): string {
+  return AUDIT_FIELD[field] ?? field;
+}
+
+/** Valor de un cambio en formato legible (estados, roles, fechas y montos incluidos). */
+export function auditValueLabel(entity: string | null | undefined, field: string | null | undefined, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  if (typeof value === "object") return JSON.stringify(value);
+  const text = String(value);
+  const key = field ?? "";
+  if (key === "status") {
+    if (entity === "Event") return eventStatusLabel(text);
+    if (entity === "Budget") return budgetStatusLabel(text);
+    if (entity === "SupplierJob") return jobStatusLabel(text);
+    if (entity === "InventoryItem") return inventoryStatusLabel(text);
+    if (entity === "Lead") return leadStatusLabel(text);
+  }
+  if (key === "role") return adminRoleLabel(text);
+  if (key === "type" && entity === "Client") return clientTypeLabel(text);
+  if (key === "type" && entity === "EventTask") return taskTypeLabel(text);
+  if (key === "kind") return inventoryKindLabel(text);
+  if (key === "category") return supplierCategoryLabel(text);
+  if (key === "items" || key === "itemCount") return numberFormat.format(Number(text) || 0);
+  if (AUDIT_MONEY_FIELDS.has(key)) {
+    const amount = Number(text);
+    return Number.isFinite(amount) ? formatMoney(amount) : text;
+  }
+  if (/(At|Date)$/.test(key)) {
+    const date = new Date(text);
+    return Number.isNaN(date.getTime()) ? text : formatDateTime(date);
+  }
+  return text;
+}
+
+export type AdminAuditLine = { label: string; from?: string; to?: string; value?: string };
+
+/** Detalle de un cambio en líneas legibles: `Estado: Borrador → Confirmado`. */
+export function auditDetailLines(
+  entity: string,
+  detail:
+    | {
+        changes?: Record<string, { from: unknown; to: unknown }>;
+        fields?: Record<string, unknown>;
+        before?: Record<string, unknown>;
+      }
+    | null
+    | undefined,
+): AdminAuditLine[] {
+  if (!detail) return [];
+  const lines: AdminAuditLine[] = [];
+  if (detail.changes) {
+    for (const [field, change] of Object.entries(detail.changes)) {
+      lines.push({
+        label: auditFieldLabel(field),
+        from: auditValueLabel(entity, field, change.from),
+        to: auditValueLabel(entity, field, change.to),
+      });
+    }
+  }
+  for (const [field, value] of Object.entries(detail.fields ?? {})) {
+    lines.push({ label: auditFieldLabel(field), value: auditValueLabel(entity, field, value) });
+  }
+  for (const [field, value] of Object.entries(detail.before ?? {})) {
+    lines.push({ label: auditFieldLabel(field), value: auditValueLabel(entity, field, value) });
+  }
+  return lines;
+}
+
+/** Detalle en una línea para el `title` de la fila. */
+export function auditDetailText(
+  entity: string,
+  detail: Parameters<typeof auditDetailLines>[1],
+): string | undefined {
+  const lines = auditDetailLines(entity, detail);
+  if (lines.length === 0) return undefined;
+  return lines
+    .map((line) => (line.from !== undefined || line.to !== undefined ? `${line.label}: ${line.from} → ${line.to}` : `${line.label}: ${line.value}`))
+    .join(" · ");
+}
+

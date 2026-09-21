@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import { jobStatusLabel } from "@/lib/admin-format";
 import {
   isSupplierJobOpen,
   supplierJobNextStatuses,
@@ -12,6 +13,7 @@ import {
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +38,22 @@ const jobInclude = {
   supplier: { select: { id: true, name: true, phone: true, category: true } },
   event: { select: { id: true, name: true, startsAt: true, status: true } },
 } as const;
+
+/** Campos que se auditan al crear o editar un trabajo de proveedor. */
+const JOB_AUDIT_FIELDS = [
+  "description",
+  "category",
+  "eventId",
+  "total",
+  "advance",
+  "status",
+  "dueAt",
+  "deliveredAt",
+  "paidAt",
+  "paymentMethod",
+  "receipt",
+  "notes",
+] as const;
 
 function isCategory(value: unknown): value is SupplierCategoryValue {
   return typeof value === "string" && (SUPPLIER_CATEGORIES as readonly string[]).includes(value);
@@ -102,7 +120,7 @@ export async function POST(request: Request) {
   if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
   if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
 
-  const supplier = await db.supplier.findFirst({ where: { id: body.supplierId, organizationId }, select: { id: true, category: true } });
+  const supplier = await db.supplier.findFirst({ where: { id: body.supplierId, organizationId }, select: { id: true, category: true, name: true } });
   if (!supplier) return jsonError("Supplier not found.", 404);
 
   const eventId = typeof body.eventId === "string" && body.eventId ? body.eventId : "";
@@ -132,6 +150,14 @@ export async function POST(request: Request) {
       status: advance > 0 ? "ADVANCE_PAID" : "PENDING",
     },
     include: jobInclude,
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "SupplierJob",
+    entityId: job.id,
+    summary: `Cargó el trabajo «${job.description}» del proveedor «${supplier.name}»`,
+    detail: { fields: auditPick(job, JOB_AUDIT_FIELDS) },
   });
   return Response.json({ job }, { status: 201 });
 }
@@ -220,5 +246,18 @@ export async function PATCH(request: Request) {
   }
 
   const updated = await db.supplierJob.update({ where: { id: job.id }, data, include: jobInclude });
+  const changes = auditChanges(job, updated, JOB_AUDIT_FIELDS);
+  if (changes) {
+    await recordAudit({
+      context: auth.context,
+      action: "status" in changes ? "status" : "update",
+      entity: "SupplierJob",
+      entityId: job.id,
+      summary: "status" in changes
+        ? `Cambió el estado del trabajo «${updated.description}» a ${jobStatusLabel(updated.status)}`
+        : `Editó el trabajo «${updated.description}» del proveedor «${updated.supplier.name}»`,
+      detail: { changes },
+    });
+  }
   return Response.json({ job: updated });
 }

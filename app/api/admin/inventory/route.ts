@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { InventoryStatus } from "@prisma/client";
+import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,9 +194,20 @@ export async function POST(request: Request) {
     const status = typeof body.status === "string" ? body.status : "";
     if (!id) return jsonError("Falta el ítem de inventario.", 400);
     if (!(INVENTORY_STATUSES as readonly string[]).includes(status)) return jsonError("Estado de inventario inválido.", 400);
-    const existing = await db.inventoryItem.findFirst({ where: { id, organizationId }, select: { id: true, name: true } });
+    const existing = await db.inventoryItem.findFirst({ where: { id, organizationId }, select: { id: true, name: true, status: true } });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
     const inventory = await db.inventoryItem.update({ where: { id: existing.id }, data: { status: status as InventoryStatus } });
+    const changes = auditChanges({ status: existing.status }, { status: inventory.status }, ["status"]);
+    if (changes) {
+      await recordAudit({
+        context: auth.context,
+        action: "status",
+        entity: "InventoryItem",
+        entityId: inventory.id,
+        summary: `Cambió «${existing.name}» a ${inventoryStatusLabel(inventory.status)}`,
+        detail: { changes },
+      });
+    }
     return Response.json({ inventory });
   }
 
@@ -223,7 +236,7 @@ export async function POST(request: Request) {
 
     const existing = await db.eventInventory.findUnique({
       where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-      select: { id: true },
+      select: { id: true, quantity: true, startsAt: true, endsAt: true },
     });
     const rows = await loadAssignments(item.id, organizationId, existing?.id);
     const availability = buildAvailability(item, rows, startsAt, endsAt);
@@ -245,6 +258,23 @@ export async function POST(request: Request) {
       create: { id: randomUUID(), eventId: event.id, inventoryId: item.id, quantity, startsAt, endsAt },
       update: { quantity, startsAt, endsAt },
     });
+    const assignmentChanges = existing
+      ? auditChanges(existing, assignment, ["quantity", "startsAt", "endsAt"])
+      : null;
+    if (!existing || assignmentChanges) {
+      await recordAudit({
+        context: auth.context,
+        action: existing ? "update" : "create",
+        entity: "EventInventory",
+        entityId: assignment.id,
+        summary: existing
+          ? `Actualizó la asignación de «${item.name}» en «${event.name}»`
+          : `Asignó «${item.name}» a «${event.name}» (${quantity} unidad${quantity === 1 ? "" : "es"})`,
+        detail: existing
+          ? { changes: assignmentChanges ?? {} }
+          : { fields: { ...auditPick(assignment, ["quantity", "startsAt", "endsAt"]), eventId: event.id, inventoryId: item.id } },
+      });
+    }
     return Response.json({ assignment }, { status: 201 });
   }
 
@@ -254,7 +284,17 @@ export async function POST(request: Request) {
     const conditionOut = typeof body.conditionOut === "string" ? body.conditionOut.trim() : "";
     if (!conditionOut) return jsonError("Indicá el estado del equipo al retirar.", 400);
     if (conditionOut.length > 160) return jsonError("El estado al retirar no puede superar 160 caracteres.", 400);
-    const existing = await db.eventInventory.findFirst({ where: { id, event: { organizationId } }, select: { id: true, checkedOut: true, checkedOutAt: true } });
+    const existing = await db.eventInventory.findFirst({
+      where: { id, event: { organizationId } },
+      select: {
+        id: true,
+        checkedOut: true,
+        checkedOutAt: true,
+        conditionOut: true,
+        inventory: { select: { name: true } },
+        event: { select: { name: true } },
+      },
+    });
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
     if (existing.checkedOutAt || existing.checkedOut) return jsonError("La salida ya está registrada para esta asignación.", 409);
     const at = parseDate(body.at) ?? new Date();
@@ -262,6 +302,17 @@ export async function POST(request: Request) {
       where: { id: existing.id },
       data: { checkedOut: true, checkedOutAt: at, conditionOut },
     });
+    const changes = auditChanges(existing, assignment, ["checkedOut", "checkedOutAt", "conditionOut"]);
+    if (changes) {
+      await recordAudit({
+        context: auth.context,
+        action: "checkout",
+        entity: "EventInventory",
+        entityId: assignment.id,
+        summary: `Registró la salida de «${existing.inventory.name}» para «${existing.event.name}»`,
+        detail: { changes },
+      });
+    }
     return Response.json({ assignment });
   }
 
@@ -281,7 +332,20 @@ export async function POST(request: Request) {
 
     const existing = await db.eventInventory.findFirst({
       where: { id, event: { organizationId } },
-      select: { id: true, quantity: true, checkedOut: true, checkedOutAt: true, checkedIn: true, checkedInAt: true },
+      select: {
+        id: true,
+        quantity: true,
+        checkedOut: true,
+        checkedOutAt: true,
+        checkedIn: true,
+        checkedInAt: true,
+        conditionIn: true,
+        damagedQuantity: true,
+        missingQuantity: true,
+        damageNotes: true,
+        inventory: { select: { name: true } },
+        event: { select: { name: true } },
+      },
     });
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
     if (!existing.checkedOutAt && !existing.checkedOut) return jsonError("Registrá primero la salida del equipo.", 409);
@@ -294,6 +358,22 @@ export async function POST(request: Request) {
       where: { id: existing.id },
       data: { checkedIn: true, checkedInAt: at, conditionIn, damagedQuantity, missingQuantity, damageNotes: damageNotes || null },
     });
+    const changes = auditChanges(
+      existing,
+      assignment,
+      ["checkedIn", "checkedInAt", "conditionIn", "damagedQuantity", "missingQuantity", "damageNotes"],
+    );
+    if (changes) {
+      const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
+      await recordAudit({
+        context: auth.context,
+        action: "checkin",
+        entity: "EventInventory",
+        entityId: assignment.id,
+        summary: `Registró la devolución de «${existing.inventory.name}» de «${existing.event.name}»${damages ? ` (${damages})` : ""}`,
+        detail: { changes },
+      });
+    }
     return Response.json({ assignment });
   }
 
@@ -304,10 +384,15 @@ export async function POST(request: Request) {
       where: { id, event: { organizationId } },
       select: {
         id: true,
+        quantity: true,
+        startsAt: true,
+        endsAt: true,
         checkedOut: true,
         checkedOutAt: true,
         checkedIn: true,
         checkedInAt: true,
+        conditionOut: true,
+        conditionIn: true,
         inventory: { select: { name: true } },
         event: { select: { name: true } },
       },
@@ -319,6 +404,16 @@ export async function POST(request: Request) {
       return jsonError(`«${existing.inventory.name}» está afuera en «${existing.event.name}»: registrá la devolución antes de quitarlo.`, 409);
     }
     await db.eventInventory.delete({ where: { id: existing.id } });
+    await recordAudit({
+      context: auth.context,
+      action: "delete",
+      entity: "EventInventory",
+      entityId: existing.id,
+      summary: `Quitó «${existing.inventory.name}» de «${existing.event.name}»`,
+      detail: {
+        before: auditPick(existing, ["quantity", "startsAt", "endsAt", "checkedOutAt", "checkedInAt", "conditionOut", "conditionIn"]),
+      },
+    });
     return Response.json({ ok: true });
   }
 

@@ -787,6 +787,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--resumen-cobrar { --resumen-cobrar-cols: minmax(6rem, 1.1fr) minmax(7.5rem, 1.4fr) 6.5rem 7rem; --admin-cols: var(--resumen-cobrar-cols); --admin-table-min: 29rem; }
 .admin-table--resumen-pagar { --resumen-pagar-cols: minmax(6.5rem, 1.1fr) minmax(7.5rem, 1.4fr) 5.5rem 6.5rem; --admin-cols: var(--resumen-pagar-cols); --admin-table-min: 28.5rem; }
 .admin-table--resumen-avisos { --resumen-avisos-cols: 5.5rem minmax(9rem, 1.8fr) 6.5rem 7.5rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 30rem; }
+.admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
+
+/* ── Auditoría: filtros, detalle desplegable y paginación ──
+   La fecha del filtro es un campo propio (etiqueta arriba, input compacto) y el
+   detalle despliega los campos tocados con el antes tachado y el después en
+   negrita; el paginado va debajo de la tabla. */
+.admin-field--filter { flex: 0 0 auto; width: 9.5rem; }
+.admin-field--filter input { min-height: 34px; padding: 5px 8px; }
+.admin-audit-detail { position: sticky; left: 0; width: min(60rem, calc(100vw - 2.5rem)); margin-top: 6px; padding: 10px 12px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-audit-lines { display: grid; gap: 4px; margin: 0; }
+.admin-audit-line { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.admin-audit-line dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.admin-audit-line dd { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
+.admin-audit-from { color: var(--a-muted); text-decoration: line-through; }
+.admin-audit-arrow { color: var(--a-muted); }
+.admin-audit-to { color: var(--a-text-strong); font-weight: 600; }
+.admin-audit-meta { margin-top: 8px; color: var(--a-muted); font-size: 11px; overflow-wrap: anywhere; }
+.admin-audit-pager { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.admin-audit-pager-info { color: var(--a-muted-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ── Checklist operativo ── */
 .admin-check { position: relative; display: inline-flex; align-items: center; gap: 6px; color: var(--a-warn); font-size: 11px; cursor: pointer; }

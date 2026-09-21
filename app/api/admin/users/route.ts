@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { AdminRole } from "@prisma/client";
+import { adminRoleLabel } from "@/lib/admin-format";
 import { hashPassword } from "@/lib/server/auth";
 import { ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +61,14 @@ export async function POST(request: Request) {
     if (membership) return jsonError("A user with this email already belongs to this organization.", 409);
     // Cuenta existente de otra empresa: se suma la membresía sin tocar credenciales.
     const created = await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: existing.id, organizationId, role, active: true } });
+    await recordAudit({
+      context: auth.context,
+      action: "create",
+      entity: "AdminUser",
+      entityId: existing.id,
+      summary: `Agregó el acceso de «${existing.name}» (${existing.email}) a la empresa`,
+      detail: { fields: { name: existing.name, email: existing.email, role: created.role, newAccount: false } },
+    });
     return Response.json({ user: { id: existing.id, name: existing.name, email: existing.email, role: created.role, active: existing.active } }, { status: 201 });
   }
 
@@ -70,6 +80,14 @@ export async function POST(request: Request) {
       data: { id: randomUUID(), adminUserId: user.id, organizationId, role, active: true },
     });
     return { user, membership };
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "AdminUser",
+    entityId: created.user.id,
+    summary: `Creó el usuario «${created.user.name}» (${created.user.email}) con rol ${adminRoleLabel(created.membership.role)}`,
+    detail: { fields: { name: created.user.name, email: created.user.email, role: created.membership.role, newAccount: true } },
   });
   return Response.json({ user: { id: created.user.id, name: created.user.name, email: created.user.email, role: created.membership.role, active: created.user.active } }, { status: 201 });
 }
@@ -104,6 +122,25 @@ export async function PATCH(request: Request) {
     }
     return next;
   });
+  const changes = auditChanges(
+    { role: membership.role, active: membership.active },
+    { role: updated.role, active: updated.active },
+    ["role", "active"],
+  );
+  if (changes) {
+    const who = `«${membership.user.name}» (${membership.user.email})`;
+    await recordAudit({
+      context: auth.context,
+      action: "active" in changes ? "status" : "update",
+      entity: "AdminUser",
+      entityId: membership.user.id,
+      summary:
+        "active" in changes
+          ? `${updated.active ? "Activó" : "Desactivó"} el acceso de ${who}`
+          : `Cambió el rol de ${who} a ${adminRoleLabel(updated.role)}`,
+      detail: { changes },
+    });
+  }
   return Response.json({
     user: {
       id: membership.user.id,

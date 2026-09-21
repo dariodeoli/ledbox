@@ -3,6 +3,7 @@ import { SUPPLIER_CATEGORIES, type SupplierCategoryValue } from "@/lib/admin-typ
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export const dynamic = "force-dynamic";
  */
 
 const MAX = { name: 120, company: 120, phone: 30, email: 200, terms: 200, notes: 1000 } as const;
+
+/** Campos que se auditan al crear o editar un proveedor. */
+const SUPPLIER_AUDIT_FIELDS = ["name", "company", "phone", "email", "category", "paymentTerms", "notes", "active"] as const;
 
 function isCategory(value: unknown): value is SupplierCategoryValue {
   return typeof value === "string" && (SUPPLIER_CATEGORIES as readonly string[]).includes(value);
@@ -75,6 +79,14 @@ export async function POST(request: Request) {
       notes: optionalText(body.notes, MAX.notes) ?? undefined,
     },
   });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "Supplier",
+    entityId: supplier.id,
+    summary: `Cargó el proveedor «${supplier.name}»`,
+    detail: { fields: auditPick(supplier, SUPPLIER_AUDIT_FIELDS) },
+  });
   return Response.json({ supplier }, { status: 201 });
 }
 
@@ -85,7 +97,7 @@ export async function PATCH(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   if (typeof body.id !== "string") return jsonError("Supplier id is required.", 400);
 
-  const supplier = await db.supplier.findFirst({ where: { id: body.id, organizationId }, select: { id: true } });
+  const supplier = await db.supplier.findFirst({ where: { id: body.id, organizationId } });
   if (!supplier) return jsonError("Supplier not found.", 404);
 
   const name = optionalText(body.name, MAX.name);
@@ -108,5 +120,18 @@ export async function PATCH(request: Request) {
       ...(body.active !== undefined ? { active: body.active as boolean } : {}),
     },
   });
+  const changes = auditChanges(supplier, updated, SUPPLIER_AUDIT_FIELDS);
+  if (changes) {
+    await recordAudit({
+      context: auth.context,
+      action: "active" in changes ? "status" : "update",
+      entity: "Supplier",
+      entityId: supplier.id,
+      summary: "active" in changes
+        ? `${updated.active ? "Activó" : "Desactivó"} el proveedor «${updated.name}»`
+        : `Editó el proveedor «${updated.name}»`,
+      detail: { changes },
+    });
+  }
   return Response.json({ supplier: updated });
 }

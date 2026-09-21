@@ -5,6 +5,7 @@ import { requireAdminContext, resolveDefaultOrganizationId } from "@/lib/server/
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { isHoneypotTriggered, leadSchema, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -180,6 +181,48 @@ export async function PATCH(request: Request) {
     const updated = await tx.lead.update({ where: { id: lead.id }, data, include: LEAD_INCLUDE });
     return { lead: updated, client, clientCreated };
   });
+
+  if (convert) {
+    const convertedClient = result.client;
+    await recordAudit({
+      context: auth.context,
+      action: "convert",
+      entity: "Lead",
+      entityId: lead.id,
+      summary: result.clientCreated
+        ? `Convirtió el lead «${lead.name}» en el cliente «${convertedClient?.name}»`
+        : `Convirtió el lead «${lead.name}» y reutilizó el cliente «${convertedClient?.name}»`,
+      detail: { fields: { clientId: convertedClient?.id ?? null, clientCreated: result.clientCreated, status: result.lead.status } },
+    });
+    if (result.clientCreated && convertedClient) {
+      await recordAudit({
+        context: auth.context,
+        action: "create",
+        entity: "Client",
+        entityId: convertedClient.id,
+        summary: `Creó el cliente «${convertedClient.name}» al convertir el lead`,
+        detail: { fields: { name: convertedClient.name, company: convertedClient.company, fromLeadId: lead.id } },
+      });
+    }
+  } else {
+    const changes = auditChanges(
+      { status: lead.status, internalNotes: lead.internalNotes },
+      { status: result.lead.status, internalNotes: result.lead.internalNotes },
+      ["status", "internalNotes"],
+    );
+    if (changes) {
+      await recordAudit({
+        context: auth.context,
+        action: "status" in changes ? "status" : "update",
+        entity: "Lead",
+        entityId: lead.id,
+        summary: "status" in changes
+          ? `Cambió el estado del lead «${lead.name}»`
+          : `Actualizó las notas internas del lead «${lead.name}»`,
+        detail: { changes },
+      });
+    }
+  }
 
   return Response.json(result);
 }
