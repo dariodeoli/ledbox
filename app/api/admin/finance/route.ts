@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditPick, recordAudit } from "@/lib/server/audit";
 import { clientLabel, dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
+import { runDailyPaymentReminders } from "@/lib/server/reminders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,10 @@ export const dynamic = "force-dynamic";
  * `PATCH` con `kind: "client"` cierra un cobro a plazo: `action: "collect"` lo
  * pasa a `RECEIVED` sellando la fecha real, `action: "cancel"` lo anula. Las
  * transiciones son monotónicas (solo desde `PENDING`) y cada una queda auditada.
+ *
+ * El `GET` es el primer uso del día del módulo y dispara el despacho diario de
+ * recordatorios al cliente (issue #19) después de responder: idempotente por
+ * cobro, canal y día (`PaymentReminderLog`), así que no hace falta cron externo.
  */
 
 /** Métodos de pago aceptados (catálogo cerrado del panel). */
@@ -51,12 +57,30 @@ export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
+  if (!auth.context.demo) {
+    // Despacho diario de recordatorios (issue #19) al primer uso del panel: sale
+    // después de la respuesta para no demorar la lista y es idempotente, así que
+    // repetirlo (o forzarlo desde el endpoint) no duplica nada.
+    after(async () => {
+      try {
+        await runDailyPaymentReminders({ organizationId });
+      } catch (error) {
+        console.error("[reminders] Falló el despacho diario:", error instanceof Error ? error.message : error);
+      }
+    });
+  }
   const [clientPayments, supplierJobs] = await Promise.all([
     db.clientPayment.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 200,
-      include: { client: true, budget: true },
+      include: {
+        client: true,
+        budget: true,
+        // Historial de recordatorios del cobro (issue #19) para el "enviado hoy"
+        // de la fila y el detalle del cobro.
+        reminders: { orderBy: { sentAt: "desc" }, take: 20 },
+      },
     }),
     db.supplierJob.findMany({
       where: { organizationId },
