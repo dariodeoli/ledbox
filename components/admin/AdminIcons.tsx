@@ -39,6 +39,12 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M9.8 17.6h4.4" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M6.5 10.5a5.5 5.5 0 0 1 11 0c0 3.2.8 4.7 1.6 5.5H4.9c.8-.8 1.6-2.3 1.6-5.5z" />
+      <path d="M10 19.2a2.1 2.1 0 0 0 4 0" />
+    </>
+  ),
   budgets: (
     <>
       <path d="M6 3h8l4 4v14H6z" />

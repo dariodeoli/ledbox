@@ -408,7 +408,7 @@ function AdminNotificationBell() {
         aria-controls="admin-notif-panel"
         title="Avisos y recordatorios"
       >
-        <AdminIcon name="alert" size={16} />
+        <AdminIcon name="bell" size={16} />
         {urgent > 0 ? (
           <span className="admin-notif-count" aria-hidden="true">
             {urgent > 99 ? "99+" : formatNumber(urgent)}

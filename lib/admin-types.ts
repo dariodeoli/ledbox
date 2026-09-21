@@ -15,6 +15,7 @@ export type AdminIconName =
   | "leads"
   | "budgets"
   | "audit"
+  | "bell"
   | "finance"
   | "inventory"
   | "suppliers"
