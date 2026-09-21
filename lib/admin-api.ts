@@ -38,7 +38,7 @@ export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: stri
 export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   timeoutMs: number;
   signal?: AbortSignal | null;
@@ -102,12 +102,13 @@ export async function adminApiGet<T = AdminApiResponse>(
 
 /**
  * Mutación del panel: limpia la caché de GET (antes y después) y devuelve el
- * error inline; 401/403 invalidan la sesión.
+ * error inline; 401/403 invalidan la sesión. `DELETE` va sin cuerpo (es el
+ * borrado explícito del avatar; el resto de las bajas del panel siguen en POST).
  */
 export async function adminSend<T>(
   path: string,
   body: unknown,
-  method: "POST" | "PATCH" = "POST",
+  method: "POST" | "PATCH" | "DELETE" = "POST",
 ): Promise<AdminSendResult<T>> {
   clearAdminApiCache();
   const outcome = await requestJson(path, { method, body, timeoutMs: SEND_TIMEOUT_MS });
