@@ -1088,6 +1088,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .lbprint-portal-data { display: grid; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .lbprint-portal-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
 
+/* Pago en la hoja impresa (issue #14): monto a transferir y datos bancarios,
+   solo con el presupuesto aprobado. El logo del banco llega por `bankMark`. */
+.lbprint-pay { display: grid; gap: 8px; }
+.lbprint-pay-now { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 7px 10px; border: 1px solid #bfe6d6; border-radius: 6px; background: #f1fbf6; }
+.lbprint-pay-amount { font-size: 18px; font-weight: 800; }
+.lbprint-pay-total { margin-left: auto; color: #5d6f78; font-size: 11px; }
+.lbprint-bank { display: flex; align-items: center; gap: 10px; }
+.lbprint-bank-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: #fff; font: 800 12px var(--font-body); letter-spacing: .04em; }
+.lbprint-bank-asset { width: 34px; height: 34px; border-radius: 8px; background: #fff; object-fit: contain; }
+.lbprint-bank-data { display: grid; gap: 1px; }
+.lbprint-bank-name { font-size: 12.5px; font-weight: 700; }
+.lbprint-bank-line { color: #35474f; font-size: 11.5px; }
+.lbprint-table--plan { margin-top: 8px; width: min(100%, 120mm); }
+
 /* Tablas del documento */
 .lbprint-table { width: 100%; border-collapse: collapse; }
 .lbprint-table th { padding: 4px 6px; text-align: left; font-size: 9.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #5d6f78; border-bottom: 1px solid #10161a; }
