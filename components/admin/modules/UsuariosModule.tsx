@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { adminRoleLabel, formatDate, formatNumber, statusTone } from "@/lib/admin-format";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
-import type { AdminUserRow } from "@/lib/admin-types";
+import { adminAvatarUrl, type AdminUserRow } from "@/lib/admin-types";
+import { emailError, FIELD_MESSAGES, normalizePersonName, personNameValid } from "@/lib/field-rules";
 import { useAdminSession } from "../AdminShell";
+import { AdminAvatar } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import {
   AdminBadge,
@@ -21,7 +23,7 @@ import {
   AdminToolbar,
 } from "../AdminUI";
 import { EmailField, PasswordField, SearchField, SelectField, TextField } from "../AdminFields";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
 const ROLE_OPTIONS = [
   { value: "ALL", label: "Todos los roles" },
@@ -36,8 +38,19 @@ const ASSIGNABLE_ROLES = ["ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
 const EMPTY_FORM = { name: "", email: "", password: "", role: "VIEWER" };
 
+const EMPTY_EDIT = { name: "", email: "" };
+
+/**
+ * Equipo / Usuarios (issue #22): además de crear, cambiar el rol y
+ * activar/desactivar, un OWNER/ADMIN edita el **nombre** y el **correo** de un
+ * usuario de la empresa. El correo es la identidad de acceso: al cambiarlo se
+ * cierran sus sesiones y vuelve a entrar con el correo nuevo (si el cambio es
+ * del propio usuario, el panel lo manda al login).
+ *
+ * Un ADMIN no toca a un OWNER y nadie edita su propio rol ni se desactiva.
+ */
 export function UsuariosModule() {
-  const { role } = useAdminSession();
+  const { role, user: sessionUser } = useAdminSession();
   const users = useAdminResource("/api/admin/users", (payload) => payload.users ?? []);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
@@ -48,6 +61,10 @@ export function UsuariosModule() {
   const [formError, setFormError] = useState("");
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<AdminUserRow | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const writable = canManageUsers(role);
   const list = useMemo(() => users.data ?? [], [users.data]);
@@ -68,6 +85,12 @@ export function UsuariosModule() {
     [list],
   );
 
+  /** Un ADMIN no edita a un OWNER; nadie se edita el rol (issue #22). */
+  function canEditUser(user: AdminUserRow): boolean {
+    if (!writable) return false;
+    return user.role !== "OWNER" || role === "OWNER";
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -82,6 +105,56 @@ export function UsuariosModule() {
     setNotice(`Usuario «${form.name}» creado.`);
     setForm(EMPTY_FORM);
     users.reload();
+  }
+
+  function startEdit(user: AdminUserRow) {
+    setEditing(user);
+    setEditForm({ name: user.name, email: user.email });
+    setEditError("");
+    setNotice("");
+  }
+
+  async function submitEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const name = normalizePersonName(editForm.name);
+    const email = editForm.email.trim().toLowerCase();
+    if (!personNameValid(name)) {
+      setEditError(FIELD_MESSAGES.name);
+      return;
+    }
+    const invalidEmail = emailError(email);
+    if (invalidEmail) {
+      setEditError(invalidEmail);
+      return;
+    }
+    setEditBusy(true);
+    setEditError("");
+    const result = await adminSend<{ sessionsClosed?: number; loggedOut?: boolean }>(
+      "/api/admin/users",
+      { id: editing.id, name, email },
+      "PATCH",
+    );
+    setEditBusy(false);
+    if (!result.ok) {
+      setEditError(result.error);
+      return;
+    }
+    const closed = result.data.sessionsClosed ?? 0;
+    const emailChanged = email !== editing.email.toLowerCase();
+    setEditing(null);
+    setNotice(
+      emailChanged
+        ? closed > 0
+          ? `Datos de «${name}» guardados y sus ${closed} ${closed === 1 ? "sesión abierta" : "sesiones abiertas"} cerradas: entra con el correo nuevo.`
+          : `Datos de «${name}» guardados: entra con el correo nuevo.`
+        : `Datos de «${name}» guardados.`,
+    );
+    users.reload();
+    if (result.data.loggedOut) {
+      // El cambio de correo era del propio usuario: su sesión ya no vale.
+      redirectToLogin();
+    }
   }
 
   async function patch(user: AdminUserRow, data: { active?: boolean; role?: string }) {
@@ -178,6 +251,38 @@ export function UsuariosModule() {
         </AdminFormPanel>
       ) : null}
 
+      {editing ? (
+        <AdminFormPanel
+          title={`Editar usuario · ${editing.name}`}
+          submitLabel="Guardar cambios"
+          onSubmit={submitEdit}
+          onCancel={() => setEditing(null)}
+          busy={editBusy}
+          status={editError}
+        >
+          <TextField
+            label="Nombre"
+            required
+            maxLength={120}
+            value={editForm.name}
+            onChange={(value) => {
+              setEditForm({ ...editForm, name: value });
+              setEditError("");
+            }}
+          />
+          <EmailField
+            label="Correo"
+            required
+            value={editForm.email}
+            onChange={(value) => {
+              setEditForm({ ...editForm, email: value });
+              setEditError("");
+            }}
+            hint="Si cambia, se cierran sus sesiones abiertas y entra con el correo nuevo."
+          />
+        </AdminFormPanel>
+      ) : null}
+
       <AdminDataState
         loading={users.loading}
         error={users.error}
@@ -204,7 +309,15 @@ export function UsuariosModule() {
             {rows.map((user) => (
               <AdminRow key={user.id}>
                 <AdminCell title={user.name}>
-                  <strong>{user.name}</strong>
+                  <span className="admin-identity">
+                    <AdminAvatar
+                      name={user.name}
+                      src={user.avatarUpdatedAt ? adminAvatarUrl(user.id, user.avatarUpdatedAt) : null}
+                      size={22}
+                    />
+                    <strong>{user.name}</strong>
+                    {user.id === sessionUser?.id ? <span className="admin-cell-sub">· vos</span> : null}
+                  </span>
                 </AdminCell>
                 <AdminCell title={user.email}>{user.email}</AdminCell>
                 <AdminCell>
@@ -230,16 +343,30 @@ export function UsuariosModule() {
                 </AdminCell>
                 <AdminCell end>
                   {writable ? (
-                    <button
-                      type="button"
-                      className="admin-iconbtn"
-                      onClick={() => toggleActive(user)}
-                      disabled={rowBusy === user.id}
-                      title={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
-                      aria-label={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
-                    >
-                      <AdminIcon name="power" size={15} />
-                    </button>
+                    <span className="admin-actions">
+                      {canEditUser(user) ? (
+                        <button
+                          type="button"
+                          className="admin-iconbtn"
+                          onClick={() => startEdit(user)}
+                          disabled={rowBusy === user.id}
+                          title={`Editar nombre y correo: ${user.name}`}
+                          aria-label={`Editar nombre y correo: ${user.name}`}
+                        >
+                          <AdminIcon name="edit" size={15} />
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="admin-iconbtn"
+                        onClick={() => toggleActive(user)}
+                        disabled={rowBusy === user.id}
+                        title={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
+                        aria-label={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
+                      >
+                        <AdminIcon name="power" size={15} />
+                      </button>
+                    </span>
                   ) : (
                     <span className="admin-muted">—</span>
                   )}

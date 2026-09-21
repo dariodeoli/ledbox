@@ -1,5 +1,9 @@
+"use client";
+
+import { useId, useRef, useState } from "react";
 import type { AdminIconName } from "@/lib/admin-types";
 import { whatsappHref, type AdminTone } from "@/lib/admin-format";
+import { prepareIdentityImage, type PreparedIdentityImage } from "@/lib/identity-image";
 import { AdminIcon } from "./AdminIcons";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 
@@ -332,5 +336,122 @@ export function AdminCell({
     <span role="cell" className={classes.join(" ")} title={title}>
       {children}
     </span>
+  );
+}
+
+/**
+ * Subida de imagen de identidad (issue #22): la usan el avatar de Mi perfil y
+ * los dos logos de la sección Empresa. Es la única pieza que abre el selector de
+ * archivos del panel; valida por magic bytes y recorta/comprime en el navegador
+ * (`prepareIdentityImage`) antes de entregar la imagen lista para subir.
+ *
+ * La vista previa la dibuja el llamador con el objeto único de identidad
+ * (`AdminAvatar` / `AdminOrgLogo`), así el panel no tiene dos formas de mostrar
+ * una foto o un logo.
+ */
+export function AdminImageUpload({
+  label,
+  hint,
+  mode = "avatar",
+  preview,
+  busy,
+  disabled,
+  error,
+  onPrepared,
+  onRemove,
+  removeLabel = "Quitar",
+}: {
+  label: string;
+  hint?: string;
+  /** `avatar` recorta cuadrado desde el centro; `logo` conserva la relación de aspecto. */
+  mode?: "avatar" | "logo";
+  preview: React.ReactNode;
+  busy?: boolean;
+  disabled?: boolean;
+  error?: string | null;
+  onPrepared: (image: PreparedIdentityImage) => void;
+  onRemove?: () => void;
+  removeLabel?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const fieldId = useId();
+  const labelId = `${fieldId}-label`;
+  const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
+  const message = error || localError;
+  const working = Boolean(busy) || preparing;
+
+  async function pick(file: File | null) {
+    if (!file) return;
+    setLocalError("");
+    setPreparing(true);
+    const result = await prepareIdentityImage(
+      file,
+      mode === "logo" ? { square: false, maxSide: 1024 } : { square: true, maxSide: 512 },
+    );
+    setPreparing(false);
+    if (!result.ok) {
+      setLocalError(result.error);
+      return;
+    }
+    onPrepared(result.image);
+  }
+
+  return (
+    <div className="admin-field admin-image-field">
+      <span className="admin-field-label" id={labelId}>
+        {label}
+      </span>
+      <div className="admin-image-body">
+        <span className="admin-image-preview">{preview}</span>
+        <div className="admin-image-actions">
+          <AdminButton
+            type="button"
+            icon="upload"
+            busy={working}
+            disabled={disabled}
+            onClick={() => inputRef.current?.click()}
+            aria-describedby={message ? errorId : hint ? hintId : undefined}
+          >
+            {working ? "Procesando" : "Subir imagen"}
+          </AdminButton>
+          {onRemove ? (
+            <AdminButton
+              type="button"
+              icon="trash"
+              disabled={disabled || working}
+              onClick={onRemove}
+              title={removeLabel}
+              aria-label={removeLabel}
+            >
+              {removeLabel}
+            </AdminButton>
+          ) : null}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        className="admin-image-input"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        aria-labelledby={labelId}
+        disabled={disabled || working}
+        onChange={(event) => {
+          void pick(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+      {message ? (
+        <span className="admin-field-error" id={errorId} role="alert">
+          {message}
+        </span>
+      ) : hint ? (
+        <span className="admin-field-hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }

@@ -8,9 +8,10 @@ import {
 } from "@/lib/admin-format";
 import { csvDay } from "@/lib/admin-export";
 import type { AdminMonthlyReport } from "@/lib/admin-types";
-import { supplierJobBalance } from "@/lib/admin-types";
+import { organizationLogoUrl, supplierJobBalance } from "@/lib/admin-types";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { loadOrganizationLogos } from "@/lib/server/branding";
 import { ReporteView } from "../../_components/ReporteView";
 
 export const runtime = "nodejs";
@@ -140,11 +141,14 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
   }));
 
   const marginRows = eventRows.filter((row) => row.margin !== null);
+  // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
+  const logos = await loadOrganizationLogos(organizationId);
   const report: AdminMonthlyReport = {
     month,
     monthLabel: formatCalendarMonth(`${month}-01`),
     issuedAt: formatDateTime(new Date()),
     organization: auth.context.organization.name,
+    logo: logos.light ? organizationLogoUrl("light", logos.light.updatedAt) : null,
     totals: {
       events: eventRows.length,
       sale: eventRows.reduce((sum, row) => sum + row.sale, 0),

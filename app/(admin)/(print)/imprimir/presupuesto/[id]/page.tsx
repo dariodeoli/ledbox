@@ -10,8 +10,10 @@ import {
   formatNumber,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
+import { organizationLogoUrl } from "@/lib/admin-types";
 import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
+import { loadOrganizationLogos } from "@/lib/server/branding";
 import { parsePaymentDetails, paymentPlanOf } from "@/lib/server/budget-portal";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -68,6 +70,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const plan = paymentPlanOf(budget);
   const details = parsePaymentDetails(budget.organization.paymentDetails);
   const mark = bankMark(details?.bank);
+  // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
+  const logos = await loadOrganizationLogos(auth.context.organizationId);
+  const logo = logos.light ? organizationLogoUrl("light", logos.light.updatedAt) : null;
 
   return (
     <>
@@ -80,6 +85,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
           organization={auth.context.organization.name}
           issuedAt={issuedAt}
           meta={`Estado: ${budgetStatusLabel(budget.status)}`}
+          logo={logo}
         />
 
         <PrintSection title="Cliente">

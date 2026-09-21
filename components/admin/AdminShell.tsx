@@ -10,6 +10,7 @@ import {
   adminNavGroups,
   adminNavLabel,
   asAdminRole,
+  canManageOrganization,
   canWriteFinance,
   isAdminNavActive,
 } from "@/lib/admin-policy";
@@ -18,23 +19,27 @@ import {
   formatCalendarDayShort,
   formatDayWhen,
   formatNumber,
-  initials,
   notificationKindLabel,
   notificationLevelLabel,
   notificationTone,
   paymentReminderMessage,
+  statusTone,
   whatsappHref,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
 import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
-import type {
-  AdminNotification,
-  AdminNotificationCounts,
-  AdminOrganization,
-  AdminRole,
-  AdminSessionUser,
+import {
+  adminAvatarUrl,
+  organizationLogoUrl,
+  type AdminNotification,
+  type AdminNotificationCounts,
+  type AdminOrganization,
+  type AdminOrganizationLogos,
+  type AdminRole,
+  type AdminSessionUser,
 } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
+import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
 import { adminApiGet, adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
@@ -48,7 +53,12 @@ export type AdminSessionState = {
   demo: boolean;
   loading: boolean;
   error: string;
+  /** Vuelve a leer la sesión (lo usan perfil y empresa al guardar cambios). */
+  reload: () => void;
 };
+
+/** Datos de sesión que viven en el estado del shell; `reload` se agrega al contexto. */
+type AdminSessionData = Omit<AdminSessionState, "reload">;
 
 const AdminSessionContext = createContext<AdminSessionState>({
   user: null,
@@ -58,6 +68,7 @@ const AdminSessionContext = createContext<AdminSessionState>({
   demo: false,
   loading: true,
   error: "",
+  reload: () => {},
 });
 
 export function useAdminSession(): AdminSessionState {
@@ -71,12 +82,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function asSessionUser(value: unknown): AdminSessionUser | null {
   if (!isRecord(value) || typeof value.id !== "string") return null;
   if (typeof value.name !== "string" || typeof value.email !== "string" || typeof value.role !== "string") return null;
-  return { id: value.id, name: value.name, email: value.email, role: asAdminRole(value.role) };
+  return {
+    id: value.id,
+    name: value.name,
+    email: value.email,
+    role: asAdminRole(value.role),
+    // Avatar subido (issue #22): sin foto, el chip dibuja las iniciales.
+    avatarUpdatedAt: typeof value.avatarUpdatedAt === "string" ? value.avatarUpdatedAt : null,
+  };
+}
+
+/** Logos de la empresa por tema (issue #22); `null` en cada variante que falta. */
+function asLogos(value: unknown): AdminOrganizationLogos | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    light: typeof value.light === "string" ? value.light : null,
+    dark: typeof value.dark === "string" ? value.dark : null,
+  };
 }
 
 function asOrganization(value: unknown): AdminOrganization | null {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") return null;
-  return { id: value.id, name: value.name, slug: typeof value.slug === "string" ? value.slug : null, role: typeof value.role === "string" ? value.role : null };
+  return {
+    id: value.id,
+    name: value.name,
+    slug: typeof value.slug === "string" ? value.slug : null,
+    role: typeof value.role === "string" ? value.role : null,
+    logos: asLogos(value.logos),
+  };
 }
 
 /**
@@ -111,7 +144,7 @@ function isDemoEntryPath(): boolean {
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [session, setSession] = useState<AdminSessionState>({
+  const [session, setSession] = useState<AdminSessionData>({
     user: null,
     role: null,
     organization: null,
@@ -121,7 +154,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     error: "",
   });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   const loadSession = useCallback(async () => {
     setSession((current) => ({ ...current, loading: true, error: "" }));
@@ -159,6 +194,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMenuOpen(false);
+    setUserMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -174,8 +210,32 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     };
   }, [menuOpen]);
 
+  // Menú del chip de usuario: cierra con Escape y al hacer clic afuera.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    }
+    function closeOnOutside(event: PointerEvent) {
+      const node = userMenuRef.current;
+      if (node && event.target instanceof Node && !node.contains(event.target)) setUserMenuOpen(false);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutside);
+    };
+  }, [userMenuOpen]);
+
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
+  const canEditOrganization = canManageOrganization(session.role);
+  const organizationLogos = session.organization?.logos;
+  const sessionValue = useMemo<AdminSessionState>(
+    () => ({ ...session, reload: () => void loadSession() }),
+    [session, loadSession],
+  );
   /**
    * Entrada a la demo: mientras no haya sesión, la campana de avisos no se monta
    * (su 401 manda al login y competiría con la creación de la sesión demo).
@@ -209,7 +269,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AdminSessionContext.Provider value={session}>
+    <AdminSessionContext.Provider value={sessionValue}>
       <div className="admin-shell">
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
@@ -258,10 +318,49 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
           <div className="admin-sidebar-foot">
             {session.organization ? (
-              <div className="admin-company" title={`Empresa activa: ${session.organization.name}`}>
-                <span className="admin-company-label">Empresa</span>
-                <strong className="admin-company-name">{session.organization.name}</strong>
-              </div>
+              canEditOrganization ? (
+                <Link
+                  className="admin-company"
+                  href="/empresa"
+                  title={`Empresa activa: ${session.organization.name} · Editar nombre y logos`}
+                >
+                  <span className="admin-company-label">Empresa</span>
+                  <span className="admin-company-main">
+                    <AdminOrgLogo
+                      name={session.organization.name}
+                      lightSrc={
+                        organizationLogos?.light
+                          ? organizationLogoUrl("light", organizationLogos.light)
+                          : null
+                      }
+                      darkSrc={
+                        organizationLogos?.dark ? organizationLogoUrl("dark", organizationLogos.dark) : null
+                      }
+                      size={22}
+                    />
+                    <strong className="admin-company-name">{session.organization.name}</strong>
+                  </span>
+                </Link>
+              ) : (
+                <div className="admin-company" title={`Empresa activa: ${session.organization.name}`}>
+                  <span className="admin-company-label">Empresa</span>
+                  <span className="admin-company-main">
+                    <AdminOrgLogo
+                      name={session.organization.name}
+                      lightSrc={
+                        organizationLogos?.light
+                          ? organizationLogoUrl("light", organizationLogos.light)
+                          : null
+                      }
+                      darkSrc={
+                        organizationLogos?.dark ? organizationLogoUrl("dark", organizationLogos.dark) : null
+                      }
+                      size={22}
+                    />
+                    <strong className="admin-company-name">{session.organization.name}</strong>
+                  </span>
+                </div>
+              )
             ) : null}
             <p className="admin-sidebar-note">Panel privado · LedBox</p>
           </div>
@@ -315,26 +414,72 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <span>Ver sitio</span>
               </a>
               {session.user ? (
-                <div className="admin-user" title={`${session.user.name} · ${adminRoleLabel(session.user.role)}`}>
-                  <span className="admin-avatar" aria-hidden="true">
-                    {initials(session.user.name)}
-                  </span>
-                  <span className="admin-user-info">
-                    <strong>{session.user.name}</strong>
-                    <small>{adminRoleLabel(session.user.role)}</small>
-                  </span>
+                <div
+                  className="admin-usermenu"
+                  ref={userMenuRef}
+                  onBlur={(event) => {
+                    const next = event.relatedTarget;
+                    if (next && !event.currentTarget.contains(next)) setUserMenuOpen(false);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="admin-user"
+                    onClick={() => setUserMenuOpen((open) => !open)}
+                    aria-haspopup="menu"
+                    aria-expanded={userMenuOpen}
+                    aria-controls="admin-usermenu"
+                    title={`${session.user.name} · ${adminRoleLabel(session.user.role)} · Tu cuenta`}
+                  >
+                    <AdminAvatar
+                      name={session.user.name}
+                      src={
+                        session.user.avatarUpdatedAt
+                          ? adminAvatarUrl(session.user.id, session.user.avatarUpdatedAt)
+                          : null
+                      }
+                      size={28}
+                    />
+                    <span className="admin-user-info">
+                      <strong>{session.user.name}</strong>
+                      <small>{adminRoleLabel(session.user.role)}</small>
+                    </span>
+                    <AdminIcon name="chevron-down" size={14} />
+                  </button>
+
+                  {userMenuOpen ? (
+                    <div className="admin-usermenu-panel" id="admin-usermenu" role="menu" aria-label="Tu cuenta">
+                      <div className="admin-usermenu-head">
+                        <strong>{session.user.name}</strong>
+                        <small>{session.user.email}</small>
+                        <AdminBadge tone={statusTone(session.user.role)}>{adminRoleLabel(session.user.role)}</AdminBadge>
+                      </div>
+                      <Link className="admin-usermenu-item" role="menuitem" href="/perfil">
+                        <AdminIcon name="user" size={15} />
+                        <span>Mi perfil</span>
+                        <small>Nombre, contraseña y foto</small>
+                      </Link>
+                      {canEditOrganization ? (
+                        <Link className="admin-usermenu-item" role="menuitem" href="/empresa">
+                          <AdminIcon name="building" size={15} />
+                          <span>Empresa</span>
+                          <small>Nombre y logos</small>
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="admin-usermenu-item"
+                        role="menuitem"
+                        onClick={() => void logout()}
+                        disabled={loggingOut}
+                      >
+                        <AdminIcon name="logout" size={15} />
+                        <span>{session.demo ? "Salir de la demo" : "Cerrar sesión"}</span>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-              <button
-                type="button"
-                className="admin-iconbtn"
-                onClick={logout}
-                disabled={loggingOut}
-                aria-label={session.demo ? "Salir de la demo" : "Cerrar sesión"}
-                title={session.demo ? "Salir de la demo" : "Cerrar sesión"}
-              >
-                <AdminIcon name="logout" size={16} />
-              </button>
             </div>
           </header>
 

@@ -73,6 +73,15 @@ const PAYMENT_PROOF_MIME: Record<string, string> = {
 /** Tipo de archivo del comprobante; un MIME desconocido se muestra tal cual. */
 export const paymentProofMimeLabel = (value: string | null | undefined) => label(PAYMENT_PROOF_MIME, value);
 
+/** Tipo real de una imagen de identidad (avatar o logo), misma tabla de etiquetas. */
+export const identityImageMimeLabel = (value: string | null | undefined) => label(PAYMENT_PROOF_MIME, value);
+
+/**
+ * Nombre de la variante del logo (issue #22): el claro va sobre fondos oscuros
+ * y el oscuro sobre fondos claros; en papel siempre se usa el claro.
+ */
+export const logoVariantLabel = (value: string | null | undefined) => (value === "dark" ? "Logo oscuro" : "Logo claro");
+
 /** Referencia corta y estable del presupuesto para documentos y links (deriva del id real). */
 export function budgetReference(id: string | null | undefined): string {
   return String(id ?? "")
@@ -784,6 +793,11 @@ const AUDIT_FIELD: Record<string, string> = {
   chequeDate: "Fecha del cheque",
   mime: "Tipo de archivo",
   size: "Tamaño",
+  password: "Contraseña",
+  avatar: "Avatar",
+  logo: "Logo",
+  logoLight: "Logo claro",
+  logoDark: "Logo oscuro",
   paymentId: "Cobro",
   category: "Categoría",
   kind: "Tipo de ítem",

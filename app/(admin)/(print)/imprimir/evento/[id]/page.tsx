@@ -11,6 +11,8 @@ import {
 } from "@/lib/admin-format";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { loadOrganizationLogos } from "@/lib/server/branding";
+import { organizationLogoUrl } from "@/lib/admin-types";
 import { PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
 import { PrintToolbar } from "../../../_components/PrintToolbar";
 
@@ -55,6 +57,9 @@ export default async function EventoImprimiblePage({ params }: { params: Promise
 
   const reference = `OT Nº ${shortReference(event.id)}`;
   const doneTasks = event.tasks.filter((task) => task.completedAt).length;
+  // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
+  const logos = await loadOrganizationLogos(auth.context.organizationId);
+  const logo = logos.light ? organizationLogoUrl("light", logos.light.updatedAt) : null;
 
   return (
     <>
@@ -67,6 +72,7 @@ export default async function EventoImprimiblePage({ params }: { params: Promise
           organization={auth.context.organization.name}
           issuedAt={formatDateTime(new Date())}
           meta={`Estado: ${eventStatusLabel(event.status)}`}
+          logo={logo}
         />
 
         <PrintSection title="Evento">

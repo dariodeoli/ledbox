@@ -191,6 +191,34 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M9.6 10.2a3 3 0 0 0 4.2 4.2" />
     </>
   ),
+  user: (
+    <>
+      <circle cx="12" cy="8.4" r="3.6" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
+  building: (
+    <>
+      <path d="M5 20V5.5A1.5 1.5 0 0 1 6.5 4h7A1.5 1.5 0 0 1 15 5.5V20" />
+      <path d="M15 10h3.5A1.5 1.5 0 0 1 20 11.5V20" />
+      <path d="M3 20h18M8 8h4M8 12h4M8 16h4" />
+    </>
+  ),
+  "chevron-down": <path d="M6.5 9.5 12 15l5.5-5.5" />,
+  upload: (
+    <>
+      <path d="M12 15.5V4.5" />
+      <path d="M7.6 8.9 12 4.5l4.4 4.4" />
+      <path d="M4.5 16v2.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V16" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4.5 7h15M9.5 7V4.8A.8.8 0 0 1 10.3 4h3.4a.8.8 0 0 1 .8.8V7" />
+      <path d="M6.5 7l.9 12.2a.8.8 0 0 0 .8.8h7.6a.8.8 0 0 0 .8-.8L17.5 7" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
 };
 
 export function AdminIcon({ name, size = 16 }: { name: AdminIconName; size?: number }) {

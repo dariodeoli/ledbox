@@ -18,6 +18,8 @@ export const ADMIN_ROUTES = [
   "/proveedores",
   "/promotoras",
   "/usuarios",
+  "/empresa",
+  "/perfil",
   "/auditoria",
   "/demo",
   "/imprimir",
