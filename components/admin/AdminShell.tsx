@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { BrandMark } from "@/components/brand-mark";
 import { adminModuleVisible, adminNavGroups, adminNavLabel, asAdminRole, isAdminNavActive } from "@/lib/admin-policy";
 import {
   adminRoleLabel,
@@ -158,7 +159,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
             <Link href="/dashboard" className="admin-brand" aria-label="LedBox · Ir al resumen">
-              <span className="admin-brand-mark">LB</span>
+              <BrandMark className="admin-brand-mark" size={30} />
               <span>
                 LEDBOX<span className="admin-brand-dot">.</span>
               </span>
