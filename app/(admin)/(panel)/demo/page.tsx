@@ -65,6 +65,7 @@ export default async function DemoPage() {
     feed,
     audits,
     portalBudget,
+    openBudget,
   ] = await Promise.all([
     db.client.count({ where: { organizationId, active: true } }),
     db.event.count({ where: { organizationId, status: { not: "CANCELLED" } } }),
@@ -89,13 +90,31 @@ export default async function DemoPage() {
     db.budget.findFirst({
       where: { organizationId, approvedAt: { not: null }, publicToken: { not: null } },
       orderBy: { approvedAt: "desc" },
-      select: { id: true, title: true, publicToken: true, approvedAt: true, approvedByName: true },
+      select: { id: true, title: true, publicToken: true, approvedAt: true, approvedByName: true, advanceAmount: true, installmentsJson: true },
+    }),
+    // Presupuesto abierto para recorrer la autogestión: link/QR activos y sin
+    // aprobación ni cambios pedidos todavía.
+    db.budget.findFirst({
+      where: {
+        organizationId,
+        publicToken: { not: null },
+        approvedAt: null,
+        revisionRequestedAt: null,
+        status: { in: ["SENT", "NEGOTIATING"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, publicToken: true, status: true, client: { select: { company: true, name: true } } },
     }),
   ]);
 
   const modules = adminNavGroups("VIEWER").flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
-  const portalUrl = portalBudget?.publicToken ? portalBudgetUrl(portalBudget.publicToken) : null;
-  const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
+  const approvedUrl = portalBudget?.publicToken ? portalBudgetUrl(portalBudget.publicToken) : null;
+  const pendingUrl = openBudget?.publicToken ? portalBudgetUrl(openBudget.publicToken) : null;
+  const [approvedQr, pendingQr] = await Promise.all([
+    approvedUrl ? qrSvg(approvedUrl, 168) : Promise.resolve(null),
+    pendingUrl ? qrSvg(pendingUrl, 168) : Promise.resolve(null),
+  ]);
+  const approvedInstallments = Array.isArray(portalBudget?.installmentsJson) ? portalBudget.installmentsJson.length : 0;
 
   return (
     <div className="admin-module-page admin-demo-page">
@@ -110,23 +129,21 @@ export default async function DemoPage() {
           <strong> solo lectura</strong>: no se guardan cambios ni se toca información real.
         </p>
         <div className="admin-demo-actions">
-          {portalUrl ? (
-            <a className="admin-btn admin-btn--primary" href={portalUrl} target="_blank" rel="noreferrer" title="Abrir el portal del cliente con el presupuesto aprobado de la demo">
+          {pendingUrl ? (
+            <a className="admin-btn admin-btn--primary" href={pendingUrl} target="_blank" rel="noreferrer" title="Portal del presupuesto pendiente: proponé cantidades y días o pedí una rebaja">
               <AdminIcon name="external" size={15} />
-              <span>Ver portal del cliente</span>
+              <span>Probar la autogestión</span>
+            </a>
+          ) : null}
+          {approvedUrl ? (
+            <a className="admin-btn" href={approvedUrl} target="_blank" rel="noreferrer" title="Portal del presupuesto aprobado: plan de pagos y datos de pago de la empresa">
+              <AdminIcon name="external" size={15} />
+              <span>Presupuesto aprobado</span>
             </a>
           ) : null}
           <Link className="admin-btn" href="/dashboard">
             <AdminIcon name="overview" size={15} />
             <span>Ir al resumen</span>
-          </Link>
-          <Link className="admin-btn" href="/calendario">
-            <AdminIcon name="calendar" size={15} />
-            <span>Ver el calendario</span>
-          </Link>
-          <Link className="admin-btn" href="/imprimir/reporte">
-            <AdminIcon name="print" size={15} />
-            <span>Reporte del mes</span>
           </Link>
           <form method="post" action="/api/demo/session">
             <input type="hidden" name="next" value="/demo" />
@@ -279,23 +296,60 @@ export default async function DemoPage() {
       <AdminPanel title="Portal del cliente y exportaciones" meta="También funcionan en la demo">
         <div className="admin-demo-resources">
           <div className="admin-demo-resource">
-            <h3>Portal del cliente</h3>
+            <h3>
+              Autogestión <AdminBadge tone="warn">Pendiente</AdminBadge>
+            </h3>
             <p>
-              Un presupuesto de la demo está aprobado desde el portal con su evidencia (nombre, fecha, IP y comentario).
-              {portalBudget ? ` «${portalBudget.title}»` : ""}
+              {openBudget ? `«${openBudget.title}»` : "Un presupuesto abierto"} está sin aprobar: entrá con el link o el QR
+              y probá la autogestión del cliente — cambá cantidades y días, o pedí una rebaja. La solicitud queda pendiente
+              para que el equipo la resuelva desde el panel.
             </p>
-            {portalUrl && portalQr && portalBudget?.publicToken ? (
+            {pendingUrl && pendingQr && openBudget?.publicToken ? (
               <div className="admin-demo-portal">
-                <div className="admin-demo-qr" aria-hidden="true" dangerouslySetInnerHTML={{ __html: portalQr }} />
+                <div className="admin-demo-qr" aria-hidden="true" dangerouslySetInnerHTML={{ __html: pendingQr }} />
+                <div className="admin-demo-portal-data">
+                  <p className="admin-demo-code">{openBudget.publicToken}</p>
+                  <p className="admin-demo-portal-link" title={pendingUrl}>
+                    {pendingUrl.replace(/^https?:\/\//, "")}
+                  </p>
+                  <a className="admin-btn admin-btn--primary" href={pendingUrl} target="_blank" rel="noreferrer">
+                    <AdminIcon name="external" size={15} />
+                    <span>Probar la autogestión</span>
+                  </a>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <div className="admin-demo-resource">
+            <h3>
+              Ya aprobado <AdminBadge tone="ok">Con datos de pago</AdminBadge>
+            </h3>
+            <p>
+              {portalBudget ? `«${portalBudget.title}»` : "Un presupuesto aprobado"} fue aprobado por el cliente desde el
+              portal (con nombre, fecha, IP y comentario). Muestra el plan de pagos —anticipo a transferir ahora
+              {approvedInstallments > 0 ? ` y ${formatNumber(approvedInstallments)} cuota${approvedInstallments === 1 ? "" : "s"}` : ""}—
+              y los datos de pago de la empresa (Ueno Bank), igual que la hoja imprimible.
+            </p>
+            {approvedUrl && approvedQr && portalBudget?.publicToken ? (
+              <div className="admin-demo-portal">
+                <div className="admin-demo-qr" aria-hidden="true" dangerouslySetInnerHTML={{ __html: approvedQr }} />
                 <div className="admin-demo-portal-data">
                   <p className="admin-demo-code">{portalBudget.publicToken}</p>
-                  <p className="admin-demo-portal-link" title={portalUrl}>
-                    {portalUrl.replace(/^https?:\/\//, "")}
+                  <p className="admin-demo-portal-link" title={approvedUrl}>
+                    {approvedUrl.replace(/^https?:\/\//, "")}
                   </p>
-                  <a className="admin-btn admin-btn--primary" href={portalUrl} target="_blank" rel="noreferrer">
-                    <AdminIcon name="external" size={15} />
-                    <span>Ver portal del cliente</span>
-                  </a>
+                  <div className="admin-demo-actions admin-demo-actions--inline">
+                    <a className="admin-btn admin-btn--primary" href={approvedUrl} target="_blank" rel="noreferrer">
+                      <AdminIcon name="external" size={15} />
+                      <span>Ver el aprobado</span>
+                    </a>
+                    {portalBudget ? (
+                      <Link className="admin-btn" href={`/imprimir/presupuesto/${portalBudget.id}`}>
+                        <AdminIcon name="print" size={15} />
+                        <span>Hoja con el logo</span>
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
