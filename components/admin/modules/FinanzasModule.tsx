@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   collectionDueText,
   collectionDueTone,
@@ -19,7 +19,14 @@ import {
 } from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
-import { collectedAmount, isCollectedPayment, supplierJobBalance, type AdminPaymentRow } from "@/lib/admin-types";
+import {
+  collectedAmount,
+  groupProofsByBudget,
+  isCollectedPayment,
+  supplierJobBalance,
+  type AdminBudgetPaymentProofRow,
+  type AdminPaymentRow,
+} from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminIcon } from "../AdminIcons";
 import {
@@ -37,7 +44,8 @@ import {
   AdminToolbar,
 } from "../AdminUI";
 import { DateField, MoneyField, SearchField, SelectField, TextField } from "../AdminFields";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { BudgetProofDialog } from "./PresupuestosModule";
 
 /** Métodos de pago del alta directa (catálogo cerrado, espejo del API). */
 const METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
@@ -100,6 +108,11 @@ export function FinanzasModule() {
   const [busyId, setBusyId] = useState("");
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  // Comprobantes del portal (issue #17): metadatos por presupuesto y visor del
+  // cobro pendiente, con "Marcar cobrado" a un clic.
+  const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
+  const [proofDialog, setProofDialog] = useState<AdminPaymentRow | null>(null);
 
   const writable = canWriteFinance(role);
   const payments = useMemo(() => finance.data?.payments ?? [], [finance.data]);
@@ -166,6 +179,36 @@ export function FinanzasModule() {
     const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
     return { collected, collectedCount, pendingTotal, pendingCount: pending.length, overdue, advances, payable };
   }, [payments, jobs]);
+
+  // Comprobantes del portal (issue #17): una sola consulta de metadatos por
+  // carga de finanzas; el visor filtra por el presupuesto del cobro.
+  const proofSignature = useMemo(
+    () =>
+      [
+        ...new Set(
+          payments
+            .map((payment) => payment.budget?.id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ].join(","),
+    [payments],
+  );
+  useEffect(() => {
+    if (!proofSignature) {
+      setProofsByBudget({});
+      return;
+    }
+    let active = true;
+    void adminApiGet<{ proofs?: AdminBudgetPaymentProofRow[] }>("/api/admin/budgets/proofs", {
+      fallbackError: "No pudimos cargar los comprobantes.",
+    }).then((result) => {
+      if (!active || !result.ok) return;
+      setProofsByBudget(groupProofsByBudget(result.data.proofs ?? []));
+    });
+    return () => {
+      active = false;
+    };
+  }, [proofSignature]);
 
   const pendingMeta = totals.pendingCount
     ? `${formatNumber(totals.pendingCount)} a plazo${totals.overdue > 0 ? ` · ${formatNumber(totals.overdue)} vencidos` : ""}`
@@ -303,6 +346,12 @@ export function FinanzasModule() {
       text: action === "collect" ? `Cobro de ${label} marcado como cobrado.` : `Cobro a plazo de ${label} anulado.`,
     });
     finance.reload();
+  }
+
+  /** "Marcar cobrado" desde el visor del comprobante: cierra el cobro y el diálogo. */
+  async function collectFromProofDialog(payment: AdminPaymentRow) {
+    await closeCollection(payment, "collect");
+    setProofDialog(null);
   }
 
   return (
@@ -517,11 +566,16 @@ export function FinanzasModule() {
               { label: "Método" },
               { label: "Cheque" },
               { label: "Monto", end: true },
+              { label: "Comprobante", end: true },
               { label: "Acciones", end: true },
             ]}
           >
             {pendingPayments.map((payment) => {
               const label = payment.client.company || payment.client.name;
+              const budgetProofs = payment.budget ? proofsByBudget[payment.budget.id] ?? [] : [];
+              const proofTitle = budgetProofs.length === 1
+                ? `Ver el comprobante recibido de ${label}`
+                : `Ver los ${formatNumber(budgetProofs.length)} comprobantes recibidos de ${label}`;
               return (
                 <AdminRow key={payment.id}>
                   <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
@@ -550,6 +604,18 @@ export function FinanzasModule() {
                   </AdminCell>
                   <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
                     <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell end>
+                    {budgetProofs.length > 0 ? (
+                      <AdminButton
+                        icon="eye"
+                        title={proofTitle}
+                        aria-label={proofTitle}
+                        onClick={() => setProofDialog(payment)}
+                      />
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
                   </AdminCell>
                   <AdminCell end>
                     <span className="admin-actions">
@@ -732,6 +798,21 @@ export function FinanzasModule() {
           {filteredJobs.length === 0 ? <AdminEmpty title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
         </AdminDataState>
       </AdminPanel>
+
+      {proofDialog ? (
+        <BudgetProofDialog
+          title={`Comprobante · ${proofDialog.client.company || proofDialog.client.name}`}
+          subtitle={[
+            proofDialog.budget?.title ?? "Sin presupuesto asociado",
+            formatMoney(proofDialog.amount),
+            "recibido desde el portal; al marcar cobrado el cobro queda cerrado con su auditoría",
+          ].join(" · ")}
+          proofs={proofDialog.budget ? proofsByBudget[proofDialog.budget.id] ?? [] : []}
+          onClose={() => setProofDialog(null)}
+          onCollect={writable ? () => void collectFromProofDialog(proofDialog) : undefined}
+          collectBusy={busyId === `collect:${proofDialog.id}`}
+        />
+      ) : null}
     </div>
   );
 }
