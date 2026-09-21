@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { AdminError, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { EmailField, HoneypotField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 
 export function AdminRecoveryForm() {
@@ -43,8 +44,16 @@ export function AdminRecoveryForm() {
       <form className="admin-form" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}
         {message && <AdminSuccess>{message}</AdminSuccess>}
-        <div className="admin-field"><label htmlFor="recovery-email">Email de acceso</label><input id="recovery-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required maxLength={320} placeholder="tu@email.com" /></div>
-        <input className="admin-honeypot" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
+        <EmailField
+          label="Email de acceso"
+          value={email}
+          onChange={setEmail}
+          required
+          placeholder="tu@email.com"
+          id="recovery-email"
+          name="email"
+        />
+        <HoneypotField />
         <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Enviando recuperación" /> Enviando…</> : "Enviar enlace →"}</button>
       </form>
       <Link href="/login" className="admin-back-link">← Volver al inicio de sesión</Link>

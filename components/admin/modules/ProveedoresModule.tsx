@@ -28,20 +28,28 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import {
+  DateField,
+  EmailField,
+  MoneyField,
+  PhoneField,
+  SearchField,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 /**
  * Flujo de proveedores: directorio con alta y edición, y trabajos por evento con
@@ -327,7 +335,7 @@ export function ProveedoresModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField value={query} onChange={setQuery} label="Buscar proveedores y trabajos" placeholder="Buscar por proveedor, trabajo, evento o rubro…" />
+        <SearchField value={query} onChange={setQuery} label="Buscar proveedores y trabajos" placeholder="Buscar por proveedor, trabajo, evento o rubro…" />
         <AdminSelect value={jobStatus} onChange={setJobStatus} label="Filtrar trabajos por estado" options={JOB_STATUS_OPTIONS} />
       </AdminToolbar>
 
@@ -355,96 +363,78 @@ export function ProveedoresModule() {
             busy={jobBusy}
             status={jobError}
           >
-            <AdminField label="Proveedor">
-              <select
-                required
-                value={jobForm.supplierId}
-                onChange={(event) => {
-                  const supplier = suppliers.find((item) => item.id === event.target.value);
-                  setJobForm({ ...jobForm, supplierId: event.target.value, category: supplier?.category ?? jobForm.category });
-                }}
-              >
-                <option value="">Elegí un proveedor…</option>
-                {suppliers
+            <SelectField
+              label="Proveedor"
+              required
+              value={jobForm.supplierId}
+              onChange={(value) => {
+                const supplier = suppliers.find((item) => item.id === value);
+                setJobForm({ ...jobForm, supplierId: value, category: supplier?.category ?? jobForm.category });
+              }}
+              options={[
+                { value: "", label: "Elegí un proveedor…" },
+                ...suppliers
                   .filter((supplier) => supplier.active || supplier.id === jobForm.supplierId)
-                  .map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-              </select>
-            </AdminField>
-            <AdminField label="Evento" hint="Opcional">
-              <select value={jobForm.eventId} onChange={(event) => setJobForm({ ...jobForm, eventId: event.target.value })}>
-                <option value="">Sin evento asociado</option>
-                {events.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Rubro del trabajo">
-              <select value={jobForm.category} onChange={(event) => setJobForm({ ...jobForm, category: event.target.value })}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Vence" hint="Fecha prevista de entrega">
-              <input type="date" value={jobForm.dueAt} onChange={(event) => setJobForm({ ...jobForm, dueAt: event.target.value })} />
-            </AdminField>
-            <AdminField label="Trabajo / concepto" wide>
-              <input
-                required
-                maxLength={200}
-                value={jobForm.description}
-                onChange={(event) => setJobForm({ ...jobForm, description: event.target.value })}
-                placeholder="Ej.: Estructura y gráfica de stand"
-              />
-            </AdminField>
-            <AdminField label="Costo total" hint="En guaraníes">
-              <input
-                type="number"
-                min="1"
-                step="1"
-                required
-                value={jobForm.total}
-                onChange={(event) => setJobForm({ ...jobForm, total: event.target.value })}
-                inputMode="numeric"
-              />
-            </AdminField>
-            <AdminField label="Anticipo" hint="Si lo cargás, queda con anticipo pagado">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={jobForm.advance}
-                onChange={(event) => setJobForm({ ...jobForm, advance: event.target.value })}
-                inputMode="numeric"
-              />
-            </AdminField>
+                  .map((supplier) => ({ value: supplier.id, label: supplier.name })),
+              ]}
+            />
+            <SelectField
+              label="Evento"
+              hint="Opcional"
+              value={jobForm.eventId}
+              onChange={(value) => setJobForm({ ...jobForm, eventId: value })}
+              options={[{ value: "", label: "Sin evento asociado" }, ...events.map((item) => ({ value: item.id, label: item.name }))]}
+            />
+            <SelectField
+              label="Rubro del trabajo"
+              value={jobForm.category}
+              onChange={(value) => setJobForm({ ...jobForm, category: value })}
+              options={CATEGORY_OPTIONS}
+            />
+            <DateField
+              label="Vence"
+              hint="Fecha prevista de entrega"
+              value={jobForm.dueAt}
+              onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
+            />
+            <TextField
+              label="Trabajo / concepto"
+              wide
+              required
+              maxLength={200}
+              value={jobForm.description}
+              onChange={(value) => setJobForm({ ...jobForm, description: value })}
+              placeholder="Ej.: Estructura y gráfica de stand"
+            />
+            <MoneyField
+              label="Costo total"
+              hint="En guaraníes"
+              required
+              value={jobForm.total}
+              onChange={(value) => setJobForm({ ...jobForm, total: value })}
+            />
+            <MoneyField
+              label="Anticipo"
+              hint="Si lo cargás, queda con anticipo pagado"
+              value={jobForm.advance}
+              onChange={(value) => setJobForm({ ...jobForm, advance: value })}
+            />
             {formAdvance > 0 ? (
               <>
-                <AdminField label="Método del anticipo">
-                  <select value={jobForm.paymentMethod} onChange={(event) => setJobForm({ ...jobForm, paymentMethod: event.target.value })}>
-                    {METHOD_OPTIONS.map((method) => (
-                      <option key={method} value={method}>
-                        {method}
-                      </option>
-                    ))}
-                  </select>
-                </AdminField>
-                <AdminField label="Comprobante del anticipo" hint="Nº de recibo o transferencia">
-                  <input
-                    maxLength={120}
-                    value={jobForm.receipt}
-                    onChange={(event) => setJobForm({ ...jobForm, receipt: event.target.value })}
-                    placeholder="Opcional"
-                  />
-                </AdminField>
+                <SelectField
+                  label="Método del anticipo"
+                  value={jobForm.paymentMethod}
+                  onChange={(value) => setJobForm({ ...jobForm, paymentMethod: value })}
+                  options={METHOD_OPTIONS.map((method) => ({ value: method, label: method }))}
+                />
+                <TextField
+                  label="Comprobante del anticipo"
+                  hint="Nº de recibo o transferencia"
+                  maxLength={120}
+                  value={jobForm.receipt}
+                  onChange={(value) => setJobForm({ ...jobForm, receipt: value })}
+                  placeholder="Opcional"
+                />
               </>
             ) : null}
           </AdminFormPanel>
@@ -467,102 +457,87 @@ export function ProveedoresModule() {
                 </AdminNote>
               </div>
             ) : null}
-            <AdminField label="Proveedor">
-              <input value={editingJob.supplier.name} disabled />
-            </AdminField>
-            <AdminField label="Evento" hint="Opcional">
-              <select value={jobForm.eventId} onChange={(event) => setJobForm({ ...jobForm, eventId: event.target.value })}>
-                <option value="">Sin evento asociado</option>
-                {events.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Rubro del trabajo">
-              <select value={jobForm.category} onChange={(event) => setJobForm({ ...jobForm, category: event.target.value })}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Vence" hint="Fecha prevista de entrega">
-              <input type="date" value={jobForm.dueAt} onChange={(event) => setJobForm({ ...jobForm, dueAt: event.target.value })} />
-            </AdminField>
-            <AdminField label="Trabajo / concepto" wide>
-              <input
-                required
-                maxLength={200}
-                value={jobForm.description}
-                onChange={(event) => setJobForm({ ...jobForm, description: event.target.value })}
-              />
-            </AdminField>
-            <AdminField label="Costo total" hint="En guaraníes">
-              <input
-                type="number"
-                min="1"
-                step="1"
-                required
-                disabled={editingClosed}
-                value={jobForm.total}
-                onChange={(event) => setJobForm({ ...jobForm, total: event.target.value })}
-                inputMode="numeric"
-              />
-            </AdminField>
-            <AdminField label="Anticipo pagado" hint="En guaraníes">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                disabled={editingClosed}
-                value={jobForm.advance}
-                onChange={(event) => setJobForm({ ...jobForm, advance: event.target.value })}
-                inputMode="numeric"
-              />
-            </AdminField>
-            <AdminField label="Método de pago" hint="Último pago registrado">
-              <select value={jobForm.paymentMethod} onChange={(event) => setJobForm({ ...jobForm, paymentMethod: event.target.value })}>
-                {METHOD_OPTIONS.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Comprobante" hint="Nº de recibo o transferencia">
-              <input
-                maxLength={120}
-                value={jobForm.receipt}
-                onChange={(event) => setJobForm({ ...jobForm, receipt: event.target.value })}
-                placeholder="Opcional"
-              />
-            </AdminField>
+            <TextField label="Proveedor" disabled value={editingJob.supplier.name} onChange={() => {}} />
+            <SelectField
+              label="Evento"
+              hint="Opcional"
+              value={jobForm.eventId}
+              onChange={(value) => setJobForm({ ...jobForm, eventId: value })}
+              options={[{ value: "", label: "Sin evento asociado" }, ...events.map((item) => ({ value: item.id, label: item.name }))]}
+            />
+            <SelectField
+              label="Rubro del trabajo"
+              value={jobForm.category}
+              onChange={(value) => setJobForm({ ...jobForm, category: value })}
+              options={CATEGORY_OPTIONS}
+            />
+            <DateField
+              label="Vence"
+              hint="Fecha prevista de entrega"
+              value={jobForm.dueAt}
+              onChange={(value) => setJobForm({ ...jobForm, dueAt: value })}
+            />
+            <TextField
+              label="Trabajo / concepto"
+              wide
+              required
+              maxLength={200}
+              value={jobForm.description}
+              onChange={(value) => setJobForm({ ...jobForm, description: value })}
+            />
+            <MoneyField
+              label="Costo total"
+              hint="En guaraníes"
+              required
+              disabled={editingClosed}
+              value={jobForm.total}
+              onChange={(value) => setJobForm({ ...jobForm, total: value })}
+            />
+            <MoneyField
+              label="Anticipo pagado"
+              hint="En guaraníes"
+              disabled={editingClosed}
+              value={jobForm.advance}
+              onChange={(value) => setJobForm({ ...jobForm, advance: value })}
+            />
+            <SelectField
+              label="Método de pago"
+              hint="Último pago registrado"
+              value={jobForm.paymentMethod}
+              onChange={(value) => setJobForm({ ...jobForm, paymentMethod: value })}
+              options={METHOD_OPTIONS.map((method) => ({ value: method, label: method }))}
+            />
+            <TextField
+              label="Comprobante"
+              hint="Nº de recibo o transferencia"
+              maxLength={120}
+              value={jobForm.receipt}
+              onChange={(value) => setJobForm({ ...jobForm, receipt: value })}
+              placeholder="Opcional"
+            />
             {editingJob.deliveredAt ? (
-              <AdminField label="Fecha de entrega">
-                <input
-                  type="date"
-                  value={jobForm.deliveredAt}
-                  onChange={(event) => setJobForm({ ...jobForm, deliveredAt: event.target.value })}
-                />
-              </AdminField>
+              <DateField
+                label="Fecha de entrega"
+                value={jobForm.deliveredAt}
+                onChange={(value) => setJobForm({ ...jobForm, deliveredAt: value })}
+              />
             ) : null}
             {editingJob.paidAt ? (
-              <AdminField label="Fecha de pago">
-                <input type="date" value={jobForm.paidAt} onChange={(event) => setJobForm({ ...jobForm, paidAt: event.target.value })} />
-              </AdminField>
-            ) : null}
-            <AdminField label="Notas" wide>
-              <textarea
-                maxLength={1000}
-                rows={2}
-                value={jobForm.notes}
-                onChange={(event) => setJobForm({ ...jobForm, notes: event.target.value })}
-                placeholder="Detalles de coordinación, materiales o acuerdos"
+              <DateField
+                label="Fecha de pago"
+                value={jobForm.paidAt}
+                onChange={(value) => setJobForm({ ...jobForm, paidAt: value })}
               />
-            </AdminField>
+            ) : null}
+            <TextAreaField
+              label="Notas"
+              wide
+              maxLength={1000}
+              rows={2}
+              value={jobForm.notes}
+              onChange={(value) => setJobForm({ ...jobForm, notes: value })}
+              placeholder="Detalles de coordinación, materiales o acuerdos"
+            />
           </AdminFormPanel>
         ) : null}
 
@@ -691,76 +666,66 @@ export function ProveedoresModule() {
             busy={supplierBusy}
             status={supplierError}
           >
-            <AdminField label="Nombre">
-              <input
-                required
-                minLength={2}
-                maxLength={120}
-                value={supplierForm.name}
-                onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })}
-                placeholder="Ej.: Carpintería Lima"
-              />
-            </AdminField>
-            <AdminField label="Empresa">
-              <input
-                maxLength={120}
-                value={supplierForm.company}
-                onChange={(event) => setSupplierForm({ ...supplierForm, company: event.target.value })}
-                placeholder="Ej.: Lima Hnos. S.A."
-              />
-            </AdminField>
-            <AdminField label="Teléfono" hint="Con código de país">
-              <input
-                type="tel"
-                maxLength={30}
-                value={supplierForm.phone}
-                onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })}
-                placeholder="+595 981 000 000"
-                autoComplete="tel"
-              />
-            </AdminField>
-            <AdminField label="Correo">
-              <input
-                type="email"
-                maxLength={200}
-                value={supplierForm.email}
-                onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })}
-                placeholder="proveedor@correo.com"
-                autoComplete="email"
-              />
-            </AdminField>
-            <AdminField label="Rubro">
-              <select value={supplierForm.category} onChange={(event) => setSupplierForm({ ...supplierForm, category: event.target.value })}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </AdminField>
-            <AdminField label="Condiciones de pago" hint="Ej.: 50% anticipo, 30 días">
-              <input
-                maxLength={200}
-                value={supplierForm.paymentTerms}
-                onChange={(event) => setSupplierForm({ ...supplierForm, paymentTerms: event.target.value })}
-                placeholder="Opcional"
-              />
-            </AdminField>
-            <AdminField label="Estado">
-              <select value={supplierForm.active ? "active" : "inactive"} onChange={(event) => setSupplierForm({ ...supplierForm, active: event.target.value === "active" })}>
-                <option value="active">Activo</option>
-                <option value="inactive">Inactivo</option>
-              </select>
-            </AdminField>
-            <AdminField label="Notas" wide>
-              <textarea
-                maxLength={1000}
-                rows={2}
-                value={supplierForm.notes}
-                onChange={(event) => setSupplierForm({ ...supplierForm, notes: event.target.value })}
-                placeholder="Contactos, materiales, acuerdos"
-              />
-            </AdminField>
+            <TextField
+              label="Nombre"
+              required
+              minLength={2}
+              maxLength={120}
+              value={supplierForm.name}
+              onChange={(value) => setSupplierForm({ ...supplierForm, name: value })}
+              placeholder="Ej.: Carpintería Lima"
+            />
+            <TextField
+              label="Empresa"
+              maxLength={120}
+              value={supplierForm.company}
+              onChange={(value) => setSupplierForm({ ...supplierForm, company: value })}
+              placeholder="Ej.: Lima Hnos. S.A."
+            />
+            <PhoneField
+              label="Teléfono"
+              hint="Con código de país"
+              value={supplierForm.phone}
+              onChange={(value) => setSupplierForm({ ...supplierForm, phone: value })}
+            />
+            <EmailField
+              label="Correo"
+              value={supplierForm.email}
+              onChange={(value) => setSupplierForm({ ...supplierForm, email: value })}
+              placeholder="proveedor@correo.com"
+            />
+            <SelectField
+              label="Rubro"
+              value={supplierForm.category}
+              onChange={(value) => setSupplierForm({ ...supplierForm, category: value })}
+              options={CATEGORY_OPTIONS}
+            />
+            <TextField
+              label="Condiciones de pago"
+              hint="Ej.: 50% anticipo, 30 días"
+              maxLength={200}
+              value={supplierForm.paymentTerms}
+              onChange={(value) => setSupplierForm({ ...supplierForm, paymentTerms: value })}
+              placeholder="Opcional"
+            />
+            <SelectField
+              label="Estado"
+              value={supplierForm.active ? "active" : "inactive"}
+              onChange={(value) => setSupplierForm({ ...supplierForm, active: value === "active" })}
+              options={[
+                { value: "active", label: "Activo" },
+                { value: "inactive", label: "Inactivo" },
+              ]}
+            />
+            <TextAreaField
+              label="Notas"
+              wide
+              maxLength={1000}
+              rows={2}
+              value={supplierForm.notes}
+              onChange={(value) => setSupplierForm({ ...supplierForm, notes: value })}
+              placeholder="Contactos, materiales, acuerdos"
+            />
           </AdminFormPanel>
         ) : null}
 
@@ -912,54 +877,42 @@ function JobStatusPanel({
         Estado actual: <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge> · Total {formatMoney(job.total)} ·
         Anticipo {formatMoney(job.advance)}
       </p>
-      <AdminField label="Nuevo estado">
-        <select required value={status} onChange={(event) => setStatus(event.target.value)}>
-          {options.map((value) => (
-            <option key={value} value={value}>
-              {jobStatusLabel(value)}
-            </option>
-          ))}
-        </select>
-      </AdminField>
+      <SelectField
+        label="Nuevo estado"
+        required
+        value={status}
+        onChange={setStatus}
+        options={options.map((value) => ({ value, label: jobStatusLabel(value) }))}
+      />
       {asksAdvance ? (
-        <AdminField label="Monto del anticipo" hint="En guaraníes, mayor a cero">
-          <input
-            type="number"
-            min="1"
-            step="1"
-            required
-            value={advance}
-            onChange={(event) => setAdvance(event.target.value)}
-            inputMode="numeric"
-          />
-        </AdminField>
+        <MoneyField
+          label="Monto del anticipo"
+          hint="En guaraníes, mayor a cero"
+          required
+          value={advance}
+          onChange={setAdvance}
+        />
       ) : null}
       {asksPayment ? (
         <>
-          <AdminField label="Método">
-            <select value={method} onChange={(event) => setMethod(event.target.value)}>
-              {METHOD_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Comprobante" hint="Nº de recibo o transferencia">
-            <input maxLength={120} value={receipt} onChange={(event) => setReceipt(event.target.value)} placeholder="Opcional" />
-          </AdminField>
+          <SelectField
+            label="Método"
+            value={method}
+            onChange={setMethod}
+            options={METHOD_OPTIONS.map((option) => ({ value: option, label: option }))}
+          />
+          <TextField
+            label="Comprobante"
+            hint="Nº de recibo o transferencia"
+            maxLength={120}
+            value={receipt}
+            onChange={setReceipt}
+            placeholder="Opcional"
+          />
         </>
       ) : null}
-      {status === "DELIVERED" ? (
-        <AdminField label="Fecha de entrega">
-          <input type="date" value={deliveredAt} onChange={(event) => setDeliveredAt(event.target.value)} />
-        </AdminField>
-      ) : null}
-      {status === "PAID" ? (
-        <AdminField label="Fecha de pago">
-          <input type="date" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
-        </AdminField>
-      ) : null}
+      {status === "DELIVERED" ? <DateField label="Fecha de entrega" value={deliveredAt} onChange={setDeliveredAt} /> : null}
+      {status === "PAID" ? <DateField label="Fecha de pago" value={paidAt} onChange={setPaidAt} /> : null}
       {status === "CANCELLED" ? <AdminNote>El trabajo queda cancelado y no se puede reactivar.</AdminNote> : null}
       {status === "BALANCE_PENDING" ? <AdminNote>Saldo que queda pendiente: {formatMoney(balance)}.</AdminNote> : null}
       {status === "PAID" ? <AdminNote>Saldo a liquidar: {formatMoney(balance)}.</AdminNote> : null}

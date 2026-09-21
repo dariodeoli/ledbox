@@ -162,26 +162,6 @@ export function AdminDataState({
   return <>{children}</>;
 }
 
-export function AdminField({
-  label,
-  hint,
-  wide,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  wide?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className={wide ? "admin-field admin-field--wide" : "admin-field"}>
-      <span className="admin-field-label">{label}</span>
-      {children}
-      {hint ? <span className="admin-field-hint">{hint}</span> : null}
-    </label>
-  );
-}
-
 export function AdminFormPanel({
   title,
   submitLabel,
@@ -220,37 +200,6 @@ export function AdminFormPanel({
         </div>
       </div>
     </form>
-  );
-}
-
-export function AdminSearchField({
-  value,
-  onChange,
-  label,
-  placeholder = "Buscar…",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="admin-search">
-      <AdminIcon name="search" size={15} />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label={label}
-        placeholder={placeholder}
-        autoComplete="off"
-      />
-      {value ? (
-        <button type="button" className="admin-search-clear" onClick={() => onChange("")} aria-label="Limpiar búsqueda" title="Limpiar búsqueda">
-          <AdminIcon name="close" size={12} />
-        </button>
-      ) : null}
-    </div>
   );
 }
 

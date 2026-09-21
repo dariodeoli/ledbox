@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdminError, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { HoneypotField, PasswordField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 
 export function AdminResetForm() {
@@ -50,9 +51,9 @@ export function AdminResetForm() {
         <p className="admin-lede">Usá al menos 8 caracteres. El enlace vence en 30 minutos y solo puede usarse una vez.</p>
         <form className="admin-form" onSubmit={handleSubmit} noValidate>
           {error && <AdminError message={error} />}
-          <div className="admin-field"><label htmlFor="new-password">Nueva contraseña</label><input id="new-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required minLength={8} maxLength={128} /></div>
-          <div className="admin-field"><label htmlFor="confirm-password">Repetir contraseña</label><input id="confirm-password" name="confirmation" type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" required minLength={8} maxLength={128} /></div>
-          <input className="admin-honeypot" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
+          <PasswordField label="Nueva contraseña" value={password} onChange={setPassword} autoComplete="new-password" required minLength={8} id="new-password" name="password" />
+          <PasswordField label="Repetir contraseña" value={confirmation} onChange={setConfirmation} autoComplete="new-password" required minLength={8} id="confirm-password" name="confirmation" />
+          <HoneypotField />
           <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Actualizando contraseña" /> Actualizando…</> : "Actualizar contraseña →"}</button>
         </form>
       </>}

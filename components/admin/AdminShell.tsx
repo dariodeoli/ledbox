@@ -26,7 +26,7 @@ import type {
 import { AdminIcon } from "./AdminIcons";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
-import { redirectToLogin, useAdminResource } from "./use-admin-data";
+import { adminApiGet, useAdminResource } from "@/lib/admin-api";
 
 export type AdminSessionState = {
   user: AdminSessionUser | null;
@@ -99,24 +99,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const loadSession = useCallback(async () => {
     setSession((current) => ({ ...current, loading: true, error: "" }));
-    try {
-      const response = await fetch("/api/admin/session", { cache: "no-store" });
-      // 401 sin sesión y 403 sin empresa activa (multiempresa) se tratan igual: volver al login.
-      if (response.status === 401 || response.status === 403) {
-        redirectToLogin();
-        return;
-      }
-      const raw = (await response.json().catch(() => null)) as unknown;
-      const { user, organization, organizations } = pickSessionData(raw);
-      if (!response.ok || !user) {
-        setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
-        return;
-      }
-      const role = asAdminRole(user.role);
-      setSession({ user: { ...user, role }, role, organization, organizations, loading: false, error: "" });
-    } catch {
-      setSession((current) => ({ ...current, loading: false, error: "No pudimos conectar con el panel." }));
+    // 401 sin sesión y 403 sin empresa activa (multiempresa) los resuelve el cliente: vuelve al login.
+    const result = await adminApiGet<unknown>("/api/admin/session", { fresh: true, fallbackError: "No pudimos cargar tu sesión." });
+    if (!result.ok) {
+      if (result.sessionInvalid) return;
+      setSession((current) => ({ ...current, loading: false, error: result.error }));
+      return;
     }
+    const { user, organization, organizations } = pickSessionData(result.data);
+    if (!user) {
+      setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
+      return;
+    }
+    const role = asAdminRole(user.role);
+    setSession({ user: { ...user, role }, role, organization, organizations, loading: false, error: "" });
   }, []);
 
   useEffect(() => {

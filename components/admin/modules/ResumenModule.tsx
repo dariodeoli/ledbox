@@ -34,7 +34,7 @@ import {
   AdminRow,
   AdminTable,
 } from "../AdminUI";
-import { useAdminResource } from "../use-admin-data";
+import { useAdminResource } from "@/lib/admin-api";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
 
 export function ResumenModule() {

@@ -21,19 +21,18 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { SearchField, SelectField, TextAreaField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -183,7 +182,7 @@ export function LeadsModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField
+        <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar leads"
@@ -396,24 +395,22 @@ export function LeadsModule() {
             {writable ? (
               <form className="admin-detail-form" onSubmit={saveDetail} aria-busy={saving || converting || undefined}>
                 <p className="admin-detail-section-title">Seguimiento comercial</p>
-                <AdminField label="Estado del lead">
-                  <select value={draftStatus} onChange={(event) => setDraftStatus(event.target.value)} aria-label="Estado del lead">
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </AdminField>
-                <AdminField label="Notas internas" hint="No las ve el cliente; máximo 2000 caracteres." wide>
-                  <textarea
-                    rows={4}
-                    maxLength={2000}
-                    value={draftNotes}
-                    onChange={(event) => setDraftNotes(event.target.value)}
-                    placeholder="Ej.: pidió presupuesto para el 12/10, coordinar visita al predio."
-                  />
-                </AdminField>
+                <SelectField
+                  label="Estado del lead"
+                  value={draftStatus}
+                  onChange={setDraftStatus}
+                  options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                />
+                <TextAreaField
+                  label="Notas internas"
+                  hint="No las ve el cliente; máximo 2000 caracteres."
+                  rows={4}
+                  maxLength={2000}
+                  wide
+                  value={draftNotes}
+                  onChange={setDraftNotes}
+                  placeholder="Ej.: pidió presupuesto para el 12/10, coordinar visita al predio."
+                />
                 {detailError ? <AdminNote tone="error">{detailError}</AdminNote> : null}
                 <div className="admin-detail-actions">
                   <AdminButton type="button" icon="check" onClick={convertToClient} busy={converting} disabled={saving}>

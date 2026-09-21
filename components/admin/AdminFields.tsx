@@ -26,6 +26,8 @@ import { AdminIcon } from "./AdminIcons";
 type FieldChromeProps = {
   /** Label visible arriba del control; sin label se usa `ariaLabel`. */
   label?: string;
+  /** Acción junto al label (por ejemplo, "¿La olvidaste?"). */
+  labelAction?: React.ReactNode;
   /** Nombre accesible cuando el campo va inline (tablas, formularios de fila). */
   ariaLabel?: string;
   hint?: string;
@@ -42,7 +44,7 @@ function describedBy(error: string | null | undefined, hint: string | undefined,
   return undefined;
 }
 
-function FieldChrome({ label, ariaLabel, hint, error, wide, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
+function FieldChrome({ label, labelAction, ariaLabel, hint, error, wide, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
   const message = error ? (
     <span className="admin-field-error" id={errorId} role="alert">
       {error}
@@ -56,9 +58,18 @@ function FieldChrome({ label, ariaLabel, hint, error, wide, htmlFor, hintId, err
   return (
     <div className={wide ? "admin-field admin-field--wide" : "admin-field"}>
       {label ? (
-        <label className="admin-field-label" htmlFor={htmlFor}>
-          {label}
-        </label>
+        labelAction ? (
+          <span className="admin-field-heading">
+            <label className="admin-field-label" htmlFor={htmlFor}>
+              {label}
+            </label>
+            {labelAction}
+          </span>
+        ) : (
+          <label className="admin-field-label" htmlFor={htmlFor}>
+            {label}
+          </label>
+        )
       ) : (
         <span className="admin-field-label" hidden>
           {ariaLabel}
@@ -458,6 +469,7 @@ export function EmailField({
   disabled,
   name,
   id,
+  autoComplete = "email",
 }: {
   label?: string;
   ariaLabel?: string;
@@ -471,6 +483,7 @@ export function EmailField({
   disabled?: boolean;
   name?: string;
   id?: string;
+  autoComplete?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
@@ -483,7 +496,7 @@ export function EmailField({
         maxLength={FIELD_LIMITS.email}
         required={required}
         placeholder={placeholder}
-        autoComplete="email"
+        autoComplete={autoComplete}
         inputMode="email"
         disabled={disabled}
         name={name}
@@ -563,6 +576,7 @@ function DateLikeField({
   name,
   id,
   className,
+  title,
 }: {
   type: "date" | "time" | "datetime-local";
   label?: string;
@@ -579,6 +593,7 @@ function DateLikeField({
   name?: string;
   id?: string;
   className?: string;
+  title?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
@@ -594,6 +609,7 @@ function DateLikeField({
         max={max}
         disabled={disabled}
         name={name}
+        title={title}
         aria-label={label ? undefined : ariaLabel}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(error, hint, hintId, errorId)}
@@ -715,6 +731,7 @@ export function SwitchField({
 /** Contraseña con mostrar/ocultar obligatorio. */
 export function PasswordField({
   label,
+  labelAction,
   ariaLabel,
   value,
   onChange,
@@ -730,6 +747,7 @@ export function PasswordField({
   id,
 }: {
   label?: string;
+  labelAction?: React.ReactNode;
   ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
@@ -747,7 +765,17 @@ export function PasswordField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const [visible, setVisible] = useState(false);
   return (
-    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome
+      label={label}
+      labelAction={labelAction}
+      ariaLabel={ariaLabel}
+      hint={hint}
+      error={error}
+      wide={wide}
+      htmlFor={fieldId}
+      hintId={hintId}
+      errorId={errorId}
+    >
       <span className="admin-password">
         <input
           id={fieldId}
@@ -808,4 +836,9 @@ export function SearchField({
       ) : null}
     </div>
   );
+}
+
+/** Trampa anti-bot de los formularios de acceso: invisible, fuera del tabulado. */
+export function HoneypotField({ name = "website" }: { name?: string }) {
+  return <input className="admin-honeypot" name={name} tabIndex={-1} autoComplete="off" aria-hidden="true" />;
 }

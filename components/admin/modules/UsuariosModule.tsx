@@ -12,17 +12,16 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminKpi,
   AdminNote,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { EmailField, PasswordField, SearchField, SelectField, TextField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 const ROLE_OPTIONS = [
   { value: "ALL", label: "Todos los roles" },
@@ -117,7 +116,7 @@ export function UsuariosModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField value={query} onChange={setQuery} label="Buscar usuarios" placeholder="Buscar por nombre, correo o rol…" />
+        <SearchField value={query} onChange={setQuery} label="Buscar usuarios" placeholder="Buscar por nombre, correo o rol…" />
         <AdminSelect value={roleFilter} onChange={setRoleFilter} label="Filtrar por rol" options={ROLE_OPTIONS} />
         {writable ? (
           <AdminButton
@@ -146,46 +145,36 @@ export function UsuariosModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Nombre">
-            <input
-              required
-              maxLength={120}
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Ej.: Ana Martínez"
-            />
-          </AdminField>
-          <AdminField label="Correo">
-            <input
-              required
-              type="email"
-              maxLength={320}
-              value={form.email}
-              onChange={(event) => setForm({ ...form, email: event.target.value })}
-              placeholder="ana@ledbox.online"
-              autoComplete="email"
-            />
-          </AdminField>
-          <AdminField label="Contraseña inicial" hint="Mínimo 12 caracteres">
-            <input
-              required
-              type="password"
-              minLength={12}
-              maxLength={128}
-              value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              autoComplete="new-password"
-            />
-          </AdminField>
-          <AdminField label="Rol">
-            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
-              {ASSIGNABLE_ROLES.map((value) => (
-                <option key={value} value={value}>
-                  {adminRoleLabel(value)}
-                </option>
-              ))}
-            </select>
-          </AdminField>
+          <TextField
+            label="Nombre"
+            required
+            maxLength={120}
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="Ej.: Ana Martínez"
+          />
+          <EmailField
+            label="Correo"
+            required
+            value={form.email}
+            onChange={(value) => setForm({ ...form, email: value })}
+            placeholder="ana@ledbox.online"
+          />
+          <PasswordField
+            label="Contraseña inicial"
+            hint="Mínimo 12 caracteres"
+            required
+            minLength={12}
+            value={form.password}
+            onChange={(value) => setForm({ ...form, password: value })}
+            autoComplete="new-password"
+          />
+          <SelectField
+            label="Rol"
+            value={form.role}
+            onChange={(value) => setForm({ ...form, role: value })}
+            options={ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }))}
+          />
         </AdminFormPanel>
       ) : null}
 
@@ -222,20 +211,15 @@ export function UsuariosModule() {
                   {user.role === "OWNER" || !writable ? (
                     <AdminBadge tone={statusTone(user.role)}>{adminRoleLabel(user.role)}</AdminBadge>
                   ) : (
-                    <select
+                    <AdminSelect
                       className="admin-filter admin-filter--cell"
                       value={user.role}
                       disabled={rowBusy === user.id}
-                      onChange={(event) => void patch(user, { role: event.target.value })}
-                      aria-label={`Rol de ${user.name}`}
+                      onChange={(value) => void patch(user, { role: value })}
+                      label={`Rol de ${user.name}`}
                       title={`Rol de ${user.name}`}
-                    >
-                      {ASSIGNABLE_ROLES.map((value) => (
-                        <option key={value} value={value}>
-                          {adminRoleLabel(value)}
-                        </option>
-                      ))}
-                    </select>
+                      options={ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }))}
+                    />
                   )}
                 </AdminCell>
                 <AdminCell>
