@@ -1,16 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { adminModuleVisible, adminNavGroups, adminNavLabel, asAdminRole, isAdminNavActive } from "@/lib/admin-policy";
-import { adminRoleLabel, initials } from "@/lib/admin-format";
+import {
+  adminRoleLabel,
+  formatCalendarDayShort,
+  formatDayWhen,
+  formatNumber,
+  initials,
+  notificationKindLabel,
+  notificationLevelLabel,
+  notificationTone,
+} from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
-import type { AdminOrganization, AdminRole, AdminSessionUser } from "@/lib/admin-types";
+import type {
+  AdminNotification,
+  AdminNotificationCounts,
+  AdminOrganization,
+  AdminRole,
+  AdminSessionUser,
+} from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
-import { AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
+import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
-import { redirectToLogin } from "./use-admin-data";
+import { redirectToLogin, useAdminResource } from "./use-admin-data";
 
 export type AdminSessionState = {
   user: AdminSessionUser | null;
@@ -222,6 +237,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="admin-topbar-tools">
+              <AdminNotificationBell />
               <AdminThemeToggle />
               <a
                 className="admin-btn admin-hide-sm"
@@ -278,4 +294,164 @@ export function AdminModuleGuard({ href, children }: { href: string; children: R
     return <AdminEmpty icon="users" title="Acceso restringido" hint="Solo propietarios y administradores pueden ver este módulo." />;
   }
   return <>{children}</>;
+}
+
+// ── Avisos operativos (issue #10) ───────────────────────────────────────────
+
+export type AdminNotificationFeed = {
+  notifications: AdminNotification[];
+  notificationCounts: AdminNotificationCounts;
+};
+
+const EMPTY_NOTIFICATION_COUNTS: AdminNotificationCounts = { overdue: 0, soon: 0, info: 0, total: 0 };
+
+/**
+ * Feed de avisos del panel (`GET /api/admin/notifications`): lectura para todos
+ * los roles. Lo comparten la campana del topbar y el bloque del Resumen.
+ */
+export function useAdminNotifications() {
+  return useAdminResource<AdminNotificationFeed>("/api/admin/notifications", (payload) => ({
+    notifications: payload.notifications ?? [],
+    notificationCounts: payload.notificationCounts ?? EMPTY_NOTIFICATION_COUNTS,
+  }));
+}
+
+/** Aviso con enlace a su módulo; el nivel real define el tono y el borde. */
+function AdminNotificationItem({ notification }: { notification: AdminNotification }) {
+  const level = notificationLevelLabel(notification.level);
+  const kind = notificationKindLabel(notification.kind);
+  const when = `${formatCalendarDayShort(notification.date)} · ${formatDayWhen(notification.date)}`;
+  return (
+    <Link
+      className="admin-notif-item"
+      href={notification.href}
+      data-level={notification.level}
+      title={`${level} · ${kind}: ${notification.title}${notification.subtitle ? ` · ${notification.subtitle}` : ""} · ${when} · Ir a ${adminNavLabel(notification.href)}`}
+    >
+      <AdminBadge tone={notificationTone(notification.level)}>{level}</AdminBadge>
+      <span className="admin-notif-main">
+        <span className="admin-notif-title">{notification.title}</span>
+        <span className="admin-notif-sub">
+          {kind}
+          {notification.subtitle ? ` · ${notification.subtitle}` : ""}
+        </span>
+      </span>
+      <span className="admin-notif-date" title={when}>
+        {when}
+      </span>
+      <AdminIcon name="arrow-right" size={14} />
+    </Link>
+  );
+}
+
+/**
+ * Campana del topbar: contador de vencidos/próximos (sin avisos no dibuja
+ * contador), panel desplegable con los avisos ordenados por urgencia y
+ * navegación al módulo de cada uno. Cierra con Escape, al salir el foco y al
+ * hacer clic afuera; al abrir refresca porque los avisos salen de datos vivos.
+ */
+function AdminNotificationBell() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const feed = useAdminNotifications();
+  const notifications = feed.data?.notifications ?? [];
+  const counts = feed.data?.notificationCounts ?? EMPTY_NOTIFICATION_COUNTS;
+  const urgent = counts.overdue + counts.soon;
+
+  // Al navegar desde un aviso el panel se cierra solo.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    function closeOnOutside(event: PointerEvent) {
+      const node = wrapRef.current;
+      if (node && event.target instanceof Node && !node.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutside);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    void feed.reload();
+    setOpen(true);
+  }
+
+  return (
+    <div
+      className="admin-notif"
+      ref={wrapRef}
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (next && !event.currentTarget.contains(next)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className="admin-iconbtn admin-notif-toggle"
+        onClick={toggle}
+        aria-label={urgent > 0 ? `Avisos: ${formatNumber(urgent)} vencidos o próximos` : "Avisos y recordatorios"}
+        aria-expanded={open}
+        aria-controls="admin-notif-panel"
+        title="Avisos y recordatorios"
+      >
+        <AdminIcon name="alert" size={16} />
+        {urgent > 0 ? (
+          <span className="admin-notif-count" aria-hidden="true">
+            {urgent > 99 ? "99+" : formatNumber(urgent)}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <div className="admin-notif-panel" id="admin-notif-panel" role="region" aria-label="Avisos y recordatorios">
+          <header className="admin-notif-head">
+            <strong>Avisos</strong>
+            <span className="admin-notif-total">
+              {counts.total > 0
+                ? `${formatNumber(counts.overdue)} vencidos · ${formatNumber(counts.soon)} próximos`
+                : "Sin pendientes"}
+            </span>
+          </header>
+          {feed.loading && notifications.length === 0 ? (
+            <AdminLoadingRows rows={3} label="Cargando avisos" />
+          ) : feed.error ? (
+            <AdminErrorState message={feed.error} onRetry={feed.reload} />
+          ) : notifications.length === 0 ? (
+            <AdminEmpty
+              icon="check"
+              title="Sin avisos"
+              hint="No hay vencimientos, checklist pendiente ni cobros con saldo."
+            />
+          ) : (
+            <ul className="admin-notif-list">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <AdminNotificationItem notification={notification} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {notifications.length > 0 && notifications.length < counts.total ? (
+            <p className="admin-notif-note">
+              Mostrando los primeros {formatNumber(notifications.length)} de {formatNumber(counts.total)} avisos; el resto vive en cada módulo.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }

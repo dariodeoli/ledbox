@@ -780,6 +780,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--resumen-eventos { --resumen-eventos-cols: 6rem minmax(8.5rem, 1.5fr) minmax(6.5rem, 1fr) 5.5rem; --admin-cols: var(--resumen-eventos-cols); --admin-table-min: 29rem; }
 .admin-table--resumen-cobrar { --resumen-cobrar-cols: minmax(6rem, 1.1fr) minmax(7.5rem, 1.4fr) 6.5rem 7rem; --admin-cols: var(--resumen-cobrar-cols); --admin-table-min: 29rem; }
 .admin-table--resumen-pagar { --resumen-pagar-cols: minmax(6.5rem, 1.1fr) minmax(7.5rem, 1.4fr) 5.5rem 6.5rem; --admin-cols: var(--resumen-pagar-cols); --admin-table-min: 28.5rem; }
+.admin-table--resumen-avisos { --resumen-avisos-cols: 5.5rem minmax(9rem, 1.8fr) 6.5rem 7.5rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 30rem; }
 
 /* ── Checklist operativo ── */
 .admin-check { position: relative; display: inline-flex; align-items: center; gap: 6px; color: var(--a-warn); font-size: 11px; cursor: pointer; }
@@ -853,6 +854,35 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-cal-alert { grid-template-columns: 5.5rem minmax(0, 1fr) 1rem; }
   .admin-cal-alert-date { grid-column: 2; grid-row: 2; text-align: left; }
   .admin-cal-alert > .admin-icon { grid-column: 3; grid-row: 1; }
+}
+
+/* ── Avisos operativos (campana del topbar y "Qué mirar hoy") ──
+   La campana lista el feed normalizado por el API y el Resumen lo muestra en la
+   tabla del panel; el nivel real (`data-level`) define el tono y el borde. */
+.admin-notif { position: relative; }
+.admin-notif-toggle { position: relative; }
+.admin-notif-count { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 1px solid var(--a-panel); border-radius: 999px; background: var(--a-danger); color: #2b0410; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-notif-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; display: grid; gap: 8px; width: min(25rem, calc(100vw - 24px)); max-height: min(70vh, 32rem); overflow-y: auto; padding: 10px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); scrollbar-width: thin; scrollbar-color: var(--a-line-2) transparent; }
+.admin-notif-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.admin-notif-head strong { color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-notif-total { color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-notif-list { display: grid; gap: 5px; list-style: none; }
+.admin-notif-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; }
+.admin-notif-item:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
+.admin-notif-item[data-level="overdue"] { border-left-color: var(--a-danger); }
+.admin-notif-item[data-level="soon"] { border-left-color: var(--a-warn); }
+.admin-notif-item[data-level="info"] { border-left-color: var(--a-info); }
+.admin-notif-main { display: grid; min-width: 0; }
+.admin-notif-title { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.admin-notif-sub { overflow: hidden; color: var(--a-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-notif-date { color: var(--a-muted-2); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-notif-item > .admin-icon { color: var(--a-muted); }
+.admin-notif-note { color: var(--a-muted); font-size: 10.5px; line-height: 1.45; }
+/* El Resumen es una grilla de paneles: los avisos van a todo el ancho. */
+.admin-panel-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) {
+  /* El `backdrop-filter` del topbar es el bloque contenedor del panel fijo: queda pegado a la barra. */
+  .admin-notif-panel { position: fixed; top: calc(var(--a-topbar) + 6px); left: 10px; right: 10px; width: auto; max-height: min(64vh, 26rem); }
 }
 
 /* ── Detalle de lead (pipeline comercial) ── */
