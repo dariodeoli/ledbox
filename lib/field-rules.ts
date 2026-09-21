@@ -41,11 +41,30 @@ export const FIELD_MESSAGES = {
   percent: "Ingresá un porcentaje entre 0 y 100.",
   name: "Ingresá un nombre de 2 a 120 caracteres.",
   required: "Este campo es obligatorio.",
+  pin: "El PIN tiene que tener entre 4 y 6 dígitos.",
 } as const;
 
 /** Deja solo dígitos (cantidades, días, códigos numéricos). */
 export function digitsOnly(value: string): string {
   return (value ?? "").replace(/\D/g, "");
+}
+
+/** PIN del panel (issue #21): 4–6 dígitos, nunca visible y validado al completarlo. */
+export const PIN_MIN_DIGITS = 4;
+export const PIN_MAX_DIGITS = 6;
+
+/** Deja solo dígitos y corta al máximo del PIN (teclado numérico y pegado incluidos). */
+export function pinInput(value: string): string {
+  return digitsOnly(value).slice(0, PIN_MAX_DIGITS);
+}
+
+/** ¿PIN válido? (4–6 dígitos; el API revalida siempre). */
+export function pinValid(value: string): boolean {
+  return new RegExp(`^\\d{${PIN_MIN_DIGITS},${PIN_MAX_DIGITS}}$`).test(value ?? "");
+}
+
+export function pinError(value: string): string | null {
+  return pinValid(value) ? null : FIELD_MESSAGES.pin;
 }
 
 /** Nombre de persona como se guarda: sin espacios de más (el límite es `FIELD_LIMITS.name`). */

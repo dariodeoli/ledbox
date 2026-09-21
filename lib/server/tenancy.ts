@@ -10,6 +10,7 @@ import { roleCan, type AdminCapability } from "./permissions";
  * membresía del usuario, y es la única puerta de entrada de `app/api/admin/*`.
  *
  * - Sin sesión → 401.
+ * - Sesión bloqueada por PIN (issue #21) → 423, salvo `allowLocked`.
  * - Con sesión pero sin membresía activa (o sin empresa activa) → 403.
  * - Con membresía pero sin la capacidad pedida → 403.
  * - La organización demo (issue #14) es de solo lectura: toda capacidad de
@@ -55,9 +56,23 @@ async function findMembership(adminUserId: string, organizationId: string | null
   });
 }
 
-export async function requireAdminContext(capability?: AdminCapability): Promise<AdminContextResult> {
+/**
+ * Resuelve la sesión, la empresa activa y la membresía. Por defecto una sesión
+ * **bloqueada** (PIN, issue #21) no entrega datos ni permite mutar: responde 423
+ * y solo los endpoints de sesión/PIN pueden operar con `allowLocked`.
+ */
+export async function requireAdminContext(
+  capability?: AdminCapability,
+  options?: { allowLocked?: boolean },
+): Promise<AdminContextResult> {
   const auth = await getAuthenticatedAdmin();
   if (!auth) return { ok: false, response: jsonError("Unauthorized", 401) };
+
+  // Bloqueo rápido del panel (issue #21): mientras la sesión está bloqueada no
+  // sale ningún dato; el desbloqueo (PIN o login completo) es lo único habilitado.
+  if (auth.session.lockedAt && !options?.allowLocked) {
+    return { ok: false, response: jsonError("El panel está bloqueado. Desbloquealo con tu PIN.", 423) };
+  }
 
   const membership = await findMembership(auth.user.id, auth.session.activeOrganizationId);
   if (!membership) return { ok: false, response: jsonError("Forbidden", 403) };

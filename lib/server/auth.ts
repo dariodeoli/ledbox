@@ -20,6 +20,10 @@ export type AuthenticatedAdmin = {
     activeOrganizationId: string | null;
     expiresAt: Date;
     revokedAt: Date | null;
+    /** Bloqueo rápido del panel (issue #21): `null` = sesión desbloqueada. */
+    lockedAt: Date | null;
+    /** PIN fallidos seguidos desde el último bloqueo (tope 5, ver `lib/server/pin.ts`). */
+    lockAttempts: number;
     createdAt: Date;
   };
 };
@@ -109,6 +113,8 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
         activeOrganizationId: session.activeOrganizationId,
         expiresAt: session.expiresAt,
         revokedAt: session.revokedAt,
+        lockedAt: session.lockedAt,
+        lockAttempts: session.lockAttempts,
         createdAt: session.createdAt,
       },
     };
