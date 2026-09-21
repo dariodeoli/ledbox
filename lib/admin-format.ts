@@ -340,3 +340,58 @@ export function formatCalendarDayShort(dayKey: string | null | undefined): strin
 export const CALENDAR_WEEKDAYS: readonly string[] = Array.from({ length: 7 }, (_, index) =>
   calendarWeekdayShortFormat.format(new Date(Date.UTC(2024, 0, 1 + index))).replace(/\.$/, ""),
 );
+
+// ── Avisos operativos ───────────────────────────────────────────────────────
+// Mismos textos que las alertas del calendario para los `kind` compartidos; la
+// campana y el Resumen suman los informativos (`lead`, `collection`).
+
+const NOTIFICATION_LEVEL: Record<string, string> = {
+  overdue: "Vencido",
+  soon: "Próximo",
+  info: "Aviso",
+};
+
+const NOTIFICATION_KIND: Record<string, string> = {
+  task: "Tarea",
+  supplier_due: "Proveedor",
+  checklist: "Checklist",
+  collection: "Cobro",
+  lead: "Lead",
+};
+
+export const notificationLevelLabel = (value: string | null | undefined) => label(NOTIFICATION_LEVEL, value);
+export const notificationKindLabel = (value: string | null | undefined) => label(NOTIFICATION_KIND, value);
+
+/** Tono del nivel de un aviso: vencido (rojo), próximo (ámbar) o informativo (azul). */
+export function notificationTone(level: string | null | undefined): AdminTone {
+  if (level === "overdue") return "danger";
+  if (level === "soon") return "warn";
+  return "info";
+}
+
+const dayKeyPartsFormat = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** Día de Asunción de un instante (`YYYY-MM-DD`); por defecto, hoy. */
+function dayKeyOf(value: string | Date = new Date()): string {
+  const date = toDate(value);
+  if (!date) return "";
+  const parts = dayKeyPartsFormat.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+/**
+ * Cuándo ocurre o pasó un día de Asunción, en texto corto: "hoy", "mañana",
+ * "en 3 d", "hace 2 d". Se calcula contra el día de Asunción, no contra la
+ * medianoche del navegador.
+ */
+export function formatDayWhen(dayKey: string | null | undefined): string {
+  const date = dayKeyToUtcDate(dayKey);
+  const today = dayKeyToUtcDate(dayKeyOf());
+  if (!date || !today) return "—";
+  const distance = Math.round((date.getTime() - today.getTime()) / 86_400_000);
+  if (distance === 0) return "hoy";
+  if (distance === 1) return "mañana";
+  if (distance === -1) return "ayer";
+  return distance > 0 ? `en ${formatNumber(distance)} d` : `hace ${formatNumber(Math.abs(distance))} d`;
+}

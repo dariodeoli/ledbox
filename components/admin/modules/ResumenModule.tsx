@@ -6,17 +6,22 @@ import {
   budgetStatusLabel,
   dueTone,
   eventStatusLabel,
+  formatCalendarDayShort,
   formatDateShort,
   formatDateTime,
+  formatDayWhen,
   formatMoney,
   formatNumber,
   formatTime,
   jobStatusLabel,
+  notificationKindLabel,
+  notificationLevelLabel,
+  notificationTone,
   statusTone,
 } from "@/lib/admin-format";
-import { canWriteOperations } from "@/lib/admin-policy";
+import { adminNavLabel, canWriteOperations } from "@/lib/admin-policy";
 import { supplierJobBalance, type AdminOverview } from "@/lib/admin-types";
-import { useAdminSession } from "../AdminShell";
+import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
   AdminCell,
@@ -43,6 +48,7 @@ export function ResumenModule() {
     payments: payload.clientPayments ?? [],
     jobs: payload.supplierJobs ?? [],
   }));
+  const notifications = useAdminNotifications();
   const [checklistError, setChecklistError] = useState("");
 
   const canToggle = canWriteOperations(role);
@@ -82,6 +88,10 @@ export function ResumenModule() {
     operations.reload();
   }, [operations.reload]);
 
+  // Avisos operativos (issue #10): los 5 principales ya vienen ordenados por urgencia.
+  const todayNotifications = useMemo(() => (notifications.data?.notifications ?? []).slice(0, 5), [notifications.data]);
+  const notificationCounts = notifications.data?.notificationCounts;
+
   const counts = overview.data?.counts;
   const totals = overview.data?.finance;
 
@@ -105,6 +115,58 @@ export function ResumenModule() {
       )}
 
       <div className="admin-panel-grid">
+        <div className="admin-panel-wide">
+          <AdminPanel
+            title="Qué mirar hoy"
+            meta={notificationCounts && notificationCounts.total > 0 ? `${formatNumber(notificationCounts.total)} avisos` : undefined}
+            action={
+              <Link className="admin-panel-link" href="/calendario">
+                Ver calendario →
+              </Link>
+            }
+          >
+            <AdminDataState
+              loading={notifications.loading}
+              error={notifications.error}
+              onRetry={notifications.reload}
+              empty={todayNotifications.length === 0}
+              emptyTitle="Nada urgente"
+              emptyHint="No hay vencimientos, checklist pendiente ni cobros con saldo para mirar hoy."
+              rows={3}
+            >
+              <AdminTable
+                view="resumen-avisos"
+                label="Qué mirar hoy"
+                columns={[{ label: "Nivel" }, { label: "Aviso" }, { label: "Módulo" }, { label: "Fecha", end: true }]}
+              >
+                {todayNotifications.map((notification) => (
+                  <AdminRow key={notification.id}>
+                    <AdminCell>
+                      <AdminBadge tone={notificationTone(notification.level)}>{notificationLevelLabel(notification.level)}</AdminBadge>
+                    </AdminCell>
+                    <AdminCell
+                      title={`${notificationKindLabel(notification.kind)}: ${notification.title}${notification.subtitle ? ` · ${notification.subtitle}` : ""}`}
+                    >
+                      <strong>{notification.title}</strong>
+                      {notification.subtitle ? <small className="admin-cell-sub"> · {notification.subtitle}</small> : null}
+                    </AdminCell>
+                    <AdminCell title={`Ir a ${adminNavLabel(notification.href)}`}>
+                      <Link className="admin-panel-link" href={notification.href}>
+                        {adminNavLabel(notification.href)} →
+                      </Link>
+                    </AdminCell>
+                    <AdminCell end title={formatCalendarDayShort(notification.date)}>
+                      <span className="admin-nowrap">
+                        {formatCalendarDayShort(notification.date)} · {formatDayWhen(notification.date)}
+                      </span>
+                    </AdminCell>
+                  </AdminRow>
+                ))}
+              </AdminTable>
+            </AdminDataState>
+          </AdminPanel>
+        </div>
+
         <AdminPanel
           title="Próximos eventos"
           meta={overview.data ? `${formatNumber(overview.data.upcoming.length)} en agenda` : undefined}

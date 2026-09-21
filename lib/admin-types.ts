@@ -434,10 +434,39 @@ export type AdminCalendarAlert = {
   href: string;
 };
 
+/**
+ * Avisos operativos (`GET /api/admin/notifications`): mismo esqueleto que las
+ * alertas del calendario, con los niveles/kind ampliados a todos los hechos
+ * reales del panel. Los `kind` compartidos con el calendario se conservan tal cual.
+ */
+export type AdminNotificationLevel = AdminCalendarAlertLevel | "info";
+export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "lead";
+
+export type AdminNotification = {
+  id: string;
+  kind: AdminNotificationKind;
+  level: AdminNotificationLevel;
+  title: string;
+  subtitle: string | null;
+  /** Día de Asunción del hecho (`YYYY-MM-DD`); es la fecha real, no el día de consulta. */
+  date: string;
+  href: string;
+};
+
+/** Totales reales del feed (sin el recorte) para el contador de la campana. */
+export type AdminNotificationCounts = {
+  overdue: number;
+  soon: number;
+  info: number;
+  total: number;
+};
+
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
+  notifications?: AdminNotification[];
+  notificationCounts?: AdminNotificationCounts;
   error?: string;
   clients?: AdminClientRow[];
   leads?: AdminLeadRow[];

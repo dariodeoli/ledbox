@@ -1,7 +1,18 @@
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
-import type { AdminCalendarAlert, AdminCalendarItem, AdminCalendarItemKind } from "@/lib/admin-types";
+import {
+  DAY_MS,
+  calendarAlerts,
+  clientLabel,
+  dayKeyOf,
+  dayStart,
+  isValidDayKey,
+  joinParts,
+  monthEndKey,
+  nextDayKey,
+} from "@/lib/server/notifications";
+import type { AdminCalendarItem, AdminCalendarItemKind } from "@/lib/admin-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,13 +30,13 @@ export const dynamic = "force-dynamic";
  * `SupplierJob.dueAt/deliveredAt/paidAt`) ubicado en el día de Asunción en que
  * ocurre. Las tareas ya cumplidas no se listan: el calendario muestra lo que
  * todavía requiere acción y su historial vive en el módulo de Eventos.
+ *
+ * Las `alerts` se arman en `lib/server/notifications.ts`, la misma fuente que
+ * `GET /api/admin/notifications`; su contrato no cambió (mismos ids, niveles,
+ * fechas y orden).
  */
 
-const TIME_ZONE = "America/Asuncion";
-const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 400;
-const ALERT_WINDOW_DAYS = 7;
-const DAY_MS = 86_400_000;
 
 const KIND_ORDER: Record<AdminCalendarItemKind, number> = {
   setup: 0,
@@ -39,93 +50,7 @@ const KIND_ORDER: Record<AdminCalendarItemKind, number> = {
   supplier_payment: 8,
 };
 
-// ── Días de Asunción ────────────────────────────────────────────────────────
-// Paraguay no aplica horario de verano desde 2024, pero el offset se calcula
-// igual con Intl para no romperse si la regla cambia (el rango se resuelve con
-// las 00:00 locales, no con la medianoche UTC del servidor).
-
-const zonePartsFormat = new Intl.DateTimeFormat("en-US", {
-  timeZone: TIME_ZONE,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
-
-type ZoneParts = { year: number; month: number; day: number; hour: number; minute: number; second: number };
-
-function zoneParts(date: Date): ZoneParts {
-  const parts = zonePartsFormat.formatToParts(date);
-  const pick = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
-  return {
-    year: pick("year"),
-    month: pick("month"),
-    day: pick("day"),
-    hour: pick("hour"),
-    minute: pick("minute"),
-    second: pick("second"),
-  };
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-/** Día de Asunción (`YYYY-MM-DD`) de un instante real. */
-function dayKeyOf(date: Date): string {
-  const { year, month, day } = zoneParts(date);
-  return `${year}-${pad(month)}-${pad(day)}`;
-}
-
-/** Offset de Asunción contra UTC para un instante dado. */
-function zoneOffsetMs(instant: Date): number {
-  const { year, month, day, hour, minute, second } = zoneParts(instant);
-  return Date.UTC(year, month - 1, day, hour, minute, second) - instant.getTime();
-}
-
-/** Instante UTC de las 00:00 de un día de Asunción. */
-function dayStart(dayKey: string): Date {
-  const [year, month, day] = dayKey.split("-").map(Number);
-  const utcMidnight = Date.UTC(year, month - 1, day);
-  const firstGuess = utcMidnight - zoneOffsetMs(new Date(utcMidnight));
-  // Segundo ajuste por si el offset cambió al convertir.
-  return new Date(utcMidnight - zoneOffsetMs(new Date(firstGuess)));
-}
-
-/** Día siguiente a una clave `YYYY-MM-DD` (a límite exclusivo). */
-function nextDayKey(dayKey: string): string {
-  const [year, month, day] = dayKey.split("-").map(Number);
-  const next = new Date(Date.UTC(year, month - 1, day + 1));
-  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
-}
-
-function isValidDayKey(value: string): boolean {
-  if (!DAY_KEY_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
-/** Último día del mes de una clave `YYYY-MM-DD`. */
-function monthEndKey(dayKey: string): string {
-  const [year, month] = dayKey.split("-").map(Number);
-  const last = new Date(Date.UTC(year, month, 0));
-  return `${last.getUTCFullYear()}-${pad(last.getUTCMonth() + 1)}-${pad(last.getUTCDate())}`;
-}
-
 // ── Normalización ───────────────────────────────────────────────────────────
-
-function clientLabel(client: { name: string; company: string | null }): string {
-  return client.company?.trim() || client.name;
-}
-
-function joinParts(parts: Array<string | null | undefined>): string | null {
-  const text = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part)).join(" · ");
-  return text || null;
-}
 
 type CalendarEvent = {
   id: string;
@@ -337,86 +262,10 @@ export async function GET(request: Request) {
   items.sort((a, b) => (a.at === b.at ? KIND_ORDER[a.kind] - KIND_ORDER[b.kind] : a.at.localeCompare(b.at)));
 
   // ── Alertas (relativas a hoy, sin depender del rango consultado) ──────────
-  const soonLimit = new Date(now.getTime() + ALERT_WINDOW_DAYS * DAY_MS);
-  const [openTasks, openJobs, incompleteEvents] = await Promise.all([
-    db.eventTask.findMany({
-      where: {
-        event: { organizationId, status: { not: "CANCELLED" } },
-        completedAt: null,
-        dueAt: { not: null, lte: soonLimit },
-      },
-      orderBy: { dueAt: "asc" },
-      take: 50,
-      include: { event: { select: { id: true, name: true } } },
-    }),
-    db.supplierJob.findMany({
-      where: {
-        organizationId,
-        status: { notIn: ["PAID", "CANCELLED"] },
-        dueAt: { not: null, lte: soonLimit },
-      },
-      orderBy: { dueAt: "asc" },
-      take: 50,
-      include: { supplier: { select: { name: true } }, event: { select: { id: true, name: true } } },
-    }),
-    db.event.findMany({
-      where: {
-        organizationId,
-        status: { notIn: ["CANCELLED", "COMPLETED"] },
-        startsAt: { not: null, gte: new Date(now.getTime() - DAY_MS), lte: soonLimit },
-        tasks: { some: { completedAt: null } },
-      },
-      orderBy: { startsAt: "asc" },
-      take: 50,
-      include: {
-        client: { select: { name: true, company: true } },
-        tasks: { where: { completedAt: null }, select: { id: true } },
-      },
-    }),
-  ]);
-
-  const alerts: AdminCalendarAlert[] = [];
-
-  for (const task of openTasks) {
-    if (!task.dueAt) continue;
-    alerts.push({
-      id: `task:${task.id}`,
-      level: task.dueAt.getTime() < now.getTime() ? "overdue" : "soon",
-      kind: "task",
-      title: task.title,
-      subtitle: task.event.name,
-      date: dayKeyOf(task.dueAt),
-      href: "/eventos",
-    });
-  }
-
-  for (const job of openJobs) {
-    if (!job.dueAt) continue;
-    alerts.push({
-      id: `supplier_due:${job.id}`,
-      level: job.dueAt.getTime() < now.getTime() ? "overdue" : "soon",
-      kind: "supplier_due",
-      title: job.supplier.name,
-      subtitle: joinParts([job.description, job.event?.name]),
-      date: dayKeyOf(job.dueAt),
-      href: "/finanzas",
-    });
-  }
-
-  for (const event of incompleteEvents) {
-    if (!event.startsAt) continue;
-    alerts.push({
-      id: `checklist:${event.id}`,
-      level: event.startsAt.getTime() < now.getTime() + DAY_MS ? "overdue" : "soon",
-      kind: "checklist",
-      title: event.name,
-      subtitle: joinParts([clientLabel(event.client), `${event.tasks.length} tareas pendientes`]),
-      date: dayKeyOf(event.startsAt),
-      href: "/eventos",
-    });
-  }
-
-  alerts.sort((a, b) => (a.level === b.level ? a.date.localeCompare(b.date) : a.level === "overdue" ? -1 : 1));
+  // Misma fuente que el feed de avisos (`lib/server/notifications.ts`): tareas
+  // pendientes, trabajos de proveedor abiertos y eventos próximos con checklist
+  // incompleto, vencidos o dentro de los próximos 7 días.
+  const alerts = await calendarAlerts(organizationId, now);
 
   return Response.json({ items, alerts, range: { from: fromKey, to: toKey } });
 }
