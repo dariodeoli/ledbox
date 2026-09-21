@@ -196,7 +196,7 @@ export function ProveedoresModule() {
   // el drag/menú solo ofrece transiciones reales y el API revalida.
   const moveJob = useCallback(async (job: AdminSupplierJobRow, nextStatus: string) => {
     setBoardError("");
-    const result = await adminSend("/api/admin/suppliers/jobs", { id: job.id, status: nextStatus }, "PATCH");
+    const result = await adminSend("/api/admin/suppliers/jobs", { id: job.id, status: nextStatus }, "PATCH", { idempotencyKey: true });
     return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
   }, []);
   const board = useAdminBoardMove({ rows: jobs, move: moveJob, onError: setBoardError });
@@ -366,12 +366,13 @@ export function ProveedoresModule() {
             ...(jobForm.paidAt ? { paidAt: jobForm.paidAt } : {}),
           },
           "PATCH",
+          { idempotencyKey: true },
         )
       : await adminSend("/api/admin/suppliers/jobs", {
           ...common,
           supplierId: jobForm.supplierId,
           ...(Number(jobForm.advance || 0) > 0 ? { paymentMethod: jobForm.paymentMethod, receipt: jobForm.receipt } : {}),
-        });
+        }, "POST", { idempotencyKey: true });
     setJobBusy(false);
     if (!result.ok) {
       setJobError(result.error);
@@ -954,6 +955,7 @@ function JobStatusPanel({
         ...(status === "PAID" ? { paidAt } : {}),
       },
       "PATCH",
+      { idempotencyKey: true },
     );
     setBusy(false);
     if (!result.ok) {
