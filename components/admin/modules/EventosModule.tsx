@@ -4,16 +4,29 @@ import { useEffect, useMemo, useState } from "react";
 import {
   damageSummary,
   eventStatusLabel,
+  checklistProgress,
   formatDateShort,
   formatDateTime,
   formatNumber,
   formatTime,
   inventoryAssignmentState,
+  isOverdue,
+  isUpcomingWithin,
   ITEM_CONDITIONS,
+  promoterAvailabilityDetail,
+  promoterAvailabilityLabel,
+  promoterAvailabilityTone,
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
-import type { AdminEventAssignment, AdminInventoryAvailability, AdminInventoryItemRow } from "@/lib/admin-types";
+import {
+  promoterIsAvailable,
+  type AdminEventAssignment,
+  type AdminEventRow,
+  type AdminInventoryAvailability,
+  type AdminInventoryItemRow,
+  type AdminPromoterRow,
+} from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -61,7 +74,7 @@ const TASK_TYPE_OPTIONS = [
 ];
 
 const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", startsAt: "" };
-const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "" };
+const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
 const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
 const EMPTY_MOVEMENT_FORM = { at: "", condition: ITEM_CONDITIONS[0] as string, damaged: "0", missing: "0", notes: "" };
 
@@ -90,6 +103,26 @@ function rangeStamp(start: string | null, end: string | null): string {
 
 const BLOCKED_INVENTORY_STATUSES = ["MAINTENANCE", "RETIRED"];
 
+/** Evento próximo (ventana de aviso de 7 días) sin tareas cumplidas: riesgo. */
+function isUpcomingEvent(event: AdminEventRow): boolean {
+  if (event.status === "CANCELLED" || event.status === "COMPLETED") return false;
+  return isUpcomingWithin(event.startsAt);
+}
+
+/** Opciones de promotora para el checklist: el estado real viaja en la etiqueta. */
+function promoterOptions(promoters: AdminPromoterRow[]): Array<{ value: string; label: string }> {
+  return [
+    { value: "", label: "Sin promotora (equipo)" },
+    ...promoters.map((promoter) => ({
+      value: promoter.id,
+      label:
+        promoter.availability === "AVAILABLE"
+          ? promoter.name
+          : `${promoter.name} · ${promoterAvailabilityLabel(promoter.availability)}`,
+    })),
+  ];
+}
+
 export function EventosModule() {
   const { role } = useAdminSession();
   const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
@@ -98,6 +131,8 @@ export function EventosModule() {
     "/api/admin/inventory",
     (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
   );
+  // Promotoras con su disponibilidad real: la asignación avisa, no bloquea (issue #24).
+  const promotersResource = useAdminResource("/api/admin/resources", (payload) => payload.promoters ?? []);
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -109,6 +144,7 @@ export function EventosModule() {
   const [taskBusy, setTaskBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [taskError, setTaskError] = useState("");
+  const [taskNotice, setTaskNotice] = useState("");
   const [checklistError, setChecklistError] = useState("");
 
   const [equipmentEventId, setEquipmentEventId] = useState("");
@@ -131,6 +167,7 @@ export function EventosModule() {
   const events = useMemo(() => operations.data ?? [], [operations.data]);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
+  const promoters = useMemo(() => promotersResource.data ?? [], [promotersResource.data]);
   const equipmentEvent = useMemo(() => events.find((event) => event.id === equipmentEventId) ?? null, [events, equipmentEventId]);
   const assignments = equipmentEvent?.assignments ?? [];
   const assignedUnits = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
@@ -167,6 +204,34 @@ export function EventosModule() {
   const pendingTasks = useMemo(
     () => events.flatMap((event) => event.tasks).filter((task) => !task.completedAt).length,
     [events],
+  );
+  /** Tareas pendientes con vencimiento pasado: el checklist real, no el ideal. */
+  const overdueTasks = useMemo(
+    () => events.flatMap((event) => event.tasks).filter((task) => !task.completedAt && isOverdue(task.dueAt)).length,
+    [events],
+  );
+  /** Eventos próximos con checklist cargado y 0 tareas cumplidas (riesgo operativo). */
+  const atRiskEvents = useMemo(
+    () =>
+      events.filter(
+        (event) =>
+          isUpcomingEvent(event) && event.tasks.length > 0 && event.tasks.every((task) => !task.completedAt),
+      ),
+    [events],
+  );
+  /** Tareas con promotora no disponible o a definir: se avisan, no se bloquean. */
+  const promoterConflicts = useMemo(
+    () =>
+      events
+        .flatMap((event) => event.tasks.map((task) => ({ task, event })))
+        .filter(({ task }) => task.promoter && !promoterIsAvailable(task.promoter))
+        .sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999")),
+    [events],
+  );
+
+  const selectedPromoter = useMemo(
+    () => promoters.find((promoter) => promoter.id === taskForm.promoterId) ?? null,
+    [promoters, taskForm.promoterId],
   );
 
   const requestedQuantity = Number(assignForm.quantity) || 0;
@@ -236,18 +301,28 @@ export function EventosModule() {
     formEvent.preventDefault();
     setTaskBusy(true);
     setTaskError("");
+    setTaskNotice("");
+    const promoter = promoters.find((candidate) => candidate.id === taskForm.promoterId) ?? null;
     const result = await adminSend("/api/admin/event-ops", {
       kind: "task",
       eventId: taskForm.eventId,
       title: taskForm.title,
       type: taskForm.type,
       dueAt: taskForm.dueAt || undefined,
+      promoterId: taskForm.promoterId || undefined,
     });
     setTaskBusy(false);
     if (!result.ok) {
       setTaskError(result.error);
       return;
     }
+    setTaskNotice(
+      promoter && !promoterIsAvailable(promoter)
+        ? `Tarea creada con «${promoter.name}» (${promoterAvailabilityLabel(promoter.availability).toLowerCase()}${
+            promoterAvailabilityDetail(promoter) ? `: ${promoterAvailabilityDetail(promoter)}` : ""
+          }). Revisá la asignación o cubrila con otra persona.`
+        : "",
+    );
     setTaskForm(EMPTY_TASK_FORM);
     operations.reload();
   }
@@ -392,8 +467,18 @@ export function EventosModule() {
         <AdminKpi
           label="Tareas pendientes"
           value={formatNumber(pendingTasks)}
-          note="checklist operativo"
-          tone={pendingTasks > 0 ? "warn" : "ok"}
+          note={
+            overdueTasks > 0
+              ? `${formatNumber(overdueTasks)} vencida${overdueTasks === 1 ? "" : "s"}`
+              : "checklist operativo"
+          }
+          tone={overdueTasks > 0 ? "warn" : "ok"}
+        />
+        <AdminKpi
+          label="Checklist en riesgo"
+          value={formatNumber(atRiskEvents.length)}
+          note="próximos sin tareas cumplidas"
+          tone={atRiskEvents.length > 0 ? "danger" : "ok"}
         />
       </section>
 
@@ -482,7 +567,7 @@ export function EventosModule() {
         >
           {rows.map((event) => {
             const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
-            const done = event.tasks.filter((task) => task.completedAt).length;
+            const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
             const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
             return (
               <AdminRow key={event.id}>
@@ -497,8 +582,12 @@ export function EventosModule() {
                 <AdminCell end title={equipmentNames || "Sin equipos asignados"}>
                   {formatNumber(units)}
                 </AdminCell>
-                <AdminCell end title={`${done} de ${event.tasks.length} tareas cumplidas`}>
-                  {done}/{event.tasks.length}
+                <AdminCell end title={progress.title}>
+                  {event.tasks.length === 0 ? (
+                    <span className="admin-muted">—</span>
+                  ) : (
+                    <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
+                  )}
                 </AdminCell>
                 <AdminCell>
                   <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
@@ -828,6 +917,14 @@ export function EventosModule() {
               label="Tipo de tarea"
               options={TASK_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
             />
+            <AdminSelect
+              className=""
+              value={taskForm.promoterId}
+              onChange={(value) => setTaskForm({ ...taskForm, promoterId: value })}
+              label="Promotora de la tarea"
+              title="Promotora asignada (opcional)"
+              options={promoterOptions(promoters)}
+            />
             <DateField
               ariaLabel="Vencimiento de la tarea"
               title="Vencimiento (opcional)"
@@ -840,7 +937,44 @@ export function EventosModule() {
           </form>
         ) : null}
 
+        {selectedPromoter && !promoterIsAvailable(selectedPromoter) ? (
+          <AdminNote>
+            <AdminBadge tone={promoterAvailabilityTone(selectedPromoter.availability)}>
+              {promoterAvailabilityLabel(selectedPromoter.availability)}
+            </AdminBadge>
+            <span>
+              <strong>{selectedPromoter.name}</strong>
+              {promoterAvailabilityDetail(selectedPromoter) ? `: ${promoterAvailabilityDetail(selectedPromoter)}.` : "."} Podés
+              asignarla igual: la tarea queda y el conflicto se ve en el checklist.
+            </span>
+          </AdminNote>
+        ) : null}
+
+        {promoterConflicts.length > 0 ? (
+          <>
+            {promoterConflicts.slice(0, 3).map(({ task, event }) => (
+              <AdminNote key={task.id}>
+                <AdminBadge tone={promoterAvailabilityTone(task.promoter?.availability)}>
+                  {promoterAvailabilityLabel(task.promoter?.availability)}
+                </AdminBadge>
+                <span>
+                  <strong>{task.promoter?.name}</strong> está asignada a «{task.title}» ({event.name}) —{" "}
+                  {promoterAvailabilityDetail(task.promoter) || "sin detalle cargado"}. Revisá la asignación o cubrila con otra
+                  persona.
+                </span>
+              </AdminNote>
+            ))}
+            {promoterConflicts.length > 3 ? (
+              <AdminNote>
+                Hay {formatNumber(promoterConflicts.length - 3)} asignación{promoterConflicts.length - 3 === 1 ? "" : "es"} más
+                con la promotora no disponible.
+              </AdminNote>
+            ) : null}
+          </>
+        ) : null}
+
         {taskError ? <AdminNote tone="error">{taskError}</AdminNote> : null}
+        {taskNotice ? <AdminNote tone="ok">{taskNotice}</AdminNote> : null}
         {checklistError ? <AdminNote tone="error">{checklistError}</AdminNote> : null}
 
         <AdminDataState
