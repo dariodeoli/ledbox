@@ -73,6 +73,10 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 | `npm run prisma:migrate` / `prisma:deploy` | Migraciones en desarrollo / producción |
 | `npm run prisma:seed` | Crea los admins iniciales (allowlist) |
 
+## Migraciones en el deploy
+
+`npm run build` y `npm start` ejecutan `scripts/migrate-deploy.mjs`, que aplica las migraciones pendientes antes de que el servidor atienda tráfico (en el build es best-effort; sin `DATABASE_URL` se omite). Si la base publicada se creó con `prisma db push` y no tiene historial de migraciones, el script marca la init como aplicada y después aplica las pendientes. Si las migraciones fallan al arrancar, el servidor no inicia (mejor que servir con el schema viejo).
+
 ## Documentación
 
 - [README-NEXT.md](README-NEXT.md) — migración del frontend a Next.js.

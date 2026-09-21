@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build && rm -rf .next/standalone/public .next/standalone/.next/static && cp -R public .next/standalone/public && mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "build": "prisma generate && node scripts/migrate-deploy.mjs --best-effort && next build && rm -rf .next/standalone/public .next/standalone/.next/static && cp -R public .next/standalone/public && mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static",
+    "start": "node scripts/migrate-deploy.mjs && HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -17,6 +17,7 @@
     "bcryptjs": "^3.0.2",
     "jose": "^6.1.0",
     "next": "^15.5.6",
+    "prisma": "^6.16.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "resend": "^6.0.0",
@@ -26,7 +27,6 @@
     "@types/node": "^24.5.2",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "prisma": "^6.16.2",
     "tsx": "^4.19.2",
     "typescript": "^5.9.2"
   },
