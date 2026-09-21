@@ -67,6 +67,17 @@ export function formatSince(value: string | Date | null | undefined, now = Date.
   return `${formatDateShort(date)} · ${formatTime(date)}`;
 }
 
+// ── Frecuencia de contratación (issue #34) ──────────────────────────────────
+// El promedio en meses de la ficha del cliente: un decimal, coma es-PY
+// («2,4 meses»). Sin muestra (menos de dos contrataciones) se dibuja «—».
+
+const MONTHS_FORMAT = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 });
+
+export function formatMonths(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
+  return `${MONTHS_FORMAT.format(value)} ${value === 1 ? "mes" : "meses"}`;
+}
+
 const FILE_SIZE_FORMAT = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 });
 
 /** Tamaño de un archivo legible: bytes, kB y MB (1,2 MB). */

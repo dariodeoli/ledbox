@@ -118,6 +118,8 @@ export type AdminClientRow = AdminClientRef & {
   active: boolean;
   createdAt: string;
   _count: { events: number; budgets: number };
+  /** Ficha 360 (issue #34): métricas reales derivadas de presupuestos, cobros y eventos. */
+  metrics: AdminClientMetrics;
 };
 
 export type AdminEventRef = {
@@ -230,9 +232,12 @@ export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amou
  * Deuda vencida derivada de los cobros reales (issue #24): solo los cobros
  * pendientes (`PENDING`) con vencimiento pasado cuentan. No hay campo nuevo:
  * sale del dato de finanzas, igual que el saldo de un presupuesto.
+ *
+ * El vencimiento acepta `Date` además de ISO (issue #34): la misma regla se
+ * evalúa server-side sobre las filas de Prisma y en el panel sobre el JSON.
  */
 export function overdueAmount(
-  payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status" | "dueAt">>,
+  payments: ReadonlyArray<{ amount: number; status: string; dueAt: string | Date | null | undefined }>,
 ): number {
   return payments.reduce(
     (sum, payment) => (payment.status === "PENDING" && isOverdue(payment.dueAt) ? sum + payment.amount : sum),
@@ -242,7 +247,7 @@ export function overdueAmount(
 
 /** Cobros vencidos de una lista (cantidad), para el detalle del indicador. */
 export function overdueCount(
-  payments: ReadonlyArray<Pick<AdminPayment, "status" | "dueAt">>,
+  payments: ReadonlyArray<{ status: string; dueAt: string | Date | null | undefined }>,
 ): number {
   return payments.filter((payment) => payment.status === "PENDING" && isOverdue(payment.dueAt)).length;
 }
@@ -369,6 +374,93 @@ export type AdminPaymentRow = AdminPayment & {
   reminders: AdminPaymentReminder[];
   /** Cuenta de tesorería del cobro (issue #27); `null` si se registró sin cuenta. */
   treasuryAccount?: AdminTreasuryAccountRef | null;
+};
+
+// ── Ficha 360 del cliente (issue #34) ───────────────────────────────────────
+// Las métricas se derivan de los datos reales del cliente en la empresa activa
+// (presupuestos, cobros y eventos); ninguna se guarda en un campo nuevo.
+// Definiciones, todas verificables contra la base:
+//
+// - `contracts`: presupuestos con estado `APPROVED` (contratos cerrados).
+// - `contracted`: Σ `total` de esos contratos.
+// - `collected`: Σ de los cobros `RECEIVED` (solo plata cobrada, nunca pendientes).
+// - `balance`: `contracted − collected`, nunca negativo (el saldo por cobrar).
+// - `overdue`: mora real = Σ cobros `PENDING` con vencimiento pasado (misma regla
+//   que el filtro «con deuda vencida» y el KPI del módulo).
+// - `averageMonths`: promedio de meses entre contrataciones consecutivas, con la
+//   fecha de contratación de cada contrato (`approvedAt` real cuando existe, el
+//   alta del presupuesto si no); `null` con menos de 2 contratos, y
+//   `frequencySamples` es la cantidad de intervalos usados. `lastContractAt` es
+//   la fecha de contratación más reciente.
+// - `averageTicket`: `contracted / contracts`; `null` sin contratos.
+// - `budgets`, `lost`, `events` y `upcomingEvents`: conteos reales (presupuestos
+//   cargados, presupuestos perdidos, eventos cargados y eventos en curso o por
+//   venir).
+// - `nextEventAt`/`nextEventName`: primer evento en curso o por venir (no
+//   cancelado ni finalizado) del cliente; `null` sin agenda.
+// - `lastActivityAt`: el hecho comercial más reciente del cliente (alta de
+//   presupuesto, evento o cobro); `null` si nunca tuvo ninguno.
+
+export type AdminClientMetrics = {
+  contracts: number;
+  contracted: number;
+  collected: number;
+  balance: number;
+  overdue: number;
+  overdueCount: number;
+  budgets: number;
+  lost: number;
+  events: number;
+  upcomingEvents: number;
+  nextEventAt: string | null;
+  nextEventName: string | null;
+  lastContractAt: string | null;
+  averageMonths: number | null;
+  frequencySamples: number;
+  averageTicket: number | null;
+  lastActivityAt: string | null;
+};
+
+/** Presupuesto de la ficha: lo que el cliente contrató o cotizó, con su cobro real. */
+export type AdminClientBudgetRow = {
+  id: string;
+  title: string;
+  status: string;
+  total: number;
+  createdAt: string;
+  validUntil: string | null;
+  approvedAt: string | null;
+  approvalMethod: string | null;
+  event: AdminEventRef | null;
+  /** Σ cobros `RECEIVED` imputados a este presupuesto. */
+  collected: number;
+  /** Cobros `PENDING` vencidos imputados a este presupuesto (mora). */
+  overdue: number;
+};
+
+/** Evento de la ficha con su checklist real (para el avance, no para editarlo). */
+export type AdminClientEventRow = {
+  id: string;
+  name: string;
+  location: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: string;
+  tasks: Array<Pick<AdminEventTask, "id" | "title" | "type" | "dueAt" | "completedAt">>;
+};
+
+/** Cobro de la ficha: estado real y a qué presupuesto está imputado. */
+export type AdminClientPaymentRow = AdminPayment & {
+  budget: { id: string; title: string } | null;
+};
+
+/** Respuesta de `GET /api/admin/clients/[id]` (`clientDetail`). */
+export type AdminClientDetail = {
+  client: AdminClientRow & { notes: string | null };
+  metrics: AdminClientMetrics;
+  budgets: AdminClientBudgetRow[];
+  events: AdminClientEventRow[];
+  payments: AdminClientPaymentRow[];
 };
 
 // ── Tesorería por cuentas y gastos (issue #27) ──────────────────────────────
@@ -1418,6 +1510,8 @@ export type AdminApiResponse = {
   organization?: AdminOrganizationBranding["organization"];
   logos?: AdminOrganizationLogos;
   clients?: AdminClientRow[];
+  /** Ficha 360 del cliente abierto (`GET /api/admin/clients/[id]`, issue #34). */
+  clientDetail?: AdminClientDetail;
   leads?: AdminLeadRow[];
   events?: AdminEventRow[];
   budgets?: AdminBudgetRow[];
