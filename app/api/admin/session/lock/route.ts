@@ -26,8 +26,9 @@ export async function POST(request: Request) {
   const lockedAt = new Date();
   await db.adminSession.update({
     where: { id: context.session.id },
-    // Cada bloqueo arranca su propio contador de intentos (tope 5).
-    data: { lockedAt, lockAttempts: 0 },
+    // Cada bloqueo arranca su propio contador de intentos (tope 5) y guarda el
+    // motivo para que la pantalla lo cuente igual después de recargar.
+    data: { lockedAt, lockAttempts: 0, lockReason: inactivity ? "inactivity" : "manual" },
   });
   await recordAudit({
     context,

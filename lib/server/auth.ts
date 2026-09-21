@@ -24,6 +24,8 @@ export type AuthenticatedAdmin = {
     lockedAt: Date | null;
     /** PIN fallidos seguidos desde el último bloqueo (tope 5, ver `lib/server/pin.ts`). */
     lockAttempts: number;
+    /** Motivo del bloqueo vigente (`inactivity`/`manual`); `null` sin bloqueo. */
+    lockReason: string | null;
     createdAt: Date;
   };
 };
@@ -115,6 +117,7 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
         revokedAt: session.revokedAt,
         lockedAt: session.lockedAt,
         lockAttempts: session.lockAttempts,
+        lockReason: session.lockReason,
         createdAt: session.createdAt,
       },
     };

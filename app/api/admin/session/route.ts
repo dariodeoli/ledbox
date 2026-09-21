@@ -35,8 +35,14 @@ export async function GET() {
     // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
     demo,
     // Bloqueo por PIN (issue #21): estado de la sesión + preferencia del usuario.
-    // La demo no usa PIN ni bloqueo (no tiene preferencia que aplicar).
+    // La demo no usa PIN ni bloqueo (no tiene preferencia que aplicar). El motivo
+    // solo viaja con un bloqueo vigente; desbloqueada, la pantalla no aplica.
     locked: result.context.session.lockedAt !== null,
+    lockReason: result.context.session.lockedAt
+      ? result.context.session.lockReason === "manual"
+        ? "manual"
+        : "inactivity"
+      : null,
     lock: security,
   });
 }

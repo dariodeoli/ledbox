@@ -169,10 +169,12 @@ model AdminSession {
   expiresAt            DateTime
   revokedAt            DateTime?
   /// Bloqueo rápido del panel (issue #21): instante en que la sesión se bloqueó
-  /// (por inactividad o a mano) y PIN fallidos seguidos desde ese bloqueo. A los
-  /// 5 fallidos la sesión se revoca y queda exigido el login completo.
+  /// (por inactividad o a mano), PIN fallidos seguidos desde ese bloqueo y motivo
+  /// (`inactivity`/`manual`) para que la pantalla lo cuente igual tras recargar.
+  /// A los 5 fallidos la sesión se revoca y queda exigido el login completo.
   lockedAt             DateTime?
   lockAttempts         Int           @default(0)
+  lockReason           String?
   createdAt            DateTime      @default(now())
   user                 AdminUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)

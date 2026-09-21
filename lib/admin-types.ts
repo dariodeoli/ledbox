@@ -97,6 +97,8 @@ export type AdminSessionPayload = {
   demo?: boolean | null;
   /** Panel bloqueado por PIN (issue #21). */
   locked?: boolean | null;
+  /** Motivo del bloqueo vigente (para el texto de la pantalla). */
+  lockReason?: "inactivity" | "manual" | null;
   lock?: AdminSessionLock | null;
 };
 

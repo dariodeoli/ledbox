@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   const wasLocked = context.session.lockedAt !== null;
   await db.adminSession.update({
     where: { id: context.session.id },
-    data: { lockedAt: null, lockAttempts: 0 },
+    data: { lockedAt: null, lockAttempts: 0, lockReason: null },
   });
   if (wasLocked) {
     await recordAudit({
