@@ -3,20 +3,65 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditPick, recordAudit } from "@/lib/server/audit";
+import { clientMetrics, factsByClient, type ClientMetricFacts } from "./metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * `GET /api/admin/clients`: clientes de la empresa activa con sus métricas de
+ * la ficha 360 (issue #34). Los hechos se traen mínimos (presupuestos, cobros y
+ * eventos) y se resumen con `clientMetrics`, la misma función que usa el
+ * detalle: la lista puede ordenar por monto contratado, filtrar «sin compras»,
+ * marcar la deuda vencida y mostrar la última actividad sin una segunda llamada
+ * a finanzas.
+ *
+ * `POST`: alta de cliente (`clients.write`).
+ */
 export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
+  const { organizationId } = auth.context;
   const clients = await db.client.findMany({
-    where: { organizationId: auth.context.organizationId },
+    where: { organizationId },
     orderBy: { createdAt: "desc" },
     take: 200,
     include: { _count: { select: { events: true, budgets: true } } },
   });
-  return Response.json({ clients });
+
+  // Solo los hechos de los clientes listados: nada de otra empresa y nada de
+  // un cliente que no viaja en la respuesta.
+  const clientIds = clients.map((client) => client.id);
+  const [budgets, payments, events] = clientIds.length
+    ? await Promise.all([
+        db.budget.findMany({
+          where: { organizationId, clientId: { in: clientIds } },
+          select: { clientId: true, status: true, total: true, createdAt: true, approvedAt: true },
+        }),
+        db.clientPayment.findMany({
+          where: { organizationId, clientId: { in: clientIds } },
+          select: { clientId: true, amount: true, status: true, dueAt: true, createdAt: true },
+        }),
+        db.event.findMany({
+          where: { organizationId, clientId: { in: clientIds } },
+          select: { clientId: true, name: true, status: true, startsAt: true, endsAt: true, createdAt: true },
+        }),
+      ])
+    : [[], [], []];
+  const budgetsByClient = factsByClient(budgets);
+  const paymentsByClient = factsByClient(payments);
+  const eventsByClient = factsByClient(events);
+
+  const rows = clients.map((client) => {
+    const facts: ClientMetricFacts = {
+      budgets: budgetsByClient.get(client.id) ?? [],
+      payments: paymentsByClient.get(client.id) ?? [],
+      events: eventsByClient.get(client.id) ?? [],
+    };
+    return { ...client, metrics: clientMetrics(facts) };
+  });
+
+  return Response.json({ clients: rows });
 }
 
 export async function POST(request: Request) {
