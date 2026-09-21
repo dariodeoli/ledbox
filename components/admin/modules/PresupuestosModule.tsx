@@ -36,19 +36,18 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { DateField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -180,24 +179,23 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetch("/api/admin/organization/payment-details", { cache: "no-store" })
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as { paymentDetails?: Partial<AdminPaymentDetails>; error?: string } | null;
+    void adminApiGet<{ paymentDetails?: Partial<AdminPaymentDetails> }>("/api/admin/organization/payment-details", {
+      fresh: true,
+      fallbackError: "No pudimos cargar los datos de pago.",
+    })
+      .then((result) => {
         if (!active) return;
-        if (!response.ok) {
-          setError(payload?.error || "No pudimos cargar los datos de pago.");
+        if (!result.ok) {
+          if (!result.sessionInvalid) setError(result.error);
           return;
         }
         setDetails({
-          bank: payload?.paymentDetails?.bank ?? "",
-          holder: payload?.paymentDetails?.holder ?? "",
-          ruc: payload?.paymentDetails?.ruc ?? "",
-          account: payload?.paymentDetails?.account ?? "",
-          alias: payload?.paymentDetails?.alias ?? "",
+          bank: result.data.paymentDetails?.bank ?? "",
+          holder: result.data.paymentDetails?.holder ?? "",
+          ruc: result.data.paymentDetails?.ruc ?? "",
+          account: result.data.paymentDetails?.account ?? "",
+          alias: result.data.paymentDetails?.alias ?? "",
         });
-      })
-      .catch(() => {
-        if (active) setError("No pudimos conectar con el panel.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -232,47 +230,44 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
         <p className="admin-dialog-text">Cargando datos de pago…</p>
       ) : (
         <div className="admin-plan-grid">
-          <AdminField label="Banco" hint="El logo se dibuja con el monograma mientras no haya asset">
-            <input
-              value={details.bank ?? ""}
-              onChange={(event) => setDetails({ ...details, bank: event.target.value })}
-              maxLength={80}
-              placeholder="Ej.: Banco Continental"
-            />
-          </AdminField>
-          <AdminField label="Titular">
-            <input
-              value={details.holder ?? ""}
-              onChange={(event) => setDetails({ ...details, holder: event.target.value })}
-              maxLength={120}
-              placeholder="LedBox S.A."
-            />
-          </AdminField>
-          <AdminField label="RUC">
-            <input
-              value={details.ruc ?? ""}
-              onChange={(event) => setDetails({ ...details, ruc: event.target.value })}
-              maxLength={20}
-              inputMode="numeric"
-              placeholder="80012345-6"
-            />
-          </AdminField>
-          <AdminField label="Cuenta">
-            <input
-              value={details.account ?? ""}
-              onChange={(event) => setDetails({ ...details, account: event.target.value })}
-              maxLength={40}
-              placeholder="1234567890"
-            />
-          </AdminField>
-          <AdminField label="Alias" wide>
-            <input
-              value={details.alias ?? ""}
-              onChange={(event) => setDetails({ ...details, alias: event.target.value })}
-              maxLength={60}
-              placeholder="ledbox.cta"
-            />
-          </AdminField>
+          <TextField
+            label="Banco"
+            hint="El logo se dibuja con el monograma mientras no haya asset"
+            value={details.bank ?? ""}
+            onChange={(value) => setDetails({ ...details, bank: value })}
+            maxLength={80}
+            placeholder="Ej.: Banco Continental"
+          />
+          <TextField
+            label="Titular"
+            value={details.holder ?? ""}
+            onChange={(value) => setDetails({ ...details, holder: value })}
+            maxLength={120}
+            placeholder="LedBox S.A."
+          />
+          <TextField
+            label="RUC"
+            value={details.ruc ?? ""}
+            onChange={(value) => setDetails({ ...details, ruc: value })}
+            maxLength={20}
+            inputMode="numeric"
+            placeholder="80012345-6"
+          />
+          <TextField
+            label="Cuenta"
+            value={details.account ?? ""}
+            onChange={(value) => setDetails({ ...details, account: value })}
+            maxLength={40}
+            placeholder="1234567890"
+          />
+          <TextField
+            label="Alias"
+            wide
+            value={details.alias ?? ""}
+            onChange={(value) => setDetails({ ...details, alias: value })}
+            maxLength={60}
+            placeholder="ledbox.cta"
+          />
           {mark ? (
             <div className="admin-bank-preview">
               {mark.asset ? (
@@ -639,7 +634,7 @@ export function PresupuestosModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField
+        <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar presupuestos"
@@ -682,78 +677,68 @@ export function PresupuestosModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Cliente">
-            <select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}>
-              <option value="">Elegí un cliente…</option>
-              {clientOptions.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.company || client.name}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Evento" hint="Opcional">
-            <select value={form.eventId} onChange={(event) => setForm({ ...form, eventId: event.target.value })}>
-              <option value="">Sin evento asociado</option>
-              {eventOptions.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Título" wide>
-            <input
-              required
-              maxLength={160}
-              value={form.title}
-              onChange={(event) => setForm({ ...form, title: event.target.value })}
-              placeholder="Ej.: Alquiler pantalla LED 6×3"
-            />
-          </AdminField>
-          <AdminField label="Producto / servicio" wide>
-            <input
-              required
-              maxLength={160}
-              value={form.item}
-              onChange={(event) => setForm({ ...form, item: event.target.value })}
-              placeholder="Ej.: Pantalla LED P3.9 interior"
-            />
-          </AdminField>
-          <AdminField label="Cantidad">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={form.quantity}
-              onChange={(event) => setForm({ ...form, quantity: event.target.value })}
-            />
-          </AdminField>
-          <AdminField label="Días">
-            <input type="number" min="1" step="1" required value={form.days} onChange={(event) => setForm({ ...form, days: event.target.value })} />
-          </AdminField>
-          <AdminField label="Precio unitario" hint="En guaraníes">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              required
-              value={form.unitPrice}
-              onChange={(event) => setForm({ ...form, unitPrice: event.target.value })}
-              inputMode="numeric"
-            />
-          </AdminField>
-          <AdminField label="Costo unitario" hint="Para el margen estimado">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.costPrice}
-              onChange={(event) => setForm({ ...form, costPrice: event.target.value })}
-              inputMode="numeric"
-            />
-          </AdminField>
+          <SelectField
+            label="Cliente"
+            required
+            value={form.clientId}
+            onChange={(value) => setForm({ ...form, clientId: value })}
+            options={[
+              { value: "", label: "Elegí un cliente…" },
+              ...clientOptions.map((client) => ({ value: client.id, label: client.company || client.name })),
+            ]}
+          />
+          <SelectField
+            label="Evento"
+            hint="Opcional"
+            value={form.eventId}
+            onChange={(value) => setForm({ ...form, eventId: value })}
+            options={[{ value: "", label: "Sin evento asociado" }, ...eventOptions.map((event) => ({ value: event.id, label: event.name }))]}
+          />
+          <TextField
+            label="Título"
+            wide
+            required
+            maxLength={160}
+            value={form.title}
+            onChange={(value) => setForm({ ...form, title: value })}
+            placeholder="Ej.: Alquiler pantalla LED 6×3"
+          />
+          <TextField
+            label="Producto / servicio"
+            wide
+            required
+            maxLength={160}
+            value={form.item}
+            onChange={(value) => setForm({ ...form, item: value })}
+            placeholder="Ej.: Pantalla LED P3.9 interior"
+          />
+          <NumberField
+            label="Cantidad"
+            required
+            maxLength={4}
+            value={form.quantity}
+            onChange={(value) => setForm({ ...form, quantity: value })}
+          />
+          <NumberField
+            label="Días"
+            required
+            maxLength={4}
+            value={form.days}
+            onChange={(value) => setForm({ ...form, days: value })}
+          />
+          <MoneyField
+            label="Precio unitario"
+            hint="En guaraníes"
+            required
+            value={form.unitPrice}
+            onChange={(value) => setForm({ ...form, unitPrice: value })}
+          />
+          <MoneyField
+            label="Costo unitario"
+            hint="Para el margen estimado"
+            value={form.costPrice}
+            onChange={(value) => setForm({ ...form, costPrice: value })}
+          />
         </AdminFormPanel>
       ) : null}
 
@@ -975,9 +960,14 @@ export function PresupuestosModule() {
                 )}
               </div>
               <p className="admin-dialog-code">{portalToken}</p>
-              <AdminField label="Link del portal" wide>
-                <input readOnly value={portalBudgetUrl(portalToken)} onFocus={(event) => event.target.select()} />
-              </AdminField>
+              <TextField
+                label="Link del portal"
+                wide
+                readOnly
+                value={portalBudgetUrl(portalToken)}
+                onChange={() => {}}
+                onFocus={(event) => event.target.select()}
+              />
               <p className="admin-dialog-text">
                 Escaneá el QR o compartí el link: el cliente ve este presupuesto —y solo este—, puede ajustar cantidades y
                 días, pedir una rebaja, aprobarlo o pedir cambios.
@@ -1030,16 +1020,16 @@ export function PresupuestosModule() {
               ? `Se registra la aprobación a nombre de ${approval.budget.client.company || approval.budget.client.name}, con tu usuario y la fecha actual. Si ya hay una aprobación registrada, no se pisa.`
               : "El cliente no ve el cambio hasta que le compartas la versión actualizada; queda registrado en el presupuesto."}
           </p>
-          <AdminField label={approval.decision === "approve" ? "Nota (opcional)" : "¿Qué cambios se piden?"} wide>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              maxLength={1000}
-              rows={4}
-              required={approval.decision === "request_revision"}
-              placeholder={approval.decision === "approve" ? "Ej.: aprobado por teléfono, coordina con Santiago" : "Ej.: sumar un día más y cambiar el lugar"}
-            />
-          </AdminField>
+          <TextAreaField
+            label={approval.decision === "approve" ? "Nota (opcional)" : "¿Qué cambios se piden?"}
+            wide
+            value={note}
+            onChange={setNote}
+            maxLength={1000}
+            rows={4}
+            required={approval.decision === "request_revision"}
+            placeholder={approval.decision === "approve" ? "Ej.: aprobado por teléfono, coordina con Santiago" : "Ej.: sumar un día más y cambiar el lugar"}
+          />
           {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
           <div className="admin-dialog-foot">
             <AdminButton onClick={() => setApproval(null)} disabled={dialogBusy}>
@@ -1104,28 +1094,26 @@ export function PresupuestosModule() {
                       {formatNumber(item.quantity)} × {formatNumber(item.days)} d
                     </span>
                     <span role="cell" className="admin-dialog-counter">
-                      <input
-                        type="text"
-                        inputMode="numeric"
+                      <NumberField
+                        ariaLabel={`Cantidad propuesta de ${item.name}`}
+                        maxLength={4}
                         value={String(proposed.quantity)}
-                        aria-label={`Cantidad propuesta de ${item.name}`}
-                        onChange={(event) =>
+                        onChange={(value) =>
                           setCounterItems((current) => ({
                             ...current,
-                            [item.id]: { ...proposed, quantity: Math.max(1, Number(event.target.value.replace(/\D/g, "")) || 1) },
+                            [item.id]: { ...proposed, quantity: Math.max(1, Number(value) || 1) },
                           }))
                         }
                       />
                       <span aria-hidden="true">×</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
+                      <NumberField
+                        ariaLabel={`Días propuestos de ${item.name}`}
+                        maxLength={4}
                         value={String(proposed.days)}
-                        aria-label={`Días propuestos de ${item.name}`}
-                        onChange={(event) =>
+                        onChange={(value) =>
                           setCounterItems((current) => ({
                             ...current,
-                            [item.id]: { ...proposed, days: Math.max(1, Number(event.target.value.replace(/\D/g, "")) || 1) },
+                            [item.id]: { ...proposed, days: Math.max(1, Number(value) || 1) },
                           }))
                         }
                       />
@@ -1142,14 +1130,12 @@ export function PresupuestosModule() {
 
           {resolution.decision === "accept" && resolution.request.kind === "discount" ? (
             <div className="admin-plan-grid">
-              <AdminField label="Descuento final (Gs)" hint="Podés aceptar el pedido o contra-ofertar con otro monto">
-                <input
-                  value={counterDiscount}
-                  onChange={(event) => setCounterDiscount(event.target.value)}
-                  inputMode="numeric"
-                  maxLength={12}
-                />
-              </AdminField>
+              <MoneyField
+                label="Descuento final (Gs)"
+                hint="Podés aceptar el pedido o contra-ofertar con otro monto"
+                value={counterDiscount}
+                onChange={setCounterDiscount}
+              />
             </div>
           ) : null}
 
@@ -1173,23 +1159,20 @@ export function PresupuestosModule() {
             </p>
           ) : null}
 
-          <AdminField
+          <TextAreaField
             label={resolution.decision === "accept" ? "Respuesta para el cliente (opcional)" : "Nota del rechazo (obligatoria)"}
             wide
-          >
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              maxLength={600}
-              rows={3}
-              required={resolution.decision === "reject"}
-              placeholder={
-                resolution.decision === "accept"
-                  ? "Ej.: confirmamos el ajuste; el equipo pasa a coordinar los equipos"
-                  : "Ej.: no podemos bajar más el precio con esa cantidad de días"
-              }
-            />
-          </AdminField>
+            value={note}
+            onChange={setNote}
+            maxLength={600}
+            rows={3}
+            required={resolution.decision === "reject"}
+            placeholder={
+              resolution.decision === "accept"
+                ? "Ej.: confirmamos el ajuste; el equipo pasa a coordinar los equipos"
+                : "Ej.: no podemos bajar más el precio con esa cantidad de días"
+            }
+          />
           {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
           <div className="admin-dialog-foot">
             <AdminButton onClick={() => setResolution(null)} disabled={dialogBusy}>
@@ -1214,72 +1197,64 @@ export function PresupuestosModule() {
             cuota) aparece como «a transferir ahora». El plan no puede superar el total ({formatMoney(plan.budget.total)}).
           </p>
           <div className="admin-plan-grid">
-            <AdminField label="Anticipo (Gs)" hint="0 = sin anticipo separado">
-              <input
-                value={plan.advance}
-                onChange={(event) => setPlan({ ...plan, advance: event.target.value })}
-                inputMode="numeric"
-                maxLength={12}
-                placeholder="0"
-              />
-            </AdminField>
-            <AdminField label="Condiciones" wide>
-              <textarea
-                value={plan.terms}
-                onChange={(event) => setPlan({ ...plan, terms: event.target.value })}
-                maxLength={600}
-                rows={3}
-                placeholder="Ej.: 50 % al confirmar y saldo 7 días antes del evento"
-              />
-            </AdminField>
+            <MoneyField
+              label="Anticipo (Gs)"
+              hint="0 = sin anticipo separado"
+              value={plan.advance}
+              onChange={(value) => setPlan({ ...plan, advance: value })}
+              placeholder="0"
+            />
+            <TextAreaField
+              label="Condiciones"
+              wide
+              value={plan.terms}
+              onChange={(value) => setPlan({ ...plan, terms: value })}
+              maxLength={600}
+              rows={3}
+              placeholder="Ej.: 50 % al confirmar y saldo 7 días antes del evento"
+            />
           </div>
           <div className="admin-plan-list">
             {plan.installments.map((installment, index) => (
               <div className="admin-plan-row" key={`installment-${index}`}>
-                <AdminField label={`Cuota ${index + 1}`}>
-                  <input
-                    value={installment.label}
-                    maxLength={60}
-                    placeholder="Ej.: Saldo final"
-                    onChange={(event) =>
-                      setPlan({
-                        ...plan,
-                        installments: plan.installments.map((row, position) =>
-                          position === index ? { ...row, label: event.target.value } : row,
-                        ),
-                      })
-                    }
-                  />
-                </AdminField>
-                <AdminField label="Monto (Gs)">
-                  <input
-                    value={installment.amount}
-                    inputMode="numeric"
-                    maxLength={12}
-                    onChange={(event) =>
-                      setPlan({
-                        ...plan,
-                        installments: plan.installments.map((row, position) =>
-                          position === index ? { ...row, amount: event.target.value } : row,
-                        ),
-                      })
-                    }
-                  />
-                </AdminField>
-                <AdminField label="Vencimiento">
-                  <input
-                    type="date"
-                    value={installment.dueAt}
-                    onChange={(event) =>
-                      setPlan({
-                        ...plan,
-                        installments: plan.installments.map((row, position) =>
-                          position === index ? { ...row, dueAt: event.target.value } : row,
-                        ),
-                      })
-                    }
-                  />
-                </AdminField>
+                <TextField
+                  label={`Cuota ${index + 1}`}
+                  value={installment.label}
+                  maxLength={60}
+                  placeholder="Ej.: Saldo final"
+                  onChange={(value) =>
+                    setPlan({
+                      ...plan,
+                      installments: plan.installments.map((row, position) =>
+                        position === index ? { ...row, label: value } : row,
+                      ),
+                    })
+                  }
+                />
+                <MoneyField
+                  label="Monto (Gs)"
+                  value={installment.amount}
+                  onChange={(value) =>
+                    setPlan({
+                      ...plan,
+                      installments: plan.installments.map((row, position) =>
+                        position === index ? { ...row, amount: value } : row,
+                      ),
+                    })
+                  }
+                />
+                <DateField
+                  label="Vencimiento"
+                  value={installment.dueAt}
+                  onChange={(value) =>
+                    setPlan({
+                      ...plan,
+                      installments: plan.installments.map((row, position) =>
+                        position === index ? { ...row, dueAt: value } : row,
+                      ),
+                    })
+                  }
+                />
                 <AdminButton
                   icon="close"
                   title={`Quitar la cuota ${index + 1}`}

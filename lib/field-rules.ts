@@ -1,0 +1,200 @@
+/**
+ * Reglas puras de campos del panel (fuente única, testeable).
+ *
+ * Acá viven la normalización y la validación de teléfonos, correos, seriales,
+ * montos PYG y porcentajes. La UI dibuja el formato y el API revalida siempre;
+ * el front solo ayuda. Un solo mensaje de error por regla.
+ */
+
+/** Límites por tipo de dato (los mismos que la plantilla general). */
+export const FIELD_LIMITS = {
+  /** Nombres y responsables. */
+  name: 120,
+  /** Empresas y razones sociales. */
+  company: 120,
+  /** Direcciones. */
+  address: 400,
+  /** Notas y descripciones largas. */
+  notes: 2000,
+  /** Descripciones de trabajo. */
+  description: 400,
+  /** Correos: máximo del panel. */
+  email: 200,
+  /** Seriales/IMEI. */
+  serial: 40,
+  /** Monto general (compras, anticipos, cobros). */
+  amountGeneral: 10_000_000_000,
+  /** Monto de ventas: presupuestos y precios unitarios. */
+  amountSales: 99_000_000_000,
+} as const;
+
+/** Código de país por defecto de los teléfonos (+595 Paraguay). */
+export const DEFAULT_PHONE_COUNTRY = "595";
+
+/** Mensaje único de cada regla (se muestra tal cual en el campo). */
+export const FIELD_MESSAGES = {
+  phone: "Ingresá un teléfono válido con código de país.",
+  email: "Ingresá un correo válido.",
+  serial: "El serial solo admite letras, números, guiones y guiones bajos.",
+  amount: "Ingresá un monto válido en guaraníes.",
+  amountLimit: "El monto supera el máximo permitido.",
+  percent: "Ingresá un porcentaje entre 0 y 100.",
+  required: "Este campo es obligatorio.",
+} as const;
+
+/** Deja solo dígitos (cantidades, días, códigos numéricos). */
+export function digitsOnly(value: string): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
+/** Limpia un pegado de monto PYG: símbolos, espacios y separadores fuera. */
+export function amountInput(value: string): string {
+  return digitsOnly(value).replace(/^0+(?=\d)/, "");
+}
+
+/** Monto PYG limpio; `null` si no hay dígitos o si no es un entero seguro. */
+export function parseAmount(value: string): number | null {
+  const digits = amountInput(value);
+  if (!digits) return null;
+  const amount = Number(digits);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+export function amountValid(value: string, limit: number = FIELD_LIMITS.amountGeneral): boolean {
+  const amount = parseAmount(value);
+  return amount !== null && amount >= 0 && amount <= limit;
+}
+
+/** Error de monto (mismo mensaje para dato inválido y para el tope). */
+export function amountError(value: string, limit: number = FIELD_LIMITS.amountGeneral): string | null {
+  const amount = parseAmount(value);
+  if (amount === null || amount < 0) return FIELD_MESSAGES.amount;
+  if (amount > limit) return FIELD_MESSAGES.amountLimit;
+  return null;
+}
+
+/**
+ * Limpia un porcentaje mientras se tipea: dígitos, un solo separador decimal y
+ * hasta 2 decimales (la coma se acepta como separador).
+ */
+export function percentInput(value: string): string {
+  const raw = (value ?? "").replace(/,/g, ".").replace(/[^\d.]/g, "");
+  const [integer = "", ...rest] = raw.split(".");
+  const decimals = rest.join("").slice(0, 2);
+  const cleanInteger = integer.replace(/^0+(?=\d)/, "").slice(0, 3);
+  if (!rest.length) return cleanInteger;
+  return `${cleanInteger || "0"}.${decimals}`;
+}
+
+/** Porcentaje 0–100 con hasta 2 decimales; `null` si no es válido. */
+export function parsePercent(value: string): number | null {
+  const raw = percentInput(value);
+  if (!raw || raw === ".") return null;
+  const percent = Number(raw);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
+  return Math.round(percent * 100) / 100;
+}
+
+export function percentValid(value: string): boolean {
+  return parsePercent(value) !== null;
+}
+
+export function percentError(value: string): string | null {
+  return parsePercent(value) === null ? FIELD_MESSAGES.percent : null;
+}
+
+/** Porcentaje listo para mostrar (es-PY, hasta 2 decimales): `12,5`. */
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat("es-PY", { maximumFractionDigits: 2 }).format(value);
+}
+
+/** Correo normalizado como se guarda: minúsculas y sin espacios externos. */
+export function normalizeEmail(value: string): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+export function emailValid(value: string): boolean {
+  const email = normalizeEmail(value);
+  if (email.length < 5 || email.length > FIELD_LIMITS.email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+export function emailError(value: string): string | null {
+  return emailValid(value) ? null : FIELD_MESSAGES.email;
+}
+
+/** Serial/IMEI como se guarda: mayúsculas, sin espacios ni separadores. */
+export function normalizeSerial(value: string): string {
+  return (value ?? "").replace(/[^A-Za-z0-9_-]/g, "").toUpperCase();
+}
+
+export function serialValid(value: string): boolean {
+  const serial = normalizeSerial(value);
+  return serial.length >= 2 && serial.length <= FIELD_LIMITS.serial;
+}
+
+export function serialError(value: string): string | null {
+  return serialValid(value) ? null : FIELD_MESSAGES.serial;
+}
+
+export type ParsedPhone = {
+  /** Código de país sin el `+` (default +595). */
+  countryCode: string;
+  /** Parte local, solo dígitos. */
+  national: string;
+};
+
+/**
+ * Parte un teléfono guardado (`+<código> <dígitos>`) o pegado (`0981 000 000`,
+ * `+54 9 11 ...`, `00595 ...`) en código de país y parte local.
+ */
+export function parsePhone(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): ParsedPhone {
+  const raw = (value ?? "").trim();
+  if (raw.startsWith("+")) {
+    const international = raw.match(/^\+\s*(\d{1,4})[\s-]+(.+)$/);
+    if (international) {
+      const national = digitsOnly(international[2]);
+      if (national) return { countryCode: digitsOnly(international[1]), national };
+    }
+    // Pegado sin separadores: si arranca con el código por defecto, se parte ahí.
+    const compact = digitsOnly(raw);
+    const defaultDigits = digitsOnly(defaultCountry);
+    if (defaultDigits && compact.startsWith(defaultDigits) && compact.length > defaultDigits.length + 5) {
+      return { countryCode: defaultDigits, national: compact.slice(defaultDigits.length) };
+    }
+    return { countryCode: defaultCountry, national: compact };
+  }
+  const digits = digitsOnly(raw);
+  const zeroPrefixed = digits.match(/^00(\d{1,4})(\d{6,})$/);
+  if (zeroPrefixed) return { countryCode: zeroPrefixed[1], national: zeroPrefixed[2] };
+  return { countryCode: defaultCountry, national: digits };
+}
+
+/** Teléfono listo para guardar: `+<código> <dígitos>`; vacío si no hay número. */
+export function normalizePhone(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): string {
+  const { countryCode, national } = parsePhone(value, defaultCountry);
+  const code = digitsOnly(countryCode).slice(0, 4) || digitsOnly(defaultCountry) || DEFAULT_PHONE_COUNTRY;
+  if (!national) return "";
+  return `+${code} ${national}`;
+}
+
+/** Valida la parte local según el país: PY móvil 9 dígitos, fijo 8; resto 6–12. */
+export function phoneValid(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): boolean {
+  const { countryCode, national } = parsePhone(value, defaultCountry);
+  const digits = digitsOnly(national);
+  if (!digits) return false;
+  if (digitsOnly(countryCode) === DEFAULT_PHONE_COUNTRY) {
+    return /^9\d{8}$/.test(digits) || /^0?[2-8]\d{6,8}$/.test(digits);
+  }
+  return digits.length >= 6 && digits.length <= 12;
+}
+
+export function phoneError(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): string | null {
+  return phoneValid(value, defaultCountry) ? null : FIELD_MESSAGES.phone;
+}
+
+/** Campo obligatorio genérico (un solo mensaje). */
+export function requiredError(value: string | null | undefined): string | null {
+  return (value ?? "").trim() ? null : FIELD_MESSAGES.required;
+}

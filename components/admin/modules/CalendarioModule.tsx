@@ -32,7 +32,7 @@ import {
   AdminSelect,
   AdminToolbar,
 } from "../AdminUI";
-import { useAdminResource } from "../use-admin-data";
+import { useAdminResource } from "@/lib/admin-api";
 
 /**
  * Calendario operativo (issue #6).

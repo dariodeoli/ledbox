@@ -22,18 +22,17 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { NumberField, SearchField, SelectField, TextField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 const KIND_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -211,7 +210,7 @@ export function InventarioModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
+        <SearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
         <AdminSelect value={kind} onChange={setKind} label="Filtrar por tipo" options={KIND_OPTIONS} />
         <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         <span className="admin-export">
@@ -251,41 +250,38 @@ export function InventarioModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Artículo">
-            <input
-              required
-              maxLength={120}
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Ej.: Pantalla LED P3.9 500×500"
-            />
-          </AdminField>
-          <AdminField label="Categoría">
-            <input
-              maxLength={80}
-              value={form.category}
-              onChange={(event) => setForm({ ...form, category: event.target.value })}
-              placeholder="Ej.: Pantallas"
-            />
-          </AdminField>
-          <AdminField label="Tipo">
-            <select value={form.inventoryKind} onChange={(event) => setForm({ ...form, inventoryKind: event.target.value })}>
-              <option value="REUSABLE">Reutilizable</option>
-              <option value="CONSUMABLE">Consumible</option>
-              <option value="DISPOSABLE">Descartable</option>
-            </select>
-          </AdminField>
-          <AdminField label="Cantidad">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={form.quantity}
-              onChange={(event) => setForm({ ...form, quantity: event.target.value })}
-              inputMode="numeric"
-            />
-          </AdminField>
+          <TextField
+            label="Artículo"
+            required
+            maxLength={120}
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="Ej.: Pantalla LED P3.9 500×500"
+          />
+          <TextField
+            label="Categoría"
+            maxLength={80}
+            value={form.category}
+            onChange={(value) => setForm({ ...form, category: value })}
+            placeholder="Ej.: Pantallas"
+          />
+          <SelectField
+            label="Tipo"
+            value={form.inventoryKind}
+            onChange={(value) => setForm({ ...form, inventoryKind: value })}
+            options={[
+              { value: "REUSABLE", label: "Reutilizable" },
+              { value: "CONSUMABLE", label: "Consumible" },
+              { value: "DISPOSABLE", label: "Descartable" },
+            ]}
+          />
+          <NumberField
+            label="Cantidad"
+            required
+            maxLength={6}
+            value={form.quantity}
+            onChange={(value) => setForm({ ...form, quantity: value })}
+          />
         </AdminFormPanel>
       ) : null}
 
@@ -354,20 +350,15 @@ export function InventarioModule() {
                   </AdminCell>
                   <AdminCell title={writable ? `Cambiar estado: ${item.name}` : `Estado: ${inventoryStatusLabel(item.status)}`}>
                     {writable ? (
-                      <select
+                      <AdminSelect
                         className="admin-filter admin-filter--cell"
                         value={item.status}
                         disabled={statusBusyId === item.id}
-                        onChange={(event) => void changeStatus(item, event.target.value)}
-                        aria-label={`Cambiar estado: ${item.name}`}
+                        onChange={(value) => void changeStatus(item, value)}
+                        label={`Cambiar estado: ${item.name}`}
                         title={`Cambiar estado: ${item.name}`}
-                      >
-                        {STATUS_PICK_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                        options={STATUS_PICK_OPTIONS}
+                      />
                     ) : (
                       <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>
                     )}

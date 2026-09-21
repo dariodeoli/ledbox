@@ -16,6 +16,7 @@ import {
   notificationTone,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
+import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
 import type {
   AdminNotification,
   AdminNotificationCounts,
@@ -26,7 +27,7 @@ import type {
 import { AdminIcon } from "./AdminIcons";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows } from "./AdminUI";
 import { AdminThemeToggle } from "./admin-theme";
-import { redirectToLogin, useAdminResource } from "./use-admin-data";
+import { adminApiGet, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
 export type AdminSessionState = {
   user: AdminSessionUser | null;
@@ -114,11 +115,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const loadSession = useCallback(async () => {
     setSession((current) => ({ ...current, loading: true, error: "" }));
-    try {
-      const response = await fetch("/api/admin/session", { cache: "no-store" });
-      // 401 sin sesión y 403 sin empresa activa (multiempresa) se tratan igual: volver al login.
-      if (response.status === 401 || response.status === 403) {
-        // En la entrada de la demo no hay sesión todavía: se pide al endpoint que la cree.
+    // Sesión por el cliente único: 401/403 invalidan la sesión (vuelve al login),
+    // salvo en la entrada de la demo, donde se pide crear la sesión demo.
+    const result = await adminApiGet<unknown>("/api/admin/session", {
+      fresh: true,
+      fallbackError: "No pudimos cargar tu sesión.",
+      skipSessionRedirect: isDemoEntryPath(),
+    });
+    if (!result.ok) {
+      if (result.sessionInvalid) {
         if (isDemoEntryPath()) {
           window.location.assign("/api/demo/session?next=/demo");
           return;
@@ -126,17 +131,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         redirectToLogin();
         return;
       }
-      const raw = (await response.json().catch(() => null)) as unknown;
-      const { user, organization, organizations, demo } = pickSessionData(raw);
-      if (!response.ok || !user) {
-        setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
-        return;
-      }
-      const role = asAdminRole(user.role);
-      setSession({ user: { ...user, role }, role, organization, organizations, demo, loading: false, error: "" });
-    } catch {
-      setSession((current) => ({ ...current, loading: false, error: "No pudimos conectar con el panel." }));
+      setSession((current) => ({ ...current, loading: false, error: result.error }));
+      return;
     }
+    const { user, organization, organizations, demo } = pickSessionData(result.data);
+    if (!user) {
+      setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
+      return;
+    }
+    const role = asAdminRole(user.role);
+    setSession({ user: { ...user, role }, role, organization, organizations, demo, loading: false, error: "" });
   }, []);
 
   useEffect(() => {
@@ -353,6 +357,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ) : null}
 
           <main className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
+
+          <footer className="admin-main-foot">
+            <span>LedBox · Panel privado</span>
+            <strong title={`Versión de la app: ${APP_VERSION}`}>{APP_VERSION_LABEL}</strong>
+          </footer>
         </div>
       </div>
     </AdminSessionContext.Provider>

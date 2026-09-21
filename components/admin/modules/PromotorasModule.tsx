@@ -10,18 +10,18 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminRow,
-  AdminSearchField,
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { PhoneField, SearchField, TextField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { normalizePhone } from "@/lib/field-rules";
 
 const EMPTY_FORM = { name: "", phone: "", specialties: "" };
 
@@ -65,7 +65,7 @@ export function PromotorasModule() {
     const result = await adminSend("/api/admin/resources", {
       kind: "promoter",
       name: form.name,
-      phone: form.phone || undefined,
+      phone: normalizePhone(form.phone) || undefined,
       specialties: form.specialties || undefined,
     });
     setBusy(false);
@@ -88,7 +88,7 @@ export function PromotorasModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField value={query} onChange={setQuery} label="Buscar promotoras" placeholder="Buscar por nombre, especialidad o contacto…" />
+        <SearchField value={query} onChange={setQuery} label="Buscar promotoras" placeholder="Buscar por nombre, especialidad o contacto…" />
         {writable ? (
           <AdminButton
             variant="primary"
@@ -115,33 +115,28 @@ export function PromotorasModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Nombre">
-            <input
-              required
-              maxLength={120}
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Ej.: Lucía Benítez"
-            />
-          </AdminField>
-          <AdminField label="Teléfono" hint="Con código de país">
-            <input
-              type="tel"
-              maxLength={30}
-              value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              placeholder="+595 981 000 000"
-              autoComplete="tel"
-            />
-          </AdminField>
-          <AdminField label="Especialidades" hint="Separadas por coma">
-            <input
-              maxLength={160}
-              value={form.specialties}
-              onChange={(event) => setForm({ ...form, specialties: event.target.value })}
-              placeholder="Ej.: Promoción, degustación"
-            />
-          </AdminField>
+          <TextField
+            label="Nombre"
+            required
+            maxLength={120}
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="Ej.: Lucía Benítez"
+          />
+          <PhoneField
+            label="Teléfono"
+            hint="Con código de país"
+            value={form.phone}
+            onChange={(value) => setForm({ ...form, phone: value })}
+          />
+          <TextField
+            label="Especialidades"
+            hint="Separadas por coma"
+            maxLength={160}
+            value={form.specialties}
+            onChange={(value) => setForm({ ...form, specialties: value })}
+            placeholder="Ej.: Promoción, degustación"
+          />
         </AdminFormPanel>
       ) : null}
 

@@ -39,7 +39,9 @@ export type AdminIconName =
   | "clock"
   | "info"
   | "print"
-  | "download";
+  | "download"
+  | "eye"
+  | "eye-off";
 
 export type AdminSessionUser = { id: string; name: string; email: string; role: AdminRole };
 

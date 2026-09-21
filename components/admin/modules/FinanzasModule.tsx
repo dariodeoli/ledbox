@@ -28,17 +28,16 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { DateField, MoneyField, SearchField, SelectField, TextField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 /** Métodos de pago del alta directa (catálogo cerrado, espejo del API). */
 const METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
@@ -331,7 +330,7 @@ export function FinanzasModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField
+        <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar movimientos"
@@ -376,129 +375,109 @@ export function FinanzasModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Cliente">
-            <select
-              required
-              value={form.clientId}
-              onChange={(event) => setForm({ ...form, clientId: event.target.value, budgetId: "" })}
-            >
-              <option value="">Elegí un cliente…</option>
-              {(clients.data ?? []).map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.company || client.name}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Presupuesto" hint="Opcional">
-            <select value={form.budgetId} onChange={(event) => setForm({ ...form, budgetId: event.target.value })}>
-              <option value="">Sin presupuesto</option>
-              {clientBudgets.map((budget) => (
-                <option key={budget.id} value={budget.id}>
-                  {budget.title} · {formatMoney(budget.total)}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Monto" hint="En guaraníes">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={form.amount}
-              onChange={(event) => setForm({ ...form, amount: event.target.value })}
-              inputMode="numeric"
-            />
-          </AdminField>
-          <AdminField label="Tipo de cobro">
-            <select
-              value={form.mode}
-              onChange={(event) => {
-                const mode = event.target.value === "term" ? "term" : "now";
-                setForm({
-                  ...form,
-                  mode,
-                  method: mode === "term" && form.method === "Tarjeta" ? "Transferencia" : form.method,
-                });
-              }}
-            >
-              <option value="now">Cobrado ahora</option>
-              <option value="term">A plazo (por cobrar)</option>
-            </select>
-          </AdminField>
-          <AdminField label="Método">
-            <select
-              value={form.method}
-              onChange={(event) => setForm({ ...form, method: event.target.value, chequeDate: "" })}
-            >
-              {(term ? TERM_METHOD_OPTIONS : METHOD_OPTIONS).map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </AdminField>
+          <SelectField
+            label="Cliente"
+            required
+            value={form.clientId}
+            onChange={(value) => setForm({ ...form, clientId: value, budgetId: "" })}
+            options={[
+              { value: "", label: "Elegí un cliente…" },
+              ...(clients.data ?? []).map((client) => ({ value: client.id, label: client.company || client.name })),
+            ]}
+          />
+          <SelectField
+            label="Presupuesto"
+            hint="Opcional"
+            value={form.budgetId}
+            onChange={(value) => setForm({ ...form, budgetId: value })}
+            options={[
+              { value: "", label: "Sin presupuesto" },
+              ...clientBudgets.map((budget) => ({ value: budget.id, label: `${budget.title} · ${formatMoney(budget.total)}` })),
+            ]}
+          />
+          <MoneyField
+            label="Monto"
+            hint="En guaraníes"
+            required
+            value={form.amount}
+            onChange={(value) => setForm({ ...form, amount: value })}
+          />
+          <SelectField
+            label="Tipo de cobro"
+            value={form.mode}
+            onChange={(value) => {
+              const mode = value === "term" ? "term" : "now";
+              setForm({
+                ...form,
+                mode,
+                method: mode === "term" && form.method === "Tarjeta" ? "Transferencia" : form.method,
+              });
+            }}
+            options={[
+              { value: "now", label: "Cobrado ahora" },
+              { value: "term", label: "A plazo (por cobrar)" },
+            ]}
+          />
+          <SelectField
+            label="Método"
+            value={form.method}
+            onChange={(value) => setForm({ ...form, method: value, chequeDate: "" })}
+            options={(term ? TERM_METHOD_OPTIONS : METHOD_OPTIONS).map((method) => ({ value: method, label: method }))}
+          />
           {term ? (
             <>
-              <AdminField label="Emisión de factura" hint="Si no hay factura, dejalo vacío">
-                <input
-                  type="date"
-                  value={form.invoiceIssuedAt}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      invoiceIssuedAt: event.target.value,
-                      invoiceNumber: event.target.value ? form.invoiceNumber : "",
-                    })
-                  }
-                />
-              </AdminField>
-              <AdminField label="Nº de factura">
-                <input
-                  maxLength={60}
-                  required={Boolean(form.invoiceIssuedAt)}
-                  value={form.invoiceNumber}
-                  onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
-                  placeholder={form.invoiceIssuedAt ? "Número de la factura" : "Primero cargá la emisión"}
-                />
-              </AdminField>
-              <AdminField label="Días de plazo" hint="Desde la emisión (o desde hoy si no hay factura)">
-                <select value={form.dueDays} onChange={(event) => setForm({ ...form, dueDays: event.target.value })}>
-                  {TERM_DAY_OPTIONS.map((days) => (
-                    <option key={days} value={days}>
-                      {TERM_DAY_LABEL[days]}
-                    </option>
-                  ))}
-                </select>
-              </AdminField>
-              <AdminField label="Vence el" hint="Fecha exacta (opcional; manda sobre los días)">
-                <input
-                  type="date"
-                  value={form.dueAt}
-                  onChange={(event) => setForm({ ...form, dueAt: event.target.value })}
-                />
-              </AdminField>
+              <DateField
+                label="Emisión de factura"
+                hint="Si no hay factura, dejalo vacío"
+                value={form.invoiceIssuedAt}
+                onChange={(value) =>
+                  setForm({
+                    ...form,
+                    invoiceIssuedAt: value,
+                    invoiceNumber: value ? form.invoiceNumber : "",
+                  })
+                }
+              />
+              <TextField
+                label="Nº de factura"
+                maxLength={60}
+                required={Boolean(form.invoiceIssuedAt)}
+                value={form.invoiceNumber}
+                onChange={(value) => setForm({ ...form, invoiceNumber: value })}
+                placeholder={form.invoiceIssuedAt ? "Número de la factura" : "Primero cargá la emisión"}
+              />
+              <SelectField
+                label="Días de plazo"
+                hint="Desde la emisión (o desde hoy si no hay factura)"
+                value={form.dueDays}
+                onChange={(value) => setForm({ ...form, dueDays: value })}
+                options={TERM_DAY_OPTIONS.map((days) => ({ value: days, label: TERM_DAY_LABEL[days] }))}
+              />
+              <DateField
+                label="Vence el"
+                hint="Fecha exacta (opcional; manda sobre los días)"
+                value={form.dueAt}
+                onChange={(value) => setForm({ ...form, dueAt: value })}
+              />
               {form.method === "Cheque" ? (
-                <AdminField label="Fecha del cheque" hint="Obligatoria para cobrar con cheque">
-                  <input
-                    type="date"
-                    required
-                    value={form.chequeDate}
-                    onChange={(event) => setForm({ ...form, chequeDate: event.target.value })}
-                  />
-                </AdminField>
+                <DateField
+                  label="Fecha del cheque"
+                  hint="Obligatoria para cobrar con cheque"
+                  required
+                  value={form.chequeDate}
+                  onChange={(value) => setForm({ ...form, chequeDate: value })}
+                />
               ) : null}
             </>
           ) : (
-            <AdminField label="Referencia" hint="Nº de transferencia o recibo">
-              <input
-                maxLength={120}
-                value={form.reference}
-                onChange={(event) => setForm({ ...form, reference: event.target.value })}
-                placeholder="Opcional"
-              />
-            </AdminField>
+            <TextField
+              label="Referencia"
+              hint="Nº de transferencia o recibo"
+              maxLength={120}
+              value={form.reference}
+              onChange={(value) => setForm({ ...form, reference: value })}
+              placeholder="Opcional"
+            />
           )}
         </AdminFormPanel>
       ) : null}

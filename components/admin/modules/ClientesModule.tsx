@@ -10,19 +10,19 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { EmailField, PhoneField, SearchField, SelectField, TextField } from "../AdminFields";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { normalizeEmail, normalizePhone } from "@/lib/field-rules";
 
 const TYPE_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -70,8 +70,8 @@ export function ClientesModule() {
       name: form.name,
       company: form.company || undefined,
       type: form.type,
-      phone: form.phone || undefined,
-      email: form.email || undefined,
+      phone: normalizePhone(form.phone) || undefined,
+      email: normalizeEmail(form.email) || undefined,
       ruc: form.ruc || undefined,
     });
     setBusy(false);
@@ -94,7 +94,7 @@ export function ClientesModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField
+        <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar clientes"
@@ -127,58 +127,50 @@ export function ClientesModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Nombre / responsable">
-            <input
-              required
-              maxLength={120}
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Ej.: María González"
-            />
-          </AdminField>
-          <AdminField label="Empresa">
-            <input
-              maxLength={120}
-              value={form.company}
-              onChange={(event) => setForm({ ...form, company: event.target.value })}
-              placeholder="Ej.: Samsung Paraguay"
-            />
-          </AdminField>
-          <AdminField label="Tipo">
-            <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
-              <option value="FINAL">Cliente final</option>
-              <option value="RESELLER">Mayorista / revendedor</option>
-            </select>
-          </AdminField>
-          <AdminField label="Teléfono" hint="Con código de país">
-            <input
-              type="tel"
-              maxLength={30}
-              value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              placeholder="+595 981 000 000"
-              autoComplete="tel"
-            />
-          </AdminField>
-          <AdminField label="Correo">
-            <input
-              type="email"
-              maxLength={320}
-              value={form.email}
-              onChange={(event) => setForm({ ...form, email: event.target.value })}
-              placeholder="contacto@empresa.com"
-              autoComplete="email"
-            />
-          </AdminField>
-          <AdminField label="RUC / CI">
-            <input
-              maxLength={30}
-              value={form.ruc}
-              onChange={(event) => setForm({ ...form, ruc: event.target.value })}
-              placeholder="80012345-6"
-              inputMode="numeric"
-            />
-          </AdminField>
+          <TextField
+            label="Nombre / responsable"
+            required
+            maxLength={120}
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="Ej.: María González"
+          />
+          <TextField
+            label="Empresa"
+            maxLength={120}
+            value={form.company}
+            onChange={(value) => setForm({ ...form, company: value })}
+            placeholder="Ej.: Samsung Paraguay"
+          />
+          <SelectField
+            label="Tipo"
+            value={form.type}
+            onChange={(value) => setForm({ ...form, type: value })}
+            options={[
+              { value: "FINAL", label: "Cliente final" },
+              { value: "RESELLER", label: "Mayorista / revendedor" },
+            ]}
+          />
+          <PhoneField
+            label="Teléfono"
+            hint="Con código de país"
+            value={form.phone}
+            onChange={(value) => setForm({ ...form, phone: value })}
+          />
+          <EmailField
+            label="Correo"
+            value={form.email}
+            onChange={(value) => setForm({ ...form, email: value })}
+            placeholder="contacto@empresa.com"
+          />
+          <TextField
+            label="RUC / CI"
+            maxLength={30}
+            value={form.ruc}
+            onChange={(value) => setForm({ ...form, ruc: value })}
+            placeholder="80012345-6"
+            inputMode="numeric"
+          />
         </AdminFormPanel>
       ) : null}
 

@@ -23,12 +23,12 @@ import {
   AdminKpi,
   AdminLoadingRows,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { useAdminResource } from "../use-admin-data";
+import { DateField, SearchField } from "../AdminFields";
+import { useAdminResource } from "@/lib/admin-api";
 
 /**
  * Historial de cambios: quién hizo qué y con qué valores, con filtros por
@@ -140,7 +140,7 @@ function AuditoriaView() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField
+        <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar en el historial"
@@ -158,24 +158,22 @@ function AuditoriaView() {
           label="Filtrar por actor"
           options={actorOptions}
         />
-        <label className="admin-field admin-field--filter">
-          <span className="admin-field-label">Desde</span>
-          <input
-            type="date"
-            value={from}
+        <div className="admin-field--filter">
+          <DateField
+            label="Desde"
             max={to || undefined}
-            onChange={(event) => updateFilter(() => setFrom(event.target.value))}
+            value={from}
+            onChange={(value) => updateFilter(() => setFrom(value))}
           />
-        </label>
-        <label className="admin-field admin-field--filter">
-          <span className="admin-field-label">Hasta</span>
-          <input
-            type="date"
-            value={to}
+        </div>
+        <div className="admin-field--filter">
+          <DateField
+            label="Hasta"
             min={from || undefined}
-            onChange={(event) => updateFilter(() => setTo(event.target.value))}
+            value={to}
+            onChange={(value) => updateFilter(() => setTo(value))}
           />
-        </label>
+        </div>
         <AdminSelect
           value={pageSize}
           onChange={(value) => updateFilter(() => setPageSize(value))}

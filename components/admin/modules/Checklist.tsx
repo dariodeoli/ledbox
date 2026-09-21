@@ -5,7 +5,7 @@ import { formatDate, formatDateShort, isDueSoon, statusTone, taskTypeLabel } fro
 import type { AdminEventTask } from "@/lib/admin-types";
 import { AdminIcon } from "../AdminIcons";
 import { AdminBadge, AdminCell, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
-import { adminSend } from "../use-admin-data";
+import { adminSend } from "@/lib/admin-api";
 
 export type ChecklistEntry = { task: AdminEventTask; eventName: string };
 

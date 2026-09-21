@@ -11,17 +11,17 @@ export function AdminSpinner({ label = "Cargando" }: { label?: string }) {
 
 export function AdminError({ message }: { message: string }) {
   return (
-    <p className="admin-alert admin-alert--error" role="alert">
+    <AdminNote tone="error" variant="alert">
       {message}
-    </p>
+    </AdminNote>
   );
 }
 
 export function AdminSuccess({ children }: { children: React.ReactNode }) {
   return (
-    <p className="admin-alert admin-alert--success" role="status">
+    <AdminNote tone="ok" variant="alert">
       {children}
-    </p>
+    </AdminNote>
   );
 }
 
@@ -78,7 +78,23 @@ export function AdminBadge({ tone = "neutral", title, children }: { tone?: Admin
   );
 }
 
-export function AdminNote({ children, tone }: { children: React.ReactNode; tone?: "ok" | "error" }) {
+/** Aviso inline único del panel: `note` en formularios y bloques, `alert` en las tarjetas de acceso. */
+export function AdminNote({
+  children,
+  tone,
+  variant = "note",
+}: {
+  children: React.ReactNode;
+  tone?: "ok" | "error";
+  variant?: "note" | "alert";
+}) {
+  if (variant === "alert") {
+    return (
+      <p className={tone === "error" ? "admin-alert admin-alert--error" : "admin-alert admin-alert--success"} role={tone === "error" ? "alert" : "status"}>
+        {children}
+      </p>
+    );
+  }
   return (
     <p className="admin-note" role={tone === "error" ? "alert" : "status"} data-tone={tone}>
       {children}
@@ -146,26 +162,6 @@ export function AdminDataState({
   return <>{children}</>;
 }
 
-export function AdminField({
-  label,
-  hint,
-  wide,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  wide?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className={wide ? "admin-field admin-field--wide" : "admin-field"}>
-      <span className="admin-field-label">{label}</span>
-      {children}
-      {hint ? <span className="admin-field-hint">{hint}</span> : null}
-    </label>
-  );
-}
-
 export function AdminFormPanel({
   title,
   submitLabel,
@@ -207,50 +203,36 @@ export function AdminFormPanel({
   );
 }
 
-export function AdminSearchField({
-  value,
-  onChange,
-  label,
-  placeholder = "Buscar…",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="admin-search">
-      <AdminIcon name="search" size={15} />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label={label}
-        placeholder={placeholder}
-        autoComplete="off"
-      />
-      {value ? (
-        <button type="button" className="admin-search-clear" onClick={() => onChange("")} aria-label="Limpiar búsqueda" title="Limpiar búsqueda">
-          <AdminIcon name="close" size={12} />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 export function AdminSelect({
   value,
   onChange,
   label,
   options,
+  className,
+  title,
+  disabled,
+  required,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   options: Array<{ value: string; label: string }>;
+  /** Clase del control; sin ella usa el filtro estándar (`admin-filter`). */
+  className?: string;
+  title?: string;
+  disabled?: boolean;
+  required?: boolean;
 }) {
   return (
-    <select className="admin-filter" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label}>
+    <select
+      className={className ?? "admin-filter"}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={label}
+      title={title}
+      disabled={disabled}
+      required={required}
+    >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}

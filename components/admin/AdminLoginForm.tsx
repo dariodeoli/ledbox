@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminError, AdminSpinner } from "./AdminUI";
+import { EmailField, HoneypotField, PasswordField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 
 async function responseMessage(response: Response, fallback: string) {
@@ -54,15 +55,28 @@ export function AdminLoginForm() {
       <div className="admin-divider" aria-hidden="true"><span>o ingresá con correo</span></div>
       <form className="admin-form" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}
-        <div className="admin-field">
-          <label htmlFor="admin-email">Email</label>
-          <input id="admin-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required maxLength={320} placeholder="tu@email.com" />
-        </div>
-        <div className="admin-field">
-          <div className="admin-field-heading"><label htmlFor="admin-password">Contraseña</label><Link href="/recuperar">¿La olvidaste?</Link></div>
-          <input id="admin-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required minLength={8} maxLength={128} />
-        </div>
-        <input className="admin-honeypot" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
+        <EmailField
+          label="Email"
+          value={email}
+          onChange={setEmail}
+          autoComplete="username"
+          required
+          placeholder="tu@email.com"
+          id="admin-email"
+          name="email"
+        />
+        <PasswordField
+          label="Contraseña"
+          labelAction={<Link href="/recuperar">¿La olvidaste?</Link>}
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+          required
+          minLength={8}
+          id="admin-password"
+          name="password"
+        />
+        <HoneypotField />
         <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Iniciando sesión" /> Ingresando…</> : "Ingresar al panel →"}</button>
       </form>
       <p className="admin-footnote">Acceso restringido a usuarios autorizados de LedBox.</p>

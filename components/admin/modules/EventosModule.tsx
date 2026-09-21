@@ -21,19 +21,26 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminField,
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminPanel,
   AdminRow,
-  AdminSearchField,
   AdminSelect,
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, redirectToLogin, useAdminResource } from "../use-admin-data";
+import {
+  DateField,
+  DateTimeField,
+  NumberField,
+  SearchField,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "../AdminFields";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
 
 const STATUS_OPTIONS = [
@@ -185,20 +192,19 @@ export function EventosModule() {
     const controller = new AbortController();
     setAvailabilityLoading(true);
     setAvailabilityError("");
-    fetch(`/api/admin/inventory?${params.toString()}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (response.status === 401) {
-          redirectToLogin();
+    void adminApiGet<{ availability?: AdminInventoryAvailability }>(`/api/admin/inventory?${params.toString()}`, {
+      fresh: true,
+      signal: controller.signal,
+      fallbackError: "No pudimos calcular la disponibilidad.",
+    })
+      .then((result) => {
+        if (!result.ok) {
+          if (result.aborted) return;
+          setAvailability(null);
+          setAvailabilityError(result.error);
           return;
         }
-        const payload = (await response.json().catch(() => ({}))) as { error?: string; availability?: AdminInventoryAvailability };
-        if (!response.ok) throw new Error(payload.error || "No pudimos calcular la disponibilidad.");
-        setAvailability(payload.availability ?? null);
-      })
-      .catch((error: unknown) => {
-        if ((error as Error).name === "AbortError") return;
-        setAvailability(null);
-        setAvailabilityError(error instanceof Error ? error.message : "No pudimos calcular la disponibilidad.");
+        setAvailability(result.data.availability ?? null);
       })
       .finally(() => setAvailabilityLoading(false));
     return () => controller.abort();
@@ -390,7 +396,7 @@ export function EventosModule() {
       </section>
 
       <AdminToolbar>
-        <AdminSearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
+        <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
         <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         {writable ? (
           <AdminButton
@@ -416,36 +422,37 @@ export function EventosModule() {
           busy={busy}
           status={formError}
         >
-          <AdminField label="Cliente">
-            <select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}>
-              <option value="">Elegí un cliente…</option>
-              {clientOptions.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.company || client.name}
-                </option>
-              ))}
-            </select>
-          </AdminField>
-          <AdminField label="Nombre del evento">
-            <input
-              required
-              maxLength={120}
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Ej.: Lanzamiento Samsung"
-            />
-          </AdminField>
-          <AdminField label="Lugar">
-            <input
-              maxLength={160}
-              value={form.location}
-              onChange={(event) => setForm({ ...form, location: event.target.value })}
-              placeholder="Ej.: Centro de Convenciones"
-            />
-          </AdminField>
-          <AdminField label="Inicio" hint="Fecha y hora del evento">
-            <input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} />
-          </AdminField>
+          <SelectField
+            label="Cliente"
+            required
+            value={form.clientId}
+            onChange={(value) => setForm({ ...form, clientId: value })}
+            options={[
+              { value: "", label: "Elegí un cliente…" },
+              ...clientOptions.map((client) => ({ value: client.id, label: client.company || client.name })),
+            ]}
+          />
+          <TextField
+            label="Nombre del evento"
+            required
+            maxLength={120}
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="Ej.: Lanzamiento Samsung"
+          />
+          <TextField
+            label="Lugar"
+            maxLength={160}
+            value={form.location}
+            onChange={(value) => setForm({ ...form, location: value })}
+            placeholder="Ej.: Centro de Convenciones"
+          />
+          <DateTimeField
+            label="Inicio"
+            hint="Fecha y hora del evento"
+            value={form.startsAt}
+            onChange={(value) => setForm({ ...form, startsAt: value })}
+          />
         </AdminFormPanel>
       ) : null}
 
@@ -539,49 +546,43 @@ export function EventosModule() {
           <>
             {writable ? (
               <form className="admin-inline-form" onSubmit={submitAssignment}>
-                <select
+                <AdminSelect
+                  className=""
                   required
                   value={assignForm.inventoryId}
-                  onChange={(event) => setAssignForm({ ...assignForm, inventoryId: event.target.value })}
-                  aria-label="Ítem de inventario"
+                  onChange={(value) => setAssignForm({ ...assignForm, inventoryId: value })}
+                  label="Ítem de inventario"
                   title="Ítem de inventario"
                   disabled={Boolean(assignEditingId)}
-                >
-                  <option value="">Ítem de inventario…</option>
-                  {inventoryItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                      {item.sku ? ` · ${item.sku}` : ""} · {formatNumber(item.availability.availableNow)} libres
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  className="admin-qty-input"
-                  value={assignForm.quantity}
-                  onChange={(event) => setAssignForm({ ...assignForm, quantity: event.target.value })}
-                  aria-label="Cantidad de unidades"
-                  title="Cantidad de unidades"
-                  inputMode="numeric"
+                  options={[
+                    { value: "", label: "Ítem de inventario…" },
+                    ...inventoryItems.map((item) => ({
+                      value: item.id,
+                      label: `${item.name}${item.sku ? ` · ${item.sku}` : ""} · ${formatNumber(item.availability.availableNow)} libres`,
+                    })),
+                  ]}
                 />
-                <input
-                  type="datetime-local"
+                <NumberField
+                  ariaLabel="Cantidad de unidades"
+                  title="Cantidad de unidades"
+                  className="admin-qty-input"
+                  required
+                  value={assignForm.quantity}
+                  onChange={(value) => setAssignForm({ ...assignForm, quantity: value })}
+                />
+                <DateTimeField
+                  ariaLabel="Inicio del rango asignado"
+                  title="Inicio del rango asignado"
                   required
                   value={assignForm.startsAt}
-                  onChange={(event) => setAssignForm({ ...assignForm, startsAt: event.target.value })}
-                  aria-label="Inicio del rango asignado"
-                  title="Inicio del rango asignado"
+                  onChange={(value) => setAssignForm({ ...assignForm, startsAt: value })}
                 />
-                <input
-                  type="datetime-local"
+                <DateTimeField
+                  ariaLabel="Fin del rango asignado"
+                  title="Fin del rango asignado"
                   required
                   value={assignForm.endsAt}
-                  onChange={(event) => setAssignForm({ ...assignForm, endsAt: event.target.value })}
-                  aria-label="Fin del rango asignado"
-                  title="Fin del rango asignado"
+                  onChange={(value) => setAssignForm({ ...assignForm, endsAt: value })}
                 />
                 <AdminButton
                   type="submit"
@@ -641,61 +642,42 @@ export function EventosModule() {
                 busy={movementBusy}
                 status={movementError}
               >
-                <AdminField
+                <DateTimeField
                   label={movement.mode === "checkout" ? "Fecha y hora de salida" : "Fecha y hora de devolución"}
                   hint={`${formatNumber(movement.assignment.quantity)} unidades asignadas`}
-                >
-                  <input
-                    type="datetime-local"
-                    required
-                    value={movementForm.at}
-                    onChange={(event) => setMovementForm({ ...movementForm, at: event.target.value })}
-                  />
-                </AdminField>
-                <AdminField label={movement.mode === "checkout" ? "Estado al retirar" : "Estado al devolver"}>
-                  <select
-                    value={movementForm.condition}
-                    onChange={(event) => setMovementForm({ ...movementForm, condition: event.target.value })}
-                  >
-                    {ITEM_CONDITIONS.map((condition) => (
-                      <option key={condition} value={condition}>
-                        {condition}
-                      </option>
-                    ))}
-                  </select>
-                </AdminField>
+                  required
+                  value={movementForm.at}
+                  onChange={(value) => setMovementForm({ ...movementForm, at: value })}
+                />
+                <SelectField
+                  label={movement.mode === "checkout" ? "Estado al retirar" : "Estado al devolver"}
+                  value={movementForm.condition}
+                  onChange={(value) => setMovementForm({ ...movementForm, condition: value })}
+                  options={ITEM_CONDITIONS.map((condition) => ({ value: condition, label: condition }))}
+                />
                 {movement.mode === "checkin" ? (
                   <>
-                    <AdminField label="Unidades dañadas">
-                      <input
-                        type="number"
-                        min="0"
-                        max={movement.assignment.quantity}
-                        step="1"
-                        value={movementForm.damaged}
-                        onChange={(event) => setMovementForm({ ...movementForm, damaged: event.target.value })}
-                        inputMode="numeric"
-                      />
-                    </AdminField>
-                    <AdminField label="Unidades faltantes">
-                      <input
-                        type="number"
-                        min="0"
-                        max={movement.assignment.quantity}
-                        step="1"
-                        value={movementForm.missing}
-                        onChange={(event) => setMovementForm({ ...movementForm, missing: event.target.value })}
-                        inputMode="numeric"
-                      />
-                    </AdminField>
-                    <AdminField label="Notas" hint="Detalle de daños o faltantes (opcional)" wide>
-                      <textarea
-                        rows={2}
-                        maxLength={400}
-                        value={movementForm.notes}
-                        onChange={(event) => setMovementForm({ ...movementForm, notes: event.target.value })}
-                      />
-                    </AdminField>
+                    <NumberField
+                      label="Unidades dañadas"
+                      maxLength={6}
+                      value={movementForm.damaged}
+                      onChange={(value) => setMovementForm({ ...movementForm, damaged: value })}
+                    />
+                    <NumberField
+                      label="Unidades faltantes"
+                      maxLength={6}
+                      value={movementForm.missing}
+                      onChange={(value) => setMovementForm({ ...movementForm, missing: value })}
+                    />
+                    <TextAreaField
+                      label="Notas"
+                      hint="Detalle de daños o faltantes (opcional)"
+                      wide
+                      rows={2}
+                      maxLength={400}
+                      value={movementForm.notes}
+                      onChange={(value) => setMovementForm({ ...movementForm, notes: value })}
+                    />
                   </>
                 ) : null}
               </AdminFormPanel>
@@ -821,40 +803,34 @@ export function EventosModule() {
       >
         {checklistWritable ? (
           <form className="admin-inline-form" onSubmit={submitTask}>
-            <select
+            <AdminSelect
+              className=""
               required
               value={taskForm.eventId}
-              onChange={(event) => setTaskForm({ ...taskForm, eventId: event.target.value })}
-              aria-label="Evento de la tarea"
-            >
-              <option value="">Evento…</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-            <input
+              onChange={(value) => setTaskForm({ ...taskForm, eventId: value })}
+              label="Evento de la tarea"
+              options={[{ value: "", label: "Evento…" }, ...events.map((event) => ({ value: event.id, label: event.name }))]}
+            />
+            <TextField
+              ariaLabel="Título de la tarea"
               required
               maxLength={120}
               value={taskForm.title}
-              onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })}
+              onChange={(value) => setTaskForm({ ...taskForm, title: value })}
               placeholder="Nueva tarea operativa"
-              aria-label="Título de la tarea"
             />
-            <select value={taskForm.type} onChange={(event) => setTaskForm({ ...taskForm, type: event.target.value })} aria-label="Tipo de tarea">
-              {TASK_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={taskForm.dueAt}
-              onChange={(event) => setTaskForm({ ...taskForm, dueAt: event.target.value })}
-              aria-label="Vencimiento de la tarea"
+            <AdminSelect
+              className=""
+              value={taskForm.type}
+              onChange={(value) => setTaskForm({ ...taskForm, type: value })}
+              label="Tipo de tarea"
+              options={TASK_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            />
+            <DateField
+              ariaLabel="Vencimiento de la tarea"
               title="Vencimiento (opcional)"
+              value={taskForm.dueAt}
+              onChange={(value) => setTaskForm({ ...taskForm, dueAt: value })}
             />
             <AdminButton type="submit" variant="primary" icon="plus" busy={taskBusy}>
               Agregar tarea
