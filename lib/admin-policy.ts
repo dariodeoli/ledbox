@@ -43,7 +43,10 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   },
   {
     label: "Sistema",
-    items: [{ href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] }],
+    items: [
+      { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
+      { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
+    ],
   },
 ];
 
