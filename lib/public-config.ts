@@ -1,16 +1,22 @@
 const DEFAULT_SITE_URL = "https://ledbox.online";
-const DEFAULT_ADMIN_URL = "https://admin.ledbox.online";
+const DEFAULT_ADMIN_URL = "https://app.ledbox.online";
 const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
 const DEFAULT_DEMO_URL = "https://demo.ledbox.online";
+const DEFAULT_PRODUCT_URL = "https://eventos.ledbox.online";
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
 export const publicConfig = {
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, ""),
+  /** App de EventOS (instancia de la empresa): el panel vive acá (issue #39). */
   adminUrl: (process.env.NEXT_PUBLIC_ADMIN_URL || DEFAULT_ADMIN_URL).replace(/\/$/, ""),
   /** Portal del cliente (issue #12): host público de los presupuestos aprobables. */
   clientUrl: (process.env.NEXT_PUBLIC_CLIENT_URL || DEFAULT_CLIENT_URL).replace(/\/$/, ""),
   /** Demo pública (issue #15): host de la demo con datos simulados. */
   demoUrl: (process.env.NEXT_PUBLIC_DEMO_URL || DEFAULT_DEMO_URL).replace(/\/$/, ""),
+  /** Landing de ventas de EventOS (issue #39); al comprar el dominio propio se cambia esta variable. */
+  productUrl: (process.env.NEXT_PUBLIC_PRODUCT_URL || DEFAULT_PRODUCT_URL).replace(/\/$/, ""),
+  /** Host viejo del panel: queda solo para redirigir a `adminUrl` (transición). */
+  legacyAdminUrl: "https://admin.ledbox.online",
   whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER,
 } as const;
 

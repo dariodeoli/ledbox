@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
 import {
@@ -27,7 +28,7 @@ import {
   whatsappHref,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
-import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
+import { APP_VERSION_LABEL } from "@/lib/version";
 import {
   adminAvatarUrl,
   organizationLogoUrl,
@@ -469,10 +470,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="admin-shell">
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
-            <Link href="/dashboard" className="admin-brand" aria-label="LedBox · Ir al resumen">
+            <Link href="/dashboard" className="admin-brand" aria-label="EventOS · Ir al resumen">
               <BrandMark className="admin-brand-mark" size={30} />
               <span>
-                LEDBOX<span className="admin-brand-dot">.</span>
+                EventOS<span className="admin-brand-dot">.</span>
               </span>
             </Link>
             <button
@@ -725,8 +726,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <main className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
 
           <footer className="admin-main-foot">
-            <span>LedBox · Panel privado</span>
-            <strong title={`Versión de la app: ${APP_VERSION}`}>{APP_VERSION_LABEL}</strong>
+            <AppFooter variant="app" className="app-footer--panel" />
           </footer>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
 
@@ -35,6 +36,8 @@ export default function PortalLayout({ children }: Readonly<{ children: React.Re
           ledbox.online
         </a>
       </footer>
+
+      <AppFooter variant="app" className="app-footer--portal" />
     </div>
   );
 }
