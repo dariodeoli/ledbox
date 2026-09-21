@@ -17,6 +17,7 @@ export type AuthenticatedAdmin = {
   session: {
     id: string;
     userId: string;
+    activeOrganizationId: string | null;
     expiresAt: Date;
     revokedAt: Date | null;
     createdAt: Date;
@@ -47,12 +48,12 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export async function createSession(user: { id: string; email: string; role: PublicAdminUser["role"] }) {
+export async function createSession(user: { id: string; email: string; role: PublicAdminUser["role"] }, activeOrganizationId?: string | null) {
   const sessionId = randomBytes(16).toString("hex");
   const jti = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + authConfig.sessionDurationMs);
   await db.adminSession.create({
-    data: { id: sessionId, userId: user.id, jtiHash: digest(jti), expiresAt },
+    data: { id: sessionId, userId: user.id, activeOrganizationId: activeOrganizationId ?? null, jtiHash: digest(jti), expiresAt },
   });
   const jwt = await new SignJWT({ email: user.email, role: user.role })
     .setProtectedHeader({ alg: "HS256" })
@@ -105,6 +106,7 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
       session: {
         id: session.id,
         userId: session.userId,
+        activeOrganizationId: session.activeOrganizationId,
         expiresAt: session.expiresAt,
         revokedAt: session.revokedAt,
         createdAt: session.createdAt,
@@ -118,16 +120,6 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
 export async function getCurrentUser() {
   const auth = await getAuthenticatedAdmin();
   return auth?.user ?? null;
-}
-
-export async function requireAdmin() {
-  return getAuthenticatedAdmin();
-}
-
-export async function requireAdminRole(roles: Array<PublicAdminUser["role"]>) {
-  const auth = await getAuthenticatedAdmin();
-  if (!auth || !roles.includes(auth.user.role)) return null;
-  return auth;
 }
 
 export async function revokeCurrentSession(): Promise<void> {

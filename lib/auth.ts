@@ -5,7 +5,6 @@ export {
   getCurrentUser,
   hashPassword,
   normalizeUserEmail,
-  requireAdmin,
   revokeCurrentSession,
   setSessionCookie,
   tokenDigest,
