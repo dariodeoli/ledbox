@@ -9,6 +9,10 @@ import type { AdminRole } from "@prisma/client";
  * no la tiene. `VIEWER` no tiene ninguna capacidad de escritura.
  */
 export type AdminCapability =
+  // Perfil propio (nombre, contraseña y avatar): cualquier rol, incluido VIEWER.
+  | "profile.write"
+  // Nombre y logos de la empresa activa.
+  | "org.manage"
   // Clientes, oportunidades y datos comerciales de contacto.
   | "clients.write"
   // Eventos, checklist operativo y asignaciones/verificación de inventario.
@@ -27,6 +31,8 @@ export type AdminCapability =
   | "users.manage";
 
 export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
+  "profile.write",
+  "org.manage",
   "clients.write",
   "events.write",
   "inventory.write",
@@ -37,9 +43,14 @@ export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
   "users.manage",
 ];
 
-const VIEWER_CAPABILITIES: readonly AdminCapability[] = [];
+const VIEWER_CAPABILITIES: readonly AdminCapability[] = [
+  // El perfil propio es de cada usuario: VIEWER edita su nombre, su contraseña y
+  // su avatar (nunca los datos de la empresa ni de otros usuarios).
+  "profile.write",
+];
 
 const OPERATIONS_CAPABILITIES: readonly AdminCapability[] = [
+  "profile.write",
   "clients.write",
   "events.write",
   "inventory.write",
@@ -47,6 +58,7 @@ const OPERATIONS_CAPABILITIES: readonly AdminCapability[] = [
 ];
 
 const FINANCE_CAPABILITIES: readonly AdminCapability[] = [
+  "profile.write",
   "budgets.write",
   "finance.write",
   "suppliers.write",

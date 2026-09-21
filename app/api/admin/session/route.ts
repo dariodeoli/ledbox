@@ -1,4 +1,6 @@
 import { listAdminOrganizations, requireAdminContext, setActiveOrganization } from "@/lib/server/tenancy";
+import { loadOrganizationLogos, logoVersions } from "@/lib/server/branding";
+import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -8,10 +10,23 @@ export async function GET() {
   const result = await requireAdminContext();
   if (!result.ok) return result.response;
   const { user, organization, role, demo } = result.context;
-  const organizations = await listAdminOrganizations(user.id);
+  const [organizations, avatar, logos] = await Promise.all([
+    listAdminOrganizations(user.id),
+    db.adminUserAvatar.findUnique({ where: { userId: user.id }, select: { updatedAt: true } }),
+    loadOrganizationLogos(organization.id),
+  ]);
   return Response.json({
-    user,
-    organization: { id: organization.id, name: organization.name, slug: organization.slug, role },
+    // El avatar (issue #22) viaja con la fecha de subida: el chip arma la URL con
+    // esa versión y refresca la foto cuando el usuario la cambia.
+    user: { ...user, avatarUpdatedAt: avatar?.updatedAt.toISOString() ?? null },
+    organization: {
+      id: organization.id,
+      name: organization.name,
+      slug: organization.slug,
+      role,
+      // Logos de la empresa por tema: el shell elige la variante según el tema.
+      logos: logoVersions(logos),
+    },
     organizations,
     // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
     demo,

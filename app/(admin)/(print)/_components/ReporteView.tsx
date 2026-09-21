@@ -37,8 +37,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
         title: `Reporte mensual · ${report.monthLabel}`,
         header: ["Concepto", "Valor", "", "", "", ""],
         rows: [
-          ["Empresa", report.organization],
-          ["Período", report.month],
+          ["Empresa", report.organization],          ["Período", report.month],
           ["Emitido", report.issuedAt],
           ["Eventos en el período", report.totals.events],
           ["Venta (presupuestos vigentes)", report.totals.sale],
@@ -144,6 +143,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
           organization={report.organization}
           issuedAt={report.issuedAt}
           meta={periodLabel}
+          logo={report.logo}
         />
 
         <section className="lbprint-kpis" aria-label="Resumen del período">

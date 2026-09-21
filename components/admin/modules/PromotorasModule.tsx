@@ -14,6 +14,7 @@ import {
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { PROMOTER_AVAILABILITIES, type AdminPromoterRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { AdminAvatar } from "../AdminAvatar";
 import {
   AdminBadge,
   AdminButton,
@@ -303,7 +304,10 @@ export function PromotorasModule() {
               return (
                 <AdminRow key={promoter.id}>
                   <AdminCell title={promoter.name}>
-                    <strong>{promoter.name}</strong>
+                    <span className="admin-identity">
+                      <AdminAvatar name={promoter.name} src={promoter.photoUrl} size={22} />
+                      <strong>{promoter.name}</strong>
+                    </span>
                   </AdminCell>
                   <AdminCell title={promoter.phone || "Sin teléfono"}>
                     <span className="admin-nowrap">{promoter.phone || "—"}</span>

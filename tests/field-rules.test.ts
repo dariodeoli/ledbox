@@ -11,6 +11,7 @@ import {
   FIELD_MESSAGES,
   formatPercent,
   normalizeEmail,
+  normalizePersonName,
   normalizePhone,
   normalizeSerial,
   parseAmount,
@@ -19,12 +20,23 @@ import {
   percentError,
   percentInput,
   percentValid,
+  personNameError,
+  personNameValid,
   phoneError,
   phoneValid,
   requiredError,
   serialError,
   serialValid,
 } from "../lib/field-rules";
+import {
+  detectIdentityImageMime,
+  detectPaymentProofMime,
+  IDENTITY_IMAGE_MAX_BYTES,
+  identityImageExtension,
+  isLogoVariant,
+  organizationLogoUrl,
+  adminAvatarUrl,
+} from "../lib/admin-types";
 
 test("digitsOnly limpia todo lo que no sea dígito", () => {
   assert.equal(digitsOnly("+595 981-000.000"), "595981000000");
@@ -97,4 +109,43 @@ test("obligatorio: un solo mensaje", () => {
   assert.equal(requiredError(""), FIELD_MESSAGES.required);
   assert.equal(requiredError("  "), FIELD_MESSAGES.required);
   assert.equal(requiredError("ok"), null);
+});
+
+test("nombre de persona: sin espacios de más y con el tope del panel", () => {
+  assert.equal(normalizePersonName("  Ana   María  "), "Ana María");
+  assert.equal(normalizePersonName(null), "");
+  assert.equal(personNameValid("Ana"), true);
+  assert.equal(personNameValid(" A "), false);
+  assert.equal(personNameValid("a".repeat(FIELD_LIMITS.name)), true);
+  assert.equal(personNameValid("a".repeat(FIELD_LIMITS.name + 1)), false);
+  assert.equal(personNameError(""), FIELD_MESSAGES.name);
+  assert.equal(personNameError("Ana Martínez"), null);
+});
+
+test("imagen de identidad: JPG, PNG y WebP reales; PDF y archivos falsos no", () => {
+  const ascii = (text: string) => new Uint8Array([...text].map((character) => character.charCodeAt(0)));
+  const webp = new Uint8Array([...ascii("RIFF"), 0, 0, 0, 0, ...ascii("WEBP")]);
+  assert.equal(detectIdentityImageMime(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+  assert.equal(detectIdentityImageMime(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "image/png");
+  assert.equal(detectIdentityImageMime(webp), "image/webp");
+  // El comprobante sí acepta PDF; la imagen de identidad no.
+  assert.equal(detectPaymentProofMime(ascii("%PDF-")), "application/pdf");
+  assert.equal(detectIdentityImageMime(ascii("%PDF-")), null);
+  assert.equal(detectIdentityImageMime(new Uint8Array([0x00, 0x01, 0x02, 0x03])), null);
+  assert.equal(identityImageExtension("image/png"), "png");
+  assert.equal(identityImageExtension("image/webp"), "webp");
+  assert.equal(identityImageExtension("image/jpeg"), "jpg");
+  assert.equal(IDENTITY_IMAGE_MAX_BYTES, 1024 * 1024);
+});
+
+test("URLs de identidad: avatar y logo con la versión que corta la caché", () => {
+  assert.equal(adminAvatarUrl("u-1"), "/api/admin/users/avatars/u-1");
+  assert.equal(
+    adminAvatarUrl("u-1", "2026-09-21T10:00:00.000Z"),
+    "/api/admin/users/avatars/u-1?v=2026-09-21T10%3A00%3A00.000Z",
+  );
+  assert.equal(organizationLogoUrl("light"), "/api/admin/organization/branding/logos/light");
+  assert.equal(isLogoVariant("light"), true);
+  assert.equal(isLogoVariant("dark"), true);
+  assert.equal(isLogoVariant("claro"), false);
 });

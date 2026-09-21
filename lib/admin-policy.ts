@@ -10,9 +10,15 @@ export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "
 export type AdminNavItem = { href: string; label: string; icon: AdminIconName; roles?: readonly AdminRole[] };
 export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
 
-/** Módulos restringidos: mismo criterio que el API (usuarios: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
+/** Módulos restringidos: mismo criterio que el API (usuarios y empresa: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/usuarios": ["OWNER", "ADMIN"],
+  "/empresa": ["OWNER", "ADMIN"],
+};
+
+/** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
+const PAGE_TITLES: Record<string, string> = {
+  "/perfil": "Mi perfil",
 };
 
 export const ADMIN_NAV: readonly AdminNavGroup[] = [
@@ -44,6 +50,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Sistema",
     items: [
+      { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
       { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
       { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
     ],
@@ -59,6 +66,9 @@ export function isAdminNavActive(pathname: string, href: string): boolean {
 }
 
 export function adminNavLabel(pathname: string): string {
+  for (const [href, label] of Object.entries(PAGE_TITLES)) {
+    if (isAdminNavActive(pathname, href)) return label;
+  }
   for (const group of ADMIN_NAV) {
     for (const item of group.items) {
       if (isAdminNavActive(pathname, item.href)) return item.label;
@@ -95,6 +105,11 @@ export function canWriteOperations(role: AdminRole | null | undefined): boolean 
 }
 
 export function canManageUsers(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
+/** Nombre y logos de la empresa (`org.manage` en el API): OWNER y ADMIN. */
+export function canManageOrganization(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN";
 }
 

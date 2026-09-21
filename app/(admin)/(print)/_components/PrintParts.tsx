@@ -4,6 +4,9 @@ import { publicConfig } from "@/lib/public-config";
  * Partes compartidas de los documentos imprimibles: encabezado con la marca del
  * panel y datos de la empresa, campos etiquetados y pie. Solo presentación: los
  * datos llegan resueltos desde cada página (server-side, filtrados por empresa).
+ *
+ * Issue #22: si la empresa subió su logo, el encabezado usa la variante **clara**
+ * (el papel es fondo blanco) servida con sesión; sin logo queda el monograma LB.
  */
 
 export function PrintHeader({
@@ -12,19 +15,26 @@ export function PrintHeader({
   organization,
   issuedAt,
   meta,
+  logo,
 }: {
   title: string;
   reference: string | null;
   organization: string;
   issuedAt: string;
   meta?: string | null;
+  /** Logo de la empresa (issue #22): en papel siempre la variante clara; `null` deja el monograma `LB`. */
+  logo?: string | null;
 }) {
   return (
     <header className="lbprint-head">
       <div className="lbprint-brand">
-        <span className="lbprint-mark" aria-hidden="true">
-          LB
-        </span>
+        {logo ? (
+          <img className="lbprint-logo" src={logo} alt="" aria-hidden="true" />
+        ) : (
+          <span className="lbprint-mark" aria-hidden="true">
+            LB
+          </span>
+        )}
         <span className="lbprint-brand-text">
           <span className="lbprint-wordmark">
             LEDBOX<span>.</span>
