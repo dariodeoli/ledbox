@@ -265,6 +265,16 @@ enum PaymentStatus {
   CANCELLED
 }
 
+/**
+ * Estado de un cobro de cliente (issue #16): a cobrar (`PENDING`), cobrado
+ * (`RECEIVED`) o anulado (`CANCELLED`). Los cobros históricos quedan `RECEIVED`.
+ */
+enum ClientPaymentStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+}
+
 enum SupplierCategory {
   CARPENTRY
   GRAPHICS
@@ -412,22 +422,41 @@ model BudgetItem {
   @@index([budgetId])
 }
 
+/**
+ * Cobro de cliente: cobrado al momento o a plazo (issue #16).
+ *
+ * - `status`: `PENDING` (a cobrar), `RECEIVED` (cobrado) o `CANCELLED` (anulado).
+ * - `paidAt`: fecha de pago; `null` mientras el cobro está pendiente (un cobro a
+ *   plazo no es plata cobrada hasta que se marca).
+ * - `collectedAt`: fecha real del cobro (los registros viejos usan `paidAt`).
+ * - `invoiceIssuedAt`/`invoiceNumber`: factura emitida; `dueAt` es el vencimiento
+ *   de cobro (la emisión a 30 días se calcula: emisión + días).
+ * - `chequeDate`: fecha del cheque cuando el método es cheque.
+ */
 model ClientPayment {
-  id             String       @id
-  organizationId String
-  clientId       String
-  budgetId       String?
-  amount         Int
-  paidAt         DateTime     @default(now())
-  method         String?
-  reference      String?
-  notes          String?
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budget         Budget?      @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  id              String              @id
+  organizationId  String
+  clientId        String
+  budgetId        String?
+  amount          Int
+  status          ClientPaymentStatus @default(RECEIVED)
+  paidAt          DateTime?
+  collectedAt     DateTime?
+  method          String?
+  reference       String?
+  invoiceNumber   String?
+  invoiceIssuedAt DateTime?
+  dueAt           DateTime?
+  chequeDate      DateTime?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budget          Budget?             @relation(fields: [budgetId], references: [id], onDelete: SetNull)
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
+  @@index([organizationId, status, dueAt])
 }
 
 model Supplier {
