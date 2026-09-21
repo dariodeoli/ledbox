@@ -1,0 +1,23 @@
+{
+  "name": "LedBox Panel",
+  "short_name": "LedBox",
+  "description": "Panel operativo de LedBox: eventos, checklist de montaje y equipos.",
+  "id": "/panel",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05080a",
+  "theme_color": "#05080a",
+  "lang": "es-PY",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Eventos", "short_name": "Eventos", "url": "/eventos", "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Inventario", "short_name": "Inventario", "url": "/inventario", "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

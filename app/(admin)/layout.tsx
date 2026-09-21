@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Panel privado",
   description: "Panel privado de gestión de contactos y cotizaciones de LedBox.",
   robots: { index: false, follow: false },
+  // PWA del panel (issue #23): instalable desde el subdominio admin, con el
+  // dashboard como inicio y su propio manifest (el sitio público conserva el suyo).
+  manifest: "/manifest-panel.webmanifest",
+  applicationName: "LedBox Panel",
+  appleWebApp: { capable: true, title: "LedBox Panel", statusBarStyle: "black-translucent" },
 };
 
 export default function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
