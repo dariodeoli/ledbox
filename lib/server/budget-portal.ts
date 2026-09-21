@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "./db";
 import { BUDGET_CODE_ALPHABET, formatBudgetCode, normalizeBudgetCode } from "@/lib/public-config";
 import { budgetReference } from "@/lib/admin-format";
+import { dayKeyOf } from "./notifications";
 
 /**
  * Portal del cliente (issue #12): acceso público por token y armado del
@@ -77,6 +78,35 @@ export type PortalBudgetProof = {
   status: PortalBudgetProofStatus;
 };
 
+/**
+ * Estado visible de un pago esperado (issue #28): `AWAITING` esperando la
+ * transferencia del cliente, `PROOF` con comprobante en revisión, `CONFIRMED`
+ * ya acreditado en una cuenta y `CANCELLED` cuando el plan dejó de incluirlo.
+ */
+export type PortalExpectedPaymentStatus = "AWAITING" | "PROOF" | "CONFIRMED" | "CANCELLED";
+
+export type PortalExpectedPayment = {
+  id: string;
+  /** Concepto real del plan: anticipo, cuota N o saldo. */
+  concept: "advance" | "installment" | "balance";
+  label: string;
+  installmentNumber: number | null;
+  amount: number;
+  dueAt: string | null;
+  status: PortalExpectedPaymentStatus;
+  /** Nombre de la cuenta de tesorería donde se espera la transferencia. */
+  accountName: string | null;
+  /** Motivo de la última observación del equipo (revisar y volver a subir). */
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  /** Fecha de la confirmación real en la cuenta. */
+  confirmedAt: string | null;
+  confirmedByName: string | null;
+  /** Si el comprobante vinculado está en revisión (metadato, nunca el archivo). */
+  hasProof: boolean;
+  createdAt: string;
+};
+
 /** Regla del comprobante en el portal (documentada en `portalProofUpload`). */
 export type PortalProofUpload = { allowed: boolean; reason: string | null };
 
@@ -141,6 +171,8 @@ export type PortalBudget = {
   paymentPlan: PortalBudgetPaymentPlan;
   /** Solo con el presupuesto aprobado; antes es `null`. */
   paymentDetails: PortalBudgetPaymentDetails | null;
+  /** Pagos esperados del plan aprobado (issue #28): el estado real de cada concepto. */
+  expectedPayments: PortalExpectedPayment[];
   /** Comprobantes ya subidos (metadatos; el archivo se ve solo en el panel). */
   proofs: PortalBudgetProof[];
   /** Si el portal habilita el formulario de comprobante y por qué no. */
@@ -195,14 +227,31 @@ export const PORTAL_MAX_PROOFS = 20;
  * plazo pendiente (`ClientPayment.status = PENDING`). Fuera de esa ventana el
  * portal no dibuja el formulario y el API responde 409; el motivo viaja en la
  * misma vista para que el estado sea honesto.
+ *
+ * Issue #28: cuando el presupuesto tiene pagos esperados y **ninguno** sigue
+ * abierto (todos confirmados o cancelados), el formulario también se cierra con
+ * su motivo: ya no hay nada que transferir.
  */
 export function portalProofUpload(budget: {
   status: string;
   approvedAt: Date | null;
   pendingPayments: number;
+  /**
+   * Pagos esperados del presupuesto (issue #28): totales y abiertos
+   * (`AWAITING` o `PROOF`). Si el presupuesto está aprobado, tiene esperados y
+   * ninguno sigue abierto, ya no hay nada que pagar.
+   */
+  expectedPayments?: number;
+  openExpectedPayments?: number;
 }): PortalProofUpload {
   if (!portalBudgetOpen(budget.status)) {
     return { allowed: false, reason: "Este presupuesto ya no está disponible." };
+  }
+  if (budget.expectedPayments !== undefined && budget.expectedPayments > 0 && budget.openExpectedPayments === 0) {
+    return {
+      allowed: false,
+      reason: "Ya confirmamos todos los pagos de este presupuesto. Si transferiste algo nuevo, escribinos y lo revisamos.",
+    };
   }
   if (budget.approvedAt || budget.pendingPayments > 0) return { allowed: true, reason: null };
   return {
@@ -236,6 +285,23 @@ type BudgetForPortal = {
   items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; notes: string | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
   payments: Array<{ id: string; amount: number }>;
+  /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
+  expectedPayments: Array<{
+    id: string;
+    concept: string;
+    installmentNumber: number | null;
+    label: string;
+    amount: number;
+    dueAt: Date | null;
+    status: string;
+    reviewNote: string | null;
+    reviewedAt: Date | null;
+    confirmedAt: Date | null;
+    confirmedByName: string | null;
+    proofId: string | null;
+    createdAt: Date;
+    expectedAccount: { name: string } | null;
+  }>;
   /** Comprobantes ya subidos, sin el binario (el archivo nunca sale del panel). */
   paymentProofs: Array<{
     id: string;
@@ -411,6 +477,31 @@ function requestView(budget: BudgetForPortal, request: BudgetForPortal["changeRe
 export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
   const method = budget.approvalMethod === "manual" ? "manual" : budget.approvalMethod === "digital" ? "digital" : null;
   const approved = Boolean(budget.approvedAt);
+  const expectedPayments = budget.expectedPayments.map((expected): PortalExpectedPayment => {
+    const status: PortalExpectedPaymentStatus =
+      expected.status === "PROOF" || expected.status === "CONFIRMED" || expected.status === "CANCELLED"
+        ? expected.status
+        : "AWAITING";
+    const concept: PortalExpectedPayment["concept"] =
+      expected.concept === "advance" || expected.concept === "balance" ? expected.concept : "installment";
+    return {
+      id: expected.id,
+      concept,
+      label: expected.label,
+      installmentNumber: expected.installmentNumber,
+      amount: expected.amount,
+      dueAt: expected.dueAt ? dayKeyOf(expected.dueAt) : null,
+      status,
+      accountName: expected.expectedAccount?.name ?? null,
+      reviewNote: expected.reviewNote,
+      reviewedAt: iso(expected.reviewedAt),
+      confirmedAt: iso(expected.confirmedAt),
+      confirmedByName: expected.confirmedByName,
+      hasProof: Boolean(expected.proofId),
+      createdAt: expected.createdAt.toISOString(),
+    };
+  });
+  const openExpected = budget.expectedPayments.filter((row) => row.status === "AWAITING" || row.status === "PROOF").length;
   return {
     reference: budgetReference(budget.id),
     title: budget.title,
@@ -439,6 +530,7 @@ export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     paymentDetails: approved ? parsePaymentDetails(budget.organization.paymentDetails) : null,
+    expectedPayments,
     proofs: budget.paymentProofs.map((proof) => ({
       id: proof.id,
       uploadedByName: proof.uploadedByName,
@@ -456,6 +548,8 @@ export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
       status: budget.status,
       approvedAt: budget.approvedAt,
       pendingPayments: budget.payments.length,
+      expectedPayments: budget.expectedPayments.length,
+      openExpectedPayments: openExpected,
     }),
     requests: budget.changeRequests.map((request) => requestView(budget, request)),
     approval: {
@@ -477,6 +571,28 @@ const portalInclude = {
   items: { orderBy: { name: "asc" } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
   payments: { where: { status: "PENDING" }, select: { id: true, amount: true } },
+  // Pagos esperados (issue #28): estado real de cada concepto y cuenta destino.
+  // No viaja el motivo interno de cancelación ni la observación técnica: solo lo
+  // que el cliente necesita para transferir y seguir su pago.
+  expectedPayments: {
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      concept: true,
+      installmentNumber: true,
+      label: true,
+      amount: true,
+      dueAt: true,
+      status: true,
+      reviewNote: true,
+      reviewedAt: true,
+      confirmedAt: true,
+      confirmedByName: true,
+      proofId: true,
+      createdAt: true,
+      expectedAccount: { select: { name: true } },
+    },
+  },
   paymentProofs: {
     orderBy: { createdAt: "desc" },
     take: PORTAL_MAX_PROOFS,
