@@ -13,6 +13,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryItemRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
@@ -135,8 +136,49 @@ export function InventarioModule() {
     resources.reload();
   }
 
-  async function changeStatus(item: AdminInventoryItemRow, next: string) {
-    setStatusBusyId(item.id);
+  /** CSV del inventario filtrado: cantidades y costos reales de cada ítem. */
+  function exportInventory() {
+    const units = rows.reduce((sum, item) => sum + item.quantity, 0);
+    const available = rows.reduce((sum, item) => sum + item.availability.availableNow, 0);
+    const committed = rows.reduce((sum, item) => sum + item.availability.committedNow, 0);
+    const blocks: CsvBlock[] = [
+      {
+        title: "Inventario",
+        header: [
+          "Artículo",
+          "Categoría",
+          "SKU",
+          "Tipo",
+          "Estado",
+          "Cantidad",
+          "Libres ahora",
+          "Comprometidas ahora",
+          "Reposición (PYG)",
+          "Costo diario (PYG)",
+          "Conflicto",
+        ],
+        rows: [
+          ...rows.map((item) => [
+            item.name,
+            item.category,
+            item.sku ?? "",
+            inventoryKindLabel(item.kind),
+            inventoryStatusLabel(item.status),
+            item.quantity,
+            item.availability.availableNow,
+            item.availability.committedNow,
+            item.replacementCost,
+            item.dailyCost,
+            csvBool(item.availability.overcommittedNow),
+          ]),
+          ["Total", "", "", "", "", units, available, committed, "", "", ""],
+        ],
+      },
+    ];
+    downloadCsv(csvFilename("inventario"), blocks);
+  }
+
+  async function changeStatus(item: AdminInventoryItemRow, next: string) {    setStatusBusyId(item.id);
     setStatusError("");
     setNotice("");
     const result = await adminSend("/api/admin/inventory", { kind: "status", id: item.id, status: next });
@@ -172,6 +214,16 @@ export function InventarioModule() {
         <AdminSearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
         <AdminSelect value={kind} onChange={setKind} label="Filtrar por tipo" options={KIND_OPTIONS} />
         <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        <span className="admin-export">
+          <AdminButton
+            icon="download"
+            onClick={exportInventory}
+            title="Exportar el inventario filtrado a CSV"
+            aria-label="Exportar el inventario filtrado a CSV"
+          >
+            Exportar CSV
+          </AdminButton>
+        </span>
         {writable ? (
           <AdminButton
             variant="primary"

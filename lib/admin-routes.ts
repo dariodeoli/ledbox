@@ -19,6 +19,7 @@ export const ADMIN_ROUTES = [
   "/promotoras",
   "/usuarios",
   "/auditoria",
+  "/imprimir",
 ] as const;
 
 export function isAdminRoute(pathname: string): boolean {

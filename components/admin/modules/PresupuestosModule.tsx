@@ -12,6 +12,7 @@ import {
   AdminEmpty,
   AdminField,
   AdminFormPanel,
+  AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminRow,
@@ -245,6 +246,7 @@ export function PresupuestosModule() {
               { label: "Margen", end: true },
               { label: "Estado" },
               { label: "Vence" },
+              { label: "Acciones", end: true },
             ]}
           >
             {rows.map((budget) => {
@@ -279,6 +281,16 @@ export function PresupuestosModule() {
                   <AdminCell title={budget.validUntil ? `Vence el ${formatDateShort(budget.validUntil)}` : "Sin vencimiento"}>
                     <span className="admin-nowrap" data-tone={dueTone(budget.validUntil)}>
                       {budget.validUntil ? formatDateShort(budget.validUntil) : "—"}
+                    </span>
+                  </AdminCell>
+                  <AdminCell end className="admin-cell--actions">
+                    <span className="admin-actions">
+                      <AdminIconLink
+                        href={`/imprimir/presupuesto/${budget.id}`}
+                        icon="print"
+                        label={`Imprimir presupuesto: ${budget.title}`}
+                        external
+                      />
                     </span>
                   </AdminCell>
                 </AdminRow>

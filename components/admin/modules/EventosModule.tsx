@@ -23,6 +23,7 @@ import {
   AdminEmpty,
   AdminField,
   AdminFormPanel,
+  AdminIconLink,
   AdminKpi,
   AdminNote,
   AdminPanel,
@@ -467,6 +468,7 @@ export function EventosModule() {
             { label: "Equipos", end: true },
             { label: "Checklist", end: true },
             { label: "Estado" },
+            { label: "Acciones", end: true },
           ]}
         >
           {rows.map((event) => {
@@ -491,6 +493,16 @@ export function EventosModule() {
                 </AdminCell>
                 <AdminCell>
                   <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
+                </AdminCell>
+                <AdminCell end className="admin-cell--actions">
+                  <span className="admin-actions">
+                    <AdminIconLink
+                      href={`/imprimir/evento/${event.id}`}
+                      icon="print"
+                      label={`Imprimir orden de trabajo: ${event.name}`}
+                      external
+                    />
+                  </span>
                 </AdminCell>
               </AdminRow>
             );

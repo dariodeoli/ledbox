@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { dueTone, formatDateShort, formatDateTime, formatMoney, formatNumber, formatTime, jobStatusLabel, statusTone } from "@/lib/admin-format";
+import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import { supplierJobBalance } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { AdminIcon } from "../AdminIcons";
 import {
   AdminBadge,
   AdminButton,
@@ -68,6 +70,56 @@ export function FinanzasModule() {
     return { collected, advances, payable };
   }, [payments, jobs]);
 
+  /** CSV de cobros con los mismos filtros de la lista (monto entero, fecha ISO). */
+  function exportCollections() {
+    const total = filteredPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const blocks: CsvBlock[] = [
+      {
+        title: "Cobros de clientes",
+        header: ["Fecha", "Cliente", "Presupuesto", "Método", "Referencia", "Monto (PYG)"],
+        rows: [
+          ...filteredPayments.map((payment) => [
+            csvStamp(payment.paidAt),
+            payment.client.company || payment.client.name,
+            payment.budget?.title ?? "",
+            payment.method ?? "",
+            payment.reference ?? "",
+            payment.amount,
+          ]),
+          ["", "", "", "", "Total", total],
+        ],
+      },
+    ];
+    downloadCsv(csvFilename("cobros-clientes"), blocks);
+  }
+
+  /** CSV de cuentas por pagar: total, anticipo y saldo real de cada trabajo. */
+  function exportPayables() {
+    const total = filteredJobs.reduce((sum, job) => sum + job.total, 0);
+    const advances = filteredJobs.reduce((sum, job) => sum + job.advance, 0);
+    const balance = filteredJobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
+    const blocks: CsvBlock[] = [
+      {
+        title: "Cuentas por pagar a proveedores",
+        header: ["Proveedor", "Trabajo", "Evento", "Vence", "Total (PYG)", "Anticipo (PYG)", "Saldo (PYG)", "Estado"],
+        rows: [
+          ...filteredJobs.map((job) => [
+            job.supplier.name,
+            job.description,
+            job.event?.name ?? "",
+            csvDay(job.dueAt),
+            job.total,
+            job.advance,
+            supplierJobBalance(job),
+            jobStatusLabel(job.status),
+          ]),
+          ["Total", "", "", "", total, advances, balance, ""],
+        ],
+      },
+    ];
+    downloadCsv(csvFilename("cuentas-por-pagar"), blocks);
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -106,6 +158,19 @@ export function FinanzasModule() {
           label="Buscar movimientos"
           placeholder="Buscar por cliente, proveedor, evento o referencia…"
         />
+        <span className="admin-export">
+          <Link
+            className="admin-btn"
+            href="/imprimir/reporte"
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir el reporte mensual imprimible"
+            aria-label="Abrir el reporte mensual imprimible"
+          >
+            <AdminIcon name="print" size={15} />
+            <span>Reporte mensual</span>
+          </Link>
+        </span>
         {writable ? (
           <AdminButton
             variant="primary"
@@ -176,6 +241,16 @@ export function FinanzasModule() {
       <AdminPanel
         title="Cobros de clientes"
         meta={`${formatNumber(filteredPayments.length)} movimientos`}
+        action={
+          <AdminButton
+            icon="download"
+            onClick={exportCollections}
+            title="Exportar los cobros filtrados a CSV"
+            aria-label="Exportar los cobros filtrados a CSV"
+          >
+            Exportar CSV
+          </AdminButton>
+        }
       >
         <AdminDataState
           loading={finance.loading}
@@ -223,9 +298,19 @@ export function FinanzasModule() {
         title="Cuentas por pagar"
         meta={`${formatNumber(filteredJobs.length)} trabajos`}
         action={
-          <Link className="admin-panel-link" href="/proveedores">
-            Gestionar en Proveedores →
-          </Link>
+          <span className="admin-panel-actions">
+            <AdminButton
+              icon="download"
+              onClick={exportPayables}
+              title="Exportar las cuentas por pagar filtradas a CSV"
+              aria-label="Exportar las cuentas por pagar filtradas a CSV"
+            >
+              Exportar CSV
+            </AdminButton>
+            <Link className="admin-panel-link" href="/proveedores">
+              Gestionar en Proveedores →
+            </Link>
+          </span>
         }
       >
         <AdminDataState

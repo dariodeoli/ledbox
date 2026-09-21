@@ -37,7 +37,9 @@ export type AdminIconName =
   | "mail"
   | "refresh"
   | "clock"
-  | "info";
+  | "info"
+  | "print"
+  | "download";
 
 export type AdminSessionUser = { id: string; name: string; email: string; role: AdminRole };
 
@@ -460,6 +462,88 @@ export type AdminNotificationCounts = {
   soon: number;
   info: number;
   total: number;
+};
+
+/**
+ * Reporte mensual imprimible (`/imprimir/reporte?mes=YYYY-MM`).
+ * Se arma server-side con datos reales del período y llega al cliente ya
+ * formateado: la hoja impresa y el CSV salen del mismo modelo.
+ */
+export type AdminMonthlyReportEventRow = {
+  id: string;
+  date: string;
+  name: string;
+  client: string;
+  location: string | null;
+  /** Venta presupuestada del evento (Σ presupuestos). */
+  sale: number;
+  /** Costos estimados cargados en los presupuestos del evento. */
+  costEstimate: number;
+  /** Venta − costos estimados; `null` cuando el evento no tiene costos cargados. */
+  margin: number | null;
+  /** Trabajos de proveedor cargados contra el evento. */
+  supplierJobs: number;
+  supplierTotal: number;
+};
+
+export type AdminMonthlyReportCollectionRow = {
+  id: string;
+  date: string;
+  client: string;
+  budget: string | null;
+  method: string | null;
+  reference: string | null;
+  amount: number;
+};
+
+export type AdminMonthlyReportSupplierPaymentRow = {
+  id: string;
+  date: string;
+  supplier: string;
+  description: string;
+  event: string | null;
+  method: string | null;
+  receipt: string | null;
+  amount: number;
+};
+
+export type AdminMonthlyReportSupplierPendingRow = {
+  id: string;
+  dueDate: string;
+  supplier: string;
+  description: string;
+  event: string | null;
+  status: string;
+  total: number;
+  advance: number;
+  balance: number;
+};
+
+export type AdminMonthlyReportTotals = {
+  events: number;
+  sale: number;
+  costEstimate: number;
+  /** Σ margen de los eventos con costos cargados; `null` si ninguno los tiene. */
+  margin: number | null;
+  collected: number;
+  paidToSuppliers: number;
+  committedBalance: number;
+};
+
+export type AdminMonthlyReport = {
+  /** Mes del período (`YYYY-MM`). */
+  month: string;
+  /** Etiqueta del período (ej.: "septiembre 2026"). */
+  monthLabel: string;
+  /** Fecha y hora de emisión, es-PY 24 h. */
+  issuedAt: string;
+  /** Empresa activa (nombre real de la organización). */
+  organization: string;
+  totals: AdminMonthlyReportTotals;
+  events: AdminMonthlyReportEventRow[];
+  collections: AdminMonthlyReportCollectionRow[];
+  supplierPayments: AdminMonthlyReportSupplierPaymentRow[];
+  supplierPending: AdminMonthlyReportSupplierPendingRow[];
 };
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
