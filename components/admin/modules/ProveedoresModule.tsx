@@ -873,10 +873,12 @@ function JobStatusPanel({
       busy={busy}
       status={error}
     >
-      <p className="admin-note admin-field--wide">
-        Estado actual: <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge> · Total {formatMoney(job.total)} ·
-        Anticipo {formatMoney(job.advance)}
-      </p>
+      <div className="admin-field--wide">
+        <AdminNote>
+          Estado actual: <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge> · Total {formatMoney(job.total)} ·
+          Anticipo {formatMoney(job.advance)}
+        </AdminNote>
+      </div>
       <SelectField
         label="Nuevo estado"
         required

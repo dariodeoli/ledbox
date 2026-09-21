@@ -679,7 +679,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-session-error { padding: 12px 16px 0; }
 .admin-main-body { flex: 1; min-width: 0; padding: 14px 16px 32px; }
 .admin-main-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--a-line); color: var(--a-muted); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
-.admin-main-foot strong { color: var(--a-muted-2); font-weight: 700; }
+.admin-main-foot strong { color: var(--a-muted-2); font-weight: 700; text-transform: none; }
 .admin-sidebar-backdrop { position: fixed; inset: 0; z-index: 25; border: 0; background: rgba(2, 6, 8, .6); backdrop-filter: blur(2px); cursor: pointer; }
 
 /* ── Controles ── */

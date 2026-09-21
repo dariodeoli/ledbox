@@ -124,13 +124,17 @@ Nunca un `<input>` suelto. Un objeto canónico por tipo:
 
 ## Checklist de adopción por app
 
-- [ ] Campos: un componente por tipo; sin inputs sueltos; tests de fuente.
-- [ ] Formatos: moneda/porcentaje/fechas/teléfonos normalizados.
-- [ ] Fotos: Avatar único con fallback; validación MIME+magic bytes; logo por tema.
-- [ ] Tablas: alineadas, sin scroll horizontal, acciones a la vista.
-- [ ] Estados y avisos: un objeto por concepto; estados honestos.
-- [ ] Dinero: idempotencia, snapshots, monotonicidad, “no disponible”.
-- [ ] Publicación: versión única, `prepare` ≠ `publish`, secreto fuera del código.
-- [ ] Biblioteca de objetos actualizada con cada regla nueva.
+- [x] Campos: un componente por tipo; sin inputs sueltos; tests de fuente.
+  Kit en `components/admin/AdminFields.tsx`, reglas puras en `lib/field-rules.ts` y aserción de fuente en `npm run check:fields` (falla con `<input>`/`<select>`/`<textarea>` sueltos o `type="number"`).
+- [x] Formatos: moneda/porcentaje/fechas/teléfonos normalizados.
+  `MoneyField`/`NumberField`/`PercentField` y las reglas puras; teléfonos `+<código> <dígitos>` (default +595), correos en minúsculas y seriales en mayúsculas sin separadores.
+- [ ] Fotos: Avatar único con fallback; validación MIME+magic bytes. LedBox no usa avatares hoy (promotoras guarda `photoUrl` sin subida).
+- [ ] Tablas: alineadas, sin scroll horizontal, acciones a la vista. El panel denso ya usa plantillas de columnas por vista; queda la auditoría fina por módulo.
+- [x] Estados y avisos: un objeto por concepto; estados honestos.
+  `AdminNote` (variantes `note`/`alert`), `AdminEmpty` y `AdminDataState` son los únicos objetos de aviso/estado inline del panel.
+- [ ] Dinero: idempotencia, snapshots, monotonicidad, “no disponible” (pendiente declarado).
+- [x] Publicación: versión única, `prepare` ≠ `publish`, secreto fuera del código.
+  `package.json` → `lib/version.ts` → pie del panel; `npm run release:prepare` valida (typecheck + tests + build) y el publish sigue en Owncoding (README).
+- [x] Biblioteca de objetos actualizada con cada regla nueva.
 
 Referencias de implementación (MobOS): `docs/PLANTILLA-OBJETOS.md`, `docs/PLANTILLA-CAMPOS.md`, `docs/AVATAR.md`, `docs/TABLAS.md`, `docs/TOKENS.md`.
