@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAdminRoute } from "@/lib/admin-routes";
+import { publicConfig } from "@/lib/public-config";
 
 /**
  * Regla de URLs (21-09-2026): el panel vive en admin.ledbox.online y sus rutas
@@ -14,8 +15,9 @@ import { isAdminRoute } from "@/lib/admin-routes";
  * - `/admin/*` (links viejos) se canonicaliza a la ruta limpia.
  */
 
-const ADMIN_URL = (process.env.NEXT_PUBLIC_ADMIN_URL || "https://admin.ledbox.online").replace(/\/+$/, "");
-const CLIENT_URL = (process.env.NEXT_PUBLIC_CLIENT_URL || "https://cliente.ledbox.online").replace(/\/+$/, "");
+// Fuente única de los dominios: `lib/public-config.ts` (nada de defaults duplicados).
+const ADMIN_URL = publicConfig.adminUrl;
+const CLIENT_URL = publicConfig.clientUrl;
 
 function adminHost(): string {
   try {
