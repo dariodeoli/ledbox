@@ -115,6 +115,25 @@ const CLIENT_TYPE: Record<string, string> = {
   RESELLER: "Mayorista",
 };
 
+const LEAD_STATUS: Record<string, string> = {
+  NEW: "Nuevo",
+  CONTACTED: "Contactado",
+  QUOTED: "Cotizado",
+  WON: "Ganado",
+  LOST: "Perdido",
+};
+
+/** Origen del lead; los valores desconocidos se muestran tal cual llegan. */
+const LEAD_SOURCE: Record<string, string> = {
+  website: "Sitio web",
+};
+
+const BILLING_UNIT: Record<string, string> = {
+  DAILY: "Por día",
+  SQUARE_METER_DAILY: "Por m² y día",
+  EVENT: "Por evento",
+};
+
 const SUPPLIER_CATEGORY: Record<string, string> = {
   CARPENTRY: "Carpintería",
   GRAPHICS: "Gráfica",
@@ -136,6 +155,10 @@ const ROLE: Record<string, string> = {
 
 const TONES: Record<string, AdminTone> = {
   DRAFT: "neutral",
+  NEW: "accent",
+  CONTACTED: "info",
+  QUOTED: "warn",
+  WON: "ok",
   CONFIRMED: "accent",
   IN_PROGRESS: "info",
   COMPLETED: "ok",
@@ -186,6 +209,9 @@ export const inventoryKindLabel = (value: string | null | undefined) => label(IN
 export const inventoryStatusLabel = (value: string | null | undefined) => label(INVENTORY_STATUS, value);
 export const taskTypeLabel = (value: string | null | undefined) => label(TASK_TYPE, value);
 export const clientTypeLabel = (value: string | null | undefined) => label(CLIENT_TYPE, value);
+export const leadStatusLabel = (value: string | null | undefined) => label(LEAD_STATUS, value);
+export const leadSourceLabel = (value: string | null | undefined) => label(LEAD_SOURCE, value);
+export const billingUnitLabel = (value: string | null | undefined) => label(BILLING_UNIT, value);
 export const supplierCategoryLabel = (value: string | null | undefined) => label(SUPPLIER_CATEGORY, value);
 export const adminRoleLabel = (value: string | null | undefined) => label(ROLE, value);
 

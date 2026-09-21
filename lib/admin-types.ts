@@ -137,6 +137,51 @@ export type AdminBudgetRow = {
 
 export type AdminPaymentRow = AdminPayment & { client: AdminClientRef; budget: { id: string; title: string } | null };
 
+/** Ítem de pedido que llega con el lead desde el sitio (relación `quoteRequests.items`). */
+export type AdminLeadItem = {
+  id: string;
+  productSlug: string;
+  productName: string;
+  quantity: number;
+  duration: number | null;
+  billingUnit: string;
+  unitPrice: number | null;
+  subtotal: number | null;
+  notes: string | null;
+};
+
+export type AdminLeadQuote = {
+  id: string;
+  referenceTotal: number | null;
+  currency: string;
+  durationDays: number | null;
+  eventDate: string | null;
+  location: string | null;
+  source: string;
+  createdAt: string;
+  items: AdminLeadItem[];
+};
+
+export type AdminLeadRow = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  company: string | null;
+  ruc: string | null;
+  reason: string | null;
+  eventDate: string | null;
+  location: string | null;
+  message: string | null;
+  internalNotes: string | null;
+  source: string;
+  consentAt: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  quoteRequests: AdminLeadQuote[];
+};
+
 export type AdminSupplierJobRow = {
   id: string;
   description: string;
@@ -223,6 +268,7 @@ export type AdminOverview = {
 export type AdminApiResponse = {
   error?: string;
   clients?: AdminClientRow[];
+  leads?: AdminLeadRow[];
   events?: AdminEventRow[];
   budgets?: AdminBudgetRow[];
   clientPayments?: AdminPaymentRow[];
