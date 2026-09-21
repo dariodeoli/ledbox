@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { adminRoleLabel, formatDate, formatNumber, statusTone } from "@/lib/admin-format";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDateTime, formatNumber, invitationStatusLabel, invitationStatusTone, mailStatusLabel, statusTone } from "@/lib/admin-format";
+import type { AdminTeamInvitation } from "@/lib/admin-types";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
 import { adminAvatarUrl, type AdminUserRow } from "@/lib/admin-types";
 import { emailError, FIELD_MESSAGES, normalizePersonName, personNameValid } from "@/lib/field-rules";
@@ -12,11 +13,13 @@ import {
   AdminBadge,
   AdminButton,
   AdminCell,
+  AdminCountdown,
   AdminDataState,
   AdminEmpty,
   AdminFormPanel,
   AdminKpi,
   AdminNote,
+  AdminPanel,
   AdminRow,
   AdminSelect,
   AdminTable,
@@ -36,9 +39,13 @@ const ROLE_OPTIONS = [
 
 const ASSIGNABLE_ROLES = ["ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
+const ROLE_SELECT_OPTIONS = ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }));
+
 const EMPTY_FORM = { name: "", email: "", password: "", role: "VIEWER" };
 
 const EMPTY_EDIT = { name: "", email: "" };
+
+const EMPTY_INVITE = { email: "", role: "VIEWER" };
 
 /**
  * Equipo / Usuarios (issue #22): además de crear, cambiar el rol y
@@ -48,6 +55,10 @@ const EMPTY_EDIT = { name: "", email: "" };
  * del propio usuario, el panel lo manda al login).
  *
  * Un ADMIN no toca a un OWNER y nadie edita su propio rol ni se desactiva.
+ *
+ * Issue #31: suma la invitación por correo (`InvitationsPanel`): el diálogo
+ * crea la invitación con su rol y la manda, y la lista muestra las que están por
+ * aceptar con reenviar/revocar.
  */
 export function UsuariosModule() {
   const { role, user: sessionUser } = useAdminSession();
@@ -209,6 +220,8 @@ export function UsuariosModule() {
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
 
+      {writable ? <InvitationsPanel /> : null}
+
       {writable && showForm ? (
         <AdminFormPanel
           title="Nuevo usuario"
@@ -246,7 +259,7 @@ export function UsuariosModule() {
             label="Rol"
             value={form.role}
             onChange={(value) => setForm({ ...form, role: value })}
-            options={ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }))}
+            options={ROLE_SELECT_OPTIONS}
           />
         </AdminFormPanel>
       ) : null}
@@ -331,7 +344,7 @@ export function UsuariosModule() {
                       onChange={(value) => void patch(user, { role: value })}
                       label={`Rol de ${user.name}`}
                       title={`Rol de ${user.name}`}
-                      options={ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }))}
+                      options={ROLE_SELECT_OPTIONS}
                     />
                   )}
                 </AdminCell>
@@ -377,5 +390,374 @@ export function UsuariosModule() {
         )}
       </AdminDataState>
     </div>
+  );
+}
+
+// ── Invitaciones al equipo (issue #31) ──────────────────────────────────────
+// Diálogo de invitación + lista de las que están por aceptar. Una sola
+// invitación por correo: volver a invitar o reenviar actualiza la existente y
+// manda un link nuevo (el anterior deja de servir).
+
+/** Texto honesto según lo que devolvió el envío real del correo. */
+function inviteDeliveryNotice(status: string, error?: string | null): { tone: "ok" | "error"; text: string } {
+  if (status === "sent") return { tone: "ok", text: "Invitación enviada por correo." };
+  const detail = error?.trim() ? ` ${error.trim()}` : "";
+  if (status === "skipped") {
+    return { tone: "error", text: `La invitación quedó guardada, pero no se envió el correo: falta configurar el proveedor.${detail}` };
+  }
+  return { tone: "error", text: `La invitación quedó guardada, pero el correo falló.${detail} Reintentá con Reenviar.` };
+}
+
+/** Diálogo del panel: correo + rol. Contrato común (foco, Escape, clic afuera). */
+function InviteDialog({
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onSubmit: (invite: { email: string; role: string }) => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [invite, setInvite] = useState(EMPTY_INVITE);
+  const [localError, setLocalError] = useState("");
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const invalid = emailError(invite.email);
+    if (invalid) {
+      setLocalError(invalid);
+      return;
+    }
+    setLocalError("");
+    onSubmit({ email: invite.email.trim().toLowerCase(), role: invite.role });
+  }
+
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label="Invitar por correo">
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">Invitar por correo</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+        <p className="admin-dialog-text">
+          Le mandamos un correo con el link para sumarse a la empresa con el rol elegido. El link vence en 7 días y la
+          invitación queda pendiente hasta que la acepte.
+        </p>
+        <form className="admin-form" onSubmit={submit} noValidate>
+          <EmailField
+            label="Correo"
+            required
+            value={invite.email}
+            onChange={(value) => {
+              setInvite({ ...invite, email: value });
+              setLocalError("");
+            }}
+            placeholder="ana@ledbox.online"
+            hint="La persona entra al panel con este correo."
+            autoComplete="off"
+          />
+          <SelectField
+            label="Rol"
+            value={invite.role}
+            onChange={(value) => setInvite({ ...invite, role: value })}
+            options={ROLE_SELECT_OPTIONS}
+            hint="El propietario no se invita por correo."
+          />
+          {localError || error ? <AdminNote tone="error">{localError || error}</AdminNote> : null}
+          <div className="admin-dialog-foot">
+            <span className="admin-dialog-spacer" />
+            <AdminButton type="button" onClick={onClose} disabled={busy}>
+              Cancelar
+            </AdminButton>
+            <AdminButton type="submit" variant="primary" icon="mail" busy={busy}>
+              Enviar invitación
+            </AdminButton>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+/** Confirmación propia (nunca confirm() nativo) para cortar una invitación. */
+function RevokeInviteDialog({
+  invitation,
+  busy,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  invitation: AdminTeamInvitation;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label={`Revocar la invitación de ${invitation.email}`}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">Revocar invitación</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+        <p className="admin-dialog-text">
+          ¿Revocar la invitación de <strong>{invitation.email}</strong>? El link deja de funcionar y la persona no puede
+          sumarse al equipo con esa invitación. Podés invitarla de nuevo cuando quieras.
+        </p>
+        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+        <div className="admin-dialog-foot">
+          <span className="admin-dialog-spacer" />
+          <AdminButton type="button" onClick={onClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton type="button" icon="trash" busy={busy} onClick={onConfirm}>
+            Revocar
+          </AdminButton>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/**
+ * Lista de invitaciones por aceptar (`pending` y `expired`) con reenviar/revocar.
+ * El envío real se muestra tal cual: si el correo falló o falta el proveedor, la
+ * fila lo dice y la invitación sigue guardada.
+ */
+function InvitationsPanel() {
+  const invitations = useAdminResource("/api/admin/invitations", (payload) => payload.invitations ?? []);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [rowBusy, setRowBusy] = useState("");
+  const [rowError, setRowError] = useState("");
+  const [revoking, setRevoking] = useState<AdminTeamInvitation | null>(null);
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [revokeError, setRevokeError] = useState("");
+
+  const list = useMemo(() => invitations.data ?? [], [invitations.data]);
+  const pendingCount = list.filter((invitation) => invitation.status === "pending").length;
+  const expiredCount = list.length - pendingCount;
+
+  async function submitInvite(invite: { email: string; role: string }) {
+    setInviteBusy(true);
+    setInviteError("");
+    setNotice(null);
+    const result = await adminSend<{ invitation: AdminTeamInvitation; mail: { status: string; error: string | null } }>(
+      "/api/admin/invitations",
+      invite,
+    );
+    setInviteBusy(false);
+    if (!result.ok) {
+      setInviteError(result.error);
+      return;
+    }
+    setShowInvite(false);
+    setNotice(inviteDeliveryNotice(result.data.mail?.status ?? "", result.data.mail?.error));
+    invitations.reload();
+  }
+
+  async function resend(invitation: AdminTeamInvitation) {
+    setRowBusy(invitation.id);
+    setRowError("");
+    setNotice(null);
+    const result = await adminSend<{ mail: { status: string; error: string | null } }>(
+      `/api/admin/invitations/${encodeURIComponent(invitation.id)}`,
+      { action: "resend" },
+      "PATCH",
+    );
+    setRowBusy("");
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
+    setNotice(inviteDeliveryNotice(result.data.mail?.status ?? "", result.data.mail?.error));
+    invitations.reload();
+  }
+
+  async function confirmRevoke() {
+    if (!revoking) return;
+    setRevokeBusy(true);
+    setRevokeError("");
+    const result = await adminSend(
+      `/api/admin/invitations/${encodeURIComponent(revoking.id)}`,
+      { action: "revoke" },
+      "PATCH",
+    );
+    setRevokeBusy(false);
+    if (!result.ok) {
+      setRevokeError(result.error);
+      return;
+    }
+    setNotice({ tone: "ok", text: `Invitación de ${revoking.email} revocada: el link dejó de funcionar.` });
+    setRevoking(null);
+    invitations.reload();
+  }
+
+  return (
+    <AdminPanel
+      title="Invitaciones pendientes"
+      meta={[`${formatNumber(pendingCount)} ${pendingCount === 1 ? "pendiente" : "pendientes"}`, expiredCount > 0 ? `${formatNumber(expiredCount)} vencida${expiredCount === 1 ? "" : "s"}` : ""]
+        .filter(Boolean)
+        .join(" · ")}
+      action={
+        <AdminButton
+          variant="primary"
+          icon="mail"
+          onClick={() => {
+            setInviteError("");
+            setNotice(null);
+            setShowInvite(true);
+          }}
+        >
+          Invitar por correo
+        </AdminButton>
+      }
+    >
+      {notice ? <AdminNote tone={notice.tone}>{notice.text}</AdminNote> : null}
+      {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
+
+      {showInvite ? (
+        <InviteDialog busy={inviteBusy} error={inviteError} onClose={() => setShowInvite(false)} onSubmit={submitInvite} />
+      ) : null}
+      {revoking ? (
+        <RevokeInviteDialog
+          invitation={revoking}
+          busy={revokeBusy}
+          error={revokeError}
+          onClose={() => setRevoking(null)}
+          onConfirm={() => void confirmRevoke()}
+        />
+      ) : null}
+
+      <AdminDataState
+        loading={invitations.loading}
+        error={invitations.error}
+        onRetry={invitations.reload}
+        empty={list.length === 0}
+        emptyTitle="Sin invitaciones pendientes"
+        emptyHint="Invitá a alguien por correo: le llega el link para sumarse con el rol que elijas."
+      >
+        <AdminTable
+          view="invitaciones"
+          label="Invitaciones por aceptar"
+          columns={[
+            { label: "Correo" },
+            { label: "Rol" },
+            { label: "Invita" },
+            { label: "Vence" },
+            { label: "Último envío" },
+            { label: "Acciones", end: true },
+          ]}
+        >
+          {list.map((invitation) => (
+            <AdminRow key={invitation.id}>
+              <AdminCell title={invitation.email}>
+                <span className="admin-identity">
+                  <strong>{invitation.email}</strong>
+                  {invitation.status === "expired" ? (
+                    <AdminBadge tone={invitationStatusTone(invitation.status)}>{invitationStatusLabel(invitation.status)}</AdminBadge>
+                  ) : null}
+                </span>
+              </AdminCell>
+              <AdminCell>
+                <AdminBadge tone={statusTone(invitation.role)}>{adminRoleLabel(invitation.role)}</AdminBadge>
+              </AdminCell>
+              <AdminCell title={invitation.invitedByEmail ?? undefined}>
+                <span className="admin-nowrap">{invitation.invitedByName}</span>
+              </AdminCell>
+              <AdminCell title={`Vence el ${formatDate(invitation.expiresAt)} · ${formatCountdown(invitation.expiresAt)}`}>
+                <span className="admin-nowrap">{formatDateShort(invitation.expiresAt)}</span>
+                <AdminCountdown value={invitation.expiresAt} short className="admin-countdown--inline" />
+              </AdminCell>
+              <AdminCell
+                title={
+                  invitation.lastMail
+                    ? `${mailStatusLabel(invitation.lastMail.status)} · ${formatDateTime(invitation.lastMail.sentAt)}${
+                        invitation.lastMail.error ? ` · ${invitation.lastMail.error}` : ""
+                      }`
+                    : "Sin envíos registrados"
+                }
+              >
+                {invitation.lastMail ? (
+                  <AdminBadge tone={invitation.lastMail.status === "sent" ? "ok" : invitation.lastMail.status === "sending" ? "warn" : "danger"}>
+                    {mailStatusLabel(invitation.lastMail.status)}
+                  </AdminBadge>
+                ) : (
+                  <span className="admin-muted">—</span>
+                )}
+              </AdminCell>
+              <AdminCell end>
+                <span className="admin-actions">
+                  <button
+                    type="button"
+                    className="admin-iconbtn"
+                    disabled={rowBusy === invitation.id}
+                    onClick={() => void resend(invitation)}
+                    title={`Reenviar la invitación a ${invitation.email}`}
+                    aria-label={`Reenviar la invitación a ${invitation.email}`}
+                  >
+                    <AdminIcon name="refresh" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-iconbtn"
+                    disabled={rowBusy === invitation.id}
+                    onClick={() => {
+                      setRevokeError("");
+                      setRevoking(invitation);
+                    }}
+                    title={`Revocar la invitación de ${invitation.email}`}
+                    aria-label={`Revocar la invitación de ${invitation.email}`}
+                  >
+                    <AdminIcon name="trash" size={15} />
+                  </button>
+                </span>
+              </AdminCell>
+            </AdminRow>
+          ))}
+        </AdminTable>
+      </AdminDataState>
+    </AdminPanel>
   );
 }
