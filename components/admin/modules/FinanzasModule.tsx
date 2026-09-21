@@ -2,10 +2,24 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { dueTone, formatDateShort, formatDateTime, formatMoney, formatNumber, formatTime, jobStatusLabel, statusTone } from "@/lib/admin-format";
+import {
+  collectionDueText,
+  collectionDueTone,
+  dueTone,
+  formatDate,
+  formatDateShort,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+  formatTime,
+  jobStatusLabel,
+  paymentStatusLabel,
+  paymentStatusTone,
+  statusTone,
+} from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
-import { supplierJobBalance } from "@/lib/admin-types";
+import { collectedAmount, isCollectedPayment, supplierJobBalance, type AdminPaymentRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminIcon } from "../AdminIcons";
 import {
@@ -26,14 +40,50 @@ import {
 } from "../AdminUI";
 import { adminSend, useAdminResource } from "../use-admin-data";
 
+/** Métodos de pago del alta directa (catálogo cerrado, espejo del API). */
 const METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
+/** Un cobro a plazo se cobra por transferencia, efectivo o cheque. */
+const TERM_METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque"];
+/** Plazos ofrecidos en días desde la emisión de la factura (issue #16). */
+const TERM_DAY_OPTIONS = ["0", "15", "30", "60"];
 
-const EMPTY_FORM = {
+const TERM_DAY_LABEL: Record<string, string> = {
+  "0": "0 días (contra entrega)",
+  "15": "15 días",
+  "30": "30 días",
+  "60": "60 días",
+};
+
+type PaymentForm = {
+  clientId: string;
+  budgetId: string;
+  amount: string;
+  /** Cobrado al momento o a plazo (por cobrar). */
+  mode: "now" | "term";
+  method: string;
+  reference: string;
+  invoiceIssuedAt: string;
+  invoiceNumber: string;
+  dueDays: string;
+  dueAt: string;
+  chequeDate: string;
+};
+
+const EMPTY_PAYMENT_FORM: PaymentForm = {
   clientId: "",
+  budgetId: "",
   amount: "",
+  mode: "now",
   method: "Transferencia",
   reference: "",
+  invoiceIssuedAt: "",
+  invoiceNumber: "",
+  dueDays: "30",
+  dueAt: "",
+  chequeDate: "",
 };
+
+type Notice = { tone: "ok" | "error"; text: string };
 
 export function FinanzasModule() {
   const { role } = useAdminSession();
@@ -42,55 +92,135 @@ export function FinanzasModule() {
     jobs: payload.supplierJobs ?? [],
   }));
   const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
+  const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? []);
 
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<PaymentForm>(EMPTY_PAYMENT_FORM);
   const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState("");
   const [formError, setFormError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const writable = canWriteFinance(role);
   const payments = useMemo(() => finance.data?.payments ?? [], [finance.data]);
   const jobs = useMemo(() => finance.data?.jobs ?? [], [finance.data]);
+  const term = form.mode === "term";
 
-  const filteredPayments = useMemo(
-    () => payments.filter((payment) => matchesQuery(query, [payment.client.company, payment.client.name, payment.budget?.title, payment.method, payment.reference])),
+  /** Presupuestos del cliente elegido (el presupuesto es opcional). */
+  const clientBudgets = useMemo(
+    () => (budgets.data ?? []).filter((budget) => budget.client.id === form.clientId),
+    [budgets.data, form.clientId],
+  );
+
+  const pendingPayments = useMemo(
+    () =>
+      payments
+        .filter((payment) => payment.status === "PENDING")
+        .filter((payment) =>
+          matchesQuery(query, [
+            payment.client.company,
+            payment.client.name,
+            payment.budget?.title,
+            payment.method,
+            payment.invoiceNumber,
+            payment.reference,
+          ]),
+        )
+        .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
     [payments, query],
   );
+
+  const settledPayments = useMemo(
+    () =>
+      payments
+        .filter((payment) => payment.status !== "PENDING")
+        .filter((payment) =>
+          matchesQuery(query, [
+            payment.client.company,
+            payment.client.name,
+            payment.budget?.title,
+            payment.method,
+            payment.reference,
+            payment.invoiceNumber,
+            paymentStatusLabel(payment.status),
+          ]),
+        )
+        .sort((a, b) =>
+          (b.collectedAt ?? b.paidAt ?? "").localeCompare(a.collectedAt ?? a.paidAt ?? ""),
+        ),
+    [payments, query],
+  );
+
   const filteredJobs = useMemo(
     () => jobs.filter((job) => matchesQuery(query, [job.supplier.name, job.event?.name, job.description, job.status])),
     [jobs, query],
   );
 
   const totals = useMemo(() => {
-    const collected = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const collected = collectedAmount(payments);
+    const collectedCount = payments.filter(isCollectedPayment).length;
+    const pending = payments.filter((payment) => payment.status === "PENDING");
+    const pendingTotal = pending.reduce((sum, payment) => sum + payment.amount, 0);
+    const overdue = pending.filter((payment) => collectionDueTone(payment.dueAt) === "danger").length;
     const advances = jobs.reduce((sum, job) => sum + job.advance, 0);
     const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
-    return { collected, advances, payable };
+    return { collected, collectedCount, pendingTotal, pendingCount: pending.length, overdue, advances, payable };
   }, [payments, jobs]);
 
-  /** CSV de cobros con los mismos filtros de la lista (monto entero, fecha ISO). */
+  const pendingMeta = totals.pendingCount
+    ? `${formatNumber(totals.pendingCount)} a plazo${totals.overdue > 0 ? ` · ${formatNumber(totals.overdue)} vencidos` : ""}`
+    : "cobros a plazo";
+
+  /** CSV de cobros cobrados/anulados con los mismos filtros de la lista. */
   function exportCollections() {
-    const total = filteredPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const total = settledPayments.reduce((sum, payment) => sum + payment.amount, 0);
     const blocks: CsvBlock[] = [
       {
         title: "Cobros de clientes",
-        header: ["Fecha", "Cliente", "Presupuesto", "Método", "Referencia", "Monto (PYG)"],
+        header: ["Fecha", "Cliente", "Presupuesto", "Factura", "Método", "Referencia", "Estado", "Monto (PYG)"],
         rows: [
-          ...filteredPayments.map((payment) => [
-            csvStamp(payment.paidAt),
+          ...settledPayments.map((payment) => [
+            csvStamp(payment.collectedAt ?? payment.paidAt),
             payment.client.company || payment.client.name,
             payment.budget?.title ?? "",
+            payment.invoiceNumber ?? "",
             payment.method ?? "",
             payment.reference ?? "",
+            paymentStatusLabel(payment.status),
             payment.amount,
           ]),
-          ["", "", "", "", "Total", total],
+          ["", "", "", "", "", "", "Total", total],
         ],
       },
     ];
     downloadCsv(csvFilename("cobros-clientes"), blocks);
+  }
+
+  /** CSV de cobros a plazo: vencimiento, factura, cheque y estado. */
+  function exportPendingCollections() {
+    const total = pendingPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const blocks: CsvBlock[] = [
+      {
+        title: "Cobros a plazo por cobrar",
+        header: ["Vence", "Cliente", "Presupuesto", "Factura", "Emisión", "Método", "Cheque", "Cuándo", "Monto (PYG)"],
+        rows: [
+          ...pendingPayments.map((payment) => [
+            csvDay(payment.dueAt),
+            payment.client.company || payment.client.name,
+            payment.budget?.title ?? "",
+            payment.invoiceNumber ?? "",
+            csvDay(payment.invoiceIssuedAt),
+            payment.method ?? "",
+            csvDay(payment.chequeDate),
+            collectionDueText(payment.dueAt),
+            payment.amount,
+          ]),
+          ["", "", "", "", "", "", "", "Total", total],
+        ],
+      },
+    ];
+    downloadCsv(csvFilename("cobros-a-plazo"), blocks);
   }
 
   /** CSV de cuentas por pagar: total, anticipo y saldo real de cada trabajo. */
@@ -124,31 +254,80 @@ export function FinanzasModule() {
     event.preventDefault();
     setBusy(true);
     setFormError("");
-    setNotice("");
-    const result = await adminSend("/api/admin/finance", {
+    setNotice(null);
+    const payload: Record<string, unknown> = {
       kind: "client",
       clientId: form.clientId,
+      budgetId: form.budgetId || undefined,
       amount: Number(form.amount),
       method: form.method || undefined,
-      reference: form.reference || undefined,
-    });
+    };
+    if (term) {
+      payload.status = "PENDING";
+      if (form.invoiceIssuedAt) payload.invoiceIssuedAt = form.invoiceIssuedAt;
+      if (form.invoiceNumber.trim()) payload.invoiceNumber = form.invoiceNumber.trim();
+      if (form.dueAt) payload.dueAt = form.dueAt;
+      else payload.dueDays = Number(form.dueDays);
+      if (form.method === "Cheque") payload.chequeDate = form.chequeDate;
+    } else {
+      payload.reference = form.reference || undefined;
+    }
+    const result = await adminSend("/api/admin/finance", payload);
     setBusy(false);
     if (!result.ok) {
       setFormError(result.error);
       return;
     }
-    setNotice("Cobro registrado.");
-    setForm({ ...EMPTY_FORM });
+    setNotice({ tone: "ok", text: term ? "Cobro a plazo registrado." : "Cobro registrado." });
+    setForm({ ...EMPTY_PAYMENT_FORM });
+    finance.reload();
+  }
+
+  /** Cierra un cobro a plazo: lo cobra (fecha real) o lo anula; el API decide y audita. */
+  async function closeCollection(payment: AdminPaymentRow, action: "collect" | "cancel") {
+    const label = payment.client.company || payment.client.name;
+    setBusyId(`${action}:${payment.id}`);
+    setNotice(null);
+    setFormError("");
+    const result = await adminSend(
+      "/api/admin/finance",
+      { kind: "client", paymentId: payment.id, action },
+      "PATCH",
+    );
+    setBusyId("");
+    if (!result.ok) {
+      setNotice({ tone: "error", text: result.error });
+      return;
+    }
+    setNotice({
+      tone: "ok",
+      text: action === "collect" ? `Cobro de ${label} marcado como cobrado.` : `Cobro a plazo de ${label} anulado.`,
+    });
     finance.reload();
   }
 
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de finanzas">
-        <AdminKpi label="Cobrado a clientes" value={formatMoney(totals.collected)} note={`${formatNumber(payments.length)} cobros`} tone="ok" />
+        <AdminKpi
+          label="Cobrado a clientes"
+          value={formatMoney(totals.collected)}
+          note={`${formatNumber(totals.collectedCount)} cobros`}
+          tone="ok"
+        />
+        <AdminKpi
+          label="Por cobrar"
+          value={formatMoney(totals.pendingTotal)}
+          note={pendingMeta}
+          tone={totals.overdue > 0 ? "danger" : totals.pendingCount > 0 ? "warn" : undefined}
+        />
         <AdminKpi label="Anticipos pagados" value={formatMoney(totals.advances)} note="a proveedores" />
-        <AdminKpi label="Saldo por pagar" value={formatMoney(totals.payable)} note="trabajos abiertos" tone="warn" />
-        <AdminKpi label="Trabajos de proveedor" value={formatNumber(jobs.length)} note="registrados" />
+        <AdminKpi
+          label="Saldo por pagar"
+          value={formatMoney(totals.payable)}
+          note={`${formatNumber(jobs.length)} trabajos de proveedor`}
+          tone="warn"
+        />
       </section>
 
       <AdminToolbar>
@@ -186,19 +365,23 @@ export function FinanzasModule() {
         ) : null}
       </AdminToolbar>
 
-      {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {notice ? <AdminNote tone={notice.tone}>{notice.text}</AdminNote> : null}
 
       {writable && showForm ? (
         <AdminFormPanel
           title="Nuevo cobro de cliente"
-          submitLabel="Registrar cobro"
+          submitLabel={term ? "Registrar cobro a plazo" : "Registrar cobro"}
           onSubmit={submit}
           onCancel={() => setShowForm(false)}
           busy={busy}
           status={formError}
         >
           <AdminField label="Cliente">
-            <select required value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })}>
+            <select
+              required
+              value={form.clientId}
+              onChange={(event) => setForm({ ...form, clientId: event.target.value, budgetId: "" })}
+            >
               <option value="">Elegí un cliente…</option>
               {(clients.data ?? []).map((client) => (
                 <option key={client.id} value={client.id}>
@@ -207,7 +390,17 @@ export function FinanzasModule() {
               ))}
             </select>
           </AdminField>
-          <AdminField label="Monto cobrado" hint="En guaraníes">
+          <AdminField label="Presupuesto" hint="Opcional">
+            <select value={form.budgetId} onChange={(event) => setForm({ ...form, budgetId: event.target.value })}>
+              <option value="">Sin presupuesto</option>
+              {clientBudgets.map((budget) => (
+                <option key={budget.id} value={budget.id}>
+                  {budget.title} · {formatMoney(budget.total)}
+                </option>
+              ))}
+            </select>
+          </AdminField>
+          <AdminField label="Monto" hint="En guaraníes">
             <input
               type="number"
               min="1"
@@ -218,29 +411,204 @@ export function FinanzasModule() {
               inputMode="numeric"
             />
           </AdminField>
+          <AdminField label="Tipo de cobro">
+            <select
+              value={form.mode}
+              onChange={(event) => {
+                const mode = event.target.value === "term" ? "term" : "now";
+                setForm({
+                  ...form,
+                  mode,
+                  method: mode === "term" && form.method === "Tarjeta" ? "Transferencia" : form.method,
+                });
+              }}
+            >
+              <option value="now">Cobrado ahora</option>
+              <option value="term">A plazo (por cobrar)</option>
+            </select>
+          </AdminField>
           <AdminField label="Método">
-            <select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>
-              {METHOD_OPTIONS.map((method) => (
+            <select
+              value={form.method}
+              onChange={(event) => setForm({ ...form, method: event.target.value, chequeDate: "" })}
+            >
+              {(term ? TERM_METHOD_OPTIONS : METHOD_OPTIONS).map((method) => (
                 <option key={method} value={method}>
                   {method}
                 </option>
               ))}
             </select>
           </AdminField>
-          <AdminField label="Referencia" hint="Nº de transferencia o recibo">
-            <input
-              maxLength={80}
-              value={form.reference}
-              onChange={(event) => setForm({ ...form, reference: event.target.value })}
-              placeholder="Opcional"
-            />
-          </AdminField>
+          {term ? (
+            <>
+              <AdminField label="Emisión de factura" hint="Si no hay factura, dejalo vacío">
+                <input
+                  type="date"
+                  value={form.invoiceIssuedAt}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      invoiceIssuedAt: event.target.value,
+                      invoiceNumber: event.target.value ? form.invoiceNumber : "",
+                    })
+                  }
+                />
+              </AdminField>
+              <AdminField label="Nº de factura">
+                <input
+                  maxLength={60}
+                  required={Boolean(form.invoiceIssuedAt)}
+                  value={form.invoiceNumber}
+                  onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
+                  placeholder={form.invoiceIssuedAt ? "Número de la factura" : "Primero cargá la emisión"}
+                />
+              </AdminField>
+              <AdminField label="Días de plazo" hint="Desde la emisión (o desde hoy si no hay factura)">
+                <select value={form.dueDays} onChange={(event) => setForm({ ...form, dueDays: event.target.value })}>
+                  {TERM_DAY_OPTIONS.map((days) => (
+                    <option key={days} value={days}>
+                      {TERM_DAY_LABEL[days]}
+                    </option>
+                  ))}
+                </select>
+              </AdminField>
+              <AdminField label="Vence el" hint="Fecha exacta (opcional; manda sobre los días)">
+                <input
+                  type="date"
+                  value={form.dueAt}
+                  onChange={(event) => setForm({ ...form, dueAt: event.target.value })}
+                />
+              </AdminField>
+              {form.method === "Cheque" ? (
+                <AdminField label="Fecha del cheque" hint="Obligatoria para cobrar con cheque">
+                  <input
+                    type="date"
+                    required
+                    value={form.chequeDate}
+                    onChange={(event) => setForm({ ...form, chequeDate: event.target.value })}
+                  />
+                </AdminField>
+              ) : null}
+            </>
+          ) : (
+            <AdminField label="Referencia" hint="Nº de transferencia o recibo">
+              <input
+                maxLength={120}
+                value={form.reference}
+                onChange={(event) => setForm({ ...form, reference: event.target.value })}
+                placeholder="Opcional"
+              />
+            </AdminField>
+          )}
         </AdminFormPanel>
       ) : null}
 
       <AdminPanel
+        title="Por cobrar"
+        meta={pendingPayments.length > 0 ? `${formatNumber(pendingPayments.length)} cobros a plazo` : undefined}
+        action={
+          <AdminButton
+            icon="download"
+            onClick={exportPendingCollections}
+            title="Exportar los cobros a plazo filtrados a CSV"
+            aria-label="Exportar los cobros a plazo filtrados a CSV"
+          >
+            Exportar CSV
+          </AdminButton>
+        }
+      >
+        <AdminDataState
+          loading={finance.loading}
+          error={finance.error}
+          onRetry={finance.reload}
+          empty={pendingPayments.length === 0}
+          emptyTitle="No hay cobros a plazo"
+          emptyHint="Registrá un cobro con factura y vencimiento para seguir acá cuándo se cobra."
+          rows={4}
+        >
+          <AdminTable
+            view="cobros-plazo"
+            label="Cobros a plazo por cobrar"
+            columns={[
+              { label: "Cliente" },
+              { label: "Factura" },
+              { label: "Emisión" },
+              { label: "Vence" },
+              { label: "Cobro" },
+              { label: "Método" },
+              { label: "Cheque" },
+              { label: "Monto", end: true },
+              { label: "Acciones", end: true },
+            ]}
+          >
+            {pendingPayments.map((payment) => {
+              const label = payment.client.company || payment.client.name;
+              return (
+                <AdminRow key={payment.id}>
+                  <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
+                    <strong>{label}</strong>
+                    {payment.budget ? <small className="admin-cell-sub"> · {payment.budget.title}</small> : null}
+                  </AdminCell>
+                  <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
+                    <span className="admin-code">{payment.invoiceNumber || "—"}</span>
+                  </AdminCell>
+                  <AdminCell title={payment.invoiceIssuedAt ? `Emitida el ${formatDate(payment.invoiceIssuedAt)}` : "Sin factura emitida"}>
+                    {payment.invoiceIssuedAt ? formatDateShort(payment.invoiceIssuedAt) : "—"}
+                  </AdminCell>
+                  <AdminCell title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)}` : "Sin vencimiento de cobro"}>
+                    <span className="admin-nowrap" data-tone={collectionDueTone(payment.dueAt)}>
+                      {payment.dueAt ? formatDateShort(payment.dueAt) : "—"}
+                    </span>
+                  </AdminCell>
+                  <AdminCell title={payment.dueAt ? `Vencimiento ${formatDate(payment.dueAt)}` : "Sin vencimiento de cobro"}>
+                    <span className="admin-nowrap" data-tone={collectionDueTone(payment.dueAt)}>
+                      {collectionDueText(payment.dueAt)}
+                    </span>
+                  </AdminCell>
+                  <AdminCell>{payment.method || "—"}</AdminCell>
+                  <AdminCell title={payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : "Sin cheque"}>
+                    <span className="admin-nowrap">{payment.chequeDate ? formatDateShort(payment.chequeDate) : "—"}</span>
+                  </AdminCell>
+                  <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
+                    <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell end>
+                    <span className="admin-actions">
+                      {writable ? (
+                        <AdminButton
+                          icon="check"
+                          busy={busyId === `collect:${payment.id}`}
+                          disabled={Boolean(busyId)}
+                          title={`Marcar cobrado: ${label}`}
+                          aria-label={`Marcar cobrado: ${label}`}
+                          onClick={() => closeCollection(payment, "collect")}
+                        />
+                      ) : null}
+                      {writable ? (
+                        <AdminButton
+                          icon="close"
+                          disabled={Boolean(busyId)}
+                          title={`Anular cobro a plazo: ${label}`}
+                          aria-label={`Anular cobro a plazo: ${label}`}
+                          onClick={() => closeCollection(payment, "cancel")}
+                        />
+                      ) : null}
+                      {!writable ? <span className="admin-muted">—</span> : null}
+                    </span>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+          {pendingPayments.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
+          ) : null}
+        </AdminDataState>
+      </AdminPanel>
+
+      <AdminPanel
         title="Cobros de clientes"
-        meta={`${formatNumber(filteredPayments.length)} movimientos`}
+        meta={`${formatNumber(settledPayments.length)} movimientos`}
         action={
           <AdminButton
             icon="download"
@@ -256,41 +624,56 @@ export function FinanzasModule() {
           loading={finance.loading}
           error={finance.error}
           onRetry={finance.reload}
-          empty={filteredPayments.length === 0}
+          empty={settledPayments.length === 0}
           emptyTitle="Sin cobros registrados"
-          emptyHint="Registrá el primer cobro para verlo acá con su presupuesto."
+          emptyHint="Registrá el primer cobro para verlo acá con su presupuesto y su fecha real."
           rows={4}
         >
           <AdminTable
             view="cobros"
             label="Cobros de clientes"
             columns={[
-              { label: "Fecha" },
+              { label: "Cobrado" },
               { label: "Cliente" },
               { label: "Presupuesto" },
+              { label: "Factura" },
               { label: "Monto", end: true },
               { label: "Método" },
               { label: "Referencia" },
+              { label: "Estado" },
             ]}
           >
-            {filteredPayments.map((payment) => (
-              <AdminRow key={payment.id}>
-                <AdminCell title={formatDateTime(payment.paidAt)}>
-                  {formatDateShort(payment.paidAt)} · {formatTime(payment.paidAt)}
-                </AdminCell>
-                <AdminCell title={payment.client.company || payment.client.name}>{payment.client.company || payment.client.name}</AdminCell>
-                <AdminCell title={payment.budget?.title || "Sin presupuesto asociado"}>{payment.budget?.title || "—"}</AdminCell>
-                <AdminCell end title={formatMoney(payment.amount)}>
-                  <strong>{formatMoney(payment.amount)}</strong>
-                </AdminCell>
-                <AdminCell>{payment.method || "—"}</AdminCell>
-                <AdminCell title={payment.reference || "Sin referencia"}>
-                  <span className="admin-code">{payment.reference || "—"}</span>
-                </AdminCell>
-              </AdminRow>
-            ))}
+            {settledPayments.map((payment) => {
+              const collectedAt = payment.collectedAt ?? payment.paidAt;
+              return (
+                <AdminRow key={payment.id}>
+                  <AdminCell title={collectedAt ? formatDateTime(collectedAt) : "Sin fecha de cobro"}>
+                    {collectedAt ? `${formatDateShort(collectedAt)} · ${formatTime(collectedAt)}` : "—"}
+                  </AdminCell>
+                  <AdminCell title={payment.client.company || payment.client.name}>
+                    {payment.client.company || payment.client.name}
+                  </AdminCell>
+                  <AdminCell title={payment.budget?.title || "Sin presupuesto asociado"}>{payment.budget?.title || "—"}</AdminCell>
+                  <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
+                    <span className="admin-code">{payment.invoiceNumber || "—"}</span>
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(payment.amount)}>
+                    <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell>{payment.method || "—"}</AdminCell>
+                  <AdminCell title={payment.reference || "Sin referencia"}>
+                    <span className="admin-code">{payment.reference || "—"}</span>
+                  </AdminCell>
+                  <AdminCell>
+                    <AdminBadge tone={paymentStatusTone(payment.status)}>{paymentStatusLabel(payment.status)}</AdminBadge>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
           </AdminTable>
-          {filteredPayments.length === 0 ? <AdminEmpty title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." /> : null}
+          {settledPayments.length === 0 ? (
+            <AdminEmpty title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
+          ) : null}
         </AdminDataState>
       </AdminPanel>
 

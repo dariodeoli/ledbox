@@ -26,7 +26,8 @@ export const dynamic = "force-dynamic";
  *
  * No se inventan estados ni fechas derivadas: cada ítem corresponde a un
  * timestamp real (`Event.setupAt/startsAt/endsAt/strikeAt`,
- * `EventTask.dueAt`, `ClientPayment.paidAt`,
+ * `EventTask.dueAt`, `ClientPayment.paidAt` de los cobros cobrados y
+ * `ClientPayment.dueAt` de los cobros a plazo pendientes —issue #16—,
  * `SupplierJob.dueAt/deliveredAt/paidAt`) ubicado en el día de Asunción en que
  * ocurre. Las tareas ya cumplidas no se listan: el calendario muestra lo que
  * todavía requiere acción y su historial vive en el módulo de Eventos.
@@ -47,7 +48,8 @@ const KIND_ORDER: Record<AdminCalendarItemKind, number> = {
   supplier_due: 5,
   supplier_delivery: 6,
   collection: 7,
-  supplier_payment: 8,
+  collection_due: 8,
+  supplier_payment: 9,
 };
 
 // ── Normalización ───────────────────────────────────────────────────────────
@@ -106,7 +108,7 @@ export async function GET(request: Request) {
   const to = dayStart(nextDayKey(toKey)); // límite exclusivo
   const now = new Date();
 
-  const [events, tasks, payments, jobs] = await Promise.all([
+  const [events, tasks, payments, pendingCollections, jobs] = await Promise.all([
     db.event.findMany({
       where: {
         organizationId,
@@ -133,8 +135,17 @@ export async function GET(request: Request) {
       include: { event: { select: { id: true, name: true } } },
     }),
     db.clientPayment.findMany({
-      where: { organizationId, paidAt: { gte: from, lt: to } },
+      where: { organizationId, status: "RECEIVED", paidAt: { gte: from, lt: to } },
       orderBy: { paidAt: "asc" },
+      take: 300,
+      include: {
+        client: { select: { name: true, company: true } },
+        budget: { select: { title: true } },
+      },
+    }),
+    db.clientPayment.findMany({
+      where: { organizationId, status: "PENDING", dueAt: { gte: from, lt: to } },
+      orderBy: { dueAt: "asc" },
       take: 300,
       include: {
         client: { select: { name: true, company: true } },
@@ -179,6 +190,7 @@ export async function GET(request: Request) {
   }
 
   for (const payment of payments) {
+    if (!payment.paidAt) continue;
     items.push({
       id: `collection:${payment.id}`,
       kind: "collection",
@@ -190,6 +202,30 @@ export async function GET(request: Request) {
       subtitle: joinParts([payment.budget?.title, payment.method]),
       href: "/finanzas",
       tone: "ok",
+      tag: null,
+      amount: payment.amount,
+    });
+  }
+
+  // Cobros a plazo pendientes: el marcador es el `dueAt` real y avisa en rojo si
+  // el día de Asunción del vencimiento ya pasó (issue #16).
+  for (const payment of pendingCollections) {
+    if (!payment.dueAt) continue;
+    items.push({
+      id: `collection_due:${payment.id}`,
+      kind: "collection_due",
+      date: dayKeyOf(payment.dueAt),
+      at: payment.dueAt.toISOString(),
+      endAt: null,
+      endDate: null,
+      title: clientLabel(payment.client),
+      subtitle: joinParts([
+        payment.budget?.title,
+        payment.method,
+        payment.invoiceNumber ? `factura ${payment.invoiceNumber}` : null,
+      ]),
+      href: "/finanzas",
+      tone: dayKeyOf(payment.dueAt) < today ? "danger" : "warn",
       tag: null,
       amount: payment.amount,
     });

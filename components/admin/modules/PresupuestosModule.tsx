@@ -20,6 +20,7 @@ import { bankMark } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   budgetApprovalState,
+  collectedAmount,
   type AdminBudgetPortalPayload,
   type AdminBudgetRequestRow,
   type AdminBudgetRow,
@@ -355,7 +356,9 @@ export function PresupuestosModule() {
   const totals = useMemo(() => {
     return budgetRows.reduce(
       (accumulator, budget) => {
-        const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
+        // Solo los cobros cobrados descuentan saldo (issue #16): un cobro a plazo
+        // pendiente o anulado todavía no es plata cobrada.
+        const paid = collectedAmount(budget.payments);
         accumulator.quoted += budget.total;
         accumulator.paid += paid;
         accumulator.receivable += Math.max(0, budget.total - paid);
@@ -856,7 +859,7 @@ export function PresupuestosModule() {
             ]}
           >
             {rows.map((budget) => {
-              const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
+              const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
               const margin = budget.total - budget.costEstimate;
               const approvalState = budgetApprovalState(budget);

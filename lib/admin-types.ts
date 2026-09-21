@@ -136,11 +136,33 @@ export type AdminBudgetInstallment = { label: string; amount: number; dueAt: str
 export type AdminPayment = {
   id: string;
   amount: number;
-  paidAt: string;
+  /** A cobrar / cobrado / anulado (issue #16). */
+  status: string;
+  /** Fecha de pago; `null` mientras el cobro está pendiente. */
+  paidAt: string | null;
+  /** Fecha real del cobro (los cobros viejos usan `paidAt`). */
+  collectedAt: string | null;
   method: string | null;
   reference: string | null;
   budgetId: string | null;
+  invoiceNumber: string | null;
+  invoiceIssuedAt: string | null;
+  /** Vencimiento de cobro de un cobro a plazo. */
+  dueAt: string | null;
+  /** Fecha del cheque cuando el método es cheque. */
+  chequeDate: string | null;
+  createdAt: string;
 };
+
+/** Solo un cobro `RECEIVED` cuenta como plata cobrada (nada de contar pendientes). */
+export function isCollectedPayment(payment: Pick<AdminPayment, "status">): boolean {
+  return payment.status === "RECEIVED";
+}
+
+/** Monto realmente cobrado de una lista de cobros. */
+export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
+  return payments.reduce((sum, payment) => (isCollectedPayment(payment) ? sum + payment.amount : sum), 0);
+}
 
 export type AdminBudgetRow = {
   id: string;
@@ -551,6 +573,7 @@ export type AdminCalendarItemKind =
   | "event_end"
   | "strike"
   | "collection"
+  | "collection_due"
   | "supplier_due"
   | "supplier_delivery"
   | "supplier_payment"
@@ -595,7 +618,7 @@ export type AdminCalendarAlert = {
  * reales del panel. Los `kind` compartidos con el calendario se conservan tal cual.
  */
 export type AdminNotificationLevel = AdminCalendarAlertLevel | "info";
-export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "lead" | "portal_request";
+export type AdminNotificationKind = AdminCalendarAlertKind | "collection" | "collection_due" | "lead" | "portal_request";
 
 export type AdminNotification = {
   id: string;

@@ -20,7 +20,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { adminNavLabel, canWriteOperations } from "@/lib/admin-policy";
-import { supplierJobBalance, type AdminOverview } from "@/lib/admin-types";
+import { collectedAmount, supplierJobBalance, type AdminOverview } from "@/lib/admin-types";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -65,7 +65,9 @@ export function ResumenModule() {
   const receivables = useMemo(
     () =>
       (budgets.data ?? [])
-        .map((budget) => ({ budget, paid: budget.payments.reduce((sum, payment) => sum + payment.amount, 0) }))
+        // Solo los cobros marcados como cobrados descuentan saldo (issue #16):
+        // un cobro a plazo pendiente o anulado todavía no es plata cobrada.
+        .map((budget) => ({ budget, paid: collectedAmount(budget.payments) }))
         .map((row) => ({ ...row, balance: row.budget.total - row.paid }))
         .filter((row) => row.balance > 0)
         .sort((a, b) => b.balance - a.balance)
