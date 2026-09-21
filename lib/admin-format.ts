@@ -234,8 +234,8 @@ export const ITEM_CONDITIONS = ["Bueno", "Con detalles", "Dañado"] as const;
 export function inventoryAssignmentState(assignment: {
   checkedOut: boolean;
   checkedIn: boolean;
-  checkedOutAt?: string | null;
-  checkedInAt?: string | null;
+  checkedOutAt?: string | Date | null;
+  checkedInAt?: string | Date | null;
 }): { label: string; tone: AdminTone } {
   if (assignment.checkedInAt || assignment.checkedIn) return { label: "Devuelto", tone: "ok" };
   if (assignment.checkedOutAt || assignment.checkedOut) return { label: "Afuera", tone: "accent" };
