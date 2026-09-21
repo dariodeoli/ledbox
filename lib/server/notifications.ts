@@ -25,6 +25,10 @@ import type {
  * - `portal_request`: solicitud del cliente en el portal sin resolver
  *   (`BudgetChangeRequest.status = pending`, issue #14); la fecha es el día en
  *   que el cliente la mandó y el aviso desaparece cuando el equipo la resuelve.
+ * - `payment_proof`: comprobante de pago recién subido desde el portal
+ *   (`BudgetPaymentProof`, issue #17) que todavía no se resolvió —el cobro
+ *   vinculado sigue pendiente— o que quedó sin cobro asociado; la fecha es el
+ *   día en que el cliente lo subió y el aviso vive la ventana de 7 días.
  *
  * El calendario consume solo los tres primeros (`calendarAlerts`); los
  * vencimientos de cobro se suman como ítem propio en `/api/admin/calendar`. Las
@@ -246,14 +250,16 @@ const PORTAL_REQUEST_KIND: Record<string, string> = {
 
 /**
  * Hechos informativos que solo muestra el módulo de avisos: leads sin contactar,
- * presupuestos aprobados con saldo y solicitudes del portal sin resolver. La
- * fecha del cobro es la validez del presupuesto (`validUntil`) y, si no tiene,
- * el día en que se cargó; la de una solicitud, el día en que la mandó el cliente.
+ * presupuestos aprobados con saldo, solicitudes del portal sin resolver y
+ * comprobantes de pago recién subidos (issue #17). La fecha del cobro es la
+ * validez del presupuesto (`validUntil`) y, si no tiene, el día en que se cargó;
+ * la de una solicitud, el día en que la mandó el cliente; la de un comprobante,
+ * el día en que llegó.
  */
 async function extraCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
   const soonKey = dayKeyOf(new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS));
   const todayKey = dayKeyOf(now);
-  const [leads, budgets, portalRequests] = await Promise.all([
+  const [leads, budgets, portalRequests, paymentProofs] = await Promise.all([
     db.lead.findMany({
       where: { organizationId, status: "NEW" },
       orderBy: { createdAt: "asc" },
@@ -284,6 +290,25 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
         createdAt: true,
         requestedByName: true,
         budget: { select: { title: true, client: { select: { name: true, company: true } } } },
+      },
+    }),
+    // Comprobantes sin resolver: el cobro vinculado sigue pendiente (el equipo
+    // todavía no marcó cobrado) o el comprobante no se pudo vincular a un cobro.
+    // Pasada la ventana de 7 días el aviso desaparece: si el cobro sigue abierto,
+    // `collection_due` lo recuerda.
+    db.budgetPaymentProof.findMany({
+      where: {
+        organizationId,
+        createdAt: { gte: new Date(now.getTime() - NOTIFICATION_WINDOW_DAYS * DAY_MS) },
+        OR: [{ paymentId: null }, { payment: { is: { status: "PENDING" } } }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: NOTIFICATION_LIMIT,
+      select: {
+        id: true,
+        createdAt: true,
+        budget: { select: { title: true, client: { select: { name: true, company: true } } } },
+        payment: { select: { amount: true } },
       },
     }),
   ]);
@@ -334,6 +359,21 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
       subtitle: joinParts([request.budget.title, PORTAL_REQUEST_KIND[request.kind] ?? "Solicitud del portal"]),
       date: dayKeyOf(request.createdAt),
       href: "/presupuestos",
+    });
+  }
+
+  for (const proof of paymentProofs) {
+    candidates.push({
+      id: `payment_proof:${proof.id}`,
+      kind: "payment_proof",
+      level: "info",
+      title: clientLabel(proof.budget.client),
+      subtitle: joinParts([
+        proof.budget.title,
+        proof.payment ? formatPyg(proof.payment.amount) : "sin cobro vinculado",
+      ]),
+      date: dayKeyOf(proof.createdAt),
+      href: "/finanzas",
     });
   }
 
@@ -388,6 +428,7 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   collection: 4,
   lead: 5,
   portal_request: 6,
+  payment_proof: 7,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */
