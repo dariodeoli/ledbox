@@ -18,6 +18,7 @@ import { publicConfig } from "@/lib/public-config";
 // Fuente única de los dominios: `lib/public-config.ts` (nada de defaults duplicados).
 const ADMIN_URL = publicConfig.adminUrl;
 const CLIENT_URL = publicConfig.clientUrl;
+const DEMO_URL = publicConfig.demoUrl;
 
 function adminHost(): string {
   try {
@@ -31,7 +32,15 @@ function clientHost(): string {
   try {
     return new URL(CLIENT_URL).host.toLowerCase();
   } catch {
-    return "cliente.ledbox.online";
+    return "clientes.ledbox.online";
+  }
+}
+
+function demoHost(): string {
+  try {
+    return new URL(DEMO_URL).host.toLowerCase();
+  } catch {
+    return "demo.ledbox.online";
   }
 }
 
@@ -51,6 +60,7 @@ export function middleware(request: NextRequest) {
   const legacyAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const onAdminHost = requestHost(request) === adminHost();
   const onClientHost = requestHost(request) === clientHost();
+  const onDemoHost = requestHost(request) === demoHost();
 
   if (onAdminHost) {
     // Links viejos con /admin → ruta limpia equivalente.
@@ -79,7 +89,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (onDemoHost) {
+    // Demo pública (issue #15): la raíz abre la demo (`app/(admin)/(panel)/demo`);
+    // el resto de rutas pasa igual (los links del portal siguen funcionando).
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/demo";
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
+
   // Host público: el panel solo vive en el subdominio admin (en producción).
+  // La demo tiene su propio host: `ledbox.online/demo` va ahí.
+  if (process.env.NODE_ENV === "production" && pathname === "/demo") {
+    return NextResponse.redirect(new URL("/", DEMO_URL), 308);
+  }
   if (process.env.NODE_ENV === "production" && (legacyAdminPath || isAdminRoute(pathname))) {
     const clean = legacyAdminPath ? pathname.slice("/admin".length) || "/" : pathname;
     return NextResponse.redirect(new URL(`${clean}${search}`, ADMIN_URL), 308);

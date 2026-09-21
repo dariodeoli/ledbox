@@ -6,7 +6,8 @@ La demo es pública, con datos simulados y **solo lectura** (no se puede romper 
 
 | Superficie | URL |
 | --- | --- |
-| Panel (demo) | https://admin.ledbox.online/demo |
+| Panel (demo) | https://demo.ledbox.online |
+| Panel (ruta vieja, redirige) | https://admin.ledbox.online/demo |
 | Portal del cliente — **autogestión** (pendiente) | https://clientes.ledbox.online/p/D3M9-F3R4-A2PY-Q7SC-K4VT |
 | Portal del cliente — **aprobado** (con datos de pago) | https://clientes.ledbox.online/p/D3M9-5G97-4XKW-2M8R-T3HN |
 

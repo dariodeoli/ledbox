@@ -1,6 +1,7 @@
 const DEFAULT_SITE_URL = "https://ledbox.online";
 const DEFAULT_ADMIN_URL = "https://admin.ledbox.online";
 const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
+const DEFAULT_DEMO_URL = "https://demo.ledbox.online";
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
 export const publicConfig = {
@@ -8,6 +9,8 @@ export const publicConfig = {
   adminUrl: (process.env.NEXT_PUBLIC_ADMIN_URL || DEFAULT_ADMIN_URL).replace(/\/$/, ""),
   /** Portal del cliente (issue #12): host público de los presupuestos aprobables. */
   clientUrl: (process.env.NEXT_PUBLIC_CLIENT_URL || DEFAULT_CLIENT_URL).replace(/\/$/, ""),
+  /** Demo pública (issue #15): host de la demo con datos simulados. */
+  demoUrl: (process.env.NEXT_PUBLIC_DEMO_URL || DEFAULT_DEMO_URL).replace(/\/$/, ""),
   whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER,
 } as const;
 

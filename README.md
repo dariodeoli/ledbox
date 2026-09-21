@@ -16,14 +16,16 @@ Sitio comercial y panel de gestión de LedBox: alquiler de pantallas y equipos L
 
 ## URLs y entornos
 
-Dos superficies sobre la misma app, separadas por host:
+Cuatro superficies sobre la misma app, separadas por host:
 
 | Superficie | Producción | Rutas |
 | --- | --- | --- |
 | Sitio público | `ledbox.online` | `/` (catálogo, carrito, leads) |
 | Panel privado | `admin.ledbox.online` | `/login`, `/dashboard`, `/eventos`, `/finanzas`… sin prefijo `/admin` |
+| Portal del cliente | `clientes.ledbox.online` | `/` (validador) y `/p/<código>` (presupuesto) |
+| Demo pública | `demo.ledbox.online` | `/` (demo con datos simulados, solo lectura) |
 
-Las páginas del panel son rutas raíz reales en `app/(admin)/*` (el route group no cambia la URL) y el sitio público en `app/(public)/*`. En el host admin, `/` muestra el dashboard; en el host público, `middleware.ts` redirige las rutas del panel al subdominio usando `lib/admin-routes.ts`.
+Las páginas del panel son rutas raíz reales en `app/(admin)/*` (el route group no cambia la URL), el sitio público en `app/(public)/*` y el portal en `app/(portal)/*`. En el host admin, `/` muestra el dashboard; en el del cliente, el validador; en el de la demo, la demo. En el host público, `middleware.ts` redirige las rutas del panel al subdominio usando `lib/admin-routes.ts`, y `/demo` al host de la demo. Los dominios se definen en `lib/public-config.ts` (`NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ADMIN_URL`, `NEXT_PUBLIC_CLIENT_URL`, `NEXT_PUBLIC_DEMO_URL`) y los usa también el middleware (fuente única).
 
 En desarrollo, `npm run dev` deja el panel en `http://localhost:3000/dashboard` y el sitio en `http://localhost:3000`; no hace falta configurar hosts.
 
