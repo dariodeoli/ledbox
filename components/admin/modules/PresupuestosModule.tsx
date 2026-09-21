@@ -10,6 +10,7 @@ import {
   budgetChangeStatusTone,
   budgetStatusLabel,
   formatBytes,
+  formatDate,
   formatDateShort,
   formatDateTime,
   formatMoney,
@@ -56,8 +57,9 @@ import {
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { DateField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { DateField, EmailField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -761,6 +763,14 @@ export function PresupuestosModule() {
   const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
   const [proofDialog, setProofDialog] = useState<AdminBudgetRow | null>(null);
 
+  // Envío del presupuesto por correo (issue #30): destinatario editable y mensaje corto.
+  const [sendBudget, setSendBudget] = useState<AdminBudgetRow | null>(null);
+  const [sendTo, setSendTo] = useState("");
+  const [sendMessage, setSendMessage] = useState("");
+  const [sendBusy, setSendBusy] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [sendError, setSendError] = useState("");
+
   const writable = canWriteFinance(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
@@ -834,11 +844,19 @@ export function PresupuestosModule() {
               >
                 QR
               </AdminButton>
+              {writable ? (
+                <AdminButton
+                  icon="mail"
+                  title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
+                  aria-label={`Enviar por correo: ${budget.title}`}
+                  onClick={() => openSend(budget)}
+                />
+              ) : null}
             </>
           ),
         };
       }),
-    [board.rows],
+    [board.rows, writable],
   );
 
   const totals = useMemo(() => {
@@ -999,6 +1017,63 @@ export function PresupuestosModule() {
         : `Link del portal revocado para «${portalBudget.title}».`,
     );
     budgetsResource.reload();
+  }
+
+  /** Abre el diálogo de envío por correo con el destinatario del cliente ya cargado. */
+  function openSend(budget: AdminBudgetRow) {
+    setSendTo(normalizeEmail(budget.client.email ?? ""));
+    setSendMessage("");
+    setSendError("");
+    setSendBudget(budget);
+  }
+
+  /** Genera el link del portal desde el diálogo de envío (sin link no hay correo). */
+  async function generateLinkForSend() {
+    if (!sendBudget) return;
+    setLinkBusy(true);
+    setSendError("");
+    const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets/token", {
+      budgetId: sendBudget.id,
+      action: "generate",
+    });
+    setLinkBusy(false);
+    if (!result.ok) {
+      setSendError(result.error);
+      return;
+    }
+    const updated = result.data.budget;
+    if (updated) setSendBudget({ ...sendBudget, ...updated });
+    setNotice(`Link del portal generado para «${sendBudget.title}».`);
+    budgetsResource.reload();
+  }
+
+  /** Envía el presupuesto y muestra el resultado real del proveedor. */
+  async function sendBudgetMail() {
+    if (!sendBudget) return;
+    const to = normalizeEmail(sendTo);
+    if (!emailValid(to)) {
+      setSendError(FIELD_MESSAGES.email);
+      return;
+    }
+    setSendBusy(true);
+    setSendError("");
+    const result = await adminSend<{ status: string; error: string | null; to: string }>("/api/admin/budgets/send", {
+      budgetId: sendBudget.id,
+      to,
+      message: sendMessage.trim() || undefined,
+    });
+    setSendBusy(false);
+    if (!result.ok) {
+      setSendError(result.error);
+      return;
+    }
+    if (result.data.status === "sent") {
+      setNotice(`Enviamos el presupuesto «${sendBudget.title}» a ${result.data.to}.`);
+      setSendBudget(null);
+      budgetsResource.reload();
+      return;
+    }
+    setSendError(result.data.error ?? "El proveedor rechazó el envío.");
   }
 
   async function submitApproval() {
@@ -1489,6 +1564,14 @@ export function PresupuestosModule() {
                       >
                         QR
                       </AdminButton>
+                      {writable ? (
+                        <AdminButton
+                          icon="mail"
+                          title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
+                          aria-label={`Enviar por correo: ${budget.title}`}
+                          onClick={() => openSend(budget)}
+                        />
+                      ) : null}
                       {budgetProofs.length > 0 ? (
                         <AdminButton
                           icon="eye"
@@ -1597,6 +1680,100 @@ export function PresupuestosModule() {
             ) : null}
             <AdminButton variant="primary" icon="refresh" busy={dialogBusy} onClick={() => void submitPortalAction("generate")}>
               {portalToken ? "Regenerar link" : "Generar link"}
+            </AdminButton>
+          </div>
+        </ModuleDialog>
+      ) : null}
+
+      {sendBudget ? (
+        <ModuleDialog title={`Enviar por correo · ${sendBudget.title}`} onClose={() => setSendBudget(null)}>
+          <p className="admin-dialog-text">
+            El correo sale con la identidad de LedBox: link del portal con el código, resumen de ítems, total y validez,
+            la hoja imprimible y los datos de pago cuando el presupuesto está aprobado.
+          </p>
+          <dl className="admin-dialog-facts">
+            <div>
+              <dt>Cliente</dt>
+              <dd>{sendBudget.client.company || sendBudget.client.name}</dd>
+            </div>
+            <div>
+              <dt>Total</dt>
+              <dd>{formatMoney(sendBudget.total)}</dd>
+            </div>
+            <div>
+              <dt>Validez</dt>
+              <dd>{sendBudget.validUntil ? `hasta el ${formatDate(sendBudget.validUntil)}` : "sin vencimiento informado"}</dd>
+            </div>
+            <div>
+              <dt>Código</dt>
+              <dd>{sendBudget.publicToken ?? "sin link del portal"}</dd>
+            </div>
+            <div>
+              <dt>Datos de pago</dt>
+              <dd>
+                {sendBudget.approvedAt
+                  ? "se incluyen (presupuesto aprobado)"
+                  : "no se incluyen: el presupuesto todavía no está aprobado"}
+              </dd>
+            </div>
+          </dl>
+
+          {!sendBudget.publicToken ? (
+            <AdminNote tone="error">
+              Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el
+              destino de aprobación.
+            </AdminNote>
+          ) : null}
+          {!emailValid(sendBudget.client.email ?? "") ? (
+            <AdminNote tone="error">
+              El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá.
+            </AdminNote>
+          ) : null}
+
+          <EmailField
+            label="Destinatario"
+            required
+            value={sendTo}
+            onChange={(value) => {
+              setSendTo(value);
+              setSendError("");
+            }}
+            disabled={sendBusy}
+            error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
+            hint="Podés cambiarlo: el correo se envía solo a esta dirección."
+          />
+          <TextAreaField
+            label="Mensaje corto (opcional)"
+            wide
+            value={sendMessage}
+            onChange={(value) => {
+              setSendMessage(value);
+              setSendError("");
+            }}
+            maxLength={600}
+            rows={3}
+            placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
+          />
+
+          {sendError ? <AdminNote tone="error">{sendError}</AdminNote> : null}
+          <div className="admin-dialog-foot">
+            {!sendBudget.publicToken ? (
+              <AdminButton icon="refresh" busy={linkBusy} disabled={sendBusy} onClick={() => void generateLinkForSend()}>
+                Generar link del portal
+              </AdminButton>
+            ) : null}
+            <span className="admin-dialog-spacer" />
+            <AdminButton onClick={() => setSendBudget(null)} disabled={sendBusy}>
+              Cancelar
+            </AdminButton>
+            <AdminButton
+              variant="primary"
+              icon="mail"
+              busy={sendBusy}
+              disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
+              onClick={() => void sendBudgetMail()}
+            >
+              Enviar presupuesto
             </AdminButton>
           </div>
         </ModuleDialog>

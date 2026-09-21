@@ -1087,8 +1087,8 @@ export const AUDIT_ENTITIES = [
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 
-/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución, conversión y recordatorio al cliente. */
-export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind"] as const;
+/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución, conversión, recordatorio al cliente y envío de correo. */
+export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind", "send"] as const;
 
 export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
 
@@ -1378,4 +1378,46 @@ export type AdminApiResponse = {
   expectedPayments?: AdminExpectedPaymentRow[];
   /** Totales de pagos esperados: por confirmar, vencidos y confirmados (issue #28). */
   expectedSummary?: AdminExpectedPaymentSummary;
+  /** Correo (issue #30): configuración, historial y resultado del envío. */
+  mail?: AdminMailConfig;
+  history?: AdminMailLogRow[];
+  status?: string;
+  sentAt?: string;
+  logId?: string | null;
+};
+
+// ── Correo (issue #30) ──────────────────────────────────────────────────────
+// `GET /api/admin/mail` (configuración + historial), `POST /api/admin/mail/test`
+// (prueba) y `POST /api/admin/budgets/send` (presupuesto al cliente).
+
+/** Categorías del historial de correo (espejo del enum `MailCategory`). */
+export type AdminMailCategory = "reset" | "reminder" | "budget" | "test" | "invitation";
+
+export type AdminMailConfig = {
+  provider: string;
+  /** Remitente configurado (`EMAIL_FROM` o el default de recuperación). */
+  sender: string;
+  /** ¿Está `RESEND_API_KEY` presente en el entorno? */
+  configured: boolean;
+  envVar: string;
+  /** Qué configurar cuando falta la clave; `null` si está todo listo. */
+  hint: string | null;
+  categories: readonly AdminMailCategory[];
+};
+
+export type AdminMailLogRow = {
+  id: string;
+  category: AdminMailCategory;
+  status: "sending" | "sent" | "failed";
+  to: string;
+  subject: string;
+  /** Motivo del fallo devuelto por el proveedor. */
+  error: string | null;
+  providerId: string | null;
+  entity: string | null;
+  entityId: string | null;
+  actorName: string | null;
+  actorEmail: string | null;
+  sentAt: string;
+  createdAt: string;
 };

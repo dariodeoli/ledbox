@@ -293,6 +293,33 @@ export const supplierCategoryLabel = (value: string | null | undefined) => label
 export const adminRoleLabel = (value: string | null | undefined) => label(ROLE, value);
 export const promoterAvailabilityLabel = (value: string | null | undefined) => label(PROMOTER_AVAILABILITY, value);
 
+/** Historial de correo (issue #30): categorías del envío y estado real del proveedor. */
+const MAIL_CATEGORY: Record<string, string> = {
+  reset: "Reset de contraseña",
+  reminder: "Recordatorio de cobro",
+  budget: "Presupuesto",
+  test: "Prueba",
+  invitation: "Invitación",
+};
+const MAIL_STATUS: Record<string, string> = {
+  sending: "Enviando",
+  sent: "Enviado",
+  failed: "Falló",
+};
+const MAIL_STATUS_TONES: Record<string, AdminTone> = {
+  sending: "warn",
+  sent: "ok",
+  failed: "danger",
+};
+
+export const mailCategoryLabel = (value: string | null | undefined) => label(MAIL_CATEGORY, value);
+export const mailStatusLabel = (value: string | null | undefined) => label(MAIL_STATUS, value);
+
+export function mailStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return MAIL_STATUS_TONES[value] ?? "neutral";
+}
+
 export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
@@ -944,6 +971,7 @@ const AUDIT_ACTION: Record<string, string> = {
   checkin: "Devolución",
   convert: "Convirtió",
   remind: "Recordó",
+  send: "Envió",
 };
 
 const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
@@ -955,6 +983,7 @@ const AUDIT_ACTION_TONES: Record<string, AdminTone> = {
   checkin: "info",
   convert: "accent",
   remind: "accent",
+  send: "accent",
 };
 
 const AUDIT_ENTITY: Record<string, string> = {
