@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalBudgetOpen } from "@/lib/server/budget-portal";
 import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -24,7 +25,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const budget = code
     ? await db.budget.findUnique({
         where: { publicToken: code },
-        select: { id: true, status: true, approvedAt: true },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          approvedAt: true,
+          organizationId: true,
+          client: { select: { name: true, company: true, email: true } },
+        },
       })
     : null;
   if (!budget) return jsonError("No encontramos ese presupuesto.", 404);
@@ -50,5 +58,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   const payload = await loadPublicBudget(code);
   if (!payload) return jsonError("No encontramos ese presupuesto.", 404);
+  const actorName = name || budget.client?.company?.trim() || budget.client?.name || "Cliente (portal)";
+  await recordAudit({
+    context: portalAuditContext(budget.organizationId, actorName, budget.client?.email),
+    action: "status",
+    entity: "Budget",
+    entityId: budget.id,
+    summary: `El cliente pidió cambios en el presupuesto «${budget.title}» desde el portal`,
+    detail: { fields: { revisionNote: note } },
+  });
   return Response.json({ budget: payload });
 }

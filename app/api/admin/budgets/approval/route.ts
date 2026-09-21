@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { recordAudit } from "@/lib/server/audit";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 const select = {
   id: true,
+  title: true,
   status: true,
   publicToken: true,
   publicTokenCreatedAt: true,
@@ -16,6 +18,7 @@ const select = {
   approvalNote: true,
   revisionRequestedAt: true,
   revisionNote: true,
+  client: { select: { name: true, company: true } },
 } as const;
 
 const MAX_NOTE = 1000;
@@ -41,13 +44,14 @@ export async function POST(request: Request) {
 
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
-    select: { id: true, status: true, approvedAt: true },
+    select: { id: true, title: true, status: true, approvedAt: true, client: { select: { name: true, company: true } } },
   });
   if (!budget) return jsonError("Budget not found.", 404);
+  const clientLabel = budget.client.company?.trim() || budget.client.name;
 
   if (decision === "approve") {
     // Idempotente: si ya hay una aprobación registrada, se devuelve tal cual.
-    await db.budget.updateMany({
+    const applied = await db.budget.updateMany({
       where: { id: budget.id, approvedAt: null },
       data: {
         status: "APPROVED",
@@ -57,6 +61,16 @@ export async function POST(request: Request) {
         approvalNote: note || null,
       },
     });
+    if (applied.count > 0) {
+      await recordAudit({
+        context: auth.context,
+        action: "status",
+        entity: "Budget",
+        entityId: budget.id,
+        summary: `Aprobó manualmente el presupuesto «${budget.title}» del cliente «${clientLabel}»`,
+        detail: { changes: { status: { from: budget.status, to: "APPROVED" }, approvalMethod: { from: null, to: "manual" } } },
+      });
+    }
   } else {
     if (budget.approvedAt) return jsonError("El presupuesto ya está aprobado.", 409);
     await db.budget.update({
@@ -66,6 +80,14 @@ export async function POST(request: Request) {
         revisionRequestedAt: new Date(),
         revisionNote: note,
       },
+    });
+    await recordAudit({
+      context: auth.context,
+      action: "status",
+      entity: "Budget",
+      entityId: budget.id,
+      summary: `Pidió cambios en el presupuesto «${budget.title}» del cliente «${clientLabel}»`,
+      detail: { fields: { revisionNote: note } },
     });
   }
 

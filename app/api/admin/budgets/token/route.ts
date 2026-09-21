@@ -1,4 +1,5 @@
 import { generatePublicToken } from "@/lib/server/budget-portal";
+import { recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -24,8 +25,12 @@ export async function POST(request: Request) {
   const action = body.action === "generate" ? "generate" : body.action === "revoke" ? "revoke" : "";
   if (!budgetId || !action) return jsonError("budgetId and action are required.", 400);
 
-  const budget = await db.budget.findFirst({ where: { id: budgetId, organizationId }, select: { id: true } });
+  const budget = await db.budget.findFirst({
+    where: { id: budgetId, organizationId },
+    select: { id: true, title: true, client: { select: { name: true, company: true } } },
+  });
   if (!budget) return jsonError("Budget not found.", 404);
+  const clientLabel = budget.client.company?.trim() || budget.client.name;
 
   const updated = await db.budget.update({
     where: { id: budget.id },
@@ -34,6 +39,17 @@ export async function POST(request: Request) {
         ? { publicToken: generatePublicToken(), publicTokenCreatedAt: new Date() }
         : { publicToken: null, publicTokenCreatedAt: null },
     select,
+  });
+
+  await recordAudit({
+    context: auth.context,
+    action: "update",
+    entity: "Budget",
+    entityId: budget.id,
+    summary:
+      action === "generate"
+        ? `Generó el link público del presupuesto «${budget.title}» del cliente «${clientLabel}»`
+        : `Revocó el link público del presupuesto «${budget.title}» del cliente «${clientLabel}»`,
   });
 
   return Response.json({ budget: updated });

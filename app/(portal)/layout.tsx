@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
 
 export const metadata: Metadata = {
@@ -18,9 +19,7 @@ export default function PortalLayout({ children }: Readonly<{ children: React.Re
     <div className="portal">
       <header className="portal-top">
         <Link href="/" className="portal-brand" aria-label="LedBox · Portal del cliente">
-          <span className="portal-brand-mark" aria-hidden="true">
-            LB
-          </span>
+          <BrandMark className="portal-brand-mark" size={34} />
           <span className="portal-brand-name">
             LEDBOX<span aria-hidden="true">.</span>
           </span>

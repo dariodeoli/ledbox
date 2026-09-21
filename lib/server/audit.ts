@@ -18,6 +18,20 @@ import type { AdminContext } from "./tenancy";
 
 export type AuditContext = Pick<AdminContext, "organizationId" | "user">;
 
+/** Contexto de auditoría para acciones del portal del cliente (actor externo, sin cuenta del panel). */
+export function portalAuditContext(organizationId: string, name: string, email?: string | null): AuditContext {
+  return {
+    organizationId,
+    user: {
+      id: "portal",
+      name: name.trim() || "Cliente (portal)",
+      email: (email ?? "").trim(),
+      // `role` solo satisface el tipo; `recordAudit` no lo persiste.
+      role: "VIEWER",
+    },
+  };
+}
+
 export type AuditDetail = {
   changes?: Record<string, { from: unknown; to: unknown }>;
   fields?: Record<string, unknown>;
