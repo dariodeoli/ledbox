@@ -10,11 +10,13 @@ import {
   budgetChangeStatusTone,
   budgetStatusLabel,
   dueTone,
+  formatBytes,
   formatDateShort,
   formatDateTime,
   formatMoney,
   formatNumber,
   inventoryStatusLabel,
+  paymentProofMimeLabel,
   statusTone,
   type AdminTone,
 } from "@/lib/admin-format";
@@ -23,6 +25,8 @@ import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   budgetApprovalState,
   collectedAmount,
+  groupProofsByBudget,
+  type AdminBudgetPaymentProofRow,
   type AdminBudgetPortalPayload,
   type AdminBudgetRequestRow,
   type AdminBudgetReservation,
@@ -352,6 +356,89 @@ function ModuleDialog({
 }
 
 /**
+ * Visor de comprobantes de pago (issue #17). Lo comparten Presupuestos (ficha
+ * del presupuesto) y Finanzas (cobro pendiente): los metadatos llegan del API y
+ * cada archivo se sirve con sesión desde `/api/admin/budgets/proofs/[id]`, en
+ * línea (imagen en el visor, PDF embebido) o en una pestaña nueva.
+ *
+ * Cuando llega `onCollect`, el pie del diálogo ofrece "Marcar cobrado" para el
+ * cobro que se está mirando: un clic y el cobro queda cerrado con su auditoría.
+ */
+export function BudgetProofDialog({
+  title,
+  subtitle,
+  proofs,
+  onClose,
+  onCollect,
+  collectBusy,
+  collectLabel,
+}: {
+  title: string;
+  subtitle?: string;
+  proofs: AdminBudgetPaymentProofRow[];
+  onClose: () => void;
+  onCollect?: () => void;
+  collectBusy?: boolean;
+  collectLabel?: string;
+}) {
+  return (
+    <ModuleDialog title={title} wide onClose={onClose}>
+      {subtitle ? <p className="admin-dialog-text">{subtitle}</p> : null}
+      {proofs.length === 0 ? (
+        <p className="admin-dialog-text">Este presupuesto todavía no tiene comprobantes subidos desde el portal.</p>
+      ) : (
+        <div className="admin-proof-list">
+          {proofs.map((proof) => {
+            const url = `/api/admin/budgets/proofs/${proof.id}`;
+            const when = formatDateTime(proof.createdAt);
+            return (
+              <article className="admin-proof" key={proof.id}>
+                <header className="admin-proof-head">
+                  <AdminBadge tone="info">{paymentProofMimeLabel(proof.mime)}</AdminBadge>
+                  <span className="admin-proof-meta">
+                    {formatBytes(proof.size)} · {proof.uploadedByName} · {when}
+                  </span>
+                </header>
+                {proof.mime === "application/pdf" ? (
+                  <iframe
+                    className="admin-proof-pdf"
+                    src={url}
+                    title={`Comprobante PDF de ${proof.uploadedByName} del ${when}`}
+                  />
+                ) : (
+                  <a
+                    className="admin-proof-frame"
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Abrir el comprobante de ${proof.uploadedByName} en una pestaña nueva`}
+                  >
+                    <img
+                      className="admin-proof-image"
+                      src={url}
+                      alt={`Comprobante subido por ${proof.uploadedByName} el ${when}`}
+                    />
+                  </a>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+      <div className="admin-dialog-foot">
+        {onCollect ? (
+          <AdminButton variant="primary" icon="check" busy={collectBusy} onClick={onCollect}>
+            {collectLabel ?? "Marcar cobrado"}
+          </AdminButton>
+        ) : null}
+        <span className="admin-dialog-spacer" />
+        <AdminButton onClick={onClose}>Cerrar</AdminButton>
+      </div>
+    </ModuleDialog>
+  );
+}
+
+/**
  * Datos de pago de la empresa (issue #14): solo OWNER/ADMIN. Se cargan al abrir
  * el diálogo y se guardan en `app/api/admin/organization/payment-details`; el
  * portal los muestra recién con el presupuesto aprobado.
@@ -664,6 +751,9 @@ export function PresupuestosModule() {
   // Vínculo con inventario y reserva automática (issue #18).
   const [linksBudget, setLinksBudget] = useState<AdminBudgetRow | null>(null);
   const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);
+  // Comprobantes de pago (issue #17): metadatos por presupuesto y visor.
+  const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
+  const [proofDialog, setProofDialog] = useState<AdminBudgetRow | null>(null);
 
   const writable = canWriteFinance(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
@@ -701,6 +791,26 @@ export function PresupuestosModule() {
       { quoted: 0, paid: 0, receivable: 0, margin: 0 },
     );
   }, [budgetRows]);
+
+  // Comprobantes del portal (issue #17): una sola consulta de metadatos por
+  // carga de presupuestos; el visor los agrupa por presupuesto.
+  const proofSignature = useMemo(() => budgetRows.map((budget) => budget.id).join(","), [budgetRows]);
+  useEffect(() => {
+    if (!proofSignature) {
+      setProofsByBudget({});
+      return;
+    }
+    let active = true;
+    void adminApiGet<{ proofs?: AdminBudgetPaymentProofRow[] }>("/api/admin/budgets/proofs", {
+      fallbackError: "No pudimos cargar los comprobantes.",
+    }).then((result) => {
+      if (!active || !result.ok) return;
+      setProofsByBudget(groupProofsByBudget(result.data.proofs ?? []));
+    });
+    return () => {
+      active = false;
+    };
+  }, [proofSignature]);
 
   // El QR se arma en el navegador con la URL pública del presupuesto abierto.
   useEffect(() => {
@@ -1216,6 +1326,8 @@ export function PresupuestosModule() {
               const linkedNames = linked
                 .map((item) => `${item.name} → ${item.inventory?.name ?? "inventario eliminado"}`)
                 .join(", ");
+              const budgetProofs = proofsByBudget[budget.id] ?? [];
+              const proofLabel = `${formatNumber(budgetProofs.length)} comprobante${budgetProofs.length === 1 ? "" : "s"} del portal`;
               return (
                 <AdminRow key={budget.id}>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
@@ -1251,7 +1363,10 @@ export function PresupuestosModule() {
                   </AdminCell>
                   <AdminCell title={portalSummary(budget)}>
                     <AdminBadge tone={budgetApprovalTone(approvalState)}>{budgetApprovalLabel(approvalState)}</AdminBadge>
-                    <small className="admin-cell-sub"> · {budget.publicToken ? "Link activo" : "Sin link"}</small>
+                    <small className="admin-cell-sub">
+                      {" "}· {budget.publicToken ? "Link activo" : "Sin link"}
+                      {budgetProofs.length > 0 ? ` · ${proofLabel}` : ""}
+                    </small>
                   </AdminCell>
                   <AdminCell title={budget.validUntil ? `Vence el ${formatDateShort(budget.validUntil)}` : "Sin vencimiento"}>
                     <span className="admin-nowrap" data-tone={dueTone(budget.validUntil)}>
@@ -1289,6 +1404,14 @@ export function PresupuestosModule() {
                       >
                         QR
                       </AdminButton>
+                      {budgetProofs.length > 0 ? (
+                        <AdminButton
+                          icon="eye"
+                          title={`Ver ${budgetProofs.length === 1 ? "el comprobante" : `los ${proofLabel}`} de ${budget.title}`}
+                          aria-label={`Ver ${budgetProofs.length === 1 ? "el comprobante" : `los ${proofLabel}`} de ${budget.title}`}
+                          onClick={() => setProofDialog(budget)}
+                        />
+                      ) : null}
                       {writable ? (
                         <AdminButton
                           icon="clock"
@@ -1753,6 +1876,14 @@ export function PresupuestosModule() {
             })}
           </AdminTable>
         </AdminPanel>
+      ) : null}
+      {proofDialog ? (
+        <BudgetProofDialog
+          title={`Comprobantes · ${proofDialog.title}`}
+          subtitle={`Enviados desde el portal por el cliente (${proofDialog.client.company || proofDialog.client.name}). El archivo se sirve con tu sesión: no es público.`}
+          proofs={proofsByBudget[proofDialog.id] ?? []}
+          onClose={() => setProofDialog(null)}
+        />
       ) : null}
     </div>
   );

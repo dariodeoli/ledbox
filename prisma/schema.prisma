@@ -57,6 +57,7 @@ model Organization {
   changeRequests   BudgetChangeRequest[]
   clientPayments   ClientPayment[]
   paymentReminders PaymentReminderLog[]
+  paymentProofs    BudgetPaymentProof[]
   suppliers        Supplier[]
   supplierJobs     SupplierJob[]
   inventoryItems   InventoryItem[]
@@ -450,6 +451,7 @@ model Budget {
   items                BudgetItem[]
   payments             ClientPayment[]
   changeRequests       BudgetChangeRequest[]
+  paymentProofs        BudgetPaymentProof[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -537,6 +539,7 @@ model ClientPayment {
   client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   budget          Budget?             @relation(fields: [budgetId], references: [id], onDelete: SetNull)
   reminders       PaymentReminderLog[]
+  proofs          BudgetPaymentProof[]
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
@@ -577,6 +580,34 @@ model PaymentReminderLog {
   @@unique([paymentId, channel, dayKey])
   @@index([organizationId, sentAt])
   @@index([organizationId, dayKey])
+}
+
+/**
+ * Comprobante de pago subido por el cliente desde el portal (issue #17).
+ *
+ * El binario vive en `data` (bytea): nunca es público — se sirve únicamente con
+ * sesión del panel (`/api/admin/budgets/proofs/[id]`) — y `mime`/`size` guardan
+ * el tipo real detectado por magic bytes y el tamaño ya comprimido. El
+ * comprobante se cuelga del presupuesto y, cuando hay un único cobro a plazo
+ * pendiente, también de ese cobro (`paymentId`); sin cobro queda a nivel del
+ * presupuesto para que el equipo lo resuelva al marcar cobrado.
+ */
+model BudgetPaymentProof {
+  id             String         @id
+  organizationId String
+  budgetId       String
+  paymentId      String?
+  uploadedByName String
+  mime           String
+  size           Int
+  data           Bytes
+  createdAt      DateTime       @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  budget         Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  payment        ClientPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, budgetId, createdAt])
+  @@index([paymentId])
 }
 
 model Supplier {

@@ -98,13 +98,22 @@ function AuditoriaView() {
   const currentPageSize = audit.data?.pageSize ?? 25;
   const pageCount = Math.max(1, Math.ceil(total / currentPageSize));
 
-  const actorOptions = useMemo(
-    () => [
+  // Los actores del portal comparten id ("portal"): se agrupan en una sola
+  // opción para no repetir claves; el detalle por cliente se busca con el texto.
+  const actorOptions = useMemo(() => {
+    const unique = new Map<string, string>();
+    for (const actor of actors) {
+      if (actor.id === "portal") {
+        unique.set("portal", "Clientes (portal)");
+        continue;
+      }
+      if (!unique.has(actor.id)) unique.set(actor.id, `${actor.name} · ${actor.email}`);
+    }
+    return [
       { value: "ALL", label: "Todos los actores" },
-      ...actors.map((actor) => ({ value: actor.id, label: `${actor.name} · ${actor.email}` })),
-    ],
-    [actors],
-  );
+      ...Array.from(unique, ([value, label]) => ({ value, label })),
+    ];
+  }, [actors]);
 
   const filtersActive = entityFilter !== "ALL" || actorFilter !== "ALL" || Boolean(from) || Boolean(to) || Boolean(debouncedQuery);
   const newest = logs[0]?.createdAt;

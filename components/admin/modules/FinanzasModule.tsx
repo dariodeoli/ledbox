@@ -27,8 +27,10 @@ import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   collectedAmount,
+  groupProofsByBudget,
   isCollectedPayment,
   supplierJobBalance,
+  type AdminBudgetPaymentProofRow,
   type AdminPaymentReminder,
   type AdminPaymentRow,
   type AdminReminderRun,
@@ -52,7 +54,8 @@ import {
   AdminToolbar,
 } from "../AdminUI";
 import { DateField, MoneyField, SearchField, SelectField, TextField } from "../AdminFields";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { BudgetProofDialog } from "./PresupuestosModule";
 
 /** Métodos de pago del alta directa (catálogo cerrado, espejo del API). */
 const METHOD_OPTIONS = ["Transferencia", "Efectivo", "Cheque", "Tarjeta", "Otro"];
@@ -334,6 +337,11 @@ export function FinanzasModule() {
   const [remindersFor, setRemindersFor] = useState("");
   const [runningReminders, setRunningReminders] = useState(false);
 
+  // Comprobantes del portal (issue #17): metadatos por presupuesto y visor del
+  // cobro pendiente, con "Marcar cobrado" a un clic.
+  const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
+  const [proofDialog, setProofDialog] = useState<AdminPaymentRow | null>(null);
+
   const writable = canWriteFinance(role);
   const canRunReminders = role === "OWNER" || role === "ADMIN";
   const payments = useMemo(() => finance.data?.payments ?? [], [finance.data]);
@@ -405,6 +413,36 @@ export function FinanzasModule() {
     const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
     return { collected, collectedCount, pendingTotal, pendingCount: pending.length, overdue, advances, payable };
   }, [payments, jobs]);
+
+  // Comprobantes del portal (issue #17): una sola consulta de metadatos por
+  // carga de finanzas; el visor filtra por el presupuesto del cobro.
+  const proofSignature = useMemo(
+    () =>
+      [
+        ...new Set(
+          payments
+            .map((payment) => payment.budget?.id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ].join(","),
+    [payments],
+  );
+  useEffect(() => {
+    if (!proofSignature) {
+      setProofsByBudget({});
+      return;
+    }
+    let active = true;
+    void adminApiGet<{ proofs?: AdminBudgetPaymentProofRow[] }>("/api/admin/budgets/proofs", {
+      fallbackError: "No pudimos cargar los comprobantes.",
+    }).then((result) => {
+      if (!active || !result.ok) return;
+      setProofsByBudget(groupProofsByBudget(result.data.proofs ?? []));
+    });
+    return () => {
+      active = false;
+    };
+  }, [proofSignature]);
 
   const pendingMeta = totals.pendingCount
     ? `${formatNumber(totals.pendingCount)} a plazo${totals.overdue > 0 ? ` · ${formatNumber(totals.overdue)} vencidos` : ""}`
@@ -618,6 +656,12 @@ export function FinanzasModule() {
       });
     }
     finance.reload();
+  }
+
+  /** "Marcar cobrado" desde el visor del comprobante: cierra el cobro y el diálogo. */
+  async function collectFromProofDialog(payment: AdminPaymentRow) {
+    await closeCollection(payment, "collect");
+    setProofDialog(null);
   }
 
   return (
@@ -842,6 +886,7 @@ export function FinanzasModule() {
               { label: "Método" },
               { label: "Recordatorio" },
               { label: "Monto", end: true },
+              { label: "Comprobante", end: true },
               { label: "Acciones", end: true },
             ]}
           >
@@ -851,6 +896,10 @@ export function FinanzasModule() {
               const whatsappToday = reminderToday(payment, "whatsapp");
               const whatsappLink = paymentWhatsappHref(payment);
               const emailDoneToday = emailToday?.status === "sent";
+              const budgetProofs = payment.budget ? proofsByBudget[payment.budget.id] ?? [] : [];
+              const proofTitle = budgetProofs.length === 1
+                ? `Ver el comprobante recibido de ${label}`
+                : `Ver los ${formatNumber(budgetProofs.length)} comprobantes recibidos de ${label}`;
               return (
                 <AdminRow key={payment.id}>
                   <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
@@ -898,6 +947,18 @@ export function FinanzasModule() {
                   </AdminCell>
                   <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
                     <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell end>
+                    {budgetProofs.length > 0 ? (
+                      <AdminButton
+                        icon="eye"
+                        title={proofTitle}
+                        aria-label={proofTitle}
+                        onClick={() => setProofDialog(payment)}
+                      />
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
                   </AdminCell>
                   <AdminCell end>
                     <span className="admin-actions">
@@ -1128,6 +1189,21 @@ export function FinanzasModule() {
           onEmail={(payment) => void remindByEmail(payment)}
           onWhatsapp={remindByWhatsapp}
           onClose={() => setRemindersFor("")}
+        />
+      ) : null}
+
+      {proofDialog ? (
+        <BudgetProofDialog
+          title={`Comprobante · ${proofDialog.client.company || proofDialog.client.name}`}
+          subtitle={[
+            proofDialog.budget?.title ?? "Sin presupuesto asociado",
+            formatMoney(proofDialog.amount),
+            "recibido desde el portal; al marcar cobrado el cobro queda cerrado con su auditoría",
+          ].join(" · ")}
+          proofs={proofDialog.budget ? proofsByBudget[proofDialog.budget.id] ?? [] : []}
+          onClose={() => setProofDialog(null)}
+          onCollect={writable ? () => void collectFromProofDialog(proofDialog) : undefined}
+          collectBusy={busyId === `collect:${proofDialog.id}`}
         />
       ) : null}
     </div>

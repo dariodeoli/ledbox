@@ -10,20 +10,33 @@ import {
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
   budgetStatusLabel,
+  formatBytes,
   formatDate,
   formatDateTime,
   formatMoney,
   formatNumber,
+  paymentProofMimeLabel,
   statusTone,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
-import type { PortalBudget, PortalBudgetRequest } from "@/lib/server/budget-portal";
+import {
+  detectPaymentProofMime,
+  PAYMENT_PROOF_MAX_BYTES,
+  PAYMENT_PROOF_MIMES,
+  paymentProofExtension,
+} from "@/lib/admin-types";
+import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest } from "@/lib/server/budget-portal";
 
 /**
  * Vista pública del presupuesto (issue #12) con autogestión del cliente
  * (issue #14): el cliente ajusta cantidades y días con el precio unitario fijo
  * y ve el total en vivo, pide una rebaja, sigue el estado de sus solicitudes y,
  * una vez aprobado, ve el monto a transferir con los datos de pago de la empresa.
+ *
+ * Suma el comprobante de pago (issue #17): el cliente sube la foto o el PDF de
+ * la transferencia —las fotos se comprimen acá, en el navegador— y sigue el
+ * estado real de cada comprobante. El archivo no se sirve en el portal: lo ve
+ * el equipo desde el panel con sesión.
  *
  * Nada se aplica solo: las propuestas quedan pendientes y el equipo las acepta
  * o rechaza desde el panel. La aprobación sigue siendo única y con evidencia.
@@ -34,6 +47,23 @@ type DraftItem = { quantity: number; days: number };
 const MAX_QUANTITY = 999;
 const MAX_DAYS = 365;
 const MAX_NOTE = 600;
+/** Lado máximo de la foto comprimida y calidad del WebP/JPEG resultante. */
+const PROOF_MAX_SIDE = 1600;
+const PROOF_QUALITY = 0.82;
+
+/** Estado del comprobante en el portal, con su tono de cápsula. */
+const PROOF_STATUS: Record<PortalBudgetProof["status"], { label: string; tone: string }> = {
+  received: { label: "Recibido", tone: "info" },
+  collected: { label: "Cobrado", tone: "ok" },
+  cancelled: { label: "Cobro anulado", tone: "danger" },
+};
+
+/** Nota del listado: explica el circuito o por qué el formulario no está disponible. */
+function proofUploadHint(budget: PortalBudget): string | null {
+  return budget.proofUpload.allowed
+    ? "El equipo de LedBox revisa cada comprobante y marca el cobro; el estado de arriba es el real."
+    : budget.proofUpload.reason;
+}
 
 function clampInt(value: string, max: number): number {
   const digits = value.replace(/\D/g, "");
@@ -65,6 +95,86 @@ function requestSummary(request: PortalBudgetRequest): string | null {
   }
   // El pedido de cambios libre ya se lee en el motivo: no se repite como resumen.
   return null;
+}
+
+// ── Comprobante de pago (issue #17) ─────────────────────────────────────────
+// La foto se comprime en el navegador (canvas, sin librerías): lado máximo
+// 1600 px y salida WebP con caída a JPEG. El PDF viaja tal cual. El tipo real
+// se valida por magic bytes antes de subir (y el API lo revalida siempre).
+
+type LoadedImage = { image: CanvasImageSource; width: number; height: number; release: () => void };
+
+async function loadImageSource(file: Blob): Promise<LoadedImage | null> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      // `from-image` respeta la orientación EXIF de las fotos de celular.
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { image: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
+    } catch {
+      // Safari viejo o formato raro: se reintenta con `<img>`.
+    }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("No pudimos leer la imagen."));
+      element.src = url;
+    });
+    return {
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      release: () => URL.revokeObjectURL(url),
+    };
+  } catch {
+    URL.revokeObjectURL(url);
+    return null;
+  }
+}
+
+/** Comprime una foto a WebP (o lo que soporte el navegador); `null` si no se pudo. */
+async function compressProofImage(file: File): Promise<Blob | null> {
+  const loaded = await loadImageSource(file);
+  if (!loaded || loaded.width < 1 || loaded.height < 1) {
+    loaded?.release();
+    return null;
+  }
+  try {
+    const scale = Math.min(1, PROOF_MAX_SIDE / Math.max(loaded.width, loaded.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(loaded.width * scale));
+    canvas.height = Math.max(1, Math.round(loaded.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(loaded.image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", PROOF_QUALITY));
+    return blob && blob.size > 0 ? blob : null;
+  } finally {
+    loaded.release();
+  }
+}
+
+/** Prepara el archivo del comprobante: valida la firma real y comprime las fotos. */
+async function prepareProofFile(file: File): Promise<{ blob: Blob; mime: string } | { error: string }> {
+  const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const detected = detectPaymentProofMime(header);
+  if (!detected) {
+    return { error: "El archivo no es un JPG, PNG, WebP o PDF: revisá que no esté renombrado." };
+  }
+  if (detected === "application/pdf") {
+    if (file.size > PAYMENT_PROOF_MAX_BYTES) {
+      return { error: "El PDF supera los 2 MB; subí una versión más liviana." };
+    }
+    return { blob: file, mime: detected };
+  }
+  const compressed = await compressProofImage(file);
+  const blob = compressed && compressed.size < file.size ? compressed : file;
+  if (blob.size > PAYMENT_PROOF_MAX_BYTES) {
+    return { error: "La imagen sigue superando los 2 MB después de comprimirla; probá con otra foto." };
+  }
+  return { blob, mime: detected };
 }
 
 function Stepper({
@@ -146,9 +256,18 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
   const [discountSent, setDiscountSent] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Comprobante de pago (issue #17).
+  const [proofName, setProofName] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState("");
+  const [proofBusy, setProofBusy] = useState(false);
+  const [proofSent, setProofSent] = useState(false);
+
   const approvedRef = useRef<HTMLElement | null>(null);
   const revisionRef = useRef<HTMLElement | null>(null);
   const proposalRef = useRef<HTMLElement | null>(null);
+  const proofRef = useRef<HTMLElement | null>(null);
+  const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   const approved = Boolean(budget.approval.approvedAt) || Boolean(justApproved);
   const revisionPending = !approved && (Boolean(budget.approval.revisionRequestedAt) || Boolean(justRequested));
@@ -164,6 +283,9 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
   useEffect(() => {
     if (itemsSent) proposalRef.current?.focus();
   }, [itemsSent]);
+  useEffect(() => {
+    if (proofSent) proofRef.current?.focus();
+  }, [proofSent]);
 
   // El borrador sigue los ítems reales: cuando el equipo aplica la propuesta,
   // el portal se refresca y los valores de partida son los nuevos.
@@ -368,6 +490,53 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
     }
   }
 
+  /** Sube el comprobante (foto comprimida o PDF) y refresca la vista del presupuesto. */
+  async function submitProof(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (proofName.trim().length < 3) {
+      setProofError("Ingresá tu nombre y apellido.");
+      return;
+    }
+    if (!proofFile) {
+      setProofError("Adjuntá el comprobante de la transferencia.");
+      return;
+    }
+    setProofBusy(true);
+    setProofError("");
+    try {
+      const prepared = await prepareProofFile(proofFile);
+      if ("error" in prepared) {
+        setProofError(prepared.error);
+        return;
+      }
+      const form = new FormData();
+      form.append("name", proofName.trim());
+      form.append(
+        "file",
+        new File([prepared.blob], `comprobante.${paymentProofExtension(prepared.mime)}`, {
+          type: prepared.blob.type || prepared.mime,
+        }),
+      );
+      const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/proof`, {
+        method: "POST",
+        body: form,
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setProofError(payload?.error || "No pudimos subir el comprobante. Probá de nuevo.");
+        return;
+      }
+      setProofSent(true);
+      setProofFile(null);
+      if (proofInputRef.current) proofInputRef.current.value = "";
+      router.refresh();
+    } catch {
+      setProofError("No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
+    } finally {
+      setProofBusy(false);
+    }
+  }
+
   return (
     <article className="portal-budget">
       <header className="portal-budget-head">
@@ -539,6 +708,99 @@ export function PortalBudgetView({ budget, token }: { budget: PortalBudget; toke
               {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {budget.proofUpload.allowed ? (
+        <section
+          className="portal-card portal-card--action"
+          aria-labelledby="portal-proof"
+          ref={proofRef}
+          tabIndex={-1}
+        >
+          <h2 className="portal-card-title" id="portal-proof">
+            Enviar comprobante
+          </h2>
+          <p className="portal-card-lead">
+            Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Las fotos se comprimen
+            en tu navegador antes de subirse y el equipo de LedBox las revisa desde el panel.
+          </p>
+          <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
+            <div className="portal-form-row">
+              <label className="portal-field" htmlFor="portal-proof-name">
+                <span className="portal-field-label">Nombre y apellido</span>
+                <input
+                  id="portal-proof-name"
+                  name="proof-name"
+                  value={proofName}
+                  onChange={(event) => {
+                    setProofName(event.target.value);
+                    setProofSent(false);
+                  }}
+                  maxLength={120}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label className="portal-field" htmlFor="portal-proof-file">
+                <span className="portal-field-label">Comprobante</span>
+                <input
+                  ref={proofInputRef}
+                  id="portal-proof-file"
+                  name="proof-file"
+                  type="file"
+                  accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
+                  onChange={(event) => {
+                    setProofFile(event.target.files?.[0] ?? null);
+                    setProofError("");
+                    setProofSent(false);
+                  }}
+                  aria-describedby="portal-proof-hint"
+                  required
+                />
+              </label>
+            </div>
+            <p className="portal-help" id="portal-proof-hint">
+              El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
+            </p>
+            {proofError ? (
+              <p className="portal-error" role="alert">
+                {proofError}
+              </p>
+            ) : null}
+            {proofSent ? (
+              <p className="portal-ok" role="status">
+                Recibimos tu comprobante. El equipo lo revisa y marca el cobro; vas a ver el estado acá abajo.
+              </p>
+            ) : null}
+            <button className="portal-btn portal-btn--primary" type="submit" disabled={proofBusy} aria-busy={proofBusy || undefined}>
+              {proofBusy ? "Subiendo comprobante…" : "Enviar comprobante"}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {budget.proofs.length > 0 ? (
+        <section className="portal-card" aria-labelledby="portal-proofs">
+          <h2 className="portal-card-title" id="portal-proofs">
+            Tus comprobantes
+          </h2>
+          <ul className="portal-proofs">
+            {budget.proofs.map((proof) => (
+              <li key={proof.id} className="portal-proof">
+                <span className="portal-chip" data-tone={PROOF_STATUS[proof.status].tone}>
+                  {PROOF_STATUS[proof.status].label}
+                </span>
+                <span className="portal-proof-main">
+                  <strong className="portal-proof-when">{formatDateTime(proof.createdAt)}</strong>
+                  <span className="portal-proof-meta">
+                    {paymentProofMimeLabel(proof.mime)} · {formatBytes(proof.size)} · {proof.uploadedByName}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {proofUploadHint(budget) ? <p className="portal-help">{proofUploadHint(budget)}</p> : null}
         </section>
       ) : null}
 

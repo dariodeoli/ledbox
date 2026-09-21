@@ -52,6 +52,27 @@ export function formatTime(value: string | Date | null | undefined): string {
   return date ? timeFormat.format(date) : "—";
 }
 
+const FILE_SIZE_FORMAT = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 });
+
+/** Tamaño de un archivo legible: bytes, kB y MB (1,2 MB). */
+export function formatBytes(value: number | null | undefined): string {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (bytes < 1024) return `${numberFormat.format(Math.round(bytes))} B`;
+  if (bytes < 1024 * 1024) return `${numberFormat.format(Math.round(bytes / 1024))} kB`;
+  return `${FILE_SIZE_FORMAT.format(bytes / (1024 * 1024))} MB`;
+}
+
+const PAYMENT_PROOF_MIME: Record<string, string> = {
+  "image/jpeg": "Imagen JPG",
+  "image/png": "Imagen PNG",
+  "image/webp": "Imagen WebP",
+  "application/pdf": "PDF",
+};
+
+/** Tipo de archivo del comprobante; un MIME desconocido se muestra tal cual. */
+export const paymentProofMimeLabel = (value: string | null | undefined) => label(PAYMENT_PROOF_MIME, value);
+
 /** Referencia corta y estable del presupuesto para documentos y links (deriva del id real). */
 export function budgetReference(id: string | null | undefined): string {
   return String(id ?? "")
@@ -545,6 +566,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   collection_due: "Cobro a plazo",
   lead: "Lead",
   portal_request: "Solicitud del portal",
+  payment_proof: "Comprobante de pago",
 };
 
 export const notificationLevelLabel = (value: string | null | undefined) => label(NOTIFICATION_LEVEL, value);
@@ -611,6 +633,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   Client: "Cliente",
   Event: "Evento",
   Budget: "Presupuesto",
+  BudgetPaymentProof: "Comprobante de pago",
   ClientPayment: "Cobro",
   Supplier: "Proveedor",
   SupplierJob: "Trabajo de proveedor",
@@ -668,6 +691,9 @@ const AUDIT_FIELD: Record<string, string> = {
   invoiceNumber: "Nº de factura",
   invoiceIssuedAt: "Emisión de factura",
   chequeDate: "Fecha del cheque",
+  mime: "Tipo de archivo",
+  size: "Tamaño",
+  paymentId: "Cobro",
   category: "Categoría",
   kind: "Tipo de ítem",
   quantity: "Cantidad",
@@ -746,6 +772,8 @@ export function auditValueLabel(entity: string | null | undefined, field: string
   if (key === "kind") return inventoryKindLabel(text);
   if (key === "category") return supplierCategoryLabel(text);
   if (key === "items" || key === "itemCount" || key === "installments") return numberFormat.format(Number(text) || 0);
+  if (key === "size") return formatBytes(Number(text));
+  if (key === "mime") return paymentProofMimeLabel(text);
   if (AUDIT_MONEY_FIELDS.has(key)) {
     const amount = Number(text);
     return Number.isFinite(amount) ? formatMoney(amount) : text;

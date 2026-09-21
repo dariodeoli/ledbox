@@ -820,11 +820,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--eventos { --eventos-cols: 8rem minmax(11rem, 1.6fr) minmax(9rem, 1.1fr) minmax(8rem, 1fr) 5.5rem 6rem 7rem 8rem; --admin-cols: var(--eventos-cols); --admin-table-min: 67rem; }
 .admin-table--presupuestos { --presupuestos-cols: minmax(11rem, 1.5fr) minmax(9rem, 1.1fr) 4rem 7rem 7rem 7rem 7rem 7.5rem minmax(9rem, 1.1fr) 6rem 15rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 93rem; }
 .admin-table--cobros { --cobros-cols: 8rem minmax(9rem, 1.2fr) minmax(9rem, 1.1fr) 8rem 8rem 7rem minmax(7rem, 1fr) 7rem; --admin-cols: var(--cobros-cols); --admin-table-min: 69rem; }
-/* Cobros a plazo (issue #16/#19): identidad, factura con su emisión, vencimiento
-   con la cuenta regresiva inline, método con el cheque, recordatorio del día y
-   acciones de recordatorio + cierre. Fila compacta: entra sin scroll horizontal
-   en desktop y en mobile la tabla se desplaza sola. */
-.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(12rem, 1.6fr) minmax(9.5rem, 1.1fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8rem 7.5rem 12rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 70rem; }
+/* Cobros a plazo (issues #16, #17 y #19): identidad, factura con su emisión,
+   vencimiento con la cuenta regresiva, método con el cheque, recordatorio del
+   día, monto, comprobante del portal y acciones. Fila compacta: entra sin
+   scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
+.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(12rem, 1.6fr) minmax(9.5rem, 1.1fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8rem 7.5rem 6.5rem 12rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 74rem; }
 .admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 70rem; }
 .admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 9.5rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 66.5rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(9rem, 1.4fr) 12.5rem 5rem 8rem 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
@@ -890,6 +890,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-dialog-counter { display: inline-flex; align-items: center; gap: 4px; }
 .admin-dialog-counter input { width: 3.4rem; min-height: 30px; padding: 4px 6px; border: 1px solid var(--a-line-2); border-radius: 7px; background: var(--a-bg-2); color: var(--a-text); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
 .admin-dialog-counter input:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+
+/* ── Comprobantes de pago (issue #17) ──
+   Visor del panel: cada comprobante se sirve con sesión desde
+   `/api/admin/budgets/proofs/[id]`; la imagen se ve en el marco y el PDF embebido. */
+.admin-proof-list { display: grid; gap: 10px; }
+.admin-proof { display: grid; gap: 10px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-proof-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-proof-meta { color: var(--a-muted-2); font-size: 11.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.admin-proof-frame { display: grid; place-items: center; min-height: 7rem; max-height: 38vh; overflow: auto; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); }
+.admin-proof-image { display: block; max-width: 100%; max-height: 36vh; }
+.admin-proof-pdf { width: 100%; height: 38vh; border: 0; border-radius: var(--a-radius); background: #fff; }
 
 /* ── Auditoría: filtros, detalle desplegable y paginación ──
    La fecha del filtro es un campo propio (etiqueta arriba, input compacto) y el
@@ -1418,6 +1429,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .portal-request-summary { color: var(--muted-2); font-size: 12.5px; line-height: 1.5; }
 .portal-request-note { color: var(--muted-2); font-size: 12.5px; }
 .portal-request-response { padding: 8px 10px; border-radius: 8px; background: var(--surface); color: var(--muted-2); font-size: 12.5px; line-height: 1.5; }
+/* Comprobantes de pago (issue #17): el archivo se elige acá, se comprime en el
+   navegador y se sube por token; el listado muestra el estado real del cobro. */
+.portal-field input[type="file"] { padding: 9px 10px; font-size: 13px; cursor: pointer; }
+.portal-field input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px; border: 1px solid var(--border-2); border-radius: 7px; background: var(--surface-2); color: var(--text); font: 700 10px var(--font-body); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.portal-field input[type="file"]::file-selector-button:hover { border-color: var(--led); color: var(--led); }
+.portal-proofs { display: grid; gap: 8px; list-style: none; }
+.portal-proof { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.portal-proof-main { display: grid; gap: 2px; min-width: 0; }
+.portal-proof-when { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.portal-proof-meta { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .portal-field input[type="file"]::file-selector-button { padding: 7px 9px; letter-spacing: .06em; }
+}
 
 @media (max-width: 480px) {
   .portal-top-label { display: none; }
