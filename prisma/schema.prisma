@@ -67,6 +67,7 @@ model Organization {
   treasuryAccounts  TreasuryAccount[]
   treasuryMovements TreasuryMovement[]
   expenses          Expense[]
+  idempotencyKeys   IdempotencyKey[]
 
   @@index([active, createdAt])
 }
@@ -597,6 +598,13 @@ model ClientPayment {
   notes             String?
   createdAt         DateTime             @default(now())
   /**
+   * Snapshot inmutable del cobro al confirmarlo (issue #20): fecha real,
+   * monto, método, referencia y los nombres del cliente, presupuesto y cuenta
+   * tal como estaban al momento. Si después se renombra el cliente o la cuenta,
+   * o se edita el presupuesto, la historia del cobro no cambia.
+   */
+  collectedSnapshot Json?
+  /**
    * Cuenta de tesorería donde entra el cobro (issue #27).
    */
   treasuryAccountId String?
@@ -820,6 +828,15 @@ model TreasuryMovement {
    * Id del hecho que lo generó (cobro, trabajo de proveedor o gasto).
    */
   sourceId         String?
+  /**
+   * Snapshot inmutable del hecho que originó el movimiento (issue #20): la
+   * etiqueta y los datos que importaban al registrarlo (`{ kind, label, amount,
+   * ref }`). La lista de tesorería lee esto y no la fuente viva, así un cambio
+   * posterior (cliente renombrado, trabajo editado, gasto borrado) no reescribe
+   * la historia. Los movimientos anteriores a la migración caen a la lectura
+   * viva de la fuente.
+   */
+  sourceSnapshot   Json?
   notes            String?
   createdById      String?
   createdByName    String
@@ -977,4 +994,33 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([entity, entityId])
   @@index([organizationId, actorId])
+}
+
+/// Clave de idempotencia de una operación financiera (issue #20).
+///
+/// La escribe la capa única `lib/server/idempotency.ts` dentro de **la misma
+/// transacción** que la operación: las escrituras y el resultado (`status` +
+/// `response`) se confirman juntos con la fila. Repetir la misma clave dentro de
+/// la empresa devuelve la respuesta original sin tocar los datos, y la misma
+/// clave con otro cuerpo responde 409. `requestHash` es el hash del cuerpo
+/// normalizado y `expiresAt` el vencimiento que limpia
+/// `purgeExpiredIdempotencyKeys`.
+model IdempotencyKey {
+  id             String       @id
+  organizationId String
+  /// Operación agrupada: `recurso:método:variante` (por ejemplo `finance:POST:client`).
+  scope          String
+  /// Clave del cliente (`Idempotency-Key` o `idempotencyKey` del body).
+  key            String
+  requestHash    String
+  /// HTTP status de la respuesta original, guardado junto al resultado.
+  status         Int          @default(0)
+  response       Json?
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, scope, key])
+  @@index([expiresAt])
+  @@index([organizationId, createdAt])
 }
