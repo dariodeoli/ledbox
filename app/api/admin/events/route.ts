@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   if (typeof body.clientId !== "string" || typeof body.name !== "string") return jsonError("Client and event name are required.", 400);
   const client = await db.client.findFirst({
     where: { id: body.clientId, organizationId: auth.context.organizationId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!client) return jsonError("Client not found.", 404);
   const event = await db.event.create({
@@ -48,6 +49,14 @@ export async function POST(request: Request) {
         ],
       },
     },
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "Event",
+    entityId: event.id,
+    summary: `Creó el evento «${event.name}» del cliente «${client.name}»`,
+    detail: { fields: auditPick(event, ["name", "location", "startsAt", "endsAt", "setupAt", "status"]) },
   });
   return Response.json({ event }, { status: 201 });
 }

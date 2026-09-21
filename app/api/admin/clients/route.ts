@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,14 @@ export async function POST(request: Request) {
       phone: typeof body.phone === "string" ? body.phone.trim() : undefined,
       ruc: typeof body.ruc === "string" ? body.ruc.trim() : undefined,
     },
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "Client",
+    entityId: client.id,
+    summary: `Creó el cliente «${client.name}»`,
+    detail: { fields: auditPick(client, ["name", "company", "type", "email", "phone", "ruc"]) },
   });
   return Response.json({ client }, { status: 201 });
 }

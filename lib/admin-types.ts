@@ -366,6 +366,58 @@ export type AdminUserRow = {
   createdAt: string;
 };
 
+/**
+ * Entidades auditables: fuente única del nombre que se guarda en `AuditLog.entity`
+ * y del filtro de `/api/admin/audit`. Solo se registran mutaciones (nunca lecturas).
+ */
+export const AUDIT_ENTITIES = [
+  "Client",
+  "Event",
+  "Budget",
+  "ClientPayment",
+  "Supplier",
+  "SupplierJob",
+  "InventoryItem",
+  "EventInventory",
+  "EventTask",
+  "Promoter",
+  "AdminUser",
+  "Lead",
+] as const;
+
+export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
+
+/** Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución y conversión. */
+export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert"] as const;
+
+export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
+
+/** Valor anterior y nuevo de un campo que cambió. */
+export type AdminAuditChange = { from: unknown; to: unknown };
+
+/** Detalle acotado: `changes` (antes/después), `fields` (alta) o `before` (baja). */
+export type AdminAuditDetail = {
+  changes?: Record<string, AdminAuditChange>;
+  fields?: Record<string, unknown>;
+  before?: Record<string, unknown>;
+};
+
+export type AdminAuditRow = {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorEmail: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  summary: string;
+  detail: AdminAuditDetail | null;
+  createdAt: string;
+};
+
+/** Actor con actividad registrada en la empresa (para el filtro del historial). */
+export type AdminAuditActor = { id: string; name: string; email: string };
+
 export type AdminOverview = {
   counts: {
     clients: number;
@@ -451,6 +503,11 @@ export type AdminApiResponse = {
   availability?: AdminInventoryAvailability;
   promoters?: AdminPromoterRow[];
   users?: AdminUserRow[];
+  auditLogs?: AdminAuditRow[];
+  auditActors?: AdminAuditActor[];
+  auditTotal?: number;
+  auditPage?: number;
+  auditPageSize?: number;
   counts?: AdminOverview["counts"];
   finance?: AdminOverview["finance"];
   upcoming?: AdminOverview["upcoming"];

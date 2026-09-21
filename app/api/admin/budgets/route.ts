@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
+import { auditPick, recordAudit } from "@/lib/server/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,6 +64,19 @@ export async function POST(request: Request) {
       items: { create: items },
     },
     include: { client: true, event: true, items: true },
+  });
+  await recordAudit({
+    context: auth.context,
+    action: "create",
+    entity: "Budget",
+    entityId: budget.id,
+    summary: `Creó el presupuesto «${budget.title}» del cliente «${budget.client.name}»`,
+    detail: {
+      fields: {
+        ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "validUntil", "eventId"]),
+        items: budget.items.length,
+      },
+    },
   });
   return Response.json({ budget }, { status: 201 });
 }
