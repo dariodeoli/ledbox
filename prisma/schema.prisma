@@ -443,9 +443,15 @@ model BudgetItem {
   costPrice Int     @default(0)
   subtotal  Int
   notes     String?
+  /// Vínculo opcional con el inventario (issue #18): al aprobar el presupuesto,
+  /// los ítems vinculados reservan stock del evento con el rango del evento.
+  /// Sin vínculo el ítem no reserva nada.
+  inventoryId String?
   budget    Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  inventory InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
 
   @@index([budgetId])
+  @@index([inventoryId])
 }
 
 /// Solicitud del cliente desde el portal (issue #14): propuesta de ítems,
@@ -574,6 +580,7 @@ model InventoryItem {
   updatedAt       DateTime         @updatedAt
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments     EventInventory[]
+  budgetItems     BudgetItem[]
 
   @@unique([organizationId, sku])
   @@index([status, category])

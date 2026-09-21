@@ -4,6 +4,7 @@ import { approvalEvidence, loadPublicBudget, portalBudgetOpen } from "@/lib/serv
 import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
+import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,11 @@ const MAX_NOTE = 600;
  * Es idempotente: una sola aprobación por presupuesto. Si ya estaba aprobado
  * (por el portal o por el panel) el reintento devuelve la aprobación original
  * sin pisarla.
+ *
+ * Con la primera aprobación se reserva el stock de los ítems vinculados al
+ * inventario usando el rango del evento (issue #18). El conflicto de
+ * disponibilidad no bloquea la aprobación: queda auditado con el actor real y
+ * el equipo lo ve en los avisos del panel (nunca en la respuesta pública).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const limited = await rateLimit(`portal:approve:${getClientIp(request)}`, 20);
@@ -76,6 +82,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       entityId: budget.id,
       summary: `El cliente «${name}» aprobó el presupuesto «${budget.title}» desde el portal`,
       detail: { fields: { approvalMethod: "digital" } },
+    });
+    // Reserva automática del stock comprometido (issue #18). No bloquea la
+    // aprobación: los conflictos se auditan y salen en los avisos del panel.
+    await reserveBudgetInventory({
+      organizationId: budget.organizationId,
+      budgetId: budget.id,
+      context: portalAuditContext(budget.organizationId, name, budget.client?.email),
     });
   }
   return Response.json({ budget: payload, alreadyApproved: updated.count === 0 });

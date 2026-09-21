@@ -2,6 +2,7 @@ import { db } from "@/lib/server/db";
 import { recordAudit } from "@/lib/server/audit";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,11 @@ const MAX_NOTE = 1000;
  * cambios del equipo (OWNER/ADMIN/FINANCE) sobre un presupuesto de la empresa
  * activa. La aprobación manual queda con actor y fecha y no pisa una ya
  * registrada (ni digital ni manual).
+ *
+ * Al aprobar se reserva el stock de los ítems vinculados al inventario con el
+ * rango del evento (issue #18). Un conflicto de disponibilidad no bloquea la
+ * aprobación: queda auditado y la respuesta trae `reservations` para que el
+ * panel muestre qué se reservó y qué quedó pendiente.
  */
 export async function POST(request: Request) {
   const auth = await requireAdminContext("budgets.write");
@@ -48,6 +54,7 @@ export async function POST(request: Request) {
   });
   if (!budget) return jsonError("Budget not found.", 404);
   const clientLabel = budget.client.company?.trim() || budget.client.name;
+  let reservations: BudgetReservation | null = null;
 
   if (decision === "approve") {
     // Idempotente: si ya hay una aprobación registrada, se devuelve tal cual.
@@ -70,6 +77,7 @@ export async function POST(request: Request) {
         summary: `Aprobó manualmente el presupuesto «${budget.title}» del cliente «${clientLabel}»`,
         detail: { changes: { status: { from: budget.status, to: "APPROVED" }, approvalMethod: { from: null, to: "manual" } } },
       });
+      reservations = await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context });
     }
   } else {
     if (budget.approvedAt) return jsonError("El presupuesto ya está aprobado.", 409);
@@ -92,5 +100,5 @@ export async function POST(request: Request) {
   }
 
   const updated = await db.budget.findUnique({ where: { id: budget.id }, select });
-  return Response.json({ budget: updated });
+  return Response.json({ budget: updated, reservations });
 }
