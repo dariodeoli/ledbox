@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { formatDate, formatDateShort, isDueSoon, statusTone, taskTypeLabel } from "@/lib/admin-format";
+import { formatDate, formatDateShort, formatSince, isDueSoon, statusTone, taskTypeLabel } from "@/lib/admin-format";
 import type { AdminEventTask } from "@/lib/admin-types";
 import { AdminIcon } from "../AdminIcons";
 import { AdminBadge, AdminCell, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
-import { adminSend } from "@/lib/admin-api";
+import { useOfflineQueue } from "../AdminOffline";
+import { queuedActionForTask } from "@/lib/offline-queue";
 
 export type ChecklistEntry = { task: AdminEventTask; eventName: string };
 
@@ -40,7 +41,7 @@ export function ChecklistTable({
       {entries.map(({ task, eventName }) => (
         <AdminRow key={task.id}>
           <AdminCell>
-            <ChecklistToggle task={task} canToggle={canToggle} onChanged={onChanged} onError={onError} />
+            <ChecklistToggle task={task} eventName={eventName} canToggle={canToggle} onChanged={onChanged} onError={onError} />
           </AdminCell>
           <AdminCell title={task.title}>
             <strong>{task.title}</strong>
@@ -60,40 +61,64 @@ export function ChecklistTable({
   );
 }
 
+/**
+ * Marca una tarea en el servidor; sin conexión la deja en la cola local
+ * (issue #23) y el estado visible pasa a "Sin subir" hasta la confirmación real.
+ */
 function ChecklistToggle({
   task,
+  eventName,
   canToggle,
   onChanged,
   onError,
 }: {
   task: AdminEventTask;
+  eventName: string;
   canToggle: boolean;
   onChanged: () => void;
   onError: (message: string) => void;
 }) {
+  const { actions, fieldAction } = useOfflineQueue();
   const [busy, setBusy] = useState(false);
-  const done = Boolean(task.completedAt);
+  const queued = queuedActionForTask(actions, task.id);
+  const done = queued ? queued.body.completed === true : Boolean(task.completedAt);
 
   if (!canToggle) {
     return <AdminBadge tone={done ? "ok" : "neutral"}>{done ? "Listo" : "Pendiente"}</AdminBadge>;
   }
 
   async function toggle() {
+    if (busy) return;
+    const next = !done;
     setBusy(true);
-    const result = await adminSend("/api/admin/event-ops", { kind: "toggle", id: task.id, completed: !done });
+    const result = await fieldAction({
+      kind: "event-task-toggle",
+      path: "/api/admin/event-ops",
+      body: { kind: "toggle", id: task.id, completed: next },
+      summary: `${next ? "Marcar cumplida" : "Volver a pendiente"}: «${task.title}»`,
+      detail: `Evento: ${eventName}`,
+    });
     setBusy(false);
     if (!result.ok) {
       onError(result.error);
       return;
     }
-    onChanged();
+    if (!result.queued) onChanged();
   }
+
+  const queuedFailed = queued?.status === "failed";
+  const title = queued
+    ? queuedFailed
+      ? `No se pudo subir: ${queued.error ?? "sin motivo informado"}. Reintentá desde el indicador de sincronización.`
+      : `Guardada en este equipo ${formatSince(queued.createdAt)}: se sube al volver la señal.`
+    : `${done ? "Volver a pendiente" : "Marcar como cumplida"}: ${task.title}${task.dueAt ? ` · vence ${formatDate(task.dueAt)}` : ""}`;
 
   return (
     <label
       className="admin-check"
       data-done={done ? "true" : undefined}
-      title={`${done ? "Volver a pendiente" : "Marcar como cumplida"}: ${task.title}${task.dueAt ? ` · vence ${formatDate(task.dueAt)}` : ""}`}
+      data-queue={queued ? (queuedFailed ? "failed" : "queued") : undefined}
+      title={title}
     >
       <input
         type="checkbox"
@@ -105,7 +130,9 @@ function ChecklistToggle({
       <span className="admin-check-box" aria-hidden="true">
         <AdminIcon name="check" size={11} />
       </span>
-      <span className="admin-check-text">{done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente"}</span>
+      <span className="admin-check-text">
+        {queued ? (queuedFailed ? "Falló" : "Sin subir") : done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente"}
+      </span>
     </label>
   );
 }
