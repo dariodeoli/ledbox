@@ -46,6 +46,7 @@ import {
   AdminRow,
   AdminSelect,
   AdminTable,
+  AdminTimelineDialog,
   AdminToolbar,
 } from "../AdminUI";
 import {
@@ -180,6 +181,8 @@ export function EventosModule() {
   const [movementForm, setMovementForm] = useState(EMPTY_MOVEMENT_FORM);
   const [movementBusy, setMovementBusy] = useState(false);
   const [movementError, setMovementError] = useState("");
+  /** Cronología real del evento (issue #33). */
+  const [timelineEvent, setTimelineEvent] = useState<AdminEventRow | null>(null);
 
   const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
@@ -235,12 +238,20 @@ export function EventosModule() {
           badges: event.tasks.length > 0 ? [{ label: `Checklist ${progress.label}`, tone: progress.tone, title: progress.title }] : [],
           detail: `${formatNumber(units)} equipo${units === 1 ? "" : "s"} asignado${units === 1 ? "" : "s"}`,
           actions: (
-            <AdminIconLink
-              href={`/imprimir/evento/${event.id}`}
-              icon="print"
-              label={`Imprimir orden de trabajo: ${event.name}`}
-              external
-            />
+            <>
+              <AdminButton
+                icon="audit"
+                title={`Ver la cronología: ${event.name}`}
+                aria-label={`Ver la cronología: ${event.name}`}
+                onClick={() => setTimelineEvent(event)}
+              />
+              <AdminIconLink
+                href={`/imprimir/evento/${event.id}`}
+                icon="print"
+                label={`Imprimir orden de trabajo: ${event.name}`}
+                external
+              />
+            </>
           ),
         };
       }),
@@ -705,6 +716,12 @@ export function EventosModule() {
                     </AdminCell>
                     <AdminCell end className="admin-cell--actions">
                       <span className="admin-actions">
+                        <AdminButton
+                          icon="audit"
+                          title={`Ver la cronología: ${event.name}`}
+                          aria-label={`Ver la cronología: ${event.name}`}
+                          onClick={() => setTimelineEvent(event)}
+                        />
                         <AdminIconLink
                           href={`/imprimir/evento/${event.id}`}
                           icon="print"
@@ -1142,6 +1159,14 @@ export function EventosModule() {
 
         {checklistEntries.length === 50 ? <AdminNote>Mostrando las primeras 50 tareas del filtro.</AdminNote> : null}
       </AdminPanel>
+
+      {timelineEvent ? (
+        <AdminTimelineDialog
+          title={`Cronología · ${timelineEvent.name}`}
+          path={`/api/admin/timeline?eventId=${encodeURIComponent(timelineEvent.id)}`}
+          onClose={() => setTimelineEvent(null)}
+        />
+      ) : null}
     </div>
   );
 }

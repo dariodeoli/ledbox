@@ -1089,10 +1089,23 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-timeline-step[data-tone="info"] { border-left-color: var(--a-info); }
 .admin-timeline-step[data-tone="warn"] { border-left-color: var(--a-warn); }
 .admin-timeline-step[data-tone="danger"] { border-left-color: var(--a-danger); }
+.admin-timeline-step[data-tone="accent"] { border-left-color: var(--a-accent); }
 .admin-timeline-when { color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .admin-timeline-body { display: grid; gap: 2px; min-width: 0; }
 .admin-timeline-body strong { color: var(--a-text-strong); font-size: 12.5px; }
 .admin-timeline-body small { color: var(--a-muted-2); font-size: 11.5px; overflow-wrap: anywhere; }
+/* Cronología completa (issue #33): contador + filtro por tipo y el ícono del
+   hito en línea con el título, con el color del tono real. */
+.admin-timeline-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.admin-timeline-count { color: var(--a-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.admin-timeline-kind { display: inline-flex; align-items: center; margin-right: 5px; color: var(--a-muted-2); vertical-align: -2px; }
+.admin-timeline-step[data-tone="ok"] .admin-timeline-kind { color: var(--a-ok); }
+.admin-timeline-step[data-tone="info"] .admin-timeline-kind { color: var(--a-info); }
+.admin-timeline-step[data-tone="warn"] .admin-timeline-kind { color: var(--a-warn); }
+.admin-timeline-step[data-tone="danger"] .admin-timeline-kind { color: var(--a-danger); }
+.admin-timeline-step[data-tone="accent"] .admin-timeline-kind { color: var(--a-accent); }
+.admin-timeline-actor { color: var(--a-muted); font-weight: 500; }
+.admin-timeline-body small.admin-timeline-meta { color: var(--a-muted); letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
 @media (max-width: 520px) {
   .admin-timeline-step { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
@@ -1759,6 +1772,24 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-proof-main { display: grid; gap: 2px; min-width: 0; }
 .portal-proof-when { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .portal-proof-meta { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+/* Cronología del cliente (issue #33): la versión reducida de los hitos reales,
+   sin costos ni actores internos; mismo lenguaje de línea de tiempo del panel. */
+.portal-timeline { display: grid; gap: 6px; list-style: none; }
+.portal-timeline-step { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--border); border-left-width: 3px; border-radius: 0 10px 10px 0; background: var(--surface-2); }
+.portal-timeline-step[data-tone="ok"] { border-left-color: #3ddc97; }
+.portal-timeline-step[data-tone="info"] { border-left-color: #9aa8ff; }
+.portal-timeline-step[data-tone="warn"] { border-left-color: #f5c451; }
+.portal-timeline-step[data-tone="danger"] { border-left-color: #ff6b85; }
+.portal-timeline-step[data-tone="accent"] { border-left-color: var(--led); }
+.portal-timeline-when { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.portal-timeline-body { display: grid; gap: 2px; min-width: 0; }
+.portal-timeline-body strong { color: var(--text); font-size: 13px; }
+.portal-timeline-body small { color: var(--muted-2); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.portal-timeline-body small.portal-timeline-kind { color: var(--muted); letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
+
+@media (max-width: 480px) {
+  .portal-timeline-step { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
 
 @media (max-width: 480px) {
   .portal-field input[type="file"]::file-selector-button { padding: 7px 9px; letter-spacing: .06em; }

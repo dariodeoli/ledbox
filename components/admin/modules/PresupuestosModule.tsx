@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   budgetApprovalLabel,
   budgetApprovalMethodLabel,
@@ -37,7 +37,6 @@ import {
 } from "@/lib/admin-types";
 import { portalBudgetUrl } from "@/lib/public-config";
 import { qrDataUrl } from "@/lib/qr";
-import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import {
@@ -46,6 +45,7 @@ import {
   AdminCell,
   AdminCountdown,
   AdminDataState,
+  AdminDialog,
   AdminEmpty,
   AdminFormPanel,
   AdminIconLink,
@@ -55,6 +55,7 @@ import {
   AdminRow,
   AdminSelect,
   AdminTable,
+  AdminTimelineDialog,
   AdminToolbar,
 } from "../AdminUI";
 import { DateField, EmailField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
@@ -315,53 +316,6 @@ function InventoryLinkPicker({
 }
 
 /**
- * Diálogo del módulo (issue #12). El panel todavía no tiene un primitivo de
- * diálogo: acá vive el primero, con el contrato mínimo (rol dialog, foco al
- * abrir, cierre con Escape y clic afuera). `wide` lo ensancha para las tablas
- * de solicitudes y el plan de pagos.
- */
-function ModuleDialog({
-  title,
-  onClose,
-  wide,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  wide?: boolean;
-  children: React.ReactNode;
-}) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section className={wide ? "admin-dialog admin-dialog--wide" : "admin-dialog"} role="dialog" aria-modal="true" aria-label={title}>
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">{title}</h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
-        {children}
-      </section>
-    </div>
-  );
-}
-
-/**
  * Visor de comprobantes de pago (issue #17). Lo comparten Presupuestos (ficha
  * del presupuesto) y Finanzas (cobro pendiente): los metadatos llegan del API y
  * cada archivo se sirve con sesión desde `/api/admin/budgets/proofs/[id]`, en
@@ -388,7 +342,7 @@ export function BudgetProofDialog({
   collectLabel?: string;
 }) {
   return (
-    <ModuleDialog title={title} wide onClose={onClose}>
+    <AdminDialog title={title} wide onClose={onClose}>
       {subtitle ? <p className="admin-dialog-text">{subtitle}</p> : null}
       {proofs.length === 0 ? (
         <p className="admin-dialog-text">Este presupuesto todavía no tiene comprobantes subidos desde el portal.</p>
@@ -440,7 +394,7 @@ export function BudgetProofDialog({
         <span className="admin-dialog-spacer" />
         <AdminButton onClick={onClose}>Cerrar</AdminButton>
       </div>
-    </ModuleDialog>
+    </AdminDialog>
   );
 }
 
@@ -501,7 +455,7 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <ModuleDialog title="Datos de pago de la empresa" wide onClose={onClose}>
+    <AdminDialog title="Datos de pago de la empresa" wide onClose={onClose}>
       <p className="admin-dialog-text">
         Se muestran en el portal del cliente cuando el presupuesto está aprobado (junto al monto a transferir) y en la hoja
         imprimible. Sin datos cargados, el portal no inventa una cuenta.
@@ -576,7 +530,7 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           Guardar datos
         </AdminButton>
       </div>
-    </ModuleDialog>
+    </AdminDialog>
   );
 }
 
@@ -630,7 +584,7 @@ function ItemLinksDialog({
   }
 
   return (
-    <ModuleDialog title={`Inventario del presupuesto · ${budget.title}`} wide onClose={onClose}>
+    <AdminDialog title={`Inventario del presupuesto · ${budget.title}`} wide onClose={onClose}>
       <p className="admin-dialog-text">
         Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
         panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
@@ -718,7 +672,7 @@ function ItemLinksDialog({
           Listo
         </AdminButton>
       </div>
-    </ModuleDialog>
+    </AdminDialog>
   );
 }
 
@@ -758,6 +712,8 @@ export function PresupuestosModule() {
 
   // Vínculo con inventario y reserva automática (issue #18).
   const [linksBudget, setLinksBudget] = useState<AdminBudgetRow | null>(null);
+  // Cronología real del presupuesto (issue #33).
+  const [timelineBudget, setTimelineBudget] = useState<AdminBudgetRow | null>(null);
   const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);
   // Comprobantes de pago (issue #17): metadatos por presupuesto y visor.
   const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
@@ -1535,6 +1491,12 @@ export function PresupuestosModule() {
                   </AdminCell>
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
+                      <AdminButton
+                        icon="audit"
+                        title={`Ver la cronología: ${budget.title}`}
+                        aria-label={`Ver la cronología: ${budget.title}`}
+                        onClick={() => setTimelineBudget(budget)}
+                      />
                       <AdminIconLink
                         href={`/imprimir/presupuesto/${budget.id}`}
                         icon="print"
@@ -1624,7 +1586,7 @@ export function PresupuestosModule() {
       </AdminDataState>
 
       {portalBudget ? (
-        <ModuleDialog title={`Portal del cliente · ${portalBudget.title}`} onClose={() => setPortalBudget(null)}>
+        <AdminDialog title={`Portal del cliente · ${portalBudget.title}`} onClose={() => setPortalBudget(null)}>
           {portalToken ? (
             <>
               <div className="admin-dialog-qr">
@@ -1682,11 +1644,11 @@ export function PresupuestosModule() {
               {portalToken ? "Regenerar link" : "Generar link"}
             </AdminButton>
           </div>
-        </ModuleDialog>
+        </AdminDialog>
       ) : null}
 
       {sendBudget ? (
-        <ModuleDialog title={`Enviar por correo · ${sendBudget.title}`} onClose={() => setSendBudget(null)}>
+        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} onClose={() => setSendBudget(null)}>
           <p className="admin-dialog-text">
             El correo sale con la identidad de LedBox: link del portal con el código, resumen de ítems, total y validez,
             la hoja imprimible y los datos de pago cuando el presupuesto está aprobado.
@@ -1776,11 +1738,11 @@ export function PresupuestosModule() {
               Enviar presupuesto
             </AdminButton>
           </div>
-        </ModuleDialog>
+        </AdminDialog>
       ) : null}
 
       {approval ? (
-        <ModuleDialog
+        <AdminDialog
           title={approval.decision === "approve" ? `Aprobar manualmente · ${approval.budget.title}` : `Pedir cambios · ${approval.budget.title}`}
           onClose={() => setApproval(null)}
         >
@@ -1808,11 +1770,11 @@ export function PresupuestosModule() {
               {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
             </AdminButton>
           </div>
-        </ModuleDialog>
+        </AdminDialog>
       ) : null}
 
       {resolution ? (
-        <ModuleDialog title={resolutionLabel} wide onClose={() => setResolution(null)}>
+        <AdminDialog title={resolutionLabel} wide onClose={() => setResolution(null)}>
           <p className="admin-dialog-text">
             {resolution.request.kind === "items"
               ? "La propuesta del cliente se aplica al presupuesto con los precios unitarios originales. Podés ajustar las cantidades y días como contra-oferta antes de aceptar."
@@ -1956,11 +1918,11 @@ export function PresupuestosModule() {
               {resolution.decision === "accept" ? "Aceptar y aplicar" : "Rechazar con nota"}
             </AdminButton>
           </div>
-        </ModuleDialog>
+        </AdminDialog>
       ) : null}
 
       {plan ? (
-        <ModuleDialog title={`Plan de pagos · ${plan.budget.title}`} wide onClose={() => setPlan(null)}>
+        <AdminDialog title={`Plan de pagos · ${plan.budget.title}`} wide onClose={() => setPlan(null)}>
           <p className="admin-dialog-text">
             El anticipo y las cuotas se muestran en el portal cuando el presupuesto está aprobado: el primero (o la primera
             cuota) aparece como «a transferir ahora». El plan no puede superar el total ({formatMoney(plan.budget.total)}).
@@ -2059,7 +2021,7 @@ export function PresupuestosModule() {
               Guardar plan
             </AdminButton>
           </div>
-        </ModuleDialog>
+        </AdminDialog>
       ) : null}
 
       {paymentsOpen ? <PaymentDetailsDialog onClose={() => setPaymentsOpen(false)} /> : null}
@@ -2151,6 +2113,13 @@ export function PresupuestosModule() {
           subtitle={`Enviados desde el portal por el cliente (${proofDialog.client.company || proofDialog.client.name}). El archivo se sirve con tu sesión: no es público.`}
           proofs={proofsByBudget[proofDialog.id] ?? []}
           onClose={() => setProofDialog(null)}
+        />
+      ) : null}
+      {timelineBudget ? (
+        <AdminTimelineDialog
+          title={`Cronología · ${timelineBudget.title}`}
+          path={`/api/admin/timeline?budgetId=${encodeURIComponent(timelineBudget.id)}`}
+          onClose={() => setTimelineBudget(null)}
         />
       ) : null}
     </div>

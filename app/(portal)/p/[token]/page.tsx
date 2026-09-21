@@ -12,6 +12,9 @@ export const metadata: Metadata = { title: "Presupuesto", robots: { index: false
  * Vista pública de un presupuesto por código de link (issue #12).
  * Un código inválido, revocado o inexistente no revela nada: 404.
  *
+ * Es la primera apertura del link: `loadPublicBudget` sella `Budget.viewedAt`
+ * una sola vez (issue #33) y arma la cronología cliente que la página dibuja.
+ *
  * `?demo=1` (issue #29) es el marcador que deja `GET /api/portal/demo` al entrar
  * por el ejemplo: muestra el aviso de datos simulados. Los links reales no lo
  * llevan y no cambian en nada.
@@ -24,7 +27,7 @@ export default async function PortalBudgetPage({
   searchParams: Promise<{ demo?: string | string[] }>;
 }) {
   const [{ token }, search] = await Promise.all([params, searchParams]);
-  const budget = await loadPublicBudget(token);
+  const budget = await loadPublicBudget(token, { sealView: true });
   if (!budget) notFound();
   return <PortalBudgetView budget={budget} token={token} demo={search.demo === "1"} />;
 }

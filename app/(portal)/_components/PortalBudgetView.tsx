@@ -20,6 +20,7 @@ import {
   formatNumber,
   paymentProofMimeLabel,
   statusTone,
+  timelineKindLabel,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
 import {
@@ -992,6 +993,32 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {budget.timeline.length > 0 ? (
+        <section className="portal-card" aria-labelledby="portal-timeline">
+          <h2 className="portal-card-title" id="portal-timeline">
+            Cronología
+          </h2>
+          <p className="portal-card-lead">
+            Todo lo que pasó con tu presupuesto, con la fecha real de cada paso: envío, cambios, aprobación, pagos y evento.
+          </p>
+          <ol className="portal-timeline">
+            {budget.timeline.map((entry) => (
+              <li className="portal-timeline-step" key={entry.id} data-tone={entry.tone}>
+                <span className="portal-timeline-when">{formatDateTime(entry.at)}</span>
+                <span className="portal-timeline-body">
+                  <strong>{entry.title}</strong>
+                  {entry.detail ? <small>{entry.detail}</small> : null}
+                  <small className="portal-timeline-kind">
+                    {timelineKindLabel(entry.kind)}
+                    {entry.actor ? ` · ${entry.actor}` : ""}
+                  </small>
+                </span>
+              </li>
+            ))}
+          </ol>
         </section>
       ) : null}
 

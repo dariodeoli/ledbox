@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import { db } from "./db";
 import { BUDGET_CODE_ALPHABET, formatBudgetCode, normalizeBudgetCode } from "@/lib/public-config";
 import { budgetReference } from "@/lib/admin-format";
+import type { AdminTimelineEntry } from "@/lib/admin-types";
 import { dayKeyOf } from "./notifications";
+import { buildBudgetTimeline } from "./timeline";
 
 /**
  * Portal del cliente (issue #12): acceso público por token y armado del
@@ -178,6 +180,11 @@ export type PortalBudget = {
   /** Si el portal habilita el formulario de comprobante y por qué no. */
   proofUpload: PortalProofUpload;
   requests: PortalBudgetRequest[];
+  /**
+   * Cronología cliente (issue #33): los hitos de venta y postventa con fechas
+   * reales, sin costos, sin actores internos y sin movimientos de tesorería.
+   */
+  timeline: AdminTimelineEntry[];
   approval: {
     state: PortalBudgetApprovalState;
     approvedAt: string | null;
@@ -262,6 +269,7 @@ export function portalProofUpload(budget: {
 
 type BudgetForPortal = {
   id: string;
+  organizationId: string;
   title: string;
   status: string;
   subtotal: number;
@@ -273,6 +281,8 @@ type BudgetForPortal = {
   validUntil: Date | null;
   notes: string | null;
   createdAt: Date;
+  /** Primera vista del portal (issue #33); `null` si el cliente nunca abrió el link. */
+  viewedAt: Date | null;
   approvedAt: Date | null;
   approvedByName: string | null;
   approvalMethod: string | null;
@@ -473,8 +483,8 @@ function requestView(budget: BudgetForPortal, request: BudgetForPortal["changeRe
   };
 }
 
-/** Vista pública del presupuesto: solo campos de venta, plan, solicitudes y aprobación. */
-export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
+/** Vista pública del presupuesto: solo campos de venta, plan, solicitudes, cronología y aprobación. */
+export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelineEntry[] = []): PortalBudget {
   const method = budget.approvalMethod === "manual" ? "manual" : budget.approvalMethod === "digital" ? "digital" : null;
   const approved = Boolean(budget.approvedAt);
   const expectedPayments = budget.expectedPayments.map((expected): PortalExpectedPayment => {
@@ -552,6 +562,7 @@ export function portalBudgetView(budget: BudgetForPortal): PortalBudget {
       openExpectedPayments: openExpected,
     }),
     requests: budget.changeRequests.map((request) => requestView(budget, request)),
+    timeline,
     approval: {
       state: approvalState(budget),
       approvedAt: iso(budget.approvedAt),
@@ -607,12 +618,39 @@ const portalInclude = {
   },
 } as const;
 
-/** Presupuesto público por código de link; `null` si no existe o no tiene token. */
-export async function loadPublicBudget(token: string | null | undefined): Promise<PortalBudget | null> {
+/**
+ * Sella la primera vista del portal (issue #33): `Budget.viewedAt` se escribe
+ * una sola vez, cuando el cliente abre el link por primera vez. Idempotente por
+ * el `where` con `viewedAt: null`; los accesos posteriores no la mueven y la
+ * respuesta de un POST del portal no la sella (solo el GET del link).
+ */
+export async function sealPortalView(budgetId: string): Promise<Date | null> {
+  const seenAt = new Date();
+  const sealed = await db.budget.updateMany({ where: { id: budgetId, viewedAt: null }, data: { viewedAt: seenAt } });
+  if (sealed.count > 0) return seenAt;
+  const current = await db.budget.findUnique({ where: { id: budgetId }, select: { viewedAt: true } });
+  return current?.viewedAt ?? null;
+}
+
+/**
+ * Presupuesto público por código de link; `null` si no existe o no tiene token.
+ *
+ * Con `sealView` (el GET del link, la página del portal) sella la primera vista
+ * antes de armar la cronología, así el hito aparece ya en esa misma apertura.
+ * Los POST del portal (`approve`, `propose`, `proof`, `revision`) leen sin
+ * sellar: la vista la registra el GET.
+ */
+export async function loadPublicBudget(
+  token: string | null | undefined,
+  options: { sealView?: boolean } = {},
+): Promise<PortalBudget | null> {
   const code = normalizeBudgetCode(token);
   if (!code) return null;
   const budget = await db.budget.findUnique({ where: { publicToken: code }, include: portalInclude });
-  return budget ? portalBudgetView(budget) : null;
+  if (!budget) return null;
+  if (options.sealView) await sealPortalView(budget.id);
+  const timeline = await buildBudgetTimeline(budget.organizationId, budget.id, { audience: "client" });
+  return portalBudgetView(budget, timeline ?? []);
 }
 
 /** Evidencia de la aprobación digital: IP y user-agent del pedido. */
