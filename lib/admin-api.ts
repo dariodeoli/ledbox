@@ -28,6 +28,16 @@ export function redirectToLogin(): void {
   window.location.assign("/login");
 }
 
+/**
+ * Avisa al shell que el servidor considera la sesión bloqueada (HTTP 423 ya
+ * traducido en `lib/server/tenancy.ts`): el shell dibuja la pantalla de PIN
+ * (issue #21) sin desloguear a nadie.
+ */
+function notifyPanelLocked(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("ledbox:admin-locked"));
+}
+
 /** 401/403: la sesión o la empresa activa dejaron de valer; se invalida todo. */
 function invalidateSession(): void {
   clearAdminApiCache();
@@ -113,6 +123,11 @@ export async function adminApiGet<T = AdminApiResponse>(
     if (!options.skipSessionRedirect) invalidateSession();
     return { ok: false, error: "La sesión venció. Volvé a iniciar sesión.", sessionInvalid: true };
   }
+  // 423: el panel quedó bloqueado por PIN (issue #21); el shell dibuja la pantalla.
+  if (outcome.status === 423) {
+    notifyPanelLocked();
+    return { ok: false, error: "El panel está bloqueado." };
+  }
   if (outcome.status < 200 || outcome.status >= 300) {
     const message = typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
     return { ok: false, error: message };
@@ -175,6 +190,11 @@ async function sendMutation<T>(
   if (outcome.status === 401 || outcome.status === 403) {
     invalidateSession();
     return { ok: false, error: "La sesión venció. Volvé a iniciar sesión." };
+  }
+  // 423: el panel quedó bloqueado por PIN (issue #21); el shell dibuja la pantalla.
+  if (outcome.status === 423) {
+    notifyPanelLocked();
+    return { ok: false, error: "El panel está bloqueado." };
   }
   if (outcome.status < 200 || outcome.status >= 300) {
     const message = typeof outcome.payload.error === "string" ? outcome.payload.error : "No pudimos guardar los cambios.";

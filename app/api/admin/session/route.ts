@@ -1,5 +1,6 @@
 import { listAdminOrganizations, requireAdminContext, setActiveOrganization } from "@/lib/server/tenancy";
 import { loadOrganizationLogos, logoVersions } from "@/lib/server/branding";
+import { loadAdminSecurity } from "@/lib/server/pin";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 
@@ -7,13 +8,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const result = await requireAdminContext();
+  // La lectura de la sesión funciona incluso con el panel bloqueado: es la que
+  // permite dibujar la pantalla de bloqueo (issue #21) tras recargar la página.
+  const result = await requireAdminContext(undefined, { allowLocked: true });
   if (!result.ok) return result.response;
   const { user, organization, role, demo } = result.context;
-  const [organizations, avatar, logos] = await Promise.all([
+  const [organizations, avatar, logos, security] = await Promise.all([
     listAdminOrganizations(user.id),
     db.adminUserAvatar.findUnique({ where: { userId: user.id }, select: { updatedAt: true } }),
     loadOrganizationLogos(organization.id),
+    loadAdminSecurity(user.id),
   ]);
   return Response.json({
     // El avatar (issue #22) viaja con la fecha de subida: el chip arma la URL con
@@ -30,6 +34,16 @@ export async function GET() {
     organizations,
     // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
     demo,
+    // Bloqueo por PIN (issue #21): estado de la sesión + preferencia del usuario.
+    // La demo no usa PIN ni bloqueo (no tiene preferencia que aplicar). El motivo
+    // solo viaja con un bloqueo vigente; desbloqueada, la pantalla no aplica.
+    locked: result.context.session.lockedAt !== null,
+    lockReason: result.context.session.lockedAt
+      ? result.context.session.lockReason === "manual"
+        ? "manual"
+        : "inactivity"
+      : null,
+    lock: security,
   });
 }
 

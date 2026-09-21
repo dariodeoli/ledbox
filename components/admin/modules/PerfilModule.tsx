@@ -10,6 +10,7 @@ import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { PasswordField, TextField } from "../AdminFields";
 import { AdminButton, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminPinSettings } from "../AdminPinSettings";
 
 /**
  * Mi perfil (issue #22): cualquier rol edita su **nombre**, su **contraseña**
@@ -17,8 +18,10 @@ import { AdminButton, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI
  * identidad de acceso y lo cambia un OWNER/ADMIN desde Equipo.
  *
  * El avatar es el objeto único del panel (foto subida → iniciales), con
- * validación por magic bytes y recorte/compresión en el navegador. En la demo
- * pública todo queda en solo lectura (el API responde 403 «Modo demo»).
+ * validación por magic bytes y recorte/compresión en el navegador. La seguridad
+ * del panel (PIN y auto-bloqueo, issue #21) vive en `AdminPinSettings`, el mismo
+ * bloque que monta la página de Configuración. En la demo pública todo queda en
+ * solo lectura (el API responde 403 «Modo demo»).
  */
 export function PerfilModule() {
   const { user, demo, reload } = useAdminSession();
@@ -267,6 +270,9 @@ export function PerfilModule() {
           </div>
         </form>
       </AdminPanel>
+
+      {/* Seguridad del panel (issue #21): PIN y auto-bloqueo por inactividad. */}
+      <AdminPinSettings />
     </div>
   );
 }

@@ -132,6 +132,14 @@ model AdminUser {
   active              Boolean              @default(true)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+  /// PIN de desbloqueo del panel (issue #21): hash bcrypt de 4–6 dígitos, nunca
+  /// en claro ni en logs. Sin PIN no hay bloqueo rápido (el auto-bloqueo no aplica).
+  pinHash             String?
+  pinUpdatedAt        DateTime?
+  /// Preferencia de auto-bloqueo por inactividad (issue #21), por usuario:
+  /// `autoLockEnabled = false` es «nunca» y `autoLockMinutes` la opción elegida.
+  autoLockEnabled     Boolean              @default(true)
+  autoLockMinutes     Int                  @default(10)
   sessions            AdminSession[]
   memberships         AdminMembership[]
   passwordResetTokens PasswordResetToken[]
@@ -163,6 +171,13 @@ model AdminSession {
   jtiHash              String        @unique
   expiresAt            DateTime
   revokedAt            DateTime?
+  /// Bloqueo rápido del panel (issue #21): instante en que la sesión se bloqueó
+  /// (por inactividad o a mano), PIN fallidos seguidos desde ese bloqueo y motivo
+  /// (`inactivity`/`manual`) para que la pantalla lo cuente igual tras recargar.
+  /// A los 5 fallidos la sesión se revoca y queda exigido el login completo.
+  lockedAt             DateTime?
+  lockAttempts         Int           @default(0)
+  lockReason           String?
   createdAt            DateTime      @default(now())
   user                 AdminUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)

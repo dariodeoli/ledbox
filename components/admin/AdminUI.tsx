@@ -1,10 +1,14 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName } from "@/lib/admin-types";
 import { countdownTone, formatCountdown, whatsappHref, type AdminTone } from "@/lib/admin-format";
 import { prepareIdentityImage, type PreparedIdentityImage } from "@/lib/identity-image";
+import { BrandMark } from "@/components/brand-mark";
 import { AdminIcon } from "./AdminIcons";
+import { AdminAvatar } from "./AdminAvatar";
+import { PinField } from "./AdminFields";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 
 /** Primitivas del panel: un solo diseño por tipo (botón, badge, campo, tabla, estado vacío). */
@@ -370,6 +374,178 @@ export function AdminCell({
     <span role="cell" className={classes.join(" ")} title={title}>
       {children}
     </span>
+  );
+}
+
+/**
+ * Pantalla de bloqueo del panel (issue #21). Reemplaza **todo** el shell: no
+ * queda contenido del panel detrás, solo el logo, el usuario y el PIN.
+ *
+ * El PIN nunca se muestra (puntos + `type=password`), se teclea con el teclado
+ * en pantalla o el físico y se valida al completar los 6 dígitos o con
+ * «Desbloquear» (mínimo 4). Si el servidor revocó la sesión por 5 fallidos, solo
+ * queda el botón de login completo. Mobile 390: una sola columna, botones grandes
+ * y el foco arranca en el PIN.
+ */
+export function AdminLockScreen({
+  name,
+  avatarSrc,
+  autoLocked,
+  error,
+  busy,
+  requireLogin,
+  onUnlock,
+  onFullLogin,
+}: {
+  name: string;
+  avatarSrc?: string | null;
+  /** El bloqueo lo disparó la inactividad (cambia el texto del encabezado). */
+  autoLocked: boolean;
+  error: string;
+  busy: boolean;
+  /** La sesión quedó invalidada (5 PIN fallidos): solo se sale con login completo. */
+  requireLogin: boolean;
+  onUnlock: (pin: string) => Promise<void>;
+  onFullLogin: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const submittingRef = useRef(false);
+
+  // El foco arranca en el PIN y vuelve después de cada intento.
+  useEffect(() => {
+    if (!requireLogin) inputRef.current?.focus();
+  }, [busy, error, requireLogin]);
+
+  async function submitPin(attempt: string) {
+    if (submittingRef.current || requireLogin || busy || !pinValid(attempt)) return;
+    submittingRef.current = true;
+    try {
+      await onUnlock(attempt);
+    } finally {
+      submittingRef.current = false;
+      setPin("");
+      inputRef.current?.focus();
+    }
+  }
+
+  function push(digit: string) {
+    setPin((current) => pinInput(current + digit));
+    inputRef.current?.focus();
+  }
+
+  function backspace() {
+    setPin((current) => current.slice(0, -1));
+    inputRef.current?.focus();
+  }
+
+  const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+  return (
+    <div className="admin-lock" role="dialog" aria-modal="true" aria-labelledby="admin-lock-title">
+      <section className="admin-lock-card">
+        <header className="admin-lock-head">
+          <span className="admin-lock-brand">
+            <BrandMark className="admin-brand-mark" size={30} />
+            <span>
+              LEDBOX<span className="admin-brand-dot">.</span>
+            </span>
+          </span>
+          <h1 className="admin-lock-title" id="admin-lock-title">
+            Panel bloqueado
+          </h1>
+          <p className="admin-lock-lede">
+            {autoLocked
+              ? "Pasó el tiempo de inactividad. Para cuidar tus datos bloqueamos el panel."
+              : "Bloqueaste el panel a mano. Para cuidar tus datos lo dejamos cerrado."}
+          </p>
+        </header>
+
+        <div className="admin-lock-user">
+          <AdminAvatar name={name} src={avatarSrc} size={40} />
+          <span className="admin-lock-user-text">
+            <strong>{name}</strong>
+            <small>{requireLogin ? "Sesión invalidada" : "Ingresá tu PIN para volver"}</small>
+          </span>
+        </div>
+
+        {requireLogin ? (
+          <div className="admin-lock-full">
+            <AdminNote tone="error" variant="alert">
+              {error}
+            </AdminNote>
+            <AdminButton type="button" variant="primary" icon="logout" onClick={onFullLogin}>
+              Iniciar sesión de nuevo
+            </AdminButton>
+          </div>
+        ) : (
+          <form
+            className="admin-lock-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitPin(pin);
+            }}
+          >
+            <PinField
+              label="PIN del panel"
+              value={pin}
+              onChange={setPin}
+              length={6}
+              autoSubmit
+              onComplete={(completed) => void submitPin(completed)}
+              inputRef={inputRef}
+              error={error || null}
+              hint={error ? undefined : "4 a 6 dígitos. Se valida al completarlo o con «Desbloquear»."}
+              autoFocus
+              disabled={busy}
+            />
+            <div className="admin-pin-pad" role="group" aria-label="Teclado numérico del PIN">
+              {digits.map((digit) => (
+                <button
+                  key={digit}
+                  type="button"
+                  className="admin-pin-pad-key"
+                  onClick={() => push(digit)}
+                  disabled={busy}
+                  aria-label={`Dígito ${digit}`}
+                >
+                  {digit}
+                </button>
+              ))}
+              <span className="admin-pin-pad-key admin-pin-pad-gap" aria-hidden="true" />
+              <button
+                type="button"
+                className="admin-pin-pad-key"
+                onClick={() => push("0")}
+                disabled={busy}
+                aria-label="Dígito 0"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                className="admin-pin-pad-key admin-pin-pad-del"
+                onClick={backspace}
+                disabled={busy || pin.length === 0}
+                aria-label="Borrar el último dígito"
+                title="Borrar el último dígito"
+              >
+                <AdminIcon name="close" size={16} />
+              </button>
+            </div>
+            <AdminButton type="submit" variant="primary" icon="check" busy={busy} disabled={pin.length < PIN_MIN_DIGITS}>
+              Desbloquear
+            </AdminButton>
+          </form>
+        )}
+
+        {requireLogin ? null : (
+          <button type="button" className="admin-lock-link" onClick={onFullLogin}>
+            Cerrar esta sesión e iniciar con otra cuenta
+          </button>
+        )}
+      </section>
+    </div>
   );
 }
 

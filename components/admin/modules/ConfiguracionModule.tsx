@@ -6,6 +6,7 @@ import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, mailCategoryLabel, mailStatusLabel, mailStatusTone } from "@/lib/admin-format";
 import type { AdminMailConfig, AdminMailLogRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { AdminPinSettings } from "../AdminPinSettings";
 import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminNote, AdminPanel, AdminRow, AdminTable } from "../AdminUI";
 
 /**
@@ -25,7 +26,7 @@ type TestOutcome = {
   to: string;
 };
 
-export function ConfiguracionModule() {
+export function ConfiguracionModule({ section = "correo" }: { section?: "correo" | "seguridad" }) {
   const { user } = useAdminSession();
   const resource = useAdminResource("/api/admin/mail", (payload) => ({
     config: (payload.mail ?? null) as AdminMailConfig | null,
@@ -55,14 +56,21 @@ export function ConfiguracionModule() {
   return (
     <div className="admin-module-page">
       <nav className="admin-subtabs" aria-label="Secciones de Configuración">
-        <Link className="admin-subtab" href="/configuracion" aria-current="page" data-active="true">
+        <Link className="admin-subtab" href="/configuracion" aria-current={section === "correo" ? "page" : undefined} data-active={section === "correo" ? "true" : undefined}>
           Correo
+        </Link>
+        <Link className="admin-subtab" href="/configuracion/seguridad" aria-current={section === "seguridad" ? "page" : undefined} data-active={section === "seguridad" ? "true" : undefined}>
+          Seguridad
         </Link>
         <Link className="admin-subtab" href="/empresa">
           Empresa
         </Link>
       </nav>
 
+      {section === "seguridad" ? <AdminPinSettings /> : null}
+
+      {section === "correo" ? (
+        <>
       <AdminPanel title="Correo" meta={config ? `${config.provider} · remitente ${config.sender}` : "Cargando…"}>
         <div className="admin-settings">
           {config && !config.configured && config.hint ? <AdminNote tone="error">{config.hint}</AdminNote> : null}
@@ -166,6 +174,8 @@ export function ConfiguracionModule() {
         Los correos de reset, recordatorios, presupuestos e invitaciones usan la misma plantilla e identidad. Si falta la
         clave del proveedor, el panel lo avisa y no intenta ningún envío.
       </AdminNote>
+        </>
+      ) : null}
     </div>
   );
 }
