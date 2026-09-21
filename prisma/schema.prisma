@@ -8,7 +8,11 @@ datasource db {
 }
 
 enum AdminRole {
+  OWNER
   ADMIN
+  FINANCE
+  OPERATIONS
+  VIEWER
 }
 
 enum LeadStatus {

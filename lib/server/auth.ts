@@ -3,13 +3,13 @@ import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { db } from "./db";
-import { authConfig, isAllowedAdminEmail, normalizeEmail, requireEnv } from "./config";
+import { authConfig, normalizeEmail, requireEnv } from "./config";
 
 export type PublicAdminUser = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN";
+  role: "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
 };
 
 export type AuthenticatedAdmin = {
@@ -23,7 +23,7 @@ export type AuthenticatedAdmin = {
   };
 };
 
-export function toPublicAdminUser(user: { id: string; name: string; email: string; role: "ADMIN" }): PublicAdminUser {
+export function toPublicAdminUser(user: { id: string; name: string; email: string; role: PublicAdminUser["role"] }): PublicAdminUser {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
 
@@ -47,7 +47,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export async function createSession(user: { id: string; email: string; role: "ADMIN" }) {
+export async function createSession(user: { id: string; email: string; role: PublicAdminUser["role"] }) {
   const sessionId = randomBytes(16).toString("hex");
   const jti = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + authConfig.sessionDurationMs);
@@ -99,7 +99,7 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
       where: { userId, jtiHash: digest(jti), revokedAt: null, expiresAt: { gt: new Date() } },
       include: { user: true },
     });
-    if (!session || !session.user.active || !isAllowedAdminEmail(session.user.email) || session.user.role !== "ADMIN") return null;
+    if (!session || !session.user.active) return null;
     return {
       user: toPublicAdminUser(session.user),
       session: {

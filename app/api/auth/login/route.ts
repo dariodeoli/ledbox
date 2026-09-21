@@ -1,6 +1,5 @@
 import { db } from "@/lib/server/db";
 import { createSession, normalizeUserEmail, setSessionCookie, toPublicAdminUser, verifyPassword } from "@/lib/server/auth";
-import { isAllowedAdminEmail } from "@/lib/server/config";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { authSchema, isHoneypotTriggered, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -15,10 +14,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return validationError(parsed.error);
   if (isHoneypotTriggered(parsed.data.honeypot, parsed.data.website)) return jsonError("Invalid request.", 400);
   const email = normalizeUserEmail(parsed.data.email);
-  if (!isAllowedAdminEmail(email)) return jsonError("Invalid email or password.", 401);
   const user = await db.adminUser.findUnique({ where: { email } });
   if (!user || !user.active || !(await verifyPassword(parsed.data.password, user.passwordHash))) return jsonError("Invalid email or password.", 401);
-  const session = await createSession({ id: user.id, email: user.email, role: "ADMIN" });
+  const session = await createSession({ id: user.id, email: user.email, role: user.role });
   await setSessionCookie(session.jwt, session.expiresAt);
   return Response.json({ user: toPublicAdminUser(user) });
 }

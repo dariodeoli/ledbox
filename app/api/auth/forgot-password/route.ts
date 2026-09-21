@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
 import { createOpaqueToken, normalizeUserEmail, tokenDigest } from "@/lib/server/auth";
-import { authConfig, isAllowedAdminEmail } from "@/lib/server/config";
+import { authConfig } from "@/lib/server/config";
 import { sendPasswordResetEmail } from "@/lib/server/resend";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { forgotPasswordSchema, isHoneypotTriggered, validationError } from "@/lib/server/validation";
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return validationError(parsed.error);
   if (isHoneypotTriggered(parsed.data.honeypot, parsed.data.website)) return jsonError("Invalid request.", 400);
   const email = normalizeUserEmail(parsed.data.email);
-  const user = isAllowedAdminEmail(email) ? await db.adminUser.findUnique({ where: { email } }) : null;
+  const user = await db.adminUser.findUnique({ where: { email } });
   if (user) {
     const token = createOpaqueToken();
     await db.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
