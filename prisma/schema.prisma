@@ -162,21 +162,25 @@ model PasswordResetToken {
 }
 
 model Lead {
-  id        String     @id
-  name      String
-  phone     String
-  email     String
-  company   String?
-  ruc       String?
-  reason    String?
-  eventDate DateTime?
-  location  String?
-  message   String?
-  source    String     @default("website")
-  consentAt DateTime
-  status    LeadStatus @default(NEW)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id            String     @id
+  name          String
+  phone         String
+  email         String
+  company       String?
+  ruc           String?
+  reason        String?
+  eventDate     DateTime?
+  location      String?
+  message       String?
+  /**
+   * Notas internas del equipo comercial (no las escribe el sitio público).
+   */
+  internalNotes String?
+  source        String     @default("website")
+  consentAt     DateTime
+  status        LeadStatus @default(NEW)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   quoteRequests  QuoteRequest[]
   organizationId String?
