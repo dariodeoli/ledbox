@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   damageSummary,
   formatDateShort,
@@ -14,7 +14,12 @@ import {
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
-import type { AdminInventoryItemRow } from "@/lib/admin-types";
+import type {
+  AdminApiResponse,
+  AdminInventoryAvailability,
+  AdminInventoryItemRow,
+  AdminInventorySubstitute,
+} from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -31,8 +36,8 @@ import {
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { NumberField, SearchField, SelectField, TextField } from "../AdminFields";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { DateField, NumberField, SearchField, SelectField, TextField } from "../AdminFields";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 
 const KIND_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -59,22 +64,32 @@ function stamp(value: string | null): string {
   return value ? `${formatDateShort(value)} · ${formatTime(value)}` : "—";
 }
 
-/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00`. */
+/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00` (fin abierto si falta). */
 function rangeStamp(start: string | null, end: string | null): string {
-  if (!start || !end) return "Sin fechas";
+  if (!start && !end) return "Sin fechas";
+  if (start && !end) return `${formatDateShort(start)} ${formatTime(start)} → sin fin`;
+  if (!start && end) return `sin inicio → ${formatDateShort(end)} ${formatTime(end)}`;
   return `${formatDateShort(start)} ${formatTime(start)} → ${formatDateShort(end)} ${formatTime(end)}`;
 }
 
+/** Rango pedido en la vista por rango: `21-sept. 00:00 → 23-sept. 23:59`. */
+function dayRangeLabel(from: string, to: string): string {
+  return `${formatDateShort(`${from}T00:00`)} 00:00 → ${formatDateShort(`${to}T23:59`)} 23:59`;
+}
+
+/**
+ * Vista de disponibilidad del equipo (issue #18): día de hoy o rango pedido.
+ * Cuando hay rango, cada ítem muestra sus unidades libres en el rango, los
+ * rangos comprometidos que se solapan y —al abrir el ítem— los sustitutos de la
+ * misma categoría con stock libre. El cálculo vive en el API.
+ */
 export function InventarioModule() {
   const { role } = useAdminSession();
-  const resources = useAdminResource(
-    "/api/admin/inventory",
-    (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
-  );
-
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("ALL");
   const [status, setStatus] = useState("ALL");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -84,7 +99,30 @@ export function InventarioModule() {
   const [statusError, setStatusError] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
+  // Disponibilidad del ítem abierto en el rango pedido (issue #18).
+  const [rangeAvailability, setRangeAvailability] = useState<AdminInventoryAvailability | null>(null);
+  const [substitutes, setSubstitutes] = useState<AdminInventorySubstitute[]>([]);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeError, setRangeError] = useState("");
+
   const writable = canWriteOperations(role);
+  const rangeActive = Boolean(from && to);
+
+  // La lista viaja con el rango cuando está completo: el API devuelve la
+  // disponibilidad de cada ítem en ese rango además de la de hoy.
+  const listPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (from) params.set("startsAt", `${from}T00:00`);
+    if (to) params.set("endsAt", `${to}T23:59`);
+    const search = params.toString();
+    return search ? `/api/admin/inventory?${search}` : "/api/admin/inventory";
+  }, [from, to]);
+
+  const resources = useAdminResource(
+    listPath,
+    (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
+  );
+
   const inventory = useMemo(() => resources.data ?? [], [resources.data]);
   const selected = useMemo(() => inventory.find((item) => item.id === selectedId) ?? null, [inventory, selectedId]);
 
@@ -101,16 +139,50 @@ export function InventarioModule() {
     () =>
       inventory.reduce(
         (accumulator, item) => {
+          const range = item.availability.range ?? null;
           accumulator.units += item.quantity;
-          accumulator.committed += item.availability.committedNow;
-          accumulator.available += item.availability.availableNow;
-          if (item.availability.overcommittedNow) accumulator.conflicts += 1;
+          accumulator.committed += rangeActive ? (range?.committed ?? 0) : item.availability.committedNow;
+          accumulator.available += rangeActive ? (range?.available ?? 0) : item.availability.availableNow;
+          if (rangeActive ? (range?.overcommitted ?? false) : item.availability.overcommittedNow) accumulator.conflicts += 1;
           return accumulator;
         },
         { units: 0, committed: 0, available: 0, conflicts: 0 },
       ),
-    [inventory],
+    [inventory, rangeActive],
   );
+
+  // Disponibilidad del ítem abierto en el rango pedido + sustitutos sugeridos.
+  useEffect(() => {
+    if (!selectedId || !rangeActive) {
+      setRangeAvailability(null);
+      setSubstitutes([]);
+      setRangeError("");
+      setRangeLoading(false);
+      return;
+    }
+    const params = new URLSearchParams({ inventoryId: selectedId, startsAt: `${from}T00:00`, endsAt: `${to}T23:59` });
+    const controller = new AbortController();
+    setRangeLoading(true);
+    setRangeError("");
+    void adminApiGet<AdminApiResponse>(`/api/admin/inventory?${params.toString()}`, {
+      fresh: true,
+      signal: controller.signal,
+      fallbackError: "No pudimos calcular la disponibilidad del rango.",
+    })
+      .then((result) => {
+        if (!result.ok) {
+          if (result.aborted) return;
+          setRangeAvailability(null);
+          setSubstitutes([]);
+          setRangeError(result.error);
+          return;
+        }
+        setRangeAvailability(result.data.availability ?? null);
+        setSubstitutes(result.data.substitutes ?? []);
+      })
+      .finally(() => setRangeLoading(false));
+    return () => controller.abort();
+  }, [selectedId, rangeActive, from, to]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -138,11 +210,19 @@ export function InventarioModule() {
   /** CSV del inventario filtrado: cantidades y costos reales de cada ítem. */
   function exportInventory() {
     const units = rows.reduce((sum, item) => sum + item.quantity, 0);
-    const available = rows.reduce((sum, item) => sum + item.availability.availableNow, 0);
-    const committed = rows.reduce((sum, item) => sum + item.availability.committedNow, 0);
+    const available = rows.reduce(
+      (sum, item) => sum + (rangeActive ? (item.availability.range?.available ?? 0) : item.availability.availableNow),
+      0,
+    );
+    const committed = rows.reduce(
+      (sum, item) => sum + (rangeActive ? (item.availability.range?.committed ?? 0) : item.availability.committedNow),
+      0,
+    );
+    const availabilityLabel = rangeActive ? "Libres en el rango" : "Libres ahora";
+    const committedLabel = rangeActive ? "Comprometidas en el rango" : "Comprometidas ahora";
     const blocks: CsvBlock[] = [
       {
-        title: "Inventario",
+        title: rangeActive ? `Inventario · ${from} a ${to}` : "Inventario",
         header: [
           "Artículo",
           "Categoría",
@@ -150,8 +230,8 @@ export function InventarioModule() {
           "Tipo",
           "Estado",
           "Cantidad",
-          "Libres ahora",
-          "Comprometidas ahora",
+          availabilityLabel,
+          committedLabel,
           "Reposición (PYG)",
           "Costo diario (PYG)",
           "Conflicto",
@@ -164,11 +244,11 @@ export function InventarioModule() {
             inventoryKindLabel(item.kind),
             inventoryStatusLabel(item.status),
             item.quantity,
-            item.availability.availableNow,
-            item.availability.committedNow,
+            rangeActive ? (item.availability.range?.available ?? 0) : item.availability.availableNow,
+            rangeActive ? (item.availability.range?.committed ?? 0) : item.availability.committedNow,
             item.replacementCost,
             item.dailyCost,
-            csvBool(item.availability.overcommittedNow),
+            csvBool(rangeActive ? (item.availability.range?.overcommitted ?? false) : item.availability.overcommittedNow),
           ]),
           ["Total", "", "", "", "", units, available, committed, "", "", ""],
         ],
@@ -177,7 +257,8 @@ export function InventarioModule() {
     downloadCsv(csvFilename("inventario"), blocks);
   }
 
-  async function changeStatus(item: AdminInventoryItemRow, next: string) {    setStatusBusyId(item.id);
+  async function changeStatus(item: AdminInventoryItemRow, next: string) {
+    setStatusBusyId(item.id);
     setStatusError("");
     setNotice("");
     const result = await adminSend("/api/admin/inventory", { kind: "status", id: item.id, status: next });
@@ -190,19 +271,26 @@ export function InventarioModule() {
     resources.reload();
   }
 
+  function clearRange() {
+    setFrom("");
+    setTo("");
+  }
+
+  const selectedRange = selected?.availability.range ?? null;
+
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de inventario">
         <AdminKpi label="Ítems" value={formatNumber(inventory.length)} note="controlados" />
         <AdminKpi label="Unidades" value={formatNumber(totals.units)} note="en total" />
         <AdminKpi
-          label="En eventos ahora"
+          label={rangeActive ? "Comprometidas en el rango" : "En eventos ahora"}
           value={formatNumber(totals.committed)}
-          note="unidades comprometidas"
+          note={rangeActive ? dayRangeLabel(from, to) : "unidades comprometidas"}
           tone={totals.committed > 0 ? "accent" : undefined}
         />
         <AdminKpi
-          label="Disponibles ahora"
+          label={rangeActive ? "Disponibles en el rango" : "Disponibles ahora"}
           value={formatNumber(totals.available)}
           note={totals.conflicts > 0 ? `${formatNumber(totals.conflicts)} ítems en conflicto` : "libres para asignar"}
           tone={totals.available === 0 || totals.conflicts > 0 ? "warn" : "ok"}
@@ -213,6 +301,29 @@ export function InventarioModule() {
         <SearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
         <AdminSelect value={kind} onChange={setKind} label="Filtrar por tipo" options={KIND_OPTIONS} />
         <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
+        <div className="admin-field--filter">
+          <DateField
+            label="Disponible desde"
+            max={to || undefined}
+            value={from}
+            onChange={setFrom}
+            title="Primer día del rango de disponibilidad"
+          />
+        </div>
+        <div className="admin-field--filter">
+          <DateField
+            label="Hasta"
+            min={from || undefined}
+            value={to}
+            onChange={setTo}
+            title="Último día del rango de disponibilidad"
+          />
+        </div>
+        {rangeActive ? (
+          <AdminButton icon="close" title="Quitar el rango y volver a la disponibilidad de hoy" aria-label="Quitar el rango de disponibilidad" onClick={clearRange}>
+            Hoy
+          </AdminButton>
+        ) : null}
         <span className="admin-export">
           <AdminButton
             icon="download"
@@ -240,6 +351,8 @@ export function InventarioModule() {
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {statusError ? <AdminNote tone="error">{statusError}</AdminNote> : null}
+      {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
+      {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
 
       {writable && showForm ? (
         <AdminFormPanel
@@ -304,7 +417,7 @@ export function InventarioModule() {
               { label: "Categoría" },
               { label: "Tipo" },
               { label: "Cantidad", end: true },
-              { label: "Libres ahora", end: true },
+              { label: rangeActive ? "Libres en rango" : "Libres ahora", end: true },
               { label: "Reposición", end: true },
               { label: "Costo diario", end: true },
               { label: "Estado" },
@@ -312,7 +425,11 @@ export function InventarioModule() {
             ]}
           >
             {rows.map((item) => {
-              const { availableNow, committedNow, overcommittedNow } = item.availability;
+              const { availableNow, committedNow, overcommittedNow, range } = item.availability;
+              const available = rangeActive ? (range?.available ?? 0) : availableNow;
+              const committed = rangeActive ? (range?.committed ?? 0) : committedNow;
+              const overcommitted = rangeActive ? (range?.overcommitted ?? false) : overcommittedNow;
+              const conflictEvents = range?.conflicts ?? [];
               return (
                 <AdminRow key={item.id}>
                   <AdminCell title={item.name}>
@@ -328,15 +445,21 @@ export function InventarioModule() {
                   </AdminCell>
                   <AdminCell
                     end
-                    title={`${formatNumber(availableNow)} libres de ${formatNumber(item.quantity)} · ${formatNumber(committedNow)} comprometidas ahora`}
+                    title={`${formatNumber(available)} libres de ${formatNumber(item.quantity)} · ${formatNumber(committed)} comprometidas ${
+                      rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
+                    }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`}
                   >
-                    <span className="admin-nowrap" data-tone={availableNow === 0 ? "warn" : undefined}>
-                      {formatNumber(availableNow)}
+                    <span className="admin-nowrap" data-tone={available === 0 ? "warn" : undefined}>
+                      {formatNumber(available)}
                     </span>
-                    {overcommittedNow ? (
+                    {overcommitted ? (
                       <AdminBadge
                         tone="danger"
-                        title="Hay más unidades asignadas a eventos vigentes que las que tiene el ítem."
+                        title={
+                          rangeActive
+                            ? "Hay más unidades comprometidas en el rango que las que tiene el ítem."
+                            : "Hay más unidades asignadas a eventos vigentes que las que tiene el ítem."
+                        }
                       >
                         Conflicto
                       </AdminBadge>
@@ -367,8 +490,8 @@ export function InventarioModule() {
                     <span className="admin-actions">
                       <AdminButton
                         icon="info"
-                        title={`Ver asignaciones: ${item.name}`}
-                        aria-label={`Ver asignaciones: ${item.name}`}
+                        title={`Ver asignaciones y disponibilidad: ${item.name}`}
+                        aria-label={`Ver asignaciones y disponibilidad: ${item.name}`}
                         onClick={() => setSelectedId((current) => (current === item.id ? "" : item.id))}
                       />
                     </span>
@@ -382,22 +505,120 @@ export function InventarioModule() {
 
       {selected ? (
         <AdminPanel
-          title={`Asignaciones · ${selected.name}`}
-          meta={`${formatNumber(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} libres ahora`}
+          title={`Disponibilidad · ${selected.name}`}
+          meta={
+            rangeActive
+              ? `${formatNumber(selectedRange?.available ?? 0)} de ${formatNumber(selected.quantity)} libres entre ${dayRangeLabel(from, to)}`
+              : `${formatNumber(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} libres ahora`
+          }
           action={
             <AdminButton
               icon="close"
-              title="Cerrar asignaciones"
-              aria-label="Cerrar asignaciones"
+              title="Cerrar disponibilidad"
+              aria-label="Cerrar disponibilidad"
               onClick={() => setSelectedId("")}
             />
           }
         >
+          {rangeActive ? (
+            rangeLoading ? (
+              <AdminNote>Calculando la disponibilidad del rango…</AdminNote>
+            ) : rangeError ? (
+              <AdminNote tone="error">{rangeError}</AdminNote>
+            ) : (
+              <>
+                <AdminNote tone={rangeAvailability && rangeAvailability.available === 0 ? "error" : undefined}>
+                  {rangeAvailability
+                    ? `${formatNumber(rangeAvailability.available)} de ${formatNumber(rangeAvailability.total)} unidades libres entre ${dayRangeLabel(from, to)}.`
+                    : "Sin datos de disponibilidad para el rango."}
+                  {rangeAvailability?.blocked
+                    ? ` «${rangeAvailability.name}» está ${rangeAvailability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
+                    : ""}
+                  {rangeAvailability && rangeAvailability.conflicts.length > 0
+                    ? ` Comprometidas: ${rangeAvailability.conflicts
+                        .map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`)
+                        .join(", ")}.`
+                    : " Sin rangos comprometidos en el rango."}
+                </AdminNote>
+
+                {rangeAvailability && rangeAvailability.conflicts.length > 0 ? (
+                  <AdminTable
+                    view="inventario-rangos"
+                    label={`Rangos comprometidos de ${selected.name} en el rango`}
+                    columns={[
+                      { label: "Evento" },
+                      { label: "Rango comprometido" },
+                      { label: "Cantidad", end: true },
+                    ]}
+                  >
+                    {rangeAvailability.conflicts.map((conflict) => (
+                      <AdminRow key={conflict.id}>
+                        <AdminCell title={conflict.eventName}>{conflict.eventName}</AdminCell>
+                        <AdminCell title={rangeStamp(conflict.startsAt, conflict.endsAt)}>
+                          {rangeStamp(conflict.startsAt, conflict.endsAt)}
+                        </AdminCell>
+                        <AdminCell end title={`${formatNumber(conflict.quantity)} unidades`}>
+                          {formatNumber(conflict.quantity)}
+                        </AdminCell>
+                      </AdminRow>
+                    ))}
+                  </AdminTable>
+                ) : null}
+
+                {substitutes.length > 0 ? (
+                  <AdminTable
+                    view="inventario-sustitutos"
+                    label={`Sustitutos de ${selected.name} con stock libre en el rango`}
+                    columns={[
+                      { label: "Sustituto" },
+                      { label: "Categoría" },
+                      { label: "Libres", end: true },
+                      { label: "Total", end: true },
+                      { label: "Estado" },
+                    ]}
+                  >
+                    {substitutes.map((substitute) => (
+                      <AdminRow key={substitute.id}>
+                        <AdminCell title={substitute.name}>
+                          <strong>{substitute.name}</strong>
+                          {substitute.sku ? <span className="admin-code"> · {substitute.sku}</span> : null}
+                        </AdminCell>
+                        <AdminCell title={substitute.category}>{substitute.category}</AdminCell>
+                        <AdminCell
+                          end
+                          title={`${formatNumber(substitute.available)} libres de ${formatNumber(substitute.total)} en el rango (${formatNumber(substitute.committed)} comprometidas)`}
+                        >
+                          <span className="admin-nowrap">{formatNumber(substitute.available)}</span>
+                        </AdminCell>
+                        <AdminCell end title={`${formatNumber(substitute.total)} unidades`}>
+                          {formatNumber(substitute.total)}
+                        </AdminCell>
+                        <AdminCell>
+                          <AdminBadge tone={statusTone(substitute.status)}>{inventoryStatusLabel(substitute.status)}</AdminBadge>
+                        </AdminCell>
+                      </AdminRow>
+                    ))}
+                  </AdminTable>
+                ) : (
+                  <AdminNote>
+                    Sin sustitutos de la categoría «{selected.category}» con stock libre en el rango.
+                  </AdminNote>
+                )}
+                <p className="admin-note">
+                  Los sustitutos se vinculan desde el presupuesto (Presupuestos → Inventario del presupuesto) para que la
+                  aprobación reserve el reemplazo.
+                </p>
+              </>
+            )
+          ) : (
+            <AdminNote>Elegí un rango (desde y hasta) para ver los rangos comprometidos y los sustitutos sugeridos.</AdminNote>
+          )}
+
           {selected.assignments.length === 0 ? (
             <AdminEmpty
               icon="inventory"
               title="Sin asignaciones"
-              hint="Los equipos se asignan a los eventos con cantidad y rango de fechas desde el módulo Eventos."
+              hint="Los equipos se asignan a los eventos con cantidad y rango de fechas desde el módulo Eventos, o se reservan al aprobar un presupuesto con ítems vinculados."
             />
           ) : (
             <AdminTable

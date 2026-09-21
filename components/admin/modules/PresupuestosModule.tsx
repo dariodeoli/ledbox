@@ -14,7 +14,9 @@ import {
   formatDateTime,
   formatMoney,
   formatNumber,
+  inventoryStatusLabel,
   statusTone,
+  type AdminTone,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
@@ -23,7 +25,10 @@ import {
   collectedAmount,
   type AdminBudgetPortalPayload,
   type AdminBudgetRequestRow,
+  type AdminBudgetReservation,
   type AdminBudgetRow,
+  type AdminInventoryItemRow,
+  type AdminInventoryLink,
   type AdminPaymentDetails,
 } from "@/lib/admin-types";
 import { portalBudgetUrl } from "@/lib/public-config";
@@ -59,7 +64,17 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelado" },
 ];
 
-const EMPTY_FORM = { clientId: "", eventId: "", title: "", item: "", quantity: "1", days: "1", unitPrice: "", costPrice: "" };
+const EMPTY_FORM = {
+  clientId: "",
+  eventId: "",
+  title: "",
+  item: "",
+  quantity: "1",
+  days: "1",
+  unitPrice: "",
+  costPrice: "",
+  inventory: null as AdminInventoryLink | null,
+};
 const MAX_INSTALLMENTS = 12;
 
 type ApprovalDecision = "approve" | "request_revision";
@@ -115,6 +130,178 @@ function planSummary(budget: AdminBudgetRow): string {
   if (installments.length > 0) parts.push(`${formatNumber(installments.length)} cuota${installments.length === 1 ? "" : "s"}`);
   if (budget.paymentTerms) parts.push(budget.paymentTerms);
   return parts.length > 0 ? parts.join(" · ") : "Sin plan de pagos";
+}
+
+// ── Reserva automática al aprobar (issue #18) ────────────────────────────────
+// Estado de cada ítem vinculado después de la reserva; el API manda el motivo.
+
+const RESERVATION_STATUS: Record<string, string> = {
+  created: "Reservado",
+  updated: "Actualizado",
+  unchanged: "Ya reservado",
+  conflict: "Conflicto",
+  blocked: "Bloqueado",
+  "missing-event": "Sin evento",
+  "missing-range": "Sin fechas",
+  "in-movement": "Movimiento en curso",
+};
+
+const RESERVATION_STATUS_TONES: Record<string, AdminTone> = {
+  created: "ok",
+  updated: "info",
+  unchanged: "neutral",
+  conflict: "danger",
+  blocked: "danger",
+  "missing-event": "warn",
+  "missing-range": "warn",
+  "in-movement": "warn",
+};
+
+function reservationStatusLabel(status: string): string {
+  return RESERVATION_STATUS[status] ?? status;
+}
+
+function reservationStatusTone(status: string): AdminTone {
+  return RESERVATION_STATUS_TONES[status] ?? "neutral";
+}
+
+/**
+ * Rango del evento para pedir disponibilidad y reservar (issue #18): montaje →
+ * desmontaje. `null` cuando el evento no tiene el rango completo (no se
+ * inventan fechas): en ese caso se muestra la disponibilidad de hoy y la reserva
+ * queda pendiente hasta definirlo.
+ */
+function eventAvailabilityRange(
+  event: { setupAt?: string | null; startsAt?: string | null; strikeAt?: string | null; endsAt?: string | null } | null,
+): { startsAt: string; endsAt: string } | null {
+  if (!event) return null;
+  const startsAt = event.setupAt ?? event.startsAt ?? null;
+  const endsAt = event.strikeAt ?? event.endsAt ?? null;
+  if (!startsAt || !endsAt) return null;
+  return { startsAt, endsAt };
+}
+
+/** Rango del evento en una línea: `21-sept. 08:00 → 23-sept. 20:00`. */
+function eventRangeLabel(range: { startsAt: string; endsAt: string }): string {
+  return `${formatDateTime(range.startsAt)} → ${formatDateTime(range.endsAt)}`;
+}
+
+/** Vínculo listo para guardar: solo los campos que el API acepta y dibuja. */
+function inventoryLinkOf(item: AdminInventoryItemRow): AdminInventoryLink {
+  return { id: item.id, name: item.name, sku: item.sku, category: item.category, quantity: item.quantity, status: item.status };
+}
+
+/**
+ * Buscador de inventario para vincular un ítem del presupuesto (issue #18).
+ * Pide la disponibilidad del rango del evento cuando existe (mismo endpoint y
+ * misma lógica que el inventario) y muestra cuántos libres hay por artículo. Un
+ * ítem sin vínculo no reserva nada: queda documentado en el propio buscador.
+ */
+function InventoryLinkPicker({
+  label,
+  hint,
+  range,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  label: string;
+  hint?: string;
+  range: { startsAt: string; endsAt: string } | null;
+  selected: AdminInventoryLink | null;
+  disabled?: boolean;
+  onSelect: (item: AdminInventoryLink | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const path = useMemo(() => {
+    if (!range) return "/api/admin/inventory";
+    const params = new URLSearchParams({ startsAt: range.startsAt, endsAt: range.endsAt });
+    return `/api/admin/inventory?${params.toString()}`;
+  }, [range]);
+  const inventory = useAdminResource(path, (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[]);
+
+  const candidates = useMemo(() => {
+    return (inventory.data ?? [])
+      .filter((item) => matchesQuery(query, [item.name, item.category, item.sku]))
+      .map((item) => ({
+        item,
+        available: range ? (item.availability.range?.available ?? 0) : item.availability.availableNow,
+        blocked: item.status === "MAINTENANCE" || item.status === "RETIRED",
+      }))
+      .sort((a, b) => b.available - a.available || a.item.name.localeCompare(b.item.name))
+      .slice(0, 6);
+  }, [inventory.data, query, range]);
+
+  const selectedRow = useMemo(
+    () => (selected ? (inventory.data ?? []).find((item) => item.id === selected.id) ?? null : null),
+    [inventory.data, selected],
+  );
+  const selectedFree = selectedRow
+    ? range
+      ? (selectedRow.availability.range?.available ?? 0)
+      : selectedRow.availability.availableNow
+    : null;
+
+  return (
+    <div className="admin-link-field">
+      <span className="admin-field-label">{label}</span>
+      {selected ? (
+        <div className="admin-link-current">
+          <span className="admin-link-name" title={`${selected.name}${selected.sku ? ` · ${selected.sku}` : ""} · ${selected.category}`}>
+            <strong>{selected.name}</strong>
+            <small className="admin-cell-sub">
+              {" "}
+              · {selected.category} · {formatNumber(selected.quantity)} unidades
+              {selectedFree !== null ? ` · ${formatNumber(selectedFree)} libres ${range ? "en el rango" : "ahora"}` : ""}
+            </small>
+          </span>
+          <AdminButton
+            icon="close"
+            title={`Quitar el vínculo con ${selected.name}`}
+            aria-label={`Quitar el vínculo con ${selected.name}`}
+            disabled={disabled}
+            onClick={() => onSelect(null)}
+          />
+        </div>
+      ) : null}
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        label={selected ? `Buscar otro artículo para ${label}` : `Buscar artículo para ${label}`}
+        placeholder="Buscar por artículo, categoría o SKU…"
+      />
+      <div className="admin-link-list">
+        {inventory.loading ? <span className="admin-muted">Cargando inventario…</span> : null}
+        {inventory.error ? <AdminNote tone="error">{inventory.error}</AdminNote> : null}
+        {!inventory.loading && !inventory.error && candidates.length === 0 ? (
+          <span className="admin-muted">Sin artículos que coincidan con la búsqueda.</span>
+        ) : null}
+        {candidates.map(({ item, available, blocked }) => (
+          <div className="admin-link-row" key={item.id}>
+            <span className="admin-link-name" title={`${item.name}${item.sku ? ` · ${item.sku}` : ""} · ${item.category}`}>
+              <strong>{item.name}</strong>
+              <small className="admin-cell-sub"> · {item.category}{item.sku ? ` · ${item.sku}` : ""}</small>
+            </span>
+            <span className="admin-link-free" data-tone={blocked || available === 0 ? "warn" : undefined}>
+              {blocked
+                ? inventoryStatusLabel(item.status)
+                : `${formatNumber(available)} libres ${range ? "en el rango" : "ahora"}`}
+            </span>
+            <AdminButton
+              icon="check"
+              title={`Vincular ${item.name}`}
+              aria-label={`Vincular ${item.name}`}
+              disabled={disabled || selected?.id === item.id}
+              onClick={() => onSelect(inventoryLinkOf(item))}
+            >
+              {selected?.id === item.id ? "Vinculado" : "Vincular"}
+            </AdminButton>
+          </div>
+        ))}
+      </div>
+      {hint ? <span className="admin-field-hint">{hint}</span> : null}
+    </div>
+  );
 }
 
 /**
@@ -300,6 +487,148 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * Vínculo de los ítems del presupuesto con el inventario (issue #18). Cada
+ * cambio se guarda al instante (`PATCH /api/admin/budgets` con
+ * `kind: "item-link"`) y queda auditado; el presupuesto y el inventario se
+ * recargan al cerrar. Sin vínculo, el ítem no reserva nada al aprobar.
+ */
+function ItemLinksDialog({
+  budget,
+  onClose,
+  onSaved,
+}: {
+  budget: AdminBudgetRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [links, setLinks] = useState<Record<string, AdminInventoryLink | null>>(() =>
+    Object.fromEntries(budget.items.map((item) => [item.id, item.inventory ?? null])),
+  );
+  const [openId, setOpenId] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const range = eventAvailabilityRange(budget.event);
+  const linkedCount = budget.items.filter((item) => links[item.id]).length;
+
+  async function save(item: AdminBudgetRow["items"][number], inventory: AdminInventoryLink | null) {
+    setBusyId(item.id);
+    setError("");
+    setNotice("");
+    const result = await adminSend(
+      "/api/admin/budgets",
+      { kind: "item-link", budgetId: budget.id, itemId: item.id, inventoryId: inventory?.id ?? null },
+      "PATCH",
+    );
+    setBusyId("");
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setLinks((current) => ({ ...current, [item.id]: inventory }));
+    setOpenId("");
+    setNotice(
+      inventory
+        ? `«${item.name}» vinculado con «${inventory.name}»: al aprobar reserva stock.`
+        : `«${item.name}» quedó sin vínculo: no reserva stock.`,
+    );
+    onSaved();
+  }
+
+  return (
+    <ModuleDialog title={`Inventario del presupuesto · ${budget.title}`} wide onClose={onClose}>
+      <p className="admin-dialog-text">
+        Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
+        panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
+        {budget.event
+          ? range
+            ? ` Rango del evento «${budget.event.name}»: ${eventRangeLabel(range)}.`
+            : ` El evento «${budget.event.name}» no tiene fechas: la reserva queda pendiente hasta definirlas.`
+          : " El presupuesto no tiene evento asociado: la reserva queda pendiente hasta asociarlo."}
+      </p>
+      <p className="admin-dialog-text">
+        {formatNumber(linkedCount)} de {formatNumber(budget.items.length)} ítems vinculados. Los conflictos de disponibilidad
+        no bloquean la aprobación: quedan auditados y el equipo los ve en los avisos y en Inventario (con sustitutos).
+      </p>
+
+      <div className="admin-link-list">
+        {budget.items.map((item) => {
+          const link = links[item.id] ?? null;
+          const open = openId === item.id;
+          const busy = busyId === item.id;
+          return (
+            <div className="admin-link-item" key={item.id}>
+              <div className="admin-link-row">
+                <span className="admin-link-name" title={item.name}>
+                  <strong>{item.name}</strong>
+                  <small className="admin-cell-sub">
+                    {" "}
+                    · {formatNumber(item.quantity)} × {formatNumber(item.days)} d
+                  </small>
+                </span>
+                <span className="admin-link-free" title={link ? `Vinculado con ${link.name}` : "Sin vínculo: el ítem no reserva stock"}>
+                  {link ? (
+                    <>
+                      Inventario: <strong>{link.name}</strong>
+                    </>
+                  ) : (
+                    <span className="admin-muted">Sin vínculo · no reserva</span>
+                  )}
+                </span>
+                <span className="admin-actions">
+                  <AdminButton
+                    icon={link ? "edit" : "check"}
+                    busy={busy}
+                    title={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
+                    aria-label={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
+                    disabled={busy}
+                    onClick={() => setOpenId(open ? "" : item.id)}
+                  >
+                    {link ? "Cambiar" : "Vincular"}
+                  </AdminButton>
+                  {link ? (
+                    <AdminButton
+                      icon="close"
+                      title={`Quitar el vínculo de «${item.name}»`}
+                      aria-label={`Quitar el vínculo de «${item.name}»`}
+                      disabled={busy}
+                      onClick={() => void save(item, null)}
+                    />
+                  ) : null}
+                </span>
+              </div>
+              {open ? (
+                <InventoryLinkPicker
+                  label={`Artículo de inventario para «${item.name}»`}
+                  hint={
+                    range
+                      ? `Disponibilidad calculada entre ${eventRangeLabel(range)}.`
+                      : "Sin fechas del evento: se muestra la disponibilidad de hoy."
+                  }
+                  range={range}
+                  selected={link}
+                  disabled={busy}
+                  onSelect={(next) => void save(item, next)}
+                />
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+      {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      <div className="admin-dialog-foot">
+        <span className="admin-dialog-spacer" />
+        <AdminButton variant="primary" icon="check" onClick={onClose} busy={Boolean(busyId)}>
+          Listo
+        </AdminButton>
+      </div>
+    </ModuleDialog>
+  );
+}
+
 export function PresupuestosModule() {
   const { role } = useAdminSession();
   const budgetsResource = useAdminResource("/api/admin/budgets", (payload) => ({
@@ -332,11 +661,20 @@ export function PresupuestosModule() {
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [plan, setPlan] = useState<{ budget: AdminBudgetRow; advance: string; terms: string; installments: PlanInstallment[] } | null>(null);
 
+  // Vínculo con inventario y reserva automática (issue #18).
+  const [linksBudget, setLinksBudget] = useState<AdminBudgetRow | null>(null);
+  const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);
+
   const writable = canWriteFinance(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const eventOptions = useMemo(() => events.data ?? [], [events.data]);
   const portalToken = portalBudget?.publicToken ?? null;
+
+  // Rango del evento elegido en el alta: define la disponibilidad que muestra el
+  // buscador de inventario y lo que se reservará al aprobar (issue #18).
+  const formEvent = useMemo(() => eventOptions.find((event) => event.id === form.eventId) ?? null, [eventOptions, form.eventId]);
+  const formRange = useMemo(() => eventAvailabilityRange(formEvent), [formEvent]);
 
   const budgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
   const requestRows = useMemo(() => budgetsResource.data?.requests ?? [], [budgetsResource.data]);
@@ -397,6 +735,7 @@ export function PresupuestosModule() {
           days: Number(form.days) || 1,
           unitPrice: Number(form.unitPrice) || 0,
           costPrice: Number(form.costPrice) || 0,
+          inventoryId: form.inventory?.id || undefined,
         },
       ],
     });
@@ -406,7 +745,11 @@ export function PresupuestosModule() {
       return;
     }
     setForm(EMPTY_FORM);
-    setNotice(`Presupuesto «${form.title}» creado.`);
+    setNotice(
+      form.inventory
+        ? `Presupuesto «${form.title}» creado con «${form.inventory.name}» vinculado al inventario.`
+        : `Presupuesto «${form.title}» creado.`,
+    );
     budgetsResource.reload();
   }
 
@@ -500,6 +843,12 @@ export function PresupuestosModule() {
     if (!result.ok) {
       setDialogError(result.error);
       return;
+    }
+    const reservations = result.data.reservations ?? null;
+    if (approval.decision === "approve" && reservations && reservations.outcomes.length > 0) {
+      setReservationReport({ title: approval.budget.title, reservation: reservations });
+    } else {
+      setReservationReport(null);
     }
     setNotice(
       approval.decision === "approve"
@@ -739,6 +1088,18 @@ export function PresupuestosModule() {
             value={form.costPrice}
             onChange={(value) => setForm({ ...form, costPrice: value })}
           />
+          <InventoryLinkPicker
+            label="Artículo de inventario (opcional)"
+            hint={
+              formRange
+                ? `Al aprobar se reserva stock del evento «${formEvent?.name}» (${eventRangeLabel(formRange)}).`
+                : "Sin evento o sin fechas no se puede calcular la disponibilidad: se muestra la de hoy y la reserva queda pendiente hasta definir el rango."
+            }
+            range={formRange}
+            selected={form.inventory}
+            disabled={busy}
+            onSelect={(item) => setForm({ ...form, inventory: item })}
+          />
         </AdminFormPanel>
       ) : null}
 
@@ -850,6 +1211,11 @@ export function PresupuestosModule() {
               const approvalState = budgetApprovalState(budget);
               const approved = approvalState === "APROBADO_DIGITAL" || approvalState === "APROBADO_MANUAL";
               const open = budget.status !== "LOST" && budget.status !== "CANCELLED";
+              const linked = budget.items.filter((item) => item.inventoryId);
+              const linkedCount = linked.length;
+              const linkedNames = linked
+                .map((item) => `${item.name} → ${item.inventory?.name ?? "inventario eliminado"}`)
+                .join(", ");
               return (
                 <AdminRow key={budget.id}>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
@@ -857,8 +1223,16 @@ export function PresupuestosModule() {
                     {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
                   </AdminCell>
                   <AdminCell title={budget.client.company || budget.client.name}>{budget.client.company || budget.client.name}</AdminCell>
-                  <AdminCell end title={`${budget.items.length} ítems`}>
+                  <AdminCell
+                    end
+                    title={`${budget.items.length} ítem${budget.items.length === 1 ? "" : "s"}${
+                      linkedCount > 0
+                        ? ` · vinculados al inventario: ${linkedNames}`
+                        : " · ninguno vinculado al inventario (no reservan stock)"
+                    }`}
+                  >
                     {formatNumber(budget.items.length)}
+                    {linkedCount > 0 ? <small className="admin-cell-sub"> · {formatNumber(linkedCount)} vinc.</small> : null}
                   </AdminCell>
                   <AdminCell end title={formatMoney(budget.total)}>
                     {formatMoney(budget.total)}
@@ -921,6 +1295,16 @@ export function PresupuestosModule() {
                           title={`Plan de pagos y cuotas: ${budget.title} · ${planSummary(budget)}`}
                           aria-label={`Plan de pagos y cuotas: ${budget.title}`}
                           onClick={() => openPlan(budget)}
+                        />
+                      ) : null}
+                      {writable ? (
+                        <AdminButton
+                          icon="inventory"
+                          title={`Inventario del presupuesto: ${budget.title} · ${
+                            linkedCount > 0 ? `${linkedCount} ítem${linkedCount === 1 ? "" : "s"} vinculado${linkedCount === 1 ? "" : "s"}` : "sin vínculos"
+                          }`}
+                          aria-label={`Inventario del presupuesto: ${budget.title}`}
+                          onClick={() => setLinksBudget(budget)}
                         />
                       ) : null}
                       {writable && open && !approved ? (
@@ -1288,6 +1672,88 @@ export function PresupuestosModule() {
       ) : null}
 
       {paymentsOpen ? <PaymentDetailsDialog onClose={() => setPaymentsOpen(false)} /> : null}
+
+      {linksBudget ? (
+        <ItemLinksDialog
+          budget={linksBudget}
+          onClose={() => setLinksBudget(null)}
+          onSaved={() => budgetsResource.reload()}
+        />
+      ) : null}
+
+      {reservationReport ? (
+        <AdminPanel
+          title={`Reserva automática · ${reservationReport.title}`}
+          meta={`${formatNumber(reservationReport.reservation.reserved)} de ${formatNumber(reservationReport.reservation.requested)} unidades reservadas${
+            reservationReport.reservation.eventName ? ` · ${reservationReport.reservation.eventName}` : ""
+          }`}
+          action={
+            <AdminButton
+              icon="close"
+              title="Cerrar el reporte de la reserva"
+              aria-label="Cerrar el reporte de la reserva"
+              onClick={() => setReservationReport(null)}
+            />
+          }
+        >
+          <AdminNote tone={reservationReport.reservation.failed || reservationReport.reservation.conflicts > 0 ? "error" : "ok"}>
+            {reservationReport.reservation.failed
+              ? "No pudimos completar la reserva automática; revisá el inventario del presupuesto."
+              : reservationReport.reservation.conflicts > 0
+                ? `La aprobación quedó registrada. ${formatNumber(reservationReport.reservation.conflicts)} ítem${
+                    reservationReport.reservation.conflicts === 1 ? "" : "s"
+                  } sin reserva completa: el detalle está abajo y los sustitutos se sugieren en Inventario.`
+                : "Los ítems vinculados quedaron reservados con el rango del evento."}
+            {reservationReport.reservation.range ? ` Rango: ${eventRangeLabel(reservationReport.reservation.range)}.` : ""}
+          </AdminNote>
+          <AdminTable
+            view="presupuestos-reserva"
+            label={`Reserva automática de ${reservationReport.title}`}
+            columns={[
+              { label: "Ítem del presupuesto" },
+              { label: "Artículo de inventario" },
+              { label: "Pedidas", end: true },
+              { label: "Reservadas", end: true },
+              { label: "Estado" },
+              { label: "Detalle" },
+            ]}
+          >
+            {reservationReport.reservation.outcomes.map((outcome) => {
+              const detail = [
+                outcome.reason,
+                outcome.conflicts.length > 0
+                  ? `Ocupado por ${outcome.conflicts.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}`
+                  : null,
+                outcome.substitutes.length > 0
+                  ? `Sustitutos: ${outcome.substitutes.map((substitute) => `${substitute.name} (${formatNumber(substitute.available)} libres)`).join(", ")}`
+                  : null,
+              ]
+                .filter((part): part is string => Boolean(part))
+                .join(" · ");
+              return (
+                <AdminRow key={outcome.itemId} tone={reservationStatusTone(outcome.status)}>
+                  <AdminCell title={outcome.itemName}>
+                    <strong>{outcome.itemName}</strong>
+                  </AdminCell>
+                  <AdminCell title={`${outcome.inventoryName}${outcome.inventorySku ? ` · ${outcome.inventorySku}` : ""}`}>
+                    {outcome.inventoryName}
+                  </AdminCell>
+                  <AdminCell end title={`${formatNumber(outcome.quantity)} pedidas`}>
+                    {formatNumber(outcome.quantity)}
+                  </AdminCell>
+                  <AdminCell end title={`${formatNumber(outcome.reserved)} reservadas de ${formatNumber(outcome.total)} en total`}>
+                    {formatNumber(outcome.reserved)}
+                  </AdminCell>
+                  <AdminCell title={outcome.reason ?? reservationStatusLabel(outcome.status)}>
+                    <AdminBadge tone={reservationStatusTone(outcome.status)}>{reservationStatusLabel(outcome.status)}</AdminBadge>
+                  </AdminCell>
+                  <AdminCell title={detail || "Reserva completa"}>{detail || "—"}</AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+        </AdminPanel>
+      ) : null}
     </div>
   );
 }

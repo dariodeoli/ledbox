@@ -80,9 +80,11 @@ function stamp(value: string | null): string {
   return value ? `${formatDateShort(value)} · ${formatTime(value)}` : "—";
 }
 
-/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00`. */
+/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00` (fin abierto si falta). */
 function rangeStamp(start: string | null, end: string | null): string {
-  if (!start || !end) return "Sin fechas";
+  if (!start && !end) return "Sin fechas";
+  if (start && !end) return `${formatDateShort(start)} ${formatTime(start)} → sin fin`;
+  if (!start && end) return `sin inicio → ${formatDateShort(end)} ${formatTime(end)}`;
   return `${formatDateShort(start)} ${formatTime(start)} → ${formatDateShort(end)} ${formatTime(end)}`;
 }
 

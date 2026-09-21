@@ -811,8 +811,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    regresiva, método, cheque, monto y acciones. El número de factura no se corta. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(12rem, 1.6fr) 7.5rem 5.5rem 5.5rem minmax(8.5rem, 1fr) 7rem 5.5rem 7.5rem 6.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 71rem; }
 .admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 70rem; }
-.admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 8rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 65rem; }
+.admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 9.5rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 66.5rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(9rem, 1.4fr) 12.5rem 5rem 8rem 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
+/* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
+   del ítem y las alternativas de la misma categoría con stock libre. */
+.admin-table--inventario-rangos { --inventario-rangos-cols: minmax(9rem, 1.5fr) 12.5rem 5rem; --admin-cols: var(--inventario-rangos-cols); --admin-table-min: 27.5rem; }
+.admin-table--inventario-sustitutos { --inventario-sustitutos-cols: minmax(10rem, 1.5fr) minmax(7rem, 1fr) 7rem 5rem 7rem; --admin-cols: var(--inventario-sustitutos-cols); --admin-table-min: 38rem; }
+/* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
+   pendiente y con qué eventos choca. */
+.admin-table--presupuestos-reserva { --presupuestos-reserva-cols: minmax(9rem, 1.3fr) minmax(9rem, 1.3fr) 5rem 6rem 7.5rem minmax(13rem, 2fr); --admin-cols: var(--presupuestos-reserva-cols); --admin-table-min: 55.5rem; }
 .admin-table--evento-equipos { --evento-equipos-cols: minmax(9rem, 1.3fr) 5rem 12.5rem 8rem 8rem 6.5rem minmax(7rem, 1fr) 11rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 68rem; }
 .admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 7.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 71rem; }
 .admin-table--trabajos { --trabajos-cols: minmax(8.5rem, 1.1fr) minmax(9.5rem, 1.4fr) minmax(6.5rem, 1fr) 5.5rem 7.5rem 7.5rem 7.5rem 7.5rem 5.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 70.5rem; }
@@ -828,6 +835,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-table--resumen-avisos { --resumen-avisos-cols: 5.5rem minmax(9rem, 1.8fr) 6.5rem 7.5rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 30rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 .admin-table--solicitudes { --solicitudes-cols: 10rem minmax(9rem, 1.2fr) minmax(13rem, 1.8fr) minmax(9rem, 1.2fr) 7.5rem 6rem 7rem; --admin-cols: var(--solicitudes-cols); --admin-table-min: 65rem; }
+
+/* ── Vínculo con inventario (issue #18) ──
+   El buscador vive dentro de la grilla de campos del alta y del diálogo de
+   vínculos del presupuesto; muestra la disponibilidad del rango del evento. */
+.admin-link-field { display: grid; grid-column: 1 / -1; gap: 6px; min-width: 0; }
+.admin-link-list { display: grid; gap: 6px; }
+.admin-link-item { display: grid; gap: 8px; padding: 9px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-link-row { display: grid; grid-template-columns: minmax(8rem, 1.4fr) minmax(8rem, 1.2fr) auto; gap: 8px; align-items: center; }
+.admin-link-name { min-width: 0; overflow: hidden; color: var(--a-muted-2); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-link-name strong { color: var(--a-text-strong); font-size: 13px; font-weight: 600; }
+.admin-link-free { min-width: 0; overflow: hidden; color: var(--a-muted-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-link-free[data-tone="warn"] { color: var(--a-warn); font-weight: 600; }
+.admin-link-free strong { color: var(--a-text-strong); }
+.admin-link-current { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-link-current .admin-link-name { flex: 1; }
 
 /* ── Solicitudes del portal, plan de pagos y datos de pago (issue #14) ──
    La cola de solicitudes usa la tabla densa del panel; los diálogos de plan y
@@ -1064,6 +1086,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 720px) {
   .admin-hide-sm { display: none; }
   .admin-panel-head { flex-wrap: wrap; }
+  .admin-link-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name actions" "free free"; }
+  .admin-link-row .admin-link-name { grid-area: name; }
+  .admin-link-row .admin-link-free { grid-area: free; }
+  .admin-link-row .admin-actions { grid-area: actions; }
 }
 @media (max-width: 520px) {
   .admin-kpi { padding: 9px 10px; }
