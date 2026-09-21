@@ -151,10 +151,14 @@ const DEMO_ORGANIZATION: Prisma.OrganizationUncheckedCreateInput = {
   paymentDetails: DEMO_PAYMENT_DETAILS,
 };
 
-type DemoEventStatus = "DRAFT" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED";
+type DemoEventStatus = "DRAFT" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
-/** Estado por fecha: pasado finalizado, hoy en curso, futuro confirmado (el borrador se declara). */
-function eventStatusFrom(startsAt: Date, endsAt: Date, now: Date, draft = false): DemoEventStatus {
+/**
+ * Estado por fecha: pasado finalizado, hoy en curso, futuro confirmado. El
+ * borrador y el cancelado se declaran (no se derivan de la fecha).
+ */
+function eventStatusFrom(startsAt: Date, endsAt: Date, now: Date, draft = false, cancelled = false): DemoEventStatus {
+  if (cancelled) return "CANCELLED";
   if (draft) return "DRAFT";
   if (endsAt.getTime() < now.getTime()) return "COMPLETED";
   if (startsAt.getTime() > now.getTime()) return "CONFIRMED";
@@ -258,7 +262,8 @@ const REAL_EVENTS_COUNT = REAL_EVENTS.length;
 /**
  * Eventos relativos a HOY: activaciones de marca (no tienen fecha publicada) y
  * el borrador. Garantizan que la demo siempre tenga algo en curso y algo
- * pendiente de confirmar, más allá de las fechas reales de las ferias.
+ * pendiente de confirmar, más allá de las fechas reales de las ferias. También
+ * vive acá el evento cancelado (issue #24): un estado real que no se maquilla.
  */
 type DemoRelativeEvent = {
   id: string;
@@ -269,12 +274,15 @@ type DemoRelativeEvent = {
   days: number;
   startsHour: number;
   draft?: boolean;
+  cancelled?: boolean;
   notes: string;
 };
 
 const RELATIVE_EVENTS: readonly DemoRelativeEvent[] = [
   { id: "demo_event_activacion_mall", clientId: "demo_client_samsung", name: "Activación Samsung · Shopping del Sol", location: "Shopping del Sol, Asunción", offsetDays: -1, days: 3, startsHour: 10, notes: "Activación en el atrio: pantalla LED, tótems interactivos y demo de producto." },
   { id: "demo_event_activacion_tigo", clientId: "demo_client_tigo", name: "Activación Tigo · Paseo La Galería", location: "Paseo La Galería, Asunción", offsetDays: 4, days: 2, startsHour: 16, notes: "Lanzamiento de planes en el atrio central, con pantalla y sonido." },
+  { id: "demo_event_showroom_nissei", clientId: "demo_client_nissei", name: "Cyberday · showroom Nissei", location: "Nissei · Shopping Mariscal, Asunción", offsetDays: 6, days: 2, startsHour: 11, notes: "Showroom de la campaña: pantalla de ofertas, tótems y transmisión en vivo." },
+  { id: "demo_event_cancelado", clientId: "demo_client_shopping", name: "Pasarela Primavera · Shopping del Sol", location: "Atrio central, Shopping del Sol, Asunción", offsetDays: 14, days: 2, startsHour: 20, cancelled: true, notes: "Cancelado: la marca postergó la campaña para noviembre y el presupuesto quedó perdido." },
   { id: "demo_event_activacion_verano", clientId: "demo_client_cerveza", name: "Activación Cervecería Paraguaya · Costanera", location: "Costanera de Asunción", offsetDays: 45, days: 3, startsHour: 18, draft: true, notes: "Borrador: falta la habilitación municipal y cerrar la estructura del escenario." },
 ];
 
@@ -290,7 +298,7 @@ const DATASET_MINS = {
   clients: CLIENTS.length,
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
-  budgets: 5,
+  budgets: 7,
   audits: 20,
 } as const;
 
@@ -306,14 +314,33 @@ const INVENTORY = [
   { id: "demo_inv_dispenser", name: "Dispensador inteligente", category: "Activaciones", sku: "DISP-01", kind: "REUSABLE", status: "AVAILABLE", quantity: 2, replacementCost: 1_100_000, dailyCost: 35_000, notes: "Dispensa premios con conteo por evento." },
   { id: "demo_inv_cable", name: "Cable UTP Cat6 (rollo 100 m)", category: "Insumos", sku: "CBL-UTP6", kind: "CONSUMABLE", status: "AVAILABLE", quantity: 12, replacementCost: 180_000, dailyCost: 0, notes: null },
   { id: "demo_inv_truss", name: "Estructura de truss 2 m", category: "Estructuras", sku: "TRS-2M", kind: "REUSABLE", status: "RESERVED", quantity: 30, replacementCost: 450_000, dailyCost: 12_000, notes: null },
-  { id: "demo_inv_panels", name: "Bastidor de piso para pantalla", category: "Estructuras", sku: "BAS-PISO", kind: "REUSABLE", status: "AVAILABLE", quantity: 18, replacementCost: 620_000, dailyCost: 18_000, notes: null },
+  { id: "demo_inv_panels", name: "Bastidor de piso para pantalla", category: "Estructuras", sku: "BAS-PISO", kind: "REUSABLE", status: "AVAILABLE", quantity: 18, replacementCost: 620_000, dailyCost: 18_000, notes: "Dos bastidores quedaron sin volver de la última feria (reclamo abierto)." },
 ] satisfies Array<{ id: string } & Omit<Prisma.InventoryItemUncheckedCreateInput, "id" | "organizationId">>;
 
-const PROMOTERS = [
-  { id: "demo_promoter_ana", name: "Ana Villalba", phone: "+595 981 445 210", email: "ana.villalba@ledbox.demo", specialties: "Activación de marca, degustación", active: true, notes: "Disponible los fines de semana." },
-  { id: "demo_promoter_lorena", name: "Lorena Ríos", phone: "+595 983 220 118", email: "lorena.rios@ledbox.demo", specialties: "Registro de invitados, acreditaciones", active: true, notes: null },
-  { id: "demo_promoter_mabel", name: "Mabel Acosta", phone: "+595 971 909 330", email: "mabel.acosta@ledbox.demo", specialties: "Fotografía y redes sociales", active: true, notes: "Lleva cámara propia." },
-  { id: "demo_promoter_javier", name: "Javier Paredes", phone: "+595 985 771 042", email: "javier.paredes@ledbox.demo", specialties: "Montaje y soporte técnico", active: true, notes: null },
+/**
+ * Promotoras del equipo de campo (issue #24): la disponibilidad es un estado
+ * real, no un adorno. Dos de ellas no están disponibles o están a definir, y una
+ * queda asignada a una tarea para que el panel muestre el aviso.
+ */
+type DemoPromoter = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  specialties: string;
+  active: boolean;
+  notes: string | null;
+  availability: "AVAILABLE" | "UNAVAILABLE" | "TO_DEFINE";
+  availabilityNote: string | null;
+  /** Días desde HOY del "hasta"; se re-ancla en cada provisión (`null` = sin fecha). */
+  unavailableInDays: number | null;
+};
+
+const PROMOTERS: readonly DemoPromoter[] = [
+  { id: "demo_promoter_ana", name: "Ana Villalba", phone: "+595 981 445 210", email: "ana.villalba@ledbox.demo", specialties: "Activación de marca, degustación", active: true, notes: "Disponible los fines de semana.", availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null },
+  { id: "demo_promoter_lorena", name: "Lorena Ríos", phone: "+595 983 220 118", email: "lorena.rios@ledbox.demo", specialties: "Registro de invitados, acreditaciones", active: true, notes: null, availability: "UNAVAILABLE", availabilityNote: "De viaje por trabajo; retoma a fin de mes.", unavailableInDays: 9 },
+  { id: "demo_promoter_mabel", name: "Mabel Acosta", phone: "+595 971 909 330", email: "mabel.acosta@ledbox.demo", specialties: "Fotografía y redes sociales", active: true, notes: "Lleva cámara propia.", availability: "TO_DEFINE", availabilityNote: "Todavía no confirmó los fines de semana de octubre.", unavailableInDays: null },
+  { id: "demo_promoter_javier", name: "Javier Paredes", phone: "+595 985 771 042", email: "javier.paredes@ledbox.demo", specialties: "Montaje y soporte técnico", active: true, notes: null, availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null },
 ];
 
 const PROMOTER_IDS = PROMOTERS.map((promoter) => promoter.id);
@@ -347,6 +374,8 @@ const LEADS: readonly DemoLead[] = [
   { id: "demo_lead_vision", name: "Carla Núñez", company: "Visión Banco", phone: "+595 972 664 812", email: "carla.nunez@visionbanco.demo", reason: "Jornada de sucursales", message: "Jornada regional de sucursales con pantalla principal y acreditación.", status: "CONTACTED", createdDaysAgo: 6, eventDateDays: 33, location: "Encarnación", internalNotes: "Pidió cotización para dos fechas; llamar el lunes." },
   { id: "demo_lead_superseis", name: "Diego Ocampos", company: "Superseis", phone: "+595 991 204 118", email: "diego.ocampos@superseis.demo", reason: "Aniversario de tienda", message: "Aniversario de la sucursal con activación de fin de semana.", status: "WON", createdDaysAgo: 20, eventDateDays: -4, location: "Asunción", internalNotes: "Cerró la activación; facturar a 30 días." },
   { id: "demo_lead_pixel", name: "Sandra Meza", company: "Agencia Punto Creativo", phone: "+595 983 991 004", email: "sandra.meza@punktocreativo.demo", reason: "Congreso interno", message: "Congreso de vendedores con pantalla principal y traducción.", status: "LOST", createdDaysAgo: 16, eventDateDays: 12, location: "San Bernardino", internalNotes: "Eligió otro proveedor por presupuesto." },
+  // Sin respuesta hace semanas (issue #24): un lead que nunca se contactó.
+  { id: "demo_lead_sin_respuesta", name: "Marcelo Aquino", company: "Frigorífico Concepción", phone: "+595 983 664 220", email: "maquino@frigorifico.concepcion.demo", reason: "Feria regional", message: "Necesitamos pantallas para una feria regional en Concepción; ¿tienen disponibilidad en octubre?", status: "NEW", createdDaysAgo: 24, eventDateDays: 32, location: "Concepción", internalNotes: "Entró por el sitio hace semanas y nadie lo contactó todavía." },
 ];
 
 // ── Alta idempotente ────────────────────────────────────────────────────────
@@ -491,6 +520,7 @@ type EventSeed = {
   days: number;
   startsHour: number;
   draft?: boolean;
+  cancelled?: boolean;
 };
 
 function finalizeEvent(seed: EventSeed, startsAt: Date, now: Date): BuiltEvent {
@@ -508,7 +538,7 @@ function finalizeEvent(seed: EventSeed, startsAt: Date, now: Date): BuiltEvent {
     startsAt,
     endsAt,
     strikeAt,
-    status: eventStatusFrom(startsAt, endsAt, now, seed.draft),
+    status: eventStatusFrom(startsAt, endsAt, now, seed.draft, seed.cancelled),
     durationDays: seed.days,
     openBalance: false,
   };
@@ -536,12 +566,76 @@ function buildEvents(base: Date, now: Date): BuiltEvent[] {
   return events;
 }
 
+/**
+ * Checklist con avance real (issue #24). La mayoría de los eventos usa el
+ * checklist derivado del estado; estos planes fijan a mano el avance de tres
+ * casos que la demo tiene que mostrar sin maquillaje:
+ *
+ * - `activacion_tigo` (próximo): 2 de 4 cumplidas y una tarea vencida.
+ * - `showroom_nissei` (próximo): 0 de 4, checklist sin arrancar (riesgo).
+ * - `activacion_mall` (en curso): 2 de 4 con la verificación del arranque vencida.
+ *
+ * Los vencimientos y las completadas se anclan a HOY (`dueInDays`/`doneInDays`),
+ * así el avance sigue siendo cierto en cada provisión.
+ */
+type DemoTaskPlanEntry = {
+  key: string;
+  type: "SETUP" | "EVENT" | "STRIKE" | "PAYMENT" | "COLLECTION";
+  title: string;
+  /** Días desde HOY del vencimiento (negativo = ya venció). */
+  dueInDays: number;
+  dueHour: number;
+  /** Días desde HOY en que se completó; `null` = sigue pendiente. */
+  doneInDays: number | null;
+  promoterId?: string | null;
+  notes?: string;
+};
+
+const TASK_PLANS: Record<string, readonly DemoTaskPlanEntry[]> = {
+  demo_event_activacion_tigo: [
+    { key: "acceso", type: "SETUP", title: "Confirmar acceso y habilitación del lugar", dueInDays: -3, dueHour: 12, doneInDays: -4 },
+    { key: "compra", type: "PAYMENT", title: "Cerrar la orden de compra con el proveedor", dueInDays: -2, dueHour: 17, doneInDays: -2 },
+    { key: "cobro", type: "COLLECTION", title: "Confirmar cobro / saldo con el cliente", dueInDays: -1, dueHour: 12, doneInDays: null, notes: "El cliente todavía no confirmó el saldo (dato simulado)." },
+    { key: "evento", type: "EVENT", title: "Verificar equipos y operación del evento", dueInDays: 4, dueHour: 16, doneInDays: null, promoterId: "demo_promoter_lorena", notes: "Asignada a una promotora no disponible: avisar (dato simulado)." },
+  ],
+  demo_event_showroom_nissei: [
+    { key: "montaje", type: "SETUP", title: "Confirmar montaje y acceso al lugar", dueInDays: 5, dueHour: 8, doneInDays: null },
+    { key: "evento", type: "EVENT", title: "Verificar equipos y operación del evento", dueInDays: 6, dueHour: 11, doneInDays: null, promoterId: "demo_promoter_mabel" },
+    { key: "desmontaje", type: "STRIKE", title: "Coordinar desmontaje y devolución", dueInDays: 8, dueHour: 9, doneInDays: null },
+    { key: "cobro", type: "COLLECTION", title: "Confirmar cobro / saldo", dueInDays: 9, dueHour: 12, doneInDays: null },
+  ],
+  demo_event_activacion_mall: [
+    { key: "montaje", type: "SETUP", title: "Confirmar montaje y acceso al lugar", dueInDays: -1, dueHour: 8, doneInDays: -1, promoterId: "demo_promoter_ana" },
+    { key: "anticipo", type: "PAYMENT", title: "Confirmar el anticipo con el cliente", dueInDays: -4, dueHour: 15, doneInDays: -3 },
+    { key: "evento", type: "EVENT", title: "Verificar equipos y operación del evento", dueInDays: -1, dueHour: 10, doneInDays: null, notes: "Quedó sin verificar en el arranque (dato simulado).", promoterId: "demo_promoter_ana" },
+    { key: "desmontaje", type: "STRIKE", title: "Coordinar desmontaje y devolución", dueInDays: 1, dueHour: 9, doneInDays: null },
+  ],
+};
+
 /** Tareas del checklist derivadas del estado del evento (4 por evento). */
-function buildTasks(event: BuiltEvent, index: number): Array<{ id: string; data: Omit<Prisma.EventTaskUncheckedCreateInput, "id"> }> {
+function buildTasks(event: BuiltEvent, index: number, base: Date): Array<{ id: string; data: Omit<Prisma.EventTaskUncheckedCreateInput, "id"> }> {
+  const plan = TASK_PLANS[event.id];
+  if (plan) {
+    return plan.map((entry) => ({
+      id: `demo_task_${event.id.replace(/^demo_event_/, "")}_${entry.key}`,
+      data: {
+        eventId: event.id,
+        type: entry.type,
+        title: entry.title,
+        dueAt: at(base, entry.dueInDays, entry.dueHour),
+        completedAt: entry.doneInDays === null ? null : at(base, entry.doneInDays, entry.dueHour, 30),
+        promoterId: entry.promoterId ?? null,
+        notes: entry.notes ?? null,
+      },
+    }));
+  }
+
   const inProgress = event.status === "IN_PROGRESS";
   const done = event.status === "COMPLETED";
   const setupDone = done || inProgress;
-  const promoterId = index % 3 === 0 ? PROMOTER_IDS[0] : index % 3 === 1 ? PROMOTER_IDS[2] : null;
+  // Promotoras del checklist derivado: solo las disponibles (las no disponibles
+  // viven en los planes, para que el aviso sea un caso real y no ruido).
+  const promoterId = index % 3 === 0 ? PROMOTER_IDS[0] : index % 3 === 1 ? PROMOTER_IDS[3] : null;
   const milestones: Array<{ key: string; type: "SETUP" | "EVENT" | "STRIKE" | "COLLECTION"; title: string; dueAt: Date; completedAt: Date | null; promoterId?: string | null }> = [
     {
       key: "setup",
@@ -625,14 +719,15 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     notes: event.notes,
   }));
 
-  const promotersData: Prisma.PromoterUncheckedCreateInput[] = PROMOTERS.map((promoter) => ({
+  const promotersData: Prisma.PromoterUncheckedCreateInput[] = PROMOTERS.map(({ unavailableInDays, ...promoter }) => ({
     ...promoter,
     ...org,
+    unavailableUntil: unavailableInDays === null ? null : at(base, unavailableInDays, 9, 0),
     createdAt: at(base, -90, 10, 0),
   }));
 
   const tasksData: Prisma.EventTaskUncheckedCreateInput[] = events
-    .flatMap((event, index) => buildTasks(event, index))
+    .flatMap((event, index) => buildTasks(event, index, base))
     .map((task) => ({ id: task.id, ...task.data }));
 
   const suppliersData: Prisma.SupplierUncheckedCreateInput[] = SUPPLIERS.map((supplier) => ({
@@ -647,6 +742,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const upcoming = events.filter((event) => event.status === "CONFIRMED");
   const past = events.filter((event) => event.status === "COMPLETED");
   const draft = events.find((event) => event.status === "DRAFT");
+  const cancelled = events.find((event) => event.status === "CANCELLED");
   const next = upcoming[0];
   const second = upcoming[1];
   const third = upcoming[2];
@@ -654,7 +750,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const recentPast = past[past.length - 1];
   const longestPast = past.reduce((best, event) => (event.durationDays > best.durationDays ? event : best), past[0]);
   const inProgress = events.find((event) => event.status === "IN_PROGRESS");
-  if (!next || !second || !third || !last || !recentPast || !longestPast || !draft || !inProgress) {
+  if (!next || !second || !third || !last || !recentPast || !longestPast || !draft || !cancelled || !inProgress) {
     throw new Error("La ventana móvil no produjo los eventos esperados para la demo.");
   }
   const pastFiller = past.find((event) => event.id !== longestPast.id && event.id !== recentPast.id) ?? longestPast;
@@ -678,6 +774,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_job_stand_feria", ...org, supplierId: "demo_supplier_carpinteria", eventId: longestPast.id, category: "FURNITURE", description: `Stands y mobiliario · ${longestPast.name}`, total: 4_100_000, advance: 2_000_000, status: "DELIVERED", dueAt: pastInstant(withinMonth(base, 12, 9, 0), now), deliveredAt: eventStart(longestPast, 1, 7), notes: "Entregado en el predio; falta el saldo." },
     { id: "demo_job_balance", ...org, supplierId: "demo_supplier_audio", eventId: recentPast.id, category: "AUDIOVISUAL", description: `Refuerzo de sonido · ${recentPast.name}`, total: 2_600_000, advance: 1_000_000, status: "BALANCE_PENDING", dueAt: pastInstant(withinMonth(base, 5, 9, 0), now), deliveredAt: eventStart(recentPast, 0, 9), notes: "Saldo pendiente de facturación." },
     { id: "demo_job_lejano", ...org, supplierId: "demo_supplier_grafica", eventId: last.id, category: "GRAPHICS", description: `Vallas y gráfica · ${last.name}`, total: 3_600_000, advance: 0, status: "PENDING", dueAt: jobDue(last, 10, 12), notes: "Esperando el arte final del cliente." },
+    // Trabajo atrasado (issue #24): vencido y todavía en producción.
+    { id: "demo_job_atraso", ...org, supplierId: "demo_supplier_carpinteria", eventId: next.id, category: "CARPENTRY", description: `Escenografía y mobiliario · ${next.name}`, total: 3_100_000, advance: 1_000_000, status: "IN_PRODUCTION", dueAt: at(base, -3, 12), notes: "Atrasado: el taller prometió entregar hace dos días y todavía no avisó." },
   ];
 
   // ── Presupuestos por rol (aprobado por portal, pendiente con link+QR, cambios pedidos) ──
@@ -685,7 +783,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     id: string;
     event: BuiltEvent;
     title: string;
-    status: "APPROVED" | "SENT" | "NEGOTIATING" | "DRAFT";
+    status: "APPROVED" | "SENT" | "NEGOTIATING" | "DRAFT" | "LOST";
     discount: number;
     validUntil: Date;
     notes: string;
@@ -818,6 +916,52 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       items: [
         { id: "demo_budget_item_e1", name: "Cilindro LED 1.5 m", quantity: 4, days: 3, unitPrice: 950_000, costPrice: 380_000 },
         { id: "demo_budget_item_e2", name: "Dispensador inteligente", quantity: 1, days: 3, unitPrice: 600_000, costPrice: 240_000 },
+      ],
+    },
+    // Mora (issue #24): presupuesto aprobado con dos cuotas vencidas, una de
+    // ellas re-emitida tras el rechazo del cheque. El cliente queda con deuda
+    // vencida visible en Clientes y en Finanzas.
+    {
+      id: "demo_budget_mora",
+      event: recentPast,
+      title: `Alquiler de pantallas ${recentPast.name}`,
+      status: "APPROVED",
+      discount: 0,
+      validUntil: at(base, -8, 18),
+      notes: "Saldo a plazo; el cheque de la cuota 1 rebotó y se re-emitió el cobro.",
+      plan: {
+        advance: 3_000_000,
+        terms: "Anticipo del 40% con la orden de trabajo; saldo en dos cuotas a 30 y 45 días.",
+        installments: [
+          { label: "Cuota 1 · saldo", amount: 4_000_000, dueInDays: -14 },
+          { label: "Cuota 2 · saldo final", amount: 4_000_000, dueInDays: -5 },
+        ],
+      },
+      approval: {
+        at: eventStart(recentPast, -9, 10, 0),
+        byName: clientContact(recentPast.clientId).name,
+        method: "manual",
+        note: "Confirmado por correo; se emite la orden de trabajo.",
+      },
+      createdAt: eventStart(recentPast, -12, 9, 0),
+      items: [
+        { id: "demo_budget_item_f1", name: "Pantalla LED P5 outdoor 960x960", quantity: 6, days: 2, unitPrice: 800_000, costPrice: 320_000 },
+        { id: "demo_budget_item_f2", name: "Operación técnica", quantity: 1, days: 2, unitPrice: 700_000, costPrice: 280_000 },
+      ],
+    },
+    // Perdido (issue #24): el evento cancelado dejó el presupuesto sin cerrar.
+    {
+      id: "demo_budget_perdido",
+      event: cancelled,
+      title: `Producción ${cancelled.name.split("·")[0].trim()}`,
+      status: "LOST",
+      discount: 0,
+      validUntil: at(base, -3, 18),
+      notes: "El cliente postergó la campaña para noviembre y eligió otro proveedor para esa fecha.",
+      createdAt: at(base, -20, 10, 30),
+      items: [
+        { id: "demo_budget_item_g1", name: "Pasarela y estructura", quantity: 1, days: 2, unitPrice: 12_500_000, costPrice: 5_200_000 },
+        { id: "demo_budget_item_g2", name: "Pantalla LED de fondo", quantity: 8, days: 2, unitPrice: 850_000, costPrice: 340_000 },
       ],
     },
   ];
@@ -975,6 +1119,63 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       invoiceIssuedAt: pastInstant(at(base, -4, 10, 0), now),
       notes: "Cuota 1 del plan de pagos aprobado.",
     },
+    // ── Mora (issue #24): anticipo cobrado, cheque rechazado (anulado) y dos
+    // cuotas vencidas que quedan pendientes. El saldo vencido del cliente sale
+    // de acá, no de un campo nuevo. ──
+    received("demo_pay_mora_anticipo", {
+      clientId: recentPast.clientId,
+      budgetId: "demo_budget_mora",
+      amount: 3_000_000,
+      paidAt: eventStart(recentPast, -10, 9, 30),
+      method: "Transferencia",
+      reference: "TRF-87942",
+      notes: "Anticipo del 40% con la orden de trabajo.",
+    }),
+    {
+      id: "demo_pay_mora_cheque",
+      ...org,
+      clientId: recentPast.clientId,
+      budgetId: "demo_budget_mora",
+      amount: 4_000_000,
+      status: "CANCELLED",
+      paidAt: null,
+      collectedAt: null,
+      method: "Cheque",
+      reference: "CHQ-5502",
+      dueAt: at(base, -21, 12, 0),
+      chequeDate: at(base, -21, 12, 0),
+      notes: "Cheque rechazado por el banco: el cobro se anuló y se re-emitió por transferencia.",
+    },
+    {
+      id: "demo_pay_mora_cuota_1",
+      ...org,
+      clientId: recentPast.clientId,
+      budgetId: "demo_budget_mora",
+      amount: 4_000_000,
+      status: "PENDING",
+      paidAt: null,
+      collectedAt: null,
+      method: "Transferencia",
+      dueAt: at(base, -14, 12, 0),
+      invoiceNumber: "FAC-2026-0179",
+      invoiceIssuedAt: pastInstant(at(base, -21, 9, 0), now),
+      notes: "Cuota 1 vencida: se re-emitió tras el rechazo del cheque.",
+    },
+    {
+      id: "demo_pay_mora_cuota_2",
+      ...org,
+      clientId: recentPast.clientId,
+      budgetId: "demo_budget_mora",
+      amount: 4_000_000,
+      status: "PENDING",
+      paidAt: null,
+      collectedAt: null,
+      method: "Transferencia",
+      dueAt: at(base, -5, 12, 0),
+      invoiceNumber: "FAC-2026-0179",
+      invoiceIssuedAt: pastInstant(at(base, -21, 9, 0), now),
+      notes: "Cuota 2 vencida: el cliente pidió refinanciar.",
+    },
   ];
 
   // ── Inventario y asignaciones (una con salida y devolución con daño) ──
@@ -988,7 +1189,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_asg_proximo_p3", eventId: next.id, inventoryId: "demo_inv_led_p3", quantity: 20, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
     { id: "demo_asg_proximo_truss", eventId: next.id, inventoryId: "demo_inv_truss", quantity: 12, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
     { id: "demo_asg_feria_totem", eventId: recentPast.id, inventoryId: "demo_inv_totem", quantity: 3, startsAt: recentPast.setupAt, endsAt: recentPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(recentPast.setupAt, 0, 8, 10), checkedInAt: atDay(recentPast.strikeAt, 0, 11, 20), conditionOut: "Bueno", conditionIn: "Con daño: marco doblado", damagedQuantity: 1, missingQuantity: 0, damageNotes: "Un tótem volvió con el marco doblado; queda en mantenimiento y se descuenta del saldo." },
-    { id: "demo_asg_feria_paneles", eventId: longestPast.id, inventoryId: "demo_inv_panels", quantity: 8, startsAt: longestPast.setupAt, endsAt: longestPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(longestPast.setupAt, 0, 8, 15), checkedInAt: atDay(longestPast.strikeAt, 0, 10, 30), conditionOut: "Bueno", conditionIn: "Bueno" },
+    { id: "demo_asg_feria_paneles", eventId: longestPast.id, inventoryId: "demo_inv_panels", quantity: 8, startsAt: longestPast.setupAt, endsAt: longestPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(longestPast.setupAt, 0, 8, 15), checkedInAt: atDay(longestPast.strikeAt, 0, 10, 30), conditionOut: "Bueno", conditionIn: "Con faltante: 2 unidades", damagedQuantity: 0, missingQuantity: 2, damageNotes: "Dos bastidores no volvieron del predio; el cliente tiene el reclamo abierto." },
     { id: "demo_asg_showroom_touch", eventId: pastFiller.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: pastFiller.setupAt, endsAt: pastFiller.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(pastFiller.setupAt, 0, 7, 20), checkedInAt: atDay(pastFiller.strikeAt, 0, 10, 0), conditionOut: "Bueno", conditionIn: "Bueno" },
   ];
 
@@ -1118,9 +1319,61 @@ function buildAuditTrail(organizationId: string, base: Date, context: AuditConte
   const { sales, ops } = ACTORS;
   const nextClient = CLIENT_BY_ID.get(context.next.clientId);
   const closedClient = CLIENT_BY_ID.get(context.longestPast.clientId);
+  const moraClient = CLIENT_BY_ID.get(context.recentPast.clientId);
   const nextContact = clientContact(context.next.clientId);
   const thirdContact = clientContact(context.third.clientId);
   const rows: AuditRow[] = [
+    // Casos difíciles (issue #24): disponibilidad, cheque rechazado, faltante y
+    // atraso de proveedor, con el mismo formato de historial que las mutaciones
+    // reales del panel (antes/después).
+    {
+      id: "demo_audit_promoter_lorena",
+      actor: ops,
+      action: "status",
+      entity: "Promoter",
+      entityId: "demo_promoter_lorena",
+      summary: "Actualizó la disponibilidad de «Lorena Ríos»",
+      days: -2,
+      hour: 9,
+      minute: 40,
+      detail: { changes: { availability: { from: "AVAILABLE", to: "UNAVAILABLE" }, availabilityNote: { from: null, to: "De viaje por trabajo; retoma a fin de mes." } } },
+    },
+    {
+      id: "demo_audit_pago_rechazado",
+      actor: sales,
+      action: "status",
+      entity: "ClientPayment",
+      entityId: "demo_pay_mora_cheque",
+      summary: `Anuló el cobro a plazo de «${moraClient?.company ?? ""}» por cheque rechazado`,
+      days: -13,
+      hour: 10,
+      minute: 5,
+      detail: { changes: { status: { from: "PENDING", to: "CANCELLED" } }, fields: { reference: "CHQ-5502", method: "Cheque" } },
+    },
+    {
+      id: "demo_audit_checkin_paneles",
+      actor: ops,
+      action: "status",
+      entity: "EventInventory",
+      entityId: "demo_asg_feria_paneles",
+      summary: `Actualizó el movimiento de «Bastidor de piso para pantalla» en «${context.longestPast.name}» (2 faltantes)`,
+      days: -15,
+      hour: 10,
+      minute: 35,
+      detail: { changes: { missingQuantity: { from: 0, to: 2 }, conditionIn: { from: "Bueno", to: "Con faltante: 2 unidades" } } },
+    },
+    {
+      id: "demo_audit_job_atraso",
+      actor: ops,
+      action: "status",
+      entity: "SupplierJob",
+      entityId: "demo_job_atraso",
+      summary: `Cambió el estado del trabajo «Escenografía y mobiliario · ${context.next.name}»`,
+      days: -1,
+      hour: 17,
+      minute: 10,
+      detail: { changes: { status: { from: "CONTRACTED", to: "IN_PRODUCTION" } }, fields: { atraso: "El taller prometió entregar hace dos días." } },
+    },
     {
       id: "demo_audit_client_tigo",
       actor: sales,

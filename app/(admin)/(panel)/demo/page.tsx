@@ -8,9 +8,12 @@ import {
   auditActionTone,
   auditDetailText,
   auditEntityLabel,
+  checklistProgress,
   formatCalendarDayShort,
   formatDate,
+  formatMoney,
   formatNumber,
+  isUpcomingWithin,
 } from "@/lib/admin-format";
 import { adminNavGroups } from "@/lib/admin-policy";
 import type { AdminAuditDetail } from "@/lib/admin-types";
@@ -19,7 +22,7 @@ import { qrSvg } from "@/lib/qr";
 import { getAuthenticatedAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { DEMO_ORGANIZATION_NAME, isDemoOrganizationId } from "@/lib/server/demo-data";
-import { dayKeyOf, listAdminNotifications } from "@/lib/server/notifications";
+import { dayKeyOf, dayStart, listAdminNotifications } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +54,7 @@ export default async function DemoPage() {
   }
   const organizationId = auth.session.activeOrganizationId as string;
   const now = new Date();
+  const todayStart = dayStart(dayKeyOf(now));
 
   const [
     clientCount,
@@ -66,6 +70,13 @@ export default async function DemoPage() {
     audits,
     portalBudget,
     openBudget,
+    overduePayments,
+    rejectedCheques,
+    riskEventCount,
+    unavailablePromoters,
+    toDefinePromoters,
+    damagedUnits,
+    cancelledEventCount,
   ] = await Promise.all([
     db.client.count({ where: { organizationId, active: true } }),
     db.event.count({ where: { organizationId, status: { not: "CANCELLED" } } }),
@@ -79,7 +90,7 @@ export default async function DemoPage() {
       where: { organizationId, startsAt: { gte: now }, status: { not: "CANCELLED" } },
       orderBy: { startsAt: "asc" },
       take: 3,
-      include: { client: { select: { name: true, company: true } } },
+      include: { client: { select: { name: true, company: true } }, tasks: { select: { completedAt: true, dueAt: true } } },
     }),
     listAdminNotifications(organizationId, now),
     db.auditLog.findMany({
@@ -105,6 +116,29 @@ export default async function DemoPage() {
       orderBy: { createdAt: "desc" },
       select: { id: true, title: true, publicToken: true, status: true, client: { select: { company: true, name: true } } },
     }),
+    // Casos difíciles de la demo (issue #24): derivados del dato real, sin
+    // campos nuevos. Mora = cobros pendientes con vencimiento pasado.
+    db.clientPayment.aggregate({
+      where: { organizationId, status: "PENDING", dueAt: { lt: todayStart } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    db.clientPayment.count({ where: { organizationId, status: "CANCELLED", method: "Cheque" } }),
+    db.event.count({
+      where: {
+        organizationId,
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+        startsAt: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) },
+        tasks: { some: {}, none: { completedAt: { not: null } } },
+      },
+    }),
+    db.promoter.count({ where: { organizationId, active: true, availability: "UNAVAILABLE" } }),
+    db.promoter.count({ where: { organizationId, active: true, availability: "TO_DEFINE" } }),
+    db.eventInventory.aggregate({
+      where: { event: { organizationId } },
+      _sum: { damagedQuantity: true, missingQuantity: true },
+    }),
+    db.event.count({ where: { organizationId, status: "CANCELLED" } }),
   ]);
 
   const modules = adminNavGroups("VIEWER").flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
@@ -115,6 +149,16 @@ export default async function DemoPage() {
     pendingUrl ? qrSvg(pendingUrl, 168) : Promise.resolve(null),
   ]);
   const approvedInstallments = Array.isArray(portalBudget?.installmentsJson) ? portalBudget.installmentsJson.length : 0;
+  const overdueAmount = overduePayments._sum.amount ?? 0;
+  const overdueCount = overduePayments._count._all;
+  const damagedTotal = (damagedUnits._sum.damagedQuantity ?? 0) + (damagedUnits._sum.missingQuantity ?? 0);
+  /** Plural simple para los textos de la demo (`1 dañado`, `2 faltantes`). */
+  const plural = (count: number, one: string, many: string) => `${formatNumber(count)} ${count === 1 ? one : many}`;
+  const inventoryNoteParts: string[] = [];
+  const damagedCount = damagedUnits._sum.damagedQuantity ?? 0;
+  const missingCount = damagedUnits._sum.missingQuantity ?? 0;
+  if (damagedCount > 0) inventoryNoteParts.push(plural(damagedCount, "dañado", "dañados"));
+  if (missingCount > 0) inventoryNoteParts.push(plural(missingCount, "faltante", "faltantes"));
 
   return (
     <div className="admin-module-page admin-demo-page">
@@ -125,8 +169,10 @@ export default async function DemoPage() {
         </h2>
         <p className="admin-demo-lede">
           Estás en una copia de trabajo del panel, con ferias, clientes, presupuestos, inventario y finanzas simulados
-          sobre el calendario real de eventos del Paraguay. La sesión es automática, no hay registro y todo el panel es de
-          <strong> solo lectura</strong>: no se guardan cambios ni se toca información real.
+          sobre el calendario real de eventos del Paraguay. Son <strong>datos simulados, incluidos los casos difíciles</strong>:
+          mora, cheques rechazados, promotoras no disponibles, equipos dañados o faltantes, checklists incompletos y
+          proveedores atrasados, igual que en una semana real de operación. La sesión es automática, no hay registro y
+          todo el panel es de <strong>solo lectura</strong>: no se guardan cambios ni se toca información real.
         </p>
         <div className="admin-demo-actions">
           {pendingUrl ? (
@@ -155,19 +201,46 @@ export default async function DemoPage() {
         </div>
         <p className="admin-demo-footnote">
           Las ferias y marcas que aparecen son referencias reales del mercado paraguayo usadas como datos simulados, con
-          contactos inventados; las fechas del calendario se re-anclan a hoy cada vez que entrás. Para salir de la demo usá
-          «Salir de la demo» en el aviso superior.
+          contactos inventados; las fechas del calendario se re-anclan a hoy cada vez que entrás, y con ellas la mora, los
+          equipos faltantes y los checklists incompletos: la demo muestra también lo que sale mal. Para salir de la demo
+          usá «Salir de la demo» en el aviso superior.
         </p>
       </section>
 
       <section className="admin-kpis" aria-label="Datos simulados de la demo">
         <AdminKpi label="Clientes" value={formatNumber(clientCount)} note="finales y revendedores" />
-        <AdminKpi label="Eventos" value={formatNumber(eventCount)} note="próximos, en curso y cerrados" />
-        <AdminKpi label="Presupuestos" value={formatNumber(budgetCount)} note="aprobados, enviados y en negociación" />
-        <AdminKpi label="Inventario" value={formatNumber(inventoryCount)} note="equipos e insumos" />
+        <AdminKpi
+          label="Eventos"
+          value={formatNumber(eventCount)}
+          note={cancelledEventCount > 0 ? `no cancelados · ${plural(cancelledEventCount, "cancelado", "cancelados")}` : "próximos, en curso y cerrados"}
+        />
+        <AdminKpi label="Presupuestos" value={formatNumber(budgetCount)} note="aprobados, enviados, en negociación y perdidos" />
+        <AdminKpi
+          label="Inventario"
+          value={formatNumber(inventoryCount)}
+          note={inventoryNoteParts.length > 0 ? inventoryNoteParts.join(" · ") : "equipos e insumos"}
+          tone={damagedTotal > 0 ? "warn" : undefined}
+        />
         <AdminKpi label="Proveedores" value={formatNumber(supplierCount)} note={`${formatNumber(openJobCount)} trabajos abiertos`} />
-        <AdminKpi label="Promotoras" value={formatNumber(promoterCount)} note="equipo de campo" />
-        <AdminKpi label="Leads nuevos" value={formatNumber(newLeadCount)} tone={newLeadCount > 0 ? "accent" : undefined} note="sin contactar" />
+        <AdminKpi
+          label="Promotoras"
+          value={formatNumber(promoterCount)}
+          note={`${plural(unavailablePromoters, "no disponible", "no disponibles")} · ${formatNumber(toDefinePromoters)} a definir`}
+          tone={unavailablePromoters + toDefinePromoters > 0 ? "warn" : undefined}
+        />
+        <AdminKpi label="Leads nuevos" value={formatNumber(newLeadCount)} tone={newLeadCount > 0 ? "accent" : undefined} note="sin contactar, uno hace semanas" />
+        <AdminKpi
+          label="Mora"
+          value={overdueCount > 0 ? formatMoney(overdueAmount) : "—"}
+          tone={overdueCount > 0 ? "danger" : undefined}
+          note={`${plural(overdueCount, "cobro vencido", "cobros vencidos")}${rejectedCheques > 0 ? ` · ${plural(rejectedCheques, "cheque rechazado", "cheques rechazados")}` : ""}`}
+        />
+        <AdminKpi
+          label="Checklist en riesgo"
+          value={formatNumber(riskEventCount)}
+          tone={riskEventCount > 0 ? "danger" : undefined}
+          note="próximos sin tareas cumplidas"
+        />
         <AdminKpi
           label="Avisos"
           value={formatNumber(feed.notificationCounts.overdue + feed.notificationCounts.soon)}
@@ -258,20 +331,28 @@ export default async function DemoPage() {
           <AdminEmpty icon="events" title="Sin eventos próximos" hint="Reiniciá los datos simulados para volver a generarlos." />
         ) : (
           <div className="admin-demo-list">
-            {upcomingEvents.map((event) => (
-              <Link className="admin-demo-event" key={event.id} href="/eventos">
-                <AdminBadge tone="accent">{formatCalendarDayShort(dayKeyOf(event.startsAt ?? event.setupAt ?? now))}</AdminBadge>
-                <span className="admin-notif-main">
-                  <span className="admin-notif-title">{event.name}</span>
-                  <span className="admin-notif-sub">
-                    {event.client.company ?? event.client.name}
-                    {event.location ? ` · ${event.location}` : ""}
+            {upcomingEvents.map((event) => {
+              const progress = checklistProgress(event.tasks, { risk: isUpcomingWithin(event.startsAt) });
+              return (
+                <Link className="admin-demo-event" key={event.id} href="/eventos">
+                  <AdminBadge tone="accent">{formatCalendarDayShort(dayKeyOf(event.startsAt ?? event.setupAt ?? now))}</AdminBadge>
+                  <span className="admin-notif-main">
+                    <span className="admin-notif-title">{event.name}</span>
+                    <span className="admin-notif-sub">
+                      {event.client.company ?? event.client.name}
+                      {event.location ? ` · ${event.location}` : ""}
+                    </span>
                   </span>
-                </span>
-                <span className="admin-notif-date">{event.setupAt ? `Montaje ${formatDate(event.setupAt)}` : ""}</span>
-                <AdminIcon name="arrow-right" size={14} />
-              </Link>
-            ))}
+                  {event.tasks.length > 0 ? (
+                    <AdminBadge tone={progress.tone} title={progress.title}>
+                      {progress.label}
+                    </AdminBadge>
+                  ) : null}
+                  <span className="admin-notif-date">{event.setupAt ? `Montaje ${formatDate(event.setupAt)}` : ""}</span>
+                  <AdminIcon name="arrow-right" size={14} />
+                </Link>
+              );
+            })}
           </div>
         )}
       </AdminPanel>
