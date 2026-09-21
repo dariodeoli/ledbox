@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { hashPassword } from "./auth";
-import { DAY_MS, dayKeyOf, dayStart } from "./notifications";
+import { DAY_MS, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
 
 /**
  * Demo pública (issue #15): organización «LedBox Demo» con datos simulados.
@@ -36,6 +36,26 @@ export const DEMO_USER_EMAIL = "demo@ledbox.online";
 export const DEMO_USER_NAME = "Visitante demo";
 
 export const DEMO_MEMBERSHIP_ID = "demo_visitor_membership";
+
+/**
+ * Datos de pago de la empresa demo (issue #14): los datos reales de LedBox
+ * autorizados por Dario, para que el portal y la hoja imprimible muestren el
+ * circuito completo. Se publican solo en presupuestos aprobados, igual que en
+ * el panel.
+ */
+export const DEMO_PAYMENT_DETAILS = {
+  bank: "Ueno Bank",
+  holder: "Santiago Javier Rodas",
+  ruc: null,
+  account: "6191649354",
+  alias: "c.i +595 982 029217",
+} as const;
+
+/** ¿La organización ya tiene datos de pago cargados? (no se pisan si existen). */
+function hasPaymentDetails(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value as Record<string, unknown>).length > 0;
+}
 
 /** ¿La empresa activa es la demo? (fuente única del slug en toda la app) */
 export function isDemoOrganizationSlug(slug: string | null | undefined): boolean {
@@ -128,6 +148,7 @@ const DEMO_ORGANIZATION: Prisma.OrganizationUncheckedCreateInput = {
   name: DEMO_ORGANIZATION_NAME,
   slug: DEMO_ORGANIZATION_SLUG,
   active: true,
+  paymentDetails: DEMO_PAYMENT_DETAILS,
 };
 
 type DemoEventStatus = "DRAFT" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED";
@@ -270,7 +291,7 @@ const DATASET_MINS = {
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
   budgets: 5,
-  audits: 15,
+  audits: 20,
 } as const;
 
 // ── Inventario, promotoras y leads ──────────────────────────────────────────
@@ -351,6 +372,14 @@ export async function ensureDemoData(): Promise<DemoSessionTarget> {
       data: { name: DEMO_ORGANIZATION_NAME, active: true },
     });
   }
+  // Los datos de pago se completan si faltan; si la empresa ya los tiene (los
+  // administra OWNER/ADMIN en el panel), no se pisan.
+  if (!hasPaymentDetails(organization.paymentDetails)) {
+    organization = await db.organization.update({
+      where: { id: organization.id },
+      data: { paymentDetails: DEMO_PAYMENT_DETAILS },
+    });
+  }
 
   // El usuario demo nunca inicia sesión con contraseña: la clave es aleatoria y
   // el único camino es `GET/POST /api/demo/session`. Su rol global es VIEWER.
@@ -390,7 +419,10 @@ export async function ensureDemoData(): Promise<DemoSessionTarget> {
   if (!fresh) {
     await seedDemoData(organization.id, base);
     // Ancla del día: mientras `updatedAt` sea de hoy, no se vuelve a escribir.
-    await db.organization.update({ where: { id: organization.id }, data: { name: DEMO_ORGANIZATION_NAME } });
+    await db.organization.update({
+      where: { id: organization.id },
+      data: { name: DEMO_ORGANIZATION_NAME, paymentDetails: DEMO_PAYMENT_DETAILS },
+    });
   }
 
   return {
@@ -661,6 +693,16 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     tokenCreatedAt?: Date;
     approval?: { at: Date; byName: string; method: "digital" | "manual"; ip?: string; userAgent?: string; note: string };
     revision?: { at: Date; note: string };
+    /**
+     * Plan de pagos (issue #14): anticipo y cuotas. Las cuotas se vencen en días
+     * relativos a HOY (`dueInDays`) o en una fecha absoluta (`dueAt`, para los
+     * presupuestos ya cerrados), así el re-anclaje nunca deja cuotas raras.
+     */
+    plan?: {
+      advance: number;
+      terms: string;
+      installments: Array<{ label: string; amount: number; dueInDays?: number; dueAt?: Date }>;
+    };
     createdAt: Date;
     items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number }>;
   }> = [
@@ -669,9 +711,18 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       event: next,
       title: `Producción integral ${next.name}`,
       status: "APPROVED",
-      discount: 1_400_000,
+      discount: 1_620_000,
       validUntil: eventStart(next, -2, 18),
       notes: "Incluye pantallas, estructura y operación técnica. Montaje el día previo.",
+      plan: {
+        advance: 9_234_000,
+        terms:
+          "Anticipo del 30% para reservar la fecha; el saldo en dos cuotas iguales a 21 y 45 días de la aprobación. Transferencia a la cuenta de la empresa.",
+        installments: [
+          { label: "Cuota 1 · saldo", amount: 10_773_000, dueInDays: 21 },
+          { label: "Cuota 2 · saldo final", amount: 10_773_000, dueInDays: 45 },
+        ],
+      },
       token: "D3M9-5G97-4XKW-2M8R-T3HN",
       tokenCreatedAt: at(base, -12, 10, 0),
       approval: {
@@ -698,6 +749,11 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       discount: 0,
       validUntil: eventStart(second, -1, 18),
       notes: "Pendiente de aprobación del cliente; link y QR activos para decidir online.",
+      plan: {
+        advance: 4_440_000,
+        terms: "Anticipo del 30% para reservar los equipos; saldo a 30 días de la aprobación.",
+        installments: [{ label: "Saldo · 30 días", amount: 10_360_000, dueInDays: 30 }],
+      },
       token: "D3M9-F3R4-A2PY-Q7SC-K4VT",
       tokenCreatedAt: at(base, -3, 9, 15),
       createdAt: at(base, -6, 9, 20),
@@ -732,6 +788,11 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       discount: 0,
       validUntil: eventStart(longestPast, -8, 18),
       notes: "Aprobado por correo y confirmado por teléfono; cobrado en su totalidad.",
+      plan: {
+        advance: 6_250_000,
+        terms: "Anticipo del 50% y saldo contra entrega en el predio.",
+        installments: [{ label: "Saldo contra entrega", amount: 6_250_000, dueAt: atDay(longestPast.endsAt, 0, 12) }],
+      },
       approval: {
         at: eventStart(longestPast, -12, 10, 0),
         byName: clientContact(longestPast.clientId).name,
@@ -769,6 +830,17 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     const costEstimate = budget.items.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
     const total = Math.max(0, subtotal - budget.discount);
     budgetTotals.set(budget.id, total);
+    // Plan de pagos: anticipo + cuotas con vencimientos relativos a hoy (o al
+    // evento en los presupuestos ya cerrados).
+    const todayKey = dayKeyOf(new Date());
+    const advanceAmount = budget.plan?.advance ?? 0;
+    const installments = (budget.plan?.installments ?? []).map((installment) => ({
+      label: installment.label,
+      amount: installment.amount,
+      dueAt: installment.dueAt ? dayKeyOf(installment.dueAt) : shiftDayKey(todayKey, installment.dueInDays ?? 0),
+    }));
+    const committed = advanceAmount + installments.reduce((sum, installment) => sum + installment.amount, 0);
+    if (committed > total) throw new Error(`El plan de pagos de ${budget.id} supera el total del presupuesto.`);
     budgetsData.push({
       id: budget.id,
       ...org,
@@ -780,6 +852,9 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       discount: budget.discount,
       total,
       costEstimate,
+      advanceAmount,
+      paymentTerms: budget.plan?.terms ?? null,
+      installmentsJson: installments.length > 0 ? (installments as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       validUntil: budget.validUntil,
       notes: budget.notes,
       publicToken: budget.token ?? null,
@@ -808,15 +883,98 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     }
   }
 
-  // ── Cobros del mes (dos caen siempre en el mes en curso para el reporte) ──
+  // ── Solicitudes del portal (issue #14): una rebaja aceptada, una rechazada y
+  // una propuesta de ítems pendiente en el presupuesto que se comparte para
+  // probar la autogestión. ──
+  const nextContact = clientContact(next.clientId);
+  const secondContact = clientContact(second.clientId);
+  const changeRequestsData: Prisma.BudgetChangeRequestUncheckedCreateInput[] = [
+    {
+      id: "demo_request_rebaja_aceptada",
+      ...org,
+      budgetId: "demo_budget_aprobado",
+      kind: "discount",
+      status: "accepted",
+      payload: { discount: { type: "percent", value: 5, amount: 1_620_000 } } as unknown as Prisma.InputJsonValue,
+      note: "Pedimos 5% de descuento para cerrar hoy.",
+      requestedByName: nextContact.name,
+      requestedByEmail: nextContact.email,
+      createdAt: at(base, -9, 15, 10),
+      resolvedAt: at(base, -8, 10, 5),
+      resolvedByName: "Valeria Ortiz",
+      responseNote: "Aprobado: 5% sobre el subtotal, ya aplicado al presupuesto.",
+    },
+    {
+      id: "demo_request_rebaja_rechazada",
+      ...org,
+      budgetId: "demo_budget_aprobado",
+      kind: "discount",
+      status: "rejected",
+      payload: { discount: { type: "percent", value: 12, amount: 3_888_000 } } as unknown as Prisma.InputJsonValue,
+      note: "Nos ofrecieron 12% en otra propuesta; ¿pueden igualarlo?",
+      requestedByName: nextContact.name,
+      requestedByEmail: nextContact.email,
+      createdAt: at(base, -6, 9, 40),
+      resolvedAt: at(base, -5, 16, 20),
+      resolvedByName: "Valeria Ortiz",
+      responseNote: "No llegamos a ese descuento: el margen del evento está ajustado. Sumamos un tótem sin cargo.",
+    },
+    {
+      id: "demo_request_items_pendiente",
+      ...org,
+      budgetId: "demo_budget_pendiente",
+      kind: "items",
+      status: "pending",
+      payload: {
+        items: [
+          { id: "demo_budget_item_b1", quantity: 8, days: 2 },
+          { id: "demo_budget_item_b2", quantity: 10, days: 2 },
+          { id: "demo_budget_item_b3", quantity: 1, days: 3 },
+        ],
+      } as unknown as Prisma.InputJsonValue,
+      note: "Sumamos dos pantallas más y un día de operación para la transmisión.",
+      requestedByName: secondContact.name,
+      requestedByEmail: secondContact.email,
+      createdAt: at(base, -1, 10, 15),
+    },
+  ];
+
+  // ── Cobros: los cobrados del mes y la cuota 1 del plan aprobado a plazo ──
   const totalOf = (id: string) => budgetTotals.get(id) ?? 0;
   const paidOf = totalOf("demo_budget_cobrado");
+  const planOf = (id: string) => budgetSeeds.find((budget) => budget.id === id)?.plan;
+  const nextPlan = planOf("demo_budget_aprobado");
+  const nextInstallment = nextPlan?.installments[0]?.amount ?? 0;
+  const received = (id: string, data: Omit<Prisma.ClientPaymentUncheckedCreateInput, "id" | "organizationId" | "status" | "collectedAt">) => ({
+    id,
+    ...org,
+    ...data,
+    status: "RECEIVED" as const,
+    collectedAt: data.paidAt ?? null,
+  });
   const paymentsData: Prisma.ClientPaymentUncheckedCreateInput[] = [
-    { id: "demo_pay_cobrado_1", ...org, clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: Math.round(paidOf / 2), paidAt: eventStart(longestPast, -10, 9, 40), method: "Transferencia", reference: "TRF-87990", notes: "Anticipo del cierre de feria." },
-    { id: "demo_pay_cobrado_2", ...org, clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: paidOf - Math.round(paidOf / 2), paidAt: eventStart(longestPast, 2, 17, 10), method: "Transferencia", reference: "TRF-88105", notes: "Cancelación total." },
-    { id: "demo_pay_cambios", ...org, clientId: third.clientId, budgetId: "demo_budget_cambios", amount: 2_000_000, paidAt: pastInstant(withinMonth(base, 8, 16, 0), now), method: "Cheque", reference: "CHQ-4471", notes: "Seña; el saldo se ajusta con los cambios pedidos." },
-    { id: "demo_pay_aprobado", ...org, clientId: next.clientId, budgetId: "demo_budget_aprobado", amount: Math.round(totalOf("demo_budget_aprobado") * 0.4), paidAt: pastInstant(withinMonth(base, 6, 15, 30), now), method: "Transferencia", reference: "TRF-88213", notes: "Anticipo del 40%." },
-    { id: "demo_pay_pendiente", ...org, clientId: second.clientId, budgetId: "demo_budget_pendiente", amount: 4_000_000, paidAt: pastInstant(withinMonth(base, 3, 11, 0), now), method: "Efectivo", reference: "REC-1042", notes: "Seña para reservar los equipos." },
+    received("demo_pay_cobrado_1", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: Math.round(paidOf / 2), paidAt: eventStart(longestPast, -10, 9, 40), method: "Transferencia", reference: "TRF-87990", notes: "Anticipo del cierre de feria." }),
+    received("demo_pay_cobrado_2", { clientId: longestPast.clientId, budgetId: "demo_budget_cobrado", amount: paidOf - Math.round(paidOf / 2), paidAt: eventStart(longestPast, 2, 17, 10), method: "Transferencia", reference: "TRF-88105", notes: "Cancelación total." }),
+    received("demo_pay_cambios", { clientId: third.clientId, budgetId: "demo_budget_cambios", amount: 2_000_000, paidAt: pastInstant(withinMonth(base, 8, 16, 0), now), method: "Cheque", reference: "CHQ-4471", notes: "Seña; el saldo se ajusta con los cambios pedidos." }),
+    received("demo_pay_aprobado", { clientId: next.clientId, budgetId: "demo_budget_aprobado", amount: nextPlan?.advance ?? 0, paidAt: pastInstant(withinMonth(base, 6, 15, 30), now), method: "Transferencia", reference: "TRF-88213", notes: "Anticipo del plan de pagos aprobado." }),
+    received("demo_pay_pendiente", { clientId: second.clientId, budgetId: "demo_budget_pendiente", amount: 4_000_000, paidAt: pastInstant(withinMonth(base, 3, 11, 0), now), method: "Efectivo", reference: "REC-1042", notes: "Seña para reservar los equipos." }),
+    // Cobro a plazo (issue #16): la cuota 1 del plan aprobado, con vencimiento
+    // próximo; se re-ancla a hoy en cada provisión.
+    {
+      id: "demo_pay_cuota_1",
+      ...org,
+      clientId: next.clientId,
+      budgetId: "demo_budget_aprobado",
+      amount: nextInstallment,
+      status: "PENDING",
+      paidAt: null,
+      collectedAt: null,
+      method: "Transferencia",
+      dueAt: at(base, 21, 12, 0),
+      invoiceNumber: "FAC-2026-0184",
+      invoiceIssuedAt: pastInstant(at(base, -4, 10, 0), now),
+      notes: "Cuota 1 del plan de pagos aprobado.",
+    },
   ];
 
   // ── Inventario y asignaciones (una con salida y devolución con daño) ──
@@ -896,6 +1054,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.clientPayment.createMany({ data: paymentsData });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.eventInventory.createMany({ data: assignmentsData });
+      await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
       await tx.lead.createMany({ data: leadsData });
       await tx.quoteRequest.create({ data: quoteData });
       await tx.quoteItem.createMany({ data: quoteItemsData });
@@ -914,6 +1073,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.eventInventory.deleteMany({ where: { event: { organizationId } } });
   await tx.eventTask.deleteMany({ where: { event: { organizationId } } });
   await tx.clientPayment.deleteMany({ where: { organizationId } });
+  await tx.budgetChangeRequest.deleteMany({ where: { organizationId } });
   await tx.budgetItem.deleteMany({ where: { budget: { organizationId } } });
   await tx.budget.deleteMany({ where: { organizationId } });
   await tx.quoteItem.deleteMany({ where: { quoteRequest: { organizationId } } });
@@ -1128,6 +1288,66 @@ function buildAuditTrail(organizationId: string, base: Date, context: AuditConte
       hour: 9,
       minute: 20,
       detail: { fields: { title: `Alquiler de pantallas ${context.second.name}`, status: "DRAFT", items: 3 } },
+    },
+    {
+      id: "demo_audit_payment_details",
+      actor: sales,
+      action: "update",
+      entity: "Organization",
+      entityId: organizationId,
+      summary: "Actualizó los datos de pago de «LedBox Demo» para el portal y la hoja impresa",
+      days: -16,
+      hour: 12,
+      minute: 15,
+      detail: { fields: { bank: "Ueno Bank", account: "6191649354", alias: "c.i +595 982 029217" } },
+    },
+    {
+      id: "demo_audit_plan_pagos",
+      actor: sales,
+      action: "update",
+      entity: "Budget",
+      entityId: "demo_budget_aprobado",
+      summary: `Definió el plan de pagos del presupuesto «Producción integral ${context.next.name}» del cliente «${nextClient?.company ?? ""}»`,
+      days: -9,
+      hour: 9,
+      minute: 50,
+      detail: { changes: { advanceAmount: { from: 0, to: 9_234_000 }, installments: { from: 0, to: 2 } } },
+    },
+    {
+      id: "demo_audit_rebaja_aceptada",
+      actor: sales,
+      action: "update",
+      entity: "Budget",
+      entityId: "demo_budget_aprobado",
+      summary: `Aceptó el pedido de rebaja de «${nextClient?.company ?? ""}» para el presupuesto «Producción integral ${context.next.name}» (descuento de Gs. 1.620.000)`,
+      days: -8,
+      hour: 10,
+      minute: 5,
+      detail: { changes: { discount: { from: 0, to: 1_620_000 } } },
+    },
+    {
+      id: "demo_audit_rebaja_rechazada",
+      actor: sales,
+      action: "status",
+      entity: "Budget",
+      entityId: "demo_budget_aprobado",
+      summary: `Rechazó el pedido de rebaja de «${nextClient?.company ?? ""}» para el presupuesto «Producción integral ${context.next.name}»: el margen del evento está ajustado`,
+      days: -5,
+      hour: 16,
+      minute: 20,
+      detail: { fields: { rechazo: "No llegamos a ese descuento; sumamos un tótem sin cargo." } },
+    },
+    {
+      id: "demo_audit_propuesta_pendiente",
+      actor: clientContact(context.second.clientId),
+      action: "create",
+      entity: "Budget",
+      entityId: "demo_budget_pendiente",
+      summary: `El cliente «${clientContact(context.second.clientId).name}» propuso nuevos ítems para el presupuesto «Alquiler de pantallas ${context.second.name}» desde el portal`,
+      days: -1,
+      hour: 10,
+      minute: 15,
+      detail: { fields: { items: 3, propuesta: "ítems" } },
     },
     {
       id: "demo_audit_revision_tercero",
