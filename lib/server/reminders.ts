@@ -10,15 +10,18 @@ import { dayKeyOf, dayStart, shiftDayKey } from "./notifications";
 import { emailConfigured, sendReminderEmail } from "./resend";
 
 /**
- * Recordatorios de cobro al cliente (issue #19).
+ * Recordatorios de cobro al cliente (issues #19 y #28).
  *
  * Alcance: cobros a plazo todavía pendientes (`ClientPayment.status = PENDING`)
- * con vencimiento vencido o dentro de los próximos 7 días, medidos por día de
- * Asunción (misma ventana que los avisos internos).
+ * y pagos esperados del plan que siguen esperando la transferencia
+ * (`ExpectedPayment.status = AWAITING`), con vencimiento vencido o dentro de los
+ * próximos 7 días, medidos por día de Asunción (misma ventana que los avisos
+ * internos). Un pago esperado con comprobante en revisión no se reclama.
  *
  * Idempotencia sin cron externo: cada envío se registra en `PaymentReminderLog`
- * y el índice único `(paymentId, channel, dayKey)` garantiza **un recordatorio
- * por cobro y canal por día**, aunque corran a la vez el despacho automático
+ * y el índice único `(targetKey, channel, dayKey)` garantiza **un recordatorio
+ * por destinatario y canal por día** —`client:<paymentId>` o
+ * `expected:<expectedPaymentId>`—, aunque corran a la vez el despacho automático
  * (al primer uso del panel) y el envío manual. El correo viaja por Resend
  * (`lib/server/resend.ts`); si falta `RESEND_API_KEY` la corrida se omite con un
  * log claro y no rompe nada. WhatsApp no usa APIs externas: el panel abre el
@@ -50,6 +53,68 @@ export function systemReminderActor(organizationId: string): AuditContext {
 
 const reminderPaymentInclude = { client: true, budget: true } as const;
 export type ReminderPayment = Prisma.ClientPaymentGetPayload<{ include: typeof reminderPaymentInclude }>;
+
+const reminderExpectedInclude = { budget: { include: { client: true } } } as const;
+export type ReminderExpectedPayment = Prisma.ExpectedPaymentGetPayload<{ include: typeof reminderExpectedInclude }>;
+
+/** Destinatario de un recordatorio: un cobro a plazo o un pago esperado del plan. */
+export type ReminderTarget =
+  | { kind: "payment"; payment: ReminderPayment }
+  | { kind: "expected"; expected: ReminderExpectedPayment };
+
+/** Clave estable del destinatario en `PaymentReminderLog.targetKey`. */
+export function reminderTargetKey(target: ReminderTarget): string {
+  return target.kind === "payment" ? `client:${target.payment.id}` : `expected:${target.expected.id}`;
+}
+
+type ReminderTargetFields = {
+  targetKey: string;
+  paymentId: string | null;
+  expectedPaymentId: string | null;
+  label: string;
+  amount: number;
+  dueAt: Date;
+  invoiceNumber: string | null;
+  budgetTitle: string | null;
+  portalUrl: string | null;
+  client: { name: string; company: string | null; email: string | null; phone: string | null };
+  concept: string;
+};
+
+/** Campos reales del recordatorio, comunes a cobros y pagos esperados. */
+export function reminderTargetFields(target: ReminderTarget): ReminderTargetFields {
+  if (target.kind === "payment") {
+    const { payment } = target;
+    return {
+      targetKey: reminderTargetKey(target),
+      paymentId: payment.id,
+      expectedPaymentId: null,
+      label: clientLabel(payment.client),
+      amount: payment.amount,
+      dueAt: payment.dueAt ?? new Date(),
+      invoiceNumber: payment.invoiceNumber,
+      budgetTitle: payment.budget?.title ?? null,
+      portalUrl: paymentPortalUrl(payment),
+      client: payment.client,
+      concept: reminderConcept({ invoiceNumber: payment.invoiceNumber, budgetTitle: payment.budget?.title ?? null }),
+    };
+  }
+  const { expected } = target;
+  const client = expected.budget.client;
+  return {
+    targetKey: reminderTargetKey(target),
+    paymentId: null,
+    expectedPaymentId: expected.id,
+    label: clientLabel(client),
+    amount: expected.amount,
+    dueAt: expected.dueAt ?? new Date(),
+    invoiceNumber: null,
+    budgetTitle: expected.budget.title,
+    portalUrl: expected.budget.publicToken ? portalBudgetUrl(expected.budget.publicToken) : null,
+    client,
+    concept: `${expected.label} del presupuesto «${expected.budget.title}»`,
+  };
+}
 
 type ReminderOrganization = {
   id: string;
@@ -88,6 +153,33 @@ export async function listPendingReminderPayments(
 
 export function clientLabel(client: { name: string; company: string | null }): string {
   return client.company?.trim() || client.name;
+}
+
+/**
+ * Pagos esperados que corresponden recordar hoy (issue #28): conceptos del plan
+ * en `AWAITING` (sin comprobante en revisión) con vencimiento vencido o por
+ * vencer dentro de la ventana, ordenados por vencimiento. El anticipo vence el
+ * día de la aprobación; el saldo sin fecha no se recuerda.
+ */
+export async function listPendingReminderExpectedPayments(
+  organizationId: string,
+  now = new Date(),
+): Promise<ReminderExpectedPayment[]> {
+  const todayKey = dayKeyOf(now);
+  const windowEnd = dayStart(shiftDayKey(todayKey, REMINDER_WINDOW_DAYS + 1));
+  const expected = await db.expectedPayment.findMany({
+    where: { organizationId, status: "AWAITING", dueAt: { not: null, lt: windowEnd } },
+    orderBy: { dueAt: "asc" },
+    take: MAX_REMINDERS_PER_RUN + 1,
+    include: reminderExpectedInclude,
+  });
+  if (expected.length > MAX_REMINDERS_PER_RUN) {
+    console.warn(
+      `[reminders] Hay más de ${MAX_REMINDERS_PER_RUN} pagos esperados por recordar en la ventana de ${REMINDER_WINDOW_DAYS} días; se recuerdan los más urgentes.`,
+    );
+    return expected.slice(0, MAX_REMINDERS_PER_RUN);
+  }
+  return expected;
 }
 
 function escapeHtml(value: string): string {
@@ -229,7 +321,8 @@ function actorFields(actor: AuditContext) {
 }
 
 /**
- * Envía el recordatorio por email de un cobro y lo registra.
+ * Envía el recordatorio por email de un destinatario (cobro a plazo o pago
+ * esperado) y lo registra.
  *
  * - Sin correo del cliente → `skipped` (no se registra nada: cuando se cargue el
  *   correo, el recordatorio del día sigue disponible).
@@ -237,24 +330,25 @@ function actorFields(actor: AuditContext) {
  *   puede pedir `retryFailed` para reintentar un intento fallido del mismo día
  *   actualizando la misma fila (nunca se duplica).
  */
-export async function sendPaymentReminderEmail(input: {
+export async function sendReminderEmailForTarget(input: {
   organization: ReminderOrganization;
-  payment: ReminderPayment;
+  target: ReminderTarget;
   actor: AuditContext;
   now?: Date;
   retryFailed?: boolean;
 }): Promise<PaymentReminderOutcome> {
-  const { organization, payment, actor } = input;
+  const { organization, actor } = input;
+  const fields = reminderTargetFields(input.target);
   const now = input.now ?? new Date();
   const dayKey = dayKeyOf(now);
-  const to = (payment.client.email ?? "").trim().toLowerCase();
-  const label = clientLabel(payment.client);
+  const to = (fields.client.email ?? "").trim().toLowerCase();
+  const label = fields.label;
   if (!to) {
     return { status: "skipped", reminder: null, alreadySentToday: false, error: "El cliente no tiene correo cargado." };
   }
 
   const existing = await db.paymentReminderLog.findUnique({
-    where: { paymentId_channel_dayKey: { paymentId: payment.id, channel: "email", dayKey } },
+    where: { targetKey_channel_dayKey: { targetKey: fields.targetKey, channel: "email", dayKey } },
   });
   if (existing && !(input.retryFailed && existing.status === "failed")) {
     return {
@@ -267,12 +361,12 @@ export async function sendPaymentReminderEmail(input: {
 
   const content = buildPaymentReminderEmail({
     organizationName: organization.name,
-    client: payment.client,
-    amount: payment.amount,
-    dueAt: payment.dueAt ?? now,
-    invoiceNumber: payment.invoiceNumber,
-    budgetTitle: payment.budget?.title ?? null,
-    portalUrl: paymentPortalUrl(payment),
+    client: fields.client,
+    amount: fields.amount,
+    dueAt: fields.dueAt,
+    invoiceNumber: fields.invoiceNumber,
+    budgetTitle: fields.budgetTitle,
+    portalUrl: fields.portalUrl,
     paymentDetails: parsePaymentDetails(organization.paymentDetails),
   });
 
@@ -292,12 +386,20 @@ export async function sendPaymentReminderEmail(input: {
   } else {
     try {
       reminder = await db.paymentReminderLog.create({
-        data: { id: randomUUID(), organizationId: organization.id, paymentId: payment.id, channel: "email", ...data },
+        data: {
+          id: randomUUID(),
+          organizationId: organization.id,
+          paymentId: fields.paymentId,
+          expectedPaymentId: fields.expectedPaymentId,
+          targetKey: fields.targetKey,
+          channel: "email",
+          ...data,
+        },
       });
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const concurrent = await db.paymentReminderLog.findUnique({
-        where: { paymentId_channel_dayKey: { paymentId: payment.id, channel: "email", dayKey } },
+        where: { targetKey_channel_dayKey: { targetKey: fields.targetKey, channel: "email", dayKey } },
       });
       return {
         status: concurrent ? reminderOutcomeOf(concurrent.status) : "skipped",
@@ -307,14 +409,15 @@ export async function sendPaymentReminderEmail(input: {
     }
   }
 
-  const concept = reminderConcept({ invoiceNumber: payment.invoiceNumber, budgetTitle: payment.budget?.title ?? null });
+  const concept = fields.concept;
   const detail = {
     fields: {
       channel: "email",
       to,
-      amount: payment.amount,
-      dueAt: payment.dueAt,
-      invoiceNumber: payment.invoiceNumber,
+      amount: fields.amount,
+      dueAt: fields.dueAt,
+      invoiceNumber: fields.invoiceNumber,
+      ...(fields.expectedPaymentId ? { expectedPaymentId: fields.expectedPaymentId } : {}),
     },
   };
   try {
@@ -326,8 +429,8 @@ export async function sendPaymentReminderEmail(input: {
     await recordAudit({
       context: actor,
       action: "remind",
-      entity: "ClientPayment",
-      entityId: payment.id,
+      entity: fields.expectedPaymentId ? "ExpectedPayment" : "ClientPayment",
+      entityId: fields.expectedPaymentId ?? (fields.paymentId as string),
       summary: `Envió el recordatorio de pago por email a «${label}» (${concept})`,
       detail,
     });
@@ -342,8 +445,8 @@ export async function sendPaymentReminderEmail(input: {
     await recordAudit({
       context: actor,
       action: "remind",
-      entity: "ClientPayment",
-      entityId: payment.id,
+      entity: fields.expectedPaymentId ? "ExpectedPayment" : "ClientPayment",
+      entityId: fields.expectedPaymentId ?? (fields.paymentId as string),
       summary: `Falló el recordatorio de pago por email a «${label}»: ${message}`.slice(0, 400),
       detail: { fields: { ...detail.fields, status: "failed" } },
     });
@@ -351,30 +454,50 @@ export async function sendPaymentReminderEmail(input: {
   }
 }
 
+/** Compatibilidad: recordatorio por email de un cobro de cliente (`POST /reminders`). */
+export function sendPaymentReminderEmail(input: {
+  organization: ReminderOrganization;
+  payment: ReminderPayment;
+  actor: AuditContext;
+  now?: Date;
+  retryFailed?: boolean;
+}): Promise<PaymentReminderOutcome> {
+  return sendReminderEmailForTarget({
+    organization: input.organization,
+    target: { kind: "payment", payment: input.payment },
+    actor: input.actor,
+    now: input.now,
+    retryFailed: input.retryFailed,
+  });
+}
+
 /**
- * Registra que el equipo abrió el mensaje de WhatsApp del cobro (el envío lo
- * confirma el equipo en WhatsApp; acá queda la constancia del día). Un solo
- * registro por cobro y día: los clics repetidos no duplican ni ensucian la
- * auditoría.
+ * Registra que el equipo abrió el mensaje de WhatsApp del destinatario (el
+ * envío lo confirma el equipo en WhatsApp; acá queda la constancia del día).
+ * Un solo registro por destinatario y día: los clics repetidos no duplican ni
+ * ensucian la auditoría.
  */
 export async function recordWhatsappReminder(input: {
   organizationId: string;
-  payment: { id: string; client: { name: string; company: string | null; phone: string | null } };
+  target: ReminderTarget;
   actor: AuditContext;
   now?: Date;
 }): Promise<{ reminder: PaymentReminderLog; alreadyToday: boolean } | null> {
+  const fields = reminderTargetFields(input.target);
   const now = input.now ?? new Date();
   const dayKey = dayKeyOf(now);
-  const to = (input.payment.client.phone ?? "").trim();
+  const to = (fields.client.phone ?? "").trim();
   if (!to) return null;
-  const label = clientLabel(input.payment.client);
+  const label = fields.label;
 
   try {
     const reminder = await db.paymentReminderLog.create({
       data: {
         id: randomUUID(),
         organizationId: input.organizationId,
-        paymentId: input.payment.id,
+        paymentId: fields.paymentId,
+        expectedPaymentId: fields.expectedPaymentId,
+        targetKey: fields.targetKey,
         channel: "whatsapp",
         status: "opened",
         to,
@@ -388,16 +511,16 @@ export async function recordWhatsappReminder(input: {
     await recordAudit({
       context: input.actor,
       action: "remind",
-      entity: "ClientPayment",
-      entityId: input.payment.id,
-      summary: `Abrió WhatsApp para recordarle el pago a «${label}»`,
+      entity: fields.expectedPaymentId ? "ExpectedPayment" : "ClientPayment",
+      entityId: fields.expectedPaymentId ?? (fields.paymentId as string),
+      summary: `Abrió WhatsApp para recordarle el pago a «${label}» (${fields.concept})`,
       detail: { fields: { channel: "whatsapp", to, status: "opened" } },
     });
     return { reminder, alreadyToday: false };
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     const existing = await db.paymentReminderLog.findUnique({
-      where: { paymentId_channel_dayKey: { paymentId: input.payment.id, channel: "whatsapp", dayKey } },
+      where: { targetKey_channel_dayKey: { targetKey: fields.targetKey, channel: "whatsapp", dayKey } },
     });
     return existing ? { reminder: existing, alreadyToday: true } : null;
   }
@@ -407,8 +530,12 @@ export async function recordWhatsappReminder(input: {
 
 export type ReminderRunSummary = {
   dayKey: string;
-  /** Cobros pendientes dentro de la ventana (vencidos o por vencer). */
+  /** Destinatarios en la ventana: cobros a plazo + pagos esperados (issue #28). */
   candidates: number;
+  /** Cobros pendientes dentro de la ventana (vencidos o por vencer). */
+  paymentCandidates: number;
+  /** Pagos esperados en `AWAITING` dentro de la ventana (issue #28). */
+  expectedCandidates: number;
   sent: number;
   failed: number;
   /** Sin correo del cliente: no se intenta y no se registra. */
@@ -419,9 +546,10 @@ export type ReminderRunSummary = {
 };
 
 /**
- * Despacho diario: recorre los cobros pendientes de la ventana y manda **un**
- * recordatorio por cobro y día. Lo llaman el primer uso del panel del día y el
- * endpoint forzado; es idempotente, así que repetirlo no duplica nada.
+ * Despacho diario: recorre los cobros pendientes y los pagos esperados de la
+ * ventana y manda **un** recordatorio por destinatario y día. Lo llaman el
+ * primer uso del panel del día y el endpoint forzado; es idempotente, así que
+ * repetirlo no duplica nada.
  */
 export async function runDailyPaymentReminders(input: {
   organizationId: string;
@@ -430,7 +558,16 @@ export async function runDailyPaymentReminders(input: {
 }): Promise<ReminderRunSummary> {
   const now = input.now ?? new Date();
   const dayKey = dayKeyOf(now);
-  const summary: ReminderRunSummary = { dayKey, candidates: 0, sent: 0, failed: 0, skipped: 0, alreadySentToday: 0 };
+  const summary: ReminderRunSummary = {
+    dayKey,
+    candidates: 0,
+    paymentCandidates: 0,
+    expectedCandidates: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    alreadySentToday: 0,
+  };
 
   const organization = await db.organization.findUnique({
     where: { id: input.organizationId },
@@ -441,13 +578,16 @@ export async function runDailyPaymentReminders(input: {
     return { ...summary, reason: "demo_organization" };
   }
 
-  const candidates = await listPendingReminderPayments(organization.id, now);
-  summary.candidates = candidates.length;
-  if (candidates.length === 0) return summary;
+  const payments = await listPendingReminderPayments(organization.id, now);
+  const expected = await listPendingReminderExpectedPayments(organization.id, now);
+  summary.paymentCandidates = payments.length;
+  summary.expectedCandidates = expected.length;
+  summary.candidates = payments.length + expected.length;
+  if (summary.candidates === 0) return summary;
 
   if (!emailConfigured()) {
     console.warn(
-      `[reminders] RESEND_API_KEY ausente: se omiten ${candidates.length} recordatorio(s) del ${dayKey} (la corrida se reintenta en el próximo uso del panel).`,
+      `[reminders] RESEND_API_KEY ausente: se omiten ${summary.candidates} recordatorio(s) del ${dayKey} (la corrida se reintenta en el próximo uso del panel).`,
     );
     return { ...summary, reason: "missing_resend_api_key" };
   }
@@ -455,23 +595,27 @@ export async function runDailyPaymentReminders(input: {
   const actor = input.actor ?? systemReminderActor(organization.id);
   const todayLogs = await db.paymentReminderLog.findMany({
     where: { organizationId: organization.id, channel: "email", dayKey },
-    select: { paymentId: true },
+    select: { targetKey: true },
   });
-  const alreadyToday = new Set(todayLogs.map((log) => log.paymentId));
+  const alreadyToday = new Set(todayLogs.map((log) => log.targetKey));
 
-  for (const payment of candidates) {
-    if (alreadyToday.has(payment.id)) {
+  const targets: ReminderTarget[] = [
+    ...payments.map((payment): ReminderTarget => ({ kind: "payment", payment })),
+    ...expected.map((row): ReminderTarget => ({ kind: "expected", expected: row })),
+  ];
+  for (const target of targets) {
+    if (alreadyToday.has(reminderTargetKey(target))) {
       summary.alreadySentToday += 1;
       continue;
     }
-    const outcome = await sendPaymentReminderEmail({ organization, payment, actor, now });
+    const outcome = await sendReminderEmailForTarget({ organization, target, actor, now });
     if (outcome.status === "sent") summary.sent += 1;
     else if (outcome.status === "failed") summary.failed += 1;
     else summary.skipped += 1;
   }
 
   console.info(
-    `[reminders] ${dayKey}: ${summary.sent} enviados, ${summary.failed} fallidos, ${summary.skipped} sin correo, ${summary.alreadySentToday} ya enviados (de ${summary.candidates} cobros en la ventana).`,
+    `[reminders] ${dayKey}: ${summary.sent} enviados, ${summary.failed} fallidos, ${summary.skipped} sin correo, ${summary.alreadySentToday} ya enviados (de ${summary.paymentCandidates} cobros y ${summary.expectedCandidates} pagos esperados en la ventana).`,
   );
   return summary;
 }

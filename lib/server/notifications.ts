@@ -35,6 +35,10 @@ import type {
  *   (`BudgetPaymentProof`, issue #17) que todavía no se resolvió —el cobro
  *   vinculado sigue pendiente— o que quedó sin cobro asociado; la fecha es el
  *   día en que el cliente lo subió y el aviso vive la ventana de 7 días.
+ * - `expected_due`: pago esperado del plan (issue #28) que sigue esperando la
+ *   transferencia (`AWAITING`, sin comprobante) y ya venció o vence dentro de
+ *   la ventana. Con comprobante en revisión (`PROOF`) no se reclama: eso es
+ *   trabajo de la cola «Por confirmar».
  *
  * El calendario consume solo los tres primeros (`calendarAlerts`); los
  * vencimientos de cobro se suman como ítem propio en `/api/admin/calendar`. Las
@@ -441,6 +445,59 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
 }
 
 /**
+ * Pagos esperados vencidos o por vencer (issue #28): conceptos del plan
+ * aprobado que siguen en `AWAITING` (sin comprobante) con vencimiento vencido o
+ * dentro de la ventana. La fecha del aviso es el vencimiento real del concepto;
+ * el WhatsApp viaja con los datos reales para reclamar la transferencia.
+ */
+async function expectedDueCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
+  const soonLimit = new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS);
+  const todayKey = dayKeyOf(now);
+  const pending = await db.expectedPayment.findMany({
+    where: { organizationId, status: "AWAITING", dueAt: { not: null, lte: soonLimit } },
+    orderBy: { dueAt: "asc" },
+    take: 50,
+    include: {
+      budget: {
+        select: {
+          title: true,
+          publicToken: true,
+          client: { select: { name: true, company: true, phone: true } },
+        },
+      },
+    },
+  });
+
+  return pending.flatMap((expected) => {
+    if (!expected.dueAt) return [];
+    const client = expected.budget.client;
+    const label = clientLabel(client);
+    return [
+      {
+        id: `expected_due:${expected.id}`,
+        kind: "expected_due" as const,
+        level: dayKeyOf(expected.dueAt) < todayKey ? ("overdue" as const) : ("soon" as const),
+        title: label,
+        subtitle: joinParts([expected.budget.title, expected.label, formatPyg(expected.amount), "sin comprobante"]),
+        date: dayKeyOf(expected.dueAt),
+        href: "/finanzas",
+        reminder: client.phone
+          ? {
+              phone: client.phone,
+              client: label,
+              amount: expected.amount,
+              dueAt: expected.dueAt.toISOString(),
+              invoiceNumber: null,
+              budgetTitle: expected.budget.title,
+              portalUrl: expected.budget.publicToken ? portalBudgetUrl(expected.budget.publicToken) : null,
+            }
+          : null,
+      },
+    ];
+  });
+}
+
+/**
  * Reservas pendientes (issue #18): presupuestos aprobados con ítems vinculados
  * al inventario cuya reserva no quedó completa. El aviso nace de datos reales
  * —el evento del presupuesto, sus fechas y las asignaciones del evento—, no de
@@ -541,10 +598,11 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   checklist: 2,
   reservation: 3,
   collection_due: 4,
-  collection: 5,
-  lead: 6,
-  portal_request: 7,
-  payment_proof: 8,
+  expected_due: 5,
+  collection: 6,
+  lead: 7,
+  portal_request: 8,
+  payment_proof: 9,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */
@@ -606,13 +664,14 @@ export async function listAdminNotifications(
   organizationId: string,
   now = new Date(),
 ): Promise<{ notifications: AdminNotification[]; notificationCounts: AdminNotificationCounts }> {
-  const [core, extras, collections, reservations] = await Promise.all([
+  const [core, extras, collections, expectedDue, reservations] = await Promise.all([
     coreCandidates(organizationId, now),
     extraCandidates(organizationId, now),
     collectionDueCandidates(organizationId, now),
+    expectedDueCandidates(organizationId, now),
     reservationCandidates(organizationId),
   ]);
-  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections, ...reservations]).sort(compareNotifications);
+  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections, ...expectedDue, ...reservations]).sort(compareNotifications);
   const notificationCounts: AdminNotificationCounts = { overdue: 0, soon: 0, info: 0, total: sorted.length };
   for (const notification of sorted) notificationCounts[notification.level] += 1;
   return { notifications: sorted.slice(0, NOTIFICATION_LIMIT), notificationCounts };
