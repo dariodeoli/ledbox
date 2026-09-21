@@ -5,6 +5,7 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 ## Contexto
 
 - Producto, módulos y pendientes: `docs/CONTEXTO-LEDBOX.md`.
+- **Reglas generales de la app (obligatorias)**: `docs/REGLAS-GENERALES.md` — buscar antes de crear, un objeto por tipo, formatos normalizados, estados honestos, endpoints públicos con token, versionado y publicación. Ningún cambio nuevo puede contradecirlas.
 - Stack, estructura y puesta en marcha: `README.md`.
 
 ## Ramas, entrega y deploy

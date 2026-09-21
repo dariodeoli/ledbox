@@ -7,7 +7,7 @@ export const authConfig = {
   sessionCookieName: "ledbox_session",
   sessionDurationMs: 1000 * 60 * 60 * 24 * 7,
   passwordResetDurationMs: 1000 * 60 * 30,
-  resetSender: "LedBox Paraguay <ledboxpy@weem.com.py>",
+  resetSender: "LedBox <ledbox@weem.com.py>",
 };
 
 export function normalizeEmail(email: string): string {

@@ -81,4 +81,5 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 
 - [README-NEXT.md](README-NEXT.md) — migración del frontend a Next.js.
 - [docs/CONTEXTO-LEDBOX.md](docs/CONTEXTO-LEDBOX.md) — contexto general: qué existe hoy, arquitectura y pendientes.
+- [docs/REGLAS-GENERALES.md](docs/REGLAS-GENERALES.md) — reglas generales de la app (obligatorias).
 - [AGENTS.md](AGENTS.md) — reglas para agentes que trabajan en el repo.
