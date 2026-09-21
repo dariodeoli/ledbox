@@ -359,25 +359,38 @@ model Event {
 }
 
 model Budget {
-  id             String           @id
-  organizationId String
-  clientId       String
-  eventId        String?
-  title          String
-  status         CommercialStatus @default(DRAFT)
-  subtotal       Int              @default(0)
-  discount       Int              @default(0)
-  total          Int              @default(0)
-  costEstimate   Int              @default(0)
-  validUntil     DateTime?
-  notes          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  items          BudgetItem[]
-  payments       ClientPayment[]
+  id                   String           @id
+  organizationId       String
+  clientId             String
+  eventId              String?
+  title                String
+  status               CommercialStatus @default(DRAFT)
+  subtotal             Int              @default(0)
+  discount             Int              @default(0)
+  total                Int              @default(0)
+  costEstimate         Int              @default(0)
+  validUntil           DateTime?
+  notes                String?
+  // Portal del cliente (issue #12): token público del presupuesto y evidencia
+  // de la aprobación digital o manual. El token es la única credencial del
+  // link y se puede regenerar o revocar desde el panel.
+  publicToken          String?          @unique
+  publicTokenCreatedAt DateTime?
+  approvedAt           DateTime?
+  approvedByName       String?
+  approvalMethod       String?
+  approvalIp           String?
+  approvalUserAgent    String?
+  approvalNote         String?
+  revisionRequestedAt  DateTime?
+  revisionNote         String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client               Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  event                Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  items                BudgetItem[]
+  payments             ClientPayment[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
