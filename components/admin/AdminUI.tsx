@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
-import type { AdminIconName } from "@/lib/admin-types";
-import { countdownTone, formatCountdown, whatsappHref, type AdminTone } from "@/lib/admin-format";
+import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
+import {
+  countdownTone,
+  formatCountdown,
+  formatDateTime,
+  formatNumber,
+  timelineKindLabel,
+  whatsappHref,
+  type AdminTone,
+} from "@/lib/admin-format";
+import { adminApiGet } from "@/lib/admin-api";
 import { prepareIdentityImage, type PreparedIdentityImage } from "@/lib/identity-image";
 import { BrandMark } from "@/components/brand-mark";
 import { AdminIcon } from "./AdminIcons";
@@ -292,6 +301,158 @@ export function AdminDialog({
         {children}
       </section>
     </div>
+  );
+}
+
+// ── Cronología (issue #33) ──────────────────────────────────────────────────
+// Un ícono por tipo de hito; el tono y la fecha los pone la fuente real.
+
+const TIMELINE_ICONS: Record<AdminTimelineKind, AdminIconName> = {
+  created: "plus",
+  updated: "edit",
+  status: "arrow-right",
+  sent: "mail",
+  viewed: "eye",
+  request: "edit",
+  request_resolved: "check",
+  approved: "check",
+  revision: "alert",
+  expected: "clock",
+  proof: "upload",
+  payment: "finance",
+  treasury: "finance",
+  inventory: "inventory",
+  checkout: "arrow-right",
+  checkin: "refresh",
+  task: "audit",
+  task_done: "check",
+  event_date: "calendar",
+  cancelled: "close",
+  thanks: "info",
+};
+
+/**
+ * Timeline vertical compartido: contador de hitos, filtro simple por tipo y
+ * una fila por hito con fecha (24 h de Asunción), actor y detalle. Los hitos
+ * llegan ya ordenados y con su tono real; el componente no interpreta nada.
+ */
+export function AdminTimeline({
+  entries,
+  loading,
+  error,
+  onRetry,
+  emptyTitle = "Todavía no hay hitos",
+  emptyHint,
+}: {
+  entries: AdminTimelineEntry[];
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
+  emptyTitle?: string;
+  emptyHint?: string;
+}) {
+  const [kind, setKind] = useState("ALL");
+  const kinds = useMemo(() => [...new Set(entries.map((entry) => entry.kind))], [entries]);
+
+  // El filtro elegido sobrevive a un reload solo si el tipo sigue existiendo.
+  useEffect(() => {
+    if (kind !== "ALL" && !kinds.includes(kind as AdminTimelineKind)) setKind("ALL");
+  }, [kind, kinds]);
+
+  const filtered = kind === "ALL" ? entries : entries.filter((entry) => entry.kind === kind);
+
+  return (
+    <AdminDataState
+      loading={loading}
+      error={error}
+      onRetry={onRetry}
+      empty={entries.length === 0}
+      emptyTitle={emptyTitle}
+      emptyHint={emptyHint}
+      rows={4}
+    >
+      <div className="admin-timeline-head">
+        <span className="admin-timeline-count">
+          {formatNumber(entries.length)} {entries.length === 1 ? "hito" : "hitos"}
+          {kind === "ALL" ? "" : ` · ${formatNumber(filtered.length)} en el filtro`}
+        </span>
+        <AdminSelect
+          value={kind}
+          onChange={setKind}
+          label="Filtrar la cronología por tipo de hito"
+          options={[
+            { value: "ALL", label: "Todos los tipos" },
+            ...kinds.map((value) => ({ value, label: timelineKindLabel(value) })),
+          ]}
+        />
+      </div>
+      <ol className="admin-timeline">
+        {filtered.map((entry) => (
+          <li className="admin-timeline-step" key={entry.id} data-tone={entry.tone}>
+            <span className="admin-timeline-when">{formatDateTime(entry.at)}</span>
+            <span className="admin-timeline-body">
+              <strong>
+                <span className="admin-timeline-kind" aria-hidden="true">
+                  <AdminIcon name={TIMELINE_ICONS[entry.kind]} size={12} />
+                </span>
+                {entry.title}
+                {entry.actor ? <span className="admin-timeline-actor"> · {entry.actor}</span> : null}
+              </strong>
+              {entry.detail ? <small>{entry.detail}</small> : null}
+              <small className="admin-timeline-meta">{timelineKindLabel(entry.kind)}</small>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </AdminDataState>
+  );
+}
+
+/**
+ * Diálogo de cronología: pide los hitos reales de un presupuesto o un evento y
+ * los dibuja con el timeline compartido. Cualquier rol con membresía lee
+ * (VIEWER incluido); el aislamiento por empresa lo resuelve el API.
+ */
+export function AdminTimelineDialog({ title, path, onClose }: { title: string; path: string; onClose: () => void }) {
+  const [entries, setEntries] = useState<AdminTimelineEntry[] | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setError("");
+    void adminApiGet<{ timeline?: AdminTimelineEntry[] }>(path, {
+      fresh: attempt > 0,
+      fallbackError: "No pudimos cargar la cronología.",
+    }).then((result) => {
+      if (!active) return;
+      if (!result.ok) {
+        setEntries([]);
+        setError(result.error);
+        return;
+      }
+      setEntries(result.data.timeline ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [path, attempt]);
+
+  return (
+    <AdminDialog title={title} size="wide" onClose={onClose}>
+      <AdminTimeline
+        entries={entries ?? []}
+        loading={entries === null && !error}
+        error={error}
+        onRetry={() => setAttempt((current) => current + 1)}
+        emptyTitle="Todavía no hay hitos registrados"
+        emptyHint="Los hitos aparecen solos cuando el presupuesto o el evento tienen movimientos reales."
+      />
+      <div className="admin-dialog-foot">
+        <span className="admin-dialog-spacer" />
+        <AdminButton onClick={onClose}>Cerrar</AdminButton>
+      </div>
+    </AdminDialog>
   );
 }
 

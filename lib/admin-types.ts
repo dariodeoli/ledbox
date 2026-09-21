@@ -274,6 +274,8 @@ export type AdminBudgetRow = {
   /** Portal del cliente (issue #12): token público y evidencia de la aprobación. */
   publicToken: string | null;
   publicTokenCreatedAt: string | null;
+  /** Primera vista del link del portal (issue #33); `null` si nunca lo abrió. */
+  viewedAt: string | null;
   approvedAt: string | null;
   approvedByName: string | null;
   approvalMethod: string | null;
@@ -365,6 +367,49 @@ export type AdminBudgetPortalPayload = {
   /** Reserva automática al aprobar (issue #18); `null`/ausente si no se aprobó ahora. */
   reservations?: AdminBudgetReservation | null;
   error?: string;
+};
+
+// ── Cronología (issue #33) ──────────────────────────────────────────────────
+// Fuente única de los hitos reales de un presupuesto o un evento. Cada hito
+// nace de un registro real (fila, correo, movimiento o auditoría) con su fecha
+// y su actor; lo que no está registrado no aparece. El mismo objeto alimenta el
+// panel (`GET /api/admin/timeline`) y la versión cliente del portal.
+
+/** Tipo de hito: define el ícono del panel y la etiqueta compartida. */
+export type AdminTimelineKind =
+  | "created"
+  | "updated"
+  | "status"
+  | "sent"
+  | "viewed"
+  | "request"
+  | "request_resolved"
+  | "approved"
+  | "revision"
+  | "expected"
+  | "proof"
+  | "payment"
+  | "treasury"
+  | "inventory"
+  | "checkout"
+  | "checkin"
+  | "task"
+  | "task_done"
+  | "event_date"
+  | "cancelled"
+  | "thanks";
+
+export type AdminTimelineEntry = {
+  /** Id estable del hito (`kind:registro`) para listas y filtros. */
+  id: string;
+  /** Fecha real del hecho (ISO). */
+  at: string;
+  kind: AdminTimelineKind;
+  title: string;
+  detail: string | null;
+  /** Nombre del actor o «Cliente (portal)»; `null` cuando no quedó registrado. */
+  actor: string | null;
+  tone: AdminTone;
 };
 
 export type AdminPaymentRow = AdminPayment & {
