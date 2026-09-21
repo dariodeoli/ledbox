@@ -536,3 +536,24 @@ La base actual está bien encaminada. El siguiente salto no es de diseño: es co
 1. LedBox ya tiene una base comercial y administrativa funcional.
 2. El principal pendiente técnico es conectar el modelo multiempresa con todos los datos operativos.
 3. Los módulos actuales permiten evolucionar hacia un ERP especializado en eventos, alquileres y producción.
+
+---
+
+## Actualización 21-09-2026
+
+Lo que sigue ya está implementado e integrado (y en producción salvo lo indicado):
+
+- **Panel rediseñado** por módulos (Resumen, Eventos, Calendario, Clientes, Leads, Presupuestos, Finanzas, Inventario, Proveedores, Promotoras, Usuarios, Auditoría), denso, claro/oscuro y mobile; URLs sin `/admin` en `admin.ledbox.online`.
+- **Multiempresa real**: `organizationId` en todos los módulos operativos, membresías, empresa activa en sesión y permisos por rol server-side (`lib/server/permissions.ts`).
+- **Inventario operativo**: asignaciones por evento con disponibilidad y conflictos, salida/devolución, daños y faltantes, estado del equipo.
+- **Proveedores** con flujo completo de estados, anticipos, entrega y saldo.
+- **Calendario operativo** (mes/semana/mobile) y **notificaciones** (campana + "Qué mirar hoy").
+- **Exportaciones**: presupuesto, orden de trabajo y reporte mensual imprimibles (PDF del navegador) y CSV de finanzas e inventario.
+- **Auditoría**: `AuditLog` (actor, acción, entidad, antes/después) y página `/auditoria` (solo OWNER/ADMIN).
+- **Portal del cliente** en `clientes.ledbox.online`: presupuesto por link/QR, aprobación digital con evidencia, pedido de cambios, autogestión (cantidades/días, rebaja), plan de cuotas y **datos de pago al aprobar** (Ueno Bank con logo).
+- **Cobros a plazo**: factura a 30 días con vencimiento, cheque con su fecha, recordatorios y "marcar cobrado" (los pendientes no cuentan como cobrados).
+- **Demo pública full** en `/demo`: datos simulados con eventos reales de Paraguay, ventana móvil y entrada al portal del cliente demo.
+- **Deploy**: migraciones automáticas al arrancar (`scripts/migrate-deploy.mjs`) y `/api/health` con estado de base y migraciones.
+- **Reglas generales obligatorias** en `docs/REGLAS-GENERALES.md`; adopción del kit de campos canónico en curso (issue #13).
+
+Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/bloqueo por inactividad, avatares (la app no los usa hoy) y adjuntar comprobante de pago en el portal.
