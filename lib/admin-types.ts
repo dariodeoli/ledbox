@@ -48,11 +48,13 @@ export type AdminOrganization = { id: string; name: string; slug?: string | null
 /**
  * `GET /api/admin/session`. Contrato objetivo `{ user, organization, organizations[] }`; el API
  * actual todavía anida el usuario autenticado (`user.user`), por eso el consumo es defensivo.
+ * `demo: true` marca la sesión de la demo pública (issue #14), de solo lectura.
  */
 export type AdminSessionPayload = {
   user: AdminSessionUser | { user: AdminSessionUser } | null;
   organization?: AdminOrganization | null;
   organizations?: AdminOrganization[] | null;
+  demo?: boolean | null;
 };
 
 /** Cliente embebido en eventos/presupuestos/finanzas (relación `client: true`). */

@@ -1,5 +1,6 @@
 import type { AdminRole } from "@prisma/client";
 import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
+import { isDemoOrganizationSlug } from "./demo-data";
 import { db } from "./db";
 import { jsonError } from "./http";
 import { roleCan, type AdminCapability } from "./permissions";
@@ -11,6 +12,8 @@ import { roleCan, type AdminCapability } from "./permissions";
  * - Sin sesión → 401.
  * - Con sesión pero sin membresía activa (o sin empresa activa) → 403.
  * - Con membresía pero sin la capacidad pedida → 403.
+ * - La organización demo (issue #14) es de solo lectura: toda capacidad de
+ *   escritura responde 403 «Modo demo: solo lectura», sin importar el rol.
  *
  * Toda lectura se filtra por `context.organizationId` y toda alta lo setea; así
  * ninguna consulta puede cruzar datos entre empresas.
@@ -27,6 +30,8 @@ export type AdminContext = {
   };
   role: AdminRole;
   organizationId: string;
+  /** La empresa activa es la demo pública: el panel va en modo solo lectura. */
+  demo: boolean;
 };
 
 export type AdminContextResult = { ok: true; context: AdminContext } | { ok: false; response: Response };
@@ -66,6 +71,13 @@ export async function requireAdminContext(capability?: AdminCapability): Promise
   }
 
   const role = membership.role;
+  const demo = isDemoOrganizationSlug(membership.organization.slug);
+  // La demo es de solo lectura por contrato: el rol de la membresía es VIEWER,
+  // pero además acá se corta cualquier capacidad de escritura (así el error es
+  // explícito y no depende de que el rol siga siendo VIEWER).
+  if (capability && demo) {
+    return { ok: false, response: jsonError("Modo demo: solo lectura", 403) };
+  }
   if (capability && !roleCan(role, capability)) {
     return { ok: false, response: jsonError("Forbidden", 403) };
   }
@@ -78,6 +90,7 @@ export async function requireAdminContext(capability?: AdminCapability): Promise
       organization: membership.organization,
       role,
       organizationId: membership.organizationId,
+      demo,
     },
   };
 }

@@ -7,12 +7,14 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const result = await requireAdminContext();
   if (!result.ok) return result.response;
-  const { user, organization, role } = result.context;
+  const { user, organization, role, demo } = result.context;
   const organizations = await listAdminOrganizations(user.id);
   return Response.json({
     user,
     organization: { id: organization.id, name: organization.name, slug: organization.slug, role },
     organizations,
+    // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
+    demo,
   });
 }
 
