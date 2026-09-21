@@ -35,7 +35,7 @@ export function AdminLoginForm() {
         setError(await responseMessage(response, "No pudimos iniciar sesión. Revisá tus datos."));
         return;
       }
-      router.replace("/admin");
+      router.replace("/dashboard");
       router.refresh();
     } catch {
       setError("No pudimos conectar con el panel. Intentá nuevamente.");
@@ -58,7 +58,7 @@ export function AdminLoginForm() {
           <input id="admin-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required maxLength={320} placeholder="tu@email.com" />
         </div>
         <div className="admin-field">
-          <div className="admin-field-heading"><label htmlFor="admin-password">Contraseña</label><Link href="/admin/recuperar">¿La olvidaste?</Link></div>
+          <div className="admin-field-heading"><label htmlFor="admin-password">Contraseña</label><Link href="/recuperar">¿La olvidaste?</Link></div>
           <input id="admin-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required minLength={8} maxLength={128} />
         </div>
         <input className="admin-honeypot" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />

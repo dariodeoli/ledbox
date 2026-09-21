@@ -46,7 +46,7 @@ export function AdminRecoveryForm() {
         <input className="admin-honeypot" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
         <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Enviando recuperación" /> Enviando…</> : "Enviar enlace →"}</button>
       </form>
-      <Link href="/admin/login" className="admin-back-link">← Volver al inicio de sesión</Link>
+      <Link href="/login" className="admin-back-link">← Volver al inicio de sesión</Link>
     </section>
   </AdminFrame>;
 }

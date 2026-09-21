@@ -3,7 +3,7 @@
 Sitio comercial y panel de gestión de LedBox: alquiler de pantallas y equipos LED, stands, activaciones y producción para eventos.
 
 - **Sitio público:** [ledbox.online](https://ledbox.online)
-- **Panel privado:** [admin.ledbox.online](https://admin.ledbox.online/admin/login)
+- **Panel privado:** [admin.ledbox.online](https://admin.ledbox.online/login) — las rutas del panel no llevan `/admin`.
 - **Instagram:** [@ledboxpy](https://www.instagram.com/ledboxpy)
 
 ## Stack
@@ -13,6 +13,19 @@ Sitio comercial y panel de gestión de LedBox: alquiler de pantallas y equipos L
 - Autenticación propia con JWT en cookie HTTP-only (`jose`) + Google SSO
 - Resend para recuperación de contraseña
 - Deploy en Coolify / Owncoding Hub; DNS y proxy en Cloudflare
+
+## URLs y entornos
+
+Dos superficies sobre la misma app, separadas por host:
+
+| Superficie | Producción | Rutas |
+| --- | --- | --- |
+| Sitio público | `ledbox.online` | `/` (catálogo, carrito, leads) |
+| Panel privado | `admin.ledbox.online` | `/login`, `/dashboard`, `/eventos`, `/finanzas`… sin prefijo `/admin` |
+
+Las páginas del panel son rutas raíz reales en `app/(admin)/*` (el route group no cambia la URL) y el sitio público en `app/(public)/*`. En el host admin, `/` muestra el dashboard; en el host público, `middleware.ts` redirige las rutas del panel al subdominio usando `lib/admin-routes.ts`.
+
+En desarrollo, `npm run dev` deja el panel en `http://localhost:3000/dashboard` y el sitio en `http://localhost:3000`; no hace falta configurar hosts.
 
 ## Estructura
 
@@ -64,3 +77,4 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 
 - [README-NEXT.md](README-NEXT.md) — migración del frontend a Next.js.
 - [docs/CONTEXTO-LEDBOX.md](docs/CONTEXTO-LEDBOX.md) — contexto general: qué existe hoy, arquitectura y pendientes.
+- [AGENTS.md](AGENTS.md) — reglas para agentes que trabajan en el repo.
