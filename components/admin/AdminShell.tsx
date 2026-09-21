@@ -33,6 +33,8 @@ export type AdminSessionState = {
   role: AdminRole | null;
   organization: AdminOrganization | null;
   organizations: AdminOrganization[];
+  /** Sesión de la demo pública (issue #14): el shell muestra el aviso de solo lectura. */
+  demo: boolean;
   loading: boolean;
   error: string;
 };
@@ -42,6 +44,7 @@ const AdminSessionContext = createContext<AdminSessionState>({
   role: null,
   organization: null,
   organizations: [],
+  demo: false,
   loading: true,
   error: "",
 });
@@ -69,7 +72,7 @@ function asOrganization(value: unknown): AdminOrganization | null {
  * `GET /api/admin/session` devuelve hoy `{ user: { user, session } }` y va a pasar a
  * `{ user, organization, organizations[] }`. Se leen las dos formas.
  */
-function pickSessionData(raw: unknown): { user: AdminSessionUser | null; organization: AdminOrganization | null; organizations: AdminOrganization[] } {
+function pickSessionData(raw: unknown): { user: AdminSessionUser | null; organization: AdminOrganization | null; organizations: AdminOrganization[]; demo: boolean } {
   const outer = isRecord(raw) ? raw : {};
   const inner = isRecord(outer.user) && "user" in outer.user ? (outer.user as Record<string, unknown>) : outer;
   const user = asSessionUser(inner.user) ?? asSessionUser(outer.user);
@@ -80,7 +83,18 @@ function pickSessionData(raw: unknown): { user: AdminSessionUser | null; organiz
       : [];
   const organizations = rawOrganizations.map(asOrganization).filter((organization): organization is AdminOrganization => Boolean(organization));
   const organization = asOrganization(inner.organization) ?? asOrganization(outer.organization) ?? organizations[0] ?? null;
-  return { user, organization, organizations };
+  const demo = outer.demo === true || inner.demo === true;
+  return { user, organization, organizations, demo };
+}
+
+/**
+ * Entrada de la demo (issue #14): si el shell se monta en `/demo` sin sesión,
+ * el 401 sale al endpoint que provisiona la sesión demo en vez del login.
+ */
+function isDemoEntryPath(): boolean {
+  if (typeof window === "undefined") return false;
+  const pathname = window.location.pathname;
+  return pathname === "/demo" || pathname.startsWith("/demo/");
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -91,6 +105,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     role: null,
     organization: null,
     organizations: [],
+    demo: false,
     loading: true,
     error: "",
   });
@@ -103,17 +118,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/admin/session", { cache: "no-store" });
       // 401 sin sesión y 403 sin empresa activa (multiempresa) se tratan igual: volver al login.
       if (response.status === 401 || response.status === 403) {
+        // En la entrada de la demo no hay sesión todavía: se pide al endpoint que la cree.
+        if (isDemoEntryPath()) {
+          window.location.assign("/api/demo/session?next=/demo");
+          return;
+        }
         redirectToLogin();
         return;
       }
       const raw = (await response.json().catch(() => null)) as unknown;
-      const { user, organization, organizations } = pickSessionData(raw);
+      const { user, organization, organizations, demo } = pickSessionData(raw);
       if (!response.ok || !user) {
         setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
         return;
       }
       const role = asAdminRole(user.role);
-      setSession({ user: { ...user, role }, role, organization, organizations, loading: false, error: "" });
+      setSession({ user: { ...user, role }, role, organization, organizations, demo, loading: false, error: "" });
     } catch {
       setSession((current) => ({ ...current, loading: false, error: "No pudimos conectar con el panel." }));
     }
@@ -143,7 +163,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
 
+  /** Sale de la demo: revoca la sesión demo, limpia la cookie y va al sitio. */
+  const exitDemo = useCallback(async () => {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/demo/session", { method: "DELETE" });
+    } catch {
+      // Aunque falle la limpieza, el visitante sale de la demo igual.
+    } finally {
+      window.location.assign(publicConfig.siteUrl);
+    }
+  }, []);
+
   async function logout() {
+    if (session.demo) {
+      await exitDemo();
+      return;
+    }
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -238,6 +274,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="admin-topbar-tools">
+              {session.demo ? (
+                <Link
+                  className="admin-demo-chip"
+                  href="/demo"
+                  title="Estás en la demo de LedBox con datos simulados · Volver a la presentación"
+                >
+                  DEMO
+                </Link>
+              ) : null}
               <AdminNotificationBell />
               <AdminThemeToggle />
               <a
@@ -266,13 +311,35 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 className="admin-iconbtn"
                 onClick={logout}
                 disabled={loggingOut}
-                aria-label="Cerrar sesión"
-                title="Cerrar sesión"
+                aria-label={session.demo ? "Salir de la demo" : "Cerrar sesión"}
+                title={session.demo ? "Salir de la demo" : "Cerrar sesión"}
               >
                 <AdminIcon name="logout" size={16} />
               </button>
             </div>
           </header>
+
+          {session.demo ? (
+            <div className="admin-demo-banner">
+              <Link className="admin-demo-badge" href="/demo" title="Volver a la presentación de la demo">
+                DEMO
+              </Link>
+              <p className="admin-demo-banner-text">
+                <strong>Datos simulados</strong>
+                <span>Recorré el panel completo con datos ficticios: la demo es de solo lectura y no toca datos reales.</span>
+              </p>
+              <button
+                type="button"
+                className="admin-btn admin-demo-exit"
+                onClick={() => void exitDemo()}
+                disabled={loggingOut}
+                title="Salir de la demo y volver a ledbox.online"
+              >
+                <AdminIcon name="logout" size={14} />
+                <span>Salir de la demo</span>
+              </button>
+            </div>
+          ) : null}
 
           {session.error ? (
             <div className="admin-session-error">

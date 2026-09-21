@@ -19,6 +19,7 @@ export const ADMIN_ROUTES = [
   "/promotoras",
   "/usuarios",
   "/auditoria",
+  "/demo",
   "/imprimir",
 ] as const;
 

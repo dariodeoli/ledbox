@@ -939,6 +939,56 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-detail-form { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
 .admin-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* ── Demo pública (issue #14) ──
+   Entrada a la demo: aviso fijo debajo del topbar (chip, aclaración de solo
+   lectura y salida al sitio) y landing con los datos simulados de la
+   organización demo. Mismo lenguaje visual que el resto del shell. */
+.admin-demo-chip { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--a-accent) 45%, transparent); border-radius: 999px; background: var(--a-accent-soft); color: var(--a-accent); font: 700 10px var(--font-body); letter-spacing: .16em; text-decoration: none; }
+.admin-demo-chip:hover { background: color-mix(in srgb, var(--a-accent) 22%, transparent); }
+.admin-demo-banner { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid color-mix(in srgb, var(--a-accent) 28%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--a-accent) 16%, transparent), transparent 55%); }
+.admin-demo-badge { display: inline-flex; align-items: center; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--a-accent) 45%, transparent); border-radius: 999px; background: var(--a-panel); color: var(--a-accent); font: 800 10.5px var(--font-body); letter-spacing: .18em; text-decoration: none; }
+.admin-demo-banner-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; color: var(--a-muted-2); font-size: 12px; }
+.admin-demo-banner-text strong { color: var(--a-text-strong); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.admin-demo-banner-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-demo-exit { margin-left: auto; }
+
+.admin-demo-page { gap: 12px; }
+.admin-demo-hero { display: grid; gap: 10px; justify-items: start; padding: 18px; border: 1px solid var(--a-line-2); border-top: 2px solid var(--a-accent); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-demo-title { margin: 0; color: var(--a-text-strong); font: 700 clamp(18px, 3.4vw, 26px)/1.15 var(--font-display); letter-spacing: .01em; text-transform: uppercase; }
+.admin-demo-title span { color: var(--a-accent); }
+.admin-demo-lede { max-width: 74ch; margin: 0; color: var(--a-muted-2); font-size: 13px; line-height: 1.6; }
+.admin-demo-lede strong { color: var(--a-text-strong); }
+.admin-demo-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-demo-actions form { display: inline-flex; }
+.admin-demo-actions--inline { margin-top: 2px; }
+.admin-demo-footnote { margin: 0; color: var(--a-muted); font-size: 11px; line-height: 1.5; }
+
+.admin-demo-list { display: grid; gap: 5px; padding: 10px; }
+.admin-demo-audit, .admin-demo-event { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; }
+.admin-demo-audit { grid-template-columns: auto minmax(0, 1fr) auto; border-left-color: var(--a-accent); }
+.admin-demo-event:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
+.admin-demo-audit > .admin-icon, .admin-demo-event > .admin-icon { color: var(--a-muted); }
+.admin-demo-panel-note { margin: 0; padding: 0 10px 10px; color: var(--a-muted); font-size: 10.5px; line-height: 1.45; }
+
+.admin-demo-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 8px; padding: 10px; }
+.admin-demo-module { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; transition: border-color .15s, background .15s, color .15s; }
+.admin-demo-module:hover { border-color: var(--a-accent); background: var(--a-bg-2); color: var(--a-accent); }
+.admin-demo-module-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-demo-module-text { display: grid; min-width: 0; }
+.admin-demo-module-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-demo-module-text small { color: var(--a-muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+
+.admin-demo-resources { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 12px; padding: 10px; }
+.admin-demo-resource { display: grid; gap: 6px; align-content: start; }
+.admin-demo-resource h3 { margin: 0; color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-demo-resource p { margin: 0; color: var(--a-muted-2); font-size: 12px; line-height: 1.55; }
+.admin-demo-code { color: var(--a-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .admin-demo-banner { flex-wrap: wrap; padding: 8px 12px; }
+  .admin-demo-banner-text span { display: none; }
+  .admin-demo-exit { margin-left: auto; }
+}
+
 /* ── Responsive ── */
 @media (min-width: 720px) {
   .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
