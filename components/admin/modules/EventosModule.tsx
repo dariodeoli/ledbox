@@ -9,7 +9,7 @@ import {
   formatTime,
   statusTone,
 } from "@/lib/admin-format";
-import { canWrite, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -68,7 +68,7 @@ export function EventosModule() {
   const [taskError, setTaskError] = useState("");
   const [checklistError, setChecklistError] = useState("");
 
-  const writable = canWrite(role);
+  const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
   const events = useMemo(() => operations.data ?? [], [operations.data]);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);

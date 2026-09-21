@@ -85,7 +85,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setSession((current) => ({ ...current, loading: true, error: "" }));
     try {
       const response = await fetch("/api/admin/session", { cache: "no-store" });
-      if (response.status === 401) {
+      // 401 sin sesión y 403 sin empresa activa (multiempresa) se tratan igual: volver al login.
+      if (response.status === 401 || response.status === 403) {
         redirectToLogin();
         return;
       }

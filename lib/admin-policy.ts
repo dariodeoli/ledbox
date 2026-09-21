@@ -10,9 +10,8 @@ export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "
 export type AdminNavItem = { href: string; label: string; icon: AdminIconName; roles?: readonly AdminRole[] };
 export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
 
-/** Módulos restringidos: mismo criterio que el API (usuarios: OWNER/ADMIN) y decisión de producto para promotoras. */
+/** Módulos restringidos: mismo criterio que el API (usuarios: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
-  "/promotoras": ["OWNER", "ADMIN"],
   "/usuarios": ["OWNER", "ADMIN"],
 };
 
@@ -37,7 +36,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     items: [
       { href: "/inventario", label: "Inventario", icon: "inventory" },
       { href: "/proveedores", label: "Proveedores", icon: "suppliers" },
-      { href: "/promotoras", label: "Promotoras", icon: "promoters", roles: RESTRICTED_MODULES["/promotoras"] },
+      { href: "/promotoras", label: "Promotoras", icon: "promoters" },
     ],
   },
   {

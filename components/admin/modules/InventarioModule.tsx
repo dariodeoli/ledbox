@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatMoney, formatNumber, inventoryKindLabel, inventoryStatusLabel, statusTone } from "@/lib/admin-format";
-import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -57,7 +57,7 @@ export function InventarioModule() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const writable = canWrite(role);
+  const writable = canWriteOperations(role);
   const inventory = useMemo(() => resources.data?.inventory ?? [], [resources.data]);
 
   const rows = useMemo(

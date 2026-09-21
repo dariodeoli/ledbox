@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatDate, formatNumber, whatsappHref } from "@/lib/admin-format";
-import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -40,7 +40,7 @@ export function PromotorasModule() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const writable = canWrite(role);
+  const writable = canWriteOperations(role);
   const promoters = useMemo(() => resources.data?.promoters ?? [], [resources.data]);
 
   const rows = useMemo(

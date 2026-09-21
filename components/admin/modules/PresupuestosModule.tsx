@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { budgetStatusLabel, dueTone, formatDateShort, formatMoney, formatNumber, statusTone } from "@/lib/admin-format";
-import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -48,7 +48,7 @@ export function PresupuestosModule() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const writable = canWrite(role);
+  const writable = canWriteFinance(role);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const eventOptions = useMemo(() => events.data ?? [], [events.data]);
 

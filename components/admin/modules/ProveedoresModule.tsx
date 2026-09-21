@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatNumber, supplierCategoryLabel, whatsappHref } from "@/lib/admin-format";
-import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -40,7 +40,7 @@ export function ProveedoresModule() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const writable = canWrite(role);
+  const writable = canWriteFinance(role);
   const suppliers = useMemo(() => resources.data?.suppliers ?? [], [resources.data]);
 
   const rows = useMemo(
