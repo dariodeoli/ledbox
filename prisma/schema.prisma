@@ -479,18 +479,29 @@ model InventoryItem {
 }
 
 model EventInventory {
-  id           String        @id
-  eventId      String
-  inventoryId  String
-  quantity     Int           @default(1)
-  checkedOut   Boolean       @default(false)
-  checkedIn    Boolean       @default(false)
-  conditionOut String?
-  conditionIn  String?
-  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  inventory    InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  id              String        @id
+  eventId         String
+  inventoryId     String
+  quantity        Int           @default(1)
+  /// Rango en el que el equipo queda comprometido con el evento. Si falta, se
+  /// usa el rango del evento (montaje → desmontaje) para calcular disponibilidad.
+  startsAt        DateTime?
+  endsAt          DateTime?
+  checkedOut      Boolean       @default(false)
+  checkedIn       Boolean       @default(false)
+  checkedOutAt    DateTime?
+  checkedInAt     DateTime?
+  conditionOut    String?
+  conditionIn     String?
+  /// Unidades que volvieron dañadas y unidades que no volvieron, con su detalle.
+  damagedQuantity Int           @default(0)
+  missingQuantity Int           @default(0)
+  damageNotes     String?
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  inventory       InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, inventoryId])
+  @@index([inventoryId, startsAt, endsAt])
 }
 
 model Promoter {
