@@ -4,6 +4,11 @@ import { randomUUID } from 'node:crypto';
 
 const prisma = new PrismaClient();
 
+// Organización por defecto de LedBox (mismo id estable que usa la migración
+// 202609210001_admin_multiempresa). El slug también es el default de
+// DEFAULT_ORGANIZATION_SLUG para los endpoints públicos de leads y cotizaciones.
+const DEFAULT_ORGANIZATION = { id: 'org_ledbox', name: 'LedBox', slug: 'ledbox' } as const;
+
 const admins = [
   { name: 'Dario Deoli', email: 'dariodeoli@gmail.com', passwordEnv: 'LEDBOX_ADMIN_DARIO_PASSWORD' },
   { name: 'Santiago Rodas', email: 'santiago.rodas.sjr@gmail.com', passwordEnv: 'LEDBOX_ADMIN_SANTIAGO_PASSWORD' },
@@ -13,6 +18,12 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const ADMIN_ALLOWLIST: ReadonlySet<string> = new Set(admins.map((admin) => admin.email));
 
 async function main() {
+  const organization = await prisma.organization.upsert({
+    where: { slug: DEFAULT_ORGANIZATION.slug },
+    create: { ...DEFAULT_ORGANIZATION, active: true },
+    update: { name: DEFAULT_ORGANIZATION.name, active: true },
+  });
+
   for (const admin of admins) {
     const email = normalizeEmail(admin.email);
     if (!ADMIN_ALLOWLIST.has(email)) throw new Error(`Admin email is not allowlisted: ${email}`);
@@ -20,13 +31,19 @@ async function main() {
     if (!password || password.length < 12) {
       throw new Error(`${admin.passwordEnv} must be set to a password of at least 12 characters`);
     }
-    await prisma.adminUser.upsert({
+    const user = await prisma.adminUser.upsert({
       where: { email },
-      create: { id: randomUUID(), name: admin.name, email, passwordHash: await hash(password, 12), active: true },
-      update: { name: admin.name, active: true, passwordHash: await hash(password, 12) },
+      create: { id: randomUUID(), name: admin.name, email, passwordHash: await hash(password, 12), role: 'OWNER', active: true },
+      update: { name: admin.name, role: 'OWNER', active: true, passwordHash: await hash(password, 12) },
+    });
+    await prisma.adminMembership.upsert({
+      where: { adminUserId_organizationId: { adminUserId: user.id, organizationId: organization.id } },
+      create: { id: randomUUID(), adminUserId: user.id, organizationId: organization.id, role: 'OWNER', active: true },
+      update: { role: 'OWNER', active: true },
     });
   }
-  console.log(`Seeded ${admins.length} allowlisted LedBox admins.`);
+
+  console.log(`Seeded ${admins.length} allowlisted LedBox admins as OWNER of ${organization.slug} (${organization.id}).`);
 }
 
 main()
