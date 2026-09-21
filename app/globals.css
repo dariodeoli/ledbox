@@ -674,6 +674,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-btn--only-icon { width: 34px; justify-content: center; padding: 0; }
 .admin-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-toolbar .admin-btn { margin-left: auto; }
+/* Exportación (issue #7): el bloque de descarga/impresión se ancla a la derecha
+   del toolbar y deja la acción primaria a su lado, sin dos `auto` compitiendo. */
+.admin-toolbar .admin-export { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.admin-toolbar .admin-export ~ .admin-btn { margin-left: 0; }
+.admin-panel-actions { display: inline-flex; align-items: center; gap: 8px; }
+.admin-panel-actions .admin-panel-link { margin-left: 0; }
 .admin-search { display: flex; flex: 1 1 16rem; align-items: center; gap: 7px; min-width: min(100%, 16rem); max-width: 26rem; height: 36px; padding: 0 9px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-muted); }
 .admin-search:focus-within { border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 .admin-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--a-text); font: 13px var(--font-body); outline: none; }
@@ -762,8 +768,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* Plantillas de columnas por vista */
 .admin-table--clientes { --clientes-cols: minmax(11rem, 1.5fr) minmax(11rem, 1.2fr) 8rem 7rem 5.5rem 7.5rem 6rem 5.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 66rem; }
-.admin-table--eventos { --eventos-cols: 8rem minmax(11rem, 1.6fr) minmax(9rem, 1.1fr) minmax(8rem, 1fr) 5.5rem 6rem 7rem; --admin-cols: var(--eventos-cols); --admin-table-min: 59rem; }
-.admin-table--presupuestos { --presupuestos-cols: minmax(11rem, 1.5fr) minmax(9rem, 1.1fr) 4rem 7rem 7rem 7rem 7rem 7.5rem 6rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 71rem; }
+.admin-table--eventos { --eventos-cols: 8rem minmax(11rem, 1.6fr) minmax(9rem, 1.1fr) minmax(8rem, 1fr) 5.5rem 6rem 7rem 8rem; --admin-cols: var(--eventos-cols); --admin-table-min: 67rem; }
+.admin-table--presupuestos { --presupuestos-cols: minmax(11rem, 1.5fr) minmax(9rem, 1.1fr) 4rem 7rem 7rem 7rem 7rem 7.5rem 6rem 8rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 79rem; }
 .admin-table--cobros { --cobros-cols: 8rem minmax(9rem, 1.2fr) minmax(9rem, 1.1fr) 8rem 7rem minmax(7rem, 1fr); --admin-cols: var(--cobros-cols); --admin-table-min: 52rem; }
 .admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 70rem; }
 .admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 8rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 65rem; }
@@ -914,3 +920,134 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .not-found-code { margin:16px 0 0; color:var(--led); font-size:clamp(70px,18vw,150px); line-height:.9; font-weight:900; letter-spacing:-.08em; }
 .not-found-card h1 { margin:22px 0 10px; }
 .not-found-card p:not(.not-found-code) { color:var(--muted); margin-bottom:28px; }
+
+/* ─── EXPORTACIONES E IMPRESIÓN (issue #7) ───
+   Documentos imprimibles del panel (`/imprimir/...`): hoja blanca autocontenida
+   (no depende de los tokens del shell), previsualización en pantalla y sin cromo
+   al imprimir. El toolbar de la vista se oculta con `@media print`. */
+
+.lbprint {
+  min-height: 100vh;
+  padding: 14px 14px 40px;
+  background: #e9eef1;
+  color: #10161a;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.lbprint-toolbar {
+  position: sticky; top: 8px; z-index: 5;
+  display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
+  width: min(100%, 210mm); margin: 0 auto 12px; padding: 8px 10px;
+  border: 1px solid #d3dce1; border-radius: 10px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 6px 18px rgba(9, 24, 31, .08);
+}
+.lbprint-spacer { flex: 1 1 auto; }
+.lbprint-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border: 1px solid #c7d3da; border-radius: 8px; background: #fff; color: #16232a;
+  font: 600 12px/1 var(--font-body); text-decoration: none; cursor: pointer;
+}
+.lbprint-btn:hover { border-color: #00a7bd; color: #00697a; }
+.lbprint-btn:focus-visible { outline: 2px solid #00b3c8; outline-offset: 2px; }
+.lbprint-btn--primary { border-color: #0b1013; background: #0b1013; color: #fff; }
+.lbprint-btn--primary:hover { border-color: #00697a; background: #00697a; color: #fff; }
+.lbprint-select-wrap { display: grid; gap: 3px; }
+.lbprint-select {
+  height: 34px; padding: 0 8px; border: 1px solid #c7d3da; border-radius: 8px;
+  background: #fff; color: #16232a; font: 600 12px/1 var(--font-body); min-width: 12rem;
+}
+.lbprint-sheet {
+  width: min(100%, 210mm); margin: 0 auto; padding: 14mm 12mm;
+  background: #fff; color: #10161a; border-radius: 3px;
+  box-shadow: 0 16px 44px rgba(9, 24, 31, .16);
+}
+
+/* Encabezado y pie del documento */
+.lbprint-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 2px solid #10161a; }
+.lbprint-brand { display: flex; align-items: center; gap: 9px; }
+.lbprint-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 7px; background: #00e5ff; color: #04191d; font: 800 12px var(--font-display); letter-spacing: 0; }
+.lbprint-brand-text { display: grid; gap: 1px; }
+.lbprint-wordmark { font: 800 13px var(--font-display); letter-spacing: 1.6px; color: #10161a; }
+.lbprint-wordmark span { color: #00a7bd; }
+.lbprint-company { color: #5d6f78; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+.lbprint-head-doc { text-align: right; }
+.lbprint-doc-title { margin: 0; font: 800 18px/1.1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; }
+.lbprint-doc-reference { margin: 3px 0 0; font-weight: 700; font-size: 12px; color: #10161a; }
+.lbprint-doc-meta { margin: 2px 0 0; font-size: 11px; color: #5d6f78; }
+
+/* Secciones y campos */
+.lbprint-section { margin-top: 14px; break-inside: avoid; }
+.lbprint-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.lbprint-section-title { margin: 0 0 6px; padding-bottom: 3px; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #5d6f78; border-bottom: 1px solid #dbe3e7; }
+.lbprint-section-action { font-size: 10.5px; color: #5d6f78; }
+.lbprint-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 20px; }
+.lbprint-field { min-width: 0; }
+.lbprint-field--wide { grid-column: 1 / -1; }
+.lbprint-label { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b7c85; }
+.lbprint-value { display: block; font-size: 12.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.lbprint-empty { margin: 4px 0 0; padding: 8px 10px; border: 1px dashed #d3dce1; border-radius: 6px; color: #6b7c85; font-size: 11.5px; }
+.lbprint-note { margin: 8px 0 0; padding: 7px 10px; border-left: 3px solid #00b3c8; background: #f1f9fb; color: #35474f; font-size: 11px; }
+
+/* Tablas del documento */
+.lbprint-table { width: 100%; border-collapse: collapse; }
+.lbprint-table th { padding: 4px 6px; text-align: left; font-size: 9.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #5d6f78; border-bottom: 1px solid #10161a; }
+.lbprint-table td { padding: 5px 6px; font-size: 11.5px; vertical-align: top; border-bottom: 1px solid #e6ecef; }
+.lbprint-table tfoot td { border-bottom: none; border-top: 1px solid #10161a; font-weight: 700; }
+.lbprint-table tr { break-inside: avoid; }
+.lbprint-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Totales, KPIs y firmas */
+.lbprint-totals { width: min(100%, 86mm); margin: 8px 0 0 auto; }
+.lbprint-total-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 6px; font-size: 12px; border-bottom: 1px solid #e6ecef; }
+.lbprint-total-row--strong { border: none; border-radius: 6px; background: #f2f7f9; padding: 6px; font-size: 14px; font-weight: 800; }
+.lbprint-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.lbprint-kpi { border: 1px solid #dbe3e7; border-radius: 8px; padding: 8px 10px; break-inside: avoid; }
+.lbprint-kpi-label { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b7c85; }
+.lbprint-kpi-value { display: block; margin-top: 2px; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lbprint-kpi-note { display: block; font-size: 10px; color: #6b7c85; }
+.lbprint-sign { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 26px; }
+.lbprint-sign-box { padding-top: 5px; border-top: 1px solid #10161a; font-size: 10.5px; color: #5d6f78; text-align: center; }
+.lbprint-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 8px; border-top: 1px solid #dbe3e7; color: #6b7c85; font-size: 10px; }
+
+@media (max-width: 640px) {
+  .lbprint { padding: 10px 8px 28px; }
+  .lbprint-sheet { padding: 16px 14px; }
+  .lbprint-grid, .lbprint-kpis { grid-template-columns: minmax(0, 1fr); }
+  .lbprint-sign { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .lbprint-head { flex-direction: column; }
+  .lbprint-head-doc { text-align: left; }
+}
+
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  /* El shell del panel (`.admin-root`) tiene fondo oscuro y `min-height: 100vh`:
+     en los documentos imprimibles se neutraliza para no pintar el resto de la hoja. */
+  .admin-root:has(.lbprint) { min-height: 0; background: #fff; }
+  /* Compacto a propósito: un presupuesto o un reporte chico deben entrar en una
+     sola hoja; el contenido que sobra fluye a la siguiente sin dejar páginas vacías. */
+  .lbprint { min-height: 0; padding: 0; background: #fff; font-size: 11px; }
+  .lbprint-toolbar { display: none !important; }
+  .lbprint-sheet { width: auto; margin: 0; padding: 0; border-radius: 0; box-shadow: none; }
+  .lbprint-head { padding-bottom: 8px; border-bottom-width: 1.5px; break-after: avoid; }
+  .lbprint-doc-title { font-size: 16px; }
+  .lbprint-value { font-size: 11.5px; }
+  .lbprint-section { margin-top: 9px; break-inside: avoid; }
+  .lbprint-section-title { margin-bottom: 4px; padding-bottom: 2px; }
+  .lbprint-grid { gap: 4px 18px; }
+  .lbprint-table th { padding: 3px 5px; }
+  .lbprint-table td { padding: 3px 5px; font-size: 10.5px; }
+  .lbprint-kpis, .lbprint-totals { margin-top: 9px; }
+  .lbprint-kpi { padding: 6px 8px; }
+  .lbprint-kpi-value { font-size: 13px; }
+  .lbprint-total-row { padding: 2px 5px; font-size: 11px; }
+  .lbprint-total-row--strong { font-size: 13px; padding: 5px; }
+  .lbprint-note { margin-top: 6px; padding: 5px 8px; font-size: 10px; }
+  .lbprint-empty { padding: 6px 8px; font-size: 10.5px; }
+  .lbprint-sign { margin-top: 16px; }
+  .lbprint-foot { margin-top: 12px; padding-top: 6px; break-inside: avoid; }
+  .lbprint-kpis, .lbprint-totals, .lbprint-sign { break-inside: avoid; }
+  .lbprint-table thead { display: table-header-group; }
+}
