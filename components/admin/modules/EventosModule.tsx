@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  damageSummary,
   eventStatusLabel,
   formatDateShort,
   formatDateTime,
   formatNumber,
   formatTime,
+  inventoryAssignmentState,
+  ITEM_CONDITIONS,
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import type { AdminEventAssignment, AdminInventoryAvailability, AdminInventoryItemRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -28,7 +32,7 @@ import {
   AdminTable,
   AdminToolbar,
 } from "../AdminUI";
-import { adminSend, useAdminResource } from "../use-admin-data";
+import { adminSend, redirectToLogin, useAdminResource } from "../use-admin-data";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
 
 const STATUS_OPTIONS = [
@@ -50,11 +54,40 @@ const TASK_TYPE_OPTIONS = [
 
 const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", startsAt: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "" };
+const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
+const EMPTY_MOVEMENT_FORM = { at: "", condition: ITEM_CONDITIONS[0] as string, damaged: "0", missing: "0", notes: "" };
+
+type MovementRequest = { mode: "checkout" | "checkin"; assignment: AdminEventAssignment };
+
+/** Valor para `datetime-local` en hora local del navegador (es-PY, 24 h). */
+function inputDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function stamp(value: string | null): string {
+  return value ? `${formatDateShort(value)} · ${formatTime(value)}` : "—";
+}
+
+/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00`. */
+function rangeStamp(start: string | null, end: string | null): string {
+  if (!start || !end) return "Sin fechas";
+  return `${formatDateShort(start)} ${formatTime(start)} → ${formatDateShort(end)} ${formatTime(end)}`;
+}
+
+const BLOCKED_INVENTORY_STATUSES = ["MAINTENANCE", "RETIRED"];
 
 export function EventosModule() {
   const { role } = useAdminSession();
   const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
   const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
+  const inventoryResource = useAdminResource(
+    "/api/admin/inventory",
+    (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
+  );
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -68,10 +101,29 @@ export function EventosModule() {
   const [taskError, setTaskError] = useState("");
   const [checklistError, setChecklistError] = useState("");
 
+  const [equipmentEventId, setEquipmentEventId] = useState("");
+  const [assignForm, setAssignForm] = useState(EMPTY_ASSIGN_FORM);
+  const [assignEditingId, setAssignEditingId] = useState("");
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState("");
+  const [assignNotice, setAssignNotice] = useState("");
+  const [equipmentError, setEquipmentError] = useState("");
+  const [availability, setAvailability] = useState<AdminInventoryAvailability | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [movement, setMovement] = useState<MovementRequest | null>(null);
+  const [movementForm, setMovementForm] = useState(EMPTY_MOVEMENT_FORM);
+  const [movementBusy, setMovementBusy] = useState(false);
+  const [movementError, setMovementError] = useState("");
+
   const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
   const events = useMemo(() => operations.data ?? [], [operations.data]);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
+  const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
+  const equipmentEvent = useMemo(() => events.find((event) => event.id === equipmentEventId) ?? null, [events, equipmentEventId]);
+  const assignments = equipmentEvent?.assignments ?? [];
+  const assignedUnits = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
 
   const rows = useMemo(() => {
     const now = Date.now();
@@ -106,6 +158,50 @@ export function EventosModule() {
     () => events.flatMap((event) => event.tasks).filter((task) => !task.completedAt).length,
     [events],
   );
+
+  const requestedQuantity = Number(assignForm.quantity) || 0;
+  const availabilityBlocked = Boolean(availability?.blocked);
+  const exceedsAvailability = Boolean(availability && requestedQuantity > availability.available);
+  // La propia asignación del evento no se cuenta como conflicto: el alta es upsert
+  // por (evento, ítem) y el API excluye esa fila al validar.
+  const existingAssignmentId =
+    assignments.find((assignment) => assignment.inventory.id === assignForm.inventoryId)?.id ?? "";
+
+  // Disponibilidad del ítem en el rango elegido: la calcula el API y la UI solo la muestra.
+  useEffect(() => {
+    if (!equipmentEvent || !assignForm.inventoryId || !assignForm.startsAt || !assignForm.endsAt) {
+      setAvailability(null);
+      setAvailabilityError("");
+      setAvailabilityLoading(false);
+      return;
+    }
+    const params = new URLSearchParams({
+      inventoryId: assignForm.inventoryId,
+      startsAt: assignForm.startsAt,
+      endsAt: assignForm.endsAt,
+    });
+    if (existingAssignmentId) params.set("excludeId", existingAssignmentId);
+    const controller = new AbortController();
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+    fetch(`/api/admin/inventory?${params.toString()}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (response.status === 401) {
+          redirectToLogin();
+          return;
+        }
+        const payload = (await response.json().catch(() => ({}))) as { error?: string; availability?: AdminInventoryAvailability };
+        if (!response.ok) throw new Error(payload.error || "No pudimos calcular la disponibilidad.");
+        setAvailability(payload.availability ?? null);
+      })
+      .catch((error: unknown) => {
+        if ((error as Error).name === "AbortError") return;
+        setAvailability(null);
+        setAvailabilityError(error instanceof Error ? error.message : "No pudimos calcular la disponibilidad.");
+      })
+      .finally(() => setAvailabilityLoading(false));
+    return () => controller.abort();
+  }, [equipmentEvent, assignForm.inventoryId, assignForm.startsAt, assignForm.endsAt, existingAssignmentId]);
 
   async function submitEvent(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
@@ -145,6 +241,137 @@ export function EventosModule() {
     }
     setTaskForm(EMPTY_TASK_FORM);
     operations.reload();
+  }
+
+  function selectEquipmentEvent(eventId: string) {
+    const event = events.find((item) => item.id === eventId) ?? null;
+    setEquipmentEventId(eventId);
+    setAssignEditingId("");
+    setAssignError("");
+    setAssignNotice("");
+    setEquipmentError("");
+    setMovement(null);
+    setAssignForm({
+      ...EMPTY_ASSIGN_FORM,
+      startsAt: inputDateTime(event?.setupAt ?? event?.startsAt),
+      endsAt: inputDateTime(event?.strikeAt ?? event?.endsAt ?? event?.startsAt),
+    });
+  }
+
+  function resetAssignForm() {
+    setAssignEditingId("");
+    setAssignError("");
+    setAssignForm({
+      ...EMPTY_ASSIGN_FORM,
+      startsAt: inputDateTime(equipmentEvent?.setupAt ?? equipmentEvent?.startsAt),
+      endsAt: inputDateTime(equipmentEvent?.strikeAt ?? equipmentEvent?.endsAt ?? equipmentEvent?.startsAt),
+    });
+  }
+
+  function startEditAssignment(assignment: AdminEventAssignment) {
+    setAssignEditingId(assignment.id);
+    setAssignError("");
+    setAssignNotice("");
+    setMovement(null);
+    setAssignForm({
+      inventoryId: assignment.inventory.id,
+      quantity: String(assignment.quantity),
+      startsAt: inputDateTime(assignment.startsAt),
+      endsAt: inputDateTime(assignment.endsAt),
+    });
+  }
+
+  async function submitAssignment(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    if (!equipmentEvent) return;
+    setAssignBusy(true);
+    setAssignError("");
+    setAssignNotice("");
+    const result = await adminSend("/api/admin/inventory", {
+      kind: "assignment",
+      eventId: equipmentEvent.id,
+      inventoryId: assignForm.inventoryId,
+      quantity: Number(assignForm.quantity) || 1,
+      startsAt: assignForm.startsAt || undefined,
+      endsAt: assignForm.endsAt || undefined,
+    });
+    setAssignBusy(false);
+    if (!result.ok) {
+      setAssignError(result.error);
+      return;
+    }
+    setAssignNotice(assignEditingId ? "Asignación actualizada." : "Equipo asignado al evento.");
+    setAssignForm({ ...EMPTY_ASSIGN_FORM, startsAt: assignForm.startsAt, endsAt: assignForm.endsAt });
+    setAssignEditingId("");
+    operations.reload();
+    inventoryResource.reload();
+  }
+
+  function openMovement(mode: "checkout" | "checkin", assignment: AdminEventAssignment) {
+    setMovement({ mode, assignment });
+    setMovementError("");
+    setMovementForm({
+      ...EMPTY_MOVEMENT_FORM,
+      at: inputDateTime(new Date()),
+      condition: ITEM_CONDITIONS[0],
+    });
+  }
+
+  async function submitMovement(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    if (!movement) return;
+    const damagedQuantity = Number(movementForm.damaged) || 0;
+    const missingQuantity = Number(movementForm.missing) || 0;
+    if (movement.mode === "checkin" && damagedQuantity + missingQuantity > movement.assignment.quantity) {
+      setMovementError(`Dañadas y faltantes no pueden superar las ${movement.assignment.quantity} unidades asignadas.`);
+      return;
+    }
+    setMovementBusy(true);
+    setMovementError("");
+    const result = await adminSend("/api/admin/inventory",
+      movement.mode === "checkout"
+        ? {
+            kind: "checkout",
+            id: movement.assignment.id,
+            at: movementForm.at || undefined,
+            conditionOut: movementForm.condition,
+          }
+        : {
+            kind: "checkin",
+            id: movement.assignment.id,
+            at: movementForm.at || undefined,
+            conditionIn: movementForm.condition,
+            damagedQuantity,
+            missingQuantity,
+            damageNotes: movementForm.notes || undefined,
+          },
+    );
+    setMovementBusy(false);
+    if (!result.ok) {
+      setMovementError(result.error);
+      return;
+    }
+    setAssignNotice(
+      movement.mode === "checkout"
+        ? `Salida registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`
+        : `Devolución registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`,
+    );
+    setMovement(null);
+    operations.reload();
+    inventoryResource.reload();
+  }
+
+  async function removeAssignment(assignment: AdminEventAssignment) {
+    setEquipmentError("");
+    setAssignNotice("");
+    const result = await adminSend("/api/admin/inventory", { kind: "assignment-delete", id: assignment.id });
+    if (!result.ok) {
+      setEquipmentError(result.error);
+      return;
+    }
+    setAssignNotice(`Asignación quitada: ${assignment.inventory.name}.`);
+    operations.reload();
+    inventoryResource.reload();
   }
 
   return (
@@ -273,6 +500,297 @@ export function EventosModule() {
           <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : null}
       </AdminDataState>
+
+      <AdminPanel
+        title="Equipos asignados"
+        meta={
+          equipmentEvent
+            ? `${formatNumber(assignedUnits)} unidades · ${formatNumber(assignments.length)} asignaciones`
+            : "elegí un evento"
+        }
+        action={
+          <AdminSelect
+            value={equipmentEventId}
+            onChange={selectEquipmentEvent}
+            label="Evento para asignar equipos"
+            options={[{ value: "", label: "Elegí un evento…" }, ...events.map((event) => ({ value: event.id, label: event.name }))]}
+          />
+        }
+      >
+        {!equipmentEvent ? (
+          <AdminEmpty
+            icon="inventory"
+            title="Elegí un evento"
+            hint="Seleccioná el evento para ver sus equipos, asignar con fechas y registrar salida o devolución."
+          />
+        ) : (
+          <>
+            {writable ? (
+              <form className="admin-inline-form" onSubmit={submitAssignment}>
+                <select
+                  required
+                  value={assignForm.inventoryId}
+                  onChange={(event) => setAssignForm({ ...assignForm, inventoryId: event.target.value })}
+                  aria-label="Ítem de inventario"
+                  title="Ítem de inventario"
+                  disabled={Boolean(assignEditingId)}
+                >
+                  <option value="">Ítem de inventario…</option>
+                  {inventoryItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.sku ? ` · ${item.sku}` : ""} · {formatNumber(item.availability.availableNow)} libres
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  className="admin-qty-input"
+                  value={assignForm.quantity}
+                  onChange={(event) => setAssignForm({ ...assignForm, quantity: event.target.value })}
+                  aria-label="Cantidad de unidades"
+                  title="Cantidad de unidades"
+                  inputMode="numeric"
+                />
+                <input
+                  type="datetime-local"
+                  required
+                  value={assignForm.startsAt}
+                  onChange={(event) => setAssignForm({ ...assignForm, startsAt: event.target.value })}
+                  aria-label="Inicio del rango asignado"
+                  title="Inicio del rango asignado"
+                />
+                <input
+                  type="datetime-local"
+                  required
+                  value={assignForm.endsAt}
+                  onChange={(event) => setAssignForm({ ...assignForm, endsAt: event.target.value })}
+                  aria-label="Fin del rango asignado"
+                  title="Fin del rango asignado"
+                />
+                <AdminButton
+                  type="submit"
+                  variant="primary"
+                  icon={assignEditingId ? "check" : "plus"}
+                  busy={assignBusy}
+                  disabled={availabilityBlocked || exceedsAvailability}
+                >
+                  {assignEditingId ? "Guardar" : "Asignar"}
+                </AdminButton>
+                {assignEditingId ? (
+                  <AdminButton type="button" onClick={resetAssignForm} disabled={assignBusy}>
+                    Cancelar
+                  </AdminButton>
+                ) : null}
+              </form>
+            ) : null}
+
+            {writable ? (
+              assignForm.inventoryId && assignForm.startsAt && assignForm.endsAt ? (
+                availabilityLoading ? (
+                  <AdminNote>Calculando disponibilidad…</AdminNote>
+                ) : availabilityError ? (
+                  <AdminNote tone="error">{availabilityError}</AdminNote>
+                ) : availability ? (
+                  <AdminNote tone={availabilityBlocked || exceedsAvailability ? "error" : undefined}>
+                    {availabilityBlocked
+                      ? `«${availability.name}» está ${availability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
+                      : `${formatNumber(availability.available)} de ${formatNumber(availability.total)} unidades disponibles en el rango.`}
+                    {availability.conflicts.length > 0
+                      ? ` Ocupadas: ${availability.conflicts
+                          .map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`)
+                          .join(", ")}.`
+                      : ""}
+                    {exceedsAvailability ? ` Pediste ${formatNumber(requestedQuantity)}.` : ""}
+                  </AdminNote>
+                ) : null
+              ) : (
+                <AdminNote>Elegí el ítem y el rango de fechas para ver la disponibilidad.</AdminNote>
+              )
+            ) : null}
+
+            {assignError ? <AdminNote tone="error">{assignError}</AdminNote> : null}
+            {assignNotice ? <AdminNote tone="ok">{assignNotice}</AdminNote> : null}
+            {equipmentError ? <AdminNote tone="error">{equipmentError}</AdminNote> : null}
+
+            {movement ? (
+              <AdminFormPanel
+                title={
+                  movement.mode === "checkout"
+                    ? `Registrar salida · ${movement.assignment.inventory.name}`
+                    : `Registrar devolución · ${movement.assignment.inventory.name}`
+                }
+                submitLabel={movement.mode === "checkout" ? "Registrar salida" : "Registrar devolución"}
+                onSubmit={submitMovement}
+                onCancel={() => setMovement(null)}
+                busy={movementBusy}
+                status={movementError}
+              >
+                <AdminField
+                  label={movement.mode === "checkout" ? "Fecha y hora de salida" : "Fecha y hora de devolución"}
+                  hint={`${formatNumber(movement.assignment.quantity)} unidades asignadas`}
+                >
+                  <input
+                    type="datetime-local"
+                    required
+                    value={movementForm.at}
+                    onChange={(event) => setMovementForm({ ...movementForm, at: event.target.value })}
+                  />
+                </AdminField>
+                <AdminField label={movement.mode === "checkout" ? "Estado al retirar" : "Estado al devolver"}>
+                  <select
+                    value={movementForm.condition}
+                    onChange={(event) => setMovementForm({ ...movementForm, condition: event.target.value })}
+                  >
+                    {ITEM_CONDITIONS.map((condition) => (
+                      <option key={condition} value={condition}>
+                        {condition}
+                      </option>
+                    ))}
+                  </select>
+                </AdminField>
+                {movement.mode === "checkin" ? (
+                  <>
+                    <AdminField label="Unidades dañadas">
+                      <input
+                        type="number"
+                        min="0"
+                        max={movement.assignment.quantity}
+                        step="1"
+                        value={movementForm.damaged}
+                        onChange={(event) => setMovementForm({ ...movementForm, damaged: event.target.value })}
+                        inputMode="numeric"
+                      />
+                    </AdminField>
+                    <AdminField label="Unidades faltantes">
+                      <input
+                        type="number"
+                        min="0"
+                        max={movement.assignment.quantity}
+                        step="1"
+                        value={movementForm.missing}
+                        onChange={(event) => setMovementForm({ ...movementForm, missing: event.target.value })}
+                        inputMode="numeric"
+                      />
+                    </AdminField>
+                    <AdminField label="Notas" hint="Detalle de daños o faltantes (opcional)" wide>
+                      <textarea
+                        rows={2}
+                        maxLength={400}
+                        value={movementForm.notes}
+                        onChange={(event) => setMovementForm({ ...movementForm, notes: event.target.value })}
+                      />
+                    </AdminField>
+                  </>
+                ) : null}
+              </AdminFormPanel>
+            ) : null}
+
+            <AdminDataState
+              loading={operations.loading}
+              error={operations.error}
+              onRetry={operations.reload}
+              empty={assignments.length === 0}
+              emptyTitle="Sin equipos asignados"
+              emptyHint="Asigná equipos con cantidad y rango de fechas: el sistema valida la disponibilidad real."
+              rows={4}
+            >
+              <AdminTable
+                view="evento-equipos"
+                label={`Equipos asignados a ${equipmentEvent.name}`}
+                columns={[
+                  { label: "Artículo" },
+                  { label: "Cantidad", end: true },
+                  { label: "Rango" },
+                  { label: "Salida" },
+                  { label: "Devolución" },
+                  { label: "Estado" },
+                  { label: "Daños" },
+                  { label: "Acciones", end: true },
+                ]}
+              >
+                {assignments.map((assignment) => {
+                  const state = inventoryAssignmentState(assignment);
+                  const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
+                  const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut);
+                  const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn);
+                  const startsAt = assignment.startsAt ?? equipmentEvent.setupAt ?? equipmentEvent.startsAt;
+                  const endsAt = assignment.endsAt ?? equipmentEvent.strikeAt ?? equipmentEvent.endsAt ?? startsAt;
+                  return (
+                    <AdminRow key={assignment.id}>
+                      <AdminCell title={assignment.inventory.name}>
+                        <strong>{assignment.inventory.name}</strong>
+                        {assignment.inventory.sku ? <span className="admin-code"> · {assignment.inventory.sku}</span> : null}
+                      </AdminCell>
+                      <AdminCell end title={`${formatNumber(assignment.quantity)} unidades`}>
+                        {formatNumber(assignment.quantity)}
+                      </AdminCell>
+                      <AdminCell title={startsAt && endsAt ? rangeStamp(startsAt, endsAt) : "Sin fechas"}>
+                        {rangeStamp(startsAt, endsAt)}
+                      </AdminCell>
+                      <AdminCell title={assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>
+                        {stamp(assignment.checkedOutAt)}
+                      </AdminCell>
+                      <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
+                        {stamp(assignment.checkedInAt)}
+                      </AdminCell>
+                      <AdminCell>
+                        <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
+                      </AdminCell>
+                      <AdminCell
+                        title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}
+                      >
+                        {damages ?? "—"}
+                      </AdminCell>
+                      <AdminCell end className="admin-cell--actions">
+                        <span className="admin-actions">
+                          {writable && !isOut && !isBack ? (
+                            <>
+                              <AdminButton
+                                title={`Registrar salida: ${assignment.inventory.name}`}
+                                aria-label={`Registrar salida: ${assignment.inventory.name}`}
+                                onClick={() => openMovement("checkout", assignment)}
+                              >
+                                Salida
+                              </AdminButton>
+                              <AdminButton
+                                title={`Editar asignación: ${assignment.inventory.name}`}
+                                aria-label={`Editar asignación: ${assignment.inventory.name}`}
+                                onClick={() => startEditAssignment(assignment)}
+                              >
+                                Editar
+                              </AdminButton>
+                              <AdminButton
+                                icon="close"
+                                title={`Quitar asignación: ${assignment.inventory.name}`}
+                                aria-label={`Quitar asignación: ${assignment.inventory.name}`}
+                                onClick={() => void removeAssignment(assignment)}
+                              />
+                            </>
+                          ) : writable && isOut && !isBack ? (
+                            <AdminButton
+                              title={`Registrar devolución: ${assignment.inventory.name}`}
+                              aria-label={`Registrar devolución: ${assignment.inventory.name}`}
+                              onClick={() => openMovement("checkin", assignment)}
+                            >
+                              Devolución
+                            </AdminButton>
+                          ) : (
+                            <span className="admin-muted">—</span>
+                          )}
+                        </span>
+                      </AdminCell>
+                    </AdminRow>
+                  );
+                })}
+              </AdminTable>
+            </AdminDataState>
+          </>
+        )}
+      </AdminPanel>
 
       <AdminPanel
         title="Checklist operativo"

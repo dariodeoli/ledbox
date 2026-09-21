@@ -78,11 +78,24 @@ export type AdminEventTask = {
   completedAt: string | null;
 };
 
-export type AdminEventAssignment = {
+export type AdminEventAssignmentMovement = {
   id: string;
   quantity: number;
+  startsAt: string | null;
+  endsAt: string | null;
   checkedOut: boolean;
   checkedIn: boolean;
+  checkedOutAt: string | null;
+  checkedInAt: string | null;
+  conditionOut: string | null;
+  conditionIn: string | null;
+  damagedQuantity: number;
+  missingQuantity: number;
+  damageNotes: string | null;
+};
+
+export type AdminEventAssignment = AdminEventAssignmentMovement & {
+  eventId: string;
   inventory: { id: string; name: string; sku: string | null };
 };
 
@@ -177,6 +190,38 @@ export type AdminInventoryRow = {
   dailyCost: number;
   notes: string | null;
   updatedAt: string;
+};
+
+/** Asignación de inventario a un evento, tal como la sirve `/api/admin/inventory`. */
+export type AdminInventoryAssignmentRow = AdminEventAssignmentMovement & {
+  eventId: string;
+  event: { id: string; name: string; startsAt: string | null; endsAt: string | null; status: string };
+};
+
+export type AdminInventoryAvailability = {
+  inventoryId: string;
+  name: string;
+  status: string;
+  total: number;
+  committed: number;
+  available: number;
+  blocked: boolean;
+  startsAt: string;
+  endsAt: string;
+  conflicts: Array<{
+    id: string;
+    eventId: string;
+    eventName: string;
+    quantity: number;
+    startsAt: string | null;
+    endsAt: string | null;
+  }>;
+};
+
+/** Ítem de `/api/admin/inventory`: incluye asignaciones y disponibilidad de hoy. */
+export type AdminInventoryItemRow = AdminInventoryRow & {
+  assignments: AdminInventoryAssignmentRow[];
+  availability: { committedNow: number; availableNow: number; overcommittedNow: boolean };
 };
 
 export type AdminPromoterRow = {
@@ -277,7 +322,8 @@ export type AdminApiResponse = {
   clientPayments?: AdminPaymentRow[];
   supplierJobs?: AdminSupplierJobRow[];
   suppliers?: AdminSupplierRow[];
-  inventory?: AdminInventoryRow[];
+  inventory?: Array<AdminInventoryRow | AdminInventoryItemRow>;
+  availability?: AdminInventoryAvailability;
   promoters?: AdminPromoterRow[];
   users?: AdminUserRow[];
   counts?: AdminOverview["counts"];
