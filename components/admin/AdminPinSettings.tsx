@@ -158,7 +158,7 @@ export function AdminPinSettings() {
   }
 
   return (
-    <AdminPanel title="PIN y bloqueo por inactividad" meta={hasPin ? "PIN activo" : "Sin PIN"}>
+    <AdminPanel title="PIN y bloqueo por inactividad" icon="lock" meta={hasPin ? "PIN activo" : "Sin PIN"}>
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
 
       <form className="admin-settings" onSubmit={savePin}>

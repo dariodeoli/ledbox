@@ -8,6 +8,7 @@ import type { AdminMailConfig, AdminMailLogRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminPinSettings } from "../AdminPinSettings";
 import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminNote, AdminPanel, AdminRow, AdminTable } from "../AdminUI";
+import { AdminIcon } from "../AdminIcons";
 
 /**
  * Configuración (issue #30): secciones del panel que son de la empresa.
@@ -57,12 +58,15 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
     <div className="admin-module-page">
       <nav className="admin-subtabs" aria-label="Secciones de Configuración">
         <Link className="admin-subtab" href="/configuracion" aria-current={section === "correo" ? "page" : undefined} data-active={section === "correo" ? "true" : undefined}>
+          <AdminIcon name="mail" size={13} />
           Correo
         </Link>
         <Link className="admin-subtab" href="/configuracion/seguridad" aria-current={section === "seguridad" ? "page" : undefined} data-active={section === "seguridad" ? "true" : undefined}>
+          <AdminIcon name="lock" size={13} />
           Seguridad
         </Link>
         <Link className="admin-subtab" href="/empresa">
+          <AdminIcon name="building" size={13} />
           Empresa
         </Link>
       </nav>
@@ -71,7 +75,7 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
 
       {section === "correo" ? (
         <>
-      <AdminPanel title="Correo" meta={config ? `${config.provider} · remitente ${config.sender}` : "Cargando…"}>
+      <AdminPanel title="Correo" icon="mail" meta={config ? `${config.provider} · remitente ${config.sender}` : "Cargando…"}>
         <div className="admin-settings">
           {config && !config.configured && config.hint ? <AdminNote tone="error">{config.hint}</AdminNote> : null}
           {testResult && testResult.status === "sent" ? (
@@ -126,13 +130,13 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Historial de envíos" meta="Últimos 30 envíos de la empresa">
+      <AdminPanel title="Historial de envíos" icon="mail" meta="Últimos 30 envíos de la empresa">
         <AdminDataState
           loading={resource.loading}
           error={resource.error}
           onRetry={resource.reload}
           empty={history.length === 0}
-          emptyTitle="Todavía no hay envíos registrados"
+          emptyTitle="Todavía no hay envíos registrados" emptyIcon="mail"
           emptyHint="Cuando el panel mande un correo (prueba, presupuesto o recordatorio) vas a verlo acá con su estado real."
         >
           <AdminTable
@@ -171,8 +175,7 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
       </AdminPanel>
 
       <AdminNote>
-        Los correos de reset, recordatorios, presupuestos e invitaciones usan la misma plantilla e identidad. Si falta la
-        clave del proveedor, el panel lo avisa y no intenta ningún envío.
+        Los correos de reset, recordatorios, presupuestos e invitaciones usan la misma plantilla e identidad.
       </AdminNote>
         </>
       ) : null}

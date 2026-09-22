@@ -118,7 +118,7 @@ export function MessageTemplateSendDialog({
   const selected = templates.find((template) => template.id === templateId);
 
   return (
-    <AdminDialog title={`Enviar por WhatsApp · ${target.label}`} size="wide" onClose={onClose}>
+    <AdminDialog title={`Enviar por WhatsApp · ${target.label}`} size="wide" icon="mail" onClose={onClose}>
       <p className="admin-dialog-text">
         Elegí una plantilla: el mensaje se completa con los datos reales de {target.label} y se abre en WhatsApp listo para
         enviar.
@@ -172,7 +172,7 @@ export function MessageTemplateSendDialog({
 
       <div className="admin-dialog-foot">
         <span className="admin-dialog-spacer" />
-        <AdminButton onClick={onClose}>Cerrar</AdminButton>
+        <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
         {href ? (
           <a
             className="admin-btn admin-btn--primary"
@@ -186,7 +186,7 @@ export function MessageTemplateSendDialog({
             <span>Enviar por WhatsApp</span>
           </a>
         ) : (
-          <AdminButton variant="primary" disabled>
+          <AdminButton variant="primary" iconNode={<WhatsappIcon size={15} />} disabled>
             Enviar por WhatsApp
           </AdminButton>
         )}

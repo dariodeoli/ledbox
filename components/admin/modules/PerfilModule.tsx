@@ -152,10 +152,9 @@ export function PerfilModule() {
 
   return (
     <div className="admin-module-page">
-      {demo ? <AdminNote>Modo demo: el perfil es de solo lectura.</AdminNote> : null}
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
 
-      <AdminPanel title="Datos personales" meta={data ? `Rol: ${adminRoleLabel(data.role)}` : undefined}>
+      <AdminPanel title="Datos personales" icon="user" meta={data ? `Rol: ${adminRoleLabel(data.role)}` : undefined}>
         <div className="admin-profile-grid">
           <AdminImageUpload
             label="Foto de perfil"
@@ -208,7 +207,7 @@ export function PerfilModule() {
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Contraseña" meta="Mínimo 8 caracteres">
+      <AdminPanel title="Contraseña" icon="lock" meta="Mínimo 8 caracteres">
         <form className="admin-settings" onSubmit={savePassword}>
           {data && !hasPassword ? (
             <AdminNote>

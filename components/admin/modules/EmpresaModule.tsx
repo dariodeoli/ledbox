@@ -121,12 +121,11 @@ export function EmpresaModule() {
 
   return (
     <div className="admin-module-page">
-      {demo ? <AdminNote>Modo demo: los datos de la empresa son de solo lectura.</AdminNote> : null}
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {logoError ? <AdminNote tone="error">{logoError}</AdminNote> : null}
 
       <AdminPanel
-        title="Datos de la empresa"
+        title="Datos de la empresa" icon="building"
         meta={organization ? `Identificador: ${organization.slug}` : undefined}
       >
         <form className="admin-settings" onSubmit={saveName}>
@@ -168,11 +167,10 @@ export function EmpresaModule() {
         </form>
       </AdminPanel>
 
-      <AdminPanel title="Logo por tema" meta="Se usan según el fondo; en papel siempre el claro">
+      <AdminPanel title="Logo por tema" icon="image" meta="Se usan según el fondo; en papel siempre el claro">
         <div className="admin-settings">
           <p className="admin-field-hint">
-            Subí la variante clara para fondos oscuros y la oscura para fondos claros. JPG, PNG o WebP hasta 1 MB; sin logo
-            queda el monograma LB.
+            JPG, PNG o WebP hasta 1 MB; sin logo queda el monograma LB.
           </p>
           <div className="admin-logos">
             {(["light", "dark"] as const).map((variant) => (

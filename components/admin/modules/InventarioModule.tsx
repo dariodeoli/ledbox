@@ -283,16 +283,16 @@ export function InventarioModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de inventario">
-        <AdminKpi label="Ítems" value={formatNumber(inventory.length)} note="controlados" />
-        <AdminKpi label="Unidades" value={formatNumber(totals.units)} note="en total" />
+        <AdminKpi label="Ítems" icon="inventory" value={formatNumber(inventory.length)} note="controlados" />
+        <AdminKpi label="Unidades" icon="inventory" value={formatNumber(totals.units)} note="en total" />
         <AdminKpi
-          label={rangeActive ? "Comprometidas en el rango" : "En eventos ahora"}
+          label={rangeActive ? "Comprometidas en el rango" : "En eventos ahora"} icon="events"
           value={formatNumber(totals.committed)}
           note={rangeActive ? dayRangeLabel(from, to) : "unidades comprometidas"}
           tone={totals.committed > 0 ? "accent" : undefined}
         />
         <AdminKpi
-          label={rangeActive ? "Disponibles en el rango" : "Disponibles ahora"}
+          label={rangeActive ? "Disponibles en el rango" : "Disponibles ahora"} icon="check"
           value={formatNumber(totals.available)}
           note={totals.conflicts > 0 ? `${formatNumber(totals.conflicts)} ítems en conflicto` : "libres para asignar"}
           tone={totals.available === 0 || totals.conflicts > 0 ? "warn" : "ok"}
@@ -405,11 +405,11 @@ export function InventarioModule() {
         error={resources.error}
         onRetry={resources.reload}
         empty={inventory.length === 0}
-        emptyTitle="Inventario vacío"
+        emptyTitle="Inventario vacío" emptyIcon="inventory"
         emptyHint="Cargá los equipos y materiales para asignarlos a los eventos."
       >
         {rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá los filtros." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá los filtros." />
         ) : (
           <AdminTable
             view="inventario"
@@ -507,7 +507,7 @@ export function InventarioModule() {
 
       {selected ? (
         <AdminPanel
-          title={`Disponibilidad · ${selected.name}`}
+          title={`Disponibilidad · ${selected.name}`} icon="inventory"
           meta={
             rangeActive
               ? `${formatNumber(selectedRange?.available ?? 0)} de ${formatNumber(selected.quantity)} libres entre ${dayRangeLabel(from, to)}`

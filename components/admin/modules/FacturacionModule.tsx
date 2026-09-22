@@ -38,6 +38,7 @@ import type {
   AdminFiscalMonthSummary,
   AdminFiscalPayload,
   AdminFiscalPeriodRow,
+  AdminIconName,
   AdminInvoiceRow,
   AdminPurchaseInvoiceRow,
   AdminSupplierRow,
@@ -69,6 +70,7 @@ import {
   TextAreaField,
   TextField,
 } from "../AdminFields";
+import { AdminIcon } from "../AdminIcons";
 
 /**
  * Facturación (issue #41): registro fiscal interno.
@@ -89,12 +91,12 @@ import {
 
 type FiscalTab = "invoices" | "purchases" | "book" | "period" | "profile";
 
-const FISCAL_TABS: Array<{ value: FiscalTab; label: string }> = [
-  { value: "invoices", label: "Facturas" },
-  { value: "purchases", label: "Compras" },
-  { value: "book", label: "Libro de IVA" },
-  { value: "period", label: "Cierre mensual" },
-  { value: "profile", label: "Datos fiscales" },
+const FISCAL_TABS: Array<{ value: FiscalTab; label: string; icon: AdminIconName }> = [
+  { value: "invoices", label: "Facturas", icon: "receipt" },
+  { value: "purchases", label: "Compras", icon: "suppliers" },
+  { value: "book", label: "Libro de IVA", icon: "overview" },
+  { value: "period", label: "Cierre mensual", icon: "lock" },
+  { value: "profile", label: "Datos fiscales", icon: "building" },
 ];
 
 const EMPTY_SUMMARY: AdminFiscalMonthSummary = {
@@ -530,11 +532,11 @@ export function FacturacionModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Resumen fiscal del período">
-        <AdminKpi label="Ventas del mes" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas · ${monthKeyLabel(month)}`} />
-        <AdminKpi label="IVA a pagar" value={formatMoney(summary.balance)} note={`débito ${formatMoney(summary.debitIva)} − crédito ${formatMoney(summary.creditIva)}`} tone={summary.balance > 0 ? "warn" : undefined} />
-        <AdminKpi label="Compras del mes" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
+        <AdminKpi label="Ventas del mes" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas · ${monthKeyLabel(month)}`} />
+        <AdminKpi label="IVA a pagar" icon="finance" value={formatMoney(summary.balance)} note={`débito ${formatMoney(summary.debitIva)} − crédito ${formatMoney(summary.creditIva)}`} tone={summary.balance > 0 ? "warn" : undefined} />
+        <AdminKpi label="Compras del mes" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
         <AdminKpi
-          label="Estado del mes"
+          label="Estado del mes" icon="lock"
           value={periodClosed ? "Cerrado" : "Abierto"}
           note={periodClosed ? `${period?.closedByName ?? "—"} · ${formatDateTime(period?.closedAt)}` : "se factura y se editan comprobantes"}
           tone={periodClosed ? "ok" : "warn"}
@@ -555,6 +557,7 @@ export function FacturacionModule() {
               setFormError("");
             }}
           >
+            <AdminIcon name={item.icon} size={13} />
             {item.label}
           </button>
         ))}
@@ -593,7 +596,7 @@ export function FacturacionModule() {
       {tab === "invoices" ? (
         <>
           <AdminPanel
-            title="Facturas del período"
+            title="Facturas del período" icon="receipt"
             meta={`${formatNumber(invoices.length)} de ${formatNumber(bookInvoices.length)} · ${formatMoney(summary.sales.total)}`}
           >
             <AdminDataState
@@ -601,11 +604,11 @@ export function FacturacionModule() {
               error={fiscal.error}
               onRetry={fiscal.reload}
               empty={bookInvoices.length === 0}
-              emptyTitle="Todavía no hay facturas en este mes"
+              emptyTitle="Todavía no hay facturas en este mes" emptyIcon="receipt"
               emptyHint={canWrite ? "Emití la primera desde un presupuesto aprobado o de forma manual." : "Cuando el equipo emita facturas, aparecen acá."}
             >
               {invoices.length === 0 ? (
-                <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de mes." />
+                <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de mes." />
               ) : (
                 <AdminTable
                   view="facturas"
@@ -698,7 +701,7 @@ export function FacturacionModule() {
           </AdminPanel>
 
           {approvedBudgets.length > 0 && canWrite && !periodClosed ? (
-            <AdminPanel title="Presupuestos aprobados para facturar" meta={`${formatNumber(approvedBudgets.length)} aprobados`}>
+            <AdminPanel title="Presupuestos aprobados para facturar" icon="budgets" meta={`${formatNumber(approvedBudgets.length)} aprobados`}>
               <AdminTable
                 view="facturables"
                 label="Presupuestos aprobados"
@@ -736,7 +739,7 @@ export function FacturacionModule() {
 
       {tab === "purchases" ? (
         <AdminPanel
-          title="Compras del período"
+          title="Compras del período" icon="suppliers"
           meta={`${formatNumber(purchases.length)} de ${formatNumber(bookPurchases.length)} · ${formatMoney(summary.purchases.total)}`}
         >
           <p className="admin-note">
@@ -748,11 +751,11 @@ export function FacturacionModule() {
             error={fiscal.error}
             onRetry={fiscal.reload}
             empty={bookPurchases.length === 0}
-            emptyTitle="Todavía no hay compras en este mes"
+            emptyTitle="Todavía no hay compras en este mes" emptyIcon="suppliers"
             emptyHint="Registrá los comprobantes de proveedores para computar el crédito de IVA."
           >
             {purchases.length === 0 ? (
-              <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de mes." />
+              <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de mes." />
             ) : (
               <AdminTable
                 view="compras"
@@ -842,9 +845,9 @@ export function FacturacionModule() {
 
       {tab === "book" ? (
         <>
-          <AdminPanel title="IVA ventas del período" meta={`${formatNumber(summary.sales.count)} comprobantes · ${formatMoney(summary.sales.total)}`}>
+          <AdminPanel title="IVA ventas del período" icon="receipt" meta={`${formatNumber(summary.sales.count)} comprobantes · ${formatMoney(summary.sales.total)}`}>
             {bookInvoices.filter((invoice) => invoice.status !== "VOID").length === 0 ? (
-              <AdminEmpty title="Sin ventas en el período" hint="Emití facturas o cambiá de mes para ver el libro." />
+              <AdminEmpty icon="receipt" title="Sin ventas en el período" hint="Emití facturas o cambiá de mes para ver el libro." />
             ) : (
               <AdminTable
                 view="libro-ventas"
@@ -893,9 +896,9 @@ export function FacturacionModule() {
             ) : null}
           </AdminPanel>
 
-          <AdminPanel title="IVA compras del período" meta={`${formatNumber(summary.purchases.count)} comprobantes · ${formatMoney(summary.purchases.total)}`}>
+          <AdminPanel title="IVA compras del período" icon="suppliers" meta={`${formatNumber(summary.purchases.count)} comprobantes · ${formatMoney(summary.purchases.total)}`}>
             {bookPurchases.length === 0 ? (
-              <AdminEmpty title="Sin compras en el período" hint="Cargá los comprobantes de proveedores desde la pestaña Compras." />
+              <AdminEmpty icon="suppliers" title="Sin compras en el período" hint="Cargá los comprobantes de proveedores desde la pestaña Compras." />
             ) : (
               <AdminTable
                 view="libro-compras"
@@ -935,7 +938,7 @@ export function FacturacionModule() {
             )}
           </AdminPanel>
 
-          <AdminPanel title="Resumen del libro" meta={monthKeyLabel(month)}>
+          <AdminPanel title="Resumen del libro" icon="overview" meta={monthKeyLabel(month)}>
             <div className="admin-detail">
               <dl className="admin-detail-grid">
                 <div className="admin-detail-item">
@@ -971,7 +974,7 @@ export function FacturacionModule() {
       {tab === "period" ? (
         <>
           <AdminPanel
-            title={`Cierre de ${monthKeyLabel(month)}`}
+            title={`Cierre de ${monthKeyLabel(month)}`} icon="lock"
             meta={periodClosed ? "cerrado" : "abierto"}
             action={
               periodClosed
@@ -1000,12 +1003,12 @@ export function FacturacionModule() {
             }
           >
             <section className="admin-kpis" aria-label="Resumen del cierre">
-              <AdminKpi label="Ventas" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas`} />
-              <AdminKpi label="Compras" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
-              <AdminKpi label="IVA débito" value={formatMoney(summary.debitIva)} note="de las ventas" />
-              <AdminKpi label="IVA crédito" value={formatMoney(summary.creditIva)} note="de las compras" />
-              <AdminKpi label="Saldo de IVA" value={formatMoney(summary.balance)} note={summary.balance >= 0 ? "a pagar" : "saldo a favor"} tone={summary.balance > 0 ? "warn" : undefined} />
-              <AdminKpi label="Resultado" value={formatMoney(summary.result)} note="ventas − compras" />
+              <AdminKpi label="Ventas" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas`} />
+              <AdminKpi label="Compras" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
+              <AdminKpi label="IVA débito" icon="finance" value={formatMoney(summary.debitIva)} note="de las ventas" />
+              <AdminKpi label="IVA crédito" icon="finance" value={formatMoney(summary.creditIva)} note="de las compras" />
+              <AdminKpi label="Saldo de IVA" icon="finance" value={formatMoney(summary.balance)} note={summary.balance >= 0 ? "a pagar" : "saldo a favor"} tone={summary.balance > 0 ? "warn" : undefined} />
+              <AdminKpi label="Resultado" icon="finance" value={formatMoney(summary.result)} note="ventas − compras" />
             </section>
             {periodClosed ? (
               <>
@@ -1089,8 +1092,8 @@ export function FacturacionModule() {
 
       {tab === "profile" ? (
         <AdminPanel
-          title="Datos fiscales de la empresa"
-          meta={canProfile ? "los edita OWNER/ADMIN" : "solo lectura"}
+          title="Datos fiscales de la empresa" icon="building"
+          meta="los edita OWNER/ADMIN"
         >
           <form className="admin-form-grid" onSubmit={saveProfile} aria-busy={busy || undefined}>
             <TextField
@@ -1143,9 +1146,7 @@ export function FacturacionModule() {
                   Guardar datos fiscales
                 </AdminButton>
               </div>
-            ) : (
-              <AdminNote>Los datos fiscales de la empresa los editan OWNER o ADMIN.</AdminNote>
-            )}
+            ) : null}
           </form>
           <p className="admin-note">
             El comprobante imprimible de este registro interno aclara que <strong>no es una factura electrónica</strong> ni
@@ -1155,7 +1156,7 @@ export function FacturacionModule() {
       ) : null}
 
       {invoiceForm ? (
-        <AdminDialog title="Nueva factura" size="wide" onClose={() => setInvoiceForm(null)}>
+        <AdminDialog title="Nueva factura" size="wide" icon="receipt" onClose={() => setInvoiceForm(null)}>
           <form className="admin-form-grid" onSubmit={submitInvoice} aria-busy={busy || undefined}>
             <SegmentedField
               label="Origen"
@@ -1334,7 +1335,7 @@ export function FacturacionModule() {
 
             <div className="admin-dialog-foot admin-field--wide">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setInvoiceForm(null)} disabled={busy}>
+              <AdminButton icon="close" type="button" onClick={() => setInvoiceForm(null)} disabled={busy}>
                 Cancelar
               </AdminButton>
               <AdminButton type="submit" variant="primary" icon="receipt" busy={busy}>
@@ -1346,7 +1347,7 @@ export function FacturacionModule() {
       ) : null}
 
       {detail ? (
-        <AdminDialog title={`Factura ${invoiceNumberLabel(detail.number)}`} size="wide" onClose={() => setDetail(null)}>
+        <AdminDialog title={`Factura ${invoiceNumberLabel(detail.number)}`} size="wide" icon="receipt" onClose={() => setDetail(null)}>
           <div className="admin-detail">
             <dl className="admin-detail-grid">
               <div className="admin-detail-item">
@@ -1387,7 +1388,12 @@ export function FacturacionModule() {
             </dl>
 
             <div className="admin-detail-section">
-              <span className="admin-detail-section-title">Detalle</span>
+              <span className="admin-detail-section-title">
+                <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                  <AdminIcon name="receipt" size={11} />
+                </span>
+                Detalle
+              </span>
               <AdminTable
                 view="factura-items"
                 label={`Ítems de la factura ${invoiceNumberLabel(detail.number)}`}
@@ -1457,7 +1463,7 @@ export function FacturacionModule() {
 
             <div className="admin-detail-actions">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setDetail(null)}>
+              <AdminButton icon="close" type="button" onClick={() => setDetail(null)}>
                 Cerrar
               </AdminButton>
               <Link className="admin-btn" href={`/imprimir/factura/${detail.id}`} target="_blank" rel="noreferrer" title="Abrir el comprobante imprimible" aria-label="Abrir el comprobante imprimible">
@@ -1469,7 +1475,7 @@ export function FacturacionModule() {
       ) : null}
 
       {purchaseForm ? (
-        <AdminDialog title={purchaseForm.id ? "Editar compra" : "Registrar compra"} size="wide" onClose={() => setPurchaseForm(null)}>
+        <AdminDialog title={purchaseForm.id ? "Editar compra" : "Registrar compra"} size="wide" icon="suppliers" onClose={() => setPurchaseForm(null)}>
           <form className="admin-form-grid" onSubmit={submitPurchase} aria-busy={busy || undefined}>
             <TextField
               label="Proveedor (razón social)"
@@ -1536,7 +1542,7 @@ export function FacturacionModule() {
             {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
             <div className="admin-dialog-foot admin-field--wide">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setPurchaseForm(null)} disabled={busy}>
+              <AdminButton icon="close" type="button" onClick={() => setPurchaseForm(null)} disabled={busy}>
                 Cancelar
               </AdminButton>
               <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
@@ -1548,7 +1554,7 @@ export function FacturacionModule() {
       ) : null}
 
       {voidTarget ? (
-        <AdminDialog title={`Anular factura ${invoiceNumberLabel(voidTarget.number)}`} onClose={() => setVoidTarget(null)}>
+        <AdminDialog title={`Anular factura ${invoiceNumberLabel(voidTarget.number)}`} icon="alert" onClose={() => setVoidTarget(null)}>
           <form
             className="admin-form-grid"
             onSubmit={(event) => {
@@ -1573,7 +1579,7 @@ export function FacturacionModule() {
             />
             <div className="admin-dialog-foot admin-field--wide">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setVoidTarget(null)} disabled={busy}>
+              <AdminButton icon="close" type="button" onClick={() => setVoidTarget(null)} disabled={busy}>
                 Cancelar
               </AdminButton>
               <AdminButton type="submit" variant="primary" icon="close" busy={busy}>
@@ -1585,14 +1591,14 @@ export function FacturacionModule() {
       ) : null}
 
       {deleteTarget ? (
-        <AdminDialog title={`Borrar compra de «${deleteTarget.reason}»`} onClose={() => setDeleteTarget(null)}>
+        <AdminDialog title={`Borrar compra de «${deleteTarget.reason}»`} icon="trash" onClose={() => setDeleteTarget(null)}>
           <AdminNote tone="error">
             Se borra el comprobante del libro de IVA de {monthKeyLabel(monthOf(new Date(deleteTarget.date)))}. Solo se puede
             con el mes abierto y queda auditado; si el comprobante ya está presentado, anulalo en tu contabilidad.
           </AdminNote>
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
-            <AdminButton type="button" onClick={() => setDeleteTarget(null)} disabled={busy}>
+            <AdminButton icon="close" type="button" onClick={() => setDeleteTarget(null)} disabled={busy}>
               Cancelar
             </AdminButton>
             <AdminButton type="button" variant="primary" icon="trash" busy={busy} onClick={() => void confirmDeletePurchase()}>
@@ -1603,7 +1609,7 @@ export function FacturacionModule() {
       ) : null}
 
       {confirmClose ? (
-        <AdminDialog title={`Cerrar ${monthKeyLabel(month)}`} onClose={() => setConfirmClose(false)}>
+        <AdminDialog title={`Cerrar ${monthKeyLabel(month)}`} icon="lock" onClose={() => setConfirmClose(false)}>
           <AdminNote>
             El cierre congela el resumen (ventas {formatMoney(summary.sales.total)}, compras {formatMoney(summary.purchases.total)},
             saldo de IVA {formatMoney(summary.balance)}) y bloquea la emisión, la anulación, el saldado y las compras de {monthKeyLabel(month)}.
@@ -1611,7 +1617,7 @@ export function FacturacionModule() {
           </AdminNote>
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
-            <AdminButton type="button" onClick={() => setConfirmClose(false)} disabled={busy}>
+            <AdminButton icon="close" type="button" onClick={() => setConfirmClose(false)} disabled={busy}>
               Cancelar
             </AdminButton>
             <AdminButton type="button" variant="primary" icon="check" busy={busy} onClick={() => void closeMonth()}>
@@ -1622,7 +1628,7 @@ export function FacturacionModule() {
       ) : null}
 
       {reopenOpen ? (
-        <AdminDialog title={`Reabrir ${monthKeyLabel(month)}`} onClose={() => setReopenOpen(false)}>
+        <AdminDialog title={`Reabrir ${monthKeyLabel(month)}`} icon="refresh" onClose={() => setReopenOpen(false)}>
           <form className="admin-form-grid" onSubmit={reopenMonth} aria-busy={busy || undefined}>
             <AdminNote>
               Reabrir habilita de nuevo la emisión, la anulación y las compras del mes. Queda auditado con tu nombre, la
@@ -1640,7 +1646,7 @@ export function FacturacionModule() {
             />
             <div className="admin-dialog-foot admin-field--wide">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setReopenOpen(false)} disabled={busy}>
+              <AdminButton icon="close" type="button" onClick={() => setReopenOpen(false)} disabled={busy}>
                 Cancelar
               </AdminButton>
               <AdminButton type="submit" variant="primary" icon="refresh" busy={busy}>

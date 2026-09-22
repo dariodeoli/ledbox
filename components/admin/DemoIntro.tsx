@@ -103,7 +103,7 @@ export function DemoIntro({
       </div>
 
       {ready && open ? (
-        <AdminDialog title={`Demo de EventOS · ${organizationName}`} size="wide" onClose={dismiss}>
+        <AdminDialog title={`Demo de EventOS · ${organizationName}`} size="wide" icon="eye" onClose={dismiss}>
           <p className="admin-dialog-text">
             Estás en la demo pública de <strong>EventOS</strong> con datos simulados de una empresa de ejemplo (
             <strong>{organizationName}</strong>): ferias, clientes, presupuestos, inventario, finanzas, tesorería,

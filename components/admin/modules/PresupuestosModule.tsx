@@ -345,7 +345,7 @@ export function BudgetProofDialog({
   collectLabel?: string;
 }) {
   return (
-    <AdminDialog title={title} size="wide" onClose={onClose}>
+    <AdminDialog title={title} size="wide" icon="budgets" onClose={onClose}>
       {subtitle ? <p className="admin-dialog-text">{subtitle}</p> : null}
       {proofs.length === 0 ? (
         <p className="admin-dialog-text">Este presupuesto todavía no tiene comprobantes subidos desde el portal.</p>
@@ -395,7 +395,7 @@ export function BudgetProofDialog({
           </AdminButton>
         ) : null}
         <span className="admin-dialog-spacer" />
-        <AdminButton onClick={onClose}>Cerrar</AdminButton>
+        <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
       </div>
     </AdminDialog>
   );
@@ -458,7 +458,7 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <AdminDialog title="Datos de pago de la empresa" size="wide" onClose={onClose}>
+    <AdminDialog title="Datos de pago de la empresa" size="wide" icon="building" onClose={onClose}>
       <p className="admin-dialog-text">
         Se muestran en el portal del cliente cuando el presupuesto está aprobado (junto al monto a transferir) y en la hoja
         imprimible. Sin datos cargados, el portal no inventa una cuenta.
@@ -526,7 +526,7 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
       {saved ? <AdminNote tone="ok">Datos de pago guardados.</AdminNote> : null}
       <div className="admin-dialog-foot">
         <span className="admin-dialog-spacer" />
-        <AdminButton onClick={onClose} disabled={busy}>
+        <AdminButton icon="close" onClick={onClose} disabled={busy}>
           Cerrar
         </AdminButton>
         <AdminButton variant="primary" icon="check" busy={busy} onClick={() => void save()} disabled={loading}>
@@ -587,7 +587,7 @@ function ItemLinksDialog({
   }
 
   return (
-    <AdminDialog title={`Inventario del presupuesto · ${budget.title}`} size="wide" onClose={onClose}>
+    <AdminDialog title={`Inventario del presupuesto · ${budget.title}`} size="wide" icon="inventory" onClose={onClose}>
       <p className="admin-dialog-text">
         Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
         panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
@@ -799,6 +799,7 @@ export function PresupuestosModule() {
                 external
               />
               <AdminButton
+                icon="globe"
                 title={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
                 aria-label={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
                 onClick={() => openPortal(budget)}
@@ -1181,12 +1182,12 @@ export function PresupuestosModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de presupuestos">
-        <AdminKpi label="Total cotizado" value={formatMoney(totals.quoted)} note="presupuestos vigentes" />
-        <AdminKpi label="Cobrado" value={formatMoney(totals.paid)} note="pagos registrados" tone="ok" />
-        <AdminKpi label="Por cobrar" value={formatMoney(totals.receivable)} note="saldo de clientes" tone="warn" />
-        <AdminKpi label="Margen estimado" value={formatMoney(totals.margin)} note="venta menos costos" tone="accent" />
+        <AdminKpi label="Total cotizado" icon="budgets" value={formatMoney(totals.quoted)} note="presupuestos vigentes" />
+        <AdminKpi label="Cobrado" icon="finance" value={formatMoney(totals.paid)} note="pagos registrados" tone="ok" />
+        <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals.receivable)} note="saldo de clientes" tone="warn" />
+        <AdminKpi label="Margen estimado" icon="finance" value={formatMoney(totals.margin)} note="venta menos costos" tone="accent" />
         <AdminKpi
-          label="Solicitudes del portal"
+          label="Solicitudes del portal" icon="globe"
           value={formatNumber(pendingRequests.length)}
           note="esperando respuesta"
           tone={pendingRequests.length > 0 ? "warn" : undefined}
@@ -1320,7 +1321,7 @@ export function PresupuestosModule() {
 
       {requestRows.length > 0 ? (
         <AdminPanel
-          title="Solicitudes del portal"
+          title="Solicitudes del portal" icon="globe"
           meta={
             pendingRequests.length > 0
               ? `${formatNumber(pendingRequests.length)} pendiente${pendingRequests.length === 1 ? "" : "s"}`
@@ -1396,12 +1397,12 @@ export function PresupuestosModule() {
         error={budgetsResource.error}
         onRetry={budgetsResource.reload}
         empty={budgetRows.length === 0}
-        emptyTitle="Todavía no hay presupuestos"
+        emptyTitle="Todavía no hay presupuestos" emptyIcon="budgets"
         emptyHint="Creá un presupuesto para seguir venta, costos, margen y cobros."
       >
         {view === "board" ? (
           searched.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
             <AdminBoard
               label="Presupuestos"
@@ -1413,7 +1414,7 @@ export function PresupuestosModule() {
             />
           )
         ) : rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : (
           <AdminTable
             view="presupuestos"
@@ -1525,6 +1526,7 @@ export function PresupuestosModule() {
                         </>
                       ) : null}
                       <AdminButton
+                        icon="globe"
                         title={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
                         aria-label={`${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`}
                         onClick={() => openPortal(budget)}
@@ -1604,7 +1606,7 @@ export function PresupuestosModule() {
       </AdminDataState>
 
       {portalBudget ? (
-        <AdminDialog title={`Portal del cliente · ${portalBudget.title}`} onClose={() => setPortalBudget(null)}>
+        <AdminDialog title={`Portal del cliente · ${portalBudget.title}`} icon="globe" onClose={() => setPortalBudget(null)}>
           {portalToken ? (
             <>
               <div className="admin-dialog-qr">
@@ -1666,7 +1668,7 @@ export function PresupuestosModule() {
       ) : null}
 
       {sendBudget ? (
-        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} onClose={() => setSendBudget(null)}>
+        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} icon="mail" onClose={() => setSendBudget(null)}>
           <p className="admin-dialog-text">
             El correo sale con la identidad de LedBox: link del portal con el código, resumen de ítems, total y validez,
             la hoja imprimible y los datos de pago cuando el presupuesto está aprobado.
@@ -1743,7 +1745,7 @@ export function PresupuestosModule() {
               </AdminButton>
             ) : null}
             <span className="admin-dialog-spacer" />
-            <AdminButton onClick={() => setSendBudget(null)} disabled={sendBusy}>
+            <AdminButton icon="close" onClick={() => setSendBudget(null)} disabled={sendBusy}>
               Cancelar
             </AdminButton>
             <AdminButton
@@ -1762,6 +1764,7 @@ export function PresupuestosModule() {
       {approval ? (
         <AdminDialog
           title={approval.decision === "approve" ? `Aprobar manualmente · ${approval.budget.title}` : `Pedir cambios · ${approval.budget.title}`}
+          icon={approval.decision === "approve" ? "check" : "edit"}
           onClose={() => setApproval(null)}
         >
           <p className="admin-dialog-text">
@@ -1781,7 +1784,7 @@ export function PresupuestosModule() {
           />
           {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
           <div className="admin-dialog-foot">
-            <AdminButton onClick={() => setApproval(null)} disabled={dialogBusy}>
+            <AdminButton icon="close" onClick={() => setApproval(null)} disabled={dialogBusy}>
               Cancelar
             </AdminButton>
             <AdminButton variant="primary" icon="check" busy={dialogBusy} onClick={() => void submitApproval()}>
@@ -1792,7 +1795,7 @@ export function PresupuestosModule() {
       ) : null}
 
       {resolution ? (
-        <AdminDialog title={resolutionLabel} size="wide" onClose={() => setResolution(null)}>
+        <AdminDialog title={resolutionLabel} size="wide" icon="edit" onClose={() => setResolution(null)}>
           <p className="admin-dialog-text">
             {resolution.request.kind === "items"
               ? "La propuesta del cliente se aplica al presupuesto con los precios unitarios originales. Podés ajustar las cantidades y días como contra-oferta antes de aceptar."
@@ -1924,7 +1927,7 @@ export function PresupuestosModule() {
           />
           {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
           <div className="admin-dialog-foot">
-            <AdminButton onClick={() => setResolution(null)} disabled={dialogBusy}>
+            <AdminButton icon="close" onClick={() => setResolution(null)} disabled={dialogBusy}>
               Cancelar
             </AdminButton>
             <AdminButton
@@ -1940,7 +1943,7 @@ export function PresupuestosModule() {
       ) : null}
 
       {plan ? (
-        <AdminDialog title={`Plan de pagos · ${plan.budget.title}`} size="wide" onClose={() => setPlan(null)}>
+        <AdminDialog title={`Plan de pagos · ${plan.budget.title}`} size="wide" icon="finance" onClose={() => setPlan(null)}>
           <p className="admin-dialog-text">
             El anticipo y las cuotas se muestran en el portal cuando el presupuesto está aprobado: el primero (o la primera
             cuota) aparece como «a transferir ahora». El plan no puede superar el total ({formatMoney(plan.budget.total)}).
@@ -2032,7 +2035,7 @@ export function PresupuestosModule() {
           {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
-            <AdminButton onClick={() => setPlan(null)} disabled={dialogBusy}>
+            <AdminButton icon="close" onClick={() => setPlan(null)} disabled={dialogBusy}>
               Cancelar
             </AdminButton>
             <AdminButton variant="primary" icon="check" busy={dialogBusy} onClick={() => void submitPlan()}>
@@ -2054,7 +2057,7 @@ export function PresupuestosModule() {
 
       {reservationReport ? (
         <AdminPanel
-          title={`Reserva automática · ${reservationReport.title}`}
+          title={`Reserva automática · ${reservationReport.title}`} icon="inventory"
           meta={`${formatNumber(reservationReport.reservation.reserved)} de ${formatNumber(reservationReport.reservation.requested)} unidades reservadas${
             reservationReport.reservation.eventName ? ` · ${reservationReport.reservation.eventName}` : ""
           }`}

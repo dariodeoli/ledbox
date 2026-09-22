@@ -108,7 +108,7 @@ function PlanRequestDialog({
 }) {
   const [note, setNote] = useState("");
   return (
-    <AdminDialog title={`Solicitar el plan ${plan.name}`} onClose={onClose}>
+    <AdminDialog title={`Solicitar el plan ${plan.name}`} icon="plan" onClose={onClose}>
       <p className="admin-dialog-text">
         La solicitud queda registrada con tu usuario y el equipo de Owncoding aplica el cambio.{" "}
         <strong>Todavía no hay pasarela de pago</strong>: el cobro del plan se coordina aparte.
@@ -133,7 +133,7 @@ function PlanRequestDialog({
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
         <div className="admin-dialog-foot">
           <span className="admin-dialog-spacer" />
-          <AdminButton type="button" onClick={onClose} disabled={busy}>
+          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
             Cancelar
           </AdminButton>
           <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
@@ -189,19 +189,12 @@ export function PlanModule() {
 
   return (
     <div className="admin-module-page">
-      {demo ? (
-        <AdminNote>
-          {data.plan
-            ? `Modo demo: el plan de la empresa demo es ${data.plan.name} y es de solo lectura.`
-            : "Modo demo: el plan es de solo lectura."}
-        </AdminNote>
-      ) : null}
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {noticeError ? <AdminNote tone="error">{noticeError}</AdminNote> : null}
 
       <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} rows={4}>
         <AdminPanel
-          title="Plan actual"
+          title="Plan actual" icon="plan"
           meta={data.planStartedAt ? `Inicio del plan: ${formatDate(data.planStartedAt)}` : undefined}
           action={plan ? <AdminBadge tone="accent">{plan.code}</AdminBadge> : undefined}
         >
@@ -214,25 +207,25 @@ export function PlanModule() {
                   <span className="admin-field-hint">{plan.description ?? "Sin descripción."}</span>
                 </div>
                 <AdminKpi
-                  label="Precio mensual"
+                  label="Precio mensual" icon="finance"
                   value={plan.priceMonthly === 0 ? "Sin costo" : `${formatMoney(plan.priceMonthly)} / mes`}
                   note="El cobro se coordina con Owncoding: todavía no hay pasarela de pago."
                 />
               </div>
               <div className="admin-kpis">
                 <AdminKpi
-                  label="Usuarios del plan"
+                  label="Usuarios del plan" icon="users"
                   value={planLimitLabel(plan.maxUsers)}
                   note={plan.maxUsers === null ? "Sin tope de usuarios." : "Membresías activas e invitaciones pendientes."}
                 />
                 <AdminKpi
-                  label="Eventos por mes"
+                  label="Eventos por mes" icon="events"
                   value={planLimitLabel(plan.maxEventsPerMonth)}
                   note={plan.maxEventsPerMonth === null ? "Sin tope de eventos." : "Eventos creados por mes calendario."}
                 />
-                <AdminKpi label="Consumo de usuarios" value={usage ? `${formatNumber(usage.users.used)} / ${planLimitLabel(usage.users.limit)}` : "—"} />
+                <AdminKpi label="Consumo de usuarios" icon="overview" value={usage ? `${formatNumber(usage.users.used)} / ${planLimitLabel(usage.users.limit)}` : "—"} />
                 <AdminKpi
-                  label={usage ? `Eventos · ${usage.events.periodLabel}` : "Eventos del mes"}
+                  label={usage ? `Eventos · ${usage.events.periodLabel}` : "Eventos del mes"} icon="events"
                   value={usage ? `${formatNumber(usage.events.used)} / ${planLimitLabel(usage.events.limit)}` : "—"}
                 />
               </div>
@@ -243,7 +236,7 @@ export function PlanModule() {
         </AdminPanel>
 
         {usage ? (
-          <AdminPanel title="Consumo del mes" meta={usage.events.periodLabel}>
+          <AdminPanel title="Consumo del mes" icon="overview" meta={usage.events.periodLabel}>
             {usageWarn ? (
               <AdminNote tone="error">
                 La empresa está en el tope del plan: las altas nuevas se rechazan con el aviso del plan y no se borra nada de lo
@@ -279,7 +272,7 @@ export function PlanModule() {
         ) : null}
 
         <AdminPanel
-          title="Planes"
+          title="Planes" icon="plan"
           meta="Comparación del catálogo · sin pasarela de pago: el cambio lo aplica Owncoding"
         >
           {data.catalog.length === 0 ? (
@@ -344,10 +337,10 @@ export function PlanModule() {
           )}
         </AdminPanel>
 
-        <AdminPanel title="Solicitudes de cambio" meta="Historial auditado">
+        <AdminPanel title="Solicitudes de cambio" icon="mail" meta="Historial auditado">
           <AdminDataState
             empty={data.requests.length === 0 && !data.pendingRequest}
-            emptyTitle="Sin solicitudes"
+            emptyTitle="Sin solicitudes" emptyIcon="mail"
             emptyHint="Cuando se pida un cambio de plan, queda registrado acá con quién lo pidió."
           >
             <AdminTable
