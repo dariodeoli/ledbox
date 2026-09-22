@@ -11,7 +11,7 @@ usa; si falta y es genérico, se crea **en la librería** y se adopta acá.
 ## 1. Cómo se consume (una sola vez)
 
 ```bash
-npm install github:dariodeoli/owncoding-ui#vX.Y.Z qrcode
+npm install github:dariodeoli/owncoding-ui#v0.13.1 qrcode
 # tailwind.config.js: presets: [preset] + corePlugins: { preflight: false }
 # globals.css: @import 'owncoding-ui/styles.css';
 ```
@@ -21,6 +21,24 @@ npm install github:dariodeoli/owncoding-ui#vX.Y.Z qrcode
   `#admin-root` → el shim de tema vive en un solo lugar (§4).
 - **Repo privado**: en CI/Coolify hace falta un token de lectura de GitHub para
   instalar la dependencia (`git+https://x-access-token:$TOKEN@github.com/...`).
+- **Prefijo de contenido del preset**: Tailwind 3.4 ignora el `content` que trae
+  el preset; hay que repetir los `src/**/*.jsx` de la librería en el `content`
+  de la app (si no, los íconos salen gigantes). Está reportado upstream (#3).
+- **`styles.css` trae base global**: se aísla en el contenedor de la pantalla que
+  adopta la librería; reportado upstream para partir tokens y base.
+
+## 1 bis. Lo que dejó el piloto (22-09-2026)
+
+- Instalar la librería + Tailwind **no cambia el panel**: capturas byte a byte
+  idénticas en `/finanzas` y `/clientes`, misma huella de DOM/estilos.
+- **Formato de dinero decidido**: `Gs 1.234.567` (sin punto). La librería quedó
+  alineada en `v0.13.1` (`Money`, `CeldaMoneda` y los formateadores puros).
+- **Tema decidido**: el panel mantiene `data-theme` por usuario; al adoptar se
+  agrega un puente de una línea para reflejarlo en `html.dark` (contrato de la
+  librería).
+- **No adoptar `DataTable`**: no soporta la plantilla `--<vista>-cols` ni el
+  scroll silencioso. Se mantiene `AdminTable` y se adopta `CeldaMoneda` adentro.
+- Veredicto completo y capturas: `docs/PILOTO-OWNCODING-UI.md`.
 
 ## 2. Mapa de adopción (objeto → dónde → prioridad)
 
