@@ -560,3 +560,15 @@ Lo que sigue ya está implementado e integrado (y en producción salvo lo indica
 - **Perfil y empresa (issue #22, rama `feat/perfil-empresa`, pendiente de integrar)**: cada usuario edita su nombre, su contraseña (pidiendo la actual) y su foto; un OWNER/ADMIN edita el nombre de la empresa y sube el logo claro y el oscuro (en papel siempre el claro); en Equipo se editan nombre y correo de un usuario (al cambiar el correo se cierran sus sesiones). Todo con auditoría de actor real.
 
 Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/bloqueo por inactividad y adjuntar comprobante de pago en el portal.
+
+## Actualización 22-09-2026
+
+- **Facturación (issue #41, rama `feat/facturacion-fiscal`)**: registro fiscal
+  interno (`/facturacion`) con datos fiscales de la empresa (RUC, razón social,
+  timbrado, establecimiento), facturas con numeración correlativa por empresa
+  atómica y sin huecos, IVA 10 %/5 %/exenta sobre enteros PYG, anulación con
+  motivo (nunca borrado), emisión desde presupuesto aprobado o manual,
+  imprimible propio, libro de IVA ventas/compras con export CSV y cierre
+  mensual con bloqueo del mes cerrado y reapertura solo OWNER con auditoría.
+  **No es la factura electrónica de SIFEN/DNIT**: ver `docs/FISCAL-SIFEN.md`
+  (alcance honesto y checklist de lo que falta).
