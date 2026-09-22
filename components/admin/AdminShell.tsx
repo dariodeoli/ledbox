@@ -433,6 +433,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
+  // Eyebrow del topbar: la empresa activa (LedBox, LedBox Demo…) y el área del
+  // módulo según el agrupamiento nuevo; antes era «LedBox · Operación» fijo,
+  // que no cambiaba en la demo ni en otra empresa.
+  const activeGroupLabel = navGroups.find((group) =>
+    group.items.some((item) => isAdminNavActive(pathname, item.href)),
+  )?.label;
+  const eyebrow = [session.organization?.name ?? "EventOS", activeGroupLabel].filter(Boolean).join(" · ");
   const moduleIcon = adminNavIcon(pathname);
   const canEditOrganization = canManageOrganization(session.role);
   const organizationLogos = session.organization?.logos;
@@ -689,7 +696,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </button>
 
             <div className="admin-topbar-title">
-              <p className="admin-topbar-eyebrow">LedBox · Operación</p>
+              <p className="admin-topbar-eyebrow">{eyebrow}</p>
               <h1 className="admin-topbar-heading" title={title}>
                 <span className="admin-topbar-icon" aria-hidden="true">
                   <AdminIcon name={moduleIcon} size={15} />
