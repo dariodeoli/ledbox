@@ -12,7 +12,8 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { withIdempotency } from "@/lib/server/idempotency";
 import { movementSourceSnapshot, parseMovementSourceSnapshot } from "@/lib/server/finance-snapshots";
-import { clientLabel, dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
+import { dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
+import { MAX_SOURCE_LABEL, resolveSourceLabels } from "@/lib/server/treasury-labels";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,6 @@ const MAX_BANK = 120;
 const MAX_NOTES = 1000;
 const MAX_RECEIPT = 120;
 const MAX_SORT_ORDER = 9_999;
-const MAX_SOURCE_LABEL = 200;
 
 const accountSelect = { id: true, name: true, type: true } as const;
 const movementInclude = { account: { select: accountSelect }, counterAccount: { select: accountSelect } } as const;
@@ -130,45 +130,10 @@ async function requestedAccount(tx: Prisma.TransactionClient, organizationId: st
 }
 
 /**
- * Etiquetas vivas del hecho real que originó cada movimiento (cobro, trabajo o
- * gasto). Es solo el respaldo de los movimientos anteriores a los snapshots
- * (issue #20): los nuevos traen su etiqueta congelada en `sourceSnapshot`.
+ * Movimientos de tesorería del período con su cuenta y su hecho de origen: la
+ * etiqueta viva (`resolveSourceLabels`) es el respaldo de los movimientos
+ * anteriores a los snapshots (issue #20).
  */
-async function resolveSourceLabels(
-  organizationId: string,
-  movements: ReadonlyArray<{ origin: string; sourceId: string | null }>,
-): Promise<Map<string, string>> {
-  const ids = (origin: string) => [
-    ...new Set(
-      movements
-        .filter((movement) => movement.origin === origin && movement.sourceId)
-        .map((movement) => movement.sourceId as string),
-    ),
-  ];
-  const [paymentIds, jobIds, expenseIds] = [ids("client_payment"), ids("supplier_job"), ids("expense")];
-  const [payments, jobs, expenses] = await Promise.all([
-    paymentIds.length
-      ? db.clientPayment.findMany({
-          where: { id: { in: paymentIds }, organizationId },
-          select: { id: true, client: { select: { name: true, company: true } } },
-        })
-      : [],
-    jobIds.length
-      ? db.supplierJob.findMany({
-          where: { id: { in: jobIds }, organizationId },
-          select: { id: true, description: true, supplier: { select: { name: true } } },
-        })
-      : [],
-    expenseIds.length
-      ? db.expense.findMany({ where: { id: { in: expenseIds }, organizationId }, select: { id: true, description: true } })
-      : [],
-  ]);
-  const labels = new Map<string, string>();
-  for (const payment of payments) labels.set(`client_payment:${payment.id}`, clientLabel(payment.client));
-  for (const job of jobs) labels.set(`supplier_job:${job.id}`, `${job.supplier.name} · ${job.description}`);
-  for (const expense of expenses) labels.set(`expense:${expense.id}`, expense.description);
-  return labels;
-}
 
 export async function GET(request: Request) {
   const auth = await requireAdminContext();
