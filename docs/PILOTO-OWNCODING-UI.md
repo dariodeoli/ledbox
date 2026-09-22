@@ -9,8 +9,9 @@ piloto (`feat/piloto-owncoding-ui`) que no se mergea hasta que el dueño decida.
 - Pantalla del piloto: **`/piloto-ui`** (sin link en el nav, `noindex`, no está
   en `lib/admin-routes`).
 - Evidencia visual: `docs/piloto-owncoding-ui/*.png`.
-- Plan de adopción del dueño (prioridades 1–3): `docs/ADOPCION-OWNCODING-UI.md`.
-  Este piloto lo valida y agrega los datos duros que faltaban.
+- Plan de adopción del dueño (prioridades 1–3): `docs/ADOPCION-OWNCODING-UI.md`
+  (vive en la rama viva, no en la base de este piloto). Este piloto lo valida y
+  agrega los datos duros que faltaban.
 
 ## 1. Cómo se instala (comandos exactos)
 
@@ -269,8 +270,8 @@ la única variable fuese el piloto.
 | `npx prisma validate` | ✅ (no se tocó el schema) |
 
 Consola del navegador en `/piloto-ui` (desktop 1440 y mobile 390, claro y
-oscuro): **0 errores y 0 warnings** (se guardan los JSON de consola de cada
-captura en el entorno de verificación).
+oscuro): **0 errores** en las capturas (el entorno de verificación guarda el
+JSON de consola de cada una).
 
 ### 6.2 `/finanzas` y `/clientes`: antes (base) vs después (piloto)
 
