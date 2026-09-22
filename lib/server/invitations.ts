@@ -4,6 +4,7 @@ import type { AdminRole, TeamInvitation, TeamInvitationStatus } from "@prisma/cl
 import { adminRoleLabel } from "@/lib/admin-format";
 import type { AdminInvitationAccountState, AdminInvitationPublicView, AdminTeamInvitation } from "@/lib/admin-types";
 import { FIELD_MESSAGES, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
+import { authErrorMessage, type AuthErrorCode } from "@/lib/google-auth";
 import { INVITATION_TOKEN_LENGTH, UNAMBIGUOUS_ALPHABET } from "@/lib/public-config";
 import { recordAudit } from "./audit";
 import { hashPassword, tokenDigest, verifyPassword } from "./auth";
@@ -232,7 +233,7 @@ export function invitationRow(
 /** Resultado de aceptar una invitación (la sesión la abre el route handler). */
 export type AcceptInvitationResult =
   | { ok: true; userId: string; accountCreated: boolean; organizationId: string; organization: string; role: AdminRole }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; /** Código estable para redirigir sin filtrar detalle (issue #38). */ code?: AuthErrorCode };
 
 type JoinTeamInput = {
   invitation: InvitationWithOrganization;
@@ -399,11 +400,11 @@ export async function acceptInvitationWithGoogle(input: {
 }): Promise<AcceptInvitationResult> {
   const now = input.now ?? new Date();
   const invitation = await findInvitationByToken(input.token);
-  if (!invitation) return { ok: false, status: 404, error: "No encontramos esta invitación. Revisá el link del correo." };
+  if (!invitation) return { ok: false, status: 404, error: authErrorMessage("invitation_missing"), code: "invitation_missing" };
   const blocked = invitationBlockedReason(invitation, now);
-  if (blocked) return { ok: false, status: 410, error: blocked };
+  if (blocked) return { ok: false, status: 410, error: blocked, code: "invitation_blocked" };
   if (normalizeEmail(input.email) !== invitation.email) {
-    return { ok: false, status: 409, error: "La cuenta de Google no coincide con el correo invitado." };
+    return { ok: false, status: 409, error: authErrorMessage("invitation_email_mismatch"), code: "invitation_email_mismatch" };
   }
 
   const user = await db.adminUser.findUnique({ where: { email: invitation.email } });
@@ -412,11 +413,11 @@ export async function acceptInvitationWithGoogle(input: {
       where: { adminUserId_organizationId: { adminUserId: user.id, organizationId: invitation.organizationId } },
       select: { id: true },
     });
-    if (membership) return { ok: false, status: 409, error: "Ya sos miembro de este equipo. Entrá al panel con tu cuenta." };
-    if (!user.active) return { ok: false, status: 409, error: "Tu cuenta está desactivada. Pedile al equipo que la reactive." };
+    if (membership) return { ok: false, status: 409, error: authErrorMessage("invitation_already_member"), code: "invitation_already_member" };
+    if (!user.active) return { ok: false, status: 409, error: authErrorMessage("invitation_user_inactive"), code: "invitation_user_inactive" };
   } else {
     const name = normalizePersonName(input.name);
-    if (!personNameValid(name)) return { ok: false, status: 400, error: FIELD_MESSAGES.name };
+    if (!personNameValid(name)) return { ok: false, status: 400, error: FIELD_MESSAGES.name, code: "invitation_name_invalid" };
   }
 
   const name = user ? user.name : normalizePersonName(input.name);
@@ -439,7 +440,7 @@ export async function acceptInvitationWithGoogle(input: {
     };
   } catch (error) {
     if (error instanceof InvitationNotAvailableError) {
-      return { ok: false, status: 409, error: "La invitación cambió mientras la aceptabas. Probá de nuevo." };
+      return { ok: false, status: 409, error: authErrorMessage("invitation_conflict"), code: "invitation_conflict" };
     }
     throw error;
   }

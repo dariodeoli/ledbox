@@ -59,6 +59,7 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 | --- | --- |
 | `DATABASE_URL` | Conexión a PostgreSQL |
 | `AUTH_SECRET` | Firma de las sesiones JWT |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | SSO con Google del panel (ver `docs/SSO.md`) |
 | `APP_URL` / `NEXT_PUBLIC_SITE_URL` | Origen público de la app |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Envío de recuperación de contraseña |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | Número de WhatsApp del sitio |
@@ -93,5 +94,6 @@ Variables de entorno (los valores reales viven en Owncoding Hub, nunca en GitHub
 
 - [README-NEXT.md](README-NEXT.md) — migración del frontend a Next.js.
 - [docs/CONTEXTO-LEDBOX.md](docs/CONTEXTO-LEDBOX.md) — contexto general: qué existe hoy, arquitectura y pendientes.
+- [docs/SSO.md](docs/SSO.md) — SSO con Google: configuración en Google Cloud, flujo del panel e invitaciones, errores y propuesta para el portal.
 - [docs/REGLAS-GENERALES.md](docs/REGLAS-GENERALES.md) — reglas generales de la app (obligatorias).
 - [AGENTS.md](AGENTS.md) — reglas para agentes que trabajan en el repo.

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AdminError, AdminSpinner } from "./AdminUI";
 import { EmailField, HoneypotField, PasswordField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
+import { authErrorMessage } from "@/lib/google-auth";
 
 async function responseMessage(response: Response, fallback: string) {
   try {
@@ -16,11 +17,11 @@ async function responseMessage(response: Response, fallback: string) {
   }
 }
 
-export function AdminLoginForm() {
+export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(googleError);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
