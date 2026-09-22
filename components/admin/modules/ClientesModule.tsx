@@ -19,8 +19,9 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
-  AdminWhatsappLink,
+  AdminWhatsappTemplateButton,
 } from "../AdminUI";
+import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { EmailField, PhoneField, SearchField, SelectField, TextField } from "../AdminFields";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { normalizeEmail, normalizePhone } from "@/lib/field-rules";
@@ -52,6 +53,8 @@ export function ClientesModule() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
+  /** Envío por WhatsApp con plantilla (issue #35) para el cliente elegido. */
+  const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   const writable = canWrite(role);
 
@@ -289,9 +292,16 @@ export function ClientesModule() {
                   </AdminCell>
                   <AdminCell end>
                     <span className="admin-actions">
-                      <AdminWhatsappLink phone={client.phone} name={name} />
+                      {writable && whatsappHref(client.phone) ? (
+                        <AdminWhatsappTemplateButton
+                          title={`Enviar por WhatsApp con plantilla a ${name}`}
+                          onClick={() =>
+                            setTemplateTarget({ kind: "client", id: client.id, label: name, phone: client.phone })
+                          }
+                        />
+                      ) : null}
                       {client.email ? <AdminIconLink href={`mailto:${client.email}`} icon="mail" label={`Enviar correo a ${name}`} /> : null}
-                      {!whatsappHref(client.phone) && !client.email ? <span className="admin-muted">—</span> : null}
+                      {(!writable || !whatsappHref(client.phone)) && !client.email ? <span className="admin-muted">—</span> : null}
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -300,6 +310,10 @@ export function ClientesModule() {
           </AdminTable>
         )}
       </AdminDataState>
+
+      {templateTarget ? (
+        <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
+      ) : null}
     </div>
   );
 }

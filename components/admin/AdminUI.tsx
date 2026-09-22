@@ -78,6 +78,65 @@ export function AdminWhatsappLink({ phone, name }: { phone: string | null | unde
   );
 }
 
+/**
+ * Acción compacta de WhatsApp con plantilla (issue #35): abre el diálogo de
+ * envío con el mensaje prellenado. El llamador la dibuja solo cuando el contacto
+ * tiene teléfono (regla existente de WhatsApp).
+ */
+export function AdminWhatsappTemplateButton({ title, onClick }: { title: string; onClick: () => void }) {
+  return (
+    <button type="button" className="admin-iconbtn" title={title} aria-label={title} onClick={onClick}>
+      <WhatsappIcon size={15} />
+    </button>
+  );
+}
+
+/**
+ * Diálogo del panel (issue #12, primitivo único desde #35): rol dialog, foco al
+ * abrir en el botón de cierre, cierre con Escape y clic afuera, y `wide` para
+ * tablas y formularios largos. Todo diálogo nuevo del panel lo usa.
+ */
+export function AdminDialog({
+  title,
+  onClose,
+  wide,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="admin-dialog-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className={wide ? "admin-dialog admin-dialog--wide" : "admin-dialog"} role="dialog" aria-modal="true" aria-label={title}>
+        <header className="admin-dialog-head">
+          <h2 className="admin-dialog-title">{title}</h2>
+          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+            <AdminIcon name="close" size={15} />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export function AdminBadge({ tone = "neutral", title, children }: { tone?: AdminTone; title?: string; children: React.ReactNode }) {
   return (
     <span className="admin-badge" data-tone={tone} title={title}>

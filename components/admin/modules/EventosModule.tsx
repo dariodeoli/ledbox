@@ -19,6 +19,7 @@ import {
   promoterAvailabilityLabel,
   promoterAvailabilityTone,
   statusTone,
+  whatsappHref,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import {
@@ -47,7 +48,9 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
+  AdminWhatsappTemplateButton,
 } from "../AdminUI";
+import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import {
   DateField,
   DateTimeField,
@@ -180,6 +183,8 @@ export function EventosModule() {
   const [movementForm, setMovementForm] = useState(EMPTY_MOVEMENT_FORM);
   const [movementBusy, setMovementBusy] = useState(false);
   const [movementError, setMovementError] = useState("");
+  /** Envío por WhatsApp con plantilla (issue #35) para el cliente del evento. */
+  const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
@@ -711,6 +716,19 @@ export function EventosModule() {
                           label={`Imprimir orden de trabajo: ${event.name}`}
                           external
                         />
+                        {writable && whatsappHref(event.client.phone) ? (
+                          <AdminWhatsappTemplateButton
+                            title={`Enviar por WhatsApp con plantilla a ${event.client.company || event.client.name}`}
+                            onClick={() =>
+                              setTemplateTarget({
+                                kind: "event",
+                                id: event.id,
+                                label: event.client.company || event.client.name,
+                                phone: event.client.phone,
+                              })
+                            }
+                          />
+                        ) : null}
                       </span>
                     </AdminCell>
                   </AdminRow>
@@ -1142,6 +1160,10 @@ export function EventosModule() {
 
         {checklistEntries.length === 50 ? <AdminNote>Mostrando las primeras 50 tareas del filtro.</AdminNote> : null}
       </AdminPanel>
+
+      {templateTarget ? (
+        <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
+      ) : null}
     </div>
   );
 }
