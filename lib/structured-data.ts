@@ -31,10 +31,9 @@ export const PRODUCT_LIST_ID = `${SITE}/#productos`;
  * Perfil real del negocio.
  *
  * Reales hoy: nombre, descripción, teléfono/WhatsApp, correo, dirección
- * (Senador Long, Asunción), país, horario de atención, Instagram, logo e imagen
- * social. Preparados para completar: `postalCode`, `latitude`/`longitude` y
- * `taxID` (RUC). Mientras estén vacíos, los nodos no los declaran (nunca datos
- * inventados).
+ * (Senador Long 506, Villa Morra, Asunción), código postal, coordenadas, RUC,
+ * país, horario de atención, Instagram, logo e imagen social. Los campos que
+ * falten no se declaran (nunca datos inventados).
  */
 export const businessProfile = {
   name: "LedBox Paraguay",
@@ -42,17 +41,18 @@ export const businessProfile = {
     "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos. Instalación y soporte técnico incluidos en todo Paraguay.",
   telephone: "+595982029217",
   email: "santiago.rodas.sjr@gmail.com",
-  streetAddress: "Senador Long",
+  streetAddress: "Senador Long 506",
   city: "Asunción",
   region: "Asunción",
   country: "PY",
-  /** Código postal. Falta el dato real. */
-  postalCode: null as string | null,
-  /** Coordenadas del local. Falta el número de la calle para geolocalizar. */
-  latitude: null as number | null,
-  longitude: null as number | null,
+  postalCode: "1411",
+  /** Coordenadas del local (Senador Long 506, Villa Morra) — OpenStreetMap. */
+  latitude: -25.2909959 as number | null,
+  longitude: -57.5776718 as number | null,
   /** Horario de atención (lunes a viernes); schema.org lo publica tal cual. */
   openingHours: ["Mo-Fr 07:00-19:00"] as string[],
+  /** RUC (identificación fiscal paraguaya). */
+  taxId: "6241386-4" as string | null,
   areaServed: "Paraguay",
   sameAs: ["https://www.instagram.com/ledboxpy/"],
   logo: "/assets/icon-512.png",
@@ -134,13 +134,14 @@ export function organizationNode(): JsonLdNode {
     image: absoluteUrl(businessProfile.image),
     description: businessProfile.description,
     ...contactFields(),
+    ...(businessProfile.taxId ? { taxID: businessProfile.taxId } : {}),
     address: postalAddressNode(),
     areaServed: { "@type": "Country", name: businessProfile.areaServed },
     sameAs: businessProfile.sameAs,
   };
 }
 
-/** Negocio local con los datos reales de LedBox (dirección parcial mientras falte la calle). */
+/** Negocio local con los datos reales de LedBox (dirección completa y RUC reales). */
 export function localBusinessNode(): JsonLdNode {
   const geo = geoNode();
   return {
@@ -152,6 +153,7 @@ export function localBusinessNode(): JsonLdNode {
     image: absoluteUrl(businessProfile.image),
     logo: absoluteUrl(businessProfile.logo),
     ...contactFields(),
+    ...(businessProfile.taxId ? { taxID: businessProfile.taxId } : {}),
     address: postalAddressNode(),
     areaServed: { "@type": "Country", name: businessProfile.areaServed },
     parentOrganization: { "@id": ORGANIZATION_ID },
