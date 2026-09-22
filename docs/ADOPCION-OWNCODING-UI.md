@@ -11,7 +11,7 @@ usa; si falta y es genérico, se crea **en la librería** y se adopta acá.
 ## 1. Cómo se consume (una sola vez)
 
 ```bash
-npm install github:dariodeoli/owncoding-ui#v0.13.1 qrcode
+npm install github:dariodeoli/owncoding-ui#v0.14.0 qrcode
 # tailwind.config.js: presets: [preset] + corePlugins: { preflight: false }
 # globals.css: @import 'owncoding-ui/styles.css';
 ```
@@ -31,6 +31,7 @@ npm install github:dariodeoli/owncoding-ui#v0.13.1 qrcode
 
 - Instalar la librería + Tailwind **no cambia el panel**: capturas byte a byte
   idénticas en `/finanzas` y `/clientes`, misma huella de DOM/estilos.
+- **v0.14.0** suma lo que el piloto pedía: `owncodingContent`, tipos, `tokens.css`/`base.css`, fechas con `timeZone`, `formatGs` con símbolo, `ChipEstado` de negocio, 23 íconos nuevos y `Stat` con tono/nota.
 - **Formato de dinero decidido**: `Gs 1.234.567` (sin punto). La librería quedó
   alineada en `v0.13.1` (`Money`, `CeldaMoneda` y los formateadores puros).
 - **Tema decidido**: el panel mantiene `data-theme` por usuario; al adoptar se
@@ -105,12 +106,12 @@ donde hoy se aplica `data-theme`.
 
 ## 6. Plan mecánico de la prioridad 1 (sin Tailwind)
 
-Se adopta `v0.13.1` (solo utils puros): `npm install github:dariodeoli/owncoding-ui#v0.13.1`.
+Se adopta `v0.14.0` (solo utils puros): `npm install github:dariodeoli/owncoding-ui#v0.14.0`.
 Nada de Tailwind, nada de estilos: son funciones y catálogos.
 
 | Paso | Archivo(s) | Cambio |
 | --- | --- | --- |
-| 1 | `package.json`, `.npmrc`/env | fijar `owncoding-ui#v0.13.1` y documentar el token de build |
+| 1 | `package.json`, `.npmrc`/env | fijar `owncoding-ui#v0.14.0` y documentar el token de build |
 | 2 | `lib/admin-format.ts` | `formatMoney`/`formatMoneyInput` delegan en `formatGs`/`formatGsInput`/`parseGsInput`; se borra el `Intl` duplicado |
 | 3 | `lib/field-rules.ts` | el teléfono usa `parseTelefono`/`componerTelefono`/`telefonoValidado` (mismo contrato de `FIELD_*`: los mensajes no cambian) |
 | 4 | Tesorería/Conciliación/Datos de pago | el catálogo de bancos y sus logos salen de `BANCOS_PARAGUAY` + `logoDeBanco`, sin listas locales |
