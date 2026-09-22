@@ -93,7 +93,14 @@ function saveState(next) {
   writeFileSync(STATE_FILE, JSON.stringify({ ...state(), ...next }, null, 2) + "\n");
 }
 function curl(url, timeout = 15) {
-  const r = spawnSync("curl", ["-s", "-L", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", String(timeout), url], { encoding: "utf8" });
+  // Con jar de cookies: el flujo de la demo (raíz → sesión → /demo) completa y
+  // termina en 200 en vez de cortar en el 303 del endpoint de sesión.
+  const jar = join(CONFIG_DIR, "pp-cookies.txt");
+  const r = spawnSync(
+    "curl",
+    ["-s", "-L", "-c", jar, "-b", jar, "-o", "/dev/null", "-w", "%{http_code}", "--max-time", String(timeout), url],
+    { encoding: "utf8" },
+  );
   return (r.stdout || "").trim() || "000";
 }
 function curlBody(url, timeout = 15) {
