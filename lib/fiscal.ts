@@ -18,12 +18,6 @@ export type InvoiceTaxTypeValue = (typeof INVOICE_TAX_TYPES)[number];
 export const INVOICE_CONDITIONS = ["CASH", "CREDIT"] as const;
 export type InvoiceConditionValue = (typeof INVOICE_CONDITIONS)[number];
 
-export const INVOICE_STATUSES = ["ISSUED", "PAID", "VOID"] as const;
-export type InvoiceStatusValue = (typeof INVOICE_STATUSES)[number];
-
-export const FISCAL_PERIOD_STATUSES = ["OPEN", "CLOSED"] as const;
-export type FiscalPeriodStatusValue = (typeof FISCAL_PERIOD_STATUSES)[number];
-
 /** Fila de la que se calculan totales: línea bruta (ventas) o comprobante cargado (compras). */
 export type TaxRow = {
   subtotal?: number;

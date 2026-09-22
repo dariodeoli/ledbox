@@ -60,13 +60,6 @@ export function hasFiscalDetails(profile: FiscalProfile): boolean {
   return FISCAL_FIELDS.some((field) => Boolean(profile[field.key]));
 }
 
-/** ¿Falta el dato que la app usa como cabecera mínima? (para avisar, no para bloquear). */
-export function missingFiscalFields(profile: FiscalProfile): string[] {
-  return FISCAL_FIELDS.filter((field) => (field.key === "razonSocial" || field.key === "ruc") && !profile[field.key]).map(
-    (field) => field.label,
-  );
-}
-
 /** Mes fiscal (`YYYY-MM`) de un instante, en días de Asunción. */
 export { currentMonthKey, monthOf } from "@/lib/fiscal";
 
@@ -88,10 +81,6 @@ export type FiscalSummarySnapshot = FiscalMonthSummary & {
   /** Comprobantes del mes considerados (ventas y compras, sin anuladas). */
   counts: { sales: number; purchases: number; voided: number };
 };
-
-export function emptyTaxTotals(): InvoiceTaxTotals {
-  return { taxable10: 0, iva10: 0, taxable5: 0, iva5: 0, exempt: 0, total: 0, count: 0 };
-}
 
 /** Lee un snapshot guardado; `null` si la forma no es la esperada. */
 export function parseFiscalSummary(value: unknown): FiscalSummarySnapshot | null {
