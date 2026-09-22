@@ -58,7 +58,11 @@ export type AdminIconName =
   | "bank"
   | "lock"
   | "image"
-  | "checkin";
+  | "checkin"
+  /** Ajustes del panel (`/configuracion`): distinto del correo y de plantillas. */
+  | "settings"
+  /** Colapsar/expandir el sidebar de escritorio (solo íconos). */
+  | "panel-left";
 
 export type AdminSessionUser = {
   id: string;
