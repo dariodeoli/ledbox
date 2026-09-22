@@ -9,6 +9,7 @@ import {
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
   budgetStatusLabel,
+  daysUntilDue,
   formatBytes,
   formatDate,
   formatDateShort,
@@ -64,6 +65,7 @@ import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminM
 import { DateField, EmailField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
+import { currentMonthKey, monthKeyLabel, monthOf } from "@/lib/fiscal";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -77,6 +79,39 @@ const STATUS_OPTIONS = [
 
 /** Tablero kanban: una columna por estado comercial (set de estados, sin máquina). */
 const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.slice(1).map((option) => ({ value: option.value, label: option.label }));
+
+/** ¿El presupuesto sigue en juego? Mismo criterio del resumen: ni perdido ni cancelado. */
+function budgetInPlay(budget: AdminBudgetRow): boolean {
+  return budget.status !== "LOST" && budget.status !== "CANCELLED";
+}
+
+/**
+ * Urgencia comercial del presupuesto, el orden por defecto de la lista y de las
+ * columnas del tablero:
+ *
+ * 0 · vigencia por delante: lo que vence antes (hoy o más adelante) va primero.
+ * 1 · vigencia ya vencida, de la más reciente a la más vieja: hay que reenviarlo
+ *     o renovarlo, pero no es «lo que vence».
+ * 2 · sin validez cargada.
+ * 3 · perdido o cancelado (al final, del más reciente al más viejo).
+ */
+function budgetUrgencyRank(budget: AdminBudgetRow): number {
+  if (!budgetInPlay(budget)) return 3;
+  const days = daysUntilDue(budget.validUntil);
+  if (days === null) return 2;
+  return days >= 0 ? 0 : 1;
+}
+
+function compareBudgetUrgency(a: AdminBudgetRow, b: AdminBudgetRow): number {
+  const rankA = budgetUrgencyRank(a);
+  const rankB = budgetUrgencyRank(b);
+  if (rankA !== rankB) return rankA - rankB;
+  const timeA = a.validUntil ? new Date(a.validUntil).getTime() : Number.POSITIVE_INFINITY;
+  const timeB = b.validUntil ? new Date(b.validUntil).getTime() : Number.POSITIVE_INFINITY;
+  // Lo que todavía vence se lee del más próximo al más lejano; lo vencido y lo
+  // cerrado, del más reciente al más viejo.
+  return rankA === 0 ? timeA - timeB : timeB - timeA;
+}
 
 const EMPTY_FORM = {
   clientId: "",
@@ -750,13 +785,17 @@ export function PresupuestosModule() {
   const rows = useMemo(() => {
     return budgetRows
       .filter((budget) => (status === "ALL" ? true : budget.status === status))
-      .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]));
+      .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]))
+      .sort(compareBudgetUrgency);
   }, [budgetRows, query, status]);
 
   // Tablero (issue #26): el estado vive en las columnas, así que la búsqueda se
-  // aplica sin el filtro de estado. El movimiento pega el PATCH real del API.
+  // aplica sin el filtro de estado y el orden por urgencia fija cada columna.
   const searched = useMemo(
-    () => budgetRows.filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name])),
+    () =>
+      budgetRows
+        .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]))
+        .sort(compareBudgetUrgency),
     [budgetRows, query],
   );
 
@@ -765,7 +804,7 @@ export function PresupuestosModule() {
     const result = await adminSend("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
     return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
   }, []);
-  const board = useAdminBoardMove({ rows: budgetRows, move: moveBudget, onError: setBoardError });
+  const board = useAdminBoardMove({ rows: searched, move: moveBudget, onError: setBoardError });
 
   const boardCards = useMemo<AdminBoardCardData[]>(
     () =>
@@ -821,20 +860,26 @@ export function PresupuestosModule() {
     [board.rows, writable],
   );
 
-  const totals = useMemo(() => {
-    return budgetRows.reduce(
-      (accumulator, budget) => {
-        // Solo los cobros cobrados descuentan saldo (issue #16): un cobro a plazo
-        // pendiente o anulado todavía no es plata cobrada.
-        const paid = collectedAmount(budget.payments);
-        accumulator.quoted += budget.total;
-        accumulator.paid += paid;
-        accumulator.receivable += Math.max(0, budget.total - paid);
-        accumulator.margin += budget.total - budget.costEstimate;
-        return accumulator;
-      },
-      { quoted: 0, paid: 0, receivable: 0, margin: 0 },
+  // KPIs del módulo (spec 22-09-2026): vigentes, por vencer en 7 días, los
+  // aprobados del mes y el monto que sigue en juego. El detalle por presupuesto
+  // (cobrado, saldo, margen) vive en las columnas de la lista y en Finanzas.
+  const kpis = useMemo(() => {
+    const inPlay = budgetRows.filter(budgetInPlay);
+    const expiring = inPlay.filter((budget) => {
+      const days = daysUntilDue(budget.validUntil);
+      return days !== null && days >= 0 && days <= 7;
+    });
+    const month = currentMonthKey();
+    const approvedThisMonth = budgetRows.filter(
+      (budget) => budget.approvedAt && monthOf(new Date(budget.approvedAt)) === month,
     );
+    return {
+      inPlay: inPlay.length,
+      expiring: expiring.length,
+      approvedThisMonth: approvedThisMonth.length,
+      amount: inPlay.reduce((sum, budget) => sum + budget.total, 0),
+      monthLabel: monthKeyLabel(month),
+    };
   }, [budgetRows]);
 
   // Comprobantes del portal (issue #17): una sola consulta de metadatos por
@@ -1182,16 +1227,25 @@ export function PresupuestosModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de presupuestos">
-        <AdminKpi label="Total cotizado" icon="budgets" value={formatMoney(totals.quoted)} note="presupuestos vigentes" />
-        <AdminKpi label="Cobrado" icon="finance" value={formatMoney(totals.paid)} note="pagos registrados" tone="ok" />
-        <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals.receivable)} note="saldo de clientes" tone="warn" />
-        <AdminKpi label="Margen estimado" icon="finance" value={formatMoney(totals.margin)} note="venta menos costos" tone="accent" />
         <AdminKpi
-          label="Solicitudes del portal" icon="globe"
-          value={formatNumber(pendingRequests.length)}
-          note="esperando respuesta"
-          tone={pendingRequests.length > 0 ? "warn" : undefined}
+          label="Vigentes" icon="budgets"
+          value={formatNumber(kpis.inPlay)}
+          note="ni perdidos ni cancelados"
+          tone={kpis.inPlay > 0 ? "accent" : undefined}
         />
+        <AdminKpi
+          label="Por vencer (7 días)" icon="clock"
+          value={formatNumber(kpis.expiring)}
+          note="validez que termina esta semana"
+          tone={kpis.expiring > 0 ? "warn" : undefined}
+        />
+        <AdminKpi
+          label="Aprobados del mes" icon="check"
+          value={formatNumber(kpis.approvedThisMonth)}
+          note={kpis.monthLabel}
+          tone={kpis.approvedThisMonth > 0 ? "ok" : undefined}
+        />
+        <AdminKpi label="Monto en juego" icon="finance" value={formatMoney(kpis.amount)} note="Σ de los vigentes" />
       </section>
 
       <AdminToolbar>
