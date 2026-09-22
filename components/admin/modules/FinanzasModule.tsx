@@ -20,7 +20,6 @@ import {
   formatTime,
   isTodayAsuncion,
   jobStatusLabel,
-  paymentReminderMessage,
   paymentStatusLabel,
   paymentStatusTone,
   reminderChannelLabel,
@@ -79,7 +78,9 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
+  AdminWhatsappTemplateButton,
 } from "../AdminUI";
+import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { BudgetProofDialog } from "./PresupuestosModule";
@@ -281,21 +282,6 @@ function reminderToday(payment: AdminPaymentRow, channel: "email" | "whatsapp"):
   );
 }
 
-/** Link del mensaje prellenado al teléfono del cliente; `null` sin teléfono válido. */
-function paymentWhatsappHref(payment: AdminPaymentRow): string | null {
-  return whatsappHref(
-    payment.client.phone,
-    paymentReminderMessage({
-      client: payment.client.company || payment.client.name,
-      amount: payment.amount,
-      dueAt: payment.dueAt,
-      invoiceNumber: payment.invoiceNumber,
-      budgetTitle: payment.budget?.title ?? null,
-      portalUrl: payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken) : null,
-    }),
-  );
-}
-
 /** Fecha y hora corta del panel para el historial (`21 sept · 14:32`). */
 function reminderStamp(value: string): string {
   return `${formatDateShort(value)} · ${formatTime(value)}`;
@@ -331,14 +317,15 @@ function PaymentRemindersDialog({
   writable,
   busyId,
   onEmail,
-  onWhatsapp,
+  onTemplate,
   onClose,
 }: {
   payment: AdminPaymentRow;
   writable: boolean;
   busyId: string;
   onEmail: (payment: AdminPaymentRow) => void;
-  onWhatsapp: (payment: AdminPaymentRow) => void;
+  /** Abre el envío por WhatsApp con plantilla (issue #35). */
+  onTemplate: (payment: AdminPaymentRow) => void;
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -354,7 +341,6 @@ function PaymentRemindersDialog({
   const label = payment.client.company || payment.client.name;
   const emailToday = reminderToday(payment, "email");
   const whatsappToday = reminderToday(payment, "whatsapp");
-  const whatsappLink = paymentWhatsappHref(payment);
   const reminders = payment.reminders ?? [];
   const emailDoneToday = emailToday?.status === "sent";
 
@@ -433,24 +419,22 @@ function PaymentRemindersDialog({
             >
               {emailDoneToday ? "Enviado hoy" : "Recordar por email"}
             </AdminButton>
-            {whatsappLink ? (
-              <a
+            {whatsappHref(payment.client.phone) ? (
+              <button
+                type="button"
                 className="admin-btn"
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
                 data-done={whatsappToday ? "true" : undefined}
                 title={
                   whatsappToday
                     ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
-                    : `Recordar por WhatsApp: ${label}`
+                    : `Enviar por WhatsApp con plantilla: ${label}`
                 }
-                aria-label={`Recordar por WhatsApp: ${label}`}
-                onClick={() => onWhatsapp(payment)}
+                aria-label={`Enviar por WhatsApp con plantilla: ${label}`}
+                onClick={() => onTemplate(payment)}
               >
                 <WhatsappIcon size={15} />
-                <span>Recordar por WhatsApp</span>
-              </a>
+                <span>Enviar por WhatsApp</span>
+              </button>
             ) : (
               <span className="admin-muted">El cliente no tiene teléfono cargado</span>
             )}
@@ -897,6 +881,8 @@ export function FinanzasModule() {
   const [reminderBusyId, setReminderBusyId] = useState("");
   const [remindersFor, setRemindersFor] = useState("");
   const [runningReminders, setRunningReminders] = useState(false);
+  /** Envío por WhatsApp con plantilla (issue #35) para el cobro elegido. */
+  const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   // Comprobantes del portal (issue #17): metadatos por presupuesto y visor del
   // cobro pendiente, con "Marcar cobrado" a un clic.
@@ -1328,12 +1314,18 @@ export function FinanzasModule() {
     finance.reload();
   }
 
-  /** Abre WhatsApp con el mensaje prellenado y deja constancia del día (sin APIs externas). */
-  function remindByWhatsapp(payment: AdminPaymentRow) {
-    setReminderBusyId(`whatsapp:${payment.id}`);
-    void adminSend("/api/admin/reminders", { paymentId: payment.id, channel: "whatsapp" }).then((result) => {
-      setReminderBusyId("");
-      if (result.ok) finance.reload();
+  /**
+   * Abre el diálogo de plantilla para el cobro (issue #35): el mensaje se arma
+   * con los datos reales y el envío queda en la auditoría y en el historial del
+   * cobro (mismo `PaymentReminderLog` del canal WhatsApp).
+   */
+  function sendWhatsappTemplate(payment: AdminPaymentRow) {
+    setRemindersFor("");
+    setTemplateTarget({
+      kind: "payment",
+      id: payment.id,
+      label: payment.client.company || payment.client.name,
+      phone: payment.client.phone,
     });
   }
 
@@ -2715,7 +2707,6 @@ export function FinanzasModule() {
               const label = payment.client.company || payment.client.name;
               const emailToday = reminderToday(payment, "email");
               const whatsappToday = reminderToday(payment, "whatsapp");
-              const whatsappLink = paymentWhatsappHref(payment);
               const emailDoneToday = emailToday?.status === "sent";
               const budgetProofs = payment.budget ? proofsByBudget[payment.budget.id] ?? [] : [];
               const proofTitle = budgetProofs.length === 1
@@ -2807,23 +2798,15 @@ export function FinanzasModule() {
                           onClick={() => void remindByEmail(payment)}
                         />
                       ) : null}
-                      {writable && whatsappLink ? (
-                        <a
-                          className="admin-iconbtn"
-                          href={whatsappLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          data-done={whatsappToday ? "true" : undefined}
+                      {writable && whatsappHref(payment.client.phone) ? (
+                        <AdminWhatsappTemplateButton
                           title={
                             whatsappToday
                               ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
-                              : `Recordar por WhatsApp: ${label}`
+                              : `Enviar por WhatsApp con plantilla: ${label}`
                           }
-                          aria-label={`Recordar por WhatsApp: ${label}`}
-                          onClick={() => remindByWhatsapp(payment)}
-                        >
-                          <WhatsappIcon size={15} />
-                        </a>
+                          onClick={() => sendWhatsappTemplate(payment)}
+                        />
                       ) : null}
                       <AdminButton
                         icon="clock"
@@ -3099,8 +3082,16 @@ export function FinanzasModule() {
           writable={writable}
           busyId={reminderBusyId}
           onEmail={(payment) => void remindByEmail(payment)}
-          onWhatsapp={remindByWhatsapp}
+          onTemplate={sendWhatsappTemplate}
           onClose={() => setRemindersFor("")}
+        />
+      ) : null}
+
+      {templateTarget ? (
+        <MessageTemplateSendDialog
+          target={templateTarget}
+          onClose={() => setTemplateTarget(null)}
+          onRegistered={() => finance.reload()}
         />
       ) : null}
 

@@ -185,6 +185,8 @@ export type TextAreaFieldProps = {
   disabled?: boolean;
   name?: string;
   id?: string;
+  /** Ref del `<textarea>` cuando el llamador inserta texto en el cursor (chips de variables). */
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
 };
 
 export function TextAreaField({
@@ -202,11 +204,13 @@ export function TextAreaField({
   disabled,
   name,
   id,
+  textareaRef,
 }: TextAreaFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <textarea
+        ref={textareaRef}
         id={label ? fieldId : id}
         value={value}
         onChange={(event) => onChange(event.target.value)}

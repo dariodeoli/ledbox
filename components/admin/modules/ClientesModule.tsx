@@ -59,7 +59,9 @@ import {
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
+  AdminWhatsappTemplateButton,
 } from "../AdminUI";
+import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { EmailField, PhoneField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { FIELD_LIMITS, FIELD_MESSAGES, emailValid } from "@/lib/field-rules";
@@ -247,18 +249,21 @@ function ClientLinks({
   name,
   message,
   compact = false,
+  skipWhatsapp = false,
 }: {
   client: Pick<AdminClientRow, "phone" | "whatsapp" | "website" | "instagram">;
   name: string;
   message?: string | null;
   compact?: boolean;
+  /** Con envío por plantilla disponible, el link simple no se dibuja. */
+  skipWhatsapp?: boolean;
 }) {
   const instagram = instagramHref(client.instagram);
   const instagramHandle = instagramLabel(client.instagram);
   const web = websiteHref(client.website);
   return (
     <>
-      <AdminWhatsappLink phone={client.whatsapp || client.phone} name={name} message={compact ? null : message} />
+      {skipWhatsapp ? null : <AdminWhatsappLink phone={client.whatsapp || client.phone} name={name} message={compact ? null : message} />}
       {instagram ? (
         <AdminIconLink
           href={instagram}
@@ -292,6 +297,8 @@ export function ClientesModule() {
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
   const [detail, setDetail] = useState<AdminClientRow | null>(null);
+  /** Envío por WhatsApp con plantilla (issue #35) para el cliente elegido. */
+  const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   const writable = canWrite(role);
 
@@ -762,7 +769,20 @@ export function ClientesModule() {
                         aria-label={`Ver la ficha de ${name}`}
                         onClick={() => setDetail(client)}
                       />
-                      <ClientLinks client={client} name={name} compact />
+                      <ClientLinks client={client} name={name} compact skipWhatsapp={writable} />
+                      {writable && whatsappHref(client.whatsapp || client.phone) ? (
+                        <AdminWhatsappTemplateButton
+                          title={`Enviar por WhatsApp con plantilla a ${name}`}
+                          onClick={() =>
+                            setTemplateTarget({
+                              kind: "client",
+                              id: client.id,
+                              label: name,
+                              phone: client.whatsapp || client.phone,
+                            })
+                          }
+                        />
+                      ) : null}
                       {client.contactEmail || client.email ? (
                         <AdminIconLink
                           href={`mailto:${client.contactEmail || client.email}`}
@@ -789,6 +809,11 @@ export function ClientesModule() {
           onEdit={openEdit}
           onClose={() => setDetail(null)}
         />
+      ) : null}
+
+      {templateTarget ? (
+        <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
+
       ) : null}
     </div>
   );

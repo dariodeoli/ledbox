@@ -463,6 +463,11 @@ export async function recordWhatsappReminder(input: {
   target: ReminderTarget;
   actor: AuditContext;
   now?: Date;
+  /**
+   * Plantilla usada cuando el mensaje se armó desde `/plantillas` (issue #35);
+   * sin ella el mensaje es el recordatorio fijo de Finanzas.
+   */
+  templateTitle?: string | null;
 }): Promise<{ reminder: PaymentReminderLog; alreadyToday: boolean } | null> {
   const fields = reminderTargetFields(input.target);
   const now = input.now ?? new Date();
@@ -489,13 +494,16 @@ export async function recordWhatsappReminder(input: {
         ...actorFields(input.actor),
       },
     });
+    const template = input.templateTitle?.trim();
     await recordAudit({
       context: input.actor,
       action: "remind",
       entity: fields.expectedPaymentId ? "ExpectedPayment" : "ClientPayment",
       entityId: fields.expectedPaymentId ?? (fields.paymentId as string),
-      summary: `Abrió WhatsApp para recordarle el pago a «${label}» (${fields.concept})`,
-      detail: { fields: { channel: "whatsapp", to, status: "opened" } },
+      summary: template
+        ? `Abrió WhatsApp para recordarle el pago a «${label}» (${fields.concept}) con la plantilla «${template}»`
+        : `Abrió WhatsApp para recordarle el pago a «${label}» (${fields.concept})`,
+      detail: { fields: { channel: "whatsapp", to, status: "opened", ...(template ? { template } : {}) } },
     });
     return { reminder, alreadyToday: false };
   } catch (error) {

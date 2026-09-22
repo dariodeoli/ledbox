@@ -18,6 +18,7 @@ import {
   inventoryStatusLabel,
   paymentProofMimeLabel,
   statusTone,
+  whatsappHref,
   type AdminTone,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
@@ -57,7 +58,9 @@ import {
   AdminTable,
   AdminTimelineDialog,
   AdminToolbar,
+  AdminWhatsappTemplateButton,
 } from "../AdminUI";
+import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { DateField, EmailField, MoneyField, NumberField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
@@ -726,6 +729,8 @@ export function PresupuestosModule() {
   const [sendBusy, setSendBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [sendError, setSendError] = useState("");
+  /** Envío por WhatsApp con plantilla (issue #35) para el cliente del presupuesto. */
+  const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   const writable = canWriteFinance(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
@@ -1534,6 +1539,19 @@ export function PresupuestosModule() {
                           onClick={() => openSend(budget)}
                         />
                       ) : null}
+                      {writable && whatsappHref(budget.client.phone) ? (
+                        <AdminWhatsappTemplateButton
+                          title={`Enviar por WhatsApp con plantilla a ${budget.client.company || budget.client.name}`}
+                          onClick={() =>
+                            setTemplateTarget({
+                              kind: "budget",
+                              id: budget.id,
+                              label: budget.client.company || budget.client.name,
+                              phone: budget.client.phone,
+                            })
+                          }
+                        />
+                      ) : null}
                       {budgetProofs.length > 0 ? (
                         <AdminButton
                           icon="eye"
@@ -2121,6 +2139,11 @@ export function PresupuestosModule() {
           path={`/api/admin/timeline?budgetId=${encodeURIComponent(timelineBudget.id)}`}
           onClose={() => setTimelineBudget(null)}
         />
+      ) : null}
+
+      {templateTarget ? (
+        <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
+
       ) : null}
     </div>
   );

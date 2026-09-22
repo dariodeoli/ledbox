@@ -3,7 +3,7 @@
  * El API revalida rol por endpoint; acá solo se decide qué se muestra y qué se puede accionar.
  */
 
-import type { AdminIconName, AdminRole } from "./admin-types";
+import type { AdminIconName, AdminRole, MessageTemplateCategoryValue } from "./admin-types";
 
 export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
@@ -38,6 +38,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
       { href: "/leads", label: "Leads", icon: "leads" },
       { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
       { href: "/finanzas", label: "Finanzas", icon: "finance" },
+      { href: "/plantillas", label: "Plantillas", icon: "mail" },
     ],
   },
   {
@@ -116,6 +117,21 @@ export function canWriteClients(role: AdminRole | null | undefined): boolean {
 
 export function canManageUsers(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN";
+}
+
+/**
+ * Plantillas de mensajes (issue #35): OWNER/ADMIN administran todas las
+ * categorías; FINANCE solo cobranzas y OPERATIONS solo eventos. Es la misma
+ * regla que revalida el API (`/api/admin/message-templates`), server-side.
+ */
+export function canWriteTemplateCategory(
+  role: AdminRole | null | undefined,
+  category: MessageTemplateCategoryValue,
+): boolean {
+  if (role === "OWNER" || role === "ADMIN") return true;
+  if (role === "FINANCE") return category === "collection";
+  if (role === "OPERATIONS") return category === "event";
+  return false;
 }
 
 /** Nombre y logos de la empresa (`org.manage` en el API): OWNER y ADMIN. */

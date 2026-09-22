@@ -820,6 +820,18 @@ export function reminderStatusTone(value: string | null | undefined): AdminTone 
   return REMINDER_STATUS_TONES[value] ?? "neutral";
 }
 
+// ── Plantillas de mensajes (issue #35) ──────────────────────────────────────
+
+const MESSAGE_TEMPLATE_CATEGORY: Record<string, string> = {
+  budget: "Presupuestos",
+  client: "Clientes",
+  event: "Eventos",
+  collection: "Cobranzas",
+  other: "Otras",
+};
+
+export const messageTemplateCategoryLabel = (value: string | null | undefined) => label(MESSAGE_TEMPLATE_CATEGORY, value);
+
 /** ¿El valor cae en el día de Asunción de hoy? (para el "enviado hoy" del recordatorio). */
 export function isTodayAsuncion(value: string | Date | null | undefined): boolean {
   const date = toDate(value);
@@ -1169,6 +1181,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   TreasuryAccount: "Cuenta de tesorería",
   TreasuryMovement: "Movimiento de tesorería",
   Expense: "Gasto",
+  MessageTemplate: "Plantilla de mensaje",
 };
 
 const AUDIT_FIELD: Record<string, string> = {
@@ -1225,6 +1238,7 @@ const AUDIT_FIELD: Record<string, string> = {
   logoDark: "Logo oscuro",
   paymentId: "Cobro",
   category: "Categoría",
+  body: "Mensaje",
   kind: "Tipo de ítem",
   quantity: "Cantidad",
   replacementCost: "Reposición",
@@ -1267,6 +1281,9 @@ const AUDIT_FIELD: Record<string, string> = {
   sentCount: "Envíos",
   lastSentAt: "Último envío",
   via: "Ingreso",
+  channel: "Canal",
+  to: "Destino",
+  template: "Plantilla",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */
@@ -1320,6 +1337,7 @@ export function auditValueLabel(entity: string | null | undefined, field: string
   if (key === "direction") return treasuryDirectionLabel(text);
   if (key === "origin") return treasuryOriginLabel(text);
   if (key === "category" && entity === "Expense") return expenseCategoryLabel(text);
+  if (key === "category" && entity === "MessageTemplate") return messageTemplateCategoryLabel(text);
   if (key === "kind") return inventoryKindLabel(text);
   if (key === "category") return supplierCategoryLabel(text);
   if (key === "items" || key === "itemCount" || key === "installments") return numberFormat.format(Number(text) || 0);

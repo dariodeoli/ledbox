@@ -96,6 +96,19 @@ export function AdminWhatsappLink({
   );
 }
 
+/**
+ * Acción compacta de WhatsApp con plantilla (issue #35): abre el diálogo de
+ * envío con el mensaje prellenado. El llamador la dibuja solo cuando el contacto
+ * tiene teléfono (regla existente de WhatsApp).
+ */
+export function AdminWhatsappTemplateButton({ title, onClick }: { title: string; onClick: () => void }) {
+  return (
+    <button type="button" className="admin-iconbtn" title={title} aria-label={title} onClick={onClick}>
+      <WhatsappIcon size={15} />
+    </button>
+  );
+}
+
 export function AdminBadge({ tone = "neutral", title, children }: { tone?: AdminTone; title?: string; children: React.ReactNode }) {
   return (
     <span className="admin-badge" data-tone={tone} title={title}>
