@@ -43,7 +43,9 @@ export async function GET(request: Request) {
     headers.append("Set-Cookie", `ledbox_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
     headers.append("Set-Cookie", `${INVITATION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
     if (!result.ok) {
-      headers.set("Location", `${invitationUrl}?error=${encodeURIComponent(result.error)}`);
+      // Código estable: la página de invitación traduce con `authErrorMessage`
+      // y nunca muestra detalle del proveedor (issue #38).
+      headers.set("Location", `${invitationUrl}?error=${encodeURIComponent(result.code ?? "invitation_failed")}`);
       return new Response(null, { status: 302, headers });
     }
     const user = await db.adminUser.findUnique({ where: { id: result.userId } });
@@ -62,7 +64,7 @@ export async function GET(request: Request) {
   const activeOrganizationId = await resolveActiveOrganizationId(user.id);
   if (!activeOrganizationId) return Response.redirect(`${loginUrl}?error=google_not_allowed`);
   const session = await createSession({ id: user.id, email: user.email, role: user.role }, activeOrganizationId);
-  const headers = new Headers({ Location: `${siteUrl.replace(/\/$/, "")}/admin` });
+  const headers = new Headers({ Location: `${siteUrl.replace(/\/$/, "")}/dashboard` });
   headers.append("Set-Cookie", `ledbox_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
   headers.append("Set-Cookie", `${authConfig.sessionCookieName}=${session.jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${session.expiresAt.toUTCString()}`);
   return new Response(null, { status: 302, headers });

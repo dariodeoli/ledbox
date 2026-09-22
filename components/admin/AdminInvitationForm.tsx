@@ -7,6 +7,7 @@ import type { AdminInvitationPublicView } from "@/lib/admin-types";
 import { AdminCountdown, AdminError, AdminNote, AdminSpinner, AdminSuccess } from "./AdminUI";
 import { HoneypotField, PasswordField, TextField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
+import { authErrorMessage } from "@/lib/google-auth";
 
 /**
  * Aceptación pública de una invitación al equipo (issue #31): la persona
@@ -73,7 +74,7 @@ export function AdminInvitationForm({
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState(errorParam);
+  const [error, setError] = useState(authErrorMessage(errorParam));
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
 

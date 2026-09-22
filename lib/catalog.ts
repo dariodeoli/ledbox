@@ -28,3 +28,17 @@ export const products: Product[] = [
 
 export const formatGs = (amount: number) => `Gs. ${amount.toLocaleString("es-PY")}`;
 export const unitDescription = (unit: BillingUnit) => unit === "sqm-day" ? "m² / día" : unit === "day" ? "día" : "evento";
+
+// ── URLs públicas por producto (issue #38) ─────────────────────────────────
+// El `id` del catálogo es el slug canónico de la ficha (`/productos/<id>`);
+// no hay un segundo identificador que se pueda desincronizar.
+
+/** Path público de la ficha de un producto. */
+export function productPath(product: Pick<Product, "id">): string {
+  return `/productos/${product.id}`;
+}
+
+/** Producto por slug de URL; `null` si no existe (la página responde 404). */
+export function productBySlug(slug: string): Product | null {
+  return products.find(product => product.id === slug) ?? null;
+}

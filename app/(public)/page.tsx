@@ -1,13 +1,17 @@
 "use client";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { CartDrawer, type CartItem } from "@/components/cart/CartDrawer";
 import { LeadCaptureDialog } from "@/components/leads/LeadCaptureDialog";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
-import { products, type Product } from "@/lib/catalog";
-import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
-import { publicConfig, whatsappUrl } from "@/lib/public-config";
-import { APP_VERSION_LABEL } from "@/lib/version";
+import { type Product } from "@/lib/catalog";
+import { InstagramIcon } from "@/components/public/InstagramIcon";
+import { PublicFaq } from "@/components/public/PublicFaq";
+import { PublicFooter } from "@/components/public/PublicFooter";
+import { PublicNav } from "@/components/public/PublicNav";
+import { PublicWhatsappFloat } from "@/components/public/PublicWhatsappFloat";
+import { StructuredData } from "@/components/public/StructuredData";
+import { whatsappUrl } from "@/lib/public-config";
+import { faqNode, pageGraph, productListNode } from "@/lib/structured-data";
 
 const whatsapp = whatsappUrl;
 const services = [
@@ -21,13 +25,11 @@ const reasons = [["◈", "Equipos propios", "Disponibilidad y control sobre cada
 export default function HomePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [leadOpen, setLeadOpen] = useState(false);
-  const [navScrolled, setNavScrolled] = useState(false);
   const [stickyClosed, setStickyClosed] = useState(false);
   const [stickyVisible, setStickyVisible] = useState(false);
 
   useEffect(() => {
     const onScroll = () => {
-      setNavScrolled(window.scrollY > 40);
       setStickyVisible(window.scrollY > Math.min(520, window.innerHeight * 0.65));
     };
     onScroll();
@@ -40,15 +42,12 @@ export default function HomePage() {
   }, [stickyClosed, stickyVisible]);
   const addProduct = (product: Product) => { setCart(current => { const existing = current.find(item => item.product.id === product.id); return existing ? current.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { product, quantity: 1, duration: 1 }]; }); setLeadOpen(true); };
   const openLead = () => setLeadOpen(true);
-  const productStructuredData = products.map(product => ({ "@type": "Product", name: product.name, description: product.description, image: `${publicConfig.siteUrl}${product.image}`, brand: { "@type": "Brand", name: "LedBox Paraguay" }, offers: { "@type": "Offer", priceCurrency: "PYG", price: product.price, availability: "https://schema.org/InStock", url: `${publicConfig.siteUrl}/#productos`, priceSpecification: { "@type": "UnitPriceSpecification", priceCurrency: "PYG", price: product.price, unitText: product.unitLabel } } }));
-  const businessStructuredData = { "@context": "https://schema.org", "@graph": [{ "@type": "Organization", name: "LedBox Paraguay", url: `${publicConfig.siteUrl}/`, logo: `${publicConfig.siteUrl}/assets/icon-512.png`, sameAs: ["https://www.instagram.com/ledboxpy/"] }, { "@type": "LocalBusiness", name: "LedBox Paraguay", description: "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos.", url: `${publicConfig.siteUrl}/`, telephone: "+595982029217", areaServed: { "@type": "Country", name: "Paraguay" }, sameAs: ["https://www.instagram.com/ledboxpy/"] }, { "@type": "WebSite", name: "LedBox Paraguay", url: `${publicConfig.siteUrl}/`, inLanguage: "es-PY" }, { "@type": "FAQPage", mainEntity: [{ "@type": "Question", name: "¿Los precios son definitivos?", acceptedAnswer: { "@type": "Answer", text: "Son precios de lista orientativos. La cotización final depende de días, cantidad, combinación, traslado, instalación y necesidades del evento." } }, { "@type": "Question", name: "¿Trabajan en todo Paraguay?", acceptedAnswer: { "@type": "Answer", text: "Sí, coordinamos alquileres, instalación y soporte para eventos en todo Paraguay." } }] }, ...productStructuredData] };
+  // Datos estructurados de la landing (issue #38): el catálogo enlaza cada
+  // producto con su URL propia y el FAQPage acompaña la sección visible.
+  const structuredData = pageGraph(productListNode(), faqNode());
   return <>
     <div className="led-grid-bg" aria-hidden="true" />
-    <nav id="nav" className={navScrolled ? "scrolled" : ""} aria-label="Navegación principal">
-      <a href="#hero" className="logo-link" aria-label="LedBox, volver al inicio"><Image className="logo-img" src="/assets/icon-192.png" alt="LedBox" width={192} height={192} priority /></a>
-      <div className="nav-center"><a href="#productos">Productos</a><a href="#servicios">Servicios</a><a href="#marcas">Marcas</a><a href="#proceso">Proceso</a><a href="#contacto">Contacto</a></div>
-      <a href={whatsapp("Hola LedBox! Quiero consultar disponibilidad.")} target="_blank" rel="noopener noreferrer" className="nav-cta">Consultar →</a>
-    </nav>
+    <PublicNav />
 
     <main>
       <header id="hero">
@@ -62,16 +61,16 @@ export default function HomePage() {
       <section id="servicios" aria-labelledby="services-title"><div className="sec-head"><div><div className="sec-kicker">Más que equipos</div><h2 id="services-title" className="sec-title rise">Servicios<span className="led">.</span></h2></div><p className="sec-desc rise">Una experiencia visual completa, desde la primera idea hasta el último minuto de tu evento.</p></div>{services.map(([num,title,desc,cta]) => <a className="svc rise" href="#contacto" key={num}><span className="num">{num}</span><h3>{title}</h3><p>{desc}</p><span className="go">{cta}</span></a>)}</section>
       <section id="marcas" aria-labelledby="brands-title"><div className="sr-only" id="brands-title">Marcas que confiaron en LedBox</div><div className="brands-track" aria-hidden="true">{["Tigo", "Personal", "Bancard", "Cervepar", "Coca-Cola", "Pilsen", "Banco Atlas", "Claro", "ueno", "Shopping del Sol", "Tigo", "Personal", "Bancard"].map((brand, i) => <span className="brand" key={`${brand}-${i}`}>{brand}</span>)}</div><p className="marcas-note">Marcas que ya hicieron visible su próximo evento · <a href="#contacto">La próxima puede ser la tuya →</a></p></section>
       <section id="proceso" aria-labelledby="process-title"><div className="sec-head"><div><div className="sec-kicker">Así trabajamos</div><h2 id="process-title" className="sec-title rise">Proceso<span className="led">.</span></h2></div><p className="sec-desc rise">Simple para vos. Preciso para nosotros. Sin sorpresas el día del evento.</p></div><div className="steps">{steps.map(([num,title,desc]) => <div className="stp rise" key={num}><div className="n">{num}</div><h3>{title}</h3><p>{desc}</p></div>)}</div></section>
-      <section id="porque" aria-labelledby="why-title"><div className="sec-head"><div><div className="sec-kicker">Por qué LedBox</div><h2 id="why-title" className="sec-title rise">Hecho para<br /><span className="led">impactar.</span></h2></div><p className="sec-desc rise">La tecnología es el medio. Tu marca es la protagonista.</p></div><div className="why-grid">{reasons.map(([icon,title,desc]) => <div className="why rise" key={title}><div className="ico" aria-hidden="true">{icon}</div><h4>{title}</h4><p>{desc}</p></div>)}</div></section>
+      <section id="porque" aria-labelledby="why-title"><div className="sec-head"><div><div className="sec-kicker">Por qué LedBox</div><h2 id="why-title" className="sec-title rise">Hecho para<br /><span className="led">impactar.</span></h2></div><p className="sec-desc rise">La tecnología es el medio. Tu marca es la protagonista.</p></div><div className="why-grid">{reasons.map(([icon,title,desc]) => <div className="why rise" key={title}><div className="ico" aria-hidden="true">{icon}</div><h3>{title}</h3><p>{desc}</p></div>)}</div></section>
+      <PublicFaq />
       <section id="contacto" aria-labelledby="contact-title"><div className="c-left"><div><div className="sec-kicker">Hablemos</div><h2 id="contact-title" className="c-title rise">Tu evento.<br /><span className="led">En grande.</span></h2><p className="c-desc">Contanos qué estás preparando y armamos una propuesta a la medida de tu evento.</p></div><div className="c-meta"><a href={whatsapp("Hola LedBox! Quiero consultar disponibilidad.")} target="_blank" rel="noopener noreferrer"><b>WhatsApp:</b> +595 982 029 217 →</a><a href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer"><b>Instagram:</b> @ledboxpy</a><span><b>Santiago J. Rodas</b> · Gerente</span><span>Asunción · Alquileres en todo Paraguay 🇵🇾</span></div></div><div className="c-right rise"><p className="chips-title">Consultas rápidas — un toque y te ayudamos</p><div className="chips"><button className="chip" type="button" onClick={openLead}>▣ Pantalla LED →</button><button className="chip" type="button" onClick={openLead}>◫ Tótem / Kiosko Touch →</button><button className="chip" type="button" onClick={openLead}>⌂ Stand para evento →</button><button className="chip" type="button" onClick={openLead}>🎥 Cobertura digital →</button></div><button className="btn-led" type="button" onClick={openLead}>Solicitar cotización →</button><p className="f-note contact-note">Te pedimos solo los datos necesarios para responderte y preparar tu cotización.</p></div></section>
     </main>
 
-    <footer><div className="ft-top"><a href="#hero" className="logo-link" aria-label="LedBox, volver al inicio"><Image className="logo-img" src="/assets/icon-192.png" alt="LedBox" width={192} height={192} /></a><div className="ft-links"><a href="#productos">Productos</a><a href="#servicios">Servicios</a><a href="#proceso">Proceso</a><a href="#contacto">Contacto</a><a href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer">Instagram</a></div></div><a className="ft-social" href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer" aria-label="Instagram @ledboxpy"><InstagramIcon /><span>Instagram · @ledboxpy</span></a><div className="ft-div" /><div className="ft-bottom"><span>© 2026 LedBox Paraguay · Todos los derechos reservados</span><span>Tecnología visual que impulsa tu marca</span><span>Asunción, Paraguay · ledbox.online</span></div><div className="ft-credit"><span>© 2026 LedBox · EventOS {APP_VERSION_LABEL}</span><span>Desarrollado por <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">Owncoding</a></span></div><div className="ft-bg" aria-hidden="true">LEDBOX</div></footer>
+    <PublicFooter />
     <CartDrawer items={cart} onChange={setCart} onQuote={openLead} />
-    <a href={whatsapp("Hola LedBox! Quiero más información.")} target="_blank" rel="noopener noreferrer" className="wa-float" aria-label="Abrir WhatsApp"><WhatsappIcon size={28} /></a>
-    {!stickyClosed && <div id="sticky-cta" className={stickyVisible ? "show" : ""} role="complementary" aria-label="Consultar disponibilidad" aria-hidden={!stickyVisible}><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}
+    <PublicWhatsappFloat />
+    {!stickyClosed && <div id="sticky-cta" className={stickyVisible ? "show" : ""} role="complementary" aria-label="Consultar disponibilidad" aria-hidden={!stickyVisible} inert={!stickyVisible}><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}
     <LeadCaptureDialog open={leadOpen} items={cart} onClose={() => setLeadOpen(false)} />
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(businessStructuredData) }} />
+    <StructuredData graph={structuredData} />
   </>;
 }
-function InstagramIcon() { return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.8" /><circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.8" /><circle cx="17.4" cy="6.7" r="1" fill="currentColor" /></svg>; }
