@@ -270,6 +270,15 @@ export default async function DemoPage() {
         organizationName={DEMO_ORGANIZATION_NAME}
         pendingUrl={pendingUrl}
         approvedUrl={approvedUrl}
+        resetForm={
+          <form method="post" action="/api/demo/session">
+            <input type="hidden" name="next" value="/demo" />
+            <button className="admin-btn" type="submit" title="Vuelve a generar los datos simulados con fechas de hoy">
+              <AdminIcon name="refresh" size={15} />
+              <span>Reiniciar los datos</span>
+            </button>
+          </form>
+        }
       />
 
       <section className="admin-kpis" aria-label="Datos simulados de la demo">

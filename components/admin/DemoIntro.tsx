@@ -20,10 +20,13 @@ export function DemoIntro({
   organizationName,
   pendingUrl,
   approvedUrl,
+  resetForm,
 }: {
   organizationName: string;
   pendingUrl: string | null;
   approvedUrl: string | null;
+  /** Formulario de «Reiniciar los datos» (POST a `/api/demo/session`), armado en la página. */
+  resetForm: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -95,13 +98,7 @@ export function DemoIntro({
             <AdminIcon name="overview" size={15} />
             <span>Ir al resumen</span>
           </Link>
-          <form method="post" action="/api/demo/session">
-            <input type="hidden" name="next" value="/demo" />
-            <button className="admin-btn" type="submit" title="Vuelve a generar los datos simulados con fechas de hoy">
-              <AdminIcon name="refresh" size={15} />
-              <span>Reiniciar los datos</span>
-            </button>
-          </form>
+          {resetForm}
         </div>
       </div>
 
