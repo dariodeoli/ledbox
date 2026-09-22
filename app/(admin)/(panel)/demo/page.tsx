@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
+import { DemoIntro } from "@/components/admin/DemoIntro";
 import { AdminBadge, AdminCountdown, AdminEmpty, AdminKpi, AdminPanel } from "@/components/admin/AdminUI";
 import {
   adminRoleLabel,
@@ -265,57 +266,11 @@ export default async function DemoPage() {
 
   return (
     <div className="admin-module-page admin-demo-page">
-      <section className="admin-demo-hero">
-        <span className="admin-demo-badge">DEMO</span>
-        <h2 className="admin-demo-title">
-          Demo de EventOS <span>·</span> {DEMO_ORGANIZATION_NAME}
-        </h2>
-        <p className="admin-demo-lede">
-          Estás en la demo pública de <strong>EventOS</strong> con datos simulados de una empresa de ejemplo ({" "}
-          <strong>{DEMO_ORGANIZATION_NAME}</strong>): ferias, clientes, presupuestos, inventario, finanzas, tesorería,
-          gastos y conciliación sobre el calendario real de eventos del Paraguay. Son{" "}
-          <strong>datos simulados, incluidos los casos difíciles</strong>: mora, cheques rechazados, promotoras no
-          disponibles, equipos dañados o faltantes, checklists incompletos, proveedores atrasados, gastos todavía{" "}
-          <strong>«A definir»</strong>, comprobantes <strong>por confirmar</strong> y recordatorios que fallan, igual que
-          en una semana real de operación. También vas a ver un logo y avatares propios: la empresa de ejemplo tiene
-          identidad. La sesión es automática y todo el panel es de <strong>solo lectura</strong>: no se guardan cambios ni
-          se toca información real.
-        </p>
-        <div className="admin-demo-actions">
-          {pendingUrl ? (
-            <a className="admin-btn admin-btn--primary" href={pendingUrl} target="_blank" rel="noreferrer" title="Portal del presupuesto pendiente: proponé cantidades y días o pedí una rebaja">
-              <AdminIcon name="external" size={15} />
-              <span>Probar la autogestión</span>
-            </a>
-          ) : null}
-          {approvedUrl ? (
-            <a className="admin-btn" href={approvedUrl} target="_blank" rel="noreferrer" title="Portal del presupuesto aprobado: plan de pagos y datos de pago de la empresa">
-              <AdminIcon name="external" size={15} />
-              <span>Presupuesto aprobado</span>
-            </a>
-          ) : null}
-          <Link className="admin-btn" href="/dashboard">
-            <AdminIcon name="overview" size={15} />
-            <span>Ir al resumen</span>
-          </Link>
-          <form method="post" action="/api/demo/session">
-            <input type="hidden" name="next" value="/demo" />
-            <button className="admin-btn" type="submit" title="Vuelve a generar los datos simulados con fechas de hoy">
-              <AdminIcon name="refresh" size={15} />
-              <span>Reiniciar los datos</span>
-            </button>
-          </form>
-        </div>
-        <p className="admin-demo-footnote">
-          EventOS es la app; {DEMO_ORGANIZATION_NAME} es la empresa de ejemplo que la usa en esta demo (el portal del
-          cliente conserva la marca LedBox). Las ferias y marcas que aparecen son referencias reales del mercado paraguayo
-          usadas como datos simulados, con contactos inventados; las fechas del calendario se re-anclan a hoy cada vez que
-          entrás, y con ellas la mora, los equipos faltantes, los gastos sin proyecto y los comprobantes en revisión: la
-          demo muestra también lo que sale mal. La cuenta demo entra como <strong>VIEWER sin PIN ni auto-bloqueo</strong>:
-          no se bloquea sola y los módulos de administración (Usuarios, Empresa, Configuración y Auditoría) quedan para
-          OWNER/ADMIN — acá se resumen en la portada. Para salir de la demo usá «Salir de la demo» en el aviso superior.
-        </p>
-      </section>
+      <DemoIntro
+        organizationName={DEMO_ORGANIZATION_NAME}
+        pendingUrl={pendingUrl}
+        approvedUrl={approvedUrl}
+      />
 
       <section className="admin-kpis" aria-label="Datos simulados de la demo">
         <AdminKpi label="Clientes" value={formatNumber(clientCount)} note="finales y revendedores" />

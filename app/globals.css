@@ -636,17 +636,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-bg-2: #ffffff;
   --a-panel: #ffffff;
   --a-panel-2: #f6fafb;
-  --a-line: #dde5ea;
-  --a-line-2: #c2d0d8;
+  /* Calibrados el 22-09-2026: el cyan del modo claro queda legible como texto
+     (≥4.5), los tonos de estado también, y los bordes marcan los objetos. */
+  --a-line: #d3dee5;
+  --a-line-2: #aec0cb;
   --a-text: #16232a;
   --a-text-strong: #0a1418;
-  --a-muted: #5f7078;
+  --a-muted: #57686f;
   --a-muted-2: #35474f;
-  --a-accent: #00879b;
+  --a-accent: #00798c;
   --a-accent-strong: #00697a;
-  --a-accent-soft: rgba(0, 135, 155, .1);
-  --a-ok: #12855a;
-  --a-warn: #9a6806;
+  --a-accent-soft: rgba(0, 121, 140, .12);
+  --a-ok: #0f7a52;
+  --a-warn: #8f6005;
   --a-danger: #bd2c47;
   --a-info: #4453cc;
   --a-shadow: 0 14px 34px rgba(18, 48, 58, .12);
@@ -749,6 +751,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-company-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .admin-company-name { color: var(--a-text-strong); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-sidebar-note { color: var(--a-muted); font-size: 10.5px; }
+/* Usuario en el nav lateral (pedido del 22-09-2026): debajo de la empresa y
+   arriba del pie; el menú se abre hacia arriba para no salir de pantalla. */
+.admin-usermenu--sidebar { width: 100%; }
+.admin-user--sidebar { width: 100%; padding: 6px 8px; border-radius: 8px; background: var(--a-bg-2); text-align: left; }
+.admin-user--sidebar .admin-user-info { flex: 1 1 auto; min-width: 0; }
+.admin-usermenu--sidebar .admin-usermenu-panel { top: auto; bottom: calc(100% + 8px); left: 0; right: 0; width: auto; }
 .admin-sidebar-close, .admin-menu-btn { display: none; }
 .admin-main { display: flex; flex-direction: column; min-width: 0; }
 .admin-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: var(--a-topbar); padding: 0 16px; border-bottom: 1px solid var(--a-line); background: color-mix(in srgb, var(--a-bg) 88%, transparent); backdrop-filter: blur(12px); }
@@ -850,11 +858,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-panel-link:hover { text-decoration: underline; }
 .admin-panel .admin-table-wrap { padding: 8px 10px 10px; border: 0; border-radius: 0; background: transparent; }
 .admin-badge { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 7px; border: 1px solid var(--a-line-2); border-radius: 999px; color: var(--a-muted-2); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
-.admin-badge[data-tone="accent"] { color: var(--a-accent); border-color: color-mix(in srgb, var(--a-accent) 36%, transparent); background: color-mix(in srgb, var(--a-accent) 10%, transparent); }
-.admin-badge[data-tone="ok"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 36%, transparent); background: color-mix(in srgb, var(--a-ok) 10%, transparent); }
-.admin-badge[data-tone="warn"] { color: var(--a-warn); border-color: color-mix(in srgb, var(--a-warn) 36%, transparent); background: color-mix(in srgb, var(--a-warn) 10%, transparent); }
-.admin-badge[data-tone="danger"] { color: var(--a-danger); border-color: color-mix(in srgb, var(--a-danger) 36%, transparent); background: color-mix(in srgb, var(--a-danger) 10%, transparent); }
-.admin-badge[data-tone="info"] { color: var(--a-info); border-color: color-mix(in srgb, var(--a-info) 36%, transparent); background: color-mix(in srgb, var(--a-info) 10%, transparent); }
+.admin-badge[data-tone="accent"] { color: var(--a-accent); border-color: color-mix(in srgb, var(--a-accent) 42%, transparent); background: color-mix(in srgb, var(--a-accent) 14%, transparent); }
+.admin-badge[data-tone="ok"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 42%, transparent); background: color-mix(in srgb, var(--a-ok) 14%, transparent); }
+.admin-badge[data-tone="warn"] { color: var(--a-warn); border-color: color-mix(in srgb, var(--a-warn) 42%, transparent); background: color-mix(in srgb, var(--a-warn) 14%, transparent); }
+.admin-badge[data-tone="danger"] { color: var(--a-danger); border-color: color-mix(in srgb, var(--a-danger) 42%, transparent); background: color-mix(in srgb, var(--a-danger) 14%, transparent); }
+.admin-badge[data-tone="info"] { color: var(--a-info); border-color: color-mix(in srgb, var(--a-info) 42%, transparent); background: color-mix(in srgb, var(--a-info) 14%, transparent); }
 .admin-empty { display: grid; justify-items: center; gap: 6px; padding: 24px 16px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius-lg); color: var(--a-muted); text-align: center; }
 .admin-empty svg { color: var(--a-accent); }
 .admin-empty-title { color: var(--a-text-strong); font-size: 13px; font-weight: 700; }
@@ -872,8 +880,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    2 días» con tono neutro, ámbar (≤ 7 días) o rojo (vencido). Números
    tabulares y sin corte; legible en claro y oscuro por los tokens del panel. */
 .admin-countdown { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--a-line-2); border-radius: 999px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 10px; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.admin-countdown[data-tone="warn"] { color: var(--a-warn); border-color: color-mix(in srgb, var(--a-warn) 36%, transparent); background: color-mix(in srgb, var(--a-warn) 10%, transparent); }
-.admin-countdown[data-tone="danger"] { color: var(--a-danger); border-color: color-mix(in srgb, var(--a-danger) 36%, transparent); background: color-mix(in srgb, var(--a-danger) 10%, transparent); }
+.admin-countdown[data-tone="warn"] { color: var(--a-warn); border-color: color-mix(in srgb, var(--a-warn) 42%, transparent); background: color-mix(in srgb, var(--a-warn) 14%, transparent); }
+.admin-countdown[data-tone="danger"] { color: var(--a-danger); border-color: color-mix(in srgb, var(--a-danger) 42%, transparent); background: color-mix(in srgb, var(--a-danger) 14%, transparent); }
 .admin-countdown--inline { margin-left: 5px; }
 /* La cuenta regresiva del formulario va debajo de su campo de fecha. */
 .admin-countdown-field { display: grid; gap: 4px; align-content: start; }
@@ -1028,7 +1036,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-client-contact > span { min-width: 0; overflow-wrap: anywhere; }
 .admin-client-contact .admin-actions { margin-left: auto; }
 .admin-client-history { display: grid; gap: 12px; }
-.admin-iconbtn[data-done="true"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 36%, transparent); }
+.admin-iconbtn[data-done="true"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 42%, transparent); }
 .admin-reminder-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
 .admin-reminder-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-reminder-main { display: grid; min-width: 0; }
@@ -1451,6 +1459,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-demo-lede strong { color: var(--a-text-strong); }
 .admin-demo-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-demo-actions form { display: inline-flex; }
+/* Barra fina de la portada de la demo (22-09-2026): reabre la bienvenida y deja
+   a mano el portal, el resumen y el reinicio. La bienvenida en sí es el popup
+   (`DemoIntro`), que se cierra con X o «Recorrer la demo» y no vuelve. */
+.admin-demo-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-demo-bar .admin-demo-actions { margin-left: auto; }
 .admin-demo-actions--inline { margin-top: 2px; }
 .admin-demo-footnote { margin: 0; color: var(--a-muted); font-size: 11px; line-height: 1.5; }
 

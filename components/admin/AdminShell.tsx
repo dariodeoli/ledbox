@@ -572,61 +572,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 </div>
               )
             ) : null}
-            <p className="admin-sidebar-note">Panel privado · LedBox</p>
-          </div>
-        </aside>
-
-        {menuOpen ? (
-          <button type="button" className="admin-sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú" />
-        ) : null}
-
-        <div className="admin-main">
-          <header className="admin-topbar">
-            <button
-              type="button"
-              className="admin-iconbtn admin-menu-btn"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Abrir menú"
-              aria-controls="admin-sidebar"
-              aria-expanded={menuOpen}
-              title="Abrir menú"
-            >
-              <AdminIcon name="menu" size={18} />
-            </button>
-
-            <div className="admin-topbar-title">
-              <p className="admin-topbar-eyebrow">LedBox · Operación</p>
-              <h1 className="admin-topbar-heading" title={title}>
-                {title}
-              </h1>
-            </div>
-
-            <div className="admin-topbar-tools">
-              {session.demo ? (
-                <Link
-                  className="admin-demo-chip"
-                  href="/demo"
-                  title="Estás en la demo de LedBox con datos simulados · Volver a la presentación"
-                >
-                  DEMO
-                </Link>
-              ) : null}
-              {demoEntryPending ? null : <AdminNotificationBell />}
-              <AdminOfflineIndicator />
-              <AdminThemeToggle />
-              <a
-                className="admin-btn admin-hide-sm"
-                href={publicConfig.siteUrl}
-                target="_blank"
-                rel="noreferrer"
-                title="Abrir el sitio público en una pestaña nueva"
-              >
-                <AdminIcon name="external" size={15} />
-                <span>Ver sitio</span>
-              </a>
               {session.user ? (
                 <div
-                  className="admin-usermenu"
+                  className="admin-usermenu admin-usermenu--sidebar"
                   ref={userMenuRef}
                   onBlur={(event) => {
                     const next = event.relatedTarget;
@@ -635,7 +583,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 >
                   <button
                     type="button"
-                    className="admin-user"
+                    className="admin-user admin-user--sidebar"
                     onClick={() => setUserMenuOpen((open) => !open)}
                     aria-haspopup="menu"
                     aria-expanded={userMenuOpen}
@@ -703,6 +651,59 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   ) : null}
                 </div>
               ) : null}
+
+            <p className="admin-sidebar-note">Panel privado · LedBox</p>
+          </div>
+        </aside>
+
+        {menuOpen ? (
+          <button type="button" className="admin-sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú" />
+        ) : null}
+
+        <div className="admin-main">
+          <header className="admin-topbar">
+            <button
+              type="button"
+              className="admin-iconbtn admin-menu-btn"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Abrir menú"
+              aria-controls="admin-sidebar"
+              aria-expanded={menuOpen}
+              title="Abrir menú"
+            >
+              <AdminIcon name="menu" size={18} />
+            </button>
+
+            <div className="admin-topbar-title">
+              <p className="admin-topbar-eyebrow">LedBox · Operación</p>
+              <h1 className="admin-topbar-heading" title={title}>
+                {title}
+              </h1>
+            </div>
+
+            <div className="admin-topbar-tools">
+              {session.demo ? (
+                <Link
+                  className="admin-demo-chip"
+                  href="/demo"
+                  title="Estás en la demo de LedBox con datos simulados · Volver a la presentación"
+                >
+                  DEMO
+                </Link>
+              ) : null}
+              {demoEntryPending ? null : <AdminNotificationBell />}
+              <AdminOfflineIndicator />
+              <AdminThemeToggle />
+              <a
+                className="admin-btn admin-hide-sm"
+                href={publicConfig.siteUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="Abrir el sitio público en una pestaña nueva"
+              >
+                <AdminIcon name="external" size={15} />
+                <span>Ver sitio</span>
+              </a>
             </div>
           </header>
 
