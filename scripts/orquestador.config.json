@@ -1,0 +1,6 @@
+{
+  "comment": "Config del orquestador (LedBox). `exclude`: ramas que nunca se integran solas (pilotos/experimentos).",
+  "exclude": ["^feat/piloto", "^feat/experimento"],
+  "umbral": 15,
+  "cooldownMin": 20
+}

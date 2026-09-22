@@ -1,0 +1,33 @@
+# Novedades para el dueño
+
+Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
+(`ht`/`hd`) agregan su bloque acá antes de publicar.
+
+## v2.1.18 — 2026-09-22
+
+- El menú quedó ordenado por áreas (General · Operación · Comercial · Finanzas ·
+  Sistema) y se puede colapsar a solo iconos; el panel recuerda cómo lo dejaste.
+- El encabezado ahora dice la empresa activa y el área (por ejemplo «LedBox Demo
+  · General»), en vez de un texto fijo.
+- Resumen muestra primero lo que te está pidiendo atención; Finanzas ordena
+  Cobros antes de Tesorería y Facturación pone arriba los presupuestos por
+  facturar.
+- Toda la app usa la misma escala visual (tipografías, espaciados, sombras y
+  estados) y los estados de carga/vacío/error son consistentes en cada módulo.
+
+## v2.1.16 / v2.1.17 — 2026-09-22
+
+- Panel: íconos en todas las secciones, KPIs, pestañas y acciones; se quitaron
+  los textos repetidos.
+- Ayuda «¿Qué es esto?» en cada módulo, buscador global con ⌘/Ctrl + K y barra
+  de navegación inferior en mobile.
+- El presupuesto del cliente quedó rediseñado: el responsable de la empresa
+  viene precargado, hay un solo botón para autorizar o pedir un cambio y, una
+  vez autorizado, desaparecen las opciones de cambio.
+
+## v2.1.13 / v2.1.14 — 2026-09-22
+
+- Conciliación bancaria: importás el extracto, el sistema sugiere el match con
+  tesorería y podés conciliar, rechazar o crear el movimiento.
+- Facturación con libro de IVA y cierre mensual; Plan con límites y consumo;
+  Sistema con el estado del respaldo y su alerta.
