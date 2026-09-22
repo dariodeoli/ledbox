@@ -1126,19 +1126,24 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--plantillas { --plantillas-cols: minmax(11rem, 1.1fr) minmax(18rem, 2.6fr) 6.5rem 8.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 48rem; }
 
 /* Registro fiscal interno (issue #41): listas del módulo de facturación.
-   Facturas, presupuestos facturables, compras, libro de IVA y cierres. */
-.admin-table--facturas { --facturas-cols: 6.5rem 6.5rem minmax(10rem, 1.7fr) 7rem 7.5rem 8rem 7rem 8rem 9.5rem; --admin-cols: var(--facturas-cols); --admin-table-min: 70.5rem; }
+   Facturas, presupuestos facturables, compras, libro de IVA y cierres. Los
+   anchos entran sin scroll horizontal en desktop (1440) y las acciones de fila
+   siempre quedan a la vista. */
+.admin-table--facturas { --facturas-cols: 6rem 6rem minmax(8.5rem, 1.6fr) 6.5rem 6.5rem 7.5rem 6.5rem 7rem 8.5rem; --admin-cols: var(--facturas-cols); --admin-table-min: 68rem; }
 .admin-table--facturables { --facturables-cols: minmax(12rem, 1.8fr) minmax(10rem, 1.3fr) 9rem 5rem; --admin-cols: var(--facturables-cols); --admin-table-min: 40rem; }
-.admin-table--compras { --compras-cols: 6.5rem minmax(10rem, 1.6fr) 7rem minmax(8rem, 1fr) 8.5rem 8rem 7.5rem 8rem 7.5rem; --admin-cols: var(--compras-cols); --admin-table-min: 69rem; }
-.admin-table--libro-ventas { --libro-ventas-cols: 6.5rem 6rem minmax(9rem, 1.4fr) 6.5rem 7.5rem 7rem 7.5rem 7rem 6.5rem 8rem; --admin-cols: var(--libro-ventas-cols); --admin-table-min: 72.5rem; }
-.admin-table--libro-compras { --libro-compras-cols: 6.5rem minmax(9rem, 1.4fr) 6.5rem 7.5rem 7.5rem 7rem 7.5rem 7rem 6.5rem 8rem; --admin-cols: var(--libro-compras-cols); --admin-table-min: 71rem; }
+.admin-table--compras { --compras-cols: 6rem minmax(8.5rem, 1.5fr) 6.5rem minmax(7.5rem, 1fr) 7rem 7.5rem 7rem 7.5rem 7rem; --admin-cols: var(--compras-cols); --admin-table-min: 69.5rem; }
+.admin-table--libro-ventas { --libro-ventas-cols: 6rem 5.5rem minmax(7.5rem, 1.4fr) 6rem 6.5rem 6rem 6.5rem 6rem 6rem 7.5rem; --admin-cols: var(--libro-ventas-cols); --admin-table-min: 69rem; }
+.admin-table--libro-compras { --libro-compras-cols: 5.5rem minmax(7.5rem, 1.4fr) 6rem 6.5rem 6.5rem 6rem 6.5rem 6rem 6rem 7.5rem; --admin-cols: var(--libro-compras-cols); --admin-table-min: 69.5rem; }
 .admin-table--cierres { --cierres-cols: 9rem 7.5rem 8.5rem 8.5rem 8.5rem minmax(11rem, 1.3fr) minmax(11rem, 1.3fr); --admin-cols: var(--cierres-cols); --admin-table-min: 64.5rem; }
-.admin-table--factura-items { --factura-items-cols: minmax(12rem, 2fr) 5.5rem 9rem minmax(8rem, 1fr) 9rem; --admin-cols: var(--factura-items-cols); --admin-table-min: 43rem; }
+.admin-table--factura-items { --factura-items-cols: minmax(9rem, 1.6fr) 4.5rem 7.5rem minmax(6.5rem, 1fr) 7.5rem; --admin-cols: var(--factura-items-cols); --admin-table-min: 37.5rem; }
 
 /* Alta de factura (issue #41): una fila por ítem con su importe desagregado y
-   el cierre de totales. Los importes van en PYG sin decimales. */
+   el cierre de totales. El nombre va a lo ancho y los datos del importe abajo,
+   así la fila entra en el diálogo sin desbordar. Los importes van en PYG sin
+   decimales. */
 .admin-fiscal-lines { display: grid; gap: 8px; }
-.admin-fiscal-line { display: grid; grid-template-columns: minmax(10rem, 1.7fr) 5.5rem 9.5rem 9.5rem minmax(8.5rem, 1fr) auto; gap: 8px; align-items: end; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-fiscal-line { display: grid; grid-template-columns: 5.5rem minmax(8rem, 1fr) minmax(7rem, 1fr) minmax(6.5rem, auto) auto; gap: 8px; align-items: end; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-fiscal-line > :first-child { grid-column: 1 / -1; }
 .admin-fiscal-line-sum { display: grid; gap: 1px; padding-bottom: 7px; text-align: right; }
 .admin-fiscal-line-sum strong { font-size: 13px; font-variant-numeric: tabular-nums; }
 .admin-fiscal-totals { display: grid; gap: 2px; padding: 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }

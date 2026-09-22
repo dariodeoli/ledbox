@@ -570,7 +570,9 @@ export function FacturacionModule() {
           title="Mes del libro de IVA, las facturas y las compras"
           options={months.map((value) => ({ value, label: monthKeyLabel(value) }))}
         />
-        <SearchField value={query} onChange={setQuery} label="Buscar comprobantes" placeholder="Buscar por cliente, RUC, número o concepto…" />
+        {tab === "invoices" || tab === "purchases" ? (
+          <SearchField value={query} onChange={setQuery} label="Buscar comprobantes" placeholder="Buscar por cliente, RUC, número o concepto…" />
+        ) : null}
         {tab === "invoices" && canWrite && !periodClosed ? (
           <AdminButton variant="primary" icon="plus" onClick={openInvoice} aria-expanded={invoiceForm !== null}>
             Nueva factura

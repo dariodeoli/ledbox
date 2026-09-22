@@ -44,7 +44,7 @@ export default async function FacturaImprimiblePage({ params }: { params: Promis
   if (!invoice) notFound();
 
   const fiscal = parseFiscalDetails(invoice.organization.fiscalDetails);
-  const issuedAt = formatDateTime(invoice.issuedAt);
+  const issuedAt = formatDate(invoice.issuedAt);
   const reference = `Nº ${invoiceNumberLabel(invoice.number)}`;
   // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
   const logos = await loadOrganizationLogos(auth.context.organizationId);
