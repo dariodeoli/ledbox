@@ -32,25 +32,41 @@ import {
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 
 /**
- * Vista pública del presupuesto (issue #12) con autogestión del cliente
- * (issue #14): el cliente ajusta cantidades y días con el precio unitario fijo
- * y ve el total en vivo, pide una rebaja, sigue el estado de sus solicitudes y,
- * una vez aprobado, ve el monto a transferir con los datos de pago de la empresa.
+ * Vista pública del presupuesto (issue #12) rediseñada: el cliente la lee de
+ * arriba abajo —encabezado, estado, ítems ajustables, totales, una **acción
+ * principal única**, plan de pagos, datos para transferir, comprobante,
+ * pedidos, cronología y ayuda— con un resumen pegajoso en escritorio.
  *
- * Suma el comprobante de pago (issue #17): el cliente sube la foto o el PDF de
- * la transferencia —las fotos se comprimen acá, en el navegador— y sigue el
- * estado real de cada comprobante. El archivo no se sirve en el portal: lo ve
- * el equipo desde el panel con sesión.
+ * La acción principal resuelve según lo que hizo el cliente (issue #14):
  *
- * Nada se aplica solo: las propuestas quedan pendientes y el equipo las acepta
- * o rechaza desde el panel. La aprobación sigue siendo única y con evidencia.
+ * - **Autorizar**: confirma lo enviado o sus propios ajustes de cantidades y
+ *   días. Con cambios encadena `propose` (kind `items`) y `approve`, siempre
+ *   con el nombre del responsable y `consent: true`; sin cambios aprueba
+ *   directo. Los ajustes quedan como solicitud pendiente para el panel, que es
+ *   el único que aplica precios y totales.
+ * - **Enviar petición**: pide una rebaja (`propose` kind `discount`) o un cambio
+ *   que no se resuelve con cantidades (`revision`) y espera la respuesta del
+ *   equipo por el mismo link.
  *
- * Con `demo` (issue #29, entrada por `GET /api/portal/demo`) muestra arriba el
- * aviso de datos simulados con la vuelta a la portada; los links reales no lo
- * llevan y no cambian en nada.
+ * Autorizado el presupuesto desaparecen los editores y los pedidos: la página
+ * queda en solo lectura (estado, plan, datos de pago, comprobante, cronología y
+ * la impresión del navegador). Lo mismo vale para una petición ya enviada.
+ *
+ * El nombre de quien autoriza viene **prellenado con el responsable cargado en
+ * la empresa del cliente** (`Client.contactName`/`contactRole`, issue #36) y
+ * queda editable por si autoriza otra persona; sin responsable cargado el campo
+ * va vacío con la ayuda correspondiente, nunca con un dato inventado.
+ *
+ * El comprobante de pago (issue #17) sigue igual: la foto se comprime en el
+ * navegador, el archivo se valida por magic bytes y el binario nunca se sirve
+ * en el portal. Con `demo` (issue #29) se muestra arriba el aviso de datos
+ * simulados; los links reales no lo llevan.
  */
 
 type DraftItem = { quantity: number; days: number };
+
+/** Qué va a hacer el cliente con el botón único de la acción principal. */
+type ActionMode = "authorize" | "discount" | "change";
 
 const MAX_QUANTITY = 999;
 const MAX_DAYS = 365;
@@ -75,6 +91,13 @@ const EXPECTED_STATUS: Record<PortalExpectedPayment["status"], { label: string; 
   PROOF: { label: "Comprobante recibido, en revisión", tone: "info" },
   CONFIRMED: { label: "Confirmado por LedBox", tone: "ok" },
   CANCELLED: { label: "Cancelado", tone: "neutral" },
+};
+
+/** Etiqueta del botón único según lo que va a pasar. */
+const ACTION_BUTTON: Record<ActionMode, string> = {
+  authorize: "Autorizar el presupuesto",
+  discount: "Enviar petición de rebaja",
+  change: "Enviar pedido de cambio",
 };
 
 /** Nota del listado: explica el circuito o por qué el formulario no está disponible. */
@@ -114,6 +137,38 @@ function requestSummary(request: PortalBudgetRequest): string | null {
   }
   // El pedido de cambios libre ya se lee en el motivo: no se repite como resumen.
   return null;
+}
+
+/** Frase corta de lo pedido, para el estado y la confirmación. */
+function requestIntent(request: PortalBudgetRequest): string {
+  if (request.kind === "items") return "el ajuste de cantidades y días";
+  if (request.kind === "discount") return "la rebaja";
+  return "el cambio";
+}
+
+/** Ítems con diferencias contra el presupuesto real (cantidad o días). */
+function changedItems(budget: PortalBudget, draft: Record<string, DraftItem>): Array<{ id: string; quantity: number; days: number }> {
+  return budget.items.flatMap((item) => {
+    const current = draft[item.id];
+    if (!current || (current.quantity === item.quantity && current.days === item.days)) return [];
+    return [{ id: item.id, quantity: current.quantity, days: current.days }];
+  });
+}
+
+/**
+ * Motivo que acompaña la propuesta cuando el cliente autoriza con ajustes: el
+ * API del portal exige una nota y esta explica, en palabras del cliente, qué
+ * cambió antes de autorizar.
+ */
+function changeNote(budget: PortalBudget, draft: Record<string, DraftItem>): string {
+  const rows = budget.items.flatMap((item) => {
+    const current = draft[item.id];
+    if (!current || (current.quantity === item.quantity && current.days === item.days)) return [];
+    return [
+      `${item.name}: ${formatNumber(item.quantity)} × ${formatNumber(item.days)} d → ${formatNumber(current.quantity)} × ${formatNumber(current.days)} d`,
+    ];
+  });
+  return rows.length > 0 ? `Ajusté el presupuesto desde el portal y lo autoricé con estos valores: ${rows.join("; ")}.` : "";
 }
 
 // ── Comprobante de pago (issue #17) ─────────────────────────────────────────
@@ -196,23 +251,64 @@ async function prepareProofFile(file: File): Promise<{ blob: Blob; mime: string 
   return { blob, mime: detected };
 }
 
+/**
+ * Selector segmentado del portal (único objeto del tipo): se usa para la
+ * intención de la acción principal y para el tipo de descuento pedido.
+ */
+function PortalSegmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  wide = false,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string; title?: string }>;
+  onChange: (value: T) => void;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`portal-segmented${wide ? " portal-segmented--wide" : ""}`} role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className="portal-segment"
+          data-active={value === option.value ? "true" : undefined}
+          aria-pressed={value === option.value}
+          title={option.title}
+          aria-label={option.title}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Stepper({
   value,
   max,
   label,
-  onChange,
+  onStep,
+  onType,
 }: {
   value: number;
   max: number;
   label: string;
-  onChange: (value: number) => void;
+  /** Suma o resta uno (el valor final lo decide quien guarda el borrador). */
+  onStep: (delta: number) => void;
+  /** Texto tipeado a mano: se normaliza al rango 1..max. */
+  onType: (text: string) => void;
 }) {
   return (
     <span className="portal-stepper">
       <button
         type="button"
         className="portal-step"
-        onClick={() => onChange(Math.max(1, value - 1))}
+        onClick={() => onStep(-1)}
         disabled={value <= 1}
         aria-label={`Restar uno a ${label}`}
         title={`Restar uno a ${label}`}
@@ -224,13 +320,13 @@ function Stepper({
         inputMode="numeric"
         pattern="[0-9]*"
         value={String(value)}
-        onChange={(event) => onChange(clampInt(event.target.value, max))}
+        onChange={(event) => onType(event.target.value)}
         aria-label={`${label} (1 a ${max})`}
       />
       <button
         type="button"
         className="portal-step"
-        onClick={() => onChange(Math.min(max, value + 1))}
+        onClick={() => onStep(1)}
         disabled={value >= max}
         aria-label={`Sumar uno a ${label}`}
         title={`Sumar uno a ${label}`}
@@ -244,39 +340,31 @@ function Stepper({
 export function PortalBudgetView({ budget, token, demo = false }: { budget: PortalBudget; token: string; demo?: boolean }) {
   const router = useRouter();
 
-  const [name, setName] = useState("");
+  // Identidad del cliente: el responsable cargado en la empresa (issue #36) es
+  // el valor inicial de quien autoriza y de quien sube el comprobante.
+  const clientLabel = budget.client.company?.trim() || budget.client.name;
+  const contactName = budget.client.contactName?.trim() ?? "";
+  const contactRole = budget.client.contactRole?.trim() ?? "";
+
+  const [mode, setMode] = useState<ActionMode>("authorize");
+  const [name, setName] = useState(contactName);
   const [consent, setConsent] = useState(false);
-  const [approveNote, setApproveNote] = useState("");
-  const [approveError, setApproveError] = useState("");
-  const [approving, setApproving] = useState(false);
+  const [note, setNote] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [sending, setSending] = useState(false);
   const [justApproved, setJustApproved] = useState<null | { already: boolean }>(null);
+  const [justRequested, setJustRequested] = useState<null | { kind: "discount" | "change"; at: string; note: string }>(null);
 
-  const [revisionName, setRevisionName] = useState("");
-  const [revisionNote, setRevisionNote] = useState("");
-  const [revisionError, setRevisionError] = useState("");
-  const [requesting, setRequesting] = useState(false);
-  const [justRequested, setJustRequested] = useState<null | { at: string; note: string }>(null);
-
-  // Autogestión (issue #14): borrador de ítems, rebaja y datos de contacto.
+  // Autogestión (issue #14): borrador de ítems y rebaja pedida.
   const [draft, setDraft] = useState<Record<string, DraftItem>>(() =>
     Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])),
   );
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [itemsNote, setItemsNote] = useState("");
-  const [itemsError, setItemsError] = useState("");
-  const [itemsSending, setItemsSending] = useState(false);
-  const [itemsSent, setItemsSent] = useState(false);
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
   const [discountValue, setDiscountValue] = useState("");
-  const [discountNote, setDiscountNote] = useState("");
-  const [discountError, setDiscountError] = useState("");
-  const [discountSending, setDiscountSending] = useState(false);
-  const [discountSent, setDiscountSent] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Comprobante de pago (issue #17) vinculado al concepto del plan (issue #28).
-  const [proofName, setProofName] = useState("");
+  const [proofName, setProofName] = useState(contactName);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofExpectedId, setProofExpectedId] = useState("");
   const [proofError, setProofError] = useState("");
@@ -285,12 +373,16 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
 
   const approvedRef = useRef<HTMLElement | null>(null);
   const revisionRef = useRef<HTMLElement | null>(null);
-  const proposalRef = useRef<HTMLElement | null>(null);
   const proofRef = useRef<HTMLElement | null>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   const approved = Boolean(budget.approval.approvedAt) || Boolean(justApproved);
-  const revisionPending = !approved && (Boolean(budget.approval.revisionRequestedAt) || Boolean(justRequested));
+  const revisionPending = !approved && (Boolean(budget.approval.revisionRequestedAt) || justRequested?.kind === "change");
+  const pendingRequests = budget.requests.filter((request) => request.status === "pending");
+  /** Pedido ya enviado y esperando respuesta (rebaja o ajuste de ítems). */
+  const waitingRequest = !approved && !revisionPending && (pendingRequests.length > 0 || Boolean(justRequested));
+  /** El cliente todavía no envió nada: puede ajustar, autorizar o pedir. */
+  const canEdit = !approved && !revisionPending && !waitingRequest;
 
   // El foco acompaña el cambio de estado para que un lector de pantalla anuncie
   // el resultado de la acción (el bloque nuevo entra al tabulado).
@@ -300,9 +392,6 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   useEffect(() => {
     if (justRequested) revisionRef.current?.focus();
   }, [justRequested]);
-  useEffect(() => {
-    if (itemsSent) proposalRef.current?.focus();
-  }, [itemsSent]);
   useEffect(() => {
     if (proofSent) proofRef.current?.focus();
   }, [proofSent]);
@@ -322,10 +411,22 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   );
   /** Concepto que corresponde transferir ahora: el primero abierto sin comprobante. */
   const dueNowExpected = openExpected.find((expected) => expected.status === "AWAITING") ?? null;
+  const paymentPlan = budget.paymentPlan;
+  /**
+   * Qué se transfiere ahora: con pagos esperados manda el primer concepto abierto
+   * (el que el plan muestra como «a transferir ahora»); sin ellos, lo dice el plan.
+   * Si ya no queda nada abierto, no hay monto a transferir.
+   */
+  const transferNow = budget.expectedPayments.length > 0
+    ? dueNowExpected
+      ? { label: dueNowExpected.label, amount: dueNowExpected.amount }
+      : null
+    : paymentPlan.dueNow;
 
   // El concepto elegido sigue a los pagos abiertos: si hay uno solo, se
   // preselecciona; cuando se confirma o desaparece, la selección se limpia.
-  const openExpectedSignature = openExpected.map((expected) => expected.id).join("|");  useEffect(() => {
+  const openExpectedSignature = openExpected.map((expected) => expected.id).join("|");
+  useEffect(() => {
     setProofExpectedId((current) => {
       if (current && openExpected.some((expected) => expected.id === current)) return current;
       return openExpected.length === 1 ? openExpected[0]?.id ?? "" : "";
@@ -335,8 +436,8 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   const approvedAt = budget.approval.approvedAt ?? (justApproved ? new Date().toISOString() : null);
   const approvedByName = budget.approval.approvedByName ?? (justApproved ? name.trim() : null);
   const approvalMethod = budget.approval.method ?? (justApproved ? "digital" : null);
-  const revisionAt = budget.approval.revisionRequestedAt ?? justRequested?.at ?? null;
-  const revisionText = justRequested ? justRequested.note : budget.approval.revisionNote;
+  const revisionAt = budget.approval.revisionRequestedAt ?? (justRequested?.kind === "change" ? justRequested.at : null);
+  const revisionText = justRequested?.kind === "change" ? justRequested.note : budget.approval.revisionNote;
   const approvalState = approved
     ? approvalMethod === "manual"
       ? "APROBADO_MANUAL"
@@ -345,14 +446,9 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
       ? "CAMBIOS_SOLICITADOS"
       : "PENDIENTE";
 
-  const itemsChanged = useMemo(
-    () =>
-      budget.items.some((item) => {
-        const current = draft[item.id];
-        return Boolean(current) && (current.quantity !== item.quantity || current.days !== item.days);
-      }),
-    [budget.items, draft],
-  );
+  const draftChanges = useMemo(() => changedItems(budget, draft), [budget, draft]);
+  /** Solo el cliente que todavía decide ajusta cantidades: aprobado o en revisión se lee. */
+  const itemsChanged = canEdit && draftChanges.length > 0;
 
   const proposedSubtotal = useMemo(
     () =>
@@ -363,148 +459,149 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
     [budget.items, draft],
   );
   const proposedTotal = Math.max(0, proposedSubtotal - budget.discount);
+  /** Total que se firma con el botón: el propuesto si hubo ajustes, el vigente si no. */
+  const actionTotal = itemsChanged ? proposedTotal : budget.total;
+  const summaryTotal = itemsChanged ? proposedTotal : budget.total;
 
-  const pendingRequests = budget.requests.filter((request) => request.status === "pending");
-  const paymentPlan = budget.paymentPlan;
+  // Rebaja pedida: monto resultante y total que quedaría si el equipo la acepta.
+  const discountRaw = discountType === "percent" ? discountValue.replace(",", ".").trim() : discountValue.replace(/\D/g, "");
+  const discountNumber = Number(discountRaw);
+  const discountAmount = !Number.isFinite(discountNumber) || discountNumber <= 0
+    ? 0
+    : discountType === "percent"
+      ? Math.round((budget.subtotal * Math.min(100, discountNumber)) / 100)
+      : Math.round(discountNumber);
+  const discountTotal = Math.max(0, budget.total - discountAmount);
+
   const mark = bankMark(budget.paymentDetails?.bank);
+  const lastRequest = pendingRequests[0] ?? null;
 
-  async function approve(event: React.FormEvent<HTMLFormElement>) {
+  /** POST del portal con el token del link; devuelve el error real del API. */
+  async function postPortal(path: string, body: unknown): Promise<{ error?: string; alreadyApproved?: boolean }> {
+    const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string; alreadyApproved?: boolean } | null;
+    if (!response.ok) throw new Error(payload?.error || "No pudimos registrar tu pedido. Probá de nuevo.");
+    return payload ?? {};
+  }
+
+  /**
+   * Acción principal única. Autoriza (con o sin ajustes, encadenando `propose`
+   * y `approve`) o envía la petición de rebaja o de cambio según la intención
+   * elegida, siempre con el nombre del responsable.
+   */
+  async function runAction(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (name.trim().length < 3) {
-      setApproveError("Ingresá tu nombre y apellido.");
+      setActionError("Ingresá el nombre y apellido de quien autoriza o pide el cambio.");
       return;
-    }
-    if (!consent) {
-      setApproveError("Marcá el consentimiento para registrar la aprobación.");
-      return;
-    }
-    setApproving(true);
-    setApproveError("");
-    try {
-      const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), consent: true, note: approveNote.trim() || undefined }),
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: string; alreadyApproved?: boolean } | null;
-      if (!response.ok) {
-        setApproveError(payload?.error || "No pudimos registrar la aprobación. Probá de nuevo.");
-        return;
-      }
-      setJustApproved({ already: Boolean(payload?.alreadyApproved) });
-      router.refresh();
-    } catch {
-      setApproveError("No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
-    } finally {
-      setApproving(false);
-    }
-  }
-
-  async function requestRevision(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!revisionNote.trim()) {
-      setRevisionError("Contanos qué cambios necesitás.");
-      return;
-    }
-    setRequesting(true);
-    setRevisionError("");
-    try {
-      const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/revision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: revisionName.trim() || undefined, note: revisionNote.trim() }),
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) {
-        setRevisionError(payload?.error || "No pudimos enviar tu comentario. Probá de nuevo.");
-        return;
-      }
-      setJustRequested({ at: new Date().toISOString(), note: revisionNote.trim() });
-      setRevisionNote("");
-      router.refresh();
-    } catch {
-      setRevisionError("No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
-    } finally {
-      setRequesting(false);
-    }
-  }
-
-  function updateDraft(id: string, patch: Partial<DraftItem>) {
-    setDraft((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
-    setItemsSent(false);
-  }
-
-  async function sendProposal(kind: "items" | "discount", event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const isItems = kind === "items";
-    const setError = isItems ? setItemsError : setDiscountError;
-    const note = isItems ? itemsNote : discountNote;
-    const setSending = isItems ? setItemsSending : setDiscountSending;
-    setError("");
-    if (contactName.trim().length < 3) {
-      setError("Ingresá tu nombre y apellido.");
-      return;
-    }
-    if (!note.trim()) {
-      setError("Contanos el motivo de tu pedido.");
-      return;
-    }
-
-    let body: Record<string, unknown> = {
-      kind,
-      name: contactName.trim(),
-      email: contactEmail.trim() || undefined,
-      note: note.trim(),
-    };
-    if (isItems) {
-      if (!itemsChanged) {
-        setError("Cambiá alguna cantidad o días antes de enviar la propuesta.");
-        return;
-      }
-      body = {
-        ...body,
-        items: budget.items.map((item) => ({
-          id: item.id,
-          quantity: draft[item.id]?.quantity ?? item.quantity,
-          days: draft[item.id]?.days ?? item.days,
-        })),
-      };
-    } else {
-      const raw = discountType === "percent" ? discountValue.replace(",", ".").trim() : discountValue.replace(/\D/g, "");
-      const value = Number(raw);
-      if (!Number.isFinite(value) || value <= 0) {
-        setError(discountType === "percent" ? "Ingresá un porcentaje mayor a cero." : "Ingresá un monto mayor a cero.");
-        return;
-      }
-      body = { ...body, discount: { type: discountType, value } };
     }
 
     setSending(true);
+    setActionError("");
     try {
-      const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/propose`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) {
-        setError(payload?.error || "No pudimos enviar tu solicitud. Probá de nuevo.");
+      if (actionMode === "authorize") {
+        if (!consent) {
+          setActionError("Marcá el consentimiento para registrar la autorización.");
+          return;
+        }
+        const changes = canEdit ? changedItems(budget, draft) : [];
+        if (changes.length > 0) {
+          // El ajuste se registra como propuesta para que el panel lo aplique;
+          // la autorización viaja en la misma acción, con los montos a la vista.
+          await postPortal("propose", {
+            kind: "items",
+            name: name.trim(),
+            note: note.trim() || changeNote(budget, draft),
+            items: changes,
+          });
+        }
+        const payload = await postPortal("approve", {
+          name: name.trim(),
+          consent: true,
+          note: note.trim() || undefined,
+        });
+        setJustApproved({ already: Boolean(payload.alreadyApproved) });
+        router.refresh();
         return;
       }
-      if (isItems) {
-        setItemsSent(true);
-        setItemsNote("");
-      } else {
-        setDiscountSent(true);
-        setDiscountNote("");
-        setDiscountValue("");
+
+      if (actionMode === "discount") {
+        if (!note.trim()) {
+          setActionError("Contanos por qué pedís la rebaja.");
+          return;
+        }
+        if (!Number.isFinite(discountNumber) || discountNumber <= 0) {
+          setActionError(discountType === "percent" ? "Ingresá un porcentaje mayor a cero." : "Ingresá un monto mayor a cero.");
+          return;
+        }
+        if (discountType === "percent" && discountNumber > 100) {
+          setActionError("El porcentaje no puede superar el 100 %.");
+          return;
+        }
+        if (discountAmount > budget.subtotal) {
+          setActionError("El monto pedido no puede superar el subtotal del presupuesto.");
+          return;
+        }
+        await postPortal("propose", {
+          kind: "discount",
+          name: name.trim(),
+          note: note.trim(),
+          discount: { type: discountType, value: discountType === "percent" ? discountNumber : discountAmount },
+        });
+        setJustRequested({ kind: "discount", at: new Date().toISOString(), note: note.trim() });
+        setNote("");
+        router.refresh();
+        return;
       }
+
+      if (!note.trim()) {
+        setActionError("Contanos qué cambio necesitás.");
+        return;
+      }
+      await postPortal("revision", { name: name.trim(), note: note.trim() });
+      setJustRequested({ kind: "change", at: new Date().toISOString(), note: note.trim() });
+      setNote("");
       router.refresh();
-    } catch {
-      setError("No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
+    } catch (error) {
+      setActionError(error instanceof Error && error.message ? error.message : "No pudimos conectar con el portal. Revisá tu conexión y probá de nuevo.");
     } finally {
       setSending(false);
     }
+  }
+
+  function updateDraft(id: string, field: keyof DraftItem, next: number) {
+    setDraft((current) => {
+      const item = budget.items.find((row) => row.id === id);
+      if (!item) return current;
+      const base = current[id] ?? { quantity: item.quantity, days: item.days };
+      const max = field === "quantity" ? MAX_QUANTITY : MAX_DAYS;
+      return { ...current, [id]: { ...base, [field]: Math.min(max, Math.max(1, Math.round(next))) } };
+    });
+  }
+
+  /** Botones +/−: el delta se aplica sobre el borrador vigente (sin pisar clics seguidos). */
+  function stepDraft(id: string, field: keyof DraftItem, delta: number) {
+    setDraft((current) => {
+      const item = budget.items.find((row) => row.id === id);
+      if (!item) return current;
+      const base = current[id] ?? { quantity: item.quantity, days: item.days };
+      const max = field === "quantity" ? MAX_QUANTITY : MAX_DAYS;
+      const next = Math.min(max, Math.max(1, base[field] + delta));
+      return { ...current, [id]: { ...base, [field]: next } };
+    });
+  }
+
+  /** Texto tipeado: se limpia a dígitos y se acota al rango del campo. */
+  function setDraftField(id: string, field: keyof DraftItem, text: string) {
+    updateDraft(id, field, clampInt(text, field === "quantity" ? MAX_QUANTITY : MAX_DAYS));
+  }
+
+  function resetDraft() {
+    setDraft(Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])));
   }
 
   async function copyPaymentDetails() {
@@ -516,7 +613,7 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
       details.ruc ? `RUC: ${details.ruc}` : null,
       details.account ? `Cuenta: ${details.account}` : null,
       details.alias ? `Alias: ${details.alias}` : null,
-      paymentPlan.dueNow ? `Monto a transferir ahora: ${formatMoney(paymentPlan.dueNow.amount)}` : null,
+      transferNow ? `Monto a transferir ahora: ${formatMoney(transferNow.amount)}` : null,
       `Presupuesto Nº ${budget.reference}`,
     ].filter((line): line is string => Boolean(line));
     try {
@@ -576,6 +673,20 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
     }
   }
 
+  /** Leyenda del nombre: de quién es el responsable cargado y que se puede cambiar. */
+  const nameHint = contactName
+    ? `Autorizás como responsable de ${clientLabel}${contactRole ? ` · ${contactRole}` : ""}. Si autoriza otra persona, cambiá el nombre.`
+    : `No tenemos un responsable cargado de ${clientLabel}: escribí el nombre y apellido de quien autoriza.`;
+
+  /** Modo efectivo: con un pedido en revisión la única acción posible es autorizar. */
+  const actionMode: ActionMode = canEdit ? mode : "authorize";
+
+  const modeOptions: Array<{ value: ActionMode; label: string; title: string }> = [
+    { value: "authorize", label: "Autorizar", title: "Autorizar el presupuesto (con o sin ajustes)" },
+    { value: "discount", label: "Rebaja", title: "Pedir una rebaja" },
+    { value: "change", label: "Otro cambio", title: "Pedir un cambio que no se resuelve con cantidades" },
+  ];
+
   return (
     <article className="portal-budget">
       {demo ? (
@@ -591,52 +702,72 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
       ) : null}
 
       <header className="portal-budget-head">
-        <p className="portal-kicker">Presupuesto Nº {budget.reference}</p>
-        <h1 className="portal-budget-title">{budget.title}</h1>
-        <p className="portal-budget-meta">
-          {budget.client.company || budget.client.name} · {budget.organization}
-        </p>
-        <p className="portal-budget-meta">
-          Emitido el {formatDateTime(budget.createdAt)} ·{" "}
-          {budget.validUntil ? (
-            <>
-              Válido hasta el {formatDate(budget.validUntil)}
-              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                {formatCountdown(budget.validUntil, "client")}
-              </span>
-            </>
-          ) : (
-            "Sin fecha de vencimiento"
-          )}
-        </p>
-        <div className="portal-budget-chips">
-          <span className="portal-chip" data-tone={statusTone(budget.status)}>
-            {budgetStatusLabel(budget.status)}
-          </span>
-          <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
-            {budgetApprovalLabel(approvalState)}
-          </span>
-          {pendingRequests.length > 0 ? (
-            <span className="portal-chip" data-tone="warn">
-              {formatNumber(pendingRequests.length)} {pendingRequests.length === 1 ? "solicitud pendiente" : "solicitudes pendientes"}
+        <div className="portal-budget-head-top">
+          <div className="portal-budget-head-title">
+            <p className="portal-kicker">Presupuesto Nº {budget.reference}</p>
+            <h1 className="portal-budget-title">{budget.title}</h1>
+            <p className="portal-budget-meta">
+              {clientLabel} · preparado por {budget.organization}
+            </p>
+          </div>
+          <div className="portal-budget-chips">
+            <span className="portal-chip" data-tone={statusTone(budget.status)}>
+              {budgetStatusLabel(budget.status)}
             </span>
-          ) : null}
+            <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
+              {budgetApprovalLabel(approvalState)}
+            </span>
+            {pendingRequests.length > 0 && !approved ? (
+              <span className="portal-chip" data-tone="warn">
+                {formatNumber(pendingRequests.length)} {pendingRequests.length === 1 ? "pedido en revisión" : "pedidos en revisión"}
+              </span>
+            ) : null}
+          </div>
         </div>
+        <dl className="portal-facts portal-facts--head">
+          <div>
+            <dt>Emitido</dt>
+            <dd>{formatDateTime(budget.createdAt)}</dd>
+          </div>
+          <div>
+            <dt>Válido hasta</dt>
+            <dd>
+              {budget.validUntil ? (
+                <>
+                  <span className="portal-nowrap">{formatDate(budget.validUntil)}</span>
+                  <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                    {formatCountdown(budget.validUntil, "client")}
+                  </span>
+                </>
+              ) : (
+                "Sin fecha de vencimiento"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Evento</dt>
+            <dd>{budget.event?.name || "Sin evento asociado"}</dd>
+          </div>
+          <div>
+            <dt>Inicio del evento</dt>
+            <dd>{budget.event?.startsAt ? formatDateTime(budget.event.startsAt) : "—"}</dd>
+          </div>
+        </dl>
       </header>
 
       {approved ? (
         <section className="portal-banner portal-banner--ok" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
           <h2 className="portal-banner-title" id="portal-approved">
-            {justApproved?.already ? "Este presupuesto ya estaba aprobado" : "Presupuesto aprobado"}
+            {justApproved?.already ? "Este presupuesto ya estaba autorizado" : "Presupuesto autorizado"}
           </h2>
           <p>
             {justApproved?.already
-              ? "Registramos tu visita: la aprobación original queda tal cual, sin cambios."
-              : "Quedó registrada tu aprobación. El equipo de LedBox te contacta para coordinar el evento."}
+              ? "Registramos tu visita: la autorización original queda tal cual, sin cambios."
+              : "Quedó registrada tu autorización. El equipo de LedBox te contacta para coordinar el evento."}
           </p>
           <dl className="portal-facts portal-facts--inline">
             <div>
-              <dt>Nombre</dt>
+              <dt>Autorizó</dt>
               <dd>{approvedByName ?? "—"}</dd>
             </div>
             <div>
@@ -649,6 +780,17 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
             </div>
           </dl>
           {budget.approval.note ? <p className="portal-banner-note">Comentario: {budget.approval.note}</p> : null}
+          {pendingRequests.length > 0 ? (
+            <p className="portal-banner-note">
+              Enviaste {pendingRequests.map((request) => requestIntent(request)).join(" y ")} con la autorización: el equipo lo
+              revisa y te confirma por este link. El presupuesto queda autorizado con los montos vigentes mientras tanto.
+            </p>
+          ) : null}
+          <div className="portal-banner-actions portal-print-hide">
+            <button type="button" className="portal-btn portal-btn--ghost" onClick={() => window.print()}>
+              Imprimir o guardar en PDF
+            </button>
+          </div>
         </section>
       ) : revisionPending ? (
         <section className="portal-banner portal-banner--warn" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-revision">
@@ -656,75 +798,338 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
             Pediste cambios
           </h2>
           <p>
-            Recibimos tu comentario{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox lo revisa y
-            te responde; mientras tanto podés aprobar el presupuesto con el detalle actual o proponer los ajustes con el
-            editor.
+            Recibimos tu pedido{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox lo revisa y te
+            responde por este mismo link con una versión nueva; no hace falta que hagas nada más por ahora.
           </p>
           {revisionText ? <blockquote className="portal-banner-quote">{revisionText}</blockquote> : null}
         </section>
+      ) : waitingRequest ? (
+        <section className="portal-banner portal-banner--info" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-waiting">
+          <h2 className="portal-banner-title" id="portal-waiting">
+            Tu pedido está en revisión
+          </h2>
+          <p>
+            Ya nos llegó {lastRequest ? requestIntent(lastRequest) : justRequested?.kind === "discount" ? "la rebaja" : "el ajuste"} y
+            el equipo te responde por este link. Mientras esperás, podés autorizar abajo el presupuesto tal como está: la
+            respuesta del equipo llega igual y no perdés tu lugar.
+          </p>
+          {lastRequest ? (
+            <p className="portal-banner-note">
+              Enviado el {formatDateTime(lastRequest.createdAt)}
+              {lastRequest.note ? `: «${lastRequest.note}»` : "."}
+            </p>
+          ) : justRequested ? (
+            <p className="portal-banner-note">
+              Enviado el {formatDateTime(justRequested.at)}
+              {justRequested.note ? `: «${justRequested.note}»` : "."}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
-      {approved && paymentPlan.dueNow ? (
-        <section className="portal-card portal-card--pay" aria-labelledby="portal-pay">
-          <h2 className="portal-card-title" id="portal-pay">
-            Pago
-          </h2>
-          <div className="portal-pay-now">
-            <div>
-              <span className="portal-pay-label">{paymentPlan.dueNow.label}</span>
-              <strong className="portal-pay-amount portal-num">{formatMoney(paymentPlan.dueNow.amount)}</strong>
+      <div className="portal-budget-grid">
+        <div className="portal-budget-main">
+          <section className="portal-card" aria-labelledby="portal-items">
+            <div className="portal-card-head">
+              <h2 className="portal-card-title" id="portal-items">
+                {canEdit ? "Ajustá tu presupuesto" : "Detalle del presupuesto"}
+              </h2>
+              {canEdit && budget.items.length > 0 ? (
+                <p className="portal-card-lead">
+                  Cambiá cantidades y días: el precio unitario queda fijo y el total se actualiza en vivo. Si dejás todo
+                  igual, autorizás lo que te enviamos.
+                </p>
+              ) : null}
             </div>
-            <span className="portal-pay-total portal-num">Total del presupuesto: {formatMoney(budget.total)}</span>
-          </div>
 
-          {budget.paymentDetails ? (
-            <div className="portal-pay-grid">
-              <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
-                {mark?.asset ? (
-                  <img className="portal-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
-                ) : (
-                  <span className="portal-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
-                    {mark?.initials ?? "B"}
-                  </span>
-                )}
-                <span className="portal-bank-name">{mark?.label ?? "Datos de pago"}</span>
+            {budget.notes ? <p className="portal-note">{budget.notes}</p> : null}
+
+            {budget.items.length === 0 ? (
+              <p className="portal-empty">Este presupuesto no tiene ítems cargados.</p>
+            ) : (
+              <div className="portal-table-wrap">
+                <table className="portal-table portal-table--items">
+                  <thead>
+                    <tr>
+                      <th scope="col">Producto / servicio</th>
+                      <th scope="col" className="portal-num">
+                        Cantidad
+                      </th>
+                      <th scope="col" className="portal-num">
+                        Días
+                      </th>
+                      <th scope="col" className="portal-num">
+                        Precio unitario
+                      </th>
+                      <th scope="col" className="portal-num">
+                        Subtotal
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {budget.items.map((item) => {
+                      const current = canEdit
+                        ? draft[item.id] ?? { quantity: item.quantity, days: item.days }
+                        : { quantity: item.quantity, days: item.days };
+                      const changed = canEdit && (current.quantity !== item.quantity || current.days !== item.days);
+                      return (
+                        <tr key={item.id} data-changed={changed ? "true" : undefined}>
+                          <td className="portal-item-cell">
+                            <strong className="portal-item-name">{item.name}</strong>
+                            {item.notes ? <small className="portal-item-note">{item.notes}</small> : null}
+                            {changed ? (
+                              <small className="portal-item-note">
+                                Antes: {formatNumber(item.quantity)} × {formatNumber(item.days)} d · subtotal{" "}
+                                {formatMoney(item.subtotal)}
+                              </small>
+                            ) : null}
+                          </td>
+                          <td className="portal-num" data-label="Cantidad">
+                            {canEdit ? (
+                              <Stepper
+                                value={current.quantity}
+                                max={MAX_QUANTITY}
+                                label={`Cantidad de ${item.name}`}
+                                onStep={(delta) => stepDraft(item.id, "quantity", delta)}
+                                onType={(text) => setDraftField(item.id, "quantity", text)}
+                              />
+                            ) : (
+                              formatNumber(item.quantity)
+                            )}
+                          </td>
+                          <td className="portal-num" data-label="Días">
+                            {canEdit ? (
+                              <Stepper
+                                value={current.days}
+                                max={MAX_DAYS}
+                                label={`Días de ${item.name}`}
+                                onStep={(delta) => stepDraft(item.id, "days", delta)}
+                                onType={(text) => setDraftField(item.id, "days", text)}
+                              />
+                            ) : (
+                              formatNumber(item.days)
+                            )}
+                          </td>
+                          <td className="portal-num" data-label="Precio unitario">{formatMoney(item.unitPrice)}</td>
+                          <td className="portal-num" data-label="Subtotal">{formatMoney(item.unitPrice * current.quantity * current.days)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <dl className="portal-facts portal-facts--pay">
-                <div>
-                  <dt>Titular</dt>
-                  <dd>{budget.paymentDetails.holder || "—"}</dd>
+            )}
+
+            <div className="portal-totals">
+              <div className="portal-total-row">
+                <span>{itemsChanged ? "Subtotal con tus cambios" : "Subtotal"}</span>
+                <span className="portal-num">{formatMoney(itemsChanged ? proposedSubtotal : budget.subtotal)}</span>
+              </div>
+              {budget.discount > 0 ? (
+                <div className="portal-total-row">
+                  <span>Descuento vigente</span>
+                  <span className="portal-num">− {formatMoney(budget.discount)}</span>
                 </div>
-                <div>
-                  <dt>RUC</dt>
-                  <dd>{budget.paymentDetails.ruc || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Cuenta</dt>
-                  <dd>{budget.paymentDetails.account || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Alias</dt>
-                  <dd>{budget.paymentDetails.alias || "—"}</dd>
-                </div>
-              </dl>
-              <button type="button" className="portal-btn" onClick={() => void copyPaymentDetails()}>
-                {copied ? "Datos copiados" : "Copiar datos de pago"}
-              </button>
-              <p className="portal-help" aria-live="polite">
-                {copied
-                  ? "Los datos quedaron en el portapapeles para pegarlos donde los necesites."
-                  : "Transferí el monto indicado y enviá el comprobante al equipo de LedBox."}
+              ) : null}
+              <div className="portal-total-row portal-total-row--strong">
+                <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
+                <span className="portal-num">{formatMoney(summaryTotal)}</span>
+              </div>
+            </div>
+            <p className="portal-help">
+              Montos en guaraníes (PYG), sin decimales. {canEdit && itemsChanged ? "Los ajustes se revisan con tu autorización: el equipo aplica el precio unitario vigente." : ""}
+            </p>
+            {canEdit && itemsChanged ? (
+              <div className="portal-form-actions">
+                <button type="button" className="portal-btn portal-btn--ghost portal-btn--sm" onClick={resetDraft}>
+                  Restablecer cantidades
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          {!approved && !revisionPending ? (
+            <section className="portal-card portal-card--action" aria-labelledby="portal-action">
+              <div className="portal-card-head">
+                <h2 className="portal-card-title" id="portal-action">
+                  Tu decisión
+                </h2>
+                <p className="portal-card-lead">
+                  {canEdit
+                    ? "Elegí una sola cosa: autorizás el presupuesto tal como queda (con tus ajustes, si los hiciste) o nos pedís una rebaja o un cambio. El equipo de LedBox responde por este mismo link."
+                    : "Mientras revisamos tu pedido podés autorizar el presupuesto tal como está; no perdés la respuesta del equipo."}
+                </p>
+              </div>
+
+              <form className="portal-form" onSubmit={(event) => void runAction(event)}>
+                {canEdit ? (
+                  <>
+                    <PortalSegmented label="Qué querés hacer" value={mode} options={modeOptions} onChange={setMode} wide />
+                    <p className="portal-action-intent" role="status">
+                      {actionMode === "authorize" ? (
+                        <>
+                          Vas a autorizar por <strong className="portal-num">{formatMoney(actionTotal)}</strong>{" "}
+                          {itemsChanged
+                            ? `con ${formatNumber(draftChanges.length)} ${draftChanges.length === 1 ? "ítem ajustado" : "ítems ajustados"}`
+                            : "tal como está el presupuesto"}
+                          .
+                        </>
+                      ) : actionMode === "discount" ? (
+                        discountAmount > 0 ? (
+                          <>
+                            Vas a pedir una rebaja de <strong className="portal-num">{formatMoney(discountAmount)}</strong>
+                            {discountType === "percent" ? ` (${formatNumber(discountNumber)} %)` : ""}. Si el equipo la acepta,
+                            el total queda en <strong className="portal-num">{formatMoney(discountTotal)}</strong>.
+                          </>
+                        ) : (
+                          <>Vas a pedir una rebaja sobre el total vigente de {formatMoney(budget.total)}.</>
+                        )
+                      ) : (
+                        <>Vas a enviar un pedido de cambio: el equipo te responde con una versión nueva del presupuesto.</>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <p className="portal-action-intent" role="status">
+                    Vas a autorizar por <strong className="portal-num">{formatMoney(budget.total)}</strong> tal como está el
+                    presupuesto.
+                  </p>
+                )}
+
+                <label className="portal-field" htmlFor="portal-name">
+                  <span className="portal-field-label">Nombre y apellido de quien autoriza o pide</span>
+                  <input
+                    id="portal-name"
+                    name="name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    maxLength={120}
+                    autoComplete="name"
+                    required
+                    aria-describedby="portal-name-hint"
+                  />
+                  <span className="portal-help" id="portal-name-hint">
+                    {nameHint}
+                  </span>
+                </label>
+
+                {canEdit && actionMode === "discount" ? (
+                  <div className="portal-form-row portal-form-row--discount">
+                    <label className="portal-field" htmlFor="portal-discount-value">
+                      <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
+                      <input
+                        id="portal-discount-value"
+                        name="discount-value"
+                        inputMode={discountType === "percent" ? "decimal" : "numeric"}
+                        value={discountValue}
+                        onChange={(event) => setDiscountValue(event.target.value)}
+                        maxLength={discountType === "percent" ? 6 : 12}
+                        placeholder={discountType === "percent" ? "Ej.: 10" : "Ej.: 500000"}
+                        required
+                      />
+                    </label>
+                    <div className="portal-field portal-field--choice">
+                      <span className="portal-field-label" id="portal-discount-type-label">Tipo de rebaja</span>
+                      <PortalSegmented
+                        label="Tipo de rebaja"
+                        value={discountType}
+                        onChange={(next) => {
+                          setDiscountType(next);
+                          setDiscountValue("");
+                        }}
+                        options={[
+                          { value: "percent", label: "Porcentaje" },
+                          { value: "amount", label: "Monto" },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                <label className="portal-field" htmlFor="portal-note">
+                  <span className="portal-field-label">
+                    {actionMode === "authorize" ? "Comentario (opcional)" : actionMode === "discount" ? "Motivo de la rebaja" : "¿Qué cambios necesitás?"}
+                  </span>
+                  <textarea
+                    id="portal-note"
+                    name="note"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    maxLength={MAX_NOTE}
+                    rows={actionMode === "authorize" ? 2 : 3}
+                    required={actionMode !== "authorize"}
+                    placeholder={
+                      actionMode === "authorize"
+                        ? "Algo que quieras aclarar con la autorización"
+                        : actionMode === "discount"
+                          ? "Ej.: somos una ONG y el evento es benéfico"
+                          : "Ej.: necesito cambiar la fecha de montaje y sumar un equipo de sonido"
+                    }
+                  />
+                </label>
+
+                {actionMode === "authorize" ? (
+                  <label className="portal-consent" htmlFor="portal-consent">
+                    <input
+                      id="portal-consent"
+                      type="checkbox"
+                      checked={consent}
+                      onChange={(event) => setConsent(event.target.checked)}
+                      aria-describedby="portal-consent-hint"
+                      required
+                    />
+                    <span id="portal-consent-hint">
+                      Confirmo que revisé el detalle, los montos y las condiciones, y autorizo este presupuesto por{" "}
+                      <strong className="portal-num">{formatMoney(actionTotal)}</strong> en nombre de {clientLabel}.
+                    </span>
+                  </label>
+                ) : (
+                  <p className="portal-help">
+                    Nada se aplica solo: el equipo revisa tu pedido y te responde con una versión nueva o una contra-oferta por
+                    este mismo link.
+                  </p>
+                )}
+
+                {actionError ? (
+                  <p className="portal-error" role="alert">
+                    {actionError}
+                  </p>
+                ) : null}
+
+                <button
+                  className="portal-btn portal-btn--primary portal-btn--block"
+                  type="submit"
+                  disabled={sending}
+                  aria-busy={sending || undefined}
+                >
+                  {sending
+                    ? "Enviando…"
+                    : actionMode === "authorize"
+                      ? `Autorizar por ${formatMoney(actionTotal)}`
+                      : ACTION_BUTTON[actionMode]}
+                </button>
+                <p className="portal-help">
+                  {actionMode === "authorize"
+                    ? "La autorización queda registrada con tu nombre, la fecha y el detalle que ves en pantalla."
+                    : "Tu pedido no cambia el presupuesto hasta que el equipo lo revise y lo acepte."}
+                </p>
+              </form>
+            </section>
+          ) : null}
+
+          <section className="portal-card" aria-labelledby="portal-payments">
+            <div className="portal-card-head">
+              <h2 className="portal-card-title" id="portal-payments">
+                {approved ? "Plan de pagos" : "Plan de pagos propuesto"}
+              </h2>
+              <p className="portal-card-lead">
+                {budget.expectedPayments.length > 0
+                  ? "Cada concepto del plan con su estado real; el equipo confirma el cobro cuando llega la transferencia."
+                  : "Cada cuota con su vencimiento; los datos para transferir se muestran cuando el presupuesto esté autorizado."}
               </p>
             </div>
-          ) : (
-            <p className="portal-help">
-              El equipo de LedBox todavía no cargó los datos bancarios de esta empresa. Escribinos y te los pasamos para
-              completar el pago.
-            </p>
-          )}
 
-          {budget.expectedPayments.length > 0 ? (
-            <div className="portal-pay-plan">
+            {budget.expectedPayments.length > 0 ? (
               <div className="portal-table-wrap">
                 <table className="portal-table portal-table--plan portal-table--expected">
                   <caption className="portal-table-caption">Tus pagos</caption>
@@ -742,18 +1147,18 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
                   <tbody>
                     {budget.expectedPayments.map((expected) => {
                       const state = EXPECTED_STATUS[expected.status];
-                      const dueNow = dueNowExpected?.id === expected.id;
+                      const isDueNow = dueNowExpected?.id === expected.id;
                       return (
                         <tr key={expected.id} data-status={expected.status}>
-                          <td>
-                            {expected.label}
-                            {dueNow ? <small className="portal-item-note">A transferir ahora</small> : null}
+                          <td className="portal-item-cell">
+                            <strong className="portal-item-name">{expected.label}</strong>
+                            {isDueNow ? <small className="portal-item-note">A transferir ahora</small> : null}
                             {expected.status === "AWAITING" && expected.reviewNote ? (
                               <small className="portal-expected-note">Observación: {expected.reviewNote}</small>
                             ) : null}
                           </td>
-                          <td className="portal-num">{formatMoney(expected.amount)}</td>
-                          <td>
+                          <td className="portal-num" data-label="Monto">{formatMoney(expected.amount)}</td>
+                          <td data-label="Vencimiento">
                             {dueLabel(expected.dueAt)}
                             {expected.dueAt && expected.status !== "CONFIRMED" ? (
                               <span className="portal-countdown" data-tone={countdownTone(expected.dueAt)}>
@@ -761,7 +1166,7 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
                               </span>
                             ) : null}
                           </td>
-                          <td>
+                          <td data-label="Estado">
                             <span className="portal-chip" data-tone={state.tone}>
                               {state.label}
                             </span>
@@ -778,691 +1183,412 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
                               <small className="portal-expected-note">Ya no forma parte del plan de pagos.</small>
                             ) : null}
                           </td>
-                          <td>{expected.accountName ?? "Te la confirmamos al transferir"}</td>
+                          <td data-label="Cuenta destino">{expected.accountName ?? "Te la confirmamos al transferir"}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-              {paymentPlan.pending > 0 ? (
-                <p className="portal-help">
-                  Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
-                </p>
-              ) : null}
-              {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
-            </div>
-          ) : paymentPlan.installments.length > 0 || paymentPlan.terms ? (
-            <div className="portal-pay-plan">
-              {paymentPlan.installments.length > 0 ? (
-                <div className="portal-table-wrap">
-                  <table className="portal-table portal-table--plan">
-                    <caption className="portal-table-caption">Plan de pagos</caption>
-                    <thead>
+            ) : paymentPlan.installments.length > 0 ? (
+              <div className="portal-table-wrap">
+                <table className="portal-table portal-table--plan">
+                  <caption className="portal-table-caption">Cuotas del plan</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Cuota</th>
+                      <th scope="col" className="portal-num">
+                        Monto
+                      </th>
+                      <th scope="col">Vencimiento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentPlan.advanceAmount > 0 ? (
                       <tr>
-                        <th scope="col">Cuota</th>
-                        <th scope="col" className="portal-num">
-                          Monto
-                        </th>
-                        <th scope="col">Vencimiento</th>
+                        <td>Anticipo{approved ? " (a transferir ahora)" : " (con la autorización)"}</td>
+                        <td className="portal-num">{formatMoney(paymentPlan.advanceAmount)}</td>
+                        <td>Con la autorización</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {paymentPlan.advanceAmount > 0 ? (
-                        <tr>
-                          <td>Anticipo (a transferir ahora)</td>
-                          <td className="portal-num">{formatMoney(paymentPlan.advanceAmount)}</td>
-                          <td>Con la aprobación</td>
-                        </tr>
-                      ) : null}
-                      {paymentPlan.installments.map((installment, index) => (
-                        <tr key={`${installment.label}-${index}`}>
-                          <td>
-                            {installment.label}
-                            {paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
-                          </td>
-                          <td className="portal-num">{formatMoney(installment.amount)}</td>
-                          <td>
-                            {dueLabel(installment.dueAt)}
-                            {installment.dueAt ? (
-                              <span className="portal-countdown" data-tone={countdownTone(installment.dueAt)}>
-                                {formatCountdown(installment.dueAt, "client")}
-                              </span>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-              {paymentPlan.pending > 0 ? (
-                <p className="portal-help">
-                  Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
-                </p>
-              ) : null}
-              {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+                    ) : null}
+                    {paymentPlan.installments.map((installment, index) => (
+                      <tr key={`${installment.label}-${index}`}>
+                        <td>
+                          {installment.label}
+                          {paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
+                        </td>
+                        <td className="portal-num">{formatMoney(installment.amount)}</td>
+                        <td>
+                          {dueLabel(installment.dueAt)}
+                          {installment.dueAt ? (
+                            <span className="portal-countdown" data-tone={countdownTone(installment.dueAt)}>
+                              {formatCountdown(installment.dueAt, "client")}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="portal-empty">El presupuesto se paga en un solo pago: {formatMoney(budget.total)}.</p>
+            )}
 
-      {budget.proofUpload.allowed ? (
-        <section
-          className="portal-card portal-card--action"
-          aria-labelledby="portal-proof"
-          ref={proofRef}
-          tabIndex={-1}
-        >
-          <h2 className="portal-card-title" id="portal-proof">
-            Enviar comprobante
-          </h2>
-          <p className="portal-card-lead">
-            Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago estás
-            comprobando para que quede vinculado a ese concepto; el equipo de LedBox lo revisa desde el panel.
-          </p>
-          <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
-            {openExpected.length > 0 ? (
-              <label className="portal-field" htmlFor="portal-proof-concept">
-                <span className="portal-field-label">¿Qué pago estás comprobando?</span>
-                <select
-                  id="portal-proof-concept"
-                  name="proof-concept"
-                  value={proofExpectedId}
-                  onChange={(event) => {
-                    setProofExpectedId(event.target.value);
-                    setProofSent(false);
-                  }}
-                  required
-                >
-                  <option value="">Elegí el concepto…</option>
-                  {openExpected.map((expected) => (
-                    <option key={expected.id} value={expected.id}>
-                      {expected.label} · {formatMoney(expected.amount)}
-                      {expected.status === "PROOF" ? " (en revisión)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <div className="portal-form-row">
-              <label className="portal-field" htmlFor="portal-proof-name">
-                <span className="portal-field-label">Nombre y apellido</span>
-                <input
-                  id="portal-proof-name"
-                  name="proof-name"
-                  value={proofName}
-                  onChange={(event) => {
-                    setProofName(event.target.value);
-                    setProofSent(false);
-                  }}
-                  maxLength={120}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-              <label className="portal-field" htmlFor="portal-proof-file">
-                <span className="portal-field-label">Comprobante</span>
-                <input
-                  ref={proofInputRef}
-                  id="portal-proof-file"
-                  name="proof-file"
-                  type="file"
-                  accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
-                  onChange={(event) => {
-                    setProofFile(event.target.files?.[0] ?? null);
-                    setProofError("");
-                    setProofSent(false);
-                  }}
-                  aria-describedby="portal-proof-hint"
-                  required
-                />
-              </label>
-            </div>
-            <p className="portal-help" id="portal-proof-hint">
-              El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
-            </p>
-            {proofError ? (
-              <p className="portal-error" role="alert">
-                {proofError}
+            {paymentPlan.pending > 0 ? (
+              <p className="portal-help">
+                Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
               </p>
             ) : null}
-            {proofSent ? (
-              <p className="portal-ok" role="status">
-                Recibimos tu comprobante. El equipo lo revisa y marca el cobro; vas a ver el estado acá abajo.
+            {paymentPlan.terms ? <p className="portal-note">{paymentPlan.terms}</p> : null}
+            {!approved ? (
+              <p className="portal-help">
+                Los datos bancarios de {budget.organization} se muestran cuando autorices el presupuesto.
               </p>
             ) : null}
-            <button className="portal-btn portal-btn--primary" type="submit" disabled={proofBusy} aria-busy={proofBusy || undefined}>
-              {proofBusy ? "Subiendo comprobante…" : "Enviar comprobante"}
-            </button>
-          </form>
-        </section>
-      ) : null}
+          </section>
 
-      {budget.proofs.length > 0 ? (
-        <section className="portal-card" aria-labelledby="portal-proofs">
-          <h2 className="portal-card-title" id="portal-proofs">
-            Tus comprobantes
-          </h2>
-          <ul className="portal-proofs">
-            {budget.proofs.map((proof) => (
-              <li key={proof.id} className="portal-proof">
-                <span className="portal-chip" data-tone={PROOF_STATUS[proof.status].tone}>
-                  {PROOF_STATUS[proof.status].label}
-                </span>
-                <span className="portal-proof-main">
-                  <strong className="portal-proof-when">{formatDateTime(proof.createdAt)}</strong>
-                  <span className="portal-proof-meta">
-                    {paymentProofMimeLabel(proof.mime)} · {formatBytes(proof.size)} · {proof.uploadedByName}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {proofUploadHint(budget) ? <p className="portal-help">{proofUploadHint(budget)}</p> : null}
-        </section>
-      ) : null}
-
-      {budget.requests.length > 0 ? (
-        <section className="portal-card" aria-labelledby="portal-requests">
-          <h2 className="portal-card-title" id="portal-requests">
-            Tus solicitudes
-          </h2>
-          <ul className="portal-requests">
-            {budget.requests.map((request) => (
-              <li key={request.id} className="portal-request" data-status={request.status}>
-                <div className="portal-request-head">
-                  <span className="portal-chip" data-tone={budgetChangeStatusTone(request.status)}>
-                    {budgetChangeStatusLabel(request.status)}
-                  </span>
-                  <strong className="portal-request-kind">{budgetChangeKindLabel(request.kind)}</strong>
-                  <span className="portal-request-when">{formatDateTime(request.createdAt)}</span>
+          {approved ? (
+            <section className="portal-card portal-card--pay" aria-labelledby="portal-payment-data">
+              <div className="portal-card-head">
+                <h2 className="portal-card-title" id="portal-payment-data">
+                  Datos para transferir
+                </h2>
+              </div>
+              {transferNow ? (
+                <div className="portal-pay-now">
+                  <div>
+                    <span className="portal-pay-label">{transferNow.label}</span>
+                    <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
+                  </div>
+                  <span className="portal-pay-total portal-num">Total del presupuesto: {formatMoney(budget.total)}</span>
                 </div>
-                {requestSummary(request) ? <p className="portal-request-summary">{requestSummary(request)}</p> : null}
-                {request.note ? <p className="portal-request-note">Motivo: {request.note}</p> : null}
-                {request.status !== "pending" && request.responseNote ? (
-                  <p className="portal-request-response">
-                    Respuesta del equipo{request.resolvedByName ? ` (${request.resolvedByName})` : ""}
-                    {request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}: {request.responseNote}
+              ) : budget.expectedPayments.length > 0 ? (
+                <p className="portal-help">Ya confirmamos todos los pagos de este presupuesto: no queda nada por transferir.</p>
+              ) : null}
+
+              {budget.paymentDetails ? (
+                <div className="portal-pay-grid">
+                  <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
+                    {mark?.asset ? (
+                      <img className="portal-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
+                    ) : (
+                      <span className="portal-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
+                        {mark?.initials ?? "B"}
+                      </span>
+                    )}
+                    <span className="portal-bank-name">{mark?.label ?? "Datos de pago"}</span>
+                  </div>
+                  <dl className="portal-facts portal-facts--pay">
+                    <div>
+                      <dt>Titular</dt>
+                      <dd>{budget.paymentDetails.holder || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>RUC</dt>
+                      <dd>{budget.paymentDetails.ruc || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>Cuenta</dt>
+                      <dd>{budget.paymentDetails.account || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>Alias</dt>
+                      <dd>{budget.paymentDetails.alias || "—"}</dd>
+                    </div>
+                  </dl>
+                  <div className="portal-form-actions portal-print-hide">
+                    <button type="button" className="portal-btn portal-btn--ghost" onClick={() => void copyPaymentDetails()}>
+                      {copied ? "Datos copiados" : "Copiar datos de pago"}
+                    </button>
+                  </div>
+                  <p className="portal-help" aria-live="polite">
+                    {copied
+                      ? "Los datos quedaron en el portapapeles para pegarlos donde los necesites."
+                      : "Transferí el monto indicado y enviá el comprobante al equipo de LedBox."}
                   </p>
-                ) : request.status === "accepted" ? (
-                  <p className="portal-request-response">
-                    El equipo aplicó tu pedido{request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}.
+                </div>
+              ) : (
+                <p className="portal-help">
+                  El equipo de LedBox todavía no cargó los datos bancarios de esta empresa. Escribinos y te los pasamos para
+                  completar el pago.
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          {budget.proofUpload.allowed ? (
+            <section className="portal-card portal-print-hide" aria-labelledby="portal-proof" ref={proofRef} tabIndex={-1}>
+              <div className="portal-card-head">
+                <h2 className="portal-card-title" id="portal-proof">
+                  Enviar comprobante
+                </h2>
+                <p className="portal-card-lead">
+                  Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago
+                  estás comprobando para que quede vinculado a ese concepto; el equipo de LedBox lo revisa desde el panel.
+                </p>
+              </div>
+              <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
+                {openExpected.length > 0 ? (
+                  <label className="portal-field" htmlFor="portal-proof-concept">
+                    <span className="portal-field-label">¿Qué pago estás comprobando?</span>
+                    <select
+                      id="portal-proof-concept"
+                      name="proof-concept"
+                      value={proofExpectedId}
+                      onChange={(event) => {
+                        setProofExpectedId(event.target.value);
+                        setProofSent(false);
+                      }}
+                      required
+                    >
+                      <option value="">Elegí el concepto…</option>
+                      {openExpected.map((expected) => (
+                        <option key={expected.id} value={expected.id}>
+                          {expected.label} · {formatMoney(expected.amount)}
+                          {expected.status === "PROOF" ? " (en revisión)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="portal-form-row">
+                  <label className="portal-field" htmlFor="portal-proof-name">
+                    <span className="portal-field-label">Nombre y apellido</span>
+                    <input
+                      id="portal-proof-name"
+                      name="proof-name"
+                      value={proofName}
+                      onChange={(event) => {
+                        setProofName(event.target.value);
+                        setProofSent(false);
+                      }}
+                      maxLength={120}
+                      autoComplete="name"
+                      required
+                      aria-describedby="portal-proof-name-hint"
+                    />
+                    <span className="portal-help" id="portal-proof-name-hint">
+                      {contactName
+                        ? `Prellenado con el responsable de ${clientLabel}${contactRole ? ` · ${contactRole}` : ""}.`
+                        : `Escribí quién hizo la transferencia en nombre de ${clientLabel}.`}
+                    </span>
+                  </label>
+                  <label className="portal-field" htmlFor="portal-proof-file">
+                    <span className="portal-field-label">Comprobante</span>
+                    <input
+                      ref={proofInputRef}
+                      id="portal-proof-file"
+                      name="proof-file"
+                      type="file"
+                      accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
+                      onChange={(event) => {
+                        setProofFile(event.target.files?.[0] ?? null);
+                        setProofError("");
+                        setProofSent(false);
+                      }}
+                      aria-describedby="portal-proof-hint"
+                      required
+                    />
+                  </label>
+                </div>
+                <p className="portal-help" id="portal-proof-hint">
+                  El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
+                </p>
+                {proofError ? (
+                  <p className="portal-error" role="alert">
+                    {proofError}
                   </p>
                 ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {budget.timeline.length > 0 ? (
-        <section className="portal-card" aria-labelledby="portal-timeline">
-          <h2 className="portal-card-title" id="portal-timeline">
-            Cronología
-          </h2>
-          <p className="portal-card-lead">
-            Todo lo que pasó con tu presupuesto, con la fecha real de cada paso: envío, cambios, aprobación, pagos y evento.
-          </p>
-          <ol className="portal-timeline">
-            {budget.timeline.map((entry) => (
-              <li className="portal-timeline-step" key={entry.id} data-tone={entry.tone}>
-                <span className="portal-timeline-when">{formatDateTime(entry.at)}</span>
-                <span className="portal-timeline-body">
-                  <strong>{entry.title}</strong>
-                  {entry.detail ? <small>{entry.detail}</small> : null}
-                  <small className="portal-timeline-kind">
-                    {timelineKindLabel(entry.kind)}
-                    {entry.actor ? ` · ${entry.actor}` : ""}
-                  </small>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-
-      <section className="portal-card" aria-labelledby="portal-items">
-        <h2 className="portal-card-title" id="portal-items">
-          Detalle
-        </h2>
-        {budget.items.length === 0 ? (
-          <p className="portal-empty">Este presupuesto no tiene ítems cargados.</p>
-        ) : (
-          <div className="portal-table-wrap">
-            <table className="portal-table">
-              <thead>
-                <tr>
-                  <th scope="col">Producto / servicio</th>
-                  <th scope="col" className="portal-num">
-                    Cantidad
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Días
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Precio unitario
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Subtotal
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {budget.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      {item.name}
-                      {item.notes ? <small className="portal-item-note">{item.notes}</small> : null}
-                    </td>
-                    <td className="portal-num">{formatNumber(item.quantity)}</td>
-                    <td className="portal-num">{formatNumber(item.days)}</td>
-                    <td className="portal-num">{formatMoney(item.unitPrice)}</td>
-                    <td className="portal-num">{formatMoney(item.subtotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div className="portal-totals">
-          <div className="portal-total-row">
-            <span>Subtotal</span>
-            <span className="portal-num">{formatMoney(budget.subtotal)}</span>
-          </div>
-          {budget.discount > 0 ? (
-            <div className="portal-total-row">
-              <span>Descuento</span>
-              <span className="portal-num">− {formatMoney(budget.discount)}</span>
-            </div>
+                {proofSent ? (
+                  <p className="portal-ok" role="status">
+                    Recibimos tu comprobante. El equipo lo revisa y marca el cobro; vas a ver el estado en el plan de pagos.
+                  </p>
+                ) : null}
+                <button className="portal-btn portal-btn--primary" type="submit" disabled={proofBusy} aria-busy={proofBusy || undefined}>
+                  {proofBusy ? "Subiendo comprobante…" : "Enviar comprobante"}
+                </button>
+              </form>
+            </section>
           ) : null}
-          <div className="portal-total-row portal-total-row--strong">
-            <span>Total</span>
-            <span className="portal-num">{formatMoney(budget.total)}</span>
-          </div>
+
+          {budget.proofs.length > 0 ? (
+            <section className="portal-card" aria-labelledby="portal-proofs">
+              <h2 className="portal-card-title" id="portal-proofs">
+                Tus comprobantes
+              </h2>
+              <ul className="portal-proofs">
+                {budget.proofs.map((proof) => (
+                  <li key={proof.id} className="portal-proof">
+                    <span className="portal-chip" data-tone={PROOF_STATUS[proof.status].tone}>
+                      {PROOF_STATUS[proof.status].label}
+                    </span>
+                    <span className="portal-proof-main">
+                      <strong className="portal-proof-when">{formatDateTime(proof.createdAt)}</strong>
+                      <span className="portal-proof-meta">
+                        {paymentProofMimeLabel(proof.mime)} · {formatBytes(proof.size)} · {proof.uploadedByName}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {proofUploadHint(budget) ? <p className="portal-help">{proofUploadHint(budget)}</p> : null}
+            </section>
+          ) : null}
+
+          {budget.requests.length > 0 ? (
+            <section className="portal-card" aria-labelledby="portal-requests">
+              <h2 className="portal-card-title" id="portal-requests">
+                Tus pedidos
+              </h2>
+              <ul className="portal-requests">
+                {budget.requests.map((request) => (
+                  <li key={request.id} className="portal-request" data-status={request.status}>
+                    <div className="portal-request-head">
+                      <span className="portal-chip" data-tone={budgetChangeStatusTone(request.status)}>
+                        {budgetChangeStatusLabel(request.status)}
+                      </span>
+                      <strong className="portal-request-kind">{budgetChangeKindLabel(request.kind)}</strong>
+                      <span className="portal-request-when">{formatDateTime(request.createdAt)}</span>
+                    </div>
+                    {requestSummary(request) ? <p className="portal-request-summary">{requestSummary(request)}</p> : null}
+                    {request.note ? <p className="portal-request-note">Motivo: {request.note}</p> : null}
+                    {request.status !== "pending" && request.responseNote ? (
+                      <p className="portal-request-response">
+                        Respuesta del equipo{request.resolvedByName ? ` (${request.resolvedByName})` : ""}
+                        {request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}: {request.responseNote}
+                      </p>
+                    ) : request.status === "accepted" ? (
+                      <p className="portal-request-response">
+                        El equipo aplicó tu pedido{request.resolvedAt ? ` el ${formatDateTime(request.resolvedAt)}` : ""}.
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {budget.timeline.length > 0 ? (
+            <section className="portal-card" aria-labelledby="portal-timeline">
+              <div className="portal-card-head">
+                <h2 className="portal-card-title" id="portal-timeline">
+                  Cronología
+                </h2>
+                <p className="portal-card-lead">
+                  Todo lo que pasó con tu presupuesto, con la fecha real de cada paso: envío, cambios, autorización, pagos y
+                  evento.
+                </p>
+              </div>
+              <ol className="portal-timeline">
+                {budget.timeline.map((entry) => (
+                  <li className="portal-timeline-step" key={entry.id} data-tone={entry.tone}>
+                    <span className="portal-timeline-when">{formatDateTime(entry.at)}</span>
+                    <span className="portal-timeline-body">
+                      <strong>{entry.title}</strong>
+                      {entry.detail ? <small>{entry.detail}</small> : null}
+                      <small className="portal-timeline-kind">
+                        {timelineKindLabel(entry.kind)}
+                        {entry.actor ? ` · ${entry.actor}` : ""}
+                      </small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
+
+          <section className="portal-card portal-help-card" aria-labelledby="portal-help">
+            <h2 className="portal-card-title" id="portal-help">
+              ¿Necesitás algo más?
+            </h2>
+            <p className="portal-card-lead">
+              Escribinos respondiendo el correo con el que te enviamos este presupuesto y citá el Nº {budget.reference}: el
+              equipo de LedBox te contesta por el mismo canal.
+            </p>
+            <ul className="portal-help-list">
+              {!approved ? (
+                <li>
+                  <strong>Autorizar o pedir un cambio:</strong> desde el bloque de decisión de esta página, con el nombre de
+                  quien decide.
+                </li>
+              ) : null}
+              {pendingRequests.length > 0 ? (
+                <li>
+                  <strong>Tus pedidos:</strong> el equipo de LedBox los revisa y te responde por este mismo link.
+                </li>
+              ) : null}
+              <li>
+                <strong>Pagos:</strong> el plan y los datos para transferir están en esta misma página.
+                {budget.proofUpload.allowed ? " El comprobante se sube desde acá." : ""}
+              </li>
+              <li>
+                <strong>Responsable registrado:</strong> {contactName ? `${contactName}${contactRole ? ` · ${contactRole}` : ""}` : "todavía no cargamos un responsable para tu empresa."}
+              </li>
+            </ul>
+          </section>
         </div>
-      </section>
 
-      {!approved && budget.items.length > 0 ? (
-        <section className="portal-card portal-card--action" aria-labelledby="portal-editor" ref={proposalRef} tabIndex={-1}>
-          <h2 className="portal-card-title" id="portal-editor">
-            Ajustá tu presupuesto
-          </h2>
-          <p className="portal-card-lead">
-            Cambiá cantidades y días: el precio unitario queda fijo. Vas a ver el total en vivo y podés enviarnos tu
-            propuesta para que la revise el equipo.
-          </p>
-
-          <div className="portal-table-wrap">
-            <table className="portal-table portal-table--editor">
-              <thead>
-                <tr>
-                  <th scope="col">Producto / servicio</th>
-                  <th scope="col" className="portal-num">
-                    Cantidad
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Días
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Precio unitario
-                  </th>
-                  <th scope="col" className="portal-num">
-                    Subtotal
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {budget.items.map((item) => {
-                  const current = draft[item.id] ?? { quantity: item.quantity, days: item.days };
-                  const changed = current.quantity !== item.quantity || current.days !== item.days;
-                  return (
-                    <tr key={item.id} data-changed={changed ? "true" : undefined}>
-                      <td>
-                        {item.name}
-                        {changed ? (
-                          <small className="portal-item-note">
-                            Antes: {formatNumber(item.quantity)} × {formatNumber(item.days)} d
-                          </small>
-                        ) : null}
-                      </td>
-                      <td className="portal-num">
-                        <Stepper
-                          value={current.quantity}
-                          max={MAX_QUANTITY}
-                          label={`Cantidad de ${item.name}`}
-                          onChange={(quantity) => updateDraft(item.id, { quantity })}
-                        />
-                      </td>
-                      <td className="portal-num">
-                        <Stepper
-                          value={current.days}
-                          max={MAX_DAYS}
-                          label={`Días de ${item.name}`}
-                          onChange={(days) => updateDraft(item.id, { days })}
-                        />
-                      </td>
-                      <td className="portal-num">{formatMoney(item.unitPrice)}</td>
-                      <td className="portal-num">
-                        <strong>{formatMoney(item.unitPrice * current.quantity * current.days)}</strong>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="portal-totals">
-            <div className="portal-total-row">
-              <span>Subtotal propuesto</span>
-              <span className="portal-num">{formatMoney(proposedSubtotal)}</span>
-            </div>
-            {budget.discount > 0 ? (
-              <div className="portal-total-row">
-                <span>Descuento vigente</span>
-                <span className="portal-num">− {formatMoney(budget.discount)}</span>
-              </div>
-            ) : null}
-            <div className="portal-total-row portal-total-row--strong">
-              <span>Total estimado</span>
-              <span className="portal-num">{formatMoney(proposedTotal)}</span>
-            </div>
-          </div>
-
-          <form className="portal-form" onSubmit={(event) => void sendProposal("items", event)}>
-            <div className="portal-form-row">
-              <label className="portal-field" htmlFor="portal-contact-name">
-                <span className="portal-field-label">Nombre y apellido</span>
-                <input
-                  id="portal-contact-name"
-                  name="contact-name"
-                  value={contactName}
-                  onChange={(event) => setContactName(event.target.value)}
-                  maxLength={120}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-              <label className="portal-field" htmlFor="portal-contact-email">
-                <span className="portal-field-label">Correo (opcional)</span>
-                <input
-                  id="portal-contact-email"
-                  name="contact-email"
-                  type="email"
-                  value={contactEmail}
-                  onChange={(event) => setContactEmail(event.target.value)}
-                  maxLength={200}
-                  autoComplete="email"
-                />
-              </label>
-            </div>
-            <label className="portal-field" htmlFor="portal-items-note">
-              <span className="portal-field-label">Motivo de tu propuesta</span>
-              <textarea
-                id="portal-items-note"
-                name="items-note"
-                value={itemsNote}
-                onChange={(event) => setItemsNote(event.target.value)}
-                maxLength={MAX_NOTE}
-                rows={3}
-                required
-                placeholder="Ej.: necesito una pantalla más y un día menos de alquiler"
-              />
-            </label>
-            {itemsError ? (
-              <p className="portal-error" role="alert">
-                {itemsError}
-              </p>
-            ) : null}
-            {itemsSent ? (
-              <p className="portal-ok" role="status">
-                Recibimos tu propuesta. El equipo la revisa y te responde por este mismo link.
-              </p>
-            ) : null}
-            <div className="portal-form-actions">
-              <button
-                type="button"
-                className="portal-btn"
-                onClick={() => {
-                  setDraft(Object.fromEntries(budget.items.map((item) => [item.id, { quantity: item.quantity, days: item.days }])));
-                  setItemsSent(false);
-                }}
-              >
-                Restablecer
-              </button>
-              <button
-                className="portal-btn portal-btn--primary"
-                type="submit"
-                disabled={itemsSending || !itemsChanged}
-                aria-busy={itemsSending || undefined}
-              >
-                {itemsSending ? "Enviando propuesta…" : "Enviar propuesta"}
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
-
-      {!approved ? (
-        <section className="portal-card portal-card--action" aria-labelledby="portal-discount">
-          <h2 className="portal-card-title" id="portal-discount">
-            Pedir una rebaja
-          </h2>
-          <p className="portal-card-lead">
-            Contanos qué descuento necesitás y por qué. El equipo puede aceptarlo, responderte con una contra-oferta o
-            rechazarlo con una nota.
-          </p>
-          <form className="portal-form" onSubmit={(event) => void sendProposal("discount", event)}>
-            <div className="portal-form-row portal-form-row--discount">
-              <label className="portal-field" htmlFor="portal-discount-value">
-                <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
-                <input
-                  id="portal-discount-value"
-                  name="discount-value"
-                  inputMode={discountType === "percent" ? "decimal" : "numeric"}
-                  value={discountValue}
-                  onChange={(event) => setDiscountValue(event.target.value)}
-                  maxLength={discountType === "percent" ? 6 : 12}
-                  placeholder={discountType === "percent" ? "Ej.: 10" : "Ej.: 500000"}
-                  required
-                />
-              </label>
-              <div className="portal-field portal-field--choice" role="group" aria-label="Tipo de descuento">
-                <span className="portal-field-label">Tipo</span>
-                <div className="portal-segmented">
-                  <button
-                    type="button"
-                    className="portal-segment"
-                    data-active={discountType === "percent" ? "true" : undefined}
-                    aria-pressed={discountType === "percent"}
-                    onClick={() => {
-                      setDiscountType("percent");
-                      setDiscountValue("");
-                    }}
-                  >
-                    Porcentaje
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-segment"
-                    data-active={discountType === "amount" ? "true" : undefined}
-                    aria-pressed={discountType === "amount"}
-                    onClick={() => {
-                      setDiscountType("amount");
-                      setDiscountValue("");
-                    }}
-                  >
-                    Monto
-                  </button>
-                </div>
-              </div>
-            </div>
-            <label className="portal-field" htmlFor="portal-discount-note">
-              <span className="portal-field-label">Motivo del pedido</span>
-              <textarea
-                id="portal-discount-note"
-                name="discount-note"
-                value={discountNote}
-                onChange={(event) => setDiscountNote(event.target.value)}
-                maxLength={MAX_NOTE}
-                rows={3}
-                required
-                placeholder="Ej.: somos una ONG y el evento es benéfico"
-              />
-            </label>
-            {discountError ? (
-              <p className="portal-error" role="alert">
-                {discountError}
-              </p>
-            ) : null}
-            {discountSent ? (
-              <p className="portal-ok" role="status">
-                Recibimos tu pedido de rebaja. El equipo te responde por este mismo link.
-              </p>
-            ) : null}
-            <button className="portal-btn" type="submit" disabled={discountSending} aria-busy={discountSending || undefined}>
-              {discountSending ? "Enviando pedido…" : "Solicitar rebaja"}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      <section className="portal-card" aria-labelledby="portal-facts">
-        <h2 className="portal-card-title" id="portal-facts">
-          Evento y condiciones
-        </h2>
-        <dl className="portal-facts">
-          <div>
-            <dt>Cliente</dt>
-            <dd>{budget.client.company || budget.client.name}</dd>
-          </div>
-          <div>
-            <dt>Evento</dt>
-            <dd>{budget.event?.name || "Sin evento asociado"}</dd>
-          </div>
-          <div>
-            <dt>Lugar</dt>
-            <dd>{budget.event?.location || "—"}</dd>
-          </div>
-          <div>
-            <dt>Inicio</dt>
-            <dd>{budget.event?.startsAt ? formatDateTime(budget.event.startsAt) : "—"}</dd>
-          </div>
-          <div>
-            <dt>Validez de la oferta</dt>
-            <dd>{budget.validUntil ? `Hasta el ${formatDate(budget.validUntil)}` : "Sin fecha de vencimiento"}</dd>
-          </div>
-          <div>
-            <dt>Moneda</dt>
-            <dd>Guaraníes (PYG), sin decimales</dd>
-          </div>
-        </dl>
-        {budget.notes ? <p className="portal-note">{budget.notes}</p> : null}
-      </section>
-
-      {!approved ? (
-        <section className="portal-card portal-card--action" aria-labelledby="portal-approve">
-          <h2 className="portal-card-title" id="portal-approve">
-            Aprobar este presupuesto
-          </h2>
-          <form className="portal-form" onSubmit={approve}>
-            <label className="portal-field" htmlFor="portal-name">
-              <span className="portal-field-label">Nombre y apellido</span>
-              <input
-                id="portal-name"
-                name="name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={120}
-                autoComplete="name"
-                required
-                aria-describedby="portal-consent-hint"
-              />
-            </label>
-            <label className="portal-field" htmlFor="portal-note">
-              <span className="portal-field-label">Comentario (opcional)</span>
-              <textarea
-                id="portal-note"
-                name="note"
-                value={approveNote}
-                onChange={(event) => setApproveNote(event.target.value)}
-                maxLength={600}
-                rows={3}
-                placeholder="Algo que quieras aclarar con la aprobación"
-              />
-            </label>
-            <label className="portal-consent" htmlFor="portal-consent">
-              <input
-                id="portal-consent"
-                type="checkbox"
-                checked={consent}
-                onChange={(event) => setConsent(event.target.checked)}
-                aria-describedby="portal-consent-hint"
-                required
-              />
-              <span id="portal-consent-hint">
-                Confirmo que revisé el detalle, los montos y las condiciones, y apruebo este presupuesto en nombre de{" "}
-                {budget.client.company || budget.client.name}.
+        <aside className="portal-budget-aside" aria-labelledby="portal-summary">
+          <div className="portal-card portal-summary">
+            <h2 className="portal-card-title" id="portal-summary">
+              Resumen de lo pedido
+            </h2>
+            <p className="portal-summary-client">{clientLabel}</p>
+            <div className="portal-budget-chips">
+              <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
+                {budgetApprovalLabel(approvalState)}
               </span>
-            </label>
-            {approveError ? (
-              <p className="portal-error" role="alert">
-                {approveError}
-              </p>
+              {budget.validUntil ? (
+                <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                  {formatCountdown(budget.validUntil, "client")}
+                </span>
+              ) : null}
+            </div>
+            <dl className="portal-facts portal-facts--aside">
+              <div>
+                <dt>Ítems</dt>
+                <dd>{formatNumber(budget.items.length)} en el detalle</dd>
+              </div>
+              <div>
+                <dt>Evento</dt>
+                <dd>{budget.event?.name || "Sin evento asociado"}</dd>
+              </div>
+              <div>
+                <dt>Lugar</dt>
+                <dd>{budget.event?.location || "—"}</dd>
+              </div>
+              <div>
+                <dt>Válido hasta</dt>
+                <dd>{budget.validUntil ? formatDate(budget.validUntil) : "Sin fecha de vencimiento"}</dd>
+              </div>
+            </dl>
+            <div className="portal-totals portal-totals--aside">
+              <div className="portal-total-row">
+                <span>Subtotal</span>
+                <span className="portal-num">{formatMoney(itemsChanged ? proposedSubtotal : budget.subtotal)}</span>
+              </div>
+              {budget.discount > 0 ? (
+                <div className="portal-total-row">
+                  <span>Descuento</span>
+                  <span className="portal-num">− {formatMoney(budget.discount)}</span>
+                </div>
+              ) : null}
+              <div className="portal-total-row portal-total-row--strong">
+                <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
+                <span className="portal-num">{formatMoney(summaryTotal)}</span>
+              </div>
+            </div>
+            {approved && transferNow ? (
+              <div className="portal-pay-now portal-pay-now--aside">
+                <span className="portal-pay-label">{transferNow.label}</span>
+                <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
+                <span className="portal-help">Transferí este monto y subí el comprobante.</span>
+              </div>
             ) : null}
-            <button className="portal-btn portal-btn--primary" type="submit" disabled={approving} aria-busy={approving || undefined}>
-              {approving ? "Registrando aprobación…" : "Aprobar presupuesto"}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
-      {!approved ? (
-        <section className="portal-card portal-card--action" aria-labelledby="portal-changes">
-          <h2 className="portal-card-title" id="portal-changes">
-            Pedir cambios
-          </h2>
-          <p className="portal-card-lead">
-            Si necesitás algo que no se resuelve con cantidades o días, dejá tu comentario y el equipo de LedBox te
-            responde con una versión nueva.
-          </p>
-          <form className="portal-form" onSubmit={requestRevision}>
-            <label className="portal-field" htmlFor="portal-revision-name">
-              <span className="portal-field-label">Nombre (opcional)</span>
-              <input
-                id="portal-revision-name"
-                name="revision-name"
-                value={revisionName}
-                onChange={(event) => setRevisionName(event.target.value)}
-                maxLength={120}
-                autoComplete="name"
-              />
-            </label>
-            <label className="portal-field" htmlFor="portal-revision-note">
-              <span className="portal-field-label">¿Qué cambios necesitás?</span>
-              <textarea
-                id="portal-revision-note"
-                name="revision-note"
-                value={revisionNote}
-                onChange={(event) => setRevisionNote(event.target.value)}
-                maxLength={1000}
-                rows={4}
-                required
-                placeholder="Ej.: sumar un día más de alquiler y cambiar el lugar del evento"
-              />
-            </label>
-            {revisionError ? (
-              <p className="portal-error" role="alert">
-                {revisionError}
-              </p>
-            ) : null}
-            <button className="portal-btn" type="submit" disabled={requesting} aria-busy={requesting || undefined}>
-              {requesting ? "Enviando…" : "Solicitar cambios"}
-            </button>
-          </form>
-        </section>
-      ) : null}
+          </div>
+        </aside>
+      </div>
     </article>
   );
 }

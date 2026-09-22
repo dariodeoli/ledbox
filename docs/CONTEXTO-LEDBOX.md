@@ -572,3 +572,18 @@ Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/
   mensual con bloqueo del mes cerrado y reapertura solo OWNER con auditoría.
   **No es la factura electrónica de SIFEN/DNIT**: ver `docs/FISCAL-SIFEN.md`
   (alcance honesto y checklist de lo que falta).
+- **Portal del cliente rediseñado (rama `feat/portal-premium`)**: la vista
+  pública del presupuesto (`clientes.ledbox.online/p/<token>`) se lee de arriba
+  abajo —encabezado con estado y validez, resumen pegajoso en escritorio, ítems
+  ajustables, totales en vivo, una **única acción principal**, plan de pagos,
+  datos para transferir, comprobante, pedidos, cronología y ayuda— y en mobile
+  es una sola columna sin scroll de página (ítems y pagos como fichas apiladas).
+  La acción única resuelve según lo que hizo el cliente: **autorizar** (enciende
+  `approve`; con cantidades/días cambiados encadena `propose` + `approve`, con
+  `consent: true`) o **enviar petición** de rebaja (`propose`) o de cambio
+  (`revision`), siempre con la microcopy de lo que va a pasar. Quien autoriza
+  llega **prellenado con el responsable de la empresa cliente**
+  (`Client.contactName`/`contactRole`, issue #36) y puede cambiarse a mano; el
+  DTO público suma esos dos campos sin exponer nada más del cliente.
+  Autorizado (o con un pedido en revisión) desaparecen los editores: la página
+  queda en solo lectura, con impresión en claro y sin acciones muertas.
