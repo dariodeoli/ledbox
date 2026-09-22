@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_MESSAGE_TEMPLATES } from '@/lib/server/message-templates';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,29 @@ async function main() {
     where: { id: organization.id, paymentDetails: { equals: Prisma.DbNull } },
     data: { paymentDetails: PAYMENT_DETAILS },
   });
+
+  // Plantillas de mensajes (issue #35): solo si la empresa todavía no tiene
+  // ninguna, con ids estables e `skipDuplicates`. Misma lista que la provisión
+  // de arranque de la migración `202609210020_message_templates` (que cubre el
+  // deploy, donde el seed no corre).
+  const templateCount = await prisma.messageTemplate.count({ where: { organizationId: organization.id } });
+  if (templateCount === 0) {
+    await prisma.messageTemplate.createMany({
+      data: DEFAULT_MESSAGE_TEMPLATES.map((template) => ({
+        id: `${organization.id}_tpl_${template.key}`,
+        organizationId: organization.id,
+        category: template.category,
+        title: template.title,
+        body: template.body,
+        active: true,
+        sortOrder: template.sortOrder,
+        createdByName: 'Semilla LedBox',
+        updatedByName: 'Semilla LedBox',
+      })),
+      skipDuplicates: true,
+    });
+    console.log(`Seeded ${DEFAULT_MESSAGE_TEMPLATES.length} message templates for ${organization.slug}.`);
+  }
 
   for (const admin of admins) {
     const email = normalizeEmail(admin.email);

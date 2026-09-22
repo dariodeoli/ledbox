@@ -74,6 +74,7 @@ model Organization {
   paymentReminders  PaymentReminderLog[]
   paymentProofs     BudgetPaymentProof[]
   mailLogs          MailLog[]
+  messageTemplates  MessageTemplate[]
   suppliers         Supplier[]
   supplierJobs      SupplierJob[]
   inventoryItems    InventoryItem[]
@@ -1261,4 +1262,50 @@ model MailLog {
 
   @@index([organizationId, createdAt])
   @@index([category, createdAt])
+}
+
+/**
+ * Categoría de una plantilla de mensaje (issue #35): el contexto en el que se
+ * usa. `budget` presupuestos · `client` clientes · `event` eventos ·
+ * `collection` cobranzas · `other` genéricas.
+ */
+enum MessageTemplateCategory {
+  budget
+  client
+  event
+  collection
+  other
+}
+
+/**
+ * Plantilla de mensaje de WhatsApp por contexto (issue #35).
+ *
+ * El cuerpo guarda variables `{{...}}` y el render vive en una sola fuente
+ * (`lib/server/message-templates.ts`): completa cada variable con datos reales
+ * al enviar y **falla claro** si falta un dato, nunca deja un `{{...}}` visible.
+ * El índice único (`organizationId`, `category`, `title`) evita duplicados por
+ * categoría y es el candado de la provisión de arranque (migración y seed).
+ */
+model MessageTemplate {
+  id             String                  @id
+  organizationId String
+  category       MessageTemplateCategory
+  /// Título corto de la lista (ej.: «Recordatorio de pago»).
+  title          String
+  /// Cuerpo del mensaje con variables `{{clave}}` (saneado y acotado a 2000).
+  body           String
+  active         Boolean                 @default(true)
+  /// Orden dentro de la categoría (menor primero); los empates caen en `createdAt`.
+  sortOrder      Int                     @default(0)
+  createdById    String?
+  createdByName  String?
+  updatedById    String?
+  updatedByName  String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, category, title])
+  @@index([organizationId, category, sortOrder])
+  @@index([organizationId, active])
 }

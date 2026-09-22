@@ -14,6 +14,7 @@ export const ADMIN_ROUTES = [
   "/leads",
   "/presupuestos",
   "/finanzas",
+  "/plantillas",
   "/inventario",
   "/proveedores",
   "/promotoras",

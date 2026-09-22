@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "test:rules": "node --import tsx --test tests/field-rules.test.ts tests/admin-format.test.ts tests/offline-queue.test.ts tests/invitation-token.test.ts && node scripts/check-fields.mjs",
+    "test:rules": "node --import tsx --test tests/field-rules.test.ts tests/admin-format.test.ts tests/offline-queue.test.ts tests/invitation-token.test.ts tests/message-templates.test.ts && node scripts/check-fields.mjs",
     "check:fields": "node scripts/check-fields.mjs",
     "release:prepare": "npm run typecheck && npm run test:rules && npm run build"
   },

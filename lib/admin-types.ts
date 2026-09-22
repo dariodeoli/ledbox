@@ -546,6 +546,64 @@ export function expectedPaymentNeedsAction(row: Pick<AdminExpectedPaymentRow, "s
   return row.status === "AWAITING" && isOverdue(row.dueAt);
 }
 
+// ── Plantillas de mensajes (issue #35) ──────────────────────────────────────
+// Categorías y variables de las plantillas de WhatsApp. El render vive en
+// `lib/server/message-templates.ts` (fuente única, compartida con el panel).
+
+/** Categorías de plantilla; espeja el enum `MessageTemplateCategory` del schema. */
+export const MESSAGE_TEMPLATE_CATEGORIES = ["budget", "client", "event", "collection", "other"] as const;
+
+export type MessageTemplateCategoryValue = (typeof MESSAGE_TEMPLATE_CATEGORIES)[number];
+
+/** Clave de variable `{{...}}` del catálogo por categoría. */
+export type MessageTemplateVariableKey =
+  | "cliente"
+  | "empresa"
+  | "presupuesto"
+  | "monto"
+  | "saldo"
+  | "vencimiento"
+  | "evento"
+  | "fecha"
+  | "lugar"
+  | "link_portal"
+  | "vendedor";
+
+/** Definición de una variable: clave, etiqueta legible, ayuda y ejemplo. */
+export type MessageTemplateVariable = {
+  key: MessageTemplateVariableKey;
+  label: string;
+  hint: string;
+  sample: string;
+};
+
+/** Valores con los que se renderiza una plantilla; `null` = dato que falta. */
+export type MessageTemplateVariableValues = Partial<Record<MessageTemplateVariableKey, string | null | undefined>>;
+
+/** Contextos desde los que se envía una plantilla (issue #35) → su categoría. */
+export const MESSAGE_TEMPLATE_TARGET_CATEGORIES = {
+  budget: "budget",
+  event: "event",
+  client: "client",
+  payment: "collection",
+} as const;
+
+export type MessageTemplateTargetKind = keyof typeof MESSAGE_TEMPLATE_TARGET_CATEGORIES;
+
+/** Fila real de `/api/admin/message-templates`. */
+export type AdminMessageTemplateRow = {
+  id: string;
+  category: MessageTemplateCategoryValue;
+  title: string;
+  body: string;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  createdByName: string | null;
+  updatedByName: string | null;
+};
+
 // ── Recordatorios de cobro (issue #19) ──────────────────────────────────────
 // Espejo de `PaymentReminderLog`: una fila por cobro, canal y día de Asunción.
 // `email` lo manda Resend (status `sent`/`failed`); `whatsapp` registra que el
@@ -1157,6 +1215,7 @@ export const AUDIT_ENTITIES = [
   "TreasuryAccount",
   "TreasuryMovement",
   "Expense",
+  "MessageTemplate",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -1458,6 +1517,8 @@ export type AdminApiResponse = {
   expectedPayments?: AdminExpectedPaymentRow[];
   /** Totales de pagos esperados: por confirmar, vencidos y confirmados (issue #28). */
   expectedSummary?: AdminExpectedPaymentSummary;
+  /** Plantillas de mensajes de WhatsApp de la empresa activa (issue #35). */
+  templates?: AdminMessageTemplateRow[];
   /** Correo (issue #30): configuración, historial y resultado del envío. */
   mail?: AdminMailConfig;
   history?: AdminMailLogRow[];
