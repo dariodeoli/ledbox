@@ -15,6 +15,7 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/usuarios": ["OWNER", "ADMIN"],
   "/empresa": ["OWNER", "ADMIN"],
   "/configuracion": ["OWNER", "ADMIN"],
+  "/sistema": ["OWNER", "ADMIN"],
 };
 
 /** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
@@ -56,6 +57,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
       { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
       { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
       { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
+      { href: "/sistema", label: "Sistema", icon: "database", roles: RESTRICTED_MODULES["/sistema"] },
     ],
   },
 ];

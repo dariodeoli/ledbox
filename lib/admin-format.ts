@@ -313,6 +313,7 @@ const MAIL_CATEGORY: Record<string, string> = {
   budget: "Presupuesto",
   test: "Prueba",
   invitation: "Invitación",
+  alert: "Alerta de sistema",
 };
 const MAIL_STATUS: Record<string, string> = {
   sending: "Enviando",
@@ -1182,6 +1183,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   TreasuryMovement: "Movimiento de tesorería",
   Expense: "Gasto",
   MessageTemplate: "Plantilla de mensaje",
+  System: "Sistema",
 };
 
 const AUDIT_FIELD: Record<string, string> = {

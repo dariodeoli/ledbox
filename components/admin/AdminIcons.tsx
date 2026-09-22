@@ -226,6 +226,13 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <ellipse cx="12" cy="12" rx="3.6" ry="8" />
     </>
   ),
+  database: (
+    <>
+      <ellipse cx="12" cy="6.2" rx="7.6" ry="2.9" />
+      <path d="M4.4 6.2v11.6c0 1.6 3.4 2.9 7.6 2.9s7.6-1.3 7.6-2.9V6.2" />
+      <path d="M4.4 12c0 1.6 3.4 2.9 7.6 2.9s7.6-1.3 7.6-2.9" />
+    </>
+  ),
   instagram: (
     <>
       <rect x="3.5" y="3.5" width="17" height="17" rx="4.6" />

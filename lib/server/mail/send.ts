@@ -15,8 +15,8 @@ import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./tr
  *
  * Decisiones:
  * - Categorías cerradas (`MAIL_CATEGORIES`) para el historial y los asuntos:
- *   `reset`, `reminder`, `budget`, `test` e `invitation` (esta última cuando
- *   llegue el flujo de invitaciones, issue #30).
+ *   `reset`, `reminder`, `budget`, `test`, `invitation` y `alert` (esta última
+ *   para las alertas de operación a OWNER/ADMIN, issue #43).
  * - El historial NO reemplaza la bitácora de recordatorios
  *   (`PaymentReminderLog`, que garantiza un recordatorio por cobro y día): la
  *   complementa con el resultado crudo del proveedor.
@@ -28,7 +28,7 @@ import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./tr
  */
 
 /** Categorías de correo de la app (el historial y los asuntos se agrupan así). */
-export const MAIL_CATEGORIES = ["reset", "reminder", "budget", "test", "invitation"] as const;
+export const MAIL_CATEGORIES = ["reset", "reminder", "budget", "test", "invitation", "alert"] as const;
 export type MailCategory = (typeof MAIL_CATEGORIES)[number];
 
 export type MailActor = {

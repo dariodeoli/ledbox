@@ -1251,6 +1251,8 @@ enum MailCategory {
   budget
   test
   invitation
+  /// Alerta de operación a OWNER/ADMIN (issue #43): respaldo vencido o fallido.
+  alert
 }
 
 /** Estado real de un envío: `sending` mientras viaja, `sent` o `failed` (con su motivo). */

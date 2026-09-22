@@ -48,6 +48,7 @@ export type AdminIconName =
   | "upload"
   | "trash"
   | "globe"
+  | "database"
   | "instagram";
 
 export type AdminSessionUser = {
@@ -1376,6 +1377,8 @@ export const AUDIT_ENTITIES = [
   "TreasuryMovement",
   "Expense",
   "MessageTemplate",
+  // Alerta de operación del sistema (issue #43): respaldo vencido o fallido.
+  "System",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -1687,6 +1690,8 @@ export type AdminApiResponse = {
   status?: string;
   sentAt?: string;
   logId?: string | null;
+  /** Estado del sistema (`GET /api/admin/system`, issue #43). */
+  system?: AdminSystemStatus;
   /** PIN y auto-bloqueo propios (`GET /api/admin/profile/pin`, issue #21). */
   pin?: AdminPinConfig["pin"];
   autoLock?: AdminPinConfig["autoLock"];
@@ -1698,7 +1703,7 @@ export type AdminApiResponse = {
 // (prueba) y `POST /api/admin/budgets/send` (presupuesto al cliente).
 
 /** Categorías del historial de correo (espejo del enum `MailCategory`). */
-export type AdminMailCategory = "reset" | "reminder" | "budget" | "test" | "invitation";
+export type AdminMailCategory = "reset" | "reminder" | "budget" | "test" | "invitation" | "alert";
 
 export type AdminMailConfig = {
   provider: string;
@@ -1727,4 +1732,72 @@ export type AdminMailLogRow = {
   actorEmail: string | null;
   sentAt: string;
   createdAt: string;
+};
+
+// ── Estado del sistema (issue #43) ──────────────────────────────────────────
+// `GET /api/admin/system` (OWNER/ADMIN; nunca en la demo): versión, base,
+// migraciones aplicadas y respaldo real, leído del archivo de estado que
+// escribe `scripts/backup.mjs`. Sin estado, el panel dice que no hay respaldos.
+
+/** Una corrida real del respaldo (la escribe `scripts/backup.mjs`). */
+export type AdminBackupRun = {
+  startedAt: string;
+  finishedAt: string;
+  status: "ok" | "failed";
+  durationMs: number;
+  /** Nombre del archivo del respaldo; `null` si la corrida no llegó a escribir uno. */
+  file: string | null;
+  /** Bytes comprimidos del archivo. */
+  bytes: number | null;
+  /** Bytes descomprimidos verificados; `null` sin verificación. */
+  uncompressedBytes: number | null;
+  /** Tablas creadas por el dump (verificación); `null` sin verificación. */
+  tables: number | null;
+  verified: boolean;
+  error: string | null;
+};
+
+/**
+ * Estado real del respaldo: `ok` (dentro del umbral), `stale` (vencido),
+ * `failed` (el último intento falló), `missing` (el archivo ya no está) o
+ * `never` (todavía no hay respaldos registrados).
+ */
+export type AdminSystemBackupStatus = "ok" | "stale" | "failed" | "missing" | "never";
+
+export type AdminSystemStatus = {
+  version: string;
+  checkedAt: string;
+  database: {
+    status: "ok" | "unavailable";
+    latencyMs: number | null;
+    sizeBytes: number | null;
+    error: string | null;
+  };
+  migrations: {
+    applied: number | null;
+    last: { name: string; finishedAt: string } | null;
+  };
+  backup: {
+    status: AdminSystemBackupStatus;
+    /** Problema detectado con su texto (mismo que viaja en la alerta); `null` si está en orden. */
+    issue: { kind: "never" | "stale" | "failed" | "missing"; detail: string } | null;
+    /** Umbral configurado (`BACKUP_MAX_AGE_HOURS`). */
+    maxAgeHours: number;
+    /** Horas desde el último respaldo ok; `null` si nunca hubo uno. */
+    ageHours: number | null;
+    lastRun: AdminBackupRun | null;
+    lastSuccess: AdminBackupRun | null;
+    history: AdminBackupRun[];
+    /** Archivos reales en el directorio de respaldos. */
+    files: { count: number; bytes: number; latest: { name: string; bytes: number; modifiedAt: string } | null };
+    retention: { days: number; minKeep: number } | null;
+    /** ¿El archivo del último respaldo ok sigue en el directorio? */
+    fileExists: boolean | null;
+    /** Problema al leer el estado del respaldo (archivo ilegible o corrupto). */
+    stateError: string | null;
+  };
+  /** Uso estimado del volumen de respaldos (bytes libres y totales del disco). */
+  disk: { freeBytes: number | null; totalBytes: number | null };
+  /** Último error real de una corrida fallida. */
+  lastError: { message: string; at: string } | null;
 };
