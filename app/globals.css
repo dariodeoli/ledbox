@@ -2233,3 +2233,77 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .producto-top { gap: 10px; }
   .producto-actions { margin-left: auto; }
 }
+
+/* ─── UX DEL PANEL (22-09-2026): ayuda contextual, buscador global y barra móvil ───
+   Tres piezas nuevas del panel, todas sobre los tokens de `.admin-root`:
+   - `.admin-help-*`: botón «¿Qué es esto?» del topbar y contenido del diálogo;
+   - `.admin-searchbtn` y `.admin-palette*`: buscador global (⌘/Ctrl + K);
+   - `.admin-bottomnav`: barra inferior de mobile (≤720 px).
+   El bloque va al final del archivo a propósito: el rediseño del panel queda intacto. */
+
+/* ── Ayuda contextual del módulo ── */
+.admin-help-btn { width: 30px; height: 30px; }
+.admin-help-mark { font: 800 13px/1 var(--font-display); letter-spacing: .02em; }
+.admin-help-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-help-item { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.5; }
+.admin-help-item .admin-icon { margin-top: 3px; color: var(--a-accent); }
+/* `nav` es del sitio público (`position: fixed; top: 0…`) y se aplica a
+   cualquier `<nav>`: acá se neutraliza, igual que `.admin-subtabs`. */
+.admin-help-links { position: static; inset: auto; z-index: auto; display: grid; justify-content: normal; gap: 4px; height: auto; padding: 12px 0 0; border: 0; border-top: 1px solid var(--a-line); background: none; transition: none; }
+.admin-help-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-bg-2); color: var(--a-muted-2); font-size: 12px; font-weight: 600; text-decoration: none; transition: border-color .15s, color .15s, background .15s; }
+.admin-help-link:hover { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent); }
+
+/* ── Buscador global: botón del topbar ── */
+.admin-searchbtn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px; border: 1px solid var(--a-line-2); border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 600 12px var(--font-body); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.admin-searchbtn:hover { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-searchbtn-key { padding: 2px 4px; border: 1px solid var(--a-line); border-radius: 4px; background: var(--a-bg-2); color: var(--a-muted); font: 700 10px var(--font-body); letter-spacing: .04em; }
+
+/* ── Buscador global: paleta de resultados ──
+   Con `.admin-palette` adentro, el diálogo se ancla a una altura de paleta y
+   scrollea solo la lista de resultados (el buscador y las teclas quedan fijos). */
+.admin-dialog:has(.admin-palette) { height: min(560px, calc(100vh - 32px)); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.admin-palette { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; min-height: 0; }
+.admin-palette-search { display: flex; align-items: center; gap: 8px; }
+.admin-palette-search .admin-search { flex: 1 1 auto; width: 100%; max-width: none; }
+.admin-palette-body { min-height: 0; overflow-y: auto; transition: opacity .15s; }
+/* Mientras llega una búsqueda nueva quedan los resultados viejos, atenuados. */
+.admin-palette-body[data-loading="true"] { opacity: .55; }
+.admin-palette-hint { display: flex; align-items: center; gap: 8px; color: var(--a-muted); font-size: 12px; }
+.admin-palette-group { display: grid; gap: 4px; margin-bottom: 12px; }
+.admin-palette-group:last-child { margin-bottom: 0; }
+.admin-palette-group-title { padding: 0 4px; color: var(--a-muted); font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.admin-palette-option { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; padding: 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--a-muted-2); font: inherit; text-align: left; cursor: pointer; }
+.admin-palette-option:hover, .admin-palette-option[data-active="true"] { border-color: var(--a-line-2); background: var(--a-panel-2); color: var(--a-text); }
+.admin-palette-option[data-active="true"] { border-color: var(--a-accent); box-shadow: inset 2px 0 0 0 var(--a-accent); }
+.admin-palette-option > .admin-icon:first-child { color: var(--a-accent); }
+.admin-palette-option > .admin-icon:last-child { color: var(--a-muted); }
+.admin-palette-text { display: grid; min-width: 0; }
+.admin-palette-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-palette-text small { overflow: hidden; color: var(--a-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-palette-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--a-line); color: var(--a-muted); font-size: 10.5px; }
+.admin-palette-foot > span { display: inline-flex; align-items: center; gap: 4px; }
+.admin-palette-kbd { padding: 1px 4px; border: 1px solid var(--a-line); border-radius: 4px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 10px var(--font-body); }
+
+/* ── Barra inferior de mobile ──
+   Solo ≤720 px: cuatro módulos de uso diario + «Más» (abre el drawer). El
+   padding de `.admin-main` corre contenido y footer para que nada quede tapado;
+   en escritorio la barra no existe.
+   El `nav` del sitio público (`position: fixed; top: 0; height`) se aplica a
+   cualquier `<nav>`: se neutraliza acá, mismo criterio que `.admin-subtabs`. */
+.admin-bottomnav { display: none; }
+@media (max-width: 720px) {
+  .admin-shell { --a-bottomnav: calc(60px + env(safe-area-inset-bottom)); }
+  .admin-bottomnav { position: fixed; inset: auto 0 0 0; z-index: 22; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; justify-content: normal; gap: 4px; height: var(--a-bottomnav); padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); border-top: 1px solid var(--a-line); border-bottom: 0; background: color-mix(in srgb, var(--a-panel) 96%, transparent); backdrop-filter: blur(12px); transition: none; }
+  .admin-bottomnav-item { display: grid; justify-items: center; gap: 1px; min-width: 0; padding: 4px 2px; border: 0; border-radius: 8px; background: transparent; color: var(--a-muted); font: 600 10px var(--font-body); text-decoration: none; cursor: pointer; }
+  .admin-bottomnav-item[data-active="true"] { background: var(--a-accent-soft); color: var(--a-accent-strong); }
+  .admin-bottomnav-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-main { padding-bottom: var(--a-bottomnav); }
+  .admin-searchbtn { justify-content: center; width: 34px; padding: 0; }
+  .admin-searchbtn-label, .admin-searchbtn-key { display: none; }
+}
+@media (max-width: 420px) {
+  .admin-help-btn { width: 28px; height: 28px; }
+}
+@media print {
+  .admin-bottomnav { display: none; }
+}
