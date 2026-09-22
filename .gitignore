@@ -6,3 +6,7 @@ out
 !.env.example
 npm-debug.log*
 *.tsbuildinfo
+
+# Respaldos de la base (scripts/backup.mjs): los dumps y su estado no van al repo.
+backups/
+*.sql.gz

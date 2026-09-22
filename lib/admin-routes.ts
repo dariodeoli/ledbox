@@ -23,6 +23,7 @@ export const ADMIN_ROUTES = [
   "/empresa",
   "/perfil",
   "/auditoria",
+  "/sistema",
   "/demo",
   "/imprimir",
   // Aceptación pública de una invitación al equipo (issue #31): es del panel

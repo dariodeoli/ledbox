@@ -1129,6 +1129,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--por-confirmar { --por-confirmar-cols: minmax(10rem, 1.4fr) 6.5rem 7.5rem minmax(7rem, 1fr) 7.5rem 7rem 8rem 12rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 68rem; }
 /* Plantillas de mensajes (issue #35): título, mensaje en una línea, estado y acciones. */
 .admin-table--plantillas { --plantillas-cols: minmax(11rem, 1.1fr) minmax(18rem, 2.6fr) 6.5rem 8.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 48rem; }
+/* Respaldo de la base (issue #43): fecha, resultado, tamaño, tablas, duración,
+   archivo y error real de cada corrida. */
+.admin-table--respaldos { --respaldos-cols: 10.5rem 7rem 7.5rem 5rem 6.5rem minmax(11rem, 1.3fr) minmax(12rem, 1.5fr); --admin-cols: var(--respaldos-cols); --admin-table-min: 66rem; }
 
 /* ── Plantillas de mensajes (issue #35) ──
    Subtabs por categoría con contador, chips de variables y vista previa del

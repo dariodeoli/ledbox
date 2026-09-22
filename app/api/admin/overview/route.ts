@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { alertBackupIssueIfNeeded } from "@/lib/server/system-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +10,19 @@ export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
+  // Respaldo vencido o fallido (issue #43): la primera visita del día de un
+  // OWNER/ADMIN al panel evalúa el estado y avisa por correo una sola vez por
+  // problema; la demo no participa.
+  if (!auth.context.demo && (auth.context.role === "OWNER" || auth.context.role === "ADMIN")) {
+    const context = auth.context;
+    after(async () => {
+      try {
+        await alertBackupIssueIfNeeded(context);
+      } catch (error) {
+        console.error("[system] No se pudo evaluar la alerta de respaldo:", error instanceof Error ? error.message : error);
+      }
+    });
+  }
   const now = new Date();
   const [clients, budgets, events, suppliers, inventory, promoters, leads, receivables, pendingCollections, payables, upcoming] = await Promise.all([
     db.client.count({ where: { organizationId, active: true } }),
