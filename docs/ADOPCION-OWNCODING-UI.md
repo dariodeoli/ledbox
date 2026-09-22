@@ -102,3 +102,31 @@ donde hoy se aplica `data-theme`.
    (`docs/DISENO-PANEL.md`), para migrar cada objeto una sola vez.
 4. **Objetos nuevos** (§3): implementar en la librería y adoptar acá en la
    misma pasada.
+
+## 6. Plan mecánico de la prioridad 1 (sin Tailwind)
+
+Se adopta `v0.13.1` (solo utils puros): `npm install github:dariodeoli/owncoding-ui#v0.13.1`.
+Nada de Tailwind, nada de estilos: son funciones y catálogos.
+
+| Paso | Archivo(s) | Cambio |
+| --- | --- | --- |
+| 1 | `package.json`, `.npmrc`/env | fijar `owncoding-ui#v0.13.1` y documentar el token de build |
+| 2 | `lib/admin-format.ts` | `formatMoney`/`formatMoneyInput` delegan en `formatGs`/`formatGsInput`/`parseGsInput`; se borra el `Intl` duplicado |
+| 3 | `lib/field-rules.ts` | el teléfono usa `parseTelefono`/`componerTelefono`/`telefonoValidado` (mismo contrato de `FIELD_*`: los mensajes no cambian) |
+| 4 | Tesorería/Conciliación/Datos de pago | el catálogo de bancos y sus logos salen de `BANCOS_PARAGUAY` + `logoDeBanco`, sin listas locales |
+| 5 | Clientes/Eventos/Leads | el campo ciudad usa `CIUDADES_PARAGUAY` + `buscarCiudad`/`departamentoDe` |
+| 6 | Pruebas | `npm run test:rules` cubre los formatos nuevos (mismos resultados que hoy) |
+
+Verificación: los valores de pantalla **no cambian** (mismo `Gs 1.234.567`, mismo
+`+595 982 029 217`, mismas ciudades) y los imprimibles siguen idénticos.
+
+## 7. Requisito de deploy (Coolify)
+
+Al adoptar la librería, el build necesita un token de lectura del repo privado:
+
+- Crear un *fine-grained token* de GitHub con acceso de lectura a
+  `dariodeoli/owncoding-ui` y cargarlo en Coolify como `GITHUB_TOKEN` del build.
+- En `package.json` la dependencia queda como
+  `git+https://x-access-token:${GITHUB_TOKEN}@github.com/dariodeoli/owncoding-ui.git#v0.13.1`
+  (o `.npmrc` con `//github.com/:_authToken=${GITHUB_TOKEN}`).
+- Probar el build en una rama antes de mergear a la rama viva.
