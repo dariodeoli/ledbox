@@ -5,6 +5,9 @@ import {
   budgetStatusLabel,
   checklistProgress,
   clientTypeLabel,
+  clientWhatsappMessage,
+  CLIENT_LINK_MESSAGES,
+  contactPhoneValid,
   eventStatusLabel,
   formatCountdown,
   formatDate,
@@ -14,14 +17,20 @@ import {
   formatMonths,
   formatNumber,
   formatTime,
+  instagramHref,
+  instagramLabel,
+  instagramValid,
   isOverdue,
   isUpcomingWithin,
   paymentStatusLabel,
   paymentStatusTone,
   statusTone,
+  websiteHref,
+  websiteValid,
   whatsappHref,
 } from "@/lib/admin-format";
 import { canWrite, matchesQuery } from "@/lib/admin-policy";
+import { clientLogoUrl } from "@/lib/admin-types";
 import type {
   AdminClientBudgetRow,
   AdminClientDetail,
@@ -29,7 +38,9 @@ import type {
   AdminClientPaymentRow,
   AdminClientRow,
 } from "@/lib/admin-types";
+import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
+import { AdminAvatar } from "../AdminAvatar";
 import {
   AdminBadge,
   AdminButton,
@@ -39,6 +50,7 @@ import {
   AdminEmpty,
   AdminFormPanel,
   AdminIconLink,
+  AdminImageUpload,
   AdminKpi,
   AdminNote,
   AdminPanel,
@@ -48,9 +60,9 @@ import {
   AdminToolbar,
   AdminWhatsappLink,
 } from "../AdminUI";
-import { EmailField, PhoneField, SearchField, SelectField, TextField } from "../AdminFields";
+import { EmailField, PhoneField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
-import { normalizeEmail, normalizePhone } from "@/lib/field-rules";
+import { FIELD_LIMITS, FIELD_MESSAGES, emailValid } from "@/lib/field-rules";
 
 const TYPE_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -74,7 +86,48 @@ const ORDER_OPTIONS = [
   { value: "RECENT", label: "Alta reciente" },
 ];
 
-const EMPTY_FORM = { name: "", company: "", type: "FINAL", phone: "", email: "", ruc: "" };
+/**
+ * Formulario único del alta y la edición (issue #36): los mismos campos del
+ * cliente, su persona encargada y los links directos. El logo se sube después
+ * de guardar, porque necesita el id del cliente.
+ */
+const EMPTY_FORM = {
+  name: "",
+  company: "",
+  type: "FINAL",
+  ruc: "",
+  phone: "",
+  email: "",
+  contactName: "",
+  contactRole: "",
+  contactPhone: "",
+  contactEmail: "",
+  website: "",
+  instagram: "",
+  whatsapp: "",
+  notes: "",
+};
+
+type ClientForm = typeof EMPTY_FORM;
+
+function formFromClient(client: AdminClientRow): ClientForm {
+  return {
+    name: client.name,
+    company: client.company ?? "",
+    type: client.type === "RESELLER" ? "RESELLER" : "FINAL",
+    ruc: client.ruc ?? "",
+    phone: client.phone ?? "",
+    email: client.email ?? "",
+    contactName: client.contactName ?? "",
+    contactRole: client.contactRole ?? "",
+    contactPhone: client.contactPhone ?? "",
+    contactEmail: client.contactEmail ?? "",
+    website: client.website ?? "",
+    instagram: client.instagram ?? "",
+    whatsapp: client.whatsapp ?? "",
+    notes: client.notes ?? "",
+  };
+}
 
 function clientLabel(client: Pick<AdminClientRow, "name" | "company">): string {
   return client.company?.trim() || client.name;
@@ -158,6 +211,67 @@ function paymentFact(payment: AdminClientPaymentRow): { label: string; tone: Ret
   };
 }
 
+/**
+ * Identidad del cliente (issue #36): logo subido servido con sesión o el
+ * monograma de iniciales del avatar único del panel. Nunca un `<img>` a mano.
+ */
+function ClientLogo({
+  client,
+  size = 22,
+  title,
+}: {
+  client: Pick<AdminClientRow, "id" | "name" | "company" | "logoUpdatedAt">;
+  size?: 22 | 40 | 64;
+  title?: string;
+}) {
+  const name = clientLabel(client);
+  const src = client.logoUpdatedAt ? clientLogoUrl(client.id, client.logoUpdatedAt) : null;
+  return (
+    <AdminAvatar
+      name={name}
+      src={src}
+      size={size}
+      title={title ?? (src ? `Logo de ${name}` : `Monograma de ${name} (sin logo subido)`)}
+    />
+  );
+}
+
+/**
+ * Links directos del cliente (issue #36): WhatsApp con el mensaje prellenado,
+ * Instagram y sitio web. Cada link sale de su propio dato —cuando falta, no se
+ * dibuja ni se reemplaza por otro— y el WhatsApp usa el número propio si
+ * difiere del teléfono general.
+ */
+function ClientLinks({
+  client,
+  name,
+  message,
+  compact = false,
+}: {
+  client: Pick<AdminClientRow, "phone" | "whatsapp" | "website" | "instagram">;
+  name: string;
+  message?: string | null;
+  compact?: boolean;
+}) {
+  const instagram = instagramHref(client.instagram);
+  const instagramHandle = instagramLabel(client.instagram);
+  const web = websiteHref(client.website);
+  return (
+    <>
+      <AdminWhatsappLink phone={client.whatsapp || client.phone} name={name} message={compact ? null : message} />
+      {instagram ? (
+        <AdminIconLink
+          href={instagram}
+          icon="instagram"
+          label={`Ver el Instagram de ${name} (${instagramHandle})`}
+          external
+        />
+      ) : null}
+      {web ? <AdminIconLink href={web} icon="globe" label={`Abrir el sitio web de ${name}`} external /> : null}
+    </>
+  );
+}
+
 export function ClientesModule() {
   const { role } = useAdminSession();
   // La lista trae las métricas reales de cada cliente (issue #34): deuda
@@ -169,7 +283,11 @@ export function ClientesModule() {
   const [filter, setFilter] = useState("ALL");
   const [order, setOrder] = useState("ACTIVITY");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<ClientForm>(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingLogoVersion, setEditingLogoVersion] = useState<string | null>(null);
+  const [pendingLogo, setPendingLogo] = useState<PreparedIdentityImage | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
@@ -185,7 +303,18 @@ export function ClientesModule() {
         if (filter === "NO_PURCHASES") return client.metrics.contracts === 0;
         return true;
       })
-      .filter((client) => matchesQuery(query, [client.name, client.company, client.ruc, client.email, client.phone]));
+      .filter((client) =>
+        matchesQuery(query, [
+          client.name,
+          client.company,
+          client.ruc,
+          client.email,
+          client.phone,
+          client.contactName,
+          client.contactEmail,
+          client.contactPhone,
+        ]),
+      );
     return sortClients(list, order);
   }, [clients.data, query, type, filter, order]);
 
@@ -201,28 +330,127 @@ export function ClientesModule() {
     };
   }, [clients.data]);
 
+  // Ayuda del front con el mismo mensaje que revalida el API (regla única).
+  const fieldErrors = {
+    phone: form.phone && !contactPhoneValid(form.phone) ? FIELD_MESSAGES.phone : null,
+    email: form.email && !emailValid(form.email) ? FIELD_MESSAGES.email : null,
+    contactPhone: form.contactPhone && !contactPhoneValid(form.contactPhone) ? FIELD_MESSAGES.phone : null,
+    contactEmail: form.contactEmail && !emailValid(form.contactEmail) ? FIELD_MESSAGES.email : null,
+    website: form.website && !websiteValid(form.website) ? CLIENT_LINK_MESSAGES.website : null,
+    instagram: form.instagram && !instagramValid(form.instagram) ? CLIENT_LINK_MESSAGES.instagram : null,
+    whatsapp: form.whatsapp && !contactPhoneValid(form.whatsapp) ? FIELD_MESSAGES.phone : null,
+  };
+  const firstFieldError = Object.values(fieldErrors).find(Boolean) ?? "";
+
+  const savedLogo = editingId && !logoRemoved ? editingLogoVersion : null;
+  const previewLogoSrc = pendingLogo?.dataUrl ?? (editingId && savedLogo ? clientLogoUrl(editingId, savedLogo) : null);
+  const hasLogo = Boolean(pendingLogo) || Boolean(savedLogo);
+
+  function openCreate() {
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+    setEditingLogoVersion(null);
+    setPendingLogo(null);
+    setLogoRemoved(false);
+    setFormError("");
+    setStatus("");
+    setShowForm(true);
+  }
+
+  function openEdit(client: AdminClientRow) {
+    setForm(formFromClient(client));
+    setEditingId(client.id);
+    setEditingLogoVersion(client.logoUpdatedAt ?? null);
+    setPendingLogo(null);
+    setLogoRemoved(false);
+    setFormError("");
+    setStatus("");
+    setDetail(null);
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setEditingLogoVersion(null);
+    setPendingLogo(null);
+    setLogoRemoved(false);
+    setFormError("");
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (firstFieldError) {
+      setFormError(firstFieldError);
+      return;
+    }
     setBusy(true);
     setFormError("");
     setStatus("");
-    const result = await adminSend("/api/admin/clients", {
+    const isEditing = Boolean(editingId);
+    const payload = {
       name: form.name,
-      company: form.company || undefined,
+      company: form.company || null,
       type: form.type,
-      phone: normalizePhone(form.phone) || undefined,
-      email: normalizeEmail(form.email) || undefined,
-      ruc: form.ruc || undefined,
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setFormError(result.error);
-      return;
+      ruc: form.ruc || null,
+      phone: form.phone || null,
+      email: form.email || null,
+      contactName: form.contactName || null,
+      contactRole: form.contactRole || null,
+      contactPhone: form.contactPhone || null,
+      contactEmail: form.contactEmail || null,
+      website: form.website || null,
+      instagram: form.instagram || null,
+      whatsapp: form.whatsapp || null,
+      notes: form.notes || null,
+    };
+
+    let clientId = editingId;
+    if (editingId) {
+      const result = await adminSend(`/api/admin/clients/${editingId}`, payload, "PATCH");
+      if (!result.ok) {
+        setBusy(false);
+        setFormError(result.error);
+        return;
+      }
+    } else {
+      const result = await adminSend<{ client?: { id?: string } }>("/api/admin/clients", payload);
+      if (!result.ok) {
+        setBusy(false);
+        setFormError(result.error);
+        return;
+      }
+      clientId = result.data.client?.id ?? null;
     }
-    setForm(EMPTY_FORM);
-    setStatus(`Cliente «${form.name}» registrado.`);
+
+    // El logo necesita el id del cliente: recién guardados los datos se sube (o
+    // se quita). Si falla, los datos ya quedaron guardados y se avisa tal cual.
+    if (clientId && (pendingLogo || (logoRemoved && editingLogoVersion))) {
+      const logoResult = pendingLogo
+        ? await adminSend(`/api/admin/clients/${clientId}/logo`, {
+            data: pendingLogo.base64,
+            mime: pendingLogo.mime,
+            width: pendingLogo.width,
+            height: pendingLogo.height,
+          })
+        : await adminSend(`/api/admin/clients/${clientId}/logo`, undefined, "DELETE");
+      if (!logoResult.ok) {
+        setBusy(false);
+        setEditingId(clientId);
+        setEditingLogoVersion(null);
+        setFormError(`Guardamos los datos del cliente, pero el logo no: ${logoResult.error}`);
+        clients.reload();
+        return;
+      }
+    }
+
+    setBusy(false);
+    setStatus(isEditing ? `Actualizamos «${form.name}».` : `Cliente «${form.name}» registrado.`);
+    closeForm();
     clients.reload();
   }
+
+  const previewName = form.company || form.name || "Cliente";
 
   return (
     <div className="admin-module-page">
@@ -260,7 +488,8 @@ export function ClientesModule() {
             icon="plus"
             onClick={() => {
               setFormError("");
-              setShowForm((open) => !open);
+              if (showForm && !editingId) setShowForm(false);
+              else openCreate();
             }}
             aria-expanded={showForm}
           >
@@ -273,57 +502,164 @@ export function ClientesModule() {
 
       {writable && showForm ? (
         <AdminFormPanel
-          title="Nuevo cliente"
-          submitLabel="Registrar cliente"
+          title={editingId ? `Editar cliente · ${form.name || "sin nombre"}` : "Nuevo cliente"}
+          submitLabel={editingId ? "Guardar cambios" : "Registrar cliente"}
           onSubmit={submit}
-          onCancel={() => setShowForm(false)}
+          onCancel={closeForm}
           busy={busy}
           status={formError}
         >
-          <TextField
-            label="Nombre / responsable"
-            required
-            maxLength={120}
-            value={form.name}
-            onChange={(value) => setForm({ ...form, name: value })}
-            placeholder="Ej.: María González"
-          />
-          <TextField
-            label="Empresa"
-            maxLength={120}
-            value={form.company}
-            onChange={(value) => setForm({ ...form, company: value })}
-            placeholder="Ej.: Samsung Paraguay"
-          />
-          <SelectField
-            label="Tipo"
-            value={form.type}
-            onChange={(value) => setForm({ ...form, type: value })}
-            options={[
-              { value: "FINAL", label: "Cliente final" },
-              { value: "RESELLER", label: "Mayorista / revendedor" },
-            ]}
-          />
-          <PhoneField
-            label="Teléfono"
-            hint="Con código de país"
-            value={form.phone}
-            onChange={(value) => setForm({ ...form, phone: value })}
-          />
-          <EmailField
-            label="Correo"
-            value={form.email}
-            onChange={(value) => setForm({ ...form, email: value })}
-            placeholder="contacto@empresa.com"
-          />
-          <TextField
-            label="RUC / CI"
-            maxLength={30}
-            value={form.ruc}
-            onChange={(value) => setForm({ ...form, ruc: value })}
-            placeholder="80012345-6"
-            inputMode="numeric"
-          />
+          <div className="admin-form-group">
+            <span className="admin-form-group-title">Cliente</span>
+            <TextField
+              label="Nombre"
+              required
+              maxLength={FIELD_LIMITS.name}
+              value={form.name}
+              onChange={(value) => setForm({ ...form, name: value })}
+              placeholder="Ej.: Samsung Paraguay"
+              hint="Como figura en la cartera; si es una persona, su nombre."
+            />
+            <TextField
+              label="Empresa"
+              maxLength={FIELD_LIMITS.company}
+              value={form.company}
+              onChange={(value) => setForm({ ...form, company: value })}
+              placeholder="Ej.: Samsung Paraguay"
+            />
+            <SelectField
+              label="Tipo"
+              value={form.type}
+              onChange={(value) => setForm({ ...form, type: value })}
+              options={[
+                { value: "FINAL", label: "Cliente final" },
+                { value: "RESELLER", label: "Mayorista / revendedor" },
+              ]}
+            />
+            <TextField
+              label="RUC / CI"
+              maxLength={30}
+              value={form.ruc}
+              onChange={(value) => setForm({ ...form, ruc: value })}
+              placeholder="80012345-6"
+              inputMode="numeric"
+            />
+          </div>
+
+          <div className="admin-form-group">
+            <span className="admin-form-group-title">Contacto general</span>
+            <PhoneField
+              label="Teléfono"
+              hint="Con código de país"
+              value={form.phone}
+              onChange={(value) => setForm({ ...form, phone: value })}
+              error={fieldErrors.phone}
+            />
+            <EmailField
+              label="Correo"
+              value={form.email}
+              onChange={(value) => setForm({ ...form, email: value })}
+              placeholder="contacto@empresa.com"
+              error={fieldErrors.email}
+            />
+          </div>
+
+          <div className="admin-form-group">
+            <span className="admin-form-group-title">Persona encargada</span>
+            <TextField
+              label="Nombre del encargado"
+              maxLength={FIELD_LIMITS.name}
+              value={form.contactName}
+              onChange={(value) => setForm({ ...form, contactName: value })}
+              placeholder="Ej.: María González"
+            />
+            <TextField
+              label="Cargo"
+              maxLength={FIELD_LIMITS.name}
+              value={form.contactRole}
+              onChange={(value) => setForm({ ...form, contactRole: value })}
+              placeholder="Ej.: Gerenta de marketing"
+            />
+            <PhoneField
+              label="Teléfono directo"
+              value={form.contactPhone}
+              onChange={(value) => setForm({ ...form, contactPhone: value })}
+              error={fieldErrors.contactPhone}
+            />
+            <EmailField
+              label="Correo directo"
+              value={form.contactEmail}
+              onChange={(value) => setForm({ ...form, contactEmail: value })}
+              error={fieldErrors.contactEmail}
+            />
+          </div>
+
+          <div className="admin-form-group">
+            <span className="admin-form-group-title">Links directos</span>
+            <TextField
+              label="Sitio web"
+              maxLength={200}
+              value={form.website}
+              onChange={(value) => setForm({ ...form, website: value })}
+              placeholder="empresa.com.py"
+              inputMode="url"
+              error={fieldErrors.website}
+              hint="Sin «https://» también funciona."
+            />
+            <TextField
+              label="Instagram"
+              maxLength={64}
+              value={form.instagram}
+              onChange={(value) => setForm({ ...form, instagram: value })}
+              placeholder="@empresa"
+              error={fieldErrors.instagram}
+              hint="El usuario con arroba o el link del perfil."
+            />
+            <PhoneField
+              label="WhatsApp"
+              hint="Solo si difiere del teléfono general"
+              value={form.whatsapp}
+              onChange={(value) => setForm({ ...form, whatsapp: value })}
+              error={fieldErrors.whatsapp}
+            />
+          </div>
+
+          <div className="admin-form-group admin-form-group--wide">
+            <span className="admin-form-group-title">Notas</span>
+            <TextAreaField
+              label="Notas internas"
+              maxLength={FIELD_LIMITS.notes}
+              rows={3}
+              wide
+              value={form.notes}
+              onChange={(value) => setForm({ ...form, notes: value })}
+              placeholder="Acuerdos, condiciones de facturación, contactos alternos…"
+            />
+          </div>
+
+          <div className="admin-form-group admin-form-group--image">
+            <span className="admin-form-group-title">Logo</span>
+            <AdminImageUpload
+              label="Logo del cliente"
+              mode="logo"
+              hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
+              preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
+              busy={busy}
+              onPrepared={(image) => {
+                setPendingLogo(image);
+                setLogoRemoved(false);
+              }}
+              onRemove={
+                hasLogo
+                  ? () => {
+                      setPendingLogo(null);
+                      setLogoRemoved(true);
+                    }
+                  : undefined
+              }
+              removeLabel="Quitar logo"
+            />
+          </div>
         </AdminFormPanel>
       ) : null}
 
@@ -357,14 +693,18 @@ export function ClientesModule() {
             {rows.map((client) => {
               const name = clientLabel(client);
               const metrics = client.metrics;
+              const contact = [client.contactPhone || client.phone, client.contactEmail || client.email].filter(Boolean).join(" · ");
               return (
                 <AdminRow key={client.id}>
                   <AdminCell title={`${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`}>
-                    <strong>{name}</strong>
-                    {client.company ? <small className="admin-cell-sub"> · {client.name}</small> : null}
+                    <span className="admin-identity">
+                      <ClientLogo client={client} size={22} />
+                      <strong>{name}</strong>
+                      {client.company && client.name !== client.company ? <small className="admin-cell-sub"> · {client.name}</small> : null}
+                    </span>
                   </AdminCell>
                   <AdminCell title={[client.phone, client.email].filter(Boolean).join(" · ") || "Sin contacto cargado"}>
-                    {[client.phone, client.email].filter(Boolean).join(" · ") || "—"}
+                    {contact || "—"}
                   </AdminCell>
                   <AdminCell>
                     <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
@@ -422,9 +762,17 @@ export function ClientesModule() {
                         aria-label={`Ver la ficha de ${name}`}
                         onClick={() => setDetail(client)}
                       />
-                      <AdminWhatsappLink phone={client.phone} name={name} />
-                      {client.email ? <AdminIconLink href={`mailto:${client.email}`} icon="mail" label={`Enviar correo a ${name}`} /> : null}
-                      {!whatsappHref(client.phone) && !client.email ? <span className="admin-muted">—</span> : null}
+                      <ClientLinks client={client} name={name} compact />
+                      {client.contactEmail || client.email ? (
+                        <AdminIconLink
+                          href={`mailto:${client.contactEmail || client.email}`}
+                          icon="mail"
+                          label={`Enviar correo a ${name}`}
+                        />
+                      ) : null}
+                      {!whatsappHref(client.whatsapp || client.phone) && !client.contactEmail && !client.email && !instagramLabel(client.instagram) && !websiteHref(client.website) ? (
+                        <span className="admin-muted">—</span>
+                      ) : null}
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -434,7 +782,14 @@ export function ClientesModule() {
         )}
       </AdminDataState>
 
-      {detail ? <ClientDetailDialog client={detail} onClose={() => setDetail(null)} /> : null}
+      {detail ? (
+        <ClientDetailDialog
+          client={detail}
+          writable={writable}
+          onEdit={openEdit}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -442,12 +797,23 @@ export function ClientesModule() {
 /**
  * Ficha 360 del cliente (issue #34): métricas reales, presupuestos, eventos y
  * cobros del cliente abierto. Es solo lectura (VIEWER incluido): el API resuelve
- * la empresa activa y los datos salen tal cual de la base.
+ * la empresa activa y los datos salen tal cual de la base. La identidad, la
+ * persona encargada y los links directos llegan del issue #36.
  *
  * La cronología del issue #33 se enchufa en el bloque «Historial», junto a las
  * listas, cuando el integrador una `lib/server/timeline.ts`.
  */
-function ClientDetailDialog({ client, onClose }: { client: AdminClientRow; onClose: () => void }) {
+function ClientDetailDialog({
+  client,
+  writable,
+  onEdit,
+  onClose,
+}: {
+  client: AdminClientRow;
+  writable: boolean;
+  onEdit: (client: AdminClientRow) => void;
+  onClose: () => void;
+}) {
   const name = clientLabel(client);
   const detail = useAdminResource(`/api/admin/clients/${client.id}`, (payload) => payload.clientDetail ?? null);
 
@@ -462,28 +828,70 @@ function ClientDetailDialog({ client, onClose }: { client: AdminClientRow; onClo
         emptyTitle="Sin datos del cliente"
         emptyHint="No pudimos leer la ficha de este cliente."
       >
-        {detail.data ? <ClientDetailBody detail={detail.data} /> : null}
+        {detail.data ? <ClientDetailBody detail={detail.data} writable={writable} onEdit={onEdit} /> : null}
       </AdminDataState>
     </AdminDialog>
   );
 }
 
-function ClientDetailBody({ detail }: { detail: AdminClientDetail }) {
+function ClientDetailBody({
+  detail,
+  writable,
+  onEdit,
+}: {
+  detail: AdminClientDetail;
+  writable: boolean;
+  onEdit: (client: AdminClientRow) => void;
+}) {
   const { client, metrics } = detail;
   const name = clientLabel(client);
   const budgets = detail.budgets;
   const events = useMemo(() => sortClientEvents(detail.events), [detail.events]);
   const payments = detail.payments;
+  const contact = client.contactName || client.contactRole || client.contactPhone || client.contactEmail;
 
   return (
     <>
       <header className="admin-client-head">
-        <div className="admin-client-title">
-          <strong className="admin-client-name">{name}</strong>
-          <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
-          <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
+        <div className="admin-client-id">
+          <ClientLogo client={client} size={64} />
+          <div className="admin-client-id-text">
+            <div className="admin-client-title">
+              <strong className="admin-client-name">{name}</strong>
+              <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
+              <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
+            </div>
+            {/* Sin encargado cargado se mantiene el responsable del alta (mismo
+                objeto de identidad, sin reordenar ni inventar otro dato). */}
+            {client.company && client.name !== client.company && !client.contactName ? (
+              <span className="admin-client-person">{client.name}</span>
+            ) : null}
+          </div>
+          <span className="admin-actions admin-client-links">
+            {writable ? (
+              <AdminButton
+                icon="edit"
+                title={`Editar ${name}`}
+                aria-label={`Editar ${name}`}
+                onClick={() => onEdit(detail.client)}
+              />
+            ) : null}
+            <ClientLinks client={client} name={name} message={clientWhatsappMessage(client.contactName || name)} />
+          </span>
         </div>
-        {client.company ? <span className="admin-client-person">{client.name}</span> : null}
+
+        {contact ? (
+          <div className="admin-client-person-card">
+            <span className="admin-client-contact-label">Encargado</span>
+            {client.contactName ? <strong>{client.contactName}</strong> : null}
+            {client.contactRole ? <span className="admin-cell-sub">{client.contactRole}</span> : null}
+            {client.contactPhone ? <span className="admin-nowrap">{client.contactPhone}</span> : null}
+            {client.contactEmail ? (
+              <AdminIconLink href={`mailto:${client.contactEmail}`} icon="mail" label={`Enviar correo a ${client.contactName ?? name}`} />
+            ) : null}
+          </div>
+        ) : null}
+
         <p className="admin-client-contact">
           <span className="admin-nowrap">
             RUC <span className="admin-code">{client.ruc || "—"}</span>
@@ -491,8 +899,7 @@ function ClientDetailBody({ detail }: { detail: AdminClientDetail }) {
           <span className="admin-nowrap">{client.phone || "Sin teléfono"}</span>
           <span>{client.email || "Sin correo"}</span>
           <span className="admin-actions">
-            <AdminWhatsappLink phone={client.phone} name={name} />
-            {client.email ? <AdminIconLink href={`mailto:${client.email}`} icon="mail" label={`Enviar correo a ${name}`} /> : null}
+            {client.email ? <AdminIconLink href={`mailto:${client.email}`} icon="mail" label={`Enviar correo general a ${name}`} /> : null}
           </span>
         </p>
         {client.notes ? <p className="admin-dialog-text">{client.notes}</p> : null}

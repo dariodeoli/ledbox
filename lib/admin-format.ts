@@ -5,6 +5,8 @@
  * navegador dibujan el mismo día.
  */
 
+import { DEFAULT_PHONE_COUNTRY, normalizePhone, parsePhone, phoneValid } from "./field-rules";
+
 export type AdminTone = "neutral" | "accent" | "ok" | "warn" | "danger" | "info";
 
 const TIME_ZONE = "America/Asuncion";
@@ -672,6 +674,94 @@ export function whatsappHref(phone: string | null | undefined, message?: string 
   const international = digits.startsWith("595") ? digits : digits.startsWith("0") ? `595${digits.slice(1)}` : `595${digits}`;
   const text = String(message ?? "").trim();
   return text ? `https://wa.me/${international}?text=${encodeURIComponent(text)}` : `https://wa.me/${international}`;
+}
+
+// ── Datos de contacto del cliente (issue #36) ───────────────────────────────
+// El sitio web se guarda normalizado con esquema (`https://…`) y el Instagram
+// como usuario sin `@`. Los links se arman acá una sola vez; si el dato falta,
+// el link no se dibuja (nunca se reemplaza por otro objeto).
+
+/** Mensaje único por regla de link; el API revalida con el mismo texto. */
+export const CLIENT_LINK_MESSAGES = {
+  website: "Ingresá un sitio web válido, por ejemplo ledbox.online.",
+  instagram: "Ingresá un usuario de Instagram válido (letras, números, puntos y guiones bajos).",
+} as const;
+
+/** Límite del sitio web guardado. */
+export const CLIENT_WEBSITE_MAX_LENGTH = 200;
+
+/** Sitio web como se guarda: sin espacios, con esquema y sin barra final. */
+export function normalizeWebsite(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!raw) return "";
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
+export function websiteValid(value: string | null | undefined): boolean {
+  const url = normalizeWebsite(value);
+  if (!url || url.length > CLIENT_WEBSITE_MAX_LENGTH) return false;
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
+/** Link del sitio web; `null` si el dato falta o no es válido. */
+export function websiteHref(value: string | null | undefined): string | null {
+  return websiteValid(value) ? normalizeWebsite(value) : null;
+}
+
+/** Usuario de Instagram como se guarda: sin URL, sin `@` y sin query. */
+export function normalizeInstagram(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/^@+/, "")
+    .split(/[/?#]/)[0]
+    .trim();
+}
+
+export function instagramValid(value: string | null | undefined): boolean {
+  return /^[A-Za-z0-9._]{1,30}$/.test(normalizeInstagram(value));
+}
+
+/** Link del perfil de Instagram; `null` si el dato falta o no es válido. */
+export function instagramHref(value: string | null | undefined): string | null {
+  const handle = normalizeInstagram(value);
+  return instagramValid(handle) ? `https://www.instagram.com/${handle}` : null;
+}
+
+/** Usuario visible con arroba (`@ledboxpy`); `null` si no hay dato válido. */
+export function instagramLabel(value: string | null | undefined): string | null {
+  const handle = normalizeInstagram(value);
+  return instagramValid(handle) ? `@${handle}` : null;
+}
+
+/** Saludo del WhatsApp prellenado de un cliente; sin nombre queda el genérico. */
+export function clientWhatsappMessage(name: string | null | undefined): string {
+  const who = String(name ?? "").trim();
+  return who ? `Hola ${who}: te escribimos de LedBox.` : "Hola: te escribimos de LedBox.";
+}
+
+/**
+ * Teléfono de contacto como se guarda en el cliente (issue #36): usa las reglas
+ * del kit y además acepta el formato local con 0 (`0981…`), que se normaliza a
+ * `+595 981…`. Vacío o inválido devuelve `""`; el API revalida con esta misma
+ * función.
+ */
+export function normalizeContactPhone(value: string | null | undefined): string {
+  const parsed = parsePhone(value);
+  const national = parsed.countryCode === DEFAULT_PHONE_COUNTRY ? parsed.national.replace(/^0/, "") : parsed.national;
+  const normalized = normalizePhone(`+${parsed.countryCode} ${national}`);
+  return phoneValid(normalized) ? normalized : "";
+}
+
+export function contactPhoneValid(value: string | null | undefined): boolean {
+  return Boolean(normalizeContactPhone(value));
 }
 
 // ── Recordatorios de cobro (issue #19) ─────────────────────────────────────

@@ -76,8 +76,17 @@ export function AdminIconLink({ href, icon, label, external }: { href: string; i
 }
 
 /** Link de WhatsApp con el teléfono normalizado; no se dibuja si no hay número válido. */
-export function AdminWhatsappLink({ phone, name }: { phone: string | null | undefined; name: string }) {
-  const href = whatsappHref(phone);
+export function AdminWhatsappLink({
+  phone,
+  name,
+  message,
+}: {
+  phone: string | null | undefined;
+  name: string;
+  /** Mensaje prellenado del chat (issue #36); sin él abre el chat pelado. */
+  message?: string | null;
+}) {
+  const href = whatsappHref(phone, message);
   if (!href) return null;
   const label = `Escribir por WhatsApp a ${name}`;
   return (

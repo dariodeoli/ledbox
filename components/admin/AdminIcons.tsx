@@ -219,6 +219,20 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M10 11v6M14 11v6" />
     </>
   ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M4 12h16" />
+      <ellipse cx="12" cy="12" rx="3.6" ry="8" />
+    </>
+  ),
+  instagram: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4.6" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.2" cy="6.9" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
 };
 
 export function AdminIcon({ name, size = 16 }: { name: AdminIconName; size?: number }) {
