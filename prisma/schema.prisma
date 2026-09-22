@@ -59,6 +59,10 @@ model Organization {
   /// Datos de pago de la empresa (issue #14): `{ bank, holder, ruc, account, alias }`.
   /// Solo OWNER/ADMIN los configuran y la API pública los entrega con el presupuesto aprobado.
   paymentDetails    Json?
+  /// Datos fiscales de la empresa (issue #41): `{ ruc, razonSocial, timbrado,
+  /// establecimiento, direccion }`. Los editan OWNER/ADMIN y son el encabezado
+  /// del comprobante imprimible del registro fiscal interno (no es SIFEN).
+  fiscalDetails     Json?
   memberships       OrganizationMembership[]
   adminMemberships  AdminMembership[]
   adminSessions     AdminSession[]
@@ -85,6 +89,10 @@ model Organization {
   expenses          Expense[]
   idempotencyKeys   IdempotencyKey[]
   teamInvitations   TeamInvitation[]
+  invoices          Invoice[]
+  purchaseInvoices  PurchaseInvoice[]
+  fiscalPeriods     FiscalPeriod[]
+  invoiceSequence   InvoiceSequence?
 
   @@index([active, createdAt])
 }
@@ -533,6 +541,7 @@ model Client {
   budgets        Budget[]
   payments       ClientPayment[]
   logo           ClientLogo?
+  invoices       Invoice[]
 
   @@index([type, active])
   @@index([createdAt])
@@ -577,6 +586,7 @@ model Event {
   tasks          EventTask[]
   supplierJobs   SupplierJob[]
   expenses       Expense[]
+  invoices       Invoice[]
 
   @@index([startsAt, status])
   @@index([clientId, createdAt])
@@ -629,6 +639,7 @@ model Budget {
   paymentProofs        BudgetPaymentProof[]
   /// Pagos esperados del plan (issue #28): anticipo, cuotas y saldo.
   expectedPayments     ExpectedPayment[]
+  invoices             Invoice[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -911,6 +922,7 @@ model Supplier {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   jobs           SupplierJob[]
   expenses       Expense[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@index([category, active])
   @@index([organizationId, name])
@@ -1345,4 +1357,240 @@ model MessageTemplate {
   @@unique([organizationId, category, title])
   @@index([organizationId, category, sortOrder])
   @@index([organizationId, active])
+}
+
+// ── Registro fiscal interno (issue #41) ─────────────────────────────────────
+//
+// Alcance honesto: esto **no** es la factura electrónica de SIFEN/DNIT (hace
+// falta certificado, timbrado autorizado y servicios de la DNIT; ver
+// `docs/FISCAL-SIFEN.md`). Es un registro fiscal interno serio: numeración
+// correlativa por empresa sin huecos, datos del receptor, IVA 10 %/5 %/exenta,
+// libro de IVA y cierre mensual.
+
+/**
+ * Condición de pago del comprobante: `CASH` contado, `CREDIT` crédito (con
+ * vencimiento declarado). El vencimiento es un dato del registro, no un plazo
+ * calculado por la app.
+ */
+enum InvoiceCondition {
+  CASH
+  CREDIT
+}
+
+/**
+ * Estado real de una factura: `ISSUED` emitida y vigente, `PAID` saldada por el
+ * equipo (el circuito de cobro se registra en Finanzas) y `VOID` anulada con
+ * motivo. Una factura **nunca se borra**: la anulación conserva el número y el
+ * motivo, y la historia queda en la auditoría. Anulada no vuelve a emitida.
+ */
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  VOID
+}
+
+/**
+ * Tipo de IVA de una línea: gravada 10 %, gravada 5 % o exenta.
+ */
+enum InvoiceTaxType {
+  IVA10
+  IVA5
+  EXEMPT
+}
+
+/**
+ * Estado del período fiscal: `OPEN` se puede facturar, `CLOSED` está bloqueado.
+ */
+enum FiscalPeriodStatus {
+  OPEN
+  CLOSED
+}
+
+/**
+ * Factura del registro fiscal interno (issue #41).
+ * - **Numeración**: `number` es correlativo por empresa (1, 2, 3…) y lo asigna
+ * la secuencia atómica `InvoiceSequence` dentro de la misma transacción que
+ * crea la factura: sin huecos y sin números repetidos. El número no se
+ * reutiliza ni cuando la factura se anula.
+ * - **Snapshots**: `clientName`/`clientRuc` guardan la razón social y el RUC del
+ * receptor al emitir; si el cliente cambia después, la factura no se
+ * reescribe (regla de snapshots inmutables).
+ * - **Montos `Int` en PYG**: `taxable10`/`iva10`, `taxable5`/`iva5` y `exempt`
+ * son las bases e IVA del encabezado; la suma de `total` de las líneas es el
+ * total. El cálculo y su redondeo viven en `lib/fiscal.ts` (una sola fuente).
+ * - **Anulación**: `voidedAt`, `voidedById`, `voidedByName` y `voidReason` (con
+ * motivo obligatorio). El mes cerrado bloquea emisión, anulación y saldado.
+ */
+model Invoice {
+  id             String           @id
+  organizationId String
+  /// Correlativo por empresa; único dentro de la empresa.
+  number         Int
+  status         InvoiceStatus    @default(ISSUED)
+  condition      InvoiceCondition @default(CASH)
+  /// Cliente del panel (opcional: una venta a consumidor final puede no tenerlo).
+  clientId       String?
+  /// Razón social del receptor, congelada al emitir.
+  clientName     String
+  /// RUC o cédula del receptor; `null` en consumidor final sin documento.
+  clientRuc      String?
+  /// Presupuesto que originó la factura (emisión desde un presupuesto aprobado).
+  budgetId       String?
+  /// Evento relacionado (opcional).
+  eventId        String?
+  /// Fecha de emisión (día de Asunción, mediodía).
+  issuedAt       DateTime
+  /// Vencimiento declarado en condición crédito; `null` a contado.
+  dueAt          DateTime?
+  /// Base gravada al 10 % (IVA incluido desagregado).
+  taxable10      Int              @default(0)
+  /// IVA 10 % del encabezado.
+  iva10          Int              @default(0)
+  /// Base gravada al 5 %.
+  taxable5       Int              @default(0)
+  /// IVA 5 % del encabezado.
+  iva5           Int              @default(0)
+  /// Monto exento.
+  exempt         Int              @default(0)
+  /// Total del comprobante (suma de las líneas, IVA incluido).
+  total          Int
+  notes          String?
+  voidedAt       DateTime?
+  voidedById     String?
+  voidedByName   String?
+  /// Motivo obligatorio de la anulación (nunca se borra la factura).
+  voidReason     String?
+  paidAt         DateTime?
+  createdById    String?
+  createdByName  String
+  createdByEmail String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  budget         Budget?          @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  items          InvoiceItem[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, issuedAt])
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@index([budgetId])
+  @@index([eventId])
+}
+
+/**
+ * Línea de una factura (issue #41). `unitPrice` y `subtotal` son **brutos**
+ * (IVA incluido, como se pacta con el cliente); `taxable` y `taxAmount` son la
+ * base imponible y el IVA desagregados según `taxType`, calculados en
+ * `lib/fiscal.ts`. La identidad de la línea queda por snapshot: editar el
+ * presupuesto o el inventario no cambia una factura emitida.
+ */
+model InvoiceItem {
+  id        String         @id
+  invoiceId String
+  name      String
+  quantity  Int            @default(1)
+  /// Precio unitario bruto (IVA incluido).
+  unitPrice Int
+  taxType   InvoiceTaxType @default(IVA10)
+  /// Importe bruto de la línea (`quantity × unitPrice`).
+  subtotal  Int
+  /// Base imponible de la línea.
+  taxable   Int            @default(0)
+  /// IVA de la línea (0 en exenta).
+  taxAmount Int            @default(0)
+  invoice   Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+/**
+ * Factura de compra del libro de IVA (issue #41): el comprobante que **emite el
+ * proveedor** y el equipo carga para el crédito fiscal. No la generamos
+ * nosotros: por eso `number` y `timbrado` son textos tal como vienen y la fecha
+ * es la del comprobante. Se puede editar o borrar mientras el período esté
+ * abierto; con el mes cerrado queda bloqueada (y auditada en cada cambio).
+ */
+model PurchaseInvoice {
+  id             String       @id
+  organizationId String
+  supplierId     String?
+  /// Fecha del comprobante (día de Asunción, mediodía).
+  date           DateTime
+  /// Razón social del proveedor, congelada al registrar.
+  reason         String
+  ruc            String?
+  /// Timbrado del proveedor (texto).
+  timbrado       String?
+  /// Número del comprobante del proveedor (texto, tal como viene).
+  number         String?
+  concept        String?
+  taxable10      Int          @default(0)
+  iva10          Int          @default(0)
+  taxable5       Int          @default(0)
+  iva5           Int          @default(0)
+  exempt         Int          @default(0)
+  total          Int
+  createdById    String?
+  createdByName  String
+  createdByEmail String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, date])
+  @@index([supplierId])
+}
+
+/**
+ * Cierre mensual del registro fiscal (issue #41). Una fila por empresa y mes
+ * (`YYYY-MM` de Asunción).
+ * - Con `CLOSED` la emisión, la anulación, el saldado y la edición de compras
+ * del mes quedan bloqueados (409 explicado, nunca un borrado silencioso).
+ * - `summary` es el **snapshot** del resumen al cerrar: la historia del mes no
+ * se reescribe aunque después se registren hechos de otros meses.
+ * - Reabrir es solo OWNER, con motivo obligatorio, y queda auditado; el mes
+ * vuelve a `OPEN` y se puede cerrar de nuevo.
+ */
+model FiscalPeriod {
+  id             String             @id
+  organizationId String
+  /// Mes fiscal `YYYY-MM` (día de Asunción).
+  month          String
+  status         FiscalPeriodStatus @default(CLOSED)
+  /// Snapshot del resumen del mes al cerrar (ventas, compras e IVA).
+  summary        Json?
+  closedAt       DateTime?
+  closedById     String?
+  closedByName   String?
+  reopenedAt     DateTime?
+  reopenedById   String?
+  reopenedByName String?
+  /// Motivo obligatorio de la reapertura.
+  reopenReason   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, month])
+  @@index([organizationId, status])
+}
+
+/**
+ * Secuencia de numeración fiscal por empresa (issue #41): una fila por empresa
+ * con el último número emitido. Se incrementa con un `UPDATE … RETURNING`
+ * atómico (`ON CONFLICT … DO UPDATE`) dentro de la transacción de la factura:
+ * dos emisiones simultáneas obtienen números distintos y un rollback devuelve
+ * el contador, así la numeración no tiene huecos.
+ */
+model InvoiceSequence {
+  id             String       @id
+  organizationId String       @unique
+  /// Último número emitido (0 = la empresa todavía no emitió ninguna factura).
+  lastNumber     Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
