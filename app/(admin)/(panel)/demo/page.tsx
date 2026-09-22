@@ -35,7 +35,7 @@ import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
 import { getAuthenticatedAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
-import { DEMO_ORGANIZATION_NAME, isDemoOrganizationId } from "@/lib/server/demo-data";
+import { DEMO_ORGANIZATION_NAME, ensureDemoData, isDemoOrganizationId } from "@/lib/server/demo-data";
 import { parseMovementSourceSnapshot } from "@/lib/server/finance-snapshots";
 import { dayKeyOf, dayStart, listAdminNotifications } from "@/lib/server/notifications";
 
@@ -86,7 +86,7 @@ export default async function DemoPage() {
     feed,
     audits,
     portalBudget,
-    openBudget,
+    openBudgetRow,
     overduePayments,
     rejectedCheques,
     riskEventCount,
@@ -215,6 +215,25 @@ export default async function DemoPage() {
     db.teamInvitation.findMany({ where: { organizationId }, orderBy: [{ createdAt: "desc" }], take: 4 }),
     db.mailLog.findMany({ where: { organizationId }, orderBy: [{ createdAt: "desc" }], take: 5 }),
   ]);
+
+  // Autogestión siempre viva (22-09-2026): si el ejemplo abierto se consumió
+  // (un visitante ensayó la aprobación en el portal), se vuelve a sembrar el
+  // dataset —igual que la entrada del portal— para que la demo conserve el caso.
+  let openBudget = openBudgetRow;
+  if (!openBudget) {
+    await ensureDemoData({ reset: true });
+    openBudget = await db.budget.findFirst({
+      where: {
+        organizationId,
+        publicToken: { not: null },
+        approvedAt: null,
+        revisionRequestedAt: null,
+        status: { in: ["SENT", "NEGOTIATING"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, publicToken: true, status: true, client: { select: { company: true, name: true } } },
+    });
+  }
 
   const modules = adminNavGroups("VIEWER").flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
   const approvedUrl = portalBudget?.publicToken ? portalBudgetUrl(portalBudget.publicToken) : null;
