@@ -3,6 +3,7 @@ import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
+import { statementRowFingerprint } from "@/lib/bank-statement";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -987,9 +988,11 @@ const DATASET_MINS = {
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
   budgets: 7,
-  audits: 32,
+  audits: 34,
   treasuryAccounts: TREASURY_ACCOUNTS.length,
   treasuryMovements: 16,
+  bankStatements: 1,
+  bankStatementRows: 6,
   expenses: EXPENSES.length,
   expectedPayments: 8,
   invitations: INVITATIONS.length,
@@ -1103,7 +1106,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars] = await Promise.all([
+  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, bankStatements, bankStatementRows, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars] = await Promise.all([
     db.client.count({ where: { organizationId: organization.id } }),
     db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
     db.promoter.count({ where: { organizationId: organization.id, photoUrl: { not: null } } }),
@@ -1120,6 +1123,8 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     }),
     db.treasuryAccount.count({ where: { organizationId: organization.id } }),
     db.treasuryMovement.count({ where: { organizationId: organization.id } }),
+    db.bankStatement.count({ where: { organizationId: organization.id } }),
+    db.bankStatementRow.count({ where: { organizationId: organization.id } }),
     db.expense.count({ where: { organizationId: organization.id } }),
     db.expectedPayment.count({ where: { organizationId: organization.id } }),
     db.teamInvitation.count({ where: { organizationId: organization.id } }),
@@ -1138,6 +1143,8 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     audits >= DATASET_MINS.audits &&
     treasuryAccounts >= DATASET_MINS.treasuryAccounts &&
     treasuryMovements >= DATASET_MINS.treasuryMovements &&
+    bankStatements >= DATASET_MINS.bankStatements &&
+    bankStatementRows >= DATASET_MINS.bankStatementRows &&
     expenses >= DATASET_MINS.expenses &&
     expectedPayments >= DATASET_MINS.expectedPayments &&
     invitations >= DATASET_MINS.invitations &&
@@ -2037,6 +2044,100 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     ),
   ];
 
+  // ── Extracto bancario de ejemplo (issue #40) ─────────────────────────────
+  // La cuenta bancaria del demo tiene su extracto importado: una fila ya
+  // conciliada con su movimiento real, dos pendientes con sugerencia (mismo
+  // importe y sentido, ±3 días), una rechazada y dos que no tienen movimiento en
+  // los libros (comisión e intereses) para mostrar el alta desde el extracto y
+  // la diferencia real del período.
+  const bankAccountMovements = treasuryMovementsData.filter((movement) => movement.accountId === "demo_treasury_ueno");
+  const bankMovementDate = (movement: (typeof treasuryMovementsData)[number]): Date =>
+    movement.occurredAt instanceof Date ? movement.occurredAt : new Date(at(base, -10, 12, 0));
+  // Los movimientos elegidos son anteriores a ayer: la fila del extracto puede
+  // caer un día después sin quedar en el futuro de la fecha de importación.
+  const bankRowCutoff = new Date(base.getTime() - DAY_MS);
+  const bankInMovements = bankAccountMovements
+    .filter((movement) => movement.direction === "IN")
+    .sort((a, b) => bankMovementDate(b).getTime() - bankMovementDate(a).getTime());
+  const bankOutMovements = bankAccountMovements
+    .filter((movement) => movement.direction === "OUT" && bankMovementDate(movement).getTime() < bankRowCutoff.getTime())
+    .sort((a, b) => bankMovementDate(b).getTime() - bankMovementDate(a).getTime());
+  const bankRowDate = (movement: (typeof treasuryMovementsData)[number] | undefined, plusDays: number): Date => {
+    const fallback = new Date(at(base, -10, 12, 0));
+    return dayStart(shiftDayKey(dayKeyOf(movement ? bankMovementDate(movement) : fallback), plusDays));
+  };
+  const bankRowDescription = (movement: (typeof treasuryMovementsData)[number] | undefined, prefix: string): string => {
+    const snapshot = movement?.sourceSnapshot;
+    const label =
+      snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && typeof (snapshot as { label?: unknown }).label === "string"
+        ? (snapshot as { label: string }).label
+        : prefix;
+    return `${prefix} · ${label}`.slice(0, 200);
+  };
+  const bankRowReference = (movement: (typeof treasuryMovementsData)[number] | undefined): string | null => {
+    const snapshot = movement?.sourceSnapshot;
+    if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && typeof (snapshot as { ref?: unknown }).ref === "string") {
+      return (snapshot as { ref: string }).ref;
+    }
+    return null;
+  };
+  const bankRowsData = (
+    [
+      { id: "demo_statement_row_1", line: 2, date: bankRowDate(bankInMovements[0], 1), direction: "CREDIT", amount: bankInMovements[0]?.amount ?? 0, description: bankRowDescription(bankInMovements[0], "Transferencia recibida"), reference: bankRowReference(bankInMovements[0]), status: "MATCHED", movementId: bankInMovements[0]?.id ?? null },
+      { id: "demo_statement_row_2", line: 3, date: bankRowDate(bankOutMovements[0], 1), direction: "DEBIT", amount: bankOutMovements[0]?.amount ?? 0, description: bankRowDescription(bankOutMovements[0], "Débito"), reference: bankRowReference(bankOutMovements[0]), status: "PENDING", movementId: null },
+      { id: "demo_statement_row_3", line: 4, date: bankRowDate(bankOutMovements[1], 1), direction: "DEBIT", amount: bankOutMovements[1]?.amount ?? 0, description: bankRowDescription(bankOutMovements[1], "Débito"), reference: bankRowReference(bankOutMovements[1]), status: "PENDING", movementId: null },
+      { id: "demo_statement_row_4", line: 5, date: new Date(at(base, -3, 12, 0)), direction: "CREDIT", amount: 300_000, description: "Transferencia no identificada · REF 4471", reference: "TRF-4471", status: "IGNORED", movementId: null },
+      { id: "demo_statement_row_5", line: 6, date: new Date(at(base, -2, 12, 0)), direction: "DEBIT", amount: 15_000, description: "Comisión de mantenimiento de cuenta", reference: "COM-0918", status: "PENDING", movementId: null },
+      { id: "demo_statement_row_6", line: 7, date: new Date(at(base, -1, 12, 0)), direction: "CREDIT", amount: 4_500, description: "Acreditación de intereses", reference: "INT-0920", status: "PENDING", movementId: null },
+    ] satisfies Array<{
+      id: string;
+      line: number;
+      date: Date;
+      direction: "DEBIT" | "CREDIT";
+      amount: number;
+      description: string;
+      reference: string | null;
+      status: "PENDING" | "MATCHED" | "IGNORED";
+      movementId: string | null;
+    }>
+  ).map((row) => ({
+    ...row,
+    organizationId,
+    accountId: "demo_treasury_ueno",
+    statementId: "demo_statement_ueno",
+    fingerprint: statementRowFingerprint({
+      date: dayKeyOf(row.date),
+      direction: row.direction,
+      amount: row.amount,
+      description: row.description,
+      reference: row.reference,
+    }),
+    raw: `${dayKeyOf(row.date)};${row.description};${row.reference ?? ""};${row.direction === "DEBIT" ? row.amount : ""};${row.direction === "CREDIT" ? row.amount : ""}`,
+    matchedAt: row.status === "MATCHED" ? new Date(at(base, -1, 9, 12)) : null,
+    matchedById: row.status === "MATCHED" ? ACTORS.sales.id : null,
+    matchedByName: row.status === "MATCHED" ? ACTORS.sales.name : null,
+    matchedByEmail: row.status === "MATCHED" ? ACTORS.sales.email : null,
+    createdAt: new Date(at(base, -1, 9, 5)),
+    updatedAt: new Date(at(base, -1, 9, 5)),
+  }));
+  const bankStatementData: Prisma.BankStatementUncheckedCreateInput = {
+    id: "demo_statement_ueno",
+    organizationId,
+    accountId: "demo_treasury_ueno",
+    label: "Ueno Bank · extracto de setiembre",
+    periodStart: dayStart(shiftDayKey(dayKeyOf(new Date()), -30)),
+    periodEnd: dayStart(dayKeyOf(new Date())),
+    originalName: "extracto-ueno-setiembre.csv",
+    lineCount: bankRowsData.length,
+    rowCount: bankRowsData.length,
+    errorCount: 0,
+    duplicateCount: 0,
+    importedById: ACTORS.sales.id,
+    importedByName: ACTORS.sales.name,
+    importedByEmail: ACTORS.sales.email,
+    createdAt: new Date(at(base, -1, 9, 5)),
+  };
+
   // ── Pagos esperados del plan (issue #28): comprobante en revisión, vencido sin
   // comprobante y confirmado con su cobro y movimiento. Los montos y los
   // vencimientos salen del plan real de cada presupuesto. ──
@@ -2436,6 +2537,9 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       });
       await tx.clientPayment.createMany({ data: paymentsData });
       await tx.treasuryMovement.createMany({ data: treasuryMovementsData });
+      // El extracto va después de los movimientos: sus filas los referencian.
+      await tx.bankStatement.create({ data: bankStatementData });
+      await tx.bankStatementRow.createMany({ data: bankRowsData });
       await tx.expense.createMany({ data: expensesData });
       await tx.budgetPaymentProof.createMany({ data: proofsData });
       await tx.expectedPayment.createMany({ data: expectedPaymentsData });
@@ -2474,6 +2578,8 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.quoteItem.deleteMany({ where: { quoteRequest: { organizationId } } });
   await tx.quoteRequest.deleteMany({ where: { organizationId } });
   await tx.lead.deleteMany({ where: { organizationId } });
+  await tx.bankStatementRow.deleteMany({ where: { organizationId } });
+  await tx.bankStatement.deleteMany({ where: { organizationId } });
   await tx.expense.deleteMany({ where: { organizationId } });
   await tx.treasuryMovement.deleteMany({ where: { organizationId } });
   await tx.supplierJob.deleteMany({ where: { organizationId } });
@@ -2607,6 +2713,35 @@ function buildAuditTrail(organizationId: string, base: Date, context: AuditConte
       hour: 9,
       minute: 10,
       detail: { fields: { amount: 1_500_000, category: "RENT", accountId: "demo_treasury_ueno", eventId: context.inProgress.id } },
+    },
+    // Conciliación bancaria (issue #40): la importación del extracto y la
+    // conciliación de su primera fila, con el actor real del panel.
+    {
+      id: "demo_audit_bank_statement_import",
+      actor: sales,
+      action: "create",
+      entity: "BankStatement",
+      entityId: "demo_statement_ueno",
+      summary: "Importó el extracto «Ueno Bank · extracto de setiembre» de «Ueno Bank» · 6 filas",
+      days: -1,
+      hour: 9,
+      minute: 5,
+      detail: { fields: { accountId: "demo_treasury_ueno", lineCount: 6, rowCount: 6, errorCount: 0, duplicateCount: 0 } },
+    },
+    {
+      id: "demo_audit_bank_statement_match",
+      actor: sales,
+      action: "update",
+      entity: "BankStatementRow",
+      entityId: "demo_statement_row_1",
+      summary: "Concilió la fila «Transferencia recibida» (línea 2) del extracto «Ueno Bank · extracto de setiembre» con un movimiento de tesorería",
+      days: -1,
+      hour: 9,
+      minute: 12,
+      detail: {
+        changes: { status: { from: "PENDING", to: "MATCHED" } },
+        fields: { statementId: "demo_statement_ueno", accountId: "demo_treasury_ueno", direction: "CREDIT" },
+      },
     },
     {
       id: "demo_audit_expense_cables",
