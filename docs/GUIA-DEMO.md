@@ -11,7 +11,7 @@ La demo es pública, con datos simulados y **solo lectura** (no se puede romper 
 | Portal del cliente — **autogestión** (pendiente) | https://clientes.ledbox.online/p/D3M9-F3R4-A2PY-Q7SC-K4VT |
 | Portal del cliente — **aprobado** (con datos de pago) | https://clientes.ledbox.online/p/D3M9-5G97-4XKW-2M8R-T3HN |
 
-No hace falta usuario ni contraseña: al entrar a `/demo`, el sistema crea la sesión de demostración automáticamente. El chip **DEMO** y el aviso fijo recuerdan que es una demo.
+No hace falta usuario ni contraseña: `demo.ledbox.online` redirige a `/demo` y ahí el sistema crea la sesión de demostración automáticamente (también funciona un link directo a un módulo, p. ej. `demo.ledbox.online/finanzas`). El chip **DEMO** y el aviso fijo recuerdan que es una demo.
 
 ## Recorrido de 8 minutos
 

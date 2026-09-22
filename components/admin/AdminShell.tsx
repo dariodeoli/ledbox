@@ -181,11 +181,21 @@ function pickSessionData(raw: unknown): {
 /**
  * Entrada de la demo (issue #14): si el shell se monta en `/demo` sin sesión,
  * el 401 sale al endpoint que provisiona la sesión demo en vez del login.
+ *
+ * Vale el path `/demo` (host público y desarrollo) y **cualquier ruta del host
+ * de la demo** (`demo.ledbox.online`, issue #39): ahí el visitante entra por la
+ * raíz o directo a un módulo compartido, y en ambos casos corresponde crear la
+ * sesión demo en vez de mandarlo al login (bug del 22-09-2026).
  */
 function isDemoEntryPath(): boolean {
   if (typeof window === "undefined") return false;
   const pathname = window.location.pathname;
-  return pathname === "/demo" || pathname.startsWith("/demo/");
+  if (pathname === "/demo" || pathname.startsWith("/demo/")) return true;
+  try {
+    return window.location.hostname.toLowerCase() === new URL(publicConfig.demoUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -215,7 +225,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     if (!result.ok) {
       if (result.sessionInvalid) {
         if (isDemoEntryPath()) {
-          window.location.assign("/api/demo/session?next=/demo");
+          // Vuelve a la misma pantalla: sirve para la entrada y para un módulo
+          // compartido de la demo (`demo.ledbox.online/finanzas`).
+          const next = `${window.location.pathname}${window.location.search}`;
+          window.location.assign(`/api/demo/session?next=${encodeURIComponent(next)}`);
           return;
         }
         redirectToLogin();

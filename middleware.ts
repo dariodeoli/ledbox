@@ -124,12 +124,13 @@ export function middleware(request: NextRequest) {
   }
 
   if (onDemoHost) {
-    // Demo pública (issue #15): la raíz abre la demo (`app/(admin)/(panel)/demo`);
-    // el resto de rutas pasa igual (los links del portal siguen funcionando).
+    // Demo pública (issue #15): la raíz **redirige** a `/demo` —la entrada que
+    // crea la sesión demo— para que la ruta visible sea la que el panel espera y
+    // el visitante nunca caiga en el login (bug del 22-09-2026).
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/demo";
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url, 308);
     }
     return NextResponse.next();
   }
