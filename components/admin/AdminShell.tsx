@@ -250,6 +250,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     void loadSession();
   }, [loadSession]);
 
+  // El menú lateral se cierra al cambiar de pantalla: antes el drawer (y el
+  // fondo oscuro del panel) quedaba abierto sobre la página nueva.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
   useEffect(() => {
     setMenuOpen(false);
     setUserMenuOpen(false);

@@ -757,7 +757,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-user--sidebar { width: 100%; padding: 6px 8px; border-radius: 8px; background: var(--a-bg-2); text-align: left; }
 .admin-user--sidebar .admin-user-info { flex: 1 1 auto; min-width: 0; }
 .admin-usermenu--sidebar .admin-usermenu-panel { top: auto; bottom: calc(100% + 8px); left: 0; right: 0; width: auto; }
-.admin-sidebar-close, .admin-menu-btn { display: none; }
+/* En escritorio el sidebar está siempre visible: los botones de abrir/cerrar el
+   menú solo existen en pantallas chicas. La regla necesita más especificidad que
+   `.admin-iconbtn` (definido más abajo con la misma), que si no los volvía a
+   mostrar en escritorio y el ☰ abría el fondo oscuro del menú móvil sobre el
+   contenido: «Finanzas no funciona» (bug del 22-09-2026). */
+.admin-topbar .admin-menu-btn, .admin-sidebar-head .admin-sidebar-close { display: none; }
 .admin-main { display: flex; flex-direction: column; min-width: 0; }
 .admin-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: var(--a-topbar); padding: 0 16px; border-bottom: 1px solid var(--a-line); background: color-mix(in srgb, var(--a-bg) 88%, transparent); backdrop-filter: blur(12px); }
 .admin-topbar-title { display: grid; min-width: 0; }
@@ -1569,7 +1574,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-shell { grid-template-columns: minmax(0, 1fr); }
   .admin-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: min(84vw, 268px); height: 100vh; transform: translateX(-102%); transition: transform .22s ease; box-shadow: var(--a-shadow); }
   .admin-sidebar.is-open { transform: none; }
-  .admin-sidebar-close, .admin-menu-btn { display: inline-grid; }
+  .admin-topbar .admin-menu-btn, .admin-sidebar-head .admin-sidebar-close { display: inline-grid; }
   .admin-topbar { gap: 10px; padding: 0 12px; }
   .admin-main-body { padding: 12px 12px 28px; }
   .admin-user { padding: 4px; }
