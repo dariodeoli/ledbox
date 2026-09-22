@@ -27,13 +27,27 @@ const PAGE_TITLES: Record<string, string> = {
   "/perfil": "Mi perfil",
 };
 
+/**
+ * Navegación agrupada del panel (orden fijado en `docs/DISENO-PANEL.md` §6):
+ * primero lo que se usa todos los días (Resumen, Calendario, Eventos), después
+ * el trabajo operativo y comercial, Finanzas con Facturación (mismo trabajo, dos
+ * caras) y al final Sistema, donde vive lo de vez en cuando y lo restringido.
+ */
 export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "General",
     items: [
       { href: "/dashboard", label: "Resumen", icon: "overview" },
-      { href: "/eventos", label: "Eventos", icon: "events" },
       { href: "/calendario", label: "Calendario", icon: "calendar" },
+    ],
+  },
+  {
+    label: "Operación",
+    items: [
+      { href: "/eventos", label: "Eventos", icon: "events" },
+      { href: "/inventario", label: "Inventario", icon: "inventory" },
+      { href: "/proveedores", label: "Proveedores", icon: "suppliers" },
+      { href: "/promotoras", label: "Promotoras", icon: "promoters" },
     ],
   },
   {
@@ -42,26 +56,23 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
       { href: "/clientes", label: "Clientes", icon: "clients" },
       { href: "/leads", label: "Leads", icon: "leads" },
       { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
-      { href: "/facturacion", label: "Facturación", icon: "receipt" },
-      { href: "/finanzas", label: "Finanzas", icon: "finance" },
       { href: "/plantillas", label: "Plantillas", icon: "mail" },
     ],
   },
   {
-    label: "Recursos",
+    label: "Finanzas",
     items: [
-      { href: "/inventario", label: "Inventario", icon: "inventory" },
-      { href: "/proveedores", label: "Proveedores", icon: "suppliers" },
-      { href: "/promotoras", label: "Promotoras", icon: "promoters" },
+      { href: "/finanzas", label: "Finanzas", icon: "finance" },
+      { href: "/facturacion", label: "Facturación", icon: "receipt" },
     ],
   },
   {
     label: "Sistema",
     items: [
-      { href: "/configuracion", label: "Configuración", icon: "mail", roles: RESTRICTED_MODULES["/configuracion"] },
-      { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
       { href: "/plan", label: "Plan", icon: "plan" },
       { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
+      { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
+      { href: "/configuracion", label: "Configuración", icon: "settings", roles: RESTRICTED_MODULES["/configuracion"] },
       { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
       { href: "/sistema", label: "Sistema", icon: "database", roles: RESTRICTED_MODULES["/sistema"] },
     ],

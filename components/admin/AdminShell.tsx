@@ -47,7 +47,7 @@ import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScr
 import { AdminCommandPalette } from "./AdminCommandPalette";
 import { AdminMobileNav } from "./AdminMobileNav";
 import { AdminModuleHelp } from "./AdminModuleHelp";
-import { AdminThemeToggle } from "./admin-theme";
+import { AdminThemeToggle, AdminSidebarToggle } from "./admin-theme";
 import { AdminOfflineBanner, AdminOfflineIndicator } from "./AdminOffline";
 import { adminApiGet, adminSend, clearAdminApiCache, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
@@ -494,12 +494,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="admin-shell">
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
-            <Link href="/dashboard" className="admin-brand" aria-label="EventOS · Ir al resumen">
+            <Link href="/dashboard" className="admin-brand" aria-label="EventOS · Ir al resumen" title="EventOS · Ir al resumen">
               <BrandMark className="admin-brand-mark" size={30} />
-              <span>
+              <span className="admin-brand-text">
                 EventOS<span className="admin-brand-dot">.</span>
               </span>
             </Link>
+            <AdminSidebarToggle />
             <button
               type="button"
               className="admin-iconbtn admin-sidebar-close"
@@ -525,9 +526,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                           className="admin-nav-link"
                           data-active={active ? "true" : undefined}
                           aria-current={active ? "page" : undefined}
+                          title={item.label}
+                          aria-label={item.label}
                         >
                           <AdminIcon name={item.icon} size={16} />
-                          <span>{item.label}</span>
+                          <span className="admin-nav-text">{item.label}</span>
                         </Link>
                       </li>
                     );

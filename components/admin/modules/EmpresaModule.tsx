@@ -10,7 +10,7 @@ import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
 import { AdminOrgLogo } from "../AdminAvatar";
 import { TextField } from "../AdminFields";
-import { AdminButton, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
  * Empresa (issue #22): OWNER/ADMIN editan el **nombre** de la empresa —el que
@@ -124,86 +124,88 @@ export function EmpresaModule() {
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {logoError ? <AdminNote tone="error">{logoError}</AdminNote> : null}
 
-      <AdminPanel
-        title="Datos de la empresa" icon="building"
-        meta={organization ? `Identificador: ${organization.slug}` : undefined}
-      >
-        <form className="admin-settings" onSubmit={saveName}>
-          <div className="admin-settings-grid">
-            <TextField
-              label="Nombre"
-              required
-              maxLength={120}
-              value={name}
-              onChange={(value) => {
-                setName(value);
-                setNameError("");
-                setNotice("");
-              }}
-              error={nameError}
-              disabled={readOnly || !organization}
-              hint="Se ve en el chip del panel y en las hojas imprimibles."
-            />
-            <div className="admin-settings-readonly">
-              <span className="admin-field-label">Identificador</span>
-              <p className="admin-detail-value">{organization?.slug ?? "—"}</p>
-              <span className="admin-field-hint">No se edita: es la referencia estable de la empresa.</span>
+      <AdminDataState loading={branding.loading} error={branding.error} onRetry={branding.reload} rows={4}>
+        <AdminPanel
+          title="Datos de la empresa" icon="building"
+          meta={organization ? `Identificador: ${organization.slug}` : undefined}
+        >
+          <form className="admin-settings" onSubmit={saveName}>
+            <div className="admin-settings-grid">
+              <TextField
+                label="Nombre"
+                required
+                maxLength={120}
+                value={name}
+                onChange={(value) => {
+                  setName(value);
+                  setNameError("");
+                  setNotice("");
+                }}
+                error={nameError}
+                disabled={readOnly || !organization}
+                hint="Se ve en el chip del panel y en las hojas imprimibles."
+              />
+              <div className="admin-settings-readonly">
+                <span className="admin-field-label">Identificador</span>
+                <p className="admin-detail-value">{organization?.slug ?? "—"}</p>
+                <span className="admin-field-hint">No se edita: es la referencia estable de la empresa.</span>
+              </div>
+            </div>
+            <div className="admin-settings-actions">
+              <AdminButton
+                type="submit"
+                variant="primary"
+                icon="check"
+                busy={savingName}
+                disabled={readOnly || !organization || !nameChanged || !personNameValid(name)}
+              >
+                Guardar nombre
+              </AdminButton>
+              <Link className="admin-panel-link" href="/presupuestos" title="Los datos de pago se cargan en Presupuestos">
+                Datos de pago de la empresa
+              </Link>
+            </div>
+          </form>
+        </AdminPanel>
+
+        <AdminPanel title="Logo por tema" icon="image" meta="Se usan según el fondo; en papel siempre el claro">
+          <div className="admin-settings">
+            <p className="admin-field-hint">
+              JPG, PNG o WebP hasta 1 MB; sin logo queda el monograma LB.
+            </p>
+            <div className="admin-logos">
+              {(["light", "dark"] as const).map((variant) => (
+                <AdminImageUpload
+                  key={variant}
+                  label={logoVariantLabel(variant)}
+                  mode="logo"
+                  hint={
+                    variant === "light"
+                      ? "Para fondos oscuros (panel en modo oscuro)."
+                      : "Para fondos claros (modo claro y papel)."
+                  }
+                  preview={
+                    <span className="admin-logo-tone" data-tone={VARIANT_TONES[variant]}>
+                      <AdminOrgLogo
+                        name={organization?.name}
+                        variant={variant}
+                        lightSrc={logoSrc(variant)}
+                        darkSrc={logoSrc(variant)}
+                        size={64}
+                      />
+                    </span>
+                  }
+                  busy={savingLogo === variant}
+                  disabled={readOnly || !organization || savingLogo !== null}
+                  onPrepared={(image) => void uploadLogo(variant, image)}
+                  onRemove={logos[variant] ? () => void removeLogo(variant) : undefined}
+                  removeLabel={`Quitar ${logoVariantLabel(variant).toLowerCase()}`}
+                />
+              ))}
             </div>
           </div>
-          <div className="admin-settings-actions">
-            <AdminButton
-              type="submit"
-              variant="primary"
-              icon="check"
-              busy={savingName}
-              disabled={readOnly || !organization || !nameChanged || !personNameValid(name)}
-            >
-              Guardar nombre
-            </AdminButton>
-            <Link className="admin-panel-link" href="/presupuestos" title="Los datos de pago se cargan en Presupuestos">
-              Datos de pago de la empresa
-            </Link>
-          </div>
-        </form>
-      </AdminPanel>
-
-      <AdminPanel title="Logo por tema" icon="image" meta="Se usan según el fondo; en papel siempre el claro">
-        <div className="admin-settings">
-          <p className="admin-field-hint">
-            JPG, PNG o WebP hasta 1 MB; sin logo queda el monograma LB.
-          </p>
-          <div className="admin-logos">
-            {(["light", "dark"] as const).map((variant) => (
-              <AdminImageUpload
-                key={variant}
-                label={logoVariantLabel(variant)}
-                mode="logo"
-                hint={
-                  variant === "light"
-                    ? "Para fondos oscuros (panel en modo oscuro)."
-                    : "Para fondos claros (modo claro y papel)."
-                }
-                preview={
-                  <span className="admin-logo-tone" data-tone={VARIANT_TONES[variant]}>
-                    <AdminOrgLogo
-                      name={organization?.name}
-                      variant={variant}
-                      lightSrc={logoSrc(variant)}
-                      darkSrc={logoSrc(variant)}
-                      size={64}
-                    />
-                  </span>
-                }
-                busy={savingLogo === variant}
-                disabled={readOnly || !organization || savingLogo !== null}
-                onPrepared={(image) => void uploadLogo(variant, image)}
-                onRemove={logos[variant] ? () => void removeLogo(variant) : undefined}
-                removeLabel={`Quitar ${logoVariantLabel(variant).toLowerCase()}`}
-              />
-            ))}
-          </div>
-        </div>
-      </AdminPanel>
+        </AdminPanel>
+      </AdminDataState>
     </div>
   );
 }

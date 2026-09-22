@@ -118,23 +118,6 @@ export function ResumenModule() {
 
   return (
     <div className="admin-module-page">
-      {overview.loading ? (
-        <AdminLoadingRows rows={2} label="Cargando indicadores" />
-      ) : overview.error ? (
-        <AdminErrorState message={overview.error} onRetry={overview.reload} />
-      ) : (
-        <section className="admin-kpis" aria-label="Indicadores del negocio">
-          <AdminKpi label="Clientes activos" icon="clients" value={formatNumber(counts?.clients)} note="en cartera" />
-          <AdminKpi label="Eventos" icon="events" value={formatNumber(counts?.events)} note="no cancelados" />
-          <AdminKpi label="Presupuestos" icon="budgets" value={formatNumber(counts?.budgets)} note="vigentes" />
-          <AdminKpi label="Leads nuevos" icon="leads" value={formatNumber(counts?.leads)} note="por contactar" tone={counts && counts.leads > 0 ? "accent" : undefined} />
-          <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals?.totalReceivable)} note="ventas aprobadas" tone="ok" />
-          <AdminKpi label="Por pagar" icon="suppliers" value={formatMoney(totals?.totalPayable)} note="proveedores" tone="warn" />
-          <AdminKpi label="Caja comprometida" icon="wallet" value={formatMoney(totals?.committedCash)} note="cobros y pagos" />
-          <AdminKpi label="Inventario" icon="inventory" value={formatNumber(counts?.inventory)} note="ítems controlados" />
-        </section>
-      )}
-
       <div className="admin-panel-grid">
         <div className="admin-panel-wide">
           <AdminPanel
@@ -187,7 +170,26 @@ export function ResumenModule() {
             </AdminDataState>
           </AdminPanel>
         </div>
+      </div>
 
+      {overview.loading ? (
+        <AdminLoadingRows rows={2} label="Cargando indicadores" />
+      ) : overview.error ? (
+        <AdminErrorState message={overview.error} onRetry={overview.reload} />
+      ) : (
+        <section className="admin-kpis" aria-label="Indicadores del negocio">
+          <AdminKpi label="Clientes activos" icon="clients" value={formatNumber(counts?.clients)} note="en cartera" />
+          <AdminKpi label="Eventos" icon="events" value={formatNumber(counts?.events)} note="no cancelados" />
+          <AdminKpi label="Presupuestos" icon="budgets" value={formatNumber(counts?.budgets)} note="vigentes" />
+          <AdminKpi label="Leads nuevos" icon="leads" value={formatNumber(counts?.leads)} note="por contactar" tone={counts && counts.leads > 0 ? "accent" : undefined} />
+          <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals?.totalReceivable)} note="ventas aprobadas" tone="ok" />
+          <AdminKpi label="Por pagar" icon="suppliers" value={formatMoney(totals?.totalPayable)} note="proveedores" tone="warn" />
+          <AdminKpi label="Caja comprometida" icon="wallet" value={formatMoney(totals?.committedCash)} note="cobros y pagos" />
+          <AdminKpi label="Inventario" icon="inventory" value={formatNumber(counts?.inventory)} note="ítems controlados" />
+        </section>
+      )}
+
+      <div className="admin-panel-grid">
         <AdminPanel
           title="Próximos eventos" icon="calendar"
           meta={overview.data ? `${formatNumber(overview.data.upcoming.length)} en agenda` : undefined}

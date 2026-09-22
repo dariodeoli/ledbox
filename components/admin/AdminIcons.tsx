@@ -294,6 +294,20 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <circle cx="17.2" cy="6.9" r="1" fill="currentColor" stroke="none" />
     </>
   ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.4v2.4M12 18.2v2.4M4.8 7.9l2.1 1.2M17.1 14.9l2.1 1.2M4.8 16.1l2.1-1.2M17.1 9.1l2.1-1.2" />
+      <circle cx="12" cy="12" r="7.6" />
+    </>
+  ),
+  "panel-left": (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9.5 4v16" />
+      <path d="M6.3 8.5h1.2M6.3 12h1.2M6.3 15.5h1.2" />
+    </>
+  ),
 };
 
 export function AdminIcon({ name, size = 16 }: { name: AdminIconName; size?: number }) {

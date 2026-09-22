@@ -2101,6 +2101,415 @@ export function FinanzasModule() {
       </AdminPanel>
 
       <AdminPanel
+        title="Por cobrar" icon="finance"
+        meta={pendingPayments.length > 0 ? `${formatNumber(pendingPayments.length)} cobros a plazo` : undefined}
+        action={
+          <AdminButton
+            icon="download"
+            onClick={exportPendingCollections}
+            title="Exportar los cobros a plazo filtrados a CSV"
+            aria-label="Exportar los cobros a plazo filtrados a CSV"
+          >
+            Exportar CSV
+          </AdminButton>
+        }
+      >
+        <AdminDataState
+          loading={finance.loading}
+          error={finance.error}
+          onRetry={finance.reload}
+          empty={pendingPayments.length === 0}
+          emptyTitle="No hay cobros a plazo" emptyIcon="finance"
+          emptyHint="Registrá un cobro con factura y vencimiento para seguir acá cuándo se cobra."
+          rows={4}
+        >
+          <AdminTable
+            view="cobros-plazo"
+            label="Cobros a plazo por cobrar"
+            columns={[
+              { label: "Cliente" },
+              { label: "Factura" },
+              { label: "Vencimiento" },
+              { label: "Método" },
+              { label: "Recordatorio" },
+              { label: "Monto", end: true },
+              { label: "Comprobante", end: true },
+              { label: "Acciones", end: true },
+            ]}
+          >
+            {pendingPayments.map((payment) => {
+              const label = payment.client.company || payment.client.name;
+              const emailToday = reminderToday(payment, "email");
+              const whatsappToday = reminderToday(payment, "whatsapp");
+              const emailDoneToday = emailToday?.status === "sent";
+              const budgetProofs = payment.budget ? proofsByBudget[payment.budget.id] ?? [] : [];
+              const proofTitle = budgetProofs.length === 1
+                ? `Ver el comprobante recibido de ${label}`
+                : `Ver los ${formatNumber(budgetProofs.length)} comprobantes recibidos de ${label}`;
+              return (
+                <AdminRow key={payment.id}>
+                  <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
+                    <strong>{label}</strong>
+                    {payment.budget ? <small className="admin-cell-sub"> · {payment.budget.title}</small> : null}
+                  </AdminCell>
+                  <AdminCell
+                    title={
+                      payment.invoiceNumber
+                        ? `Factura ${payment.invoiceNumber}${payment.invoiceIssuedAt ? ` · emitida el ${formatDate(payment.invoiceIssuedAt)}` : ""}`
+                        : "Sin factura emitida"
+                    }
+                  >
+                    {payment.invoiceNumber ? (
+                      <>
+                        <span className="admin-code">{payment.invoiceNumber}</span>
+                        {payment.invoiceIssuedAt ? (
+                          <small className="admin-cell-sub"> · {formatDateShort(payment.invoiceIssuedAt)}</small>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
+                  </AdminCell>
+                  <AdminCell
+                    title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)} · ${formatCountdown(payment.dueAt)}` : "Sin vencimiento de cobro"}
+                  >
+                    <span className="admin-nowrap">{payment.dueAt ? formatDateShort(payment.dueAt) : "—"}</span>
+                    <AdminCountdown
+                      value={payment.dueAt}
+                      className="admin-countdown--inline"
+                      title={`Cuánto falta para el vencimiento: ${label}`}
+                    />
+                  </AdminCell>
+                  <AdminCell
+                    title={[
+                      payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : payment.method || "Sin método",
+                      payment.treasuryAccount ? `Entra en ${payment.treasuryAccount.name}` : "Sin cuenta de tesorería asignada",
+                    ].join(" · ")}
+                  >
+                    {payment.method || "—"}
+                    {payment.chequeDate ? <small className="admin-cell-sub"> · cheque {formatDateShort(payment.chequeDate)}</small> : null}
+                    {payment.treasuryAccount ? <small className="admin-cell-sub"> · {payment.treasuryAccount.name}</small> : null}
+                  </AdminCell>
+                  <AdminCell title={reminderCellTitle(payment)}>
+                    {emailToday ? (
+                      <AdminBadge tone={reminderStatusTone(emailToday.status)}>
+                        {emailToday.status === "sending" ? "En curso" : `${reminderStatusLabel(emailToday.status)} hoy`}
+                      </AdminBadge>
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
+                  </AdminCell>
+                  <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
+                    <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell end>
+                    {budgetProofs.length > 0 ? (
+                      <AdminButton
+                        icon="eye"
+                        title={proofTitle}
+                        aria-label={proofTitle}
+                        onClick={() => setProofDialog(payment)}
+                      />
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
+                  </AdminCell>
+                  <AdminCell end>
+                    <span className="admin-actions">
+                      {writable ? (
+                        <AdminButton
+                          icon="mail"
+                          busy={reminderBusyId === `email:${payment.id}`}
+                          disabled={Boolean(busyId) || Boolean(reminderBusyId) || emailDoneToday || !payment.client.email}
+                          title={
+                            !payment.client.email
+                              ? `Sin correo cargado: ${label}`
+                              : emailDoneToday
+                                ? `Ya se envió hoy a ${emailToday?.to}`
+                                : `Recordar por email: ${label}`
+                          }
+                          aria-label={`Recordar por email: ${label}`}
+                          onClick={() => void remindByEmail(payment)}
+                        />
+                      ) : null}
+                      {writable && whatsappHref(payment.client.phone) ? (
+                        <AdminWhatsappTemplateButton
+                          title={
+                            whatsappToday
+                              ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
+                              : `Enviar por WhatsApp con plantilla: ${label}`
+                          }
+                          onClick={() => sendWhatsappTemplate(payment)}
+                        />
+                      ) : null}
+                      <AdminButton
+                        icon="clock"
+                        title={`Historial de recordatorios: ${label}`}
+                        aria-label={`Historial de recordatorios: ${label}`}
+                        onClick={() => setRemindersFor(payment.id)}
+                      />
+                      {writable ? (
+                        <AdminButton
+                          icon="check"
+                          busy={busyId === `collect:${payment.id}`}
+                          disabled={Boolean(busyId)}
+                          title={`Marcar cobrado: ${label}`}
+                          aria-label={`Marcar cobrado: ${label}`}
+                          onClick={() => closeCollection(payment, "collect")}
+                        />
+                      ) : null}
+                      {writable ? (
+                        <AdminButton
+                          icon="close"
+                          disabled={Boolean(busyId)}
+                          title={`Anular cobro a plazo: ${label}`}
+                          aria-label={`Anular cobro a plazo: ${label}`}
+                          onClick={() => closeCollection(payment, "cancel")}
+                        />
+                      ) : null}
+                    </span>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+          {pendingPayments.length === 0 ? (
+            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
+          ) : null}
+        </AdminDataState>
+      </AdminPanel>
+
+      <AdminPanel
+        title="Cobros de clientes" icon="finance"
+        meta={`${formatNumber(settledPayments.length)} movimientos`}
+        action={
+          <AdminButton
+            icon="download"
+            onClick={exportCollections}
+            title="Exportar los cobros filtrados a CSV"
+            aria-label="Exportar los cobros filtrados a CSV"
+          >
+            Exportar CSV
+          </AdminButton>
+        }
+      >
+        <AdminDataState
+          loading={finance.loading}
+          error={finance.error}
+          onRetry={finance.reload}
+          empty={settledPayments.length === 0}
+          emptyTitle="Sin cobros registrados" emptyIcon="finance"
+          emptyHint="Registrá el primer cobro para verlo acá con su presupuesto y su fecha real."
+          rows={4}
+        >
+          <AdminTable
+            view="cobros"
+            label="Cobros de clientes"
+            columns={[
+              { label: "Cobrado" },
+              { label: "Cliente" },
+              { label: "Presupuesto" },
+              { label: "Factura" },
+              { label: "Monto", end: true },
+              { label: "Método" },
+              { label: "Referencia" },
+              { label: "Estado" },
+            ]}
+          >
+            {settledPayments.map((payment) => {
+              const collectedAt = payment.collectedAt ?? payment.paidAt;
+              return (
+                <AdminRow key={payment.id}>
+                  <AdminCell title={collectedAt ? formatDateTime(collectedAt) : "Sin fecha de cobro"}>
+                    {collectedAt ? `${formatDateShort(collectedAt)} · ${formatTime(collectedAt)}` : "—"}
+                  </AdminCell>
+                  <AdminCell title={payment.client.company || payment.client.name}>
+                    {payment.client.company || payment.client.name}
+                  </AdminCell>
+                  <AdminCell title={payment.budget?.title || "Sin presupuesto asociado"}>{payment.budget?.title || "—"}</AdminCell>
+                  <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
+                    <span className="admin-code">{payment.invoiceNumber || "—"}</span>
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(payment.amount)}>
+                    <strong>{formatMoney(payment.amount)}</strong>
+                  </AdminCell>
+                  <AdminCell
+                    title={
+                      payment.treasuryAccount
+                        ? `Entró en ${payment.treasuryAccount.name}`
+                        : `${payment.method || "Sin método"} · sin cuenta de tesorería registrada`
+                    }
+                  >
+                    {payment.method || "—"}
+                    {payment.treasuryAccount ? <small className="admin-cell-sub"> · {payment.treasuryAccount.name}</small> : null}
+                  </AdminCell>
+                  <AdminCell title={payment.reference || "Sin referencia"}>
+                    <span className="admin-code">{payment.reference || "—"}</span>
+                  </AdminCell>
+                  <AdminCell>
+                    <AdminBadge tone={paymentStatusTone(payment.status)}>{paymentStatusLabel(payment.status)}</AdminBadge>
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+          {settledPayments.length === 0 ? (
+            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
+          ) : null}
+        </AdminDataState>
+      </AdminPanel>
+
+      <AdminPanel
+        title="Cuentas por pagar" icon="suppliers"
+        meta={`${formatNumber(filteredJobs.length)} trabajos`}
+        action={
+          <span className="admin-panel-actions">
+            <AdminButton
+              icon="download"
+              onClick={exportPayables}
+              title="Exportar las cuentas por pagar filtradas a CSV"
+              aria-label="Exportar las cuentas por pagar filtradas a CSV"
+            >
+              Exportar CSV
+            </AdminButton>
+            <Link className="admin-panel-link" href="/proveedores">
+              Gestionar en Proveedores →
+            </Link>
+          </span>
+        }
+      >
+        {writable && payJob && payJobRow ? (
+          <form className="admin-inline-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
+            <span className="admin-note">
+              <strong>Pago a {payJobRow.supplier.name}</strong>
+              <span className="admin-cell-sub">
+                {" "}
+                · {payJobRow.description} · saldo {formatMoney(supplierJobBalance(payJobRow))}
+              </span>
+            </span>
+            <span className="admin-pay-amount">
+              <MoneyField
+                ariaLabel="Monto del pago"
+                required
+                value={payJob.amount}
+                onChange={(value) => setPayJob({ ...payJob, amount: value })}
+              />
+            </span>
+            <SelectField
+              ariaLabel="Cuenta del pago"
+              value={payJob.accountId || defaultAccountId}
+              onChange={(value) => setPayJob({ ...payJob, accountId: value })}
+              options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
+            />
+            <DateField
+              ariaLabel="Fecha del pago"
+              title="Fecha del pago"
+              value={payJob.date}
+              onChange={(value) => setPayJob({ ...payJob, date: value })}
+            />
+            <SelectField
+              ariaLabel="Método del pago"
+              value={payJob.method}
+              onChange={(value) => setPayJob({ ...payJob, method: value })}
+              options={METHOD_SELECT_OPTIONS}
+            />
+            <TextField
+              ariaLabel="Comprobante del pago"
+              title="Número o referencia del comprobante (opcional)"
+              maxLength={120}
+              value={payJob.receipt}
+              onChange={(value) => setPayJob({ ...payJob, receipt: value })}
+              placeholder="Comprobante"
+            />
+            <AdminButton type="submit" variant="primary" icon="check" busy={payBusy} disabled={payBusy}>
+              Registrar pago
+            </AdminButton>
+            <AdminButton icon="close" type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
+              Cancelar
+            </AdminButton>
+          </form>
+        ) : null}
+        {writable && payJob && payError ? <AdminNote tone="error">{payError}</AdminNote> : null}
+
+        <AdminDataState
+          loading={finance.loading}
+          error={finance.error}
+          onRetry={finance.reload}
+          empty={filteredJobs.length === 0}
+          emptyTitle="Sin trabajos de proveedor" emptyIcon="suppliers"
+          emptyHint="Los trabajos se cargan y avanzan en Proveedores; acá ves el costo, el anticipo, el saldo y podés pagarlos desde una cuenta."
+          rows={4}
+        >
+          <AdminTable
+            view="pagar"
+            label="Cuentas por pagar"
+            columns={[
+              { label: "Proveedor" },
+              { label: "Trabajo" },
+              { label: "Evento" },
+              { label: "Vence" },
+              { label: "Total", end: true },
+              { label: "Anticipo", end: true },
+              { label: "Saldo", end: true },
+              { label: "Estado" },
+              { label: "Acciones", end: true },
+            ]}
+          >
+            {filteredJobs.map((job) => {
+              const balance = supplierJobBalance(job);
+              const settled = job.status === "PAID" || job.status === "CANCELLED";
+              return (
+                <AdminRow key={job.id}>
+                  <AdminCell title={job.supplier.name}>
+                    <strong>{job.supplier.name}</strong>
+                  </AdminCell>
+                  <AdminCell title={job.description}>{job.description}</AdminCell>
+                  <AdminCell title={job.event?.name || "Sin evento asociado"}>{job.event?.name || "—"}</AdminCell>
+                  <AdminCell title={job.dueAt ? `Vence el ${formatDateShort(job.dueAt)}` : "Sin fecha prevista"}>
+                    <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
+                    {settled ? null : (
+                      <AdminCountdown
+                        value={job.dueAt}
+                        className="admin-countdown--inline"
+                        title={`Cuánto falta para el vencimiento: ${job.description}`}
+                      />
+                    )}
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(job.total)}>
+                    {formatMoney(job.total)}
+                  </AdminCell>
+                  <AdminCell end title={formatMoney(job.advance)}>
+                    {formatMoney(job.advance)}
+                  </AdminCell>
+                  <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(job.total)}`}>
+                    <strong>{formatMoney(balance)}</strong>
+                  </AdminCell>
+                  <AdminCell>
+                    <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge>
+                  </AdminCell>
+                  <AdminCell end>
+                    {writable && !settled && balance > 0 ? (
+                      <AdminButton
+                        icon="finance"
+                        title={`Registrar pago a ${job.supplier.name}: ${job.description} (saldo ${formatMoney(balance)})`}
+                        aria-label={`Registrar pago a ${job.supplier.name}: ${job.description}`}
+                        disabled={Boolean(payBusy)}
+                        onClick={() => openPayJob(job)}
+                      >
+                        Pagar
+                      </AdminButton>
+                    ) : (
+                      <span className="admin-muted">—</span>
+                    )}
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
+          {filteredJobs.length === 0 ? <AdminEmpty icon="search" title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
+        </AdminDataState>
+      </AdminPanel>
+      <AdminPanel
         title="Tesorería" icon="wallet"
         meta={`${formatNumber(accounts.length)} cuentas · disponible ${formatMoney(summary.total)}`}
         action={
@@ -2692,415 +3101,6 @@ export function FinanzasModule() {
         </AdminDataState>
       </AdminPanel>
 
-      <AdminPanel
-        title="Por cobrar" icon="finance"
-        meta={pendingPayments.length > 0 ? `${formatNumber(pendingPayments.length)} cobros a plazo` : undefined}
-        action={
-          <AdminButton
-            icon="download"
-            onClick={exportPendingCollections}
-            title="Exportar los cobros a plazo filtrados a CSV"
-            aria-label="Exportar los cobros a plazo filtrados a CSV"
-          >
-            Exportar CSV
-          </AdminButton>
-        }
-      >
-        <AdminDataState
-          loading={finance.loading}
-          error={finance.error}
-          onRetry={finance.reload}
-          empty={pendingPayments.length === 0}
-          emptyTitle="No hay cobros a plazo" emptyIcon="finance"
-          emptyHint="Registrá un cobro con factura y vencimiento para seguir acá cuándo se cobra."
-          rows={4}
-        >
-          <AdminTable
-            view="cobros-plazo"
-            label="Cobros a plazo por cobrar"
-            columns={[
-              { label: "Cliente" },
-              { label: "Factura" },
-              { label: "Vencimiento" },
-              { label: "Método" },
-              { label: "Recordatorio" },
-              { label: "Monto", end: true },
-              { label: "Comprobante", end: true },
-              { label: "Acciones", end: true },
-            ]}
-          >
-            {pendingPayments.map((payment) => {
-              const label = payment.client.company || payment.client.name;
-              const emailToday = reminderToday(payment, "email");
-              const whatsappToday = reminderToday(payment, "whatsapp");
-              const emailDoneToday = emailToday?.status === "sent";
-              const budgetProofs = payment.budget ? proofsByBudget[payment.budget.id] ?? [] : [];
-              const proofTitle = budgetProofs.length === 1
-                ? `Ver el comprobante recibido de ${label}`
-                : `Ver los ${formatNumber(budgetProofs.length)} comprobantes recibidos de ${label}`;
-              return (
-                <AdminRow key={payment.id}>
-                  <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
-                    <strong>{label}</strong>
-                    {payment.budget ? <small className="admin-cell-sub"> · {payment.budget.title}</small> : null}
-                  </AdminCell>
-                  <AdminCell
-                    title={
-                      payment.invoiceNumber
-                        ? `Factura ${payment.invoiceNumber}${payment.invoiceIssuedAt ? ` · emitida el ${formatDate(payment.invoiceIssuedAt)}` : ""}`
-                        : "Sin factura emitida"
-                    }
-                  >
-                    {payment.invoiceNumber ? (
-                      <>
-                        <span className="admin-code">{payment.invoiceNumber}</span>
-                        {payment.invoiceIssuedAt ? (
-                          <small className="admin-cell-sub"> · {formatDateShort(payment.invoiceIssuedAt)}</small>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="admin-muted">—</span>
-                    )}
-                  </AdminCell>
-                  <AdminCell
-                    title={payment.dueAt ? `Vence el ${formatDate(payment.dueAt)} · ${formatCountdown(payment.dueAt)}` : "Sin vencimiento de cobro"}
-                  >
-                    <span className="admin-nowrap">{payment.dueAt ? formatDateShort(payment.dueAt) : "—"}</span>
-                    <AdminCountdown
-                      value={payment.dueAt}
-                      className="admin-countdown--inline"
-                      title={`Cuánto falta para el vencimiento: ${label}`}
-                    />
-                  </AdminCell>
-                  <AdminCell
-                    title={[
-                      payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : payment.method || "Sin método",
-                      payment.treasuryAccount ? `Entra en ${payment.treasuryAccount.name}` : "Sin cuenta de tesorería asignada",
-                    ].join(" · ")}
-                  >
-                    {payment.method || "—"}
-                    {payment.chequeDate ? <small className="admin-cell-sub"> · cheque {formatDateShort(payment.chequeDate)}</small> : null}
-                    {payment.treasuryAccount ? <small className="admin-cell-sub"> · {payment.treasuryAccount.name}</small> : null}
-                  </AdminCell>
-                  <AdminCell title={reminderCellTitle(payment)}>
-                    {emailToday ? (
-                      <AdminBadge tone={reminderStatusTone(emailToday.status)}>
-                        {emailToday.status === "sending" ? "En curso" : `${reminderStatusLabel(emailToday.status)} hoy`}
-                      </AdminBadge>
-                    ) : (
-                      <span className="admin-muted">—</span>
-                    )}
-                  </AdminCell>
-                  <AdminCell end title={`Monto por cobrar ${formatMoney(payment.amount)}`}>
-                    <strong>{formatMoney(payment.amount)}</strong>
-                  </AdminCell>
-                  <AdminCell end>
-                    {budgetProofs.length > 0 ? (
-                      <AdminButton
-                        icon="eye"
-                        title={proofTitle}
-                        aria-label={proofTitle}
-                        onClick={() => setProofDialog(payment)}
-                      />
-                    ) : (
-                      <span className="admin-muted">—</span>
-                    )}
-                  </AdminCell>
-                  <AdminCell end>
-                    <span className="admin-actions">
-                      {writable ? (
-                        <AdminButton
-                          icon="mail"
-                          busy={reminderBusyId === `email:${payment.id}`}
-                          disabled={Boolean(busyId) || Boolean(reminderBusyId) || emailDoneToday || !payment.client.email}
-                          title={
-                            !payment.client.email
-                              ? `Sin correo cargado: ${label}`
-                              : emailDoneToday
-                                ? `Ya se envió hoy a ${emailToday?.to}`
-                                : `Recordar por email: ${label}`
-                          }
-                          aria-label={`Recordar por email: ${label}`}
-                          onClick={() => void remindByEmail(payment)}
-                        />
-                      ) : null}
-                      {writable && whatsappHref(payment.client.phone) ? (
-                        <AdminWhatsappTemplateButton
-                          title={
-                            whatsappToday
-                              ? `WhatsApp abierto hoy ${reminderStamp(whatsappToday.sentAt)}: ${label}`
-                              : `Enviar por WhatsApp con plantilla: ${label}`
-                          }
-                          onClick={() => sendWhatsappTemplate(payment)}
-                        />
-                      ) : null}
-                      <AdminButton
-                        icon="clock"
-                        title={`Historial de recordatorios: ${label}`}
-                        aria-label={`Historial de recordatorios: ${label}`}
-                        onClick={() => setRemindersFor(payment.id)}
-                      />
-                      {writable ? (
-                        <AdminButton
-                          icon="check"
-                          busy={busyId === `collect:${payment.id}`}
-                          disabled={Boolean(busyId)}
-                          title={`Marcar cobrado: ${label}`}
-                          aria-label={`Marcar cobrado: ${label}`}
-                          onClick={() => closeCollection(payment, "collect")}
-                        />
-                      ) : null}
-                      {writable ? (
-                        <AdminButton
-                          icon="close"
-                          disabled={Boolean(busyId)}
-                          title={`Anular cobro a plazo: ${label}`}
-                          aria-label={`Anular cobro a plazo: ${label}`}
-                          onClick={() => closeCollection(payment, "cancel")}
-                        />
-                      ) : null}
-                    </span>
-                  </AdminCell>
-                </AdminRow>
-              );
-            })}
-          </AdminTable>
-          {pendingPayments.length === 0 ? (
-            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
-          ) : null}
-        </AdminDataState>
-      </AdminPanel>
-
-      <AdminPanel
-        title="Cobros de clientes" icon="finance"
-        meta={`${formatNumber(settledPayments.length)} movimientos`}
-        action={
-          <AdminButton
-            icon="download"
-            onClick={exportCollections}
-            title="Exportar los cobros filtrados a CSV"
-            aria-label="Exportar los cobros filtrados a CSV"
-          >
-            Exportar CSV
-          </AdminButton>
-        }
-      >
-        <AdminDataState
-          loading={finance.loading}
-          error={finance.error}
-          onRetry={finance.reload}
-          empty={settledPayments.length === 0}
-          emptyTitle="Sin cobros registrados" emptyIcon="finance"
-          emptyHint="Registrá el primer cobro para verlo acá con su presupuesto y su fecha real."
-          rows={4}
-        >
-          <AdminTable
-            view="cobros"
-            label="Cobros de clientes"
-            columns={[
-              { label: "Cobrado" },
-              { label: "Cliente" },
-              { label: "Presupuesto" },
-              { label: "Factura" },
-              { label: "Monto", end: true },
-              { label: "Método" },
-              { label: "Referencia" },
-              { label: "Estado" },
-            ]}
-          >
-            {settledPayments.map((payment) => {
-              const collectedAt = payment.collectedAt ?? payment.paidAt;
-              return (
-                <AdminRow key={payment.id}>
-                  <AdminCell title={collectedAt ? formatDateTime(collectedAt) : "Sin fecha de cobro"}>
-                    {collectedAt ? `${formatDateShort(collectedAt)} · ${formatTime(collectedAt)}` : "—"}
-                  </AdminCell>
-                  <AdminCell title={payment.client.company || payment.client.name}>
-                    {payment.client.company || payment.client.name}
-                  </AdminCell>
-                  <AdminCell title={payment.budget?.title || "Sin presupuesto asociado"}>{payment.budget?.title || "—"}</AdminCell>
-                  <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
-                    <span className="admin-code">{payment.invoiceNumber || "—"}</span>
-                  </AdminCell>
-                  <AdminCell end title={formatMoney(payment.amount)}>
-                    <strong>{formatMoney(payment.amount)}</strong>
-                  </AdminCell>
-                  <AdminCell
-                    title={
-                      payment.treasuryAccount
-                        ? `Entró en ${payment.treasuryAccount.name}`
-                        : `${payment.method || "Sin método"} · sin cuenta de tesorería registrada`
-                    }
-                  >
-                    {payment.method || "—"}
-                    {payment.treasuryAccount ? <small className="admin-cell-sub"> · {payment.treasuryAccount.name}</small> : null}
-                  </AdminCell>
-                  <AdminCell title={payment.reference || "Sin referencia"}>
-                    <span className="admin-code">{payment.reference || "—"}</span>
-                  </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={paymentStatusTone(payment.status)}>{paymentStatusLabel(payment.status)}</AdminBadge>
-                  </AdminCell>
-                </AdminRow>
-              );
-            })}
-          </AdminTable>
-          {settledPayments.length === 0 ? (
-            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
-          ) : null}
-        </AdminDataState>
-      </AdminPanel>
-
-      <AdminPanel
-        title="Cuentas por pagar" icon="suppliers"
-        meta={`${formatNumber(filteredJobs.length)} trabajos`}
-        action={
-          <span className="admin-panel-actions">
-            <AdminButton
-              icon="download"
-              onClick={exportPayables}
-              title="Exportar las cuentas por pagar filtradas a CSV"
-              aria-label="Exportar las cuentas por pagar filtradas a CSV"
-            >
-              Exportar CSV
-            </AdminButton>
-            <Link className="admin-panel-link" href="/proveedores">
-              Gestionar en Proveedores →
-            </Link>
-          </span>
-        }
-      >
-        {writable && payJob && payJobRow ? (
-          <form className="admin-inline-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
-            <span className="admin-note">
-              <strong>Pago a {payJobRow.supplier.name}</strong>
-              <span className="admin-cell-sub">
-                {" "}
-                · {payJobRow.description} · saldo {formatMoney(supplierJobBalance(payJobRow))}
-              </span>
-            </span>
-            <span className="admin-pay-amount">
-              <MoneyField
-                ariaLabel="Monto del pago"
-                required
-                value={payJob.amount}
-                onChange={(value) => setPayJob({ ...payJob, amount: value })}
-              />
-            </span>
-            <SelectField
-              ariaLabel="Cuenta del pago"
-              value={payJob.accountId || defaultAccountId}
-              onChange={(value) => setPayJob({ ...payJob, accountId: value })}
-              options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
-            />
-            <DateField
-              ariaLabel="Fecha del pago"
-              title="Fecha del pago"
-              value={payJob.date}
-              onChange={(value) => setPayJob({ ...payJob, date: value })}
-            />
-            <SelectField
-              ariaLabel="Método del pago"
-              value={payJob.method}
-              onChange={(value) => setPayJob({ ...payJob, method: value })}
-              options={METHOD_SELECT_OPTIONS}
-            />
-            <TextField
-              ariaLabel="Comprobante del pago"
-              title="Número o referencia del comprobante (opcional)"
-              maxLength={120}
-              value={payJob.receipt}
-              onChange={(value) => setPayJob({ ...payJob, receipt: value })}
-              placeholder="Comprobante"
-            />
-            <AdminButton type="submit" variant="primary" icon="check" busy={payBusy} disabled={payBusy}>
-              Registrar pago
-            </AdminButton>
-            <AdminButton icon="close" type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
-              Cancelar
-            </AdminButton>
-          </form>
-        ) : null}
-        {writable && payJob && payError ? <AdminNote tone="error">{payError}</AdminNote> : null}
-
-        <AdminDataState
-          loading={finance.loading}
-          error={finance.error}
-          onRetry={finance.reload}
-          empty={filteredJobs.length === 0}
-          emptyTitle="Sin trabajos de proveedor" emptyIcon="suppliers"
-          emptyHint="Los trabajos se cargan y avanzan en Proveedores; acá ves el costo, el anticipo, el saldo y podés pagarlos desde una cuenta."
-          rows={4}
-        >
-          <AdminTable
-            view="pagar"
-            label="Cuentas por pagar"
-            columns={[
-              { label: "Proveedor" },
-              { label: "Trabajo" },
-              { label: "Evento" },
-              { label: "Vence" },
-              { label: "Total", end: true },
-              { label: "Anticipo", end: true },
-              { label: "Saldo", end: true },
-              { label: "Estado" },
-              { label: "Acciones", end: true },
-            ]}
-          >
-            {filteredJobs.map((job) => {
-              const balance = supplierJobBalance(job);
-              const settled = job.status === "PAID" || job.status === "CANCELLED";
-              return (
-                <AdminRow key={job.id}>
-                  <AdminCell title={job.supplier.name}>
-                    <strong>{job.supplier.name}</strong>
-                  </AdminCell>
-                  <AdminCell title={job.description}>{job.description}</AdminCell>
-                  <AdminCell title={job.event?.name || "Sin evento asociado"}>{job.event?.name || "—"}</AdminCell>
-                  <AdminCell title={job.dueAt ? `Vence el ${formatDateShort(job.dueAt)}` : "Sin fecha prevista"}>
-                    <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
-                    {settled ? null : (
-                      <AdminCountdown
-                        value={job.dueAt}
-                        className="admin-countdown--inline"
-                        title={`Cuánto falta para el vencimiento: ${job.description}`}
-                      />
-                    )}
-                  </AdminCell>
-                  <AdminCell end title={formatMoney(job.total)}>
-                    {formatMoney(job.total)}
-                  </AdminCell>
-                  <AdminCell end title={formatMoney(job.advance)}>
-                    {formatMoney(job.advance)}
-                  </AdminCell>
-                  <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(job.total)}`}>
-                    <strong>{formatMoney(balance)}</strong>
-                  </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge>
-                  </AdminCell>
-                  <AdminCell end>
-                    {writable && !settled && balance > 0 ? (
-                      <AdminButton
-                        icon="finance"
-                        title={`Registrar pago a ${job.supplier.name}: ${job.description} (saldo ${formatMoney(balance)})`}
-                        aria-label={`Registrar pago a ${job.supplier.name}: ${job.description}`}
-                        disabled={Boolean(payBusy)}
-                        onClick={() => openPayJob(job)}
-                      >
-                        Pagar
-                      </AdminButton>
-                    ) : (
-                      <span className="admin-muted">—</span>
-                    )}
-                  </AdminCell>
-                </AdminRow>
-              );
-            })}
-          </AdminTable>
-          {filteredJobs.length === 0 ? <AdminEmpty icon="search" title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
-        </AdminDataState>
-      </AdminPanel>
 
       {reminderDetail ? (
         <PaymentRemindersDialog

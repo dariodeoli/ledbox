@@ -9,7 +9,7 @@ import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { PasswordField, TextField } from "../AdminFields";
-import { AdminButton, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { AdminPinSettings } from "../AdminPinSettings";
 
 /**
@@ -154,121 +154,123 @@ export function PerfilModule() {
     <div className="admin-module-page">
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
 
-      <AdminPanel title="Datos personales" icon="user" meta={data ? `Rol: ${adminRoleLabel(data.role)}` : undefined}>
-        <div className="admin-profile-grid">
-          <AdminImageUpload
-            label="Foto de perfil"
-            mode="avatar"
-            hint="JPG, PNG o WebP hasta 1 MB. Se recorta cuadrada y se comprime en tu navegador; solo se ve con sesión del panel."
-            preview={<AdminAvatar name={data?.name ?? user?.name} src={avatarSrc} size={64} />}
-            busy={avatarBusy}
-            disabled={readOnly || !data}
-            error={avatarError}
-            onPrepared={(image) => void uploadAvatar(image)}
-            onRemove={avatarUpdatedAt ? () => void removeAvatar() : undefined}
-            removeLabel="Quitar foto"
-          />
-
-          <form className="admin-settings-form" onSubmit={saveName}>
-            <TextField
-              label="Nombre"
-              required
-              maxLength={120}
-              autoComplete="name"
-              value={name}
-              onChange={(value) => {
-                setName(value);
-                setNameError("");
-                setNotice("");
-              }}
-              error={nameError}
+      <AdminDataState loading={profile.loading} error={profile.error} onRetry={profile.reload} rows={4}>
+        <AdminPanel title="Datos personales" icon="user" meta={data ? `Rol: ${adminRoleLabel(data.role)}` : undefined}>
+          <div className="admin-profile-grid">
+            <AdminImageUpload
+              label="Foto de perfil"
+              mode="avatar"
+              hint="JPG, PNG o WebP hasta 1 MB. Se recorta cuadrada y se comprime en tu navegador; solo se ve con sesión del panel."
+              preview={<AdminAvatar name={data?.name ?? user?.name} src={avatarSrc} size={64} />}
+              busy={avatarBusy}
               disabled={readOnly || !data}
-              hint="Así te ve el equipo en el panel y en la auditoría."
+              error={avatarError}
+              onPrepared={(image) => void uploadAvatar(image)}
+              onRemove={avatarUpdatedAt ? () => void removeAvatar() : undefined}
+              removeLabel="Quitar foto"
             />
-            <TextField
-              label="Correo"
-              value={data?.email ?? ""}
-              onChange={() => {}}
-              readOnly
-              hint="El correo es tu identidad de acceso: lo cambia un OWNER/ADMIN del equipo."
-            />
+
+            <form className="admin-settings-form" onSubmit={saveName}>
+              <TextField
+                label="Nombre"
+                required
+                maxLength={120}
+                autoComplete="name"
+                value={name}
+                onChange={(value) => {
+                  setName(value);
+                  setNameError("");
+                  setNotice("");
+                }}
+                error={nameError}
+                disabled={readOnly || !data}
+                hint="Así te ve el equipo en el panel y en la auditoría."
+              />
+              <TextField
+                label="Correo"
+                value={data?.email ?? ""}
+                onChange={() => {}}
+                readOnly
+                hint="El correo es tu identidad de acceso: lo cambia un OWNER/ADMIN del equipo."
+              />
+              <div className="admin-settings-actions">
+                <AdminButton
+                  type="submit"
+                  variant="primary"
+                  icon="check"
+                  busy={savingName}
+                  disabled={readOnly || !data || !nameChanged || !personNameValid(name)}
+                >
+                  Guardar nombre
+                </AdminButton>
+              </div>
+            </form>
+          </div>
+        </AdminPanel>
+
+        <AdminPanel title="Contraseña" icon="lock" meta="Mínimo 8 caracteres">
+          <form className="admin-settings" onSubmit={savePassword}>
+            {data && !hasPassword ? (
+              <AdminNote>
+                Tu cuenta ingresa con Google y todavía no tiene contraseña propia. Podés crear una desde «¿La olvidaste?» en el
+                login: te llega un correo para definirla.
+              </AdminNote>
+            ) : null}
+            <div className="admin-settings-grid">
+              <PasswordField
+                label="Contraseña actual"
+                required
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(value) => {
+                  setCurrentPassword(value);
+                  setPasswordError("");
+                }}
+                disabled={readOnly || !data || !hasPassword}
+              />
+              <PasswordField
+                label="Contraseña nueva"
+                required
+                minLength={8}
+                hint="Al menos 8 caracteres. Al guardarla se cierran las demás sesiones abiertas."
+                value={newPassword}
+                onChange={(value) => {
+                  setNewPassword(value);
+                  setPasswordError("");
+                }}
+                disabled={readOnly || !data || !hasPassword}
+              />
+              <PasswordField
+                label="Repetir contraseña nueva"
+                required
+                minLength={8}
+                value={repeatPassword}
+                onChange={(value) => {
+                  setRepeatPassword(value);
+                  setPasswordError("");
+                }}
+                disabled={readOnly || !data || !hasPassword}
+              />
+            </div>
+            {passwordError ? (
+              <span className="admin-field-error" role="alert">
+                {passwordError}
+              </span>
+            ) : null}
             <div className="admin-settings-actions">
               <AdminButton
                 type="submit"
                 variant="primary"
                 icon="check"
-                busy={savingName}
-                disabled={readOnly || !data || !nameChanged || !personNameValid(name)}
+                busy={savingPassword}
+                disabled={readOnly || !data || !hasPassword || !currentPassword || !newPassword}
               >
-                Guardar nombre
+                Cambiar contraseña
               </AdminButton>
             </div>
           </form>
-        </div>
-      </AdminPanel>
-
-      <AdminPanel title="Contraseña" icon="lock" meta="Mínimo 8 caracteres">
-        <form className="admin-settings" onSubmit={savePassword}>
-          {data && !hasPassword ? (
-            <AdminNote>
-              Tu cuenta ingresa con Google y todavía no tiene contraseña propia. Podés crear una desde «¿La olvidaste?» en el
-              login: te llega un correo para definirla.
-            </AdminNote>
-          ) : null}
-          <div className="admin-settings-grid">
-            <PasswordField
-              label="Contraseña actual"
-              required
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(value) => {
-                setCurrentPassword(value);
-                setPasswordError("");
-              }}
-              disabled={readOnly || !data || !hasPassword}
-            />
-            <PasswordField
-              label="Contraseña nueva"
-              required
-              minLength={8}
-              hint="Al menos 8 caracteres. Al guardarla se cierran las demás sesiones abiertas."
-              value={newPassword}
-              onChange={(value) => {
-                setNewPassword(value);
-                setPasswordError("");
-              }}
-              disabled={readOnly || !data || !hasPassword}
-            />
-            <PasswordField
-              label="Repetir contraseña nueva"
-              required
-              minLength={8}
-              value={repeatPassword}
-              onChange={(value) => {
-                setRepeatPassword(value);
-                setPasswordError("");
-              }}
-              disabled={readOnly || !data || !hasPassword}
-            />
-          </div>
-          {passwordError ? (
-            <span className="admin-field-error" role="alert">
-              {passwordError}
-            </span>
-          ) : null}
-          <div className="admin-settings-actions">
-            <AdminButton
-              type="submit"
-              variant="primary"
-              icon="check"
-              busy={savingPassword}
-              disabled={readOnly || !data || !hasPassword || !currentPassword || !newPassword}
-            >
-              Cambiar contraseña
-            </AdminButton>
-          </div>
-        </form>
-      </AdminPanel>
+        </AdminPanel>
+      </AdminDataState>
 
       {/* Seguridad del panel (issue #21): PIN y auto-bloqueo por inactividad. */}
       <AdminPinSettings />

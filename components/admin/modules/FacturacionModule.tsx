@@ -595,7 +595,40 @@ export function FacturacionModule() {
 
       {tab === "invoices" ? (
         <>
-          <AdminPanel
+          {approvedBudgets.length > 0 && canWrite && !periodClosed ? (
+            <AdminPanel title="Presupuestos aprobados para facturar" icon="budgets" meta={`${formatNumber(approvedBudgets.length)} aprobados`}>
+              <AdminTable
+                view="facturables"
+                label="Presupuestos aprobados"
+                columns={[
+                  { label: "Presupuesto" },
+                  { label: "Cliente" },
+                  { label: "Total" },
+                  { label: "Emitir", end: true },
+                ]}
+              >
+                {approvedBudgets.slice(0, 35).map((budget) => (
+                  <AdminRow key={budget.id}>
+                    <AdminCell title={budget.title}>
+                      <strong>{budget.title}</strong>
+                    </AdminCell>
+                    <AdminCell title={budget.client.company || budget.client.name}>{budget.client.company || budget.client.name}</AdminCell>
+                    <AdminCell title={formatMoney(budget.total)}>
+                      <span className="admin-nowrap">{formatMoney(budget.total)}</span>
+                    </AdminCell>
+                    <AdminCell end className="admin-cell--actions">
+                      <AdminButton
+                        icon="receipt"
+                        title={`Emitir la factura de «${budget.title}»`}
+                        aria-label={`Emitir la factura del presupuesto ${budget.title}`}
+                        onClick={() => openFromBudget(budget.id)}
+                      />
+                    </AdminCell>
+                  </AdminRow>
+                ))}
+              </AdminTable>
+            </AdminPanel>
+          ) : null}          <AdminPanel
             title="Facturas del período" icon="receipt"
             meta={`${formatNumber(invoices.length)} de ${formatNumber(bookInvoices.length)} · ${formatMoney(summary.sales.total)}`}
           >
@@ -700,40 +733,7 @@ export function FacturacionModule() {
             </AdminDataState>
           </AdminPanel>
 
-          {approvedBudgets.length > 0 && canWrite && !periodClosed ? (
-            <AdminPanel title="Presupuestos aprobados para facturar" icon="budgets" meta={`${formatNumber(approvedBudgets.length)} aprobados`}>
-              <AdminTable
-                view="facturables"
-                label="Presupuestos aprobados"
-                columns={[
-                  { label: "Presupuesto" },
-                  { label: "Cliente" },
-                  { label: "Total" },
-                  { label: "Emitir", end: true },
-                ]}
-              >
-                {approvedBudgets.slice(0, 35).map((budget) => (
-                  <AdminRow key={budget.id}>
-                    <AdminCell title={budget.title}>
-                      <strong>{budget.title}</strong>
-                    </AdminCell>
-                    <AdminCell title={budget.client.company || budget.client.name}>{budget.client.company || budget.client.name}</AdminCell>
-                    <AdminCell title={formatMoney(budget.total)}>
-                      <span className="admin-nowrap">{formatMoney(budget.total)}</span>
-                    </AdminCell>
-                    <AdminCell end className="admin-cell--actions">
-                      <AdminButton
-                        icon="receipt"
-                        title={`Emitir la factura de «${budget.title}»`}
-                        aria-label={`Emitir la factura del presupuesto ${budget.title}`}
-                        onClick={() => openFromBudget(budget.id)}
-                      />
-                    </AdminCell>
-                  </AdminRow>
-                ))}
-              </AdminTable>
-            </AdminPanel>
-          ) : null}
+
         </>
       ) : null}
 
