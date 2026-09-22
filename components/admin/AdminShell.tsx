@@ -43,6 +43,9 @@ import {
 import { AdminIcon } from "./AdminIcons";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen } from "./AdminUI";
+import { AdminCommandPalette } from "./AdminCommandPalette";
+import { AdminMobileNav } from "./AdminMobileNav";
+import { AdminModuleHelp } from "./AdminModuleHelp";
 import { AdminThemeToggle } from "./admin-theme";
 import { AdminOfflineBanner, AdminOfflineIndicator } from "./AdminOffline";
 import { adminApiGet, adminSend, clearAdminApiCache, redirectToLogin, useAdminResource } from "@/lib/admin-api";
@@ -687,7 +690,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </h1>
             </div>
 
+            {/* Ayuda contextual del módulo (22-09-2026): junto al título, nunca
+                compite con las acciones del topbar. */}
+            <AdminModuleHelp />
+
             <div className="admin-topbar-tools">
+              <AdminCommandPalette />
               {session.demo ? (
                 <Link
                   className="admin-demo-chip"
@@ -749,6 +757,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <AppFooter variant="app" className="app-footer--panel" />
           </footer>
         </div>
+
+        {/* Barra inferior de mobile (≤720 px): cuatro módulos + «Más», que abre
+            el drawer de siempre. En escritorio no se dibuja. */}
+        <AdminMobileNav menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)} />
       </div>
       )}
     </AdminSessionContext.Provider>
