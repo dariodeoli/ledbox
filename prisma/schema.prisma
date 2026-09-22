@@ -508,6 +508,21 @@ model Client {
   ruc            String?
   email          String?
   phone          String?
+  /**
+   * Persona encargada del cliente (issue #36): nombre, cargo y contacto
+   * directo. Conviven con los datos generales del cliente; si un dato falta no
+   * se completa con otro campo.
+   */
+  contactName    String?
+  contactRole    String?
+  contactPhone   String?
+  contactEmail   String?
+  /// Sitio web normalizado (`https://…`); el link se dibuja en la ficha.
+  website        String?
+  /// Usuario de Instagram sin `@`; el link se arma con `instagramHref`.
+  instagram      String?
+  /// WhatsApp propio cuando difiere del teléfono general (mismo formato).
+  whatsapp       String?
   notes          String?
   active         Boolean         @default(true)
   createdAt      DateTime        @default(now())
@@ -516,10 +531,28 @@ model Client {
   events         Event[]
   budgets        Budget[]
   payments       ClientPayment[]
+  logo           ClientLogo?
 
   @@index([type, active])
   @@index([createdAt])
   @@index([organizationId, createdAt])
+}
+
+/// Logo del cliente (issue #36): mismo pipeline de imágenes del panel
+/// (`lib/server/branding.ts` + `lib/identity-image.ts`), binario en la base y
+/// servido solo con sesión desde `/api/admin/clients/[id]/logo`. Un logo por
+/// cliente; sin logo queda el monograma de iniciales del avatar.
+model ClientLogo {
+  id        String   @id
+  clientId  String   @unique
+  mime      String
+  size      Int
+  width     Int?
+  height    Int?
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
 model Event {

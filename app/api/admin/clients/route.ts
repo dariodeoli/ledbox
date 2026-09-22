@@ -4,6 +4,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditPick, recordAudit } from "@/lib/server/audit";
 import { clientMetrics, factsByClient, type ClientMetricFacts } from "./metrics";
+import { parseClientFields } from "./client-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,10 @@ export const dynamic = "force-dynamic";
  * marcar la deuda vencida y mostrar la última actividad sin una segunda llamada
  * a finanzas.
  *
- * `POST`: alta de cliente (`clients.write`).
+ * Cada fila trae además la versión de su logo (issue #36), sin el binario: la
+ * identidad de la lista lo pide con sesión a `/clients/[id]/logo`.
+ *
+ * `POST`: alta de cliente (`clients.write`) con los datos de contacto y links.
  */
 export async function GET() {
   const auth = await requireAdminContext();
@@ -26,7 +30,7 @@ export async function GET() {
     where: { organizationId },
     orderBy: { createdAt: "desc" },
     take: 200,
-    include: { _count: { select: { events: true, budgets: true } } },
+    include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
   });
 
   // Solo los hechos de los clientes listados: nada de otra empresa y nada de
@@ -53,32 +57,49 @@ export async function GET() {
   const eventsByClient = factsByClient(events);
 
   const rows = clients.map((client) => {
+    const { logo, ...rest } = client;
     const facts: ClientMetricFacts = {
       budgets: budgetsByClient.get(client.id) ?? [],
       payments: paymentsByClient.get(client.id) ?? [],
       events: eventsByClient.get(client.id) ?? [],
     };
-    return { ...client, metrics: clientMetrics(facts) };
+    return { ...rest, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null, metrics: clientMetrics(facts) };
   });
 
   return Response.json({ clients: rows });
 }
 
+/** Campos que se auditan al crear un cliente (sin el binario del logo). */
+const CLIENT_AUDIT_FIELDS = [
+  "name",
+  "company",
+  "type",
+  "ruc",
+  "email",
+  "phone",
+  "contactName",
+  "contactRole",
+  "contactPhone",
+  "contactEmail",
+  "website",
+  "instagram",
+  "whatsapp",
+] as const;
+
 export async function POST(request: Request) {
   const auth = await requireAdminContext("clients.write");
   if (!auth.ok) return auth.response;
-  const body = await readJson(request) as Record<string, unknown>;
-  if (typeof body.name !== "string" || body.name.trim().length < 2) return jsonError("Name is required.", 400);
+  const parsed = parseClientFields(await readJson(request));
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  if (parsed.data.name === undefined) return jsonError("Ingresá el nombre del cliente.", 400);
+
   const client = await db.client.create({
     data: {
       id: randomUUID(),
       organizationId: auth.context.organizationId,
-      name: body.name.trim(),
-      company: typeof body.company === "string" ? body.company.trim() : undefined,
-      type: body.type === "RESELLER" ? "RESELLER" : "FINAL",
-      email: typeof body.email === "string" ? body.email.trim().toLowerCase() : undefined,
-      phone: typeof body.phone === "string" ? body.phone.trim() : undefined,
-      ruc: typeof body.ruc === "string" ? body.ruc.trim() : undefined,
+      ...parsed.data,
+      name: parsed.data.name,
+      type: parsed.data.type ?? "FINAL",
     },
   });
   await recordAudit({
@@ -87,7 +108,7 @@ export async function POST(request: Request) {
     entity: "Client",
     entityId: client.id,
     summary: `Creó el cliente «${client.name}»`,
-    detail: { fields: auditPick(client, ["name", "company", "type", "email", "phone", "ruc"]) },
+    detail: { fields: auditPick(client, CLIENT_AUDIT_FIELDS) },
   });
-  return Response.json({ client }, { status: 201 });
+  return Response.json({ client: { ...client, logoUpdatedAt: null } }, { status: 201 });
 }

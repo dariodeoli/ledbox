@@ -46,7 +46,9 @@ export type AdminIconName =
   | "building"
   | "chevron-down"
   | "upload"
-  | "trash";
+  | "trash"
+  | "globe"
+  | "instagram";
 
 export type AdminSessionUser = {
   id: string;
@@ -110,10 +112,26 @@ export type AdminClientRef = {
   type: string;
   email: string | null;
   phone: string | null;
+  /**
+   * Versión del logo del cliente (issue #36); la traen la lista y la ficha. Los
+   * refs embebidos (eventos, presupuestos y finanzas) no la incluyen.
+   */
+  logoUpdatedAt?: string | null;
 };
 
 export type AdminClientRow = AdminClientRef & {
   ruc: string | null;
+  /** Persona encargada del cliente (issue #36) y sus datos de contacto directo. */
+  contactName: string | null;
+  contactRole: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  /** Sitio web normalizado (`https://…`). */
+  website: string | null;
+  /** Usuario de Instagram sin `@`. */
+  instagram: string | null;
+  /** WhatsApp propio cuando difiere del teléfono general. */
+  whatsapp: string | null;
   notes: string | null;
   active: boolean;
   createdAt: string;
@@ -892,6 +910,11 @@ export function adminAvatarUrl(userId: string, version?: string | Date | null): 
 /** URL del logo de la empresa para una variante; se sirve con sesión. */
 export function organizationLogoUrl(variant: LogoVariant, version?: string | Date | null): string {
   return `/api/admin/organization/branding/logos/${variant}${versionQuery(version)}`;
+}
+
+/** URL del logo de un cliente (issue #36); se sirve con sesión y `version` corta la caché. */
+export function clientLogoUrl(clientId: string, version?: string | Date | null): string {
+  return `/api/admin/clients/${encodeURIComponent(clientId)}/logo${versionQuery(version)}`;
 }
 
 /**

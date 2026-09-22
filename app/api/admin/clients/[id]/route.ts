@@ -1,8 +1,10 @@
 import { isOverdue } from "@/lib/admin-format";
 import { db } from "@/lib/server/db";
-import { jsonError } from "@/lib/server/http";
+import { jsonError, readJson } from "@/lib/server/http";
+import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { clientMetrics } from "../metrics";
+import { parseClientFields } from "../client-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +27,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const client = await db.client.findFirst({
     where: { id, organizationId },
-    include: { _count: { select: { events: true, budgets: true } } },
+    include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
   });
   if (!client) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
+  const { logo, ...clientRow } = client;
 
   const [budgets, events, payments] = await Promise.all([
     db.budget.findMany({
@@ -99,7 +102,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   return Response.json({
     clientDetail: {
-      client,
+      client: { ...clientRow, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null },
       metrics,
       budgets: budgets.map((budget) => ({
         ...budget,
@@ -109,5 +112,66 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       events,
       payments,
     },
+  });
+}
+
+/** Campos que se auditan al editar un cliente (sin el binario del logo). */
+const CLIENT_AUDIT_FIELDS = [
+  "name",
+  "company",
+  "type",
+  "ruc",
+  "email",
+  "phone",
+  "contactName",
+  "contactRole",
+  "contactPhone",
+  "contactEmail",
+  "website",
+  "instagram",
+  "whatsapp",
+  "notes",
+] as const;
+
+/**
+ * `PATCH /api/admin/clients/[id]`: edita los datos del cliente de la empresa
+ * activa (`clients.write`), incluidos los de contacto y los links directos del
+ * issue #36. Es parcial: un campo ausente no se toca y vacío lo limpia. Un id de
+ * otra empresa responde 404 sin revelar nada; el logo se sube por su endpoint.
+ */
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdminContext("clients.write");
+  if (!auth.ok) return auth.response;
+  const { organizationId } = auth.context;
+  const { id } = await params;
+
+  const before = await db.client.findFirst({ where: { id, organizationId } });
+  if (!before) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
+
+  const parsed = parseClientFields(await readJson(request));
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+
+  const updated = await db.client.update({
+    where: { id: before.id },
+    data: parsed.data,
+    include: { logo: { select: { updatedAt: true } } },
+  });
+  const { logo, ...clientRow } = updated;
+
+  const changes = auditChanges(before, updated, CLIENT_AUDIT_FIELDS);
+  if (changes) {
+    await recordAudit({
+      context: auth.context,
+      action: "update",
+      entity: "Client",
+      entityId: updated.id,
+      summary: `Editó el cliente «${updated.name}»`,
+      detail: { changes },
+    });
+  }
+
+  return Response.json({
+    client: { ...clientRow, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null },
+    unchanged: !changes,
   });
 }
