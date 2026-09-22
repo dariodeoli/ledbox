@@ -164,7 +164,12 @@ export type PortalBudget = {
   createdAt: string;
   validUntil: string | null;
   notes: string | null;
-  client: { name: string; company: string | null };
+  /**
+   * Cliente, solo lo que la vista pública muestra. `contactName`/`contactRole`
+   * (issue #36) son el responsable cargado en la empresa: el portal los usa
+   * para prellenar quién autoriza; nunca viaja nada más de la ficha.
+   */
+  client: { name: string; company: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: string | null } | null;
   items: PortalBudgetItem[];
   subtotal: number;
@@ -290,7 +295,7 @@ type BudgetForPortal = {
   revisionRequestedAt: Date | null;
   revisionNote: string | null;
   organization: { name: string; paymentDetails: unknown };
-  client: { name: string; company: string | null };
+  client: { name: string; company: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; notes: string | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
@@ -520,7 +525,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     createdAt: budget.createdAt.toISOString(),
     validUntil: iso(budget.validUntil),
     notes: budget.notes,
-    client: { name: budget.client.name, company: budget.client.company },
+    client: { name: budget.client.name, company: budget.client.company, contactName: budget.client.contactName, contactRole: budget.client.contactRole },
     event: budget.event
       ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
       : null,
@@ -577,7 +582,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
 
 const portalInclude = {
   organization: { select: { name: true, paymentDetails: true } },
-  client: { select: { name: true, company: true } },
+  client: { select: { name: true, company: true, contactName: true, contactRole: true } },
   event: { select: { name: true, location: true, startsAt: true } },
   items: { orderBy: { name: "asc" } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
