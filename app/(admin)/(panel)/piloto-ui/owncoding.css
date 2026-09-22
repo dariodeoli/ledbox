@@ -1,0 +1,150 @@
+/**
+ * CSS del piloto OwnCoding UI — se importa SOLO desde `page.tsx` de la ruta
+ * /piloto-ui, así que Next lo carga como chunk de esa ruta: el resto del panel
+ * no descarga Tailwind ni el CSS de la librería.
+ *
+ * Tres bloques, en este orden:
+ *   1. Tailwind 3.4 (preflight apagado en tailwind.config.mjs).
+ *   2. `owncoding-ui/styles.css`: tokens `--c-*` de la librería + su base global.
+ *   3. Contención: la base global de la librería se acota para que el shell del
+ *      panel no cambie (ver docs/PILOTO-OWNCODING-UI.md, conflicto B).
+ *
+ * Nota de orden: el `@import` va primero (regla de CSS: los @import van antes de
+ * cualquier regla) y la librería documenta su import *después* de las directivas
+ * de Tailwind. Con el preflight apagado el resultado es el mismo: la librería no
+ * trae reglas que compitan con las utilidades.
+ */
+
+@import "owncoding-ui/styles.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Contención del piloto (conflicto B del reporte)
+   `styles.css` trae base global —`html`, `body`, `h1..h3`, `nav`, `button`,
+   `label`, placeholder y foco— que pisa el CSS del panel cuando esta hoja se
+   carga. Como la hoja entra por la ruta del piloto, acotamos esas reglas al
+   valor que el panel ya tiene en globals.css para que la pantalla real no
+   cambie. Si LedBox adopta la librería, esto se reemplaza por el shim de tema
+   definitivo (tokens `--c-*` apuntando a los `--a-*` del panel).
+   ───────────────────────────────────────────────────────────────────────── */
+body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: auto;
+  min-height: 100vh;
+}
+h1,
+h2,
+h3,
+nav,
+button,
+label {
+  font-family: var(--font-body);
+}
+
+/* Dentro de la columna de la librería sí valen las bases de la librería (para
+   verla como se ve en su app de origen). */
+.piloto-oc {
+  background: rgb(var(--c-paper));
+  color: rgb(var(--c-fore));
+}
+.piloto-oc :is(h1, h2, h3, nav, button, label) {
+  font-family: "Space Grotesk", "Inter", sans-serif;
+}
+.piloto-oc :focus-visible {
+  outline: 2px solid var(--oc-brand);
+  outline-offset: 3px;
+}
+.piloto-oc input::placeholder {
+  color: #8197a5;
+}
+
+/* Layout del piloto: dos columnas (panel actual | librería) que se apilan en
+   mobile. Estilos propios del piloto, no del panel. */
+.piloto-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 40px;
+}
+.piloto-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.piloto-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .piloto-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.piloto-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.piloto-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--a-muted);
+}
+.piloto-tag--oc {
+  color: rgb(var(--c-fono));
+}
+.piloto-box {
+  min-width: 0;
+}
+.piloto-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--a-muted-2);
+  background: var(--a-bg-2);
+  border: 1px solid var(--a-line);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+.piloto-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--a-muted-2);
+  font-size: 12px;
+}
+.piloto-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* El panel dibuja sus KPI en 2 columnas; en la mitad del piloto los montos se
+   truncaban, así que en la columna del panel mantenemos 2 columnas anchas. */
+.piloto-col .admin-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Plantillas de columna de las tablas del piloto: el panel usa una variable
+   `--<vista>-cols` por vista (acá la escribimos para el piloto, no en
+   globals.css, para no tocar el panel). */
+.admin-table--piloto-formatos {
+  --admin-cols: minmax(6rem, 0.9fr) minmax(7rem, 1.1fr) minmax(7rem, 1.1fr) minmax(10rem, 1.6fr);
+  --admin-table-min: 44rem;
+}
+.admin-table--piloto-campos {
+  --admin-cols: minmax(5.5rem, 0.8fr) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(8rem, 1.4fr);
+  --admin-table-min: 40rem;
+}
+.admin-table--piloto-cuentas {
+  --admin-cols: minmax(6rem, 1.2fr) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(4.5rem, 0.8fr);
+  --admin-table-min: 36rem;
+}
