@@ -30,32 +30,29 @@ export const PRODUCT_LIST_ID = `${SITE}/#productos`;
 /**
  * Perfil real del negocio.
  *
- * Reales hoy: nombre, descripción, teléfono/WhatsApp, ciudad, país, Instagram,
- * logo e imagen social. Preparados para completar (los pide el reporte del
- * issue #38): `email`, `streetAddress`, `region`, `postalCode`,
- * `latitude`/`longitude` y `openingHours`. Mientras estén vacíos, los nodos no
- * los declaran (nunca datos inventados).
+ * Reales hoy: nombre, descripción, teléfono/WhatsApp, correo, dirección
+ * (Senador Long, Asunción), país, horario de atención, Instagram, logo e imagen
+ * social. Preparados para completar: `postalCode`, `latitude`/`longitude` y
+ * `taxID` (RUC). Mientras estén vacíos, los nodos no los declaran (nunca datos
+ * inventados).
  */
 export const businessProfile = {
   name: "LedBox Paraguay",
   description:
     "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos. Instalación y soporte técnico incluidos en todo Paraguay.",
   telephone: "+595982029217",
-  /** Correo público del negocio. TODO(datos reales): definir buzón y completar. */
-  email: null as string | null,
-  /** Calle y número del local o depósito. TODO(datos reales). */
-  streetAddress: null as string | null,
+  email: "santiago.rodas.sjr@gmail.com",
+  streetAddress: "Senador Long",
   city: "Asunción",
-  /** Departamento/estado. TODO(datos reales). */
-  region: null as string | null,
+  region: "Asunción",
   country: "PY",
-  /** Código postal. TODO(datos reales). */
+  /** Código postal. Falta el dato real. */
   postalCode: null as string | null,
-  /** Coordenadas del local. TODO(datos reales). */
+  /** Coordenadas del local. Falta el número de la calle para geolocalizar. */
   latitude: null as number | null,
   longitude: null as number | null,
-  /** Horarios en formato schema.org (ej. "Mo-Fr 08:00-18:00"). TODO(datos reales). */
-  openingHours: [] as string[],
+  /** Horario de atención (lunes a viernes); schema.org lo publica tal cual. */
+  openingHours: ["Mo-Fr 07:00-19:00"] as string[],
   areaServed: "Paraguay",
   sameAs: ["https://www.instagram.com/ledboxpy/"],
   logo: "/assets/icon-512.png",
