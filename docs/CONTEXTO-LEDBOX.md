@@ -127,13 +127,14 @@ Ya tiene:
 - Sitemap
 - Robots
 - Canonical
+- URLs propias por producto (`/productos/<slug>`, issue #38) con metadata y OG propios
 - JSON-LD de:
   - Organization
   - LocalBusiness
   - WebSite
-  - FAQPage
-  - Product
-  - Offer
+  - FAQPage (preguntas visibles en la landing)
+  - Product + Offer por producto (precio PYG y unidad de cobro)
+  - ItemList del catálogo y BreadcrumbList en cada ficha
 - Favicons
 - Manifest PWA
 - Apple Touch Icon
