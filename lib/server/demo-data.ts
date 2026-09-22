@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
+import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -34,9 +35,10 @@ import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifica
  * hecha), **gastos** (dos «A definir» sin proyecto), **pagos esperados**
  * (comprobante en revisión, vencido sin comprobante y confirmado), **correos**
  * (`MailLog`, incluido un fallo con su motivo), **invitaciones al equipo**
- * (pendiente y aceptada) e **identidad** (logos claro/oscuro de la empresa y
- * avatares del equipo, generados como PNG en el momento del alta). El usuario
- * demo no tiene PIN ni auto-bloqueo: la demo no se bloquea sola.
+ * (pendiente y aceptada), **plantillas de mensajes de WhatsApp** (repartidas por
+ * categoría, con las variables del catálogo) e **identidad** (logos claro/oscuro
+ * de la empresa y avatares del equipo, generados como PNG en el momento del
+ * alta). El usuario demo no tiene PIN ni auto-bloqueo: la demo no se bloquea sola.
  */
 
 export const DEMO_ORGANIZATION_ID = "org_demo";
@@ -621,6 +623,109 @@ const COLLABORATORS = [
   { id: ACTORS.ops.id, name: ACTORS.ops.name, email: ACTORS.ops.email, role: "OPERATIONS", initials: "MF", accent: [122, 68, 220, 255] as Rgba },
 ] satisfies Array<{ id: string; name: string; email: string; role: "ADMIN" | "OPERATIONS"; initials: string; accent: Rgba }>;
 
+// ── Plantillas de mensajes de WhatsApp (issue #35) ──────────────────────────
+//
+// La demo entra a `/plantillas` con contenido real: plantillas de LedBox
+// repartidas por las cuatro categorías de envío, cada una con las variables de
+// su catálogo (una variable fuera de categoría es un error de guardado). Las
+// creó Valeria, la ADMIN de la empresa demo; como la demo es de solo lectura,
+// se listan y se previsualizan, pero no se editan ni se borran.
+
+type DemoMessageTemplate = {
+  id: string;
+  category: MessageTemplateCategoryValue;
+  title: string;
+  body: string;
+  sortOrder: number;
+};
+
+const DEMO_MESSAGE_TEMPLATES: readonly DemoMessageTemplate[] = [
+  {
+    id: "demo_tpl_cotizacion_enviada",
+    category: "budget",
+    title: "Cotización enviada",
+    sortOrder: 10,
+    body: [
+      "Hola {{cliente}}: te compartimos la cotización «{{presupuesto}}» de {{empresa}}.",
+      "",
+      "• Total: {{monto}}",
+      "• Validez: hasta el {{vencimiento}}",
+      "• Detalle y aprobación en el portal: {{link_portal}}",
+      "",
+      "Si querés ajustar ítems, equipos o días de alquiler, avisanos.",
+      "{{vendedor}}",
+    ].join("\n"),
+  },
+  {
+    id: "demo_tpl_seguimiento_cotizacion",
+    category: "budget",
+    title: "Seguimiento de cotización",
+    sortOrder: 20,
+    body: [
+      "Hola {{cliente}}: ¿cómo estás? Soy {{vendedor}}, de {{empresa}}.",
+      "",
+      "Te escribo para saber si pudiste revisar la cotización «{{presupuesto}}» por {{monto}}. Si querés, vemos los equipos, los días de alquiler o la forma de pago.",
+      "",
+      "La cotización sigue vigente hasta el {{vencimiento}}.",
+    ].join("\n"),
+  },
+  {
+    id: "demo_tpl_recordatorio_saldo",
+    category: "collection",
+    title: "Recordatorio de saldo",
+    sortOrder: 10,
+    body: [
+      "Hola {{cliente}}: te escribimos de {{empresa}} por el saldo pendiente de «{{presupuesto}}».",
+      "",
+      "• Saldo: {{saldo}}",
+      "• Vencimiento: {{vencimiento}}",
+      "• Detalle y datos de pago en el portal: {{link_portal}}",
+      "",
+      "Si ya abonaste, ignorá este mensaje.",
+      "{{vendedor}}",
+    ].join("\n"),
+  },
+  {
+    id: "demo_tpl_pago_acreditado",
+    category: "collection",
+    title: "Pago acreditado",
+    sortOrder: 20,
+    body: [
+      "Hola {{cliente}}: ¡gracias! Acreditamos el pago de {{monto}} de «{{presupuesto}}».",
+      "",
+      "Te enviamos el comprobante en cuanto esté emitido. Cualquier duda quedo a disposición.",
+      "{{vendedor}} · {{empresa}}",
+    ].join("\n"),
+  },
+  {
+    id: "demo_tpl_montaje_evento",
+    category: "event",
+    title: "Coordinación de montaje",
+    sortOrder: 10,
+    body: [
+      "Hola {{cliente}}: coordinamos la llegada de nuestro equipo para «{{evento}}».",
+      "",
+      "• Fecha: {{fecha}}",
+      "• Lugar: {{lugar}}",
+      "",
+      "Necesitamos el acceso al predio unas horas antes para el montaje y la prueba de las pantallas. Si cambia el horario, avisanos por acá.",
+      "",
+      "{{vendedor}} · {{empresa}}",
+    ].join("\n"),
+  },
+  {
+    id: "demo_tpl_bienvenida_cliente",
+    category: "client",
+    title: "Bienvenida y coordinación",
+    sortOrder: 10,
+    body: [
+      "Hola {{cliente}}: ¡gracias por elegir a {{empresa}}! Soy {{vendedor}} y te acompaño en la coordinación de tus eventos.",
+      "",
+      "Cuando quieras sumar equipos, fechas o una activación nueva, escribime por acá.",
+    ].join("\n"),
+  },
+];
+
 // ── Identidad: logos y avatares de la demo (PNG generados, sin dependencias) ──
 
 type Rgba = readonly [number, number, number, number];
@@ -889,6 +994,7 @@ const DATASET_MINS = {
   expectedPayments: 8,
   invitations: INVITATIONS.length,
   mailLogs: MAIL_LOGS.length,
+  messageTemplates: DEMO_MESSAGE_TEMPLATES.length,
   logos: 2,
 } as const;
 
@@ -997,7 +1103,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, logos, avatars] = await Promise.all([
+  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars] = await Promise.all([
     db.client.count({ where: { organizationId: organization.id } }),
     db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
     db.promoter.count({ where: { organizationId: organization.id, photoUrl: { not: null } } }),
@@ -1018,6 +1124,7 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     db.expectedPayment.count({ where: { organizationId: organization.id } }),
     db.teamInvitation.count({ where: { organizationId: organization.id } }),
     db.mailLog.count({ where: { organizationId: organization.id } }),
+    db.messageTemplate.count({ where: { organizationId: organization.id } }),
     db.organizationLogo.count({ where: { organizationId: organization.id } }),
     db.adminUserAvatar.count({ where: { userId: { in: [DEMO_USER_ID, ...COLLABORATORS.map((collaborator) => collaborator.id)] } } }),
   ]);
@@ -1035,6 +1142,7 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     expectedPayments >= DATASET_MINS.expectedPayments &&
     invitations >= DATASET_MINS.invitations &&
     mailLogs >= DATASET_MINS.mailLogs &&
+    messageTemplates >= DATASET_MINS.messageTemplates &&
     logos >= DATASET_MINS.logos &&
     avatars >= COLLABORATORS.length + 1 &&
     upcoming >= 3;
@@ -2190,6 +2298,19 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     createdAt: at(base, -invitation.createdDaysAgo, 9, 0),
   }));
 
+  // ── Plantillas de WhatsApp (issue #35): misma data canónica del dataset, con
+  // la empresa demo y la autora real del panel. ──
+  const messageTemplatesData: Prisma.MessageTemplateUncheckedCreateInput[] = DEMO_MESSAGE_TEMPLATES.map((template) => ({
+    ...template,
+    ...org,
+    active: true,
+    createdById: DEMO_INVITER.id,
+    createdByName: DEMO_INVITER.name,
+    updatedById: DEMO_INVITER.id,
+    updatedByName: DEMO_INVITER.name,
+    createdAt: at(base, -8, 10, 15),
+  }));
+
   // ── Identidad de la demo (issue #32): logos de la empresa y avatares del
   // equipo, para que el shell y la sección Empresa no caigan al monograma. Las
   // imágenes ya se generaron arriba (también las usan los clientes y promotoras).
@@ -2320,6 +2441,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.expectedPayment.createMany({ data: expectedPaymentsData });
       await tx.teamInvitation.createMany({ data: invitationsData });
       await tx.mailLog.createMany({ data: mailLogsData });
+      await tx.messageTemplate.createMany({ data: messageTemplatesData });
       await tx.paymentReminderLog.createMany({ data: reminderLogsData });
       await tx.organizationLogo.createMany({ data: logosData });
       await tx.inventoryItem.createMany({ data: inventoryData });
@@ -2364,6 +2486,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.treasuryAccount.deleteMany({ where: { organizationId } });
   await tx.teamInvitation.deleteMany({ where: { organizationId } });
   await tx.mailLog.deleteMany({ where: { organizationId } });
+  await tx.messageTemplate.deleteMany({ where: { organizationId } });
   await tx.organizationLogo.deleteMany({ where: { organizationId } });
   // Equipo simulado: la membresía primero y la cuenta después (no pertenecen a
   // ninguna otra empresa, así que borrarlas no toca datos reales). La membresía
