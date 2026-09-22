@@ -254,6 +254,13 @@ export function CalendarioModule() {
 
   return (
     <div className="admin-module-page">
+      <section className="admin-kpis" aria-label="Indicadores del calendario">
+        <AdminKpi label="Movimientos" icon="calendar" value={formatNumber(items.length)} note="en el período" />
+        <AdminKpi label="Cobros" icon="finance" value={formatMoney(collected)} note="registrados en el período" tone="ok" />
+        <AdminKpi label="Atrasados" icon="alert" value={formatNumber(overdue)} note="vencimientos vencidos" tone={overdue > 0 ? "danger" : "ok"} />
+        <AdminKpi label="Próximos" icon="clock" value={formatNumber(soon)} note="vencen en 7 días" tone={soon > 0 ? "warn" : "ok"} />
+      </section>
+
       <AdminToolbar>
         <div className="admin-cal-nav">
           <AdminButton icon="arrow-left" onClick={() => move(-1)} title={view === "month" ? "Mes anterior" : "Semana anterior"}>
@@ -280,13 +287,6 @@ export function CalendarioModule() {
           ]}
         />
       </AdminToolbar>
-
-      <section className="admin-kpis" aria-label="Indicadores del calendario">
-        <AdminKpi label="Movimientos" icon="calendar" value={formatNumber(items.length)} note="en el período" />
-        <AdminKpi label="Cobros" icon="finance" value={formatMoney(collected)} note="registrados en el período" tone="ok" />
-        <AdminKpi label="Atrasados" icon="alert" value={formatNumber(overdue)} note="vencimientos vencidos" tone={overdue > 0 ? "danger" : "ok"} />
-        <AdminKpi label="Próximos" icon="clock" value={formatNumber(soon)} note="vencen en 7 días" tone={soon > 0 ? "warn" : "ok"} />
-      </section>
 
       <AdminPanel title={view === "month" ? "Vista mensual" : "Vista semanal"} icon="calendar" meta={`${formatNumber(items.length)} movimientos`}>
         <AdminDataState loading={calendar.loading} error={calendar.error} onRetry={calendar.reload} rows={6}>
