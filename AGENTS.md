@@ -10,7 +10,7 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 
 ## Ramas, entrega y deploy
 
-- Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify la publica en ledbox.online y admin.ledbox.online). Solo el integrador mergea ahí; ningún workstream pushea directo a esa rama ni a `main`.
+- Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify publica ledbox.online, app.ledbox.online, eventos.ledbox.online, clientes.ledbox.online y demo.ledbox.online). Solo el integrador mergea ahí; ningún workstream pushea directo a esa rama ni a `main`.
 - Cada workstream trabaja en su propio worktree y rama `feat/<slug>`, con commits convencionales por unidad de trabajo y sin atribución de IA.
 - Antes de empezar: `git fetch origin --prune` y partir de la rama base indicada en el brief.
 - Entrega: `npm run typecheck` y `npm run build` en verde; `npx prisma validate` si se tocó el schema; sin marcadores de conflicto; handover con rama, commits, rutas tocadas y verificaciones.
@@ -19,9 +19,9 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 
 ## URLs del panel (regla del 21-09-2026)
 
-- En producción el panel vive en `admin.ledbox.online` y las rutas **no llevan** `/admin`: `/login`, `/dashboard`, `/eventos`, `/finanzas`, etc.
+- En producción el panel (app **EventOS**) vive en `app.ledbox.online` y las rutas **no llevan** `/admin`: `/login`, `/dashboard`, `/eventos`, `/finanzas`, etc. `admin.ledbox.online` redirige 308 al host nuevo y `eventos.ledbox.online` sirve la landing de ventas del producto.
 - Las páginas del panel son rutas raíz reales en `app/(admin)/*` (el route group no cambia la URL); el sitio público vive en `app/(public)/*`.
-- En el host admin (`NEXT_PUBLIC_ADMIN_URL`, default `https://admin.ledbox.online`), `/` muestra el dashboard (`app/(admin)/dashboard`). En el host público, `middleware.ts` redirige las rutas del panel al subdominio y `/admin/*` se canonicaliza a la ruta limpia.
+- En el host de la app (`NEXT_PUBLIC_ADMIN_URL`, default `https://app.ledbox.online`), `/` muestra el dashboard (`app/(admin)/dashboard`). En el host público, `middleware.ts` redirige las rutas del panel al subdominio y `/admin/*` se canonicaliza a la ruta limpia.
 - Al crear una página o módulo del panel, agregarlo a `lib/admin-routes.ts` (lista que usa el middleware del host público).
 - En el código, links y redirects del panel usan rutas limpias (`/login`, `/dashboard`, `/eventos`). URLs absolutas del panel (emails, callbacks) se arman con `publicConfig.adminUrl`.
 - Desarrollo: `npm run dev` deja el panel en `http://localhost:3000/dashboard` y el sitio público en `http://localhost:3000`; no hace falta configurar hosts.

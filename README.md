@@ -3,7 +3,7 @@
 Sitio comercial y panel de gestión de LedBox: alquiler de pantallas y equipos LED, stands, activaciones y producción para eventos.
 
 - **Sitio público:** [ledbox.online](https://ledbox.online)
-- **Panel privado:** [admin.ledbox.online](https://admin.ledbox.online/login) — las rutas del panel no llevan `/admin`.
+- **App de EventOS (panel privado):** [app.ledbox.online](https://app.ledbox.online/login) — las rutas del panel no llevan `/admin`. `admin.ledbox.online` redirige al host nuevo.
 - **Instagram:** [@ledboxpy](https://www.instagram.com/ledboxpy)
 
 ## Stack

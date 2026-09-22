@@ -6,8 +6,9 @@ clientes en el portal (propuesta, **sin implementar**).
 
 - **Google no se usa como proveedor genérico** (no hay NextAuth): el flujo es
   OAuth 2.0 *Authorization Code* propio, en dos endpoints.
-- El **panel vive en `admin.ledbox.online`** y sus rutas no llevan `/admin`
-  (regla del 21-09-2026): el callback es `/api/auth/callback/google`.
+- El **panel vive en `app.ledbox.online`** (EventOS) y sus rutas no llevan
+  `/admin` (regla del 21-09-2026): el callback es `/api/auth/callback/google`.
+  `admin.ledbox.online` redirige al host nuevo (issue #39).
 - La **aceptación de invitaciones** (issue #31) usa el mismo callback, con el
   token de la invitación en su propia cookie.
 
@@ -56,25 +57,33 @@ Orígenes autorizados de JavaScript (no los usa el flujo actual, pero evitan
 ruido al configurar):
 
 ```
+https://app.ledbox.online
 https://admin.ledbox.online
 http://localhost:3000
 ```
 
 URIs de redireccionamiento autorizados — **exactos**, sin barra final, con el
-path completo. Registrar los dos del panel (hoy y el host nuevo, issue #39) y el
-de desarrollo:
+path completo. Estado al 21-09-2026: registrados en Google Cloud el de la app y
+el viejo del panel (transición) y el de desarrollo:
 
 ```
-https://admin.ledbox.online/api/auth/callback/google
 https://app.ledbox.online/api/auth/callback/google
+https://admin.ledbox.online/api/auth/callback/google
 http://localhost:3000/api/auth/callback/google
 ```
 
-> El panel vive en `admin.ledbox.online` y pasa a `app.ledbox.online` con el
-> rediseño de hosts (issue #39); el `NEXT_PUBLIC_ADMIN_URL` define cuál se usa.
+> Cliente OAuth real: **`LexBox`**, proyecto **`weem-db`**
+> (ID público `500595134387-k1g1s92q5pr26efbt6fehs8ksn4qeloq`). Verificado en
+> producción: `/api/auth/login/google` redirige a Google con ese `client_id` y
+> con `redirect_uri=https://app.ledbox.online/api/auth/callback/google`, tanto
+> en el login como en la aceptación de invitaciones.
+>
+> El panel vive en `app.ledbox.online` desde el issue #39 (`admin.ledbox.online`
+> redirige 308); el `NEXT_PUBLIC_ADMIN_URL` define cuál se usa.
 > El callback arma el `redirect_uri` con el origen real de la request
 > (`getPublicOrigin`), así que el mismo deploy funciona en los dos hosts
-> mientras ambos estén registrados en Google.
+> mientras ambos estén registrados en Google. Al comprar el dominio propio de
+> EventOS hay que registrar también su callback.
 >
 > El panel **no** puede configurar `https://admin.ledbox.online/admin/api/...`:
 > las rutas del panel van sin `/admin`.

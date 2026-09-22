@@ -28,7 +28,8 @@ Repositorio: [GitHub LedBox](https://github.com/dariodeoli/ledbox)
 Producción:
 
 - [ledbox.online](https://ledbox.online)
-- [admin.ledbox.online](https://admin.ledbox.online/admin/login)
+- [app.ledbox.online](https://app.ledbox.online/login) (EventOS; `admin.ledbox.online` redirige)
+- [eventos.ledbox.online](https://eventos.ledbox.online) (landing de ventas de EventOS)
 
 ## 2. Sitio público
 
@@ -143,7 +144,7 @@ Ya tiene:
 
 ## 3. Panel administrativo
 
-URL: [admin.ledbox.online/admin/login](https://admin.ledbox.online/admin/login)
+URL: [app.ledbox.online/login](https://app.ledbox.online/login)
 
 ### Acceso
 
@@ -544,7 +545,7 @@ La base actual está bien encaminada. El siguiente salto no es de diseño: es co
 
 Lo que sigue ya está implementado e integrado (y en producción salvo lo indicado):
 
-- **Panel rediseñado** por módulos (Resumen, Eventos, Calendario, Clientes, Leads, Presupuestos, Finanzas, Inventario, Proveedores, Promotoras, Usuarios, Auditoría), denso, claro/oscuro y mobile; URLs sin `/admin` en `admin.ledbox.online`.
+- **Panel rediseñado** por módulos (Resumen, Eventos, Calendario, Clientes, Leads, Presupuestos, Finanzas, Inventario, Proveedores, Promotoras, Usuarios, Auditoría), denso, claro/oscuro y mobile; URLs sin `/admin` en `app.ledbox.online` (EventOS).
 - **Multiempresa real**: `organizationId` en todos los módulos operativos, membresías, empresa activa en sesión y permisos por rol server-side (`lib/server/permissions.ts`).
 - **Inventario operativo**: asignaciones por evento con disponibilidad y conflictos, salida/devolución, daños y faltantes, estado del equipo.
 - **Proveedores** con flujo completo de estados, anticipos, entrega y saldo.
