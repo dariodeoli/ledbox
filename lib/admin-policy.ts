@@ -10,7 +10,11 @@ export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "
 export type AdminNavItem = { href: string; label: string; icon: AdminIconName; roles?: readonly AdminRole[] };
 export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
 
-/** Módulos restringidos: mismo criterio que el API (usuarios, empresa y configuración: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad. */
+/**
+ * Módulos restringidos: mismo criterio que el API (usuarios, empresa y configuración: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad.
+ * El plan (issue #42) se ve en todos los roles: el consumo y los topes son
+ * información de la empresa; solo OWNER/ADMIN piden el cambio (`org.manage`).
+ */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/usuarios": ["OWNER", "ADMIN"],
   "/empresa": ["OWNER", "ADMIN"],
@@ -54,6 +58,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     items: [
       { href: "/configuracion", label: "Configuración", icon: "mail", roles: RESTRICTED_MODULES["/configuracion"] },
       { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
+      { href: "/plan", label: "Plan", icon: "plan" },
       { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
       { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
     ],

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
@@ -175,6 +176,19 @@ export function AdminNote({
   );
 }
 
+/**
+ * Límite del plan alcanzado (issue #42): el aviso único del 403 explicado que
+ * devuelve el servidor, con el acceso directo a la página de Plan para pedir el
+ * cambio. Lo dibujan los formularios de alta (usuarios, invitaciones y eventos).
+ */
+export function AdminPlanLimitNote({ message }: { message: string }) {
+  return (
+    <p className="admin-note" role="alert" data-tone="error">
+      {message} <Link className="admin-note-link" href="/plan">Ver planes</Link>
+    </p>
+  );
+}
+
 export function AdminEmpty({ title, hint, icon = "info" }: { title: string; hint?: string; icon?: AdminIconName }) {
   return (
     <div className="admin-empty">
@@ -242,6 +256,7 @@ export function AdminFormPanel({
   onCancel,
   busy,
   status,
+  statusNote,
   children,
 }: {
   title: string;
@@ -250,6 +265,8 @@ export function AdminFormPanel({
   onCancel: () => void;
   busy?: boolean;
   status?: string | null;
+  /** Aviso propio con acciones (por ejemplo el límite del plan con su link). */
+  statusNote?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -262,7 +279,7 @@ export function AdminFormPanel({
       </div>
       <div className="admin-form-grid">{children}</div>
       <div className="admin-form-foot">
-        {status ? <AdminNote tone="error">{status}</AdminNote> : null}
+        {statusNote ? statusNote : status ? <AdminNote tone="error">{status}</AdminNote> : null}
         <div className="admin-form-actions">
           <AdminButton type="button" onClick={onCancel} disabled={busy}>
             Cancelar
