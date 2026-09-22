@@ -29,6 +29,8 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 
 ## Diseño del panel (rediseño general 21-09-2026)
 
+- **Guía del rediseño completo (22-09-2026): `docs/DISENO-PANEL.md`** — tokens, shell, componentes y el orden de la navegación. Toda pantalla nueva o tocada la respeta.
+
 - Identidad: negro + cyan eléctrico, tipografía fuerte; modo claro/oscuro persistente por usuario.
 - Densidad: sin espacios vacíos. Listas con encabezado de columnas, filas finas (~44–52 px, una sola línea de contenido principal), toda la información en columnas alineadas, acciones compactas con `title` + `aria-label`.
 - Una plantilla de columnas por vista (variable CSS `--<vista>-cols`) compartida por encabezado y filas; nada de dos plantillas paralelas ni columnas que colapsan.

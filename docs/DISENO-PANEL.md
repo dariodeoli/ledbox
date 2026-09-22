@@ -1,0 +1,113 @@
+# Rediseño completo del panel (EventOS) — guía de diseño
+
+Guía para el rediseño integral de la UI del panel, pedido por el dueño el
+22-09-2026 («rediseñar la UI de la app, completa, y reordenar todo»). Es la
+fuente única del lenguaje visual: todo componente nuevo o tocado la respeta.
+No contradice `docs/REGLAS-GENERALES.md` ni `AGENTS.md`: los completa.
+
+## 1. Objetivo
+
+Que la app **se entienda de un vistazo**: jerarquía clara, íconos que asocien
+cada título con lo que hace, nada de texto repetido y **una sola acción
+principal por pantalla**. Rediseño, no maquillaje: se reordenan las secciones y
+se unifican los componentes, sin cambiar datos ni contratos.
+
+## 2. Principios
+
+1. **Densidad primero**: sin espacios vacíos; filas de 44–52 px; una sola línea
+   de contenido principal por fila; toda la información en columnas alineadas.
+2. **Ícono + título**: cada sección, pestaña y KPI lleva un ícono consistente
+   (el mismo concepto usa el mismo ícono en toda la app).
+3. **Una acción principal**: en cada pantalla hay **una** acción primaria
+   visible (el resto son secundarias o viven en el menú de fila).
+4. **Estado honesto**: los estados vacíos, de carga y de error dicen la verdad
+   y proponen el siguiente paso; nunca se inventan métricas ni se ocultan datos.
+5. **Sin texto repetido**: el mismo mensaje se dice **una vez**, en el lugar más
+   útil. Las reglas del negocio, límites y advertencias no se borran: se mueven
+   al lugar donde se leen.
+6. **Un componente por tipo**: extender los primitivos (`AdminUI`, `AdminFields`)
+   antes que crear variantes. CSS solo en `app/globals.css`, tokens `--a-*`.
+
+## 3. Tokens (una sola escala)
+
+- **Tipografía**: display (títulos de pantalla y montos grandes) · body 12.5–13
+  px (filas, campos, notas) · micro 10–11 px (etiquetas en mayúscula, chips,
+  cabeceras de tabla). Nada intermedio suelto.
+- **Espaciado**: 4 · 8 · 12 · 16 · 24 · 32 (todo padding/gap sale de acá).
+- **Radios**: 8 (controles) · 10 (paneles/chips) · 14 (tarjetas y diálogos).
+- **Sombras**: una sola (`--a-shadow`) para paneles flotantes y diálogos.
+- **Bordes**: `--a-line` para separadores internos, `--a-line-2` para el borde
+  de los objetos; en modo claro marcan el objeto (calibrados el 22-09-2026).
+- **Estados**: hover (acento suave), activo/seleccionado (acento), foco visible
+  (`:focus-visible` con acento), deshabilitado (opacidad .5).
+- **Modo claro/oscuro**: mismos tokens, dos valores; cualquier color nuevo se
+  define en ambos temas y se verifica contraste AA (texto ≥ 4.5, UI ≥ 3).
+
+## 4. Shell del panel
+
+- **Sidebar**: marca arriba; navegación **agrupada** (ver §6); pie con la
+  empresa, el usuario (avatar, rol, menú) y la nota del panel. Colapsable en
+  escritorio (solo íconos) y drawer en mobile.
+- **Topbar**: ícono del módulo + eyebrow + título del módulo; a la derecha las
+  herramientas reales (buscar ⌘K, avisos, tema, demo, salir). Sin botones mudos.
+- **Área de contenido**, con este ritmo fijo:
+  1. encabezado del módulo (título, ícono, ayuda «¿Qué es esto?»),
+  2. KPIs del módulo (máximo 4–5, con ícono y tono),
+  3. barra de filtros/búsqueda (una sola),
+  4. contenido (tabla o tablero) con su plantilla de columnas,
+  5. acciones masivas solo si existen y son reales.
+- **Mobile**: barra inferior con los 4 módulos diarios + «Más»; el contenido
+  nunca queda tapado (padding real) y no hay scroll horizontal de página.
+
+## 5. Componentes (contrato)
+
+| Componente | Reglas |
+| --- | --- |
+| Botón primario | Uno por pantalla; verbo + ícono; nunca en dos acciones a la vez |
+| Botón secundario / ghost | Acciones de soporte, sin ícono si el texto alcanza |
+| Acción de fila | Ícono 15–16 px, `title` + `aria-label`, agrupadas a la derecha |
+| Panel/sección | Título con ícono + contador o dato clave a la derecha; cuerpo denso |
+| KPI | Etiqueta micro, valor display, nota corta, ícono con el tono |
+| Tabla | Encabezado de columnas + filas 44–52 px, plantilla `--<vista>-cols` |
+| Pestañas | Ícono + etiqueta; contador cuando aporta; estado activo evidente |
+| Campos | Kit canónico (`AdminFields`); nunca `<input>` suelto en `components/admin` |
+| Diálogo | `AdminDialog` (default/wide/ficha); título con ícono; acción primaria al pie |
+| Estado vacío | Ícono + una línea + una acción; sin párrafos |
+| Estado de carga | Filas fantasma con la densidad real; sin spinners sueltos |
+| Nota/ayuda | Una línea, al lado del dato que explica; nunca repetida |
+
+## 6. Reordenar: navegación propuesta
+
+| Grupo | Módulos |
+| --- | --- |
+| **General** | Resumen · Calendario |
+| **Operación** | Eventos · Inventario · Proveedores · Promotoras |
+| **Comercial** | Clientes · Leads · Presupuestos · Plantillas |
+| **Finanzas** | Finanzas · Facturación |
+| **Sistema** | Plan · Usuarios · Empresa · Configuración · Auditoría · Sistema |
+
+Reglas del reordenamiento:
+- Lo que se usa todos los días arriba (Resumen, Calendario, Eventos).
+- Finanzas y Facturación juntas (son el mismo trabajo con dos caras).
+- Sistema agrupa lo que se toca de vez en cuando y lo restringido (OWNER/ADMIN).
+- Dentro de cada módulo: primero lo urgente/accionable (avisos, pendientes), después lo
+  operativo (listas y tableros), al final lo descriptivo (notas, ayudas, históricos).
+
+## 7. Qué NO cambia
+
+- Contratos públicos (`/api/leads`, `/api/quotes`, portal, demo), roles y
+  permisos, montos `Int` PYG, fechas es-PY 24 h, aislamiento por empresa,
+  auditoría, migraciones y el footer con versión (`AppFooter`).
+- La demo sigue siendo de solo lectura y con sus datos simulados.
+- Sin dependencias nuevas ni librerías de UI.
+
+## 8. Verificación obligatoria
+
+1. `npm run typecheck`, `npm run build`, `npm run test:rules`, `npm run check:fields`.
+2. Capturas CDP en **claro y oscuro**, desktop 1440 y mobile 390, de todos los
+   módulos; consola sin errores; sin scroll horizontal de página a 390.
+3. Contraste: texto ≥ 4.5 y UI ≥ 3 en ambos temas.
+4. Teclado: foco visible, Escape cierra diálogos, la acción principal se alcanza
+   con Tab en orden lógico.
+5. Comparar contra el «antes» (`/tmp/antes-oscuro`, `/tmp/antes-claro` del
+   22-09-2026) para el antes/después del reporte.
