@@ -231,6 +231,58 @@ const CLIENTS: readonly DemoClient[] = [
 
 const CLIENT_BY_ID = new Map(CLIENTS.map((client) => [client.id, client]));
 
+/**
+ * Marca y contacto de cada cliente demo (issue #36): iniciales y color del
+ * monograma que se usa como logo, el cargo de la persona encargada y sus links
+ * directos. Datos ficticios plausibles: la demo no depende de assets externos
+ * (el logo se genera en el proceso) y el WhatsApp solo se completa cuando
+ * difiere del teléfono general — si falta, el link usa el teléfono.
+ */
+type DemoClientProfile = {
+  /** Iniciales del monograma del logo (marca). */
+  initials: string;
+  /** Color de marca del degradé del monograma. */
+  accent: Rgba;
+  /** Cargo de la persona encargada (el nombre es el contacto del cliente). */
+  contactRole: string;
+  website: string;
+  instagram: string;
+  whatsapp?: string;
+};
+
+const CLIENT_PROFILES: Record<string, DemoClientProfile> = {
+  demo_client_tigo: { initials: "TG", accent: [0, 58, 140, 255], contactRole: "Gerenta de Eventos", website: "https://www.tigo.com.py", instagram: "tigoparaguay", whatsapp: "+595 981 214 511" },
+  demo_client_personal: { initials: "PE", accent: [0, 103, 177, 255], contactRole: "Jefe de Marketing", website: "https://www.personal.com.py", instagram: "personalparaguay" },
+  demo_client_claro: { initials: "CL", accent: [218, 41, 28, 255], contactRole: "Coordinadora de Eventos", website: "https://www.claro.com.py", instagram: "claropy", whatsapp: "+595 971 330 411" },
+  demo_client_samsung: { initials: "SA", accent: [20, 40, 160, 255], contactRole: "Gerente de Retail", website: "https://www.samsung.com/py", instagram: "samsungparaguay" },
+  demo_client_lg: { initials: "LG", accent: [165, 0, 52, 255], contactRole: "Jefa de Marketing", website: "https://www.lg.com/py", instagram: "lgparaguay" },
+  demo_client_cellshop: { initials: "CS", accent: [220, 40, 60, 255], contactRole: "Coordinadora de Campañas", website: "https://www.cellshop.com.py", instagram: "cellshoppy" },
+  demo_client_nissei: { initials: "NI", accent: [0, 90, 170, 255], contactRole: "Jefe de Eventos", website: "https://www.nissei.com.py", instagram: "nisseipy" },
+  demo_client_shopping: { initials: "SD", accent: [196, 22, 118, 255], contactRole: "Gerenta de Marketing", website: "https://www.shoppingdelsol.com", instagram: "shoppingdelsol" },
+  demo_client_paseo: { initials: "PG", accent: [0, 150, 160, 255], contactRole: "Coordinador de Eventos", website: "https://www.paseolagaleria.com.py", instagram: "paseolagaleria" },
+  demo_client_itau: { initials: "IT", accent: [236, 104, 44, 255], contactRole: "Gerenta de Eventos", website: "https://www.itau.com.py", instagram: "itauparaguay" },
+  demo_client_ueno: { initials: "UE", accent: [150, 200, 0, 255], contactRole: "Brand Manager", website: "https://www.ueno.com.py", instagram: "uenobank", whatsapp: "+595 971 808 261" },
+  demo_client_vision: { initials: "VB", accent: [0, 70, 160, 255], contactRole: "Jefa de Sucursales", website: "https://www.visionbanco.com", instagram: "visionbanco" },
+  demo_client_cocacola: { initials: "CC", accent: [228, 0, 0, 255], contactRole: "Coordinadora de Activaciones", website: "https://www.cocacola.com.py", instagram: "cocacolapy" },
+  demo_client_cerveza: { initials: "CP", accent: [200, 140, 20, 255], contactRole: "Gerente de Eventos", website: "https://www.cervezaparaguaya.com.py", instagram: "cervezaparaguaya", whatsapp: "+595 984 220 119" },
+  demo_client_trebol: { initials: "TR", accent: [0, 110, 190, 255], contactRole: "Jefa de Marketing", website: "https://www.trebol.com.py", instagram: "lacteostrebol" },
+  demo_client_superseis: { initials: "SU", accent: [0, 140, 70, 255], contactRole: "Gerente de Marketing", website: "https://www.superseis.com.py", instagram: "superseis" },
+  demo_client_pixel: { initials: "AP", accent: [120, 60, 200, 255], contactRole: "Director de Producción", website: "https://www.agenciapixel.com.py", instagram: "agenciapixelpy" },
+  demo_client_puntocreativo: { initials: "PC", accent: [230, 120, 20, 255], contactRole: "Gerenta de Cuentas", website: "https://www.puntocreativo.com.py", instagram: "puntocreativo" },
+};
+
+/** Correo directo del encargado: nombre.apellido en el dominio del cliente. */
+function contactEmailOf(client: DemoClient): string {
+  const domain = client.email.split("@")[1] ?? "empresa.demo";
+  const slug = client.name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return `${slug || "contacto"}@${domain}`;
+}
+
 /** Contacto del cliente de un evento (para las aprobaciones del portal). */
 function clientContact(clientId: string): DemoAuditActor {
   const client = CLIENT_BY_ID.get(clientId);
@@ -373,13 +425,16 @@ type DemoPromoter = {
   availabilityNote: string | null;
   /** Días desde HOY del "hasta"; se re-ancla en cada provisión (`null` = sin fecha). */
   unavailableInDays: number | null;
+  /** Iniciales y color de la foto generada de la demo (sin assets externos). */
+  initials: string;
+  accent: Rgba;
 };
 
 const PROMOTERS: readonly DemoPromoter[] = [
-  { id: "demo_promoter_ana", name: "Ana Villalba", phone: "+595 981 445 210", email: "ana.villalba@ledbox.demo", specialties: "Activación de marca, degustación", active: true, notes: "Disponible los fines de semana.", availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null },
-  { id: "demo_promoter_lorena", name: "Lorena Ríos", phone: "+595 983 220 118", email: "lorena.rios@ledbox.demo", specialties: "Registro de invitados, acreditaciones", active: true, notes: null, availability: "UNAVAILABLE", availabilityNote: "De viaje por trabajo; retoma a fin de mes.", unavailableInDays: 9 },
-  { id: "demo_promoter_mabel", name: "Mabel Acosta", phone: "+595 971 909 330", email: "mabel.acosta@ledbox.demo", specialties: "Fotografía y redes sociales", active: true, notes: "Lleva cámara propia.", availability: "TO_DEFINE", availabilityNote: "Todavía no confirmó los fines de semana de octubre.", unavailableInDays: null },
-  { id: "demo_promoter_javier", name: "Javier Paredes", phone: "+595 985 771 042", email: "javier.paredes@ledbox.demo", specialties: "Montaje y soporte técnico", active: true, notes: null, availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null },
+  { id: "demo_promoter_ana", name: "Ana Villalba", phone: "+595 981 445 210", email: "ana.villalba@ledbox.demo", specialties: "Activación de marca, degustación", active: true, notes: "Disponible los fines de semana.", availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null, initials: "AV", accent: [0, 168, 186, 255] },
+  { id: "demo_promoter_lorena", name: "Lorena Ríos", phone: "+595 983 220 118", email: "lorena.rios@ledbox.demo", specialties: "Registro de invitados, acreditaciones", active: true, notes: null, availability: "UNAVAILABLE", availabilityNote: "De viaje por trabajo; retoma a fin de mes.", unavailableInDays: 9, initials: "LR", accent: [122, 68, 220, 255] },
+  { id: "demo_promoter_mabel", name: "Mabel Acosta", phone: "+595 971 909 330", email: "mabel.acosta@ledbox.demo", specialties: "Fotografía y redes sociales", active: true, notes: "Lleva cámara propia.", availability: "TO_DEFINE", availabilityNote: "Todavía no confirmó los fines de semana de octubre.", unavailableInDays: null, initials: "MA", accent: [214, 51, 132, 255] },
+  { id: "demo_promoter_javier", name: "Javier Paredes", phone: "+595 985 771 042", email: "javier.paredes@ledbox.demo", specialties: "Montaje y soporte técnico", active: true, notes: null, availability: "AVAILABLE", availabilityNote: null, unavailableInDays: null, initials: "JP", accent: [22, 163, 108, 255] },
 ];
 
 const PROMOTER_IDS = PROMOTERS.map((promoter) => promoter.id);
@@ -582,17 +637,28 @@ const IDENTITY_PAPER: Rgba = [248, 250, 252, 255];
 const IDENTITY_GREY: Rgba = [186, 196, 204, 255];
 const IDENTITY_OK: Rgba = [22, 163, 108, 255];
 
-/** Glifos 5×7 de las letras que usan el logo y los avatares. */
+/** Glifos 5×7 de las letras que usan el logo, los avatares y los monogramas. */
 const GLYPHS: Record<string, readonly string[]> = {
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
   B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  C: ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
   D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
   E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
-  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
-  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
-  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
-  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
-  M: ["10001", "11011", "10101", "10001", "10001", "10001", "10001"],
   F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  G: ["01110", "10001", "10000", "10111", "10001", "10001", "01111"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10001", "10001", "10001", "10001"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
 };
 
 function newCanvas(width: number, height: number, fill: Rgba): PixelCanvas {
@@ -764,6 +830,10 @@ type DemoIdentityImages = {
   demoAvatar: DemoImage;
   collaborators: Map<string, DemoImage>;
   proof: DemoImage;
+  /** Logo de cada cliente demo (issue #36): monograma de iniciales y color de marca. */
+  clientLogos: Map<string, DemoImage>;
+  /** Foto de cada promotora demo (issue #36): mismo monograma generado. */
+  promoterPhotos: Map<string, DemoImage>;
 };
 
 let identityImages: DemoIdentityImages | null = null;
@@ -775,12 +845,23 @@ function demoIdentityImages(): DemoIdentityImages {
     for (const collaborator of COLLABORATORS) {
       collaborators.set(collaborator.id, buildAvatarImage(collaborator.initials, IDENTITY_INK, collaborator.accent));
     }
+    const clientLogos = new Map<string, DemoImage>();
+    for (const client of CLIENTS) {
+      const profile = CLIENT_PROFILES[client.id];
+      if (profile) clientLogos.set(client.id, buildAvatarImage(profile.initials, IDENTITY_INK, profile.accent));
+    }
+    const promoterPhotos = new Map<string, DemoImage>();
+    for (const promoter of PROMOTERS) {
+      promoterPhotos.set(promoter.id, buildAvatarImage(promoter.initials, IDENTITY_INK, promoter.accent));
+    }
     identityImages = {
       logoLight: buildLogoImage("light"),
       logoDark: buildLogoImage("dark"),
       demoAvatar: buildAvatarImage(DEMO_USER_AVATAR_INITIALS, IDENTITY_INK, IDENTITY_ACCENT),
       collaborators,
       proof: buildProofImage(),
+      clientLogos,
+      promoterPhotos,
     };
   }
   return identityImages;
@@ -796,6 +877,8 @@ function demoIdentityImages(): DemoIdentityImages {
  */
 const DATASET_MINS = {
   clients: CLIENTS.length,
+  clientLogos: CLIENTS.length,
+  promoterPhotos: PROMOTERS.length,
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
   budgets: 7,
@@ -914,8 +997,10 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, logos, avatars] = await Promise.all([
+  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, logos, avatars] = await Promise.all([
     db.client.count({ where: { organizationId: organization.id } }),
+    db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
+    db.promoter.count({ where: { organizationId: organization.id, photoUrl: { not: null } } }),
     db.event.count({ where: { organizationId: organization.id } }),
     db.eventTask.count({ where: { event: { organizationId: organization.id } } }),
     db.budget.count({ where: { organizationId: organization.id } }),
@@ -938,6 +1023,8 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
   ]);
   const complete =
     clients >= DATASET_MINS.clients &&
+    clientLogos >= DATASET_MINS.clientLogos &&
+    promoterPhotos >= DATASET_MINS.promoterPhotos &&
     events >= DATASET_MINS.events &&
     tasks >= DATASET_MINS.tasks &&
     budgets >= DATASET_MINS.budgets &&
@@ -1185,14 +1272,46 @@ function buildTasks(event: BuiltEvent, index: number, base: Date): Array<{ id: s
 async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const org = { organizationId };
   const now = new Date();
+  // Identidad de la demo (logos y avatares) generada en el proceso, sin assets
+  // externos: se usa para los logos de los clientes y las fotos de promotoras.
+  const images = demoIdentityImages();
 
-  const clientsData: Prisma.ClientUncheckedCreateInput[] = CLIENTS.map((client) => ({
-    ...client,
-    ...org,
-    ruc: null,
-    active: true,
-    createdAt: at(base, -60, 9, 10),
-  }));
+  const clientsData: Prisma.ClientUncheckedCreateInput[] = CLIENTS.map((client) => {
+    const profile = CLIENT_PROFILES[client.id];
+    return {
+      ...client,
+      ...org,
+      ruc: null,
+      active: true,
+      // Datos completos del cliente (issue #36): el contacto del dataset es la
+      // persona encargada, con su cargo, contacto directo y links plausibles.
+      contactName: client.name,
+      contactRole: profile?.contactRole ?? null,
+      contactPhone: client.phone,
+      contactEmail: contactEmailOf(client),
+      website: profile?.website ?? null,
+      instagram: profile?.instagram ?? null,
+      whatsapp: profile?.whatsapp ?? null,
+      createdAt: at(base, -60, 9, 10),
+    };
+  });
+
+  // Logo de cada cliente: monograma de iniciales con el color de su marca.
+  const clientLogosData: Prisma.ClientLogoUncheckedCreateInput[] = [];
+  for (const client of CLIENTS) {
+    const logo = images.clientLogos.get(client.id);
+    if (!logo) continue;
+    clientLogosData.push({
+      id: `demo_client_logo_${client.id}`,
+      clientId: client.id,
+      mime: logo.mime,
+      size: logo.size,
+      width: logo.width,
+      height: logo.height,
+      data: logo.data,
+      createdAt: at(base, -60, 9, 20),
+    });
+  }
 
   // ── Eventos con estado derivado por fecha (ventana móvil ±6 meses) ──
   const events = buildEvents(base, now);
@@ -1210,12 +1329,17 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     notes: event.notes,
   }));
 
-  const promotersData: Prisma.PromoterUncheckedCreateInput[] = PROMOTERS.map(({ unavailableInDays, ...promoter }) => ({
-    ...promoter,
-    ...org,
-    unavailableUntil: unavailableInDays === null ? null : at(base, unavailableInDays, 9, 0),
-    createdAt: at(base, -90, 10, 0),
-  }));
+  const promotersData: Prisma.PromoterUncheckedCreateInput[] = PROMOTERS.map(({ unavailableInDays, initials, accent, ...promoter }) => {
+    const photo = images.promoterPhotos.get(promoter.id);
+    return {
+      ...promoter,
+      ...org,
+      // Foto generada de la demo (sin assets externos); el avatar único la dibuja.
+      photoUrl: photo ? `data:${photo.mime};base64,${Buffer.from(photo.data).toString("base64")}` : null,
+      unavailableUntil: unavailableInDays === null ? null : at(base, unavailableInDays, 9, 0),
+      createdAt: at(base, -90, 10, 0),
+    };
+  });
 
   const tasksData: Prisma.EventTaskUncheckedCreateInput[] = events
     .flatMap((event, index) => buildTasks(event, index, base))
@@ -2067,8 +2191,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   }));
 
   // ── Identidad de la demo (issue #32): logos de la empresa y avatares del
-  // equipo, para que el shell y la sección Empresa no caigan al monograma. ──
-  const images = demoIdentityImages();
+  // equipo, para que el shell y la sección Empresa no caigan al monograma. Las
+  // imágenes ya se generaron arriba (también las usan los clientes y promotoras).
   const logosData: Prisma.OrganizationLogoUncheckedCreateInput[] = [
     { id: "demo_logo_light", organizationId, variant: "light", mime: images.logoLight.mime, size: images.logoLight.size, width: images.logoLight.width, height: images.logoLight.height, data: images.logoLight.data, createdAt: at(base, -30, 10, 0) },
     { id: "demo_logo_dark", organizationId, variant: "dark", mime: images.logoDark.mime, size: images.logoDark.size, width: images.logoDark.width, height: images.logoDark.height, data: images.logoDark.data, createdAt: at(base, -30, 10, 0) },
@@ -2177,6 +2301,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
         update: { mime: images.demoAvatar.mime, size: images.demoAvatar.size, width: images.demoAvatar.width, height: images.demoAvatar.height, data: images.demoAvatar.data },
       });
       await tx.client.createMany({ data: clientsData });
+      await tx.clientLogo.createMany({ data: clientLogosData });
       await tx.event.createMany({ data: eventsData });
       await tx.promoter.createMany({ data: promotersData });
       await tx.eventTask.createMany({ data: tasksData });
@@ -2232,6 +2357,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.supplierJob.deleteMany({ where: { organizationId } });
   await tx.event.deleteMany({ where: { organizationId } });
   await tx.supplier.deleteMany({ where: { organizationId } });
+  await tx.clientLogo.deleteMany({ where: { client: { organizationId } } });
   await tx.client.deleteMany({ where: { organizationId } });
   await tx.inventoryItem.deleteMany({ where: { organizationId } });
   await tx.promoter.deleteMany({ where: { organizationId } });
