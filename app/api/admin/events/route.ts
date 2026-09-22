@@ -5,6 +5,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { planLimitViolation } from "@/lib/server/plan-limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,10 @@ export async function POST(request: Request) {
     select: { id: true, name: true },
   });
   if (!client) return jsonError("Client not found.", 404);
+  // Límite del plan (issue #42): cuenta los eventos creados en el mes; los
+  // eventos ya cargados no se tocan.
+  const limit = await planLimitViolation(auth.context, "events");
+  if (limit) return jsonError(limit.error, 403, limit.code);
   const event = await db.event.create({
     data: {
       id: randomUUID(),

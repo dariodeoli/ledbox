@@ -358,6 +358,31 @@ export function invitationStatusTone(value: string | null | undefined): AdminTon
   return INVITATION_STATUS_TONES[value] ?? "neutral";
 }
 
+// ── Solicitudes de cambio de plan (issue #42) ───────────────────────────────
+// Estado real de `PlanChangeRequest`: nace `pending` (la pide el equipo) y la
+// resuelve Owncoding al aplicar el cambio.
+
+const PLAN_REQUEST_STATUS: Record<string, string> = {
+  pending: "Pendiente",
+  approved: "Aplicada",
+  rejected: "Rechazada",
+  cancelled: "Cancelada",
+};
+
+const PLAN_REQUEST_STATUS_TONES: Record<string, AdminTone> = {
+  pending: "warn",
+  approved: "ok",
+  rejected: "danger",
+  cancelled: "neutral",
+};
+
+export const planRequestStatusLabel = (value: string | null | undefined) => label(PLAN_REQUEST_STATUS, value);
+
+export function planRequestStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return PLAN_REQUEST_STATUS_TONES[value] ?? "neutral";
+}
+
 export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
@@ -1182,6 +1207,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   TreasuryMovement: "Movimiento de tesorería",
   Expense: "Gasto",
   MessageTemplate: "Plantilla de mensaje",
+  PlanChangeRequest: "Solicitud de plan",
 };
 
 const AUDIT_FIELD: Record<string, string> = {
@@ -1284,6 +1310,11 @@ const AUDIT_FIELD: Record<string, string> = {
   channel: "Canal",
   to: "Destino",
   template: "Plantilla",
+  planCode: "Código del plan",
+  planName: "Plan",
+  priceMonthly: "Precio mensual",
+  replacedPending: "Reemplazó la solicitud pendiente",
+  planStartedAt: "Inicio del plan",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */
@@ -1300,6 +1331,7 @@ const AUDIT_MONEY_FIELDS: ReadonlySet<string> = new Set([
   "unitPrice",
   "costPrice",
   "openingBalance",
+  "priceMonthly",
 ]);
 
 export const auditActionLabel = (value: string | null | undefined) => label(AUDIT_ACTION, value);

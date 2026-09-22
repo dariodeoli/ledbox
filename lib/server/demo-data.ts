@@ -3,6 +3,7 @@ import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
+import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -1031,6 +1032,16 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
     organization = await db.organization.update({
       where: { id: organization.id },
       data: { paymentDetails: DEMO_PAYMENT_DETAILS },
+    });
+  }
+
+  // Plan de la demo (issue #42): Pro, con el inicio en el alta de la empresa. La
+  // demo es de solo lectura: el plan se ve (consumo y comparación), no se cambia.
+  const demoPlan = await db.plan.findUnique({ where: { code: DEMO_PLAN_CODE }, select: { id: true } });
+  if (demoPlan && organization.planId !== demoPlan.id) {
+    organization = await db.organization.update({
+      where: { id: organization.id },
+      data: { planId: demoPlan.id, planStartedAt: organization.planStartedAt ?? organization.createdAt },
     });
   }
 

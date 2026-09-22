@@ -7,6 +7,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
+import { planLimitViolation } from "@/lib/server/plan-limits";
 import { emailError, FIELD_MESSAGES, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
@@ -72,6 +73,11 @@ export async function POST(request: Request) {
   if (!personNameValid(name)) return jsonError(FIELD_MESSAGES.name, 400);
   if (emailError(email)) return jsonError(emailError(email) ?? "Correo inválido.", 400);
   if (password.length < 12) return jsonError("La contraseña inicial debe tener al menos 12 caracteres.", 400);
+
+  // Límite del plan (issue #42): crear usuario (o sumar una membresía existente)
+  // ocupa un lugar. Vale igual para ambos caminos de abajo.
+  const limit = await planLimitViolation(auth.context, "users");
+  if (limit) return jsonError(limit.error, 403, limit.code);
 
   const existing = await db.adminUser.findUnique({ where: { email } });
   if (existing) {

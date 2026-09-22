@@ -3,6 +3,7 @@ import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } 
 import { isDemoOrganizationSlug } from "./demo-data";
 import { db } from "./db";
 import { jsonError } from "./http";
+import { ensureOrganizationPlan } from "./plan-limits";
 import { roleCan, type AdminCapability } from "./permissions";
 
 /**
@@ -28,6 +29,8 @@ export type AdminContext = {
     id: string;
     name: string;
     slug: string;
+    /** Plan comercial vigente (issue #42); `null` se resuelve con el por defecto. */
+    planId: string | null;
   };
   role: AdminRole;
   organizationId: string;
@@ -37,7 +40,7 @@ export type AdminContext = {
 
 export type AdminContextResult = { ok: true; context: AdminContext } | { ok: false; response: Response };
 
-const organizationSelect = { id: true, name: true, slug: true } as const;
+const organizationSelect = { id: true, name: true, slug: true, planId: true } as const;
 
 async function findMembership(adminUserId: string, organizationId: string | null) {
   const base = { adminUserId, active: true, organization: { active: true } } as const;
@@ -87,6 +90,12 @@ export async function requireAdminContext(
 
   const role = membership.role;
   const demo = isDemoOrganizationSlug(membership.organization.slug);
+  // La empresa sin plan recibe el por defecto una sola vez (issue #42): así los
+  // límites se aplican desde el primer request y no queda una empresa sin tope
+  // por olvido. Best-effort: `ensureOrganizationPlan` nunca rompe el request.
+  if (!membership.organization.planId) {
+    membership.organization.planId = await ensureOrganizationPlan(membership.organizationId);
+  }
   // La demo es de solo lectura por contrato: el rol de la membresía es VIEWER,
   // pero además acá se corta cualquier capacidad de escritura (así el error es
   // explícito y no depende de que el rol siga siendo VIEWER).
