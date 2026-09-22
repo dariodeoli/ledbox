@@ -35,3 +35,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - footer único (empresa + crédito) en vez de dos pies pegados
 
+## v2.1.20 — 2026-09-22
+
+- la ayuda de Clientes nombra los filtros reales de la cartera
+- cierra la pasada por pantalla (señal, urgencia y acción única)
+
