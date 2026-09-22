@@ -138,11 +138,11 @@ function AuditoriaView() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de auditoría">
-        <AdminKpi label="Registros" value={formatNumber(total)} note={filtersActive ? "según los filtros" : "histórico completo"} tone="accent" />
-        <AdminKpi label="Página" value={`${formatNumber(currentPage)} / ${formatNumber(pageCount)}`} note={`${formatNumber(currentPageSize)} por página`} />
-        <AdminKpi label="Actores" value={formatNumber(actors.length)} note="con actividad registrada" tone="ok" />
+        <AdminKpi label="Registros" icon="audit" value={formatNumber(total)} note={filtersActive ? "según los filtros" : "histórico completo"} tone="accent" />
+        <AdminKpi label="Página" icon="overview" value={`${formatNumber(currentPage)} / ${formatNumber(pageCount)}`} note={`${formatNumber(currentPageSize)} por página`} />
+        <AdminKpi label="Actores" icon="users" value={formatNumber(actors.length)} note="con actividad registrada" tone="ok" />
         <AdminKpi
-          label="Última actividad"
+          label="Última actividad" icon="clock"
           value={newest ? formatDate(newest) : "—"}
           note={newest ? `${formatTime(newest)} · página actual` : "sin movimientos"}
         />
@@ -205,6 +205,7 @@ function AuditoriaView() {
         onRetry={audit.reload}
         empty={total === 0}
         emptyTitle={filtersActive ? "Sin resultados" : "Todavía no hay movimientos"}
+        emptyIcon={filtersActive ? "search" : "audit"}
         emptyHint={
           filtersActive
             ? "Probá con otro filtro o ampliá el rango de fechas."
@@ -296,7 +297,7 @@ function AuditoriaView() {
         </AdminTable>
 
         <div className="admin-audit-pager">
-          <AdminButton disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} title="Página anterior" aria-label="Página anterior">
+          <AdminButton icon="arrow-left" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} title="Página anterior" aria-label="Página anterior">
             Anterior
           </AdminButton>
           <span className="admin-audit-pager-info">

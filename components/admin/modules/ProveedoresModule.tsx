@@ -390,11 +390,11 @@ export function ProveedoresModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de proveedores">
-        <AdminKpi label="Proveedores" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
-        <AdminKpi label="Trabajos abiertos" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
-        <AdminKpi label="Saldo por pagar" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
+        <AdminKpi label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
+        <AdminKpi label="Trabajos abiertos" icon="suppliers" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
+        <AdminKpi label="Saldo por pagar" icon="finance" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
         <AdminKpi
-          label="Vencidos"
+          label="Vencidos" icon="alert"
           value={formatNumber(totals.overdue)}
           note="con fecha prevista pasada"
           tone={totals.overdue > 0 ? "warn" : "ok"}
@@ -412,7 +412,7 @@ export function ProveedoresModule() {
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       <AdminPanel
-        title="Trabajos por evento"
+        title="Trabajos por evento" icon="suppliers"
         meta={`${formatNumber(jobRows.length)} de ${formatNumber(jobs.length)}`}
         action={
           <span className="admin-panel-actions">
@@ -640,12 +640,12 @@ export function ProveedoresModule() {
           error={jobsResource.error}
           onRetry={jobsResource.reload}
           empty={jobs.length === 0}
-          emptyTitle="Sin trabajos de proveedor"
+          emptyTitle="Sin trabajos de proveedor" emptyIcon="suppliers"
           emptyHint="Cargá el trabajo contratado para seguir el anticipo, la entrega y el saldo."
         >
         {jobsView === "board" ? (
           searchedJobs.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
             <AdminBoard
               label="Trabajos de proveedores"
@@ -657,7 +657,7 @@ export function ProveedoresModule() {
             />
           )
         ) : jobRows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : (
             <AdminTable
               view="trabajos"
@@ -745,7 +745,7 @@ export function ProveedoresModule() {
       </AdminPanel>
 
       <AdminPanel
-        title="Proveedores"
+        title="Proveedores" icon="suppliers"
         meta={`${formatNumber(supplierRows.length)} de ${formatNumber(suppliers.length)}`}
         action={
           writable ? (
@@ -834,11 +834,11 @@ export function ProveedoresModule() {
           error={suppliersResource.error}
           onRetry={suppliersResource.reload}
           empty={suppliers.length === 0}
-          emptyTitle="Todavía no hay proveedores"
+          emptyTitle="Todavía no hay proveedores" emptyIcon="suppliers"
           emptyHint="Cargá carpintería, gráfica, transporte y otros rubros que trabajan en tus eventos."
         >
           {supplierRows.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
             <AdminTable
               view="proveedores"

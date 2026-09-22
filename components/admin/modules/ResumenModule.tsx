@@ -124,21 +124,21 @@ export function ResumenModule() {
         <AdminErrorState message={overview.error} onRetry={overview.reload} />
       ) : (
         <section className="admin-kpis" aria-label="Indicadores del negocio">
-          <AdminKpi label="Clientes activos" value={formatNumber(counts?.clients)} note="en cartera" />
-          <AdminKpi label="Eventos" value={formatNumber(counts?.events)} note="no cancelados" />
-          <AdminKpi label="Presupuestos" value={formatNumber(counts?.budgets)} note="vigentes" />
-          <AdminKpi label="Leads nuevos" value={formatNumber(counts?.leads)} note="por contactar" tone={counts && counts.leads > 0 ? "accent" : undefined} />
-          <AdminKpi label="Por cobrar" value={formatMoney(totals?.totalReceivable)} note="ventas aprobadas" tone="ok" />
-          <AdminKpi label="Por pagar" value={formatMoney(totals?.totalPayable)} note="proveedores" tone="warn" />
-          <AdminKpi label="Caja comprometida" value={formatMoney(totals?.committedCash)} note="cobros y pagos" />
-          <AdminKpi label="Inventario" value={formatNumber(counts?.inventory)} note="ítems controlados" />
+          <AdminKpi label="Clientes activos" icon="clients" value={formatNumber(counts?.clients)} note="en cartera" />
+          <AdminKpi label="Eventos" icon="events" value={formatNumber(counts?.events)} note="no cancelados" />
+          <AdminKpi label="Presupuestos" icon="budgets" value={formatNumber(counts?.budgets)} note="vigentes" />
+          <AdminKpi label="Leads nuevos" icon="leads" value={formatNumber(counts?.leads)} note="por contactar" tone={counts && counts.leads > 0 ? "accent" : undefined} />
+          <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals?.totalReceivable)} note="ventas aprobadas" tone="ok" />
+          <AdminKpi label="Por pagar" icon="suppliers" value={formatMoney(totals?.totalPayable)} note="proveedores" tone="warn" />
+          <AdminKpi label="Caja comprometida" icon="wallet" value={formatMoney(totals?.committedCash)} note="cobros y pagos" />
+          <AdminKpi label="Inventario" icon="inventory" value={formatNumber(counts?.inventory)} note="ítems controlados" />
         </section>
       )}
 
       <div className="admin-panel-grid">
         <div className="admin-panel-wide">
           <AdminPanel
-            title="Qué mirar hoy"
+            title="Qué mirar hoy" icon="bell"
             meta={notificationCounts && notificationCounts.total > 0 ? `${formatNumber(notificationCounts.total)} avisos` : undefined}
             action={
               <Link className="admin-panel-link" href="/calendario">
@@ -151,7 +151,7 @@ export function ResumenModule() {
               error={notifications.error}
               onRetry={notifications.reload}
               empty={todayNotifications.length === 0}
-              emptyTitle="Nada urgente"
+              emptyTitle="Nada urgente" emptyIcon="check"
               emptyHint="No hay vencimientos, checklist pendiente ni cobros con saldo para mirar hoy."
               rows={3}
             >
@@ -189,7 +189,7 @@ export function ResumenModule() {
         </div>
 
         <AdminPanel
-          title="Próximos eventos"
+          title="Próximos eventos" icon="calendar"
           meta={overview.data ? `${formatNumber(overview.data.upcoming.length)} en agenda` : undefined}
           action={
             <Link className="admin-panel-link" href="/eventos">
@@ -202,7 +202,7 @@ export function ResumenModule() {
             error={overview.error}
             onRetry={overview.reload}
             empty={(overview.data?.upcoming.length ?? 0) === 0}
-            emptyTitle="Sin eventos en agenda"
+            emptyTitle="Sin eventos en agenda" emptyIcon="calendar"
             emptyHint="Cargá el primer evento para verlo acá con su checklist."
           >
             <AdminTable
@@ -240,7 +240,7 @@ export function ResumenModule() {
         </AdminPanel>
 
         <AdminPanel
-          title="Checklist pendiente"
+          title="Checklist pendiente" icon="audit"
           meta={
             pendingTotal > 0
               ? `${formatNumber(pendingTotal)} pendientes${overdueTasks.length > 0 ? ` · ${formatNumber(overdueTasks.length)} vencida${overdueTasks.length === 1 ? "" : "s"}` : ""}`
@@ -258,7 +258,7 @@ export function ResumenModule() {
             error={operations.error}
             onRetry={operations.reload}
             empty={pendingTasks.length === 0}
-            emptyTitle="Checklist al día"
+            emptyTitle="Checklist al día" emptyIcon="check"
             emptyHint="No quedan tareas pendientes en los eventos cargados."
             rows={4}
           >
@@ -274,7 +274,7 @@ export function ResumenModule() {
         </AdminPanel>
 
         <AdminPanel
-          title="Tareas vencidas"
+          title="Tareas vencidas" icon="alert"
           meta={overdueTasks.length > 0 ? `${formatNumber(overdueTasks.length)} sin cerrar` : undefined}
           action={
             <Link className="admin-panel-link" href="/eventos">
@@ -287,7 +287,7 @@ export function ResumenModule() {
             error={operations.error}
             onRetry={operations.reload}
             empty={overdueTasks.length === 0}
-            emptyTitle="Sin tareas vencidas"
+            emptyTitle="Sin tareas vencidas" emptyIcon="check"
             emptyHint="Ninguna tarea pendiente pasó su fecha de vencimiento."
             rows={3}
           >
@@ -316,7 +316,7 @@ export function ResumenModule() {
         </AdminPanel>
 
         <AdminPanel
-          title="Por cobrar"
+          title="Por cobrar" icon="finance"
           meta={receivables.length > 0 ? `${formatNumber(receivables.length)} saldos` : undefined}
           action={
             <Link className="admin-panel-link" href="/presupuestos">
@@ -329,7 +329,7 @@ export function ResumenModule() {
             error={budgets.error}
             onRetry={budgets.reload}
             empty={receivables.length === 0}
-            emptyTitle="Nada pendiente de cobro"
+            emptyTitle="Nada pendiente de cobro" emptyIcon="check"
             emptyHint="Los presupuestos aprobados y enviados aparecen acá con su saldo."
             rows={4}
           >
@@ -362,7 +362,7 @@ export function ResumenModule() {
         </AdminPanel>
 
         <AdminPanel
-          title="Por pagar"
+          title="Por pagar" icon="suppliers"
           meta={payables.length > 0 ? `${formatNumber(payables.length)} trabajos` : undefined}
           action={
             <Link className="admin-panel-link" href="/finanzas">
@@ -375,7 +375,7 @@ export function ResumenModule() {
             error={finance.error}
             onRetry={finance.reload}
             empty={payables.length === 0}
-            emptyTitle="Sin saldos con proveedores"
+            emptyTitle="Sin saldos con proveedores" emptyIcon="check"
             emptyHint="Los trabajos contratados con saldo pendiente aparecen acá."
             rows={4}
           >

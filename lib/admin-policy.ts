@@ -88,6 +88,29 @@ export function adminNavLabel(pathname: string): string {
   return "Panel";
 }
 
+/** Páginas fuera del sidebar: mismo criterio de ícono que el resto del panel. */
+const PAGE_ICONS: Record<string, AdminIconName> = {
+  "/perfil": "user",
+  "/demo": "overview",
+};
+
+/**
+ * Ícono del módulo para el título de la página (issue del 22-09-2026): sale del
+ * mismo ítem de navegación que dibuja el sidebar, así el encabezado y el menú
+ * nunca muestran íconos distintos. Sin coincidencia cae en la vista general.
+ */
+export function adminNavIcon(pathname: string): AdminIconName {
+  for (const [href, icon] of Object.entries(PAGE_ICONS)) {
+    if (isAdminNavActive(pathname, href)) return icon;
+  }
+  for (const group of ADMIN_NAV) {
+    for (const item of group.items) {
+      if (isAdminNavActive(pathname, item.href)) return item.icon;
+    }
+  }
+  return "overview";
+}
+
 export function adminNavGroups(role: AdminRole | null | undefined): AdminNavGroup[] {
   return ADMIN_NAV.map((group) => ({
     label: group.label,

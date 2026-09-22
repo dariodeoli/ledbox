@@ -39,6 +39,7 @@ import type {
   AdminClientRow,
 } from "@/lib/admin-types";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
+import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import {
@@ -462,21 +463,21 @@ export function ClientesModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de clientes">
-        <AdminKpi label="Clientes" value={formatNumber(totals.total)} note="en cartera" />
-        <AdminKpi label="Activos" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
+        <AdminKpi label="Clientes" icon="clients" value={formatNumber(totals.total)} note="en cartera" />
+        <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
         <AdminKpi
-          label="Con deuda vencida"
+          label="Con deuda vencida" icon="alert"
           value={formatNumber(totals.overdue)}
           note={`${formatNumber(totals.overdueCount)} cobro${totals.overdueCount === 1 ? "" : "s"} vencido${totals.overdueCount === 1 ? "" : "s"}`}
           tone={totals.overdue > 0 ? "danger" : undefined}
         />
         <AdminKpi
-          label="Deuda vencida"
+          label="Deuda vencida" icon="alert"
           value={formatMoney(totals.overdueAmount)}
           note="cobros pendientes con vencimiento pasado"
           tone={totals.overdueAmount > 0 ? "danger" : undefined}
         />
-        <AdminKpi label="Revendedores" value={formatNumber(totals.resellers)} note="mayoristas" tone="accent" />
+        <AdminKpi label="Revendedores" icon="clients" value={formatNumber(totals.resellers)} note="mayoristas" tone="accent" />
       </section>
 
       <AdminToolbar>
@@ -675,11 +676,11 @@ export function ClientesModule() {
         error={clients.error}
         onRetry={clients.reload}
         empty={(clients.data ?? []).length === 0}
-        emptyTitle="Todavía no hay clientes"
+        emptyTitle="Todavía no hay clientes" emptyIcon="clients"
         emptyHint="Registrá el primer cliente para asociarle eventos y presupuestos."
       >
         {rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro." />
         ) : (
           <AdminTable
             view="clientes"
@@ -843,14 +844,14 @@ function ClientDetailDialog({
   const detail = useAdminResource(`/api/admin/clients/${client.id}`, (payload) => payload.clientDetail ?? null);
 
   return (
-    <AdminDialog title={`Ficha del cliente · ${name}`} size="ficha" onClose={onClose}>
+    <AdminDialog title={`Ficha del cliente · ${name}`} size="ficha" icon="clients" onClose={onClose}>
       <AdminDataState
         loading={detail.loading}
         error={detail.error}
         onRetry={detail.reload}
         rows={6}
         empty={!detail.data}
-        emptyTitle="Sin datos del cliente"
+        emptyTitle="Sin datos del cliente" emptyIcon="clients"
         emptyHint="No pudimos leer la ficha de este cliente."
       >
         {detail.data ? <ClientDetailBody detail={detail.data} writable={writable} onEdit={onEdit} /> : null}
@@ -931,11 +932,11 @@ function ClientDetailBody({
       </header>
 
       <section className="admin-kpis" aria-label={`Métricas de ${name}`}>
-        <AdminKpi label="Contratos" value={formatNumber(metrics.contracts)} note="presupuestos aprobados" tone={metrics.contracts > 0 ? "ok" : undefined} />
-        <AdminKpi label="Total contratado" value={formatMoney(metrics.contracted)} note="Σ contratos aprobados" />
-        <AdminKpi label="Total cobrado" value={formatMoney(metrics.collected)} note="cobros recibidos" tone={metrics.collected > 0 ? "ok" : undefined} />
+        <AdminKpi label="Contratos" icon="budgets" value={formatNumber(metrics.contracts)} note="presupuestos aprobados" tone={metrics.contracts > 0 ? "ok" : undefined} />
+        <AdminKpi label="Total contratado" icon="budgets" value={formatMoney(metrics.contracted)} note="Σ contratos aprobados" />
+        <AdminKpi label="Total cobrado" icon="finance" value={formatMoney(metrics.collected)} note="cobros recibidos" tone={metrics.collected > 0 ? "ok" : undefined} />
         <AdminKpi
-          label="Saldo pendiente"
+          label="Saldo pendiente" icon="finance"
           value={formatMoney(metrics.balance)}
           // Honestidad del dato: si lo cobrado supera lo contratado (por ejemplo,
           // una seña sobre una cotización todavía sin aprobar), no se dibuja un
@@ -944,7 +945,7 @@ function ClientDetailBody({
           tone={metrics.balance > 0 ? "warn" : undefined}
         />
         <AdminKpi
-          label="Mora"
+          label="Mora" icon="alert"
           value={formatMoney(metrics.overdue)}
           note={
             metrics.overdueCount > 0
@@ -954,7 +955,7 @@ function ClientDetailBody({
           tone={metrics.overdue > 0 ? "danger" : undefined}
         />
         <AdminKpi
-          label="Frecuencia"
+          label="Frecuencia" icon="calendar"
           value={formatMonths(metrics.averageMonths)}
           note={
             metrics.frequencySamples > 0
@@ -963,24 +964,24 @@ function ClientDetailBody({
           }
         />
         <AdminKpi
-          label="Última contratación"
+          label="Última contratación" icon="clock"
           value={formatDate(metrics.lastContractAt)}
           note={metrics.lastContractAt ? formatCountdown(metrics.lastContractAt, "short") : "sin contratos"}
         />
         <AdminKpi
-          label="Ticket promedio"
+          label="Ticket promedio" icon="finance"
           value={metrics.averageTicket === null ? "—" : formatMoney(metrics.averageTicket)}
           note="por contrato"
         />
         <AdminKpi
-          label="Próxima actividad"
+          label="Próxima actividad" icon="calendar"
           value={metrics.nextEventAt ? formatDate(metrics.nextEventAt) : "—"}
           note={metrics.nextEventName ?? "sin eventos por venir"}
           tone={metrics.nextEventAt ? "accent" : undefined}
         />
-        <AdminKpi label="Eventos" value={formatNumber(metrics.events)} note={`${formatNumber(metrics.upcomingEvents)} en agenda`} />
+        <AdminKpi label="Eventos" icon="events" value={formatNumber(metrics.events)} note={`${formatNumber(metrics.upcomingEvents)} en agenda`} />
         <AdminKpi
-          label="Presupuestos"
+          label="Presupuestos" icon="budgets"
           value={formatNumber(metrics.budgets)}
           note={`${formatNumber(metrics.contracts)} aprobado${metrics.contracts === 1 ? "" : "s"} · ${formatNumber(metrics.lost)} perdido${metrics.lost === 1 ? "" : "s"}`}
         />
@@ -989,14 +990,19 @@ function ClientDetailBody({
       {/* Historial del cliente: los hechos reales que explican las métricas. La
           cronología (issue #33) se suma acá, sin otro estado que la ficha. */}
       <section className="admin-client-history" aria-label={`Historial de ${name}`}>
-        <h3 className="admin-panel-title">Historial</h3>
+        <h3 className="admin-panel-title">
+          <span className="admin-panel-icon" aria-hidden="true">
+            <AdminIcon name="clock" size={13} />
+          </span>
+          Historial
+        </h3>
 
         <AdminPanel
-          title="Presupuestos"
+          title="Presupuestos" icon="budgets"
           meta={`${formatNumber(budgets.length)} · ${formatNumber(metrics.contracts)} aprobado${metrics.contracts === 1 ? "" : "s"}`}
         >
           {budgets.length === 0 ? (
-            <AdminEmpty title="Sin presupuestos" hint="Este cliente todavía no tiene presupuestos cargados." />
+            <AdminEmpty icon="budgets" title="Sin presupuestos" hint="Este cliente todavía no tiene presupuestos cargados." />
           ) : (
             <AdminTable
               view="cliente-presupuestos"
@@ -1039,9 +1045,9 @@ function ClientDetailBody({
           )}
         </AdminPanel>
 
-        <AdminPanel title="Eventos" meta={`${formatNumber(events.length)} · ${formatNumber(metrics.upcomingEvents)} en agenda`}>
+        <AdminPanel title="Eventos" icon="events" meta={`${formatNumber(events.length)} · ${formatNumber(metrics.upcomingEvents)} en agenda`}>
           {events.length === 0 ? (
-            <AdminEmpty title="Sin eventos" hint="Este cliente todavía no tiene eventos cargados." />
+            <AdminEmpty icon="events" title="Sin eventos" hint="Este cliente todavía no tiene eventos cargados." />
           ) : (
             <AdminTable
               view="cliente-eventos"
@@ -1081,11 +1087,11 @@ function ClientDetailBody({
         </AdminPanel>
 
         <AdminPanel
-          title="Cobros"
+          title="Cobros" icon="finance"
           meta={`${formatNumber(payments.length)} · ${formatMoney(metrics.collected)} cobrado${metrics.overdue > 0 ? ` · ${formatMoney(metrics.overdue)} vencido` : ""}`}
         >
           {payments.length === 0 ? (
-            <AdminEmpty title="Sin cobros" hint="Este cliente todavía no tiene cobros registrados." />
+            <AdminEmpty icon="finance" title="Sin cobros" hint="Este cliente todavía no tiene cobros registrados." />
           ) : (
             <AdminTable
               view="cliente-pagos"

@@ -34,6 +34,7 @@ import {
   AdminWhatsappLink,
 } from "../AdminUI";
 import { SearchField, SelectField, TextAreaField } from "../AdminFields";
+import { AdminIcon } from "../AdminIcons";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_FILTER_OPTIONS = [
@@ -229,10 +230,10 @@ export function LeadsModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de leads">
-        <AdminKpi label="Leads" value={formatNumber(totals.total)} note="últimos 100 ingresos" />
-        <AdminKpi label="Nuevos" value={formatNumber(totals.new)} note="por contactar" tone={totals.new > 0 ? "accent" : undefined} />
-        <AdminKpi label="Cotizados" value={formatNumber(totals.quoted)} note="en pipeline" tone={totals.quoted > 0 ? "warn" : undefined} />
-        <AdminKpi label="Ganados" value={formatNumber(totals.won)} note="convertidos en cliente" tone={totals.won > 0 ? "ok" : undefined} />
+        <AdminKpi label="Leads" icon="leads" value={formatNumber(totals.total)} note="últimos 100 ingresos" />
+        <AdminKpi label="Nuevos" icon="plus" value={formatNumber(totals.new)} note="por contactar" tone={totals.new > 0 ? "accent" : undefined} />
+        <AdminKpi label="Cotizados" icon="budgets" value={formatNumber(totals.quoted)} note="en pipeline" tone={totals.quoted > 0 ? "warn" : undefined} />
+        <AdminKpi label="Ganados" icon="check" value={formatNumber(totals.won)} note="convertidos en cliente" tone={totals.won > 0 ? "ok" : undefined} />
       </section>
 
       <AdminToolbar>
@@ -256,12 +257,12 @@ export function LeadsModule() {
         error={leads.error}
         onRetry={leads.reload}
         empty={list.length === 0}
-        emptyTitle="Todavía no hay leads"
+        emptyTitle="Todavía no hay leads" emptyIcon="leads"
         emptyHint="Cuando alguien pida una cotización desde el sitio, el lead entra acá con su pedido y datos de contacto."
       >
         {view === "board" ? (
           searched.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
             <AdminBoard
               label="Leads"
@@ -273,7 +274,7 @@ export function LeadsModule() {
             />
           )
         ) : rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : (
           <AdminTable
             view="leads"
@@ -365,7 +366,7 @@ export function LeadsModule() {
 
       {selected ? (
         <AdminPanel
-          title={`Lead · ${selected.name}`}
+          title={`Lead · ${selected.name}`} icon="leads"
           meta={`Ingresó el ${formatDateTime(selected.createdAt)} · ${leadSourceLabel(selected.source)}`}
           action={
             <AdminButton icon="close" onClick={closeDetail} aria-label="Cerrar el detalle del lead" title="Cerrar el detalle del lead" />
@@ -421,14 +422,24 @@ export function LeadsModule() {
             </dl>
 
             <div className="admin-detail-section">
-              <p className="admin-detail-section-title">Mensaje del lead</p>
+              <p className="admin-detail-section-title">
+                <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                  <AdminIcon name="mail" size={11} />
+                </span>
+                Mensaje del lead
+              </p>
               {selected.message ? <p className="admin-detail-text">{selected.message}</p> : <p className="admin-muted">El lead no dejó un mensaje.</p>}
             </div>
 
             <div className="admin-detail-section">
-              <p className="admin-detail-section-title">Productos de interés</p>
+              <p className="admin-detail-section-title">
+                <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                  <AdminIcon name="inventory" size={11} />
+                </span>
+                Productos de interés
+              </p>
               {selected.quoteRequests.length === 0 ? (
-                <AdminEmpty title="Sin pedido del sitio" hint="El lead consultó sin productos cargados en el cotizador." />
+                <AdminEmpty icon="leads" title="Sin pedido del sitio" hint="El lead consultó sin productos cargados en el cotizador." />
               ) : (
                 selected.quoteRequests.map((quote) => (
                   <div className="admin-detail-quote" key={quote.id}>
@@ -480,7 +491,12 @@ export function LeadsModule() {
 
             {writable ? (
               <form className="admin-detail-form" onSubmit={saveDetail} aria-busy={saving || converting || undefined}>
-                <p className="admin-detail-section-title">Seguimiento comercial</p>
+                <p className="admin-detail-section-title">
+                  <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                    <AdminIcon name="overview" size={11} />
+                  </span>
+                  Seguimiento comercial
+                </p>
                 <SelectField
                   label="Estado del lead"
                   value={draftStatus}
@@ -509,7 +525,12 @@ export function LeadsModule() {
               </form>
             ) : (
               <div className="admin-detail-section">
-                <p className="admin-detail-section-title">Notas internas</p>
+                <p className="admin-detail-section-title">
+                  <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                    <AdminIcon name="edit" size={11} />
+                  </span>
+                  Notas internas
+                </p>
                 {selected.internalNotes ? <p className="admin-detail-text">{selected.internalNotes}</p> : <p className="admin-muted">Sin notas registradas.</p>}
                 <AdminNote>Tu rol es de solo lectura: no podés cambiar el estado ni convertir el lead.</AdminNote>
               </div>

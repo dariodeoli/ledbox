@@ -95,15 +95,15 @@ function SistemaView() {
         error={resource.error}
         onRetry={resource.reload}
         empty={!status}
-        emptyTitle="Sin estado del sistema"
+        emptyTitle="Sin estado del sistema" emptyIcon="database"
         emptyHint="No pudimos leer el estado del respaldo ni de la base."
       >
         {status && backup ? (
           <>
             <section className="admin-kpis" aria-label="Resumen del sistema">
-              <AdminKpi label="Versión" value={status.version} note="Fuente única: package.json" />
+              <AdminKpi label="Versión" icon="info" value={status.version} note="Fuente única: package.json" />
               <AdminKpi
-                label="Base de datos"
+                label="Base de datos" icon="database"
                 value={status.database.status === "ok" ? "Responde" : "Sin conexión"}
                 tone={status.database.status === "ok" ? "ok" : "danger"}
                 note={
@@ -113,12 +113,12 @@ function SistemaView() {
                 }
               />
               <AdminKpi
-                label="Migraciones"
+                label="Migraciones" icon="database"
                 value={status.migrations.applied !== null ? formatNumber(status.migrations.applied) : "—"}
                 note={status.migrations.last ? status.migrations.last.name : "sin historial"}
               />
               <AdminKpi
-                label="Último respaldo"
+                label="Último respaldo" icon="clock"
                 value={backup.lastSuccess ? formatSince(backup.lastSuccess.finishedAt) : "Sin respaldos"}
                 tone={BACKUP_STATUS[backup.status].tone}
                 note={backup.lastSuccess ? formatDateTime(backup.lastSuccess.finishedAt) : `umbral ${formatNumber(backup.maxAgeHours)} h`}
@@ -126,7 +126,7 @@ function SistemaView() {
             </section>
 
             <AdminPanel
-              title="Respaldo de la base"
+              title="Respaldo de la base" icon="database"
               meta={`${BACKUP_STATUS[backup.status].label} · umbral ${formatNumber(backup.maxAgeHours)} h`}
               action={
                 <AdminButton icon="refresh" busy={resource.loading} onClick={resource.reload} title="Volver a leer el estado real">
@@ -212,11 +212,11 @@ function SistemaView() {
               </div>
             </AdminPanel>
 
-            <AdminPanel title="Historial de respaldos" meta={`Últimas ${formatNumber(backup.history.length)} corridas`}>
+            <AdminPanel title="Historial de respaldos" icon="clock" meta={`Últimas ${formatNumber(backup.history.length)} corridas`}>
               <AdminDataState
                 loading={false}
                 empty={backup.history.length === 0}
-                emptyTitle="Todavía no hay corridas registradas"
+                emptyTitle="Todavía no hay corridas registradas" emptyIcon="database"
                 emptyHint="Cuando el cron corra `node scripts/backup.mjs` vas a ver acá cada intento con su resultado real."
               >
                 <AdminTable
@@ -261,7 +261,7 @@ function SistemaView() {
               </AdminDataState>
             </AdminPanel>
 
-            <AdminPanel title="Base de datos y migraciones" meta="PostgreSQL · Prisma">
+            <AdminPanel title="Base de datos y migraciones" icon="database" meta="PostgreSQL · Prisma">
               <div className="admin-settings">
                 <div className="admin-settings-grid">
                   <div className="admin-settings-readonly">

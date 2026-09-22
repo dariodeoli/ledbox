@@ -159,21 +159,21 @@ export function PromotorasModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de promotoras">
-        <AdminKpi label="Promotoras" value={formatNumber(promoters.length)} note="activas" />
-        <AdminKpi label="Disponibles" value={formatNumber(totals.available)} note="pueden tomar tareas" tone="ok" />
+        <AdminKpi label="Promotoras" icon="promoters" value={formatNumber(promoters.length)} note="activas" />
+        <AdminKpi label="Disponibles" icon="check" value={formatNumber(totals.available)} note="pueden tomar tareas" tone="ok" />
         <AdminKpi
-          label="No disponibles"
+          label="No disponibles" icon="alert"
           value={formatNumber(totals.unavailable)}
           note="con motivo y fecha"
           tone={totals.unavailable > 0 ? "danger" : undefined}
         />
         <AdminKpi
-          label="A definir"
+          label="A definir" icon="clock"
           value={formatNumber(totals.toDefine)}
           note="sin confirmar"
           tone={totals.toDefine > 0 ? "warn" : undefined}
         />
-        <AdminKpi label="Contactables" value={formatNumber(totals.reachable)} note="con teléfono o correo" />
+        <AdminKpi label="Contactables" icon="mail" value={formatNumber(totals.reachable)} note="con teléfono o correo" />
       </section>
 
       <AdminToolbar>
@@ -277,11 +277,11 @@ export function PromotorasModule() {
         error={resources.error}
         onRetry={resources.reload}
         empty={promoters.length === 0}
-        emptyTitle="Todavía no hay promotoras"
+        emptyTitle="Todavía no hay promotoras" emptyIcon="promoters"
         emptyHint="Cargá el staff de promoción para asignarlo a las tareas de cada evento."
       >
         {rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de disponibilidad." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de disponibilidad." />
         ) : (
           <AdminTable
             view="promotoras"

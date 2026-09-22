@@ -199,10 +199,10 @@ export function UsuariosModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de usuarios">
-        <AdminKpi label="Usuarios" value={formatNumber(list.length)} note="con acceso al panel" />
-        <AdminKpi label="Activos" value={formatNumber(totals.active)} note="pueden ingresar" tone="ok" />
-        <AdminKpi label="Administradores" value={formatNumber(totals.admins)} note="propietarios y admins" tone="accent" />
-        <AdminKpi label="Consulta" value={formatNumber(totals.viewers)} note="solo lectura" />
+        <AdminKpi label="Usuarios" icon="users" value={formatNumber(list.length)} note="con acceso al panel" />
+        <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="pueden ingresar" tone="ok" />
+        <AdminKpi label="Administradores" icon="users" value={formatNumber(totals.admins)} note="propietarios y admins" tone="accent" />
+        <AdminKpi label="Consulta" icon="eye" value={formatNumber(totals.viewers)} note="solo lectura" />
       </section>
 
       <AdminToolbar>
@@ -309,11 +309,11 @@ export function UsuariosModule() {
         error={users.error}
         onRetry={users.reload}
         empty={list.length === 0}
-        emptyTitle="Sin usuarios cargados"
+        emptyTitle="Sin usuarios cargados" emptyIcon="users"
         emptyHint="Creá el primer usuario para dar acceso al panel."
       >
         {rows.length === 0 ? (
-          <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de rol." />
+          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de rol." />
         ) : (
           <AdminTable
             view="usuarios"
@@ -465,7 +465,12 @@ function InviteDialog({
     >
       <section className="admin-dialog" role="dialog" aria-modal="true" aria-label="Invitar por correo">
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">Invitar por correo</h2>
+          <h2 className="admin-dialog-title">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="mail" size={11} />
+            </span>
+            Invitar por correo
+          </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
@@ -505,7 +510,7 @@ function InviteDialog({
           ) : null}
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
-            <AdminButton type="button" onClick={onClose} disabled={busy}>
+            <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
               Cancelar
             </AdminButton>
             <AdminButton type="submit" variant="primary" icon="mail" busy={busy}>
@@ -553,7 +558,12 @@ function RevokeInviteDialog({
     >
       <section className="admin-dialog" role="dialog" aria-modal="true" aria-label={`Revocar la invitación de ${invitation.email}`}>
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">Revocar invitación</h2>
+          <h2 className="admin-dialog-title">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="trash" size={11} />
+            </span>
+            Revocar invitación
+          </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
@@ -565,7 +575,7 @@ function RevokeInviteDialog({
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
         <div className="admin-dialog-foot">
           <span className="admin-dialog-spacer" />
-          <AdminButton type="button" onClick={onClose} disabled={busy}>
+          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
             Cancelar
           </AdminButton>
           <AdminButton type="button" icon="trash" busy={busy} onClick={onConfirm}>
@@ -659,7 +669,7 @@ function InvitationsPanel() {
 
   return (
     <AdminPanel
-      title="Invitaciones pendientes"
+      title="Invitaciones pendientes" icon="mail"
       meta={[`${formatNumber(pendingCount)} ${pendingCount === 1 ? "pendiente" : "pendientes"}`, expiredCount > 0 ? `${formatNumber(expiredCount)} vencida${expiredCount === 1 ? "" : "s"}` : ""]
         .filter(Boolean)
         .join(" · ")}
@@ -705,7 +715,7 @@ function InvitationsPanel() {
         error={invitations.error}
         onRetry={invitations.reload}
         empty={list.length === 0}
-        emptyTitle="Sin invitaciones pendientes"
+        emptyTitle="Sin invitaciones pendientes" emptyIcon="mail"
         emptyHint="Invitá a alguien por correo: le llega el link para sumarse con el rol que elijas."
       >
         <AdminTable

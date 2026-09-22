@@ -6,6 +6,7 @@ import { formatNumber, messageTemplateCategoryLabel } from "@/lib/admin-format";
 import { canWriteTemplateCategory, matchesQuery } from "@/lib/admin-policy";
 import {
   MESSAGE_TEMPLATE_CATEGORIES,
+  type AdminIconName,
   type AdminMessageTemplateRow,
   type MessageTemplateCategoryValue,
 } from "@/lib/admin-types";
@@ -32,6 +33,7 @@ import {
   AdminToolbar,
 } from "../AdminUI";
 import { SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { AdminIcon } from "../AdminIcons";
 
 /**
  * Plantillas de mensajes de WhatsApp por contexto (issue #35).
@@ -52,6 +54,15 @@ type TemplateForm = {
 };
 
 const EMPTY_FORM: TemplateForm = { id: "", category: "budget", title: "", body: "", active: true };
+
+/** Ícono de cada categoría: mismo criterio que el módulo al que sirve la plantilla. */
+const MESSAGE_TEMPLATE_CATEGORY_ICONS: Record<MessageTemplateCategoryValue, AdminIconName> = {
+  budget: "budgets",
+  client: "clients",
+  event: "events",
+  collection: "finance",
+  other: "info",
+};
 
 export function PlantillasModule() {
   const { role } = useAdminSession();
@@ -207,10 +218,10 @@ export function PlantillasModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de plantillas">
-        <AdminKpi label="Plantillas" value={formatNumber(totals.total)} note="de mensajes de WhatsApp" />
-        <AdminKpi label="Activas" value={formatNumber(totals.active)} note="disponibles para enviar" tone="ok" />
-        <AdminKpi label="Inactivas" value={formatNumber(totals.inactive)} note="ocultas en los módulos" />
-        <AdminKpi label="Categorías" value={formatNumber(totals.categories)} note={`de ${formatNumber(MESSAGE_TEMPLATE_CATEGORIES.length)}`} tone="accent" />
+        <AdminKpi label="Plantillas" icon="mail" value={formatNumber(totals.total)} note="de mensajes de WhatsApp" />
+        <AdminKpi label="Activas" icon="check" value={formatNumber(totals.active)} note="disponibles para enviar" tone="ok" />
+        <AdminKpi label="Inactivas" icon="eye-off" value={formatNumber(totals.inactive)} note="ocultas en los módulos" />
+        <AdminKpi label="Categorías" icon="overview" value={formatNumber(totals.categories)} note={`de ${formatNumber(MESSAGE_TEMPLATE_CATEGORIES.length)}`} tone="accent" />
       </section>
 
       <nav className="admin-subtabs" aria-label="Categorías de plantillas">
@@ -227,6 +238,7 @@ export function PlantillasModule() {
               setFormError("");
             }}
           >
+            <AdminIcon name={MESSAGE_TEMPLATE_CATEGORY_ICONS[value]} size={13} />
             {messageTemplateCategoryLabel(value)}
             <span className="admin-subtab-count">{formatNumber(counts.get(value) ?? 0)}</span>
           </button>
@@ -246,7 +258,7 @@ export function PlantillasModule() {
       {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
 
       <AdminPanel
-        title={`Plantillas de ${messageTemplateCategoryLabel(category).toLowerCase()}`}
+        title={`Plantillas de ${messageTemplateCategoryLabel(category).toLowerCase()}`} icon="mail"
         meta={`${formatNumber(rows.length)} de ${formatNumber(counts.get(category) ?? 0)}`}
         action={
           canCreate ? (
@@ -261,11 +273,11 @@ export function PlantillasModule() {
           error={templatesResource.error}
           onRetry={templatesResource.reload}
           empty={templates.length === 0}
-          emptyTitle="Todavía no hay plantillas"
+          emptyTitle="Todavía no hay plantillas" emptyIcon="mail"
           emptyHint="Cargá la primera plantilla para responder por WhatsApp con el mensaje ya armado."
         >
           {rows.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de categoría." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá de categoría." />
           ) : (
             <AdminTable
               view="plantillas"
@@ -331,7 +343,7 @@ export function PlantillasModule() {
       </AdminPanel>
 
       {form ? (
-        <AdminDialog title={form.id ? `Editar plantilla · ${form.title}` : "Nueva plantilla"} size="wide" onClose={() => setForm(null)}>
+        <AdminDialog title={form.id ? `Editar plantilla · ${form.title}` : "Nueva plantilla"} size="wide" icon="mail" onClose={() => setForm(null)}>
           <form className="admin-template-form" onSubmit={submitTemplate} aria-busy={busy || undefined}>
             <SelectField
               label="Categoría"
@@ -404,7 +416,7 @@ export function PlantillasModule() {
 
             <div className="admin-dialog-foot">
               <span className="admin-dialog-spacer" />
-              <AdminButton type="button" onClick={() => setForm(null)} disabled={busy}>
+              <AdminButton icon="close" type="button" onClick={() => setForm(null)} disabled={busy}>
                 Cancelar
               </AdminButton>
               <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
@@ -416,14 +428,14 @@ export function PlantillasModule() {
       ) : null}
 
       {deleting ? (
-        <AdminDialog title={`Borrar plantilla · ${deleting.title}`} onClose={() => setDeleting(null)}>
+        <AdminDialog title={`Borrar plantilla · ${deleting.title}`} icon="trash" onClose={() => setDeleting(null)}>
           <AdminNote tone="error">
             Se borra la plantilla «{deleting.title}» de {messageTemplateCategoryLabel(deleting.category).toLowerCase()}. Los
             envíos ya registrados en la auditoría no se tocan.
           </AdminNote>
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
-            <AdminButton type="button" onClick={() => setDeleting(null)} disabled={busy}>
+            <AdminButton icon="close" type="button" onClick={() => setDeleting(null)} disabled={busy}>
               Cancelar
             </AdminButton>
             <AdminButton type="button" variant="primary" icon="trash" busy={busy} onClick={() => void confirmDelete()}>

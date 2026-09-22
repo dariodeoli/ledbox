@@ -54,6 +54,7 @@ import {
   AdminTable,
 } from "../AdminUI";
 import { DateField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { AdminIcon } from "../AdminIcons";
 
 /**
  * Conciliación bancaria (issue #40): sección de `/finanzas`.
@@ -242,7 +243,7 @@ export function ConciliacionBancaria({
 
   return (
     <AdminPanel
-      title="Conciliación bancaria"
+      title="Conciliación bancaria" icon="bank"
       meta={meta}
       action={
         writable ? (
@@ -258,7 +259,7 @@ export function ConciliacionBancaria({
       }
     >
       {accounts.length === 0 ? (
-        <AdminEmpty
+        <AdminEmpty icon="wallet"
           title="Sin cuentas de tesorería"
           hint="Creá una cuenta (efectivo, banco o cheques) para importar el extracto y conciliarlo contra sus movimientos."
         />
@@ -266,19 +267,19 @@ export function ConciliacionBancaria({
         <>
           <section className="admin-kpis admin-kpis--conciliacion" aria-label="Indicadores de conciliación bancaria">
             <AdminKpi
-              label="Pendientes"
+              label="Pendientes" icon="alert"
               value={formatNumber(summary.pending.count)}
               note={`${formatMoney(summary.pending.net)} netos del extracto`}
               tone={pendingTone}
             />
             <AdminKpi
-              label="Conciliadas del período"
+              label="Conciliadas del período" icon="check"
               value={formatNumber(summary.matched.count)}
               note={`${formatMoney(summary.matched.net)} netos del extracto`}
               tone={summary.matched.count > 0 ? "ok" : undefined}
             />
             <AdminKpi
-              label="Diferencia"
+              label="Diferencia" icon="alert"
               value={formatMoney(summary.difference)}
               note="extracto − movimientos de la cuenta"
               tone={summary.rows > 0 || summary.bookNet !== 0 ? differenceTone : undefined}
@@ -337,6 +338,7 @@ export function ConciliacionBancaria({
                     ? "Sin filas rechazadas en el período"
                     : "Sin extractos importados en el período"
             }
+            emptyIcon="bank"
             emptyHint={
               summary.rows > 0
                 ? "Probá con otro estado o con «Todas las filas»: hay filas en otros estados."
@@ -564,7 +566,7 @@ function StatementRowDialog({
   const direction = row.direction === "DEBIT" ? "OUT" : "IN";
 
   return (
-    <AdminDialog title={`Conciliar la fila ${row.line} del extracto`} size="wide" onClose={onClose}>
+    <AdminDialog title={`Conciliar la fila ${row.line} del extracto`} size="wide" icon="check" onClose={onClose}>
       <dl className="admin-dialog-facts">
         <div>
           <dt>Fecha</dt>
@@ -593,7 +595,12 @@ function StatementRowDialog({
         </div>
       </dl>
 
-      <h3 className="admin-dialog-title admin-dialog-subtitle">Sugerencias de conciliación</h3>
+      <h3 className="admin-dialog-title admin-dialog-subtitle">
+        <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+          <AdminIcon name="check" size={11} />
+        </span>
+        Sugerencias de conciliación
+      </h3>
       {suggestions.length === 0 ? (
         <AdminNote>
           No hay movimientos de «{accountName}» del mismo sentido y importe con fecha ±{STATEMENT_MATCH_WINDOW_DAYS} días.
@@ -627,7 +634,12 @@ function StatementRowDialog({
 
       {others.length > 0 ? (
         <>
-          <h3 className="admin-dialog-title admin-dialog-subtitle">Mismo importe y sentido, otra fecha</h3>
+          <h3 className="admin-dialog-title admin-dialog-subtitle">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="clock" size={11} />
+            </span>
+            Mismo importe y sentido, otra fecha
+          </h3>
           <ul className="admin-match-list">
             {others.slice(0, 12).map((movement) => (
               <li className="admin-match-item" key={movement.id}>
@@ -672,7 +684,7 @@ function StatementRowDialog({
         >
           Crear movimiento desde el extracto
         </AdminButton>
-        <AdminButton onClick={onClose} disabled={busy}>
+        <AdminButton icon="close" onClick={onClose} disabled={busy}>
           Cerrar
         </AdminButton>
       </div>
@@ -816,7 +828,7 @@ function ImportStatementDialog({
   const previewErrors = preview?.rows.filter((row) => row.error).slice(0, 8) ?? [];
 
   return (
-    <AdminDialog title="Importar extracto del banco" size="wide" onClose={onClose}>
+    <AdminDialog title="Importar extracto del banco" size="wide" icon="bank" onClose={onClose}>
       <div className="admin-import-grid">
         <SelectField
           label="Cuenta de tesorería"
@@ -878,7 +890,12 @@ function ImportStatementDialog({
 
       {header.length > 0 ? (
         <div className="admin-import-mapping">
-          <h3 className="admin-dialog-title admin-dialog-subtitle">Columnas del archivo</h3>
+          <h3 className="admin-dialog-title admin-dialog-subtitle">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="database" size={11} />
+            </span>
+            Columnas del archivo
+          </h3>
           <div className="admin-import-mapping-grid">
             <MappingSelect label="Fecha" value={mapping.date} header={header} onChange={(value) => changeMapping("date", value)} />
             <MappingSelect label="Descripción" value={mapping.description} header={header} onChange={(value) => changeMapping("description", value)} />
@@ -993,7 +1010,7 @@ function ImportStatementDialog({
         >
           Importar {importable > 0 ? formatNumber(importable) : ""} filas
         </AdminButton>
-        <AdminButton onClick={onClose} disabled={importBusy}>
+        <AdminButton icon="close" onClick={onClose} disabled={importBusy}>
           Cancelar
         </AdminButton>
       </div>

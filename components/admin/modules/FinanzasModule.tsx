@@ -355,7 +355,12 @@ function PaymentRemindersDialog({
     >
       <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Recordatorios de ${label}`}>
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">Recordatorios · {label}</h2>
+          <h2 className="admin-dialog-title">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="bell" size={11} />
+            </span>
+            Recordatorios · {label}
+          </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
@@ -446,7 +451,7 @@ function PaymentRemindersDialog({
           Historial de recordatorios del cobro (máximo uno por canal y día; los repetidos no se envían de nuevo).
         </p>
         {reminders.length === 0 ? (
-          <AdminEmpty title="Sin recordatorios" hint="Todavía no se envió ni abrió ningún recordatorio para este cobro." />
+          <AdminEmpty icon="bell" title="Sin recordatorios" hint="Todavía no se envió ni abrió ningún recordatorio para este cobro." />
         ) : (
           <ul className="admin-reminder-list">
             {reminders.map((reminder) => (
@@ -471,7 +476,7 @@ function PaymentRemindersDialog({
 
         <div className="admin-dialog-foot">
           <span className="admin-dialog-spacer" />
-          <AdminButton onClick={onClose}>Cerrar</AdminButton>
+          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
         </div>
       </section>
     </div>
@@ -551,6 +556,9 @@ function ExpectedReviewDialog({
       >
         <header className="admin-dialog-head">
           <h2 className="admin-dialog-title">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="check" size={11} />
+            </span>
             {confirming ? "Confirmar en cuenta" : "Observar / rechazar"} · {concept}
           </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
@@ -669,7 +677,7 @@ function ExpectedReviewDialog({
         ) : null}
 
         <div className="admin-dialog-foot">
-          <AdminButton type="button" disabled={busy} onClick={onClose}>
+          <AdminButton icon="arrow-left" type="button" disabled={busy} onClick={onClose}>
             Volver
           </AdminButton>
           <span className="admin-dialog-spacer" />
@@ -801,7 +809,12 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
     >
       <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Trazabilidad de ${budget.title}`}>
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">Trazabilidad · {budget.title}</h2>
+          <h2 className="admin-dialog-title">
+            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+              <AdminIcon name="clock" size={11} />
+            </span>
+            Trazabilidad · {budget.title}
+          </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
@@ -854,7 +867,7 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
 
         <div className="admin-dialog-foot">
           <span className="admin-dialog-spacer" />
-          <AdminButton onClick={onClose}>Cerrar</AdminButton>
+          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
         </div>
       </section>
     </div>
@@ -1717,19 +1730,19 @@ export function FinanzasModule() {
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de finanzas">
         <AdminKpi
-          label="Cobrado a clientes"
+          label="Cobrado a clientes" icon="finance"
           value={formatMoney(totals.collected)}
           note={`${formatNumber(totals.collectedCount)} cobros`}
           tone="ok"
         />
         <AdminKpi
-          label="Por cobrar"
+          label="Por cobrar" icon="finance"
           value={formatMoney(totals.pendingTotal)}
           note={pendingMeta}
           tone={totals.overdue > 0 ? "danger" : totals.pendingCount > 0 ? "warn" : undefined}
         />
         <AdminKpi
-          label="Por confirmar"
+          label="Por confirmar" icon="clock"
           value={formatMoney(expectedSummary.pending.total)}
           note={
             expectedSummary.pending.count > 0
@@ -1738,9 +1751,9 @@ export function FinanzasModule() {
           }
           tone={expectedSummary.overdue.count > 0 ? "danger" : expectedSummary.proof.count > 0 ? "warn" : undefined}
         />
-        <AdminKpi label="Anticipos pagados" value={formatMoney(totals.advances)} note="a proveedores" />
+        <AdminKpi label="Anticipos pagados" icon="suppliers" value={formatMoney(totals.advances)} note="a proveedores" />
         <AdminKpi
-          label="Saldo por pagar"
+          label="Saldo por pagar" icon="suppliers"
           value={formatMoney(totals.payable)}
           note={`${formatNumber(jobs.length)} trabajos de proveedor`}
           tone="warn"
@@ -1937,7 +1950,7 @@ export function FinanzasModule() {
       ) : null}
 
       <AdminPanel
-        title="Por confirmar"
+        title="Por confirmar" icon="clock"
         meta={
           expectedSummary.pending.count > 0
             ? `${formatNumber(expectedSummary.pending.count)} ${expectedSummary.pending.count === 1 ? "pago esperado" : "pagos esperados"} · ${formatMoney(expectedSummary.pending.total)}`
@@ -1964,6 +1977,7 @@ export function FinanzasModule() {
           onRetry={expected.reload}
           empty={expectedQueue.length === 0}
           emptyTitle={expectedRows.length === 0 ? "Sin pagos esperados" : "Nada por confirmar"}
+          emptyIcon="clock"
           emptyHint={
             expectedRows.length === 0
               ? "Al aprobar un presupuesto con plan de pagos se generan acá el anticipo, las cuotas y el saldo."
@@ -2065,6 +2079,7 @@ export function FinanzasModule() {
                       {writable ? (
                         <AdminButton
                           variant="primary"
+                          icon="check"
                           disabled={Boolean(expectedBusy)}
                           title={`Confirmar en cuenta: ${concept} de ${label} (${formatMoney(row.amount)})`}
                           aria-label={`Confirmar en cuenta: ${concept} de ${label}`}
@@ -2086,7 +2101,7 @@ export function FinanzasModule() {
       </AdminPanel>
 
       <AdminPanel
-        title="Tesorería"
+        title="Tesorería" icon="wallet"
         meta={`${formatNumber(accounts.length)} cuentas · disponible ${formatMoney(summary.total)}`}
         action={
           writable ? (
@@ -2111,24 +2126,24 @@ export function FinanzasModule() {
       >
         <section className="admin-kpis admin-kpis--treasury" aria-label="Disponible de tesorería">
           <AdminKpi
-            label="Disponible en efectivo"
+            label="Disponible en efectivo" icon="wallet"
             value={formatMoney(summary.cash)}
             note={`${formatNumber(accountCounts.CASH ?? 0)} ${accountCounts.CASH === 1 ? "cuenta de efectivo" : "cuentas de efectivo"}`}
             tone={summary.cash > 0 ? "ok" : undefined}
           />
           <AdminKpi
-            label="Disponible en banco"
+            label="Disponible en banco" icon="bank"
             value={formatMoney(summary.bank)}
             note={`${formatNumber(accountCounts.BANK ?? 0)} ${accountCounts.BANK === 1 ? "cuenta bancaria" : "cuentas bancarias"}`}
           />
           <AdminKpi
-            label="Cheques a cobrar"
+            label="Cheques a cobrar" icon="receipt"
             value={formatMoney(summary.cheque)}
             note={`${formatNumber(accountCounts.CHEQUE ?? 0)} ${accountCounts.CHEQUE === 1 ? "cuenta de cheques" : "cuentas de cheques"}`}
             tone={summary.cheque > 0 ? "warn" : undefined}
           />
           <AdminKpi
-            label="Total disponible"
+            label="Total disponible" icon="wallet"
             value={formatMoney(summary.total)}
             note={`${formatNumber(summary.activeAccounts)} activas de ${formatNumber(summary.accounts)}`}
           />
@@ -2208,7 +2223,7 @@ export function FinanzasModule() {
           error={treasury.error}
           onRetry={treasury.reload}
           empty={accounts.length === 0}
-          emptyTitle="Sin cuentas de tesorería"
+          emptyTitle="Sin cuentas de tesorería" emptyIcon="wallet"
           emptyHint="Creá la primera cuenta (efectivo, banco o cheques) para ver el disponible real y registrar movimientos."
           rows={3}
         >
@@ -2274,7 +2289,7 @@ export function FinanzasModule() {
       </AdminPanel>
 
       <AdminPanel
-        title="Movimientos de tesorería"
+        title="Movimientos de tesorería" icon="refresh"
         meta={`${formatNumber(movements.length)} en ${periodLabel}`}
         action={
           writable ? (
@@ -2373,7 +2388,7 @@ export function FinanzasModule() {
           error={treasury.error}
           onRetry={treasury.reload}
           empty={movements.length === 0}
-          emptyTitle="Sin movimientos en el período"
+          emptyTitle="Sin movimientos en el período" emptyIcon="refresh"
           emptyHint="Los cobros cobrados, los pagos a proveedores, los gastos y las transferencias aparecen acá con su cuenta."
           rows={4}
         >
@@ -2428,7 +2443,7 @@ export function FinanzasModule() {
       />
 
       <AdminPanel
-        title="Gastos"
+        title="Gastos" icon="receipt"
         meta={`${formatNumber(filteredExpenses.length)} de ${formatNumber(expenseRows.length)} · ${periodLabel}`}
       >
         <div className="admin-toolbar admin-toolbar--panel">
@@ -2601,6 +2616,7 @@ export function FinanzasModule() {
           onRetry={expenses.reload}
           empty={filteredExpenses.length === 0}
           emptyTitle={expenseRows.length === 0 ? "Sin gastos en el período" : "Sin resultados"}
+          emptyIcon="receipt"
           emptyHint={
             expenseRows.length === 0
               ? "Cargá el primer gasto con monto, descripción y categoría: la cuenta y el proyecto se eligen en la misma fila."
@@ -2677,7 +2693,7 @@ export function FinanzasModule() {
       </AdminPanel>
 
       <AdminPanel
-        title="Por cobrar"
+        title="Por cobrar" icon="finance"
         meta={pendingPayments.length > 0 ? `${formatNumber(pendingPayments.length)} cobros a plazo` : undefined}
         action={
           <AdminButton
@@ -2695,7 +2711,7 @@ export function FinanzasModule() {
           error={finance.error}
           onRetry={finance.reload}
           empty={pendingPayments.length === 0}
-          emptyTitle="No hay cobros a plazo"
+          emptyTitle="No hay cobros a plazo" emptyIcon="finance"
           emptyHint="Registrá un cobro con factura y vencimiento para seguir acá cuándo se cobra."
           rows={4}
         >
@@ -2850,13 +2866,13 @@ export function FinanzasModule() {
             })}
           </AdminTable>
           {pendingPayments.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
           ) : null}
         </AdminDataState>
       </AdminPanel>
 
       <AdminPanel
-        title="Cobros de clientes"
+        title="Cobros de clientes" icon="finance"
         meta={`${formatNumber(settledPayments.length)} movimientos`}
         action={
           <AdminButton
@@ -2874,7 +2890,7 @@ export function FinanzasModule() {
           error={finance.error}
           onRetry={finance.reload}
           empty={settledPayments.length === 0}
-          emptyTitle="Sin cobros registrados"
+          emptyTitle="Sin cobros registrados" emptyIcon="finance"
           emptyHint="Registrá el primer cobro para verlo acá con su presupuesto y su fecha real."
           rows={4}
         >
@@ -2930,13 +2946,13 @@ export function FinanzasModule() {
             })}
           </AdminTable>
           {settledPayments.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
           ) : null}
         </AdminDataState>
       </AdminPanel>
 
       <AdminPanel
-        title="Cuentas por pagar"
+        title="Cuentas por pagar" icon="suppliers"
         meta={`${formatNumber(filteredJobs.length)} trabajos`}
         action={
           <span className="admin-panel-actions">
@@ -3000,7 +3016,7 @@ export function FinanzasModule() {
             <AdminButton type="submit" variant="primary" icon="check" busy={payBusy} disabled={payBusy}>
               Registrar pago
             </AdminButton>
-            <AdminButton type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
+            <AdminButton icon="close" type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
               Cancelar
             </AdminButton>
           </form>
@@ -3012,7 +3028,7 @@ export function FinanzasModule() {
           error={finance.error}
           onRetry={finance.reload}
           empty={filteredJobs.length === 0}
-          emptyTitle="Sin trabajos de proveedor"
+          emptyTitle="Sin trabajos de proveedor" emptyIcon="suppliers"
           emptyHint="Los trabajos se cargan y avanzan en Proveedores; acá ves el costo, el anticipo, el saldo y podés pagarlos desde una cuenta."
           rows={4}
         >
@@ -3082,7 +3098,7 @@ export function FinanzasModule() {
               );
             })}
           </AdminTable>
-          {filteredJobs.length === 0 ? <AdminEmpty title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
+          {filteredJobs.length === 0 ? <AdminEmpty icon="search" title="Sin resultados" hint="Ningún trabajo coincide con la búsqueda." /> : null}
         </AdminDataState>
       </AdminPanel>
 

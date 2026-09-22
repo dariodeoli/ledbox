@@ -555,11 +555,11 @@ export function EventosModule() {
   return (
     <div className="admin-module-page">
       <section className="admin-kpis" aria-label="Indicadores de eventos">
-        <AdminKpi label="Eventos" value={formatNumber(events.length)} note="cargados" />
-        <AdminKpi label="Próximos" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
-        <AdminKpi label="En curso" value={formatNumber(inProgress)} note="operación activa" />
+        <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
+        <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
+        <AdminKpi label="En curso" icon="checkin" value={formatNumber(inProgress)} note="operación activa" />
         <AdminKpi
-          label="Tareas pendientes"
+          label="Tareas pendientes" icon="audit"
           value={formatNumber(pendingTasks)}
           note={
             overdueTasks > 0
@@ -569,7 +569,7 @@ export function EventosModule() {
           tone={overdueTasks > 0 ? "warn" : "ok"}
         />
         <AdminKpi
-          label="Checklist en riesgo"
+          label="Checklist en riesgo" icon="alert"
           value={formatNumber(atRiskEvents.length)}
           note="próximos sin tareas cumplidas"
           tone={atRiskEvents.length > 0 ? "danger" : "ok"}
@@ -649,12 +649,12 @@ export function EventosModule() {
         error={operations.error}
         onRetry={operations.reload}
         empty={events.length === 0}
-        emptyTitle="Todavía no hay eventos"
+        emptyTitle="Todavía no hay eventos" emptyIcon="events"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
       >
         {view === "board" ? (
           searched.length === 0 ? (
-            <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda." />
+            <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
           ) : (
             <AdminBoard
               label="Eventos"
@@ -761,14 +761,14 @@ export function EventosModule() {
               })}
             </AdminTable>
             {rows.length === 0 ? (
-              <AdminEmpty title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
+              <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
             ) : null}
           </>
         )}
       </AdminDataState>
 
       <AdminPanel
-        title="Equipos asignados"
+        title="Equipos asignados" icon="inventory"
         meta={
           equipmentEvent
             ? `${formatNumber(assignedUnits)} unidades · ${formatNumber(assignments.length)} asignaciones`
@@ -841,7 +841,7 @@ export function EventosModule() {
                   {assignEditingId ? "Guardar" : "Asignar"}
                 </AdminButton>
                 {assignEditingId ? (
-                  <AdminButton type="button" onClick={resetAssignForm} disabled={assignBusy}>
+                  <AdminButton icon="close" type="button" onClick={resetAssignForm} disabled={assignBusy}>
                     Cancelar
                   </AdminButton>
                 ) : null}
@@ -935,7 +935,7 @@ export function EventosModule() {
               error={operations.error}
               onRetry={operations.reload}
               empty={assignments.length === 0}
-              emptyTitle="Sin equipos asignados"
+              emptyTitle="Sin equipos asignados" emptyIcon="inventory"
               emptyHint="Asigná equipos con cantidad y rango de fechas: el sistema valida la disponibilidad real."
               rows={4}
             >
@@ -1023,6 +1023,7 @@ export function EventosModule() {
                           {writable && !isOut && !isBack ? (
                             <>
                               <AdminButton
+                                icon="arrow-right"
                                 title={`Registrar salida: ${assignment.inventory.name}`}
                                 aria-label={`Registrar salida: ${assignment.inventory.name}`}
                                 onClick={() => openMovement("checkout", assignment)}
@@ -1030,6 +1031,7 @@ export function EventosModule() {
                                 Salida
                               </AdminButton>
                               <AdminButton
+                                icon="edit"
                                 title={`Editar asignación: ${assignment.inventory.name}`}
                                 aria-label={`Editar asignación: ${assignment.inventory.name}`}
                                 onClick={() => startEditAssignment(assignment)}
@@ -1045,6 +1047,7 @@ export function EventosModule() {
                             </>
                           ) : writable && isOut && !isBack ? (
                             <AdminButton
+                              icon="checkin"
                               title={`Registrar devolución: ${assignment.inventory.name}`}
                               aria-label={`Registrar devolución: ${assignment.inventory.name}`}
                               onClick={() => openMovement("checkin", assignment)}
@@ -1066,7 +1069,7 @@ export function EventosModule() {
       </AdminPanel>
 
       <AdminPanel
-        title="Checklist operativo"
+        title="Checklist operativo" icon="audit"
         meta={`${formatNumber(pendingTasks)} pendientes`}
         action={
           <AdminSelect
@@ -1171,6 +1174,7 @@ export function EventosModule() {
           onRetry={operations.reload}
           empty={checklistEntries.length === 0}
           emptyTitle={taskFilter === "PENDING" ? "Checklist al día" : "Sin tareas cargadas"}
+          emptyIcon={taskFilter === "PENDING" ? "check" : "audit"}
           emptyHint="Las tareas base se generan al crear un evento y se pueden sumar a mano."
           rows={4}
         >

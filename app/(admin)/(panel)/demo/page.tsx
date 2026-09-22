@@ -301,68 +301,68 @@ export default async function DemoPage() {
       />
 
       <section className="admin-kpis" aria-label="Datos simulados de la demo">
-        <AdminKpi label="Clientes" value={formatNumber(clientCount)} note="finales y revendedores" />
+        <AdminKpi label="Clientes" icon="clients" value={formatNumber(clientCount)} note="finales y revendedores" />
         <AdminKpi
-          label="Eventos"
+          label="Eventos" icon="events"
           value={formatNumber(eventCount)}
           note={cancelledEventCount > 0 ? `no cancelados · ${plural(cancelledEventCount, "cancelado", "cancelados")}` : "próximos, en curso y cerrados"}
         />
-        <AdminKpi label="Presupuestos" value={formatNumber(budgetCount)} note="aprobados, enviados, en negociación y perdidos" />
+        <AdminKpi label="Presupuestos" icon="budgets" value={formatNumber(budgetCount)} note="aprobados, enviados, en negociación y perdidos" />
         <AdminKpi
-          label="Inventario"
+          label="Inventario" icon="inventory"
           value={formatNumber(inventoryCount)}
           note={inventoryNoteParts.length > 0 ? inventoryNoteParts.join(" · ") : "equipos e insumos"}
           tone={damagedTotal > 0 ? "warn" : undefined}
         />
-        <AdminKpi label="Proveedores" value={formatNumber(supplierCount)} note={`${formatNumber(openJobCount)} trabajos abiertos`} />
+        <AdminKpi label="Proveedores" icon="suppliers" value={formatNumber(supplierCount)} note={`${formatNumber(openJobCount)} trabajos abiertos`} />
         <AdminKpi
-          label="Promotoras"
+          label="Promotoras" icon="promoters"
           value={formatNumber(promoterCount)}
           note={`${plural(unavailablePromoters, "no disponible", "no disponibles")} · ${formatNumber(toDefinePromoters)} a definir`}
           tone={unavailablePromoters + toDefinePromoters > 0 ? "warn" : undefined}
         />
-        <AdminKpi label="Leads nuevos" value={formatNumber(newLeadCount)} tone={newLeadCount > 0 ? "accent" : undefined} note="sin contactar, uno hace semanas" />
+        <AdminKpi label="Leads nuevos" icon="leads" value={formatNumber(newLeadCount)} tone={newLeadCount > 0 ? "accent" : undefined} note="sin contactar, uno hace semanas" />
         <AdminKpi
-          label="Mora"
+          label="Mora" icon="alert"
           value={overdueCount > 0 ? formatMoney(overdueAmount) : "—"}
           tone={overdueCount > 0 ? "danger" : undefined}
           note={`${plural(overdueCount, "cobro vencido", "cobros vencidos")}${rejectedCheques > 0 ? ` · ${plural(rejectedCheques, "cheque rechazado", "cheques rechazados")}` : ""}`}
         />
         <AdminKpi
-          label="Tesorería"
+          label="Tesorería" icon="wallet"
           value={formatMoney(treasuryTotal)}
           note={`${plural(treasuryAccounts.length, "cuenta", "cuentas")} · saldo derivado de movimientos`}
         />
         <AdminKpi
-          label="Por confirmar"
+          label="Por confirmar" icon="clock"
           value={expectedPendingCount > 0 ? formatMoney(expectedPendingTotal) : "—"}
           tone={expectedPendingCount > 0 ? "warn" : undefined}
           note={`${plural(expectedProof.length, "comprobante en revisión", "comprobantes en revisión")} · ${plural(expectedOverdue.length, "vencido sin comprobante", "vencidos sin comprobante")}`}
         />
         <AdminKpi
-          label="Gastos"
+          label="Gastos" icon="receipt"
           value={formatNumber(expenseCount)}
           note={toDefineExpenses > 0 ? `${plural(toDefineExpenses, "gasto", "gastos")} «A definir» sin proyecto` : "todos con proyecto asignado"}
         />
         <AdminKpi
-          label="Equipo"
+          label="Equipo" icon="users"
           value={formatNumber(invitationRows.length)}
           note={`${plural(pendingInvitations, "invitación pendiente", "invitaciones pendientes")} · ${plural(acceptedInvitations, "aceptada", "aceptadas")}`}
         />
         <AdminKpi
-          label="Correos"
+          label="Correos" icon="mail"
           value={formatNumber(mailRows.length)}
           tone={failedMails > 0 ? "warn" : undefined}
           note={failedMails > 0 ? `${plural(failedMails, "envío fallido", "envíos fallidos")} con su motivo` : "sin fallos registrados"}
         />
         <AdminKpi
-          label="Checklist en riesgo"
+          label="Checklist en riesgo" icon="alert"
           value={formatNumber(riskEventCount)}
           tone={riskEventCount > 0 ? "danger" : undefined}
           note="próximos sin tareas cumplidas"
         />
         <AdminKpi
-          label="Avisos"
+          label="Avisos" icon="bell"
           value={formatNumber(feed.notificationCounts.overdue + feed.notificationCounts.soon)}
           tone={feed.notificationCounts.overdue > 0 ? "warn" : undefined}
           note={`${formatNumber(feed.notificationCounts.overdue)} vencidos · ${formatNumber(feed.notificationCounts.soon)} próximos`}
@@ -371,7 +371,7 @@ export default async function DemoPage() {
 
       <div className="admin-panel-grid">
         <AdminPanel
-          title="Avisos operativos"
+          title="Avisos operativos" icon="bell"
           meta={`${formatNumber(feed.notificationCounts.overdue)} vencidos · ${formatNumber(feed.notificationCounts.soon)} próximos`}
           action={
             <Link className="admin-panel-link" href="/calendario">
@@ -409,7 +409,7 @@ export default async function DemoPage() {
         </AdminPanel>
 
         <AdminPanel
-          title="Auditoría"
+          title="Auditoría" icon="audit"
           meta="Últimos cambios"
           action={
             <Link className="admin-panel-link" href="/eventos">
@@ -448,7 +448,7 @@ export default async function DemoPage() {
 
       <div className="admin-panel-grid">
         <AdminPanel
-          title="Tesorería"
+          title="Tesorería" icon="wallet"
           meta={`${formatMoney(treasuryTotal)} en ${plural(treasuryAccounts.length, "cuenta", "cuentas")}`}
           action={
             <Link className="admin-panel-link" href="/finanzas">
@@ -495,7 +495,7 @@ export default async function DemoPage() {
         </AdminPanel>
 
         <AdminPanel
-          title="Gastos y conciliación"
+          title="Gastos y conciliación" icon="receipt"
           meta={`${plural(expenseCount, "gasto", "gastos")} · ${plural(expectedRows.length, "pago esperado", "pagos esperados")}`}
           action={
             <Link className="admin-panel-link" href="/finanzas">
@@ -566,12 +566,17 @@ export default async function DemoPage() {
       </div>
 
       <AdminPanel
-        title="Equipo, correos e identidad"
+        title="Equipo, correos e identidad" icon="users"
         meta={`${plural(invitationRows.length, "invitación", "invitaciones")} · ${plural(mailRows.length, "envío", "envíos")}`}
       >
         <div className="admin-demo-resources">
           <div className="admin-demo-resource">
-            <h3>Invitaciones al equipo</h3>
+            <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="users" size={11} />
+              </span>
+              Invitaciones al equipo
+            </h3>
             <p>
               La empresa demo ya tiene equipo simulado: una invitación quedó pendiente (con su correo enviado) y otra fue
               aceptada, así que la persona figura como miembro. En el panel real, invitar y revocar es de OWNER/ADMIN;
@@ -593,7 +598,12 @@ export default async function DemoPage() {
             </div>
           </div>
           <div className="admin-demo-resource">
-            <h3>Historial de correos</h3>
+            <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="mail" size={11} />
+              </span>
+              Historial de correos
+            </h3>
             <p>
               Cada fila es un intento real contra el proveedor: el presupuesto enviado, el recordatorio de cobro, el correo
               de prueba y un <strong>fallo con su motivo</strong>. El módulo completo vive en Configuración (OWNER/ADMIN).
@@ -615,21 +625,25 @@ export default async function DemoPage() {
             </div>
           </div>
           <div className="admin-demo-resource">
-            <h3>Identidad de la demo</h3>
+            <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="image" size={11} />
+              </span>
+              Identidad de la demo
+            </h3>
             <p>
               La empresa demo tiene sus dos logos (claro y oscuro) y el equipo tiene avatar: por eso el shell muestra un
               logo propio y no el monograma de respaldo. El usuario demo entra sin PIN y con auto-bloqueo «nunca»: la demo
               no se bloquea sola.
             </p>
             <p className="admin-demo-footnote">
-              Las imágenes se generan con los datos simulados (PNG en la base) y se sirven solo con sesión, igual que en el
-              panel real.
+              Las imágenes se generan en la base (PNG) y se sirven solo con sesión, igual que en el panel real.
             </p>
           </div>
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Próximos eventos" meta="Agenda simulada" action={<Link className="admin-panel-link" href="/eventos">Ver todos</Link>}>
+      <AdminPanel title="Próximos eventos" icon="calendar" meta="Agenda simulada" action={<Link className="admin-panel-link" href="/eventos">Ver todos</Link>}>
         {upcomingEvents.length === 0 ? (
           <AdminEmpty icon="events" title="Sin eventos próximos" hint="Reiniciá los datos simulados para volver a generarlos." />
         ) : (
@@ -668,7 +682,7 @@ export default async function DemoPage() {
         )}
       </AdminPanel>
 
-      <AdminPanel title="Módulos" meta="Todo navegable en la demo" action={<Link className="admin-panel-link" href="/dashboard">Resumen</Link>}>
+      <AdminPanel title="Módulos" icon="overview" meta="Todo navegable en la demo" action={<Link className="admin-panel-link" href="/dashboard">Resumen</Link>}>
         <div className="admin-demo-modules">
           {modules.map((module) => (
             <Link className="admin-demo-module" key={module.href} href={module.href}>
@@ -685,10 +699,13 @@ export default async function DemoPage() {
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Portal del cliente y exportaciones" meta="También funcionan en la demo">
+      <AdminPanel title="Portal del cliente y exportaciones" icon="globe" meta="También funcionan en la demo">
         <div className="admin-demo-resources">
           <div className="admin-demo-resource">
             <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="globe" size={11} />
+              </span>
               Autogestión <AdminBadge tone="warn">Pendiente</AdminBadge>
             </h3>
             <p>
@@ -714,6 +731,9 @@ export default async function DemoPage() {
           </div>
           <div className="admin-demo-resource">
             <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="check" size={11} />
+              </span>
               Ya aprobado <AdminBadge tone="ok">Con datos de pago</AdminBadge>
             </h3>
             <p>
@@ -747,7 +767,12 @@ export default async function DemoPage() {
             ) : null}
           </div>
           <div className="admin-demo-resource">
-            <h3>PDF y CSV</h3>
+            <h3>
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name="download" size={11} />
+              </span>
+              PDF y CSV
+            </h3>
             <p>
               Las vistas imprimibles salen de datos reales de la demo: orden de trabajo del evento, presupuesto con QR y
               reporte mensual. Los CSV se descargan desde Inventario y Finanzas.
