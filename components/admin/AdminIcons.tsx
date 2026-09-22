@@ -204,6 +204,13 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M3 20h18M8 8h4M8 12h4M8 16h4" />
     </>
   ),
+  plan: (
+    <>
+      <path d="M12 3.6 20 8l-8 4.4L4 8z" />
+      <path d="M4 12.4 12 16.8l8-4.4" />
+      <path d="M4 16.4 12 20.8l8-4.4" />
+    </>
+  ),
   "chevron-down": <path d="M6.5 9.5 12 15l5.5-5.5" />,
   upload: (
     <>

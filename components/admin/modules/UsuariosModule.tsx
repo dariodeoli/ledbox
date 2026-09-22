@@ -20,6 +20,7 @@ import {
   AdminKpi,
   AdminNote,
   AdminPanel,
+  AdminPlanLimitNote,
   AdminRow,
   AdminSelect,
   AdminTable,
@@ -70,6 +71,7 @@ export function UsuariosModule() {
   const [busy, setBusy] = useState(false);
   const [rowBusy, setRowBusy] = useState("");
   const [formError, setFormError] = useState("");
+  const [formLimit, setFormLimit] = useState("");
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
@@ -106,11 +108,15 @@ export function UsuariosModule() {
     event.preventDefault();
     setBusy(true);
     setFormError("");
+    setFormLimit("");
     setNotice("");
     const result = await adminSend("/api/admin/users", form);
     setBusy(false);
     if (!result.ok) {
-      setFormError(result.error);
+      // Tope del plan (issue #42): el servidor explica el límite y acá se suma
+      // el acceso a la página de Plan para pedir el cambio.
+      if (result.code === "plan_limit") setFormLimit(result.error);
+      else setFormError(result.error);
       return;
     }
     setNotice(`Usuario «${form.name}» creado.`);
@@ -208,6 +214,7 @@ export function UsuariosModule() {
             icon="plus"
             onClick={() => {
               setFormError("");
+              setFormLimit("");
               setShowForm((open) => !open);
             }}
             aria-expanded={showForm}
@@ -230,6 +237,7 @@ export function UsuariosModule() {
           onCancel={() => setShowForm(false)}
           busy={busy}
           status={formError}
+          statusNote={formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
         >
           <TextField
             label="Nombre"
@@ -412,11 +420,14 @@ function inviteDeliveryNotice(status: string, error?: string | null): { tone: "o
 function InviteDialog({
   busy,
   error,
+  limitError,
   onClose,
   onSubmit,
 }: {
   busy: boolean;
   error: string;
+  /** El error es el tope del plan (issue #42): se muestra con el acceso a Plan. */
+  limitError?: boolean;
   onClose: () => void;
   onSubmit: (invite: { email: string; role: string }) => void;
 }) {
@@ -483,7 +494,15 @@ function InviteDialog({
             options={ROLE_SELECT_OPTIONS}
             hint="El propietario no se invita por correo."
           />
-          {localError || error ? <AdminNote tone="error">{localError || error}</AdminNote> : null}
+          {localError ? (
+            <AdminNote tone="error">{localError}</AdminNote>
+          ) : error ? (
+            limitError ? (
+              <AdminPlanLimitNote message={error} />
+            ) : (
+              <AdminNote tone="error">{error}</AdminNote>
+            )
+          ) : null}
           <div className="admin-dialog-foot">
             <span className="admin-dialog-spacer" />
             <AdminButton type="button" onClick={onClose} disabled={busy}>
@@ -568,6 +587,7 @@ function InvitationsPanel() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState("");
+  const [inviteLimit, setInviteLimit] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [rowBusy, setRowBusy] = useState("");
   const [rowError, setRowError] = useState("");
@@ -582,6 +602,7 @@ function InvitationsPanel() {
   async function submitInvite(invite: { email: string; role: string }) {
     setInviteBusy(true);
     setInviteError("");
+    setInviteLimit(false);
     setNotice(null);
     const result = await adminSend<{ invitation: AdminTeamInvitation; mail: { status: string; error: string | null } }>(
       "/api/admin/invitations",
@@ -589,6 +610,8 @@ function InvitationsPanel() {
     );
     setInviteBusy(false);
     if (!result.ok) {
+      // Tope del plan (issue #42): la invitación reserva un lugar del cupo.
+      setInviteLimit(result.code === "plan_limit");
       setInviteError(result.error);
       return;
     }
@@ -646,6 +669,7 @@ function InvitationsPanel() {
           icon="mail"
           onClick={() => {
             setInviteError("");
+            setInviteLimit(false);
             setNotice(null);
             setShowInvite(true);
           }}
@@ -658,7 +682,13 @@ function InvitationsPanel() {
       {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
 
       {showInvite ? (
-        <InviteDialog busy={inviteBusy} error={inviteError} onClose={() => setShowInvite(false)} onSubmit={submitInvite} />
+        <InviteDialog
+          busy={inviteBusy}
+          error={inviteError}
+          limitError={inviteLimit}
+          onClose={() => setShowInvite(false)}
+          onSubmit={submitInvite}
+        />
       ) : null}
       {revoking ? (
         <RevokeInviteDialog

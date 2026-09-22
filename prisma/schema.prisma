@@ -49,6 +49,72 @@ enum OrganizationRole {
   VIEWER
 }
 
+/// Plan comercial vendible (issue #42): límites y precio mensual en guaraníes.
+///
+/// - `maxUsers` cuenta **membresías activas + invitaciones pendientes**: invitar
+///   reserva un lugar, así el tope no se rompe al aceptar una invitación vieja.
+/// - `maxEventsPerMonth` cuenta los eventos **creados** en el mes calendario de
+///   Asunción; los eventos ya cargados nunca se ocultan.
+/// - `null` en un límite significa sin tope. `priceMonthly` es Int PYG: la UI
+///   dibuja el formato.
+///
+/// El catálogo lo publica la migración `202609220027_plans_catalog` (misma lista
+/// que `PLAN_CATALOG` en `lib/plan-rules.ts` y el seed: si cambia, van las tres).
+model Plan {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  maxUsers          Int?
+  maxEventsPerMonth Int?
+  priceMonthly      Int
+  /// Capacidades incluidas que dibuja la comparación (lista de textos).
+  features          Json?
+  /// Orden de exhibición en el catálogo (menor primero).
+  sortOrder         Int                 @default(0)
+  /// Plan vigente para nuevas asignaciones; los retirados se conservan.
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  organizations     Organization[]
+  changeRequests    PlanChangeRequest[]
+
+  @@index([active, sortOrder])
+}
+
+/// Estado de la solicitud de cambio de plan: nace `pending` (la registra el
+/// equipo desde el panel) y el cambio efectivo lo hace Owncoding —todavía sin
+/// pasarela de pago—, que la marca `approved` o `rejected`.
+enum PlanChangeRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+/// Solicitud de cambio de plan de una empresa (issue #42), auditada con el actor
+/// real. Una sola `pending` por empresa: pedir otro plan actualiza la existente.
+model PlanChangeRequest {
+  id               String                  @id
+  organizationId   String
+  /// Plan solicitado: el vigente no cambia hasta que Owncoding lo aplique.
+  planId           String
+  status           PlanChangeRequestStatus @default(pending)
+  note             String?
+  requestedById    String?
+  requestedByName  String
+  requestedByEmail String?
+  decidedAt        DateTime?
+  decidedByName    String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan             Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([planId])
+}
+
 model Organization {
   id                String                   @id
   name              String
@@ -59,6 +125,13 @@ model Organization {
   /// Datos de pago de la empresa (issue #14): `{ bank, holder, ruc, account, alias }`.
   /// Solo OWNER/ADMIN los configuran y la API pública los entrega con el presupuesto aprobado.
   paymentDetails    Json?
+  /// Plan comercial vigente (issue #42). `null` = todavía sin asignar: la capa de
+  /// tenancy le pone el plan por defecto la primera vez y los límites aplican igual.
+  planId            String?
+  /// Inicio del plan vigente (lo dibuja la página de Plan).
+  planStartedAt     DateTime?
+  plan              Plan?                    @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planRequests      PlanChangeRequest[]
   memberships       OrganizationMembership[]
   adminMemberships  AdminMembership[]
   adminSessions     AdminSession[]
@@ -87,6 +160,7 @@ model Organization {
   teamInvitations   TeamInvitation[]
 
   @@index([active, createdAt])
+  @@index([planId])
 }
 
 model AppUser {

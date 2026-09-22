@@ -1565,6 +1565,42 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-board { --a-board-col: min(78vw, 16.5rem); }
 }
 
+/* ── Plan de la empresa (issue #42) ──
+   Plan vigente, consumo del mes con barra y comparación del catálogo en tarjetas
+   con pie anclado (misma altura por fila). Las solicitudes usan la tabla densa
+   del panel con su plantilla de columnas. */
+.admin-plan-usage { display: grid; gap: 9px; padding: 10px 12px 12px; }
+.admin-plan-usage-row { display: grid; gap: 5px; padding: 9px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-plan-usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.admin-plan-usage-label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-plan-usage-value { color: var(--a-text-strong); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-plan-usage-limit { color: var(--a-muted); font-weight: 600; }
+.admin-plan-meter { display: block; overflow: hidden; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--a-line-2) 70%, transparent); }
+.admin-plan-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--a-accent); transition: width .2s ease; }
+.admin-plan-usage-row[data-level="warn"] .admin-plan-meter-fill { background: var(--a-warn); }
+.admin-plan-usage-row[data-level="danger"] .admin-plan-meter-fill { background: var(--a-danger); }
+.admin-plan-usage-row[data-level="none"] .admin-plan-meter-fill { background: var(--a-ok); }
+.admin-plan-usage-note { color: var(--a-muted); font-size: 11px; }
+.admin-plans { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); padding: 10px 12px 12px; }
+.admin-plan-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
+.admin-plan-card[data-current="true"] { border-color: color-mix(in srgb, var(--a-accent) 45%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a-accent) 20%, transparent); }
+.admin-plan-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin-plan-card-name { color: var(--a-text-strong); font: 700 14px var(--font-body); letter-spacing: .02em; }
+.admin-plan-card-price { display: flex; align-items: baseline; gap: 6px; }
+.admin-plan-card-price strong { color: var(--a-text-strong); font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-plan-card-price span { color: var(--a-muted); font-size: 11px; }
+.admin-plan-card-features { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.admin-plan-card-features li { position: relative; padding-left: 14px; color: var(--a-muted-2); font-size: 11.5px; line-height: 1.45; }
+.admin-plan-card-features li::before { content: ""; position: absolute; top: .55em; left: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--a-accent); }
+.admin-plan-card-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+.admin-plan-card .admin-facts { margin: 0; }
+.admin-plan-card .admin-btn { width: 100%; justify-content: center; }
+.admin-note-link { color: inherit; font-weight: 700; text-decoration: underline; }
+.admin-table--plan-solicitudes { --plan-solicitudes-cols: 9.5rem minmax(7.5rem, 1fr) 7.5rem minmax(9rem, 1.1fr) minmax(11rem, 1.5fr); --admin-cols: var(--plan-solicitudes-cols); --admin-table-min: 48rem; }
+@media (max-width: 520px) {
+  .admin-plans { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Responsive ── */
 @media (min-width: 720px) {
   .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }

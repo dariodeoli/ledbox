@@ -49,7 +49,8 @@ export type AdminIconName =
   | "trash"
   | "globe"
   | "database"
-  | "instagram";
+  | "instagram"
+  | "plan";
 
 export type AdminSessionUser = {
   id: string;
@@ -1351,6 +1352,62 @@ export type AdminInvitationPublicView = {
   canAccept: boolean;
 };
 
+// ── Planes por empresa (issue #42) ──────────────────────────────────────────
+// Espejo de `Plan`, `PlanChangeRequest` y el consumo que devuelve
+// `GET /api/admin/plan`. Los límites `null` son «sin tope» y `priceMonthly` es
+// Int PYG (el formato lo dibuja la UI).
+
+export type AdminPlanRow = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  maxUsers: number | null;
+  maxEventsPerMonth: number | null;
+  priceMonthly: number;
+  features: string[];
+  sortOrder: number;
+  active: boolean;
+};
+
+export type AdminPlanUsageRow = {
+  used: number;
+  limit: number | null;
+  level: "none" | "ok" | "warn" | "danger";
+  percent: number | null;
+};
+
+export type AdminPlanUsage = {
+  users: AdminPlanUsageRow & { pendingInvitations: number };
+  events: AdminPlanUsageRow & { periodLabel: string };
+};
+
+export type AdminPlanRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export type AdminPlanRequestRow = {
+  id: string;
+  planId: string;
+  planCode: string;
+  planName: string;
+  status: AdminPlanRequestStatus;
+  note: string | null;
+  requestedByName: string;
+  requestedByEmail: string | null;
+  decidedAt: string | null;
+  decidedByName: string | null;
+  createdAt: string;
+};
+
+/** `GET /api/admin/plan`: plan vigente, catálogo, consumo y solicitudes. */
+export type AdminPlanPayload = {
+  plan: AdminPlanRow | null;
+  planStartedAt: string | null;
+  catalog: AdminPlanRow[];
+  usage: AdminPlanUsage | null;
+  pendingRequest: AdminPlanRequestRow | null;
+  requests: AdminPlanRequestRow[];
+};
+
 /**
  * Entidades auditables: fuente única del nombre que se guarda en `AuditLog.entity`
  * y del filtro de `/api/admin/audit`. Solo se registran mutaciones (nunca lecturas).
@@ -1379,6 +1436,7 @@ export const AUDIT_ENTITIES = [
   "MessageTemplate",
   // Alerta de operación del sistema (issue #43): respaldo vencido o fallido.
   "System",
+  "PlanChangeRequest",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -1682,6 +1740,13 @@ export type AdminApiResponse = {
   expectedPayments?: AdminExpectedPaymentRow[];
   /** Totales de pagos esperados: por confirmar, vencidos y confirmados (issue #28). */
   expectedSummary?: AdminExpectedPaymentSummary;
+  /** Plan de la empresa (issue #42): vigente, catálogo, consumo y solicitudes. */
+  plan?: AdminPlanRow | null;
+  planStartedAt?: string | null;
+  catalog?: AdminPlanRow[];
+  usage?: AdminPlanUsage | null;
+  pendingRequest?: AdminPlanRequestRow | null;
+  requests?: AdminPlanRequestRow[];
   /** Plantillas de mensajes de WhatsApp de la empresa activa (issue #35). */
   templates?: AdminMessageTemplateRow[];
   /** Correo (issue #30): configuración, historial y resultado del envío. */

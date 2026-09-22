@@ -44,6 +44,7 @@ import {
   AdminKpi,
   AdminNote,
   AdminPanel,
+  AdminPlanLimitNote,
   AdminRow,
   AdminSelect,
   AdminTable,
@@ -165,6 +166,7 @@ export function EventosModule() {
   const [busy, setBusy] = useState(false);
   const [taskBusy, setTaskBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  const [formLimit, setFormLimit] = useState("");
   const [taskError, setTaskError] = useState("");
   const [taskNotice, setTaskNotice] = useState("");
   const [checklistError, setChecklistError] = useState("");
@@ -357,6 +359,7 @@ export function EventosModule() {
     formEvent.preventDefault();
     setBusy(true);
     setFormError("");
+    setFormLimit("");
     const result = await adminSend("/api/admin/events", {
       clientId: form.clientId,
       name: form.name,
@@ -365,7 +368,10 @@ export function EventosModule() {
     });
     setBusy(false);
     if (!result.ok) {
-      setFormError(result.error);
+      // Tope del plan (issue #42): el cupo es de altas del mes; se explica con
+      // el acceso a la página de Plan.
+      if (result.code === "plan_limit") setFormLimit(result.error);
+      else setFormError(result.error);
       return;
     }
     setForm(EMPTY_EVENT_FORM);
@@ -582,6 +588,7 @@ export function EventosModule() {
             icon="plus"
             onClick={() => {
               setFormError("");
+              setFormLimit("");
               setShowForm((open) => !open);
             }}
             aria-expanded={showForm}
@@ -599,6 +606,7 @@ export function EventosModule() {
           onCancel={() => setShowForm(false)}
           busy={busy}
           status={formError}
+          statusNote={formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
         >
           <SelectField
             label="Cliente"

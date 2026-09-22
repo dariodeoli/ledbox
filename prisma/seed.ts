@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_MESSAGE_TEMPLATES } from '@/lib/server/message-templates';
+import { DEFAULT_PLAN_CODE, PLAN_CATALOG } from '@/lib/plan-rules';
 
 const prisma = new PrismaClient();
 
@@ -61,6 +62,38 @@ async function main() {
       skipDuplicates: true,
     });
     console.log(`Seeded ${DEFAULT_MESSAGE_TEMPLATES.length} message templates for ${organization.slug}.`);
+  }
+
+  // Catálogo de planes (issue #42): misma lista que la migración
+  // `202609220027_plans_catalog` y `PLAN_CATALOG` en `lib/plan-rules.ts`. Solo
+  // crea los que faltan: nunca pisa precios ni límites ya ajustados.
+  await prisma.plan.createMany({
+    data: PLAN_CATALOG.map((plan) => ({
+      id: plan.id,
+      code: plan.code,
+      name: plan.name,
+      description: plan.description,
+      maxUsers: plan.maxUsers,
+      maxEventsPerMonth: plan.maxEventsPerMonth,
+      priceMonthly: plan.priceMonthly,
+      features: [...plan.features],
+      sortOrder: plan.sortOrder,
+      active: true,
+    })),
+    skipDuplicates: true,
+  });
+
+  // Plan por defecto para la empresa que todavía no tiene (idempotente): los
+  // límites se aplican desde el primer uso y el inicio es el alta de la empresa.
+  const defaultPlan = PLAN_CATALOG.find((plan) => plan.code === DEFAULT_PLAN_CODE);
+  if (defaultPlan) {
+    const assigned = await prisma.organization.updateMany({
+      where: { id: organization.id, planId: null },
+      data: { planId: defaultPlan.id, planStartedAt: organization.createdAt },
+    });
+    if (assigned.count > 0) {
+      console.log(`Assigned default plan ${defaultPlan.code} to ${organization.slug}.`);
+    }
   }
 
   for (const admin of admins) {

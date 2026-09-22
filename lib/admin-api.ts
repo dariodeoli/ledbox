@@ -44,8 +44,8 @@ function invalidateSession(): void {
   redirectToLogin();
 }
 
-export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: string; sessionInvalid?: boolean; aborted?: boolean };
-export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string };
+export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; sessionInvalid?: boolean; aborted?: boolean };
+export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 
 export type AdminSendOptions = {
   /**
@@ -120,6 +120,14 @@ export async function adminApiGet<T = AdminApiResponse>(
     return { ok: false, error: "No pudimos conectar con el panel.", aborted: Boolean(options.signal?.aborted) };
   }
   if (outcome.status === 401 || outcome.status === 403) {
+    // 403 con código (hoy solo `plan_limit`, issue #42): la operación la rechazó
+    // una regla de negocio, no la sesión; se muestra inline sin cerrar sesión.
+    const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
+    if (code) {
+      const message =
+        typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
+      return { ok: false, error: message, code };
+    }
     if (!options.skipSessionRedirect) invalidateSession();
     return { ok: false, error: "La sesión venció. Volvé a iniciar sesión.", sessionInvalid: true };
   }
@@ -188,6 +196,14 @@ async function sendMutation<T>(
   clearAdminApiCache();
   if (!outcome) return { ok: false, error: "No pudimos conectar con el panel." };
   if (outcome.status === 401 || outcome.status === 403) {
+    // Misma regla que en los GET: un 403 con código es una regla de negocio
+    // (límite del plan, issue #42), no una sesión vencida.
+    const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
+    if (code) {
+      const message =
+        typeof outcome.payload.error === "string" ? outcome.payload.error : "No pudimos guardar los cambios.";
+      return { ok: false, error: message, code };
+    }
     invalidateSession();
     return { ok: false, error: "La sesión venció. Volvé a iniciar sesión." };
   }

@@ -12,6 +12,7 @@ import {
   type InvitationLastMail,
 } from "@/lib/server/invitations";
 import { buildInvitationMail, sendMail } from "@/lib/server/mail";
+import { planLimitViolation } from "@/lib/server/plan-limits";
 import { ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -83,6 +84,11 @@ export async function POST(request: Request) {
     return jsonError("Elegí un rol válido para la invitación (el propietario no se invita por correo).", 400);
   }
   const role = body.role;
+
+  // Límite del plan (issue #42): la invitación reserva un lugar del cupo de
+  // usuarios, así el tope no se rompe al aceptarla.
+  const limit = await planLimitViolation(auth.context, "users");
+  if (limit) return jsonError(limit.error, 403, limit.code);
 
   // Invitar a quien ya es miembro no tiene sentido: no se duplica la membresía.
   const existing = await db.adminUser.findUnique({
