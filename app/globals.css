@@ -1899,7 +1899,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-brand-name { font: 800 15px var(--font-display); letter-spacing: 2px; }
 .portal-brand-name span { color: var(--led); }
 .portal-top-label { color: var(--muted-2); font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
-.portal-main { flex: 1; width: 100%; max-width: 62rem; margin: 0 auto; padding: clamp(22px, 4vw, 44px) clamp(16px, 4vw, 32px) 56px; }
+.portal-main { flex: 1; width: 100%; max-width: 72rem; margin: 0 auto; padding: clamp(22px, 4vw, 44px) clamp(16px, 4vw, 32px) 56px; }
 .portal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 16px clamp(16px, 4vw, 40px) 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 .portal-foot a { color: var(--led); text-decoration: none; }
 .portal-foot a:hover { text-decoration: underline; }
@@ -1925,14 +1925,35 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-btn:hover:not(:disabled) { border-color: var(--led); color: var(--led); }
 .portal-btn--primary { border-color: transparent; background: var(--led); color: #04191d; }
 .portal-btn--primary:hover:not(:disabled) { border-color: transparent; background: #7df3ff; color: #04191d; }
+.portal-btn--ghost { border-color: var(--border); color: var(--muted-2); }
+.portal-btn--ghost:hover:not(:disabled) { color: var(--led); border-color: var(--led); }
+.portal-btn--sm { min-height: 36px; padding: 0 14px; font-size: 10px; }
+.portal-btn--block { justify-self: stretch; width: 100%; min-height: 50px; font-size: 12px; }
 .portal-btn:disabled { opacity: .6; cursor: not-allowed; }
 
-/* Vista del presupuesto */
-.portal-budget { display: grid; gap: 14px; }
-.portal-budget-head { display: grid; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+/* Vista del presupuesto (rediseño 22-09-2026): encabezado con hechos, estado,
+   ítems ajustables, totales, acción principal única, plan, datos de pago,
+   comprobante, pedidos, cronología y ayuda. En escritorio el resumen queda
+   pegajoso al costado; en mobile es una sola columna, sin scroll de página. */
+.portal-budget { display: grid; gap: 16px; }
+.portal-budget-head { display: grid; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.portal-budget-head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.portal-budget-head-title { display: grid; gap: 6px; min-width: 0; }
 .portal-budget-title { font-family: var(--font-display); font-size: clamp(24px, 5.5vw, 38px); line-height: 1.02; text-transform: uppercase; }
 .portal-budget-meta { color: var(--muted-2); font-size: 13px; }
 .portal-budget-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.portal-nowrap { white-space: nowrap; }
+.portal-budget-grid { display: grid; gap: 16px; }
+.portal-budget-main { display: grid; gap: 16px; min-width: 0; }
+.portal-budget-aside { min-width: 0; }
+.portal-card-head { display: grid; gap: 8px; }
+.portal-summary-client { color: var(--text); font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.portal-totals--aside { width: 100%; margin-left: 0; }
+.portal-help-card .portal-help-list { display: grid; gap: 8px; margin: 0; padding-left: 18px; color: var(--muted-2); font-size: 12.5px; line-height: 1.55; }
+.portal-help-card .portal-help-list strong { color: var(--text); }
+.portal-action-intent { padding: 12px 14px; border: 1px solid rgba(0, 229, 255, .35); border-radius: 12px; background: var(--led-soft); color: var(--text); font-size: 14px; line-height: 1.5; }
+.portal-action-intent strong { font-size: 17px; font-weight: 800; }
+.portal-pay-now--aside { display: grid; gap: 4px; justify-items: start; }
 .portal-chip { display: inline-flex; align-items: center; padding: 5px 10px; border: 1px solid var(--border-2); border-radius: 999px; color: var(--muted-2); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
 .portal-chip[data-tone="accent"] { border-color: rgba(0, 229, 255, .4); background: var(--led-soft); color: var(--led); }
 .portal-chip[data-tone="ok"] { border-color: rgba(61, 220, 151, .4); background: rgba(61, 220, 151, .08); color: #3ddc97; }
@@ -1964,6 +1985,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-facts dt { color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .portal-facts dd { font-size: 13.5px; overflow-wrap: anywhere; }
 .portal-facts--inline { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+.portal-facts--head { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.portal-facts--aside { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
 .portal-note { padding: 10px 12px; border-left: 3px solid var(--led); background: var(--led-soft); color: var(--muted-2); font-size: 13px; white-space: pre-wrap; }
 .portal-empty { color: var(--muted); font-size: 13px; }
 
@@ -1971,10 +1994,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-banner { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--border-2); border-radius: 14px; background: var(--surface); }
 .portal-banner--ok { border-color: rgba(61, 220, 151, .4); background: rgba(61, 220, 151, .07); }
 .portal-banner--warn { border-color: rgba(245, 196, 81, .4); background: rgba(245, 196, 81, .07); }
+.portal-banner--info { border-color: rgba(154, 168, 255, .4); background: rgba(154, 168, 255, .07); }
 .portal-banner--demo { border-color: rgba(0, 229, 255, .45); background: var(--led-soft); }
 .portal-banner--demo .portal-banner-title { color: var(--led); }
 .portal-banner--demo a { color: var(--led); text-decoration: none; }
 .portal-banner--demo a:hover { text-decoration: underline; }
+.portal-banner-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px; }
 .portal-banner-title { font-family: var(--font-display); font-size: 17px; letter-spacing: .02em; text-transform: uppercase; }
 .portal-banner-note { color: var(--muted-2); font-size: 13px; }
 .portal-banner-quote { margin: 0; padding-left: 12px; border-left: 2px solid var(--border-2); color: var(--muted-2); font-size: 13px; white-space: pre-wrap; }
@@ -1997,13 +2022,30 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-stepper input { width: 3.6rem; padding: 6px 8px; border: 1px solid var(--border-2); border-radius: 7px; background: var(--surface-2); color: var(--text); font: 600 13px var(--font-body); font-variant-numeric: tabular-nums; text-align: center; }
 .portal-stepper input:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
 .portal-segmented { display: inline-flex; overflow: hidden; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface-2); }
+.portal-segmented--wide { display: flex; flex-wrap: wrap; width: 100%; }
+.portal-segmented--wide .portal-segment { flex: 1 1 auto; min-width: 6.5rem; }
 .portal-segment { padding: 9px 12px; border: 0; background: transparent; color: var(--muted-2); font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
 .portal-segment + .portal-segment { border-left: 1px solid var(--border-2); }
 .portal-segment[data-active="true"] { background: var(--led-soft); color: var(--led); }
 .portal-ok { color: #3ddc97; font-size: 12.5px; line-height: 1.5; }
-.portal-table--editor { min-width: 36rem; }
-.portal-table--editor tr[data-changed="true"] td { background: rgba(0, 229, 255, .04); }
-.portal-table--editor td:first-child { min-width: 12rem; }
+.portal-table--items { min-width: 36rem; }
+.portal-table--items tr[data-changed="true"] td { background: rgba(0, 229, 255, .04); }
+.portal-table--items td:first-child { min-width: 12rem; }
+.portal-item-name { font-weight: 600; }
+/* Mobile: cada ítem se lee como una ficha apilada (sin scroll horizontal). */
+@media (max-width: 640px) {
+  .portal-table--items { min-width: 0; }
+  .portal-table--items thead { display: none; }
+  .portal-table--items, .portal-table--items tbody, .portal-table--items tr, .portal-table--items td { display: block; width: 100%; }
+  .portal-table--items tr { margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+  .portal-table--items tr[data-changed="true"] { border-color: rgba(0, 229, 255, .45); }
+  .portal-table--items tr[data-changed="true"] td { background: none; }
+  .portal-table--items td { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 5px 0; border: 0; text-align: left; }
+  .portal-table--items td + td { border-top: 1px solid var(--border); }
+  .portal-table--items td::before { content: attr(data-label); color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .portal-table--items td.portal-item-cell { display: block; padding-top: 0; }
+  .portal-table--items td.portal-item-cell::before { content: none; }
+}
 .portal-table-caption { margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-align: left; text-transform: uppercase; }
 .portal-table--plan { min-width: 24rem; }
 /* Pagos esperados (issue #28): el plan muestra el estado real de cada concepto,
@@ -2011,6 +2053,19 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-table--expected { min-width: 40rem; }
 .portal-table--expected td { vertical-align: top; }
 .portal-table--expected .portal-chip { margin-bottom: 4px; }
+/* Mobile: cada concepto del plan es una ficha (sin scroll horizontal). */
+@media (max-width: 640px) {
+  .portal-table--expected { min-width: 0; }
+  .portal-table--expected thead { display: none; }
+  .portal-table--expected, .portal-table--expected tbody, .portal-table--expected tr, .portal-table--expected td { display: block; width: 100%; }
+  .portal-table--expected tr { margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+  .portal-table--expected td { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; padding: 5px 0; border: 0; text-align: left; }
+  .portal-table--expected td + td { border-top: 1px solid var(--border); }
+  .portal-table--expected td::before { content: attr(data-label); color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .portal-table--expected td.portal-item-cell { display: block; padding-top: 0; }
+  .portal-table--expected td.portal-item-cell::before { content: none; }
+  .portal-table--expected td[data-label="Estado"] { align-items: flex-start; flex-direction: column; }
+}
 .portal-expected-note { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
 .portal-card--pay { border-color: rgba(61, 220, 151, .35); }
 .portal-pay-now { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid rgba(61, 220, 151, .35); border-radius: 12px; background: rgba(61, 220, 151, .06); }
@@ -2023,7 +2078,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-bank-asset { height: 26px; width: auto; max-width: 170px; object-fit: contain; }
 .portal-bank-name { font-size: 14px; font-weight: 700; }
 .portal-facts--pay { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
-.portal-pay-plan { display: grid; gap: 10px; }
+.portal-summary { border-color: var(--border-2); }
 .portal-requests { display: grid; gap: 10px; }
 .portal-request { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-left-width: 3px; border-radius: 12px; background: var(--surface-2); }
 .portal-request[data-status="pending"] { border-left-color: #f5c451; }
@@ -2059,6 +2114,34 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-timeline-body strong { color: var(--text); font-size: 13px; }
 .portal-timeline-body small { color: var(--muted-2); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .portal-timeline-body small.portal-timeline-kind { color: var(--muted); letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
+
+/* Escritorio: el resumen queda pegajoso al costado de las secciones. En mobile
+   el mismo bloque va primero (después del estado) y todo es una sola columna. */
+@media (min-width: 1024px) {
+  .portal-budget-grid { grid-template-columns: minmax(0, 1fr) 21.5rem; align-items: start; }
+  .portal-budget-aside { position: sticky; top: 76px; }
+}
+
+@media (max-width: 1023px) {
+  .portal-budget-aside { order: -1; }
+  .portal-budget-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Impresión del presupuesto autorizado: solo el documento, en claro. */
+@media print {
+  .portal { background: #fff; color: #0b0f12; }
+  .portal-top, .portal-foot, .app-footer--portal, .portal-budget-aside, .portal-print-hide, .portal-btn { display: none !important; }
+  .portal-main { max-width: none; padding: 0; }
+  .portal-card, .portal-banner, .portal-facts--head, .portal-pay-now { border-color: #ccd6da !important; background: #fff !important; color: #0b0f12 !important; }
+  .portal-card-title, .portal-banner-title, .portal-banner-note, .portal-card-lead, .portal-help, .portal-help-list, .portal-note, .portal-facts dt, .portal-facts dd, .portal-item-note, .portal-expected-note, .portal-timeline-body small { color: #38474d !important; }
+  .portal-budget-title, .portal-kicker { color: #0b0f12 !important; }
+  .portal-chip, .portal-countdown { border-color: #b9c4c8 !important; background: none !important; color: #38474d !important; }
+  .portal-note { border-left-color: #0b0f12 !important; }
+  .portal-table th, .portal-table td { border-color: #dbe3e7 !important; color: #0b0f12 !important; }
+  .portal-total-row--strong, .portal-action-intent { border: 1px solid #dbe3e7 !important; background: #f2f6f8 !important; color: #0b0f12 !important; }
+  .portal-timeline-step, .portal-request, .portal-proof { border-color: #dbe3e7 !important; background: #f7fafb !important; }
+  .portal-card, .portal-banner, .portal-timeline-step { break-inside: avoid; }
+}
 
 @media (max-width: 480px) {
   .portal-timeline-step { grid-template-columns: minmax(0, 1fr); gap: 2px; }
