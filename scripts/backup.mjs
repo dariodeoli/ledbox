@@ -46,6 +46,7 @@ import { access, mkdir, readdir, readFile, rename, stat, unlink, writeFile } fro
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 
@@ -240,21 +241,25 @@ async function dumpToFile({ bin, env, plainFile, target }) {
 
 /**
  * Verifica el respaldo ya comprimido: lo descomprime de punta a punta y exige
- * el marcador de cierre de `pg_dump`. Devuelve el tamaño descomprimido y las
- * tablas creadas por el dump. Un archivo truncado falla acá.
+ * el marcador de cierre de `pg_dump`. Devuelve el tamaño descomprimido exacto
+ * y las tablas creadas por el dump. Un archivo truncado falla acá.
  */
 async function verifyDump(file) {
   const gunzip = createGunzip();
   const input = createReadStream(file);
   input.once("error", (error) => gunzip.destroy(error));
-  input.pipe(gunzip);
   let bytes = 0;
+  const counter = new Transform({
+    transform(chunk, _encoding, callback) {
+      bytes += chunk.length;
+      callback(null, chunk);
+    },
+  });
   let tables = 0;
   let complete = false;
   let lastLine = "";
-  const lines = createInterface({ input: gunzip, crlfDelay: Infinity });
+  const lines = createInterface({ input: input.pipe(gunzip).pipe(counter), crlfDelay: Infinity });
   for await (const line of lines) {
-    bytes += Buffer.byteLength(line, "utf8") + 1;
     if (line.startsWith("CREATE TABLE ")) tables += 1;
     if (line.includes(DUMP_COMPLETE_MARKER)) complete = true;
     lastLine = line;
@@ -400,11 +405,21 @@ async function backup(config, now) {
     bytes = (await stat(gzipFile)).size;
 
     if (config.verify) {
-      const result = await verifyDump(gzipFile);
-      uncompressedBytes = result.bytes;
-      tables = result.tables;
-      verified = true;
-      logger.info(`Verificado: ${tables} tablas, ${uncompressedBytes} bytes descomprimidos.`);
+      try {
+        const result = await verifyDump(gzipFile);
+        uncompressedBytes = result.bytes;
+        tables = result.tables;
+        verified = true;
+        logger.info(`Verificado: ${tables} tablas, ${uncompressedBytes} bytes descomprimidos.`);
+      } catch (caught) {
+        // Un dump que no verifica no es un respaldo: se borra para que nadie lo
+        // confunda con uno válido y la corrida queda fallida con el motivo real.
+        await unlink(gzipFile).catch(() => {});
+        file = null;
+        throw new Error(
+          `${caught instanceof Error ? caught.message : String(caught)} Se borró el archivo incompleto.`,
+        );
+      }
     } else {
       logger.warn("Verificación desactivada (BACKUP_VERIFY=0): el respaldo no se descomprimió.");
     }
