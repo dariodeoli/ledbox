@@ -285,6 +285,16 @@ const TONES: Record<string, AdminTone> = {
   STRIKE: "warn",
   PAYMENT: "ok",
   COLLECTION: "ok",
+  // Registro fiscal (issue #41): estados, condiciones y tipos de IVA.
+  ISSUED: "info",
+  VOID: "danger",
+  CASH: "neutral",
+  CREDIT: "warn",
+  OPEN: "warn",
+  CLOSED: "ok",
+  IVA10: "accent",
+  IVA5: "info",
+  EXEMPT: "neutral",
 };
 
 function label(map: Record<string, string>, value: string | null | undefined): string {
@@ -361,6 +371,50 @@ export function invitationStatusTone(value: string | null | undefined): AdminTon
 export function statusTone(value: string | null | undefined): AdminTone {
   if (!value) return "neutral";
   return TONES[value] ?? "neutral";
+}
+
+// ── Registro fiscal interno (issue #41) ─────────────────────────────────────
+// Etiquetas de los estados, condiciones y tipos de IVA del comprobante. La
+// misma fuente para la lista, el libro y el imprimible.
+
+const INVOICE_STATUS: Record<string, string> = {
+  ISSUED: "Emitida",
+  PAID: "Saldada",
+  VOID: "Anulada",
+};
+
+const INVOICE_CONDITION: Record<string, string> = {
+  CASH: "Contado",
+  CREDIT: "Crédito",
+};
+
+const INVOICE_TAX_TYPE: Record<string, string> = {
+  IVA10: "Gravada 10 %",
+  IVA5: "Gravada 5 %",
+  EXEMPT: "Exenta",
+};
+
+const FISCAL_PERIOD_STATUS: Record<string, string> = {
+  OPEN: "Abierto",
+  CLOSED: "Cerrado",
+};
+
+export const invoiceStatusLabel = (value: string | null | undefined) => label(INVOICE_STATUS, value);
+export const invoiceConditionLabel = (value: string | null | undefined) => label(INVOICE_CONDITION, value);
+export const invoiceTaxTypeLabel = (value: string | null | undefined) => label(INVOICE_TAX_TYPE, value);
+export const fiscalPeriodStatusLabel = (value: string | null | undefined) => label(FISCAL_PERIOD_STATUS, value);
+
+/** Tipo de IVA de un comprobante de compra a partir de sus montos (sin campo propio). */
+export function purchaseTaxTypeLabel(row: {
+  taxable10?: number | null;
+  iva10?: number | null;
+  taxable5?: number | null;
+  iva5?: number | null;
+} | null | undefined): string {
+  if (!row) return "—";
+  if ((row.taxable10 ?? 0) > 0 || (row.iva10 ?? 0) > 0) return INVOICE_TAX_TYPE.IVA10;
+  if ((row.taxable5 ?? 0) > 0 || (row.iva5 ?? 0) > 0) return INVOICE_TAX_TYPE.IVA5;
+  return INVOICE_TAX_TYPE.EXEMPT;
 }
 
 /** Tono de la disponibilidad de una promotora (fuente única con `statusTone`). */
@@ -1182,6 +1236,9 @@ const AUDIT_ENTITY: Record<string, string> = {
   TreasuryMovement: "Movimiento de tesorería",
   Expense: "Gasto",
   MessageTemplate: "Plantilla de mensaje",
+  Invoice: "Factura",
+  PurchaseInvoice: "Compra",
+  FiscalPeriod: "Cierre mensual",
 };
 
 const AUDIT_FIELD: Record<string, string> = {
@@ -1284,6 +1341,31 @@ const AUDIT_FIELD: Record<string, string> = {
   channel: "Canal",
   to: "Destino",
   template: "Plantilla",
+  // Registro fiscal (issue #41).
+  number: "Número",
+  clientName: "Razón social",
+  clientRuc: "RUC del cliente",
+  condition: "Condición",
+  issuedAt: "Emisión",
+  taxable10: "Gravada 10 %",
+  iva10: "IVA 10 %",
+  taxable5: "Gravada 5 %",
+  iva5: "IVA 5 %",
+  exempt: "Exenta",
+  voidReason: "Motivo de anulación",
+  month: "Mes",
+  reason: "Razón social",
+  timbrado: "Timbrado",
+  concept: "Concepto",
+  voidedByName: "Anulada por",
+  closedByName: "Cerrado por",
+  reopenedByName: "Reabierto por",
+  reopenReason: "Motivo de reapertura",
+  summary: "Resumen del cierre",
+  establecimiento: "Establecimiento",
+  direccion: "Dirección",
+  razonSocial: "Razón social",
+  fiscalDetails: "Datos fiscales",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */
@@ -1300,6 +1382,15 @@ const AUDIT_MONEY_FIELDS: ReadonlySet<string> = new Set([
   "unitPrice",
   "costPrice",
   "openingBalance",
+  "taxable10",
+  "iva10",
+  "taxable5",
+  "iva5",
+  "exempt",
+  "debitIva",
+  "creditIva",
+  "balance",
+  "result",
 ]);
 
 export const auditActionLabel = (value: string | null | undefined) => label(AUDIT_ACTION, value);

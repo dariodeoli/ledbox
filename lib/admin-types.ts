@@ -14,6 +14,7 @@ export type AdminIconName =
   | "clients"
   | "leads"
   | "budgets"
+  | "receipt"
   | "audit"
   | "bell"
   | "finance"
@@ -1337,6 +1338,147 @@ export type AdminTeamInvitation = {
 /** Resultado del último envío de correo, sin el detalle del historial completo. */
 export type AdminMailLogStatus = { status: string; error: string | null; sentAt: string };
 
+// ── Registro fiscal interno (issue #41) ─────────────────────────────────────
+// Contrato de `GET/POST/PATCH /api/admin/fiscal`: datos fiscales de la empresa,
+// facturas de venta, compras del libro de IVA y períodos mensuales. Alcance
+// honesto: no es la factura electrónica de SIFEN/DNIT (ver docs/FISCAL-SIFEN.md).
+
+/** Espejo del enum `InvoiceTaxType` (lo comparten el API y `lib/fiscal.ts`). */
+export type AdminInvoiceTaxType = "IVA10" | "IVA5" | "EXEMPT";
+
+/** Espejo del enum `InvoiceCondition`. */
+export type AdminInvoiceCondition = "CASH" | "CREDIT";
+
+/** Espejo del enum `InvoiceStatus`. */
+export type AdminInvoiceStatus = "ISSUED" | "PAID" | "VOID";
+
+/** Espejo del enum `FiscalPeriodStatus`. */
+export type AdminFiscalPeriodStatus = "OPEN" | "CLOSED";
+
+/** Datos fiscales de la empresa (mismos campos que `lib/server/fiscal.ts`). */
+export type AdminFiscalProfile = {
+  ruc: string | null;
+  razonSocial: string | null;
+  timbrado: string | null;
+  establecimiento: string | null;
+  direccion: string | null;
+};
+
+export type AdminInvoiceItem = {
+  id: string;
+  name: string;
+  quantity: number;
+  /** Precio unitario bruto (IVA incluido). */
+  unitPrice: number;
+  taxType: AdminInvoiceTaxType;
+  /** Importe bruto de la línea. */
+  subtotal: number;
+  /** Base imponible desagregada. */
+  taxable: number;
+  /** IVA de la línea. */
+  taxAmount: number;
+};
+
+export type AdminInvoiceRow = {
+  id: string;
+  number: number;
+  status: AdminInvoiceStatus;
+  condition: AdminInvoiceCondition;
+  clientId: string | null;
+  /** Razón social del receptor, congelada al emitir. */
+  clientName: string;
+  clientRuc: string | null;
+  budgetId: string | null;
+  eventId: string | null;
+  issuedAt: string;
+  dueAt: string | null;
+  taxable10: number;
+  iva10: number;
+  taxable5: number;
+  iva5: number;
+  exempt: number;
+  total: number;
+  notes: string | null;
+  voidedAt: string | null;
+  voidedByName: string | null;
+  voidReason: string | null;
+  paidAt: string | null;
+  createdByName: string;
+  createdAt: string;
+  items: AdminInvoiceItem[];
+  client?: { id: string; name: string; company: string | null } | null;
+  budget?: { id: string; title: string; status: string } | null;
+  event?: { id: string; name: string } | null;
+};
+
+export type AdminPurchaseInvoiceRow = {
+  id: string;
+  supplierId: string | null;
+  date: string;
+  reason: string;
+  ruc: string | null;
+  timbrado: string | null;
+  number: string | null;
+  concept: string | null;
+  taxable10: number;
+  iva10: number;
+  taxable5: number;
+  iva5: number;
+  exempt: number;
+  total: number;
+  createdByName: string;
+  createdAt: string;
+  supplier?: { id: string; name: string } | null;
+};
+
+/** Montos del libro de IVA por tasa (espejo de `InvoiceTaxTotals`). */
+export type AdminInvoiceTaxTotals = {
+  taxable10: number;
+  iva10: number;
+  taxable5: number;
+  iva5: number;
+  exempt: number;
+  total: number;
+  count: number;
+};
+
+export type AdminFiscalMonthSummary = {
+  sales: AdminInvoiceTaxTotals;
+  purchases: AdminInvoiceTaxTotals;
+  debitIva: number;
+  creditIva: number;
+  /** `débito − crédito`: positivo es a pagar, negativo es saldo a favor. */
+  balance: number;
+  /** `ventas − compras` del registro. */
+  result: number;
+  counts: { sales: number; purchases: number; voided: number };
+};
+
+export type AdminFiscalPeriodRow = {
+  id: string;
+  month: string;
+  status: AdminFiscalPeriodStatus;
+  /** Snapshot del resumen al cerrar; `null` mientras el mes sigue abierto. */
+  summary: AdminFiscalMonthSummary | null;
+  closedAt: string | null;
+  closedByName: string | null;
+  reopenedAt: string | null;
+  reopenedByName: string | null;
+  reopenReason: string | null;
+  updatedAt: string;
+};
+
+/** `GET /api/admin/fiscal?month=YYYY-MM`. */
+export type AdminFiscalPayload = {
+  profile: AdminFiscalProfile;
+  month: string;
+  period: AdminFiscalPeriodRow | null;
+  summary: AdminFiscalMonthSummary;
+  invoices: AdminInvoiceRow[];
+  purchases: AdminPurchaseInvoiceRow[];
+  periods: AdminFiscalPeriodRow[];
+};
+
 /** Vista pública de la invitación para la página de aceptación. */
 export type AdminInvitationPublicView = {
   status: AdminInvitationStatus;
@@ -1376,6 +1518,9 @@ export const AUDIT_ENTITIES = [
   "TreasuryMovement",
   "Expense",
   "MessageTemplate",
+  "Invoice",
+  "PurchaseInvoice",
+  "FiscalPeriod",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];

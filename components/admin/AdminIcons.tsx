@@ -52,6 +52,12 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M9 12.5h6M9 16h4" />
     </>
   ),
+  receipt: (
+    <>
+      <path d="M6.5 3h11v18l-2.2-1.6-2.2 1.6-2.2-1.6L8.7 21l-2.2-1.6z" />
+      <path d="M9.5 8.2h5M9.5 12h5" />
+    </>
+  ),
   finance: (
     <>
       <rect x="2.5" y="6" width="19" height="12" rx="2" />

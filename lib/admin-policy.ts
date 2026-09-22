@@ -37,6 +37,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
       { href: "/clientes", label: "Clientes", icon: "clients" },
       { href: "/leads", label: "Leads", icon: "leads" },
       { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
+      { href: "/facturacion", label: "Facturación", icon: "receipt" },
       { href: "/finanzas", label: "Finanzas", icon: "finance" },
       { href: "/plantillas", label: "Plantillas", icon: "mail" },
     ],
@@ -137,6 +138,24 @@ export function canWriteTemplateCategory(
 /** Nombre y logos de la empresa (`org.manage` en el API): OWNER y ADMIN. */
 export function canManageOrganization(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN";
+}
+
+/**
+ * Registro fiscal (issue #41): emisión de facturas, compras, saldado y cierre
+ * mensual. Mismo alcance que `finance.write` en el API; VIEWER solo lee.
+ */
+export function canWriteFiscal(role: AdminRole | null | undefined): boolean {
+  return canWriteFinance(role);
+}
+
+/** Datos fiscales de la empresa: `org.manage` en el API (OWNER y ADMIN). */
+export function canManageFiscalProfile(role: AdminRole | null | undefined): boolean {
+  return canManageOrganization(role);
+}
+
+/** Reapertura de un mes cerrado: solo OWNER (misma regla que revalida el API). */
+export function canReopenFiscalPeriod(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER";
 }
 
 /** Filtro genérico de búsqueda: compara en minúsculas contra los valores dados. */
