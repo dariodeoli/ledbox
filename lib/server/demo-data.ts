@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
+import { fiscalSummaryOf, grossToNet, shiftMonthKey, taxTotalsOf, type InvoiceTaxTypeValue } from "@/lib/fiscal";
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { db } from "./db";
 import { hashPassword } from "./auth";
@@ -67,6 +68,25 @@ export const DEMO_PAYMENT_DETAILS = {
 
 /** ¿La organización ya tiene datos de pago cargados? (no se pisan si existen). */
 function hasPaymentDetails(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value as Record<string, unknown>).length > 0;
+}
+
+/**
+ * Datos fiscales de la empresa demo (issue #41): ficticios y consistentes con el
+ * resto del dataset. El RUC y el timbrado son de mentira: el comprobante
+ * imprimible aclara que es un registro interno y no un comprobante de SIFEN.
+ */
+export const DEMO_FISCAL_DETAILS = {
+  ruc: "80012345-6",
+  razonSocial: "LedBox Demo S.A.",
+  timbrado: "12345678",
+  establecimiento: "Casa central",
+  direccion: "Av. Mcal. López 1234, Asunción",
+} as const;
+
+/** ¿La organización ya tiene datos fiscales cargados? (no se pisan si existen). */
+function hasFiscalDetails(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.keys(value as Record<string, unknown>).length > 0;
 }
@@ -996,6 +1016,9 @@ const DATASET_MINS = {
   mailLogs: MAIL_LOGS.length,
   messageTemplates: DEMO_MESSAGE_TEMPLATES.length,
   logos: 2,
+  invoices: 5,
+  invoicePurchases: 4,
+  fiscalPeriods: 1,
 } as const;
 
 // ── Alta idempotente ────────────────────────────────────────────────────────
@@ -1031,6 +1054,13 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
     organization = await db.organization.update({
       where: { id: organization.id },
       data: { paymentDetails: DEMO_PAYMENT_DETAILS },
+    });
+  }
+  // Los datos fiscales (issue #41) siguen la misma regla: solo si faltan.
+  if (!hasFiscalDetails(organization.fiscalDetails)) {
+    organization = await db.organization.update({
+      where: { id: organization.id },
+      data: { fiscalDetails: DEMO_FISCAL_DETAILS },
     });
   }
 
@@ -1085,7 +1115,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
     // Ancla del día: mientras `updatedAt` sea de hoy, no se vuelve a escribir.
     await db.organization.update({
       where: { id: organization.id },
-      data: { name: DEMO_ORGANIZATION_NAME, paymentDetails: DEMO_PAYMENT_DETAILS },
+      data: { name: DEMO_ORGANIZATION_NAME, paymentDetails: DEMO_PAYMENT_DETAILS, fiscalDetails: DEMO_FISCAL_DETAILS },
     });
   }
 
@@ -1103,7 +1133,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars] = await Promise.all([
+  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars, invoices, purchases, fiscalPeriods] = await Promise.all([
     db.client.count({ where: { organizationId: organization.id } }),
     db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
     db.promoter.count({ where: { organizationId: organization.id, photoUrl: { not: null } } }),
@@ -1127,6 +1157,9 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     db.messageTemplate.count({ where: { organizationId: organization.id } }),
     db.organizationLogo.count({ where: { organizationId: organization.id } }),
     db.adminUserAvatar.count({ where: { userId: { in: [DEMO_USER_ID, ...COLLABORATORS.map((collaborator) => collaborator.id)] } } }),
+    db.invoice.count({ where: { organizationId: organization.id } }),
+    db.purchaseInvoice.count({ where: { organizationId: organization.id } }),
+    db.fiscalPeriod.count({ where: { organizationId: organization.id } }),
   ]);
   const complete =
     clients >= DATASET_MINS.clients &&
@@ -1144,6 +1177,9 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     mailLogs >= DATASET_MINS.mailLogs &&
     messageTemplates >= DATASET_MINS.messageTemplates &&
     logos >= DATASET_MINS.logos &&
+    invoices >= DATASET_MINS.invoices &&
+    purchases >= DATASET_MINS.invoicePurchases &&
+    fiscalPeriods >= DATASET_MINS.fiscalPeriods &&
     avatars >= COLLABORATORS.length + 1 &&
     upcoming >= 3;
   if (!complete) return false;
@@ -2370,6 +2406,287 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_quote_item_2", quoteRequestId: "demo_quote_cerveza", productSlug: "totem-led-2x1", productName: "Tótem LED 2x1 m", quantity: 2, duration: 1, billingUnit: "DAILY", unitPrice: 1_800_000, subtotal: 3_600_000 },
   ];
 
+  // ── Registro fiscal interno (issue #41) ──────────────────────────────────
+  // Facturas del mes en curso (una anulada con motivo y otra saldada), compras
+  // del libro de IVA y el mes anterior **cerrado** con su snapshot. Los números
+  // son correlativos y la secuencia queda en el último emitido: es el mismo
+  // circuito que usa el panel (nunca se inventa un número ni se saltea uno).
+  const currentMonth = dayKeyOf(base).slice(0, 7);
+  const previousMonth = shiftMonthKey(currentMonth, -1);
+  const monthStart = (month: string, day: number, hour: number, minute = 0) =>
+    new Date(dayStart(`${month}-${String(day).padStart(2, "0")}`).getTime() + (hour * 60 + minute) * 60_000);
+
+  type DemoInvoiceSeed = {
+    id: string;
+    number: number;
+    clientId: string;
+    clientRuc: string;
+    budgetId?: string;
+    eventId?: string;
+    condition: "CASH" | "CREDIT";
+    status: "ISSUED" | "PAID" | "VOID";
+    issuedAt: Date;
+    dueAt?: Date;
+    paidAt?: Date;
+    voided?: { at: Date; reason: string };
+    notes: string;
+    items: Array<{ name: string; quantity: number; unitPrice: number; taxType: InvoiceTaxTypeValue }>;
+  };
+
+  const invoiceSeeds: DemoInvoiceSeed[] = [
+    {
+      // Mes cerrado: campaña ya cobrada.
+      id: "demo_invoice_prev_1",
+      number: 1,
+      clientId: "demo_client_cellshop",
+      clientRuc: "80033445-7",
+      condition: "CASH",
+      status: "PAID",
+      issuedAt: monthStart(previousMonth, 5, 11, 20),
+      paidAt: monthStart(previousMonth, 8, 15, 0),
+      notes: "Campaña de compras online: muro LED y contenido vertical.",
+      items: [
+        { name: "Pantalla LED P3.9 500x500 (m²)", quantity: 12, unitPrice: 950_000, taxType: "IVA10" },
+        { name: "Operación técnica y contenidos", quantity: 1, unitPrice: 1_650_000, taxType: "IVA10" },
+      ],
+    },
+    {
+      // Mes cerrado: showroom con streaming (muestra IVA 5 %).
+      id: "demo_invoice_prev_2",
+      number: 2,
+      clientId: "demo_client_nissei",
+      clientRuc: "80077889-2",
+      condition: "CREDIT",
+      status: "ISSUED",
+      issuedAt: monthStart(previousMonth, 18, 16, 5),
+      dueAt: monthStart(currentMonth, 3, 12, 0),
+      notes: "Aniversario de tienda: tótems y transmisión en vivo.",
+      items: [
+        { name: "Tótem Touch 43”", quantity: 2, unitPrice: 4_200_000, taxType: "IVA10" },
+        { name: "Streaming y contenido para redes", quantity: 1, unitPrice: 1_050_000, taxType: "IVA5" },
+      ],
+    },
+    {
+      // Mes en curso: factura parcial del presupuesto aprobado (anticipo).
+      id: "demo_invoice_1",
+      number: 3,
+      clientId: next.clientId,
+      clientRuc: "80011223-4",
+      budgetId: "demo_budget_aprobado",
+      eventId: next.id,
+      condition: "CREDIT",
+      status: "ISSUED",
+      issuedAt: monthStart(currentMonth, 2, 10, 40),
+      dueAt: at(base, 15, 12, 0),
+      notes: "Factura parcial del anticipo del presupuesto aprobado.",
+      items: [
+        { name: "Tótem LED 2x1 m", quantity: 2, unitPrice: 1_800_000, taxType: "IVA10" },
+        { name: "Operación técnica y montaje", quantity: 1, unitPrice: 3_300_000, taxType: "IVA10" },
+      ],
+    },
+    {
+      // Mes en curso: cobrada, con las tres tasas (10 %, 5 % y exenta).
+      id: "demo_invoice_2",
+      number: 4,
+      clientId: "demo_client_tigo",
+      clientRuc: "80012345-6",
+      condition: "CASH",
+      status: "PAID",
+      issuedAt: monthStart(currentMonth, 4, 9, 15),
+      paidAt: monthStart(currentMonth, 4, 15, 30),
+      notes: "Activación de marca con pantalla principal, sonido y seguro.",
+      items: [
+        { name: "Pantalla LED P3.9 500x500 (m²)", quantity: 8, unitPrice: 950_000, taxType: "IVA10" },
+        { name: "Refuerzo de sonido", quantity: 1, unitPrice: 1_050_000, taxType: "IVA5" },
+        { name: "Seguro de equipos y responsabilidad civil", quantity: 1, unitPrice: 350_000, taxType: "EXEMPT" },
+      ],
+    },
+    {
+      // Mes en curso: anulada con motivo (el número queda, no suma al libro).
+      id: "demo_invoice_3",
+      number: 5,
+      clientId: "demo_client_personal",
+      clientRuc: "80055667-1",
+      condition: "CASH",
+      status: "VOID",
+      issuedAt: monthStart(currentMonth, 6, 14, 0),
+      voided: { at: monthStart(currentMonth, 6, 17, 20), reason: "RUC del receptor equivocado: se emite de nuevo con el dato correcto." },
+      notes: "Anulada el mismo día por error en el RUC.",
+      items: [{ name: "Cilindro LED 1,5 m", quantity: 1, unitPrice: 1_200_000, taxType: "IVA10" }],
+    },
+  ];
+
+  const invoicesData: Prisma.InvoiceUncheckedCreateInput[] = [];
+  const invoiceItemsData: Prisma.InvoiceItemUncheckedCreateInput[] = [];
+  for (const seed of invoiceSeeds) {
+    const lines = seed.items.map((item) => ({
+      ...item,
+      subtotal: item.quantity * item.unitPrice,
+      ...grossToNet(item.quantity * item.unitPrice, item.taxType),
+    }));
+    const totals = taxTotalsOf(lines.map((line) => ({ subtotal: line.subtotal, taxType: line.taxType })));
+    const client = CLIENT_BY_ID.get(seed.clientId);
+    invoicesData.push({
+      id: seed.id,
+      organizationId,
+      number: seed.number,
+      status: seed.status,
+      condition: seed.condition,
+      clientId: seed.clientId,
+      clientName: client ? clientLabel({ name: client.name, company: client.company }) : "Cliente",
+      clientRuc: seed.clientRuc,
+      budgetId: seed.budgetId ?? null,
+      eventId: seed.eventId ?? null,
+      issuedAt: seed.issuedAt,
+      dueAt: seed.dueAt ?? null,
+      taxable10: totals.taxable10,
+      iva10: totals.iva10,
+      taxable5: totals.taxable5,
+      iva5: totals.iva5,
+      exempt: totals.exempt,
+      total: totals.total,
+      notes: seed.notes,
+      ...(seed.voided
+        ? { voidedAt: seed.voided.at, voidedById: ACTORS.sales.id, voidedByName: ACTORS.sales.name, voidReason: seed.voided.reason }
+        : {}),
+      paidAt: seed.paidAt ?? null,
+      createdById: ACTORS.sales.id,
+      createdByName: ACTORS.sales.name,
+      createdByEmail: ACTORS.sales.email,
+      createdAt: seed.issuedAt,
+    });
+    lines.forEach((line, index) => {
+      invoiceItemsData.push({
+        id: `${seed.id}_item_${index + 1}`,
+        invoiceId: seed.id,
+        name: line.name,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        taxType: line.taxType,
+        subtotal: line.subtotal,
+        taxable: line.taxable,
+        taxAmount: line.taxAmount,
+      });
+    });
+  }
+
+  type DemoPurchaseSeed = {
+    id: string;
+    supplierId: string;
+    date: Date;
+    taxType: InvoiceTaxTypeValue;
+    total: number;
+    concept: string;
+    number: string;
+  };
+
+  const purchaseSeeds: DemoPurchaseSeed[] = [
+    {
+      id: "demo_purchase_prev_1",
+      supplierId: "demo_supplier_grafica",
+      date: monthStart(previousMonth, 12, 10, 0),
+      taxType: "IVA10",
+      total: 5_500_000,
+      concept: "Impresión de lonas y vinilos del pabellón",
+      number: "001-001-0000987",
+    },
+    {
+      id: "demo_purchase_1",
+      supplierId: "demo_supplier_carpinteria",
+      date: monthStart(currentMonth, 3, 9, 30),
+      taxType: "IVA10",
+      total: 3_300_000,
+      concept: "Escenografía y mobiliario del evento",
+      number: "001-001-0001120",
+    },
+    {
+      id: "demo_purchase_2",
+      supplierId: "demo_supplier_transporte",
+      date: monthStart(currentMonth, 5, 8, 0),
+      taxType: "IVA5",
+      total: 630_000,
+      concept: "Flete del equipo al predio",
+      number: "002-001-0000451",
+    },
+    {
+      id: "demo_purchase_3",
+      supplierId: "demo_supplier_electricidad",
+      date: monthStart(currentMonth, 7, 11, 15),
+      taxType: "EXEMPT",
+      total: 250_000,
+      concept: "Tasas municipales de ocupación",
+      number: "003-001-0000090",
+    },
+  ];
+
+  const purchasesData: Prisma.PurchaseInvoiceUncheckedCreateInput[] = purchaseSeeds.map((seed) => {
+    const { taxable, taxAmount } = grossToNet(seed.total, seed.taxType);
+    return {
+      id: seed.id,
+      organizationId,
+      supplierId: seed.supplierId,
+      date: seed.date,
+      reason: supplierNameOf(seed.supplierId),
+      ruc: "80045678-9",
+      timbrado: "77889900",
+      number: seed.number,
+      concept: seed.concept,
+      taxable10: seed.taxType === "IVA10" ? taxable : 0,
+      iva10: seed.taxType === "IVA10" ? taxAmount : 0,
+      taxable5: seed.taxType === "IVA5" ? taxable : 0,
+      iva5: seed.taxType === "IVA5" ? taxAmount : 0,
+      exempt: seed.taxType === "EXEMPT" ? taxable : 0,
+      total: seed.total,
+      createdById: ACTORS.ops.id,
+      createdByName: ACTORS.ops.name,
+      createdByEmail: ACTORS.ops.email,
+      createdAt: seed.date,
+    };
+  });
+
+  // Snapshot del mes cerrado: el mismo resumen que calcula el panel (y que el
+  // API congela al cerrar). La historia del mes no se reescribe.
+  const currentMonthStart = dayStart(`${currentMonth}-01`);
+  const previousInvoices = invoicesData.filter((invoice) => invoice.issuedAt < currentMonthStart && invoice.status !== "VOID");
+  const previousPurchases = purchasesData.filter((purchase) => purchase.date < currentMonthStart);
+  const previousSummary = {
+    ...fiscalSummaryOf(
+      previousInvoices.map(({ taxable10, iva10, taxable5, iva5, exempt, total }) => ({
+        taxable10: taxable10 ?? 0,
+        iva10: iva10 ?? 0,
+        taxable5: taxable5 ?? 0,
+        iva5: iva5 ?? 0,
+        exempt: exempt ?? 0,
+        total: total ?? 0,
+      })),
+      previousPurchases.map(({ taxable10, iva10, taxable5, iva5, exempt, total }) => ({
+        taxable10: taxable10 ?? 0,
+        iva10: iva10 ?? 0,
+        taxable5: taxable5 ?? 0,
+        iva5: iva5 ?? 0,
+        exempt: exempt ?? 0,
+        total: total ?? 0,
+      })),
+    ),
+    counts: {
+      sales: previousInvoices.length,
+      purchases: previousPurchases.length,
+      voided: invoicesData.filter((invoice) => invoice.issuedAt < currentMonthStart && invoice.status === "VOID").length,
+    },
+  };
+  const periodsData: Prisma.FiscalPeriodUncheckedCreateInput[] = [
+    {
+      id: "demo_fiscal_period_prev",
+      organizationId,
+      month: previousMonth,
+      status: "CLOSED",
+      summary: previousSummary as unknown as Prisma.InputJsonValue,
+      closedAt: monthStart(currentMonth, 1, 9, 10),
+      closedById: ACTORS.ops.id,
+      closedByName: ACTORS.ops.name,
+    },
+  ];
+
   const auditData = buildAuditTrail(organizationId, base, {
     next,
     second,
@@ -2437,6 +2754,15 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.clientPayment.createMany({ data: paymentsData });
       await tx.treasuryMovement.createMany({ data: treasuryMovementsData });
       await tx.expense.createMany({ data: expensesData });
+      // Registro fiscal (issue #41): compras, facturas con sus ítems, el mes
+      // cerrado con su snapshot y la secuencia en el último número emitido.
+      await tx.purchaseInvoice.createMany({ data: purchasesData });
+      await tx.invoice.createMany({ data: invoicesData });
+      await tx.invoiceItem.createMany({ data: invoiceItemsData });
+      await tx.fiscalPeriod.createMany({ data: periodsData });
+      await tx.invoiceSequence.createMany({
+        data: [{ id: `seq_${organizationId}`, organizationId, lastNumber: invoicesData.length }],
+      });
       await tx.budgetPaymentProof.createMany({ data: proofsData });
       await tx.expectedPayment.createMany({ data: expectedPaymentsData });
       await tx.teamInvitation.createMany({ data: invitationsData });
@@ -2463,6 +2789,13 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
  */
 async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
   await tx.paymentReminderLog.deleteMany({ where: { organizationId } });
+  // Registro fiscal (issue #41): primero los comprobantes y los períodos (la
+  // secuencia se reescribe en cada provisión).
+  await tx.invoiceItem.deleteMany({ where: { invoice: { organizationId } } });
+  await tx.invoice.deleteMany({ where: { organizationId } });
+  await tx.purchaseInvoice.deleteMany({ where: { organizationId } });
+  await tx.fiscalPeriod.deleteMany({ where: { organizationId } });
+  await tx.invoiceSequence.deleteMany({ where: { organizationId } });
   await tx.budgetPaymentProof.deleteMany({ where: { organizationId } });
   await tx.expectedPayment.deleteMany({ where: { organizationId } });
   await tx.eventInventory.deleteMany({ where: { event: { organizationId } } });
@@ -2982,6 +3315,43 @@ function buildAuditTrail(organizationId: string, base: Date, context: AuditConte
       hour: 11,
       minute: 22,
       detail: { fields: { revisionRequestedAt: true } },
+    },
+    // Registro fiscal (issue #41): emisión, anulación y cierre del mes anterior.
+    {
+      id: "demo_audit_invoice_1",
+      actor: sales,
+      action: "create",
+      entity: "Invoice",
+      entityId: "demo_invoice_1",
+      summary: `Emitió la factura Nº 3 a «${nextClient?.company ?? ""}» por 6.900.000 Gs.`,
+      days: -2,
+      hour: 10,
+      minute: 40,
+      detail: { fields: { number: 3, total: 6_900_000, budgetId: "demo_budget_aprobado" } },
+    },
+    {
+      id: "demo_audit_invoice_3",
+      actor: sales,
+      action: "status",
+      entity: "Invoice",
+      entityId: "demo_invoice_3",
+      summary: "Anuló la factura Nº 5 (RUC del receptor equivocado: se emite de nuevo con el dato correcto.)",
+      days: -1,
+      hour: 17,
+      minute: 20,
+      detail: { changes: { status: { from: "ISSUED", to: "VOID" } } },
+    },
+    {
+      id: "demo_audit_fiscal_close",
+      actor: ops,
+      action: "status",
+      entity: "FiscalPeriod",
+      entityId: "demo_fiscal_period_prev",
+      summary: "Cerró el mes fiscal anterior: ventas 20.250.000 Gs., compras 5.500.000 Gs.",
+      days: -21,
+      hour: 9,
+      minute: 10,
+      detail: { changes: { status: { from: "OPEN", to: "CLOSED" } } },
     },
   ];
 

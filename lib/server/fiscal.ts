@@ -1,5 +1,12 @@
-import { isMonthKey, shiftMonthKey, type FiscalMonthSummary, type InvoiceTaxTotals } from "@/lib/fiscal";
-import { dayKeyOf, dayStart } from "./notifications";
+import {
+  currentMonthKey,
+  isMonthKey,
+  monthOf,
+  shiftMonthKey,
+  type FiscalMonthSummary,
+  type InvoiceTaxTotals,
+} from "@/lib/fiscal";
+import { dayStart } from "./notifications";
 
 /**
  * Capa server-side del registro fiscal interno (issue #41): datos fiscales de la
@@ -61,14 +68,7 @@ export function missingFiscalFields(profile: FiscalProfile): string[] {
 }
 
 /** Mes fiscal (`YYYY-MM`) de un instante, en días de Asunción. */
-export function monthOf(date: Date): string {
-  return dayKeyOf(date).slice(0, 7);
-}
-
-/** Mes fiscal en curso (día de Asunción). */
-export function currentMonthKey(): string {
-  return monthOf(new Date());
-}
+export { currentMonthKey, monthOf } from "@/lib/fiscal";
 
 /** Clave `YYYY-MM` pedida en un query/body; `null` si viene inválida. */
 export function readMonthKey(raw: unknown, fallback: string | null = null): string | null {

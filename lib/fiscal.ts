@@ -195,6 +195,27 @@ export function isMonthKey(value: string | null | undefined): boolean {
   return typeof value === "string" && MONTH_KEY_PATTERN.test(value);
 }
 
+const MONTH_PARTS_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Asuncion",
+  year: "numeric",
+  month: "2-digit",
+});
+
+/**
+ * Mes fiscal (`YYYY-MM`) de un instante, en días de Asunción. La misma zona que
+ * el resto de la app: el mes no se corre de noche ni cambia por el navegador.
+ */
+export function monthOf(date: Date): string {
+  const parts = MONTH_PARTS_FORMAT.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}`;
+}
+
+/** Mes fiscal en curso (día de Asunción). */
+export function currentMonthKey(now = new Date()): string {
+  return monthOf(now);
+}
+
 /** Mes anterior/siguiente de una clave `YYYY-MM`. */
 export function shiftMonthKey(month: string, delta: number): string {
   const [year, monthNumber] = month.split("-").map(Number);

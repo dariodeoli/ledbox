@@ -239,13 +239,13 @@ export async function GET(request: Request) {
   const summary = fiscalSummaryOf(salesRowsForSummary(invoices), purchases);
 
   return Response.json({
-    profile: parseFiscalDetails(organization?.fiscalDetails),
+    fiscalProfile: parseFiscalDetails(organization?.fiscalDetails),
     month,
-    period: period ? periodPayload(period) : null,
-    summary: { ...summary, counts: { sales: summary.sales.count, purchases: summary.purchases.count, voided: invoices.filter((invoice) => invoice.status === "VOID").length } },
+    fiscalPeriod: period ? periodPayload(period) : null,
+    fiscalSummary: { ...summary, counts: { sales: summary.sales.count, purchases: summary.purchases.count, voided: invoices.filter((invoice) => invoice.status === "VOID").length } },
     invoices,
     purchases,
-    periods: periods.map(periodPayload),
+    fiscalPeriods: periods.map(periodPayload),
   });
 }
 

@@ -1836,6 +1836,14 @@ export type AdminApiResponse = {
   pin?: AdminPinConfig["pin"];
   autoLock?: AdminPinConfig["autoLock"];
   hasPassword?: boolean;
+  /** Registro fiscal interno (issue #41): perfil, mes, período, resumen y comprobantes. */
+  fiscalProfile?: AdminFiscalProfile;
+  fiscalPeriod?: AdminFiscalPeriodRow | null;
+  fiscalSummary?: AdminFiscalMonthSummary;
+  fiscalPeriods?: AdminFiscalPeriodRow[];
+  month?: string;
+  invoices?: AdminInvoiceRow[];
+  purchases?: AdminPurchaseInvoiceRow[];
 };
 
 // ── Correo (issue #30) ──────────────────────────────────────────────────────
