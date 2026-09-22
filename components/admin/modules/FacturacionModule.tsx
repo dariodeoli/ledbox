@@ -219,6 +219,8 @@ export function FacturacionModule() {
   const data = fiscal.data;
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const profile = data?.profile ?? null;
+  /** Sin RUC, razón social o timbrado el imprimible sale incompleto: se avisa. */
+  const profileIncomplete = profile ? !profile.ruc || !profile.razonSocial || !profile.timbrado : false;
   const period = data?.period ?? null;
   const months = useMemo(() => monthOptions(month), [month]);
   const thisMonth = monthOf(new Date());
@@ -564,6 +566,23 @@ export function FacturacionModule() {
       </nav>
 
       {notice ? <AdminNote tone={notice.tone}>{notice.text}</AdminNote> : null}
+
+      {canProfile && tab !== "profile" && profileIncomplete ? (
+        <AdminNote tone="warn">
+          <strong>Faltan datos fiscales de la empresa</strong> (RUC, razón social y timbrado): son el encabezado del
+          comprobante imprimible.{" "}
+          <button
+            type="button"
+            className="admin-linkbtn"
+            onClick={() => {
+              setTab("profile");
+              setNotice(null);
+            }}
+          >
+            Completarlos ahora
+          </button>
+        </AdminNote>
+      ) : null}
 
       <AdminToolbar>
         <AdminSelect

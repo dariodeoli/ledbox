@@ -173,12 +173,17 @@ export function AdminNote({
   variant = "note",
 }: {
   children: React.ReactNode;
-  tone?: "ok" | "error";
+  tone?: "ok" | "warn" | "error";
   variant?: "note" | "alert";
 }) {
   if (variant === "alert") {
     return (
-      <p className={tone === "error" ? "admin-alert admin-alert--error" : "admin-alert admin-alert--success"} role={tone === "error" ? "alert" : "status"}>
+      <p
+        className={
+          tone === "error" ? "admin-alert admin-alert--error" : tone === "warn" ? "admin-alert admin-alert--warn" : "admin-alert admin-alert--success"
+        }
+        role={tone === "error" ? "alert" : "status"}
+      >
         {children}
       </p>
     );
