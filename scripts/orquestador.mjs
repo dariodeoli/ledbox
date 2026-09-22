@@ -93,7 +93,7 @@ function saveState(next) {
   writeFileSync(STATE_FILE, JSON.stringify({ ...state(), ...next }, null, 2) + "\n");
 }
 function curl(url, timeout = 15) {
-  const r = spawnSync("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", String(timeout), url], { encoding: "utf8" });
+  const r = spawnSync("curl", ["-s", "-L", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", String(timeout), url], { encoding: "utf8" });
   return (r.stdout || "").trim() || "000";
 }
 function curlBody(url, timeout = 15) {
@@ -201,8 +201,11 @@ function pp() {
 
   console.log("\n▌ Pendientes del dueño");
   const pend = existsSync("docs/PENDIENTES-DUENO.md") ? readFileSync("docs/PENDIENTES-DUENO.md", "utf8") : "";
-  const bullets = pend.split("\n").filter((l) => l.trim().startsWith("- "));
-  console.log(bullets.length ? bullets.map((l) => "  " + l).join("\n") : "  (nada anotado)");
+  const bullets = pend
+    .split(/\n(?=- )/)
+    .filter((block) => block.trim().startsWith("- "))
+    .map((block) => "  " + block.replace(/\s+/g, " ").trim().slice(0, 130));
+  console.log(bullets.length ? bullets.join("\n") : "  (nada anotado)");
   console.log("");
 }
 
