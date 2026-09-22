@@ -46,17 +46,19 @@ export function AdminSuccess({ children }: { children: React.ReactNode }) {
 type AdminButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "ghost" | "icon";
   icon?: AdminIconName;
+  /** Ícono que no sale del set del panel (p. ej. la marca de WhatsApp); tiene prioridad sobre `icon`. */
+  iconNode?: React.ReactNode;
   busy?: boolean;
 };
 
-export function AdminButton({ variant = "ghost", icon, busy, children, className, disabled, ...rest }: AdminButtonProps) {
+export function AdminButton({ variant = "ghost", icon, iconNode, busy, children, className, disabled, ...rest }: AdminButtonProps) {
   const classes = ["admin-btn"];
   if (variant === "primary") classes.push("admin-btn--primary");
   if (!children) classes.push("admin-btn--only-icon");
   if (className) classes.push(className);
   return (
     <button {...rest} className={classes.join(" ")} disabled={disabled || busy} aria-busy={busy || undefined}>
-      {busy ? <AdminSpinner label="Guardando" /> : icon ? <AdminIcon name={icon} /> : null}
+      {busy ? <AdminSpinner label="Guardando" /> : iconNode ? iconNode : icon ? <AdminIcon name={icon} /> : null}
       {children ? <span>{children}</span> : null}
     </button>
   );
@@ -231,6 +233,7 @@ export function AdminDataState({
   empty,
   emptyTitle,
   emptyHint,
+  emptyIcon,
   rows,
   children,
 }: {
@@ -240,12 +243,14 @@ export function AdminDataState({
   empty?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
+  /** Ícono del estado vacío; sin él se usa el genérico de `AdminEmpty`. */
+  emptyIcon?: AdminIconName;
   rows?: number;
   children: React.ReactNode;
 }) {
   if (loading) return <AdminLoadingRows rows={rows} />;
   if (error) return <AdminErrorState message={error} onRetry={onRetry} />;
-  if (empty) return <AdminEmpty title={emptyTitle || "Sin registros"} hint={emptyHint} />;
+  if (empty) return <AdminEmpty title={emptyTitle || "Sin registros"} hint={emptyHint} icon={emptyIcon} />;
   return <>{children}</>;
 }
 
@@ -281,7 +286,7 @@ export function AdminFormPanel({
       <div className="admin-form-foot">
         {statusNote ? statusNote : status ? <AdminNote tone="error">{status}</AdminNote> : null}
         <div className="admin-form-actions">
-          <AdminButton type="button" onClick={onCancel} disabled={busy}>
+          <AdminButton icon="close" type="button" onClick={onCancel} disabled={busy}>
             Cancelar
           </AdminButton>
           <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
@@ -303,11 +308,14 @@ export function AdminDialog({
   title,
   onClose,
   size = "default",
+  icon,
   children,
 }: {
   title: string;
   onClose: () => void;
   size?: "default" | "wide" | "ficha";
+  /** Ícono del asunto del diálogo; mismo chip que los títulos de sección. */
+  icon?: AdminIconName;
   children: React.ReactNode;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -332,7 +340,14 @@ export function AdminDialog({
     >
       <section className={classes.join(" ")} role="dialog" aria-modal="true" aria-label={title}>
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">{title}</h2>
+          <h2 className="admin-dialog-title">
+            {icon ? (
+              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                <AdminIcon name={icon} size={11} />
+              </span>
+            ) : null}
+            {title}
+          </h2>
           <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
@@ -408,6 +423,7 @@ export function AdminTimeline({
       empty={entries.length === 0}
       emptyTitle={emptyTitle}
       emptyHint={emptyHint}
+      emptyIcon="clock"
       rows={4}
     >
       <div className="admin-timeline-head">
@@ -478,7 +494,7 @@ export function AdminTimelineDialog({ title, path, onClose }: { title: string; p
   }, [path, attempt]);
 
   return (
-    <AdminDialog title={title} size="wide" onClose={onClose}>
+    <AdminDialog title={title} size="wide" icon="clock" onClose={onClose}>
       <AdminTimeline
         entries={entries ?? []}
         loading={entries === null && !error}
@@ -489,7 +505,7 @@ export function AdminTimelineDialog({ title, path, onClose }: { title: string; p
       />
       <div className="admin-dialog-foot">
         <span className="admin-dialog-spacer" />
-        <AdminButton onClick={onClose}>Cerrar</AdminButton>
+        <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
       </div>
     </AdminDialog>
   );
@@ -538,10 +554,17 @@ export function AdminToolbar({ children }: { children: React.ReactNode }) {
   return <div className="admin-toolbar">{children}</div>;
 }
 
-export function AdminKpi({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: AdminTone }) {
+export function AdminKpi({ label, value, note, tone, icon }: { label: string; value: string; note?: string; tone?: AdminTone; icon?: AdminIconName }) {
   return (
     <div className="admin-kpi" data-tone={tone}>
-      <span className="admin-kpi-label">{label}</span>
+      <span className="admin-kpi-label">
+        {icon ? (
+          <span className="admin-kpi-icon" aria-hidden="true">
+            <AdminIcon name={icon} size={12} />
+          </span>
+        ) : null}
+        {label}
+      </span>
       <strong className="admin-kpi-value">{value}</strong>
       {note ? <span className="admin-kpi-note">{note}</span> : null}
     </div>
@@ -552,16 +575,24 @@ export function AdminPanel({
   title,
   meta,
   action,
+  icon,
   children,
 }: {
   title: string;
   meta?: string;
   action?: React.ReactNode;
+  /** Ícono del tipo de sección; coherente entre módulos (cobros = mismo ícono siempre). */
+  icon?: AdminIconName;
   children: React.ReactNode;
 }) {
   return (
     <section className="admin-panel">
       <header className="admin-panel-head">
+        {icon ? (
+          <span className="admin-panel-icon" aria-hidden="true">
+            <AdminIcon name={icon} size={13} />
+          </span>
+        ) : null}
         <h2 className="admin-panel-title">{title}</h2>
         {meta ? <span className="admin-panel-meta">{meta}</span> : null}
         {action ? <div className="admin-panel-action">{action}</div> : null}

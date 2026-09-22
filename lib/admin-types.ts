@@ -34,6 +34,7 @@ export type AdminIconName =
   | "check"
   | "edit"
   | "arrow-right"
+  | "arrow-left"
   | "alert"
   | "power"
   | "mail"
@@ -52,7 +53,12 @@ export type AdminIconName =
   | "globe"
   | "database"
   | "instagram"
-  | "plan";
+  | "plan"
+  | "wallet"
+  | "bank"
+  | "lock"
+  | "image"
+  | "checkin";
 
 export type AdminSessionUser = {
   id: string;

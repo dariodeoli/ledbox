@@ -767,7 +767,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: var(--a-topbar); padding: 0 16px; border-bottom: 1px solid var(--a-line); background: color-mix(in srgb, var(--a-bg) 88%, transparent); backdrop-filter: blur(12px); }
 .admin-topbar-title { display: grid; min-width: 0; }
 .admin-topbar-eyebrow { color: var(--a-muted); font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.admin-topbar-heading { overflow: hidden; color: var(--a-text-strong); font: 700 16px/1.2 var(--font-body); letter-spacing: .02em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.admin-topbar-heading { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; color: var(--a-text-strong); font: 700 16px/1.2 var(--font-body); letter-spacing: .02em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.admin-topbar-icon { display: inline-grid; place-items: center; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px; background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-topbar-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .admin-usermenu { position: relative; }
 .admin-user { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--a-line); border-radius: 999px; background: var(--a-panel); color: inherit; font-family: inherit; cursor: pointer; transition: border-color .15s, background .15s; }
@@ -847,16 +848,24 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-module-page { display: grid; gap: 12px; }
 .admin-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .admin-kpi { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
-.admin-kpi-label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-kpi-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-kpi-icon { display: inline-grid; place-items: center; flex: 0 0 auto; width: 18px; height: 18px; border-radius: 6px; background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-kpi-value { overflow: hidden; color: var(--a-text-strong); font: 700 20px/1.15 var(--font-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .admin-kpi-note { color: var(--a-muted); font-size: 11px; }
 .admin-kpi[data-tone="accent"] .admin-kpi-value { color: var(--a-accent); }
 .admin-kpi[data-tone="ok"] .admin-kpi-value { color: var(--a-ok); }
 .admin-kpi[data-tone="warn"] .admin-kpi-value { color: var(--a-warn); }
+.admin-kpi[data-tone="danger"] .admin-kpi-value { color: var(--a-danger); }
+.admin-kpi[data-tone="accent"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-accent) 14%, transparent); color: var(--a-accent); }
+.admin-kpi[data-tone="ok"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-ok) 14%, transparent); color: var(--a-ok); }
+.admin-kpi[data-tone="warn"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-warn) 14%, transparent); color: var(--a-warn); }
+.admin-kpi[data-tone="danger"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-danger) 14%, transparent); color: var(--a-danger); }
 .admin-panel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .admin-panel { overflow: hidden; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel); }
 .admin-panel-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--a-line); background: var(--a-accent-soft); }
-.admin-panel-title { color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-panel-title { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+/* Chip del ícono de sección: mismo objeto en todos los módulos. */
+.admin-panel-icon { display: inline-grid; place-items: center; flex: 0 0 auto; width: 20px; height: 20px; border: 1px solid color-mix(in srgb, var(--a-accent) 36%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--a-accent) 16%, transparent); color: var(--a-accent); }
 .admin-panel-meta { color: var(--a-muted); font-size: 11px; }
 .admin-panel-action { margin-left: auto; }
 .admin-panel-link { margin-left: auto; color: var(--a-accent); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
@@ -932,7 +941,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    a cualquier `<nav>`; acá se neutraliza explícitamente para que los subtabs
    vivan en el flujo del panel y no encima de la barra superior. */
 .admin-subtabs { position: static; inset: auto; z-index: auto; display: flex; align-items: center; justify-content: flex-start; gap: 6px; flex-wrap: wrap; height: auto; padding: 0; border: 0; background: none; transition: none; }
-.admin-subtab { padding: 7px 13px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.admin-subtab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.admin-subtab .admin-icon { color: var(--a-accent); }
 .admin-subtab:hover { border-color: var(--a-line-2); color: var(--a-text); }
 .admin-subtab[data-active="true"], .admin-subtab[aria-current="page"] { border-color: color-mix(in srgb, var(--a-accent) 48%, transparent); background: var(--a-accent-soft); color: var(--a-text-strong); }
 .admin-image-field { align-content: start; }
@@ -1006,7 +1016,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Ficha 360 del cliente (issue #34): más ancho para las listas de hechos. */
 .admin-dialog--ficha { width: min(1040px, 100%); }
 .admin-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.admin-dialog-title { color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-dialog-title { display: inline-flex; align-items: center; gap: 6px; color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
 .admin-dialog-text { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; }
 .admin-dialog-code { color: var(--a-text-strong); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; font-weight: 700; letter-spacing: .08em; text-align: center; }
 .admin-dialog-qr { display: grid; place-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: #fff; }
@@ -1272,7 +1282,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-match-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .admin-match-main strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-match-main small { color: var(--a-muted); font-size: 10.5px; overflow-wrap: anywhere; }
-.admin-dialog-subtitle { font-size: 12.5px; letter-spacing: .02em; }
+.admin-dialog-subtitle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; letter-spacing: .02em; }
 .admin-csv-field { align-content: start; }
 .admin-csv-body { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .admin-csv-name { flex: 1 1 10rem; min-width: 0; overflow: hidden; padding: 7px 10px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); color: var(--a-muted-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1508,7 +1518,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-detail-label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .admin-detail-value { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
 .admin-detail-section { display: grid; gap: 6px; }
-.admin-detail-section-title { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.admin-detail-section-title { display: inline-flex; align-items: center; gap: 6px; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+/* Chip chico para los títulos de sección dentro de fichas y diálogos. */
+.admin-panel-icon--sm { width: 17px; height: 17px; border-radius: 5px; }
 .admin-detail-text { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
 .admin-detail-quote { display: grid; gap: 6px; }
 .admin-detail-quote-meta { color: var(--a-muted); font-size: 11px; }
@@ -1566,7 +1578,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 .admin-demo-resources { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 12px; padding: 10px; }
 .admin-demo-resource { display: grid; gap: 6px; align-content: start; }
-.admin-demo-resource h3 { margin: 0; color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-demo-resource h3 { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
 .admin-demo-resource p { margin: 0; color: var(--a-muted-2); font-size: 12px; line-height: 1.55; }
 .admin-demo-code { color: var(--a-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; overflow-wrap: anywhere; }
 .admin-demo-portal { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
@@ -1706,6 +1718,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-brand-note { display: none; }
   .admin-main-body { padding: 10px 10px 26px; }
   .admin-topbar-eyebrow { display: none; }
+  /* Mobile angosto: el ícono del título cede para que el nombre entre completo. */
+  .admin-topbar-icon { display: none; }
   .admin-inline-form select, .admin-inline-form input { max-width: none; flex: 1 1 100%; }
   .admin-inline-form .admin-btn { margin-left: 0; }
   .admin-filter { max-width: none; }

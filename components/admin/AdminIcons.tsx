@@ -132,6 +132,12 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M13.5 6.5 19.5 12l-6 5.5" />
     </>
   ),
+  "arrow-left": (
+    <>
+      <path d="M20 12H5" />
+      <path d="M10.5 6.5 4.5 12l6 5.5" />
+    </>
+  ),
   alert: (
     <>
       <path d="M12 4l9 16H3z" />
@@ -215,6 +221,41 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M12 3.6 20 8l-8 4.4L4 8z" />
       <path d="M4 12.4 12 16.8l8-4.4" />
       <path d="M4 16.4 12 20.8l8-4.4" />
+    </>
+  ),
+  wallet: (
+    <>
+      <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h11A1.5 1.5 0 0 1 18 7.5" />
+      <rect x="3" y="7.5" width="18" height="12" rx="2" />
+      <path d="M16 13.5h3M3 11h18" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="M3.5 9.5 12 4l8.5 5.5" />
+      <path d="M5.5 10v8M10 10v8M14 10v8M18.5 10v8" />
+      <path d="M3 19.5h18" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+      <path d="M12 14.4v2.2" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M4.5 17.5 10 12l3.4 3.4 2.6-2.6 4.5 4.7" />
+    </>
+  ),
+  checkin: (
+    <>
+      <path d="M4 12h11" />
+      <path d="M10.5 7.5 15 12l-4.5 4.5" />
+      <path d="M20 4.5v15" />
     </>
   ),
   "chevron-down": <path d="M6.5 9.5 12 15l5.5-5.5" />,

@@ -9,6 +9,7 @@ import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
 import {
   adminModuleVisible,
   adminNavGroups,
+  adminNavIcon,
   adminNavLabel,
   asAdminRole,
   canManageOrganization,
@@ -429,6 +430,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
   const title = adminNavLabel(pathname);
+  const moduleIcon = adminNavIcon(pathname);
   const canEditOrganization = canManageOrganization(session.role);
   const organizationLogos = session.organization?.logos;
   const sessionValue = useMemo<AdminSessionState>(
@@ -683,6 +685,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className="admin-topbar-title">
               <p className="admin-topbar-eyebrow">LedBox · Operación</p>
               <h1 className="admin-topbar-heading" title={title}>
+                <span className="admin-topbar-icon" aria-hidden="true">
+                  <AdminIcon name={moduleIcon} size={15} />
+                </span>
                 {title}
               </h1>
             </div>
@@ -720,7 +725,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </Link>
               <p className="admin-demo-banner-text">
                 <strong>Datos simulados</strong>
-                <span>Recorré el panel completo con datos ficticios: la demo es de solo lectura y no toca datos reales.</span>
+                <span>Recorré el panel completo: es de solo lectura y no toca datos reales.</span>
               </p>
               <button
                 type="button"
