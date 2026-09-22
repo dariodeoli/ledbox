@@ -31,3 +31,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   tesorería y podés conciliar, rechazar o crear el movimiento.
 - Facturación con libro de IVA y cierre mensual; Plan con límites y consumo;
   Sistema con el estado del respaldo y su alerta.
+## v2.1.19 — 2026-09-22
+
+- footer único (empresa + crédito) en vez de dos pies pegados
+
