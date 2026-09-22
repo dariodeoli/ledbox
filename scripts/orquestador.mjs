@@ -248,13 +248,11 @@ function al() {
   console.log("\n  Regla: un dominio por slot (panel, portal, librería, operación), brief con archivos y puertos propios.\n");
 }
 
-function novedadesEntry(version, list) {
+function novedadesEntry(version, subjects) {
   const bullets = [];
-  for (const s of list) {
-    for (const c of s.commits) {
-      const clean = c.subject.replace(/^(\w+)(\([^)]*\))?!?:\s*/, "");
-      if (!bullets.includes(clean)) bullets.push(clean);
-    }
+  for (const subject of subjects) {
+    const clean = subject.replace(/^(\w+)(\([^)]*\))?!?:\s*/, "");
+    if (!bullets.includes(clean)) bullets.push(clean);
   }
   const today = new Date().toISOString().slice(0, 10);
   const lines = [`## v${version} — ${today}`, "", ...bullets.slice(0, 12).map((b) => `- ${b}`), ""];
@@ -270,11 +268,12 @@ function ht() {
     return false;
   }
   const list = slots();
-  if (!list.length) {
-    log("ht: no hay ramas con commits nuevos; nada que integrar");
+  const localAhead = Number(git("rev-list", "--count", `origin/${LIVE_BRANCH}..HEAD`) || 0);
+  if (!list.length && localAhead === 0) {
+    log("ht: no hay ramas ni commits locales pendientes; nada que integrar");
     return false;
   }
-  log(`═══ ht · ciclo completo (${list.length} rama/s) ═══`);
+  log(`═══ ht · ciclo completo (${list.length} rama/s, ${localAhead} commit/s locales) ═══`);
   if (dryRun) {
     log("(dry-run) mergearía: " + list.map((s) => `${s.branch} (${s.count})`).join(", "));
     return true;
@@ -313,20 +312,23 @@ function ht() {
       log(`✓ ${slot.branch} integrada (${slot.count} commits)`);
     }
 
-    if (!merged.length) {
+    if (!merged.length && localAhead === 0) {
       log("ht: no se integró nada; revisar los motivos arriba");
       saveState({ lastRun: new Date().toISOString(), lastOutcome: "nothing-merged" });
       return false;
     }
 
     const version = nextVersion(currentVersion());
-    const bullets = novedadesEntry(version, merged);
+    const subjects = merged.length
+      ? merged.flatMap((slot) => slot.commits.map((c) => c.subject))
+      : git("log", "--format=%s", `origin/${LIVE_BRANCH}..HEAD`).split("\n").filter(Boolean);
+    const bullets = novedadesEntry(version, subjects);
     log(`NOVEDADES.md actualizado (${bullets} bullets, v${version})`);
     if (!run("commit de novedades", "git", ["add", NOVEDADES]) || !run("commit", "git", ["commit", "-q", "-m", `docs(novedades): ronda hacia v${version}`])) {
       log("✗ no pude commitear NOVEDADES.md");
       return false;
     }
-    if (!run("push", "git", ["push", "origin", LIVE_BRANCH])) return false;
+    if (merged.length && !run("push", "git", ["push", "origin", LIVE_BRANCH])) return false;
     if (!run("release + deploy", "npm", ["run", "deploy:patch"], { quiet: true })) return false;
 
     // Smoke: versión desplegada y superficies.

@@ -30,14 +30,7 @@ export default function PortalLayout({ children }: Readonly<{ children: React.Re
 
       <main className="portal-main">{children}</main>
 
-      <footer className="portal-foot">
-        <span>LedBox Paraguay · Tecnología visual para eventos</span>
-        <a href={publicConfig.siteUrl} rel="noreferrer">
-          ledbox.online
-        </a>
-      </footer>
-
-      <AppFooter variant="app" className="app-footer--portal" />
+      <AppFooter variant="portal" />
     </div>
   );
 }

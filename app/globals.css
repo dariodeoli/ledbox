@@ -1953,9 +1953,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-brand-name span { color: var(--led); }
 .portal-top-label { color: var(--muted-2); font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 .portal-main { flex: 1; width: 100%; max-width: 72rem; margin: 0 auto; padding: clamp(22px, 4vw, 44px) clamp(16px, 4vw, 32px) 56px; }
-.portal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 16px clamp(16px, 4vw, 40px) 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+
 .portal-foot a { color: var(--led); text-decoration: none; }
 .portal-foot a:hover { text-decoration: underline; }
+.app-footer--portal a { color: var(--led); text-decoration: none; }
+.app-footer--portal a:hover { text-decoration: underline; }
 
 /* Landing: validador del código */
 .portal-hero { display: grid; gap: 14px; max-width: 40rem; }
@@ -2224,7 +2226,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .app-footer-credit a:hover { color: var(--a-accent); }
 .app-footer--panel { border-top: 0; padding: 8px 0 2px; }
 .app-footer--access { justify-content: center; border-top: 0; padding-top: 16px; }
-.app-footer--portal { border-top: 1px solid var(--line, #1b2733); padding: 12px 20px 18px; background: transparent; }
+.app-footer--portal { padding: 16px clamp(16px, 4vw, 40px) 22px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 @media (max-width: 640px) { .app-footer { justify-content: center; text-align: center; } }
 
 /* ── Landing de EventOS (issue #39) ── */
