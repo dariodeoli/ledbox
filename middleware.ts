@@ -132,7 +132,11 @@ export function middleware(request: NextRequest) {
       url.pathname = "/demo";
       return NextResponse.redirect(url, 308);
     }
-    return NextResponse.next();
+    // El layout del panel lee `x-pathname` para devolver al visitante a la misma
+    // pantalla después de crear la sesión demo (links profundos incluidos).
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-pathname", `${pathname}${search}`);
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   // Host público: el panel solo vive en el subdominio de la app (en producción).

@@ -24,6 +24,15 @@ export function whatsappUrl(message: string): string {
   return `https://wa.me/${publicConfig.whatsappNumber}?text=${encodeURIComponent(message)}`;
 }
 
+/** Host (sin puerto) de una URL de configuración; `""` si no es una URL válida. */
+export function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 // ── Código público del presupuesto (issue #12) ─────────────────────────────
 // El código es la única credencial del link: alfabeto sin caracteres ambiguos
 // (nada de 0/1/I/O) y 20 caracteres (100 bits) en grupos de cuatro para poder
