@@ -78,6 +78,7 @@ const TYPE_OPTIONS = [
 // contrato (ningún presupuesto aprobado).
 const FILTER_OPTIONS = [
   { value: "ALL", label: "Toda la cartera" },
+  { value: "NO_RESPONSIBLE", label: "Sin responsable cargado" },
   { value: "OVERDUE", label: "Con deuda vencida" },
   { value: "NO_PURCHASES", label: "Sin compras" },
 ];
@@ -307,6 +308,7 @@ export function ClientesModule() {
     const list = (clients.data ?? [])
       .filter((client) => (type === "ALL" ? true : client.type === type))
       .filter((client) => {
+        if (filter === "NO_RESPONSIBLE") return !client.contactName;
         if (filter === "OVERDUE") return client.metrics.overdue > 0;
         if (filter === "NO_PURCHASES") return client.metrics.contracts === 0;
         return true;
@@ -711,7 +713,22 @@ export function ClientesModule() {
                       {client.company && client.name !== client.company ? <small className="admin-cell-sub"> · {client.name}</small> : null}
                     </span>
                   </AdminCell>
-                  <AdminCell title={[client.phone, client.email].filter(Boolean).join(" · ") || "Sin contacto cargado"}>
+                  <AdminCell
+                    title={[client.phone, client.email].filter(Boolean).join(" · ") || "Sin contacto cargado"}
+                  >
+                    {/* Señal compacta del dato que falta para el portal: sin
+                        responsable cargado, la aprobación del presupuesto no
+                        tiene a quién prellenarle el nombre. El chip va primero
+                        para que el ancho fijo de la columna no lo recorte. */}
+                    {client.contactName ? null : (
+                      <AdminBadge
+                        tone="warn"
+                        label={`Sin responsable cargado: el portal no puede prellenar quién autoriza el presupuesto de ${name}`}
+                        title={`Sin responsable cargado: el portal no puede prellenar quién autoriza el presupuesto de ${name}`}
+                      >
+                        <AdminIcon name="alert" size={11} />
+                      </AdminBadge>
+                    )}{" "}
                     {contact || "—"}
                   </AdminCell>
                   <AdminCell>

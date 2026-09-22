@@ -112,9 +112,21 @@ export function AdminWhatsappTemplateButton({ title, onClick }: { title: string;
   );
 }
 
-export function AdminBadge({ tone = "neutral", title, children }: { tone?: AdminTone; title?: string; children: React.ReactNode }) {
+/** Chip de estado reutilizable; `label` da nombre accesible a los de solo ícono. */
+export function AdminBadge({
+  tone = "neutral",
+  title,
+  label,
+  children,
+}: {
+  tone?: AdminTone;
+  title?: string;
+  /** Nombre accesible: obligatorio en los chips de solo ícono. */
+  label?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="admin-badge" data-tone={tone} title={title}>
+    <span className="admin-badge" data-tone={tone} title={title} aria-label={label} role={label ? "img" : undefined}>
       {children}
     </span>
   );

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   damageSummary,
+  daysUntilDue,
   eventStatusLabel,
   checklistProgress,
   formatDateShort,
@@ -130,6 +131,40 @@ function isUpcomingEvent(event: AdminEventRow): boolean {
   return isUpcomingWithin(event.startsAt);
 }
 
+/**
+ * Urgencia operativa del evento, el orden por defecto de la lista y de las
+ * columnas del tablero (día de Asunción, como el resto de las fechas):
+ *
+ * 0 · en juego con checklist abierto: en curso, arrancando hoy o mañana, o
+ *     próximo sin ninguna tarea cumplida (lo que hay que resolver ya).
+ * 1 · en juego con el checklist cerrado.
+ * 2 · próximo (7 días) con el checklist todavía abierto.
+ * 3 · el resto de lo que viene.
+ * 4 · ya pasado o cancelado (del más reciente al más viejo).
+ */
+function eventUrgency(event: AdminEventRow): number {
+  if (event.status === "CANCELLED" || event.status === "COMPLETED") return 4;
+  const pending = event.tasks.some((task) => !task.completedAt);
+  const start = event.startsAt ? new Date(event.startsAt).getTime() : null;
+  const end = event.endsAt ? new Date(event.endsAt).getTime() : null;
+  const now = Date.now();
+  const live = event.status === "IN_PROGRESS" || (start !== null && start <= now && (end === null || end >= now));
+  const days = daysUntilDue(event.startsAt);
+  const imminent = days !== null && days >= 0 && days <= 1;
+  if (live || imminent) return pending ? 0 : 1;
+  if (pending && isUpcomingEvent(event)) return 2;
+  return 3;
+}
+
+function compareEventUrgency(a: AdminEventRow, b: AdminEventRow): number {
+  const rank = eventUrgency(a) - eventUrgency(b);
+  if (rank !== 0) return rank;
+  const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
+  const timeB = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
+  // Lo pasado se lee al revés: primero lo más reciente.
+  return eventUrgency(a) >= 4 ? timeB - timeA : timeA - timeB;
+}
+
 /** Opciones de promotora para el checklist: el estado real viaja en la etiqueta. */
 function promoterOptions(promoters: AdminPromoterRow[]): Array<{ value: string; label: string }> {
   return [
@@ -208,26 +243,21 @@ export function EventosModule() {
   );
 
   const rows = useMemo(() => {
-    const now = Date.now();
     return searched
       .filter((event) => (status === "ALL" ? true : event.status === status))
-      .sort((a, b) => {
-        const aTime = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
-        const bTime = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
-        const aUpcoming = aTime >= now;
-        const bUpcoming = bTime >= now;
-        if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-        return aUpcoming ? aTime - bTime : bTime - aTime;
-      });
+      .sort(compareEventUrgency);
   }, [searched, status]);
 
   // Tablero (issue #26): columnas por estado; el movimiento pega el PATCH real.
+  // La búsqueda sí filtra las tarjetas y el orden por urgencia fija el de cada
+  // columna, así el tablero abre en lo que está en juego.
+  const orderedSearched = useMemo(() => [...searched].sort(compareEventUrgency), [searched]);
   const moveEvent = useCallback(async (event: AdminEventRow, nextStatus: string) => {
     setBoardError("");
     const result = await adminSend("/api/admin/events", { id: event.id, status: nextStatus }, "PATCH");
     return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
   }, []);
-  const board = useAdminBoardMove({ rows: events, move: moveEvent, onError: setBoardError });
+  const board = useAdminBoardMove({ rows: orderedSearched, move: moveEvent, onError: setBoardError });
 
   const boardCards = useMemo<AdminBoardCardData[]>(
     () =>
@@ -833,7 +863,6 @@ export function EventosModule() {
                 />
                 <AdminButton
                   type="submit"
-                  variant="primary"
                   icon={assignEditingId ? "check" : "plus"}
                   busy={assignBusy}
                   disabled={availabilityBlocked || exceedsAvailability}
@@ -1122,7 +1151,7 @@ export function EventosModule() {
               value={taskForm.dueAt}
               onChange={(value) => setTaskForm({ ...taskForm, dueAt: value })}
             />
-            <AdminButton type="submit" variant="primary" icon="plus" busy={taskBusy}>
+            <AdminButton type="submit" icon="plus" busy={taskBusy}>
               Agregar tarea
             </AdminButton>
           </form>

@@ -618,7 +618,6 @@ function StatementRowDialog({
               </span>
               <AdminButton
                 icon="check"
-                variant="primary"
                 busy={busy}
                 disabled={busy}
                 onClick={() => onMatch(movement.id)}

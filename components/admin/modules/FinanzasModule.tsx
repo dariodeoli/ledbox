@@ -1981,7 +1981,7 @@ export function FinanzasModule() {
           emptyHint={
             expectedRows.length === 0
               ? "Al aprobar un presupuesto con plan de pagos se generan acá el anticipo, las cuotas y el saldo."
-              : "No hay comprobantes en revisión ni pagos vencidos sin comprobante: el plan está al día."
+              : "El plan de pagos del portal está al día."
           }
           rows={3}
         >
@@ -2078,7 +2078,6 @@ export function FinanzasModule() {
                       ) : null}
                       {writable ? (
                         <AdminButton
-                          variant="primary"
                           icon="check"
                           disabled={Boolean(expectedBusy)}
                           title={`Confirmar en cuenta: ${concept} de ${label} (${formatMoney(row.amount)})`}
@@ -2421,7 +2420,7 @@ export function FinanzasModule() {
               onChange={(value) => setPayJob({ ...payJob, receipt: value })}
               placeholder="Comprobante"
             />
-            <AdminButton type="submit" variant="primary" icon="check" busy={payBusy} disabled={payBusy}>
+            <AdminButton type="submit" icon="check" busy={payBusy} disabled={payBusy}>
               Registrar pago
             </AdminButton>
             <AdminButton icon="close" type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
@@ -3001,7 +3000,7 @@ export function FinanzasModule() {
               </>
             ) : null}
             <span className="admin-form-actions">
-              <AdminButton type="submit" variant="primary" icon="check" busy={expenseBusy} disabled={expenseBusy}>
+              <AdminButton type="submit" icon="check" busy={expenseBusy} disabled={expenseBusy}>
                 Guardar
               </AdminButton>
               <AdminButton

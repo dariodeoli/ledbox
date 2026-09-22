@@ -76,7 +76,7 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     title: "Clientes",
     summary: "La cartera comercial con la ficha 360 de cada cliente, armada con datos reales.",
     bullets: [
-      "Filtrá por tipo (final, mayorista, revendedor) o por deuda vencida, y ordená por monto contratado o última actividad.",
+      "Filtrá por tipo (final, mayorista, revendedor), por deuda vencida, sin compras o sin responsable cargado, y ordená por monto contratado o última actividad.",
       "La ficha resume contratos, cobrado, saldo pendiente, mora, ticket promedio y frecuencia de compra.",
       "Cargá contactos directos (encargado, WhatsApp, Instagram y web) y el logo que el cliente ve en el portal.",
       "Desde la ficha se abren sus presupuestos, eventos y cobros sin salir de la pantalla.",

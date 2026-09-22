@@ -578,7 +578,7 @@ export function FacturacionModule() {
         ) : null}
         {tab === "invoices" && canWrite && !periodClosed ? (
           <AdminButton variant="primary" icon="plus" onClick={openInvoice} aria-expanded={invoiceForm !== null}>
-            Nueva factura
+            Emitir factura
           </AdminButton>
         ) : null}
         {tab === "purchases" && canWrite && !periodClosed ? (
