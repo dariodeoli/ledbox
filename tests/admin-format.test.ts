@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  clientWhatsappMessage,
+  contactPhoneValid,
   countdownDays,
   countdownTone,
   daysUntilDue,
   formatCountdown,
   formatDayWhen,
+  instagramHref,
+  instagramLabel,
   inventoryAssignmentCountdown,
+  normalizeContactPhone,
+  normalizeInstagram,
+  normalizeWebsite,
   paymentReminderMessage,
+  websiteHref,
 } from "../lib/admin-format";
 
 /**
@@ -101,4 +109,43 @@ test("el recordatorio de cobro usa la voz del cliente", () => {
   });
   assert.match(message, /vence en 3 días/);
   assert.doesNotMatch(message, /faltan/);
+});
+
+/**
+ * Datos de contacto del cliente (issue #36): el sitio web se normaliza con
+ * esquema, el Instagram como usuario sin `@` y el teléfono acepta el formato
+ * local con 0. Las mismas funciones las usa la UI y el API.
+ */
+
+test("sitio web: se guarda con esquema, sin barra final y solo si es válido", () => {
+  assert.equal(normalizeWebsite("empresa.com.py"), "https://empresa.com.py");
+  assert.equal(normalizeWebsite("  www.empresa.com.py/ "), "https://www.empresa.com.py");
+  assert.equal(normalizeWebsite("http://empresa.com.py/"), "http://empresa.com.py");
+  assert.equal(normalizeWebsite(""), "");
+  assert.equal(websiteHref("empresa.com.py"), "https://empresa.com.py");
+  assert.equal(websiteHref("no es una url"), null);
+  assert.equal(websiteHref("https://sin-punto"), null);
+  assert.equal(websiteHref(null), null);
+});
+
+test("instagram: se guarda como usuario sin arroba y el link va al perfil", () => {
+  assert.equal(normalizeInstagram("@ledboxpy"), "ledboxpy");
+  assert.equal(normalizeInstagram("https://www.instagram.com/ledboxpy/?hl=es"), "ledboxpy");
+  assert.equal(instagramHref("@ledboxpy"), "https://www.instagram.com/ledboxpy");
+  assert.equal(instagramLabel("ledboxpy"), "@ledboxpy");
+  assert.equal(instagramHref("usuario con espacios"), null);
+  assert.equal(instagramHref(""), null);
+});
+
+test("teléfono de contacto: normaliza el 0 local y rechaza lo inválido", () => {
+  assert.equal(normalizeContactPhone("0981 123 456"), "+595 981123456");
+  assert.equal(normalizeContactPhone("+595 981 123 456"), "+595 981123456");
+  assert.equal(contactPhoneValid("0981 123 456"), true);
+  assert.equal(contactPhoneValid("123"), false);
+  assert.equal(contactPhoneValid(""), false);
+});
+
+test("el WhatsApp prellenado del cliente saluda por su nombre", () => {
+  assert.equal(clientWhatsappMessage("María González"), "Hola María González: te escribimos de LedBox.");
+  assert.equal(clientWhatsappMessage("  "), "Hola: te escribimos de LedBox.");
 });
