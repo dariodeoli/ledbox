@@ -783,10 +783,108 @@ export function AdminLockScreen({
 }
 
 /**
+ * Entrada de archivos de texto del panel (issue #40): la usa la importación del
+ * extracto bancario para leer un CSV local. El texto no se sube a ningún lado:
+ * se queda en el navegador y viaja al API recién al previsualizar o importar.
+ * Es la única pieza del panel que abre un archivo de texto; los adjuntos de
+ * imagen/PDF siguen en `AdminImageUpload`.
+ */
+export function AdminCsvField({
+  label,
+  hint,
+  fileName,
+  busy,
+  disabled,
+  error,
+  onText,
+}: {
+  label: string;
+  hint?: string;
+  /** Nombre del archivo ya leído (el llamador lo conserva para la cabecera). */
+  fileName?: string | null;
+  busy?: boolean;
+  disabled?: boolean;
+  error?: string | null;
+  /** Texto completo del archivo y su nombre, listos para la vista previa. */
+  onText: (text: string, fileName: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [localError, setLocalError] = useState("");
+  const fieldId = useId();
+  const labelId = `${fieldId}-label`;
+  const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
+  const message = error || localError;
+
+  async function pick(file: File | null) {
+    if (!file) return;
+    setLocalError("");
+    if (file.size > MAX_CSV_FILE_BYTES) {
+      setLocalError("El archivo supera los 512 KB: dividí el extracto por período.");
+      return;
+    }
+    const text = await file.text().catch(() => "");
+    if (!text.trim()) {
+      setLocalError("El archivo está vacío o no es un CSV de texto.");
+      return;
+    }
+    onText(text, file.name);
+  }
+
+  return (
+    <div className="admin-field admin-csv-field">
+      <span className="admin-field-label" id={labelId}>
+        {label}
+      </span>
+      <div className="admin-csv-body">
+        <span className="admin-csv-name" title={fileName ?? undefined}>
+          {fileName || "Ningún archivo elegido"}
+        </span>
+        <AdminButton
+          type="button"
+          icon="upload"
+          busy={busy}
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+          aria-describedby={message ? errorId : hint ? hintId : undefined}
+        >
+          Elegir CSV
+        </AdminButton>
+      </div>
+      <input
+        ref={inputRef}
+        className="admin-csv-input"
+        type="file"
+        accept=".csv,.tsv,.txt,text/csv,text/plain"
+        aria-labelledby={labelId}
+        disabled={disabled || busy}
+        onChange={(event) => {
+          void pick(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+      {message ? (
+        <span className="admin-field-error" id={errorId} role="alert">
+          {message}
+        </span>
+      ) : hint ? (
+        <span className="admin-field-hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Tope del archivo de texto aceptado por `AdminCsvField` (512 KB, igual que el API). */
+const MAX_CSV_FILE_BYTES = 512 * 1024;
+
+/**
  * Subida de imagen de identidad (issue #22): la usan el avatar de Mi perfil y
  * los dos logos de la sección Empresa. Es la única pieza que abre el selector de
- * archivos del panel; valida por magic bytes y recorta/comprime en el navegador
- * (`prepareIdentityImage`) antes de entregar la imagen lista para subir.
+ * archivos de identidad del panel; valida por magic bytes y recorta/comprime en
+ * el navegador (`prepareIdentityImage`) antes de entregar la imagen lista para
+ * subir.
  *
  * La vista previa la dibuja el llamador con el objeto único de identidad
  * (`AdminAvatar` / `AdminOrgLogo`), así el panel no tiene dos formas de mostrar

@@ -83,6 +83,8 @@ model Organization {
   treasuryAccounts  TreasuryAccount[]
   treasuryMovements TreasuryMovement[]
   expenses          Expense[]
+  bankStatements    BankStatement[]
+  bankStatementRows BankStatementRow[]
   idempotencyKeys   IdempotencyKey[]
   teamInvitations   TeamInvitation[]
 
@@ -1011,6 +1013,8 @@ model TreasuryAccount {
   clientPayments   ClientPayment[]
   expectedPayments ExpectedPayment[]    @relation("ExpectedPaymentAccount")
   expenses         Expense[]
+  bankStatements   BankStatement[]      @relation("BankStatementAccount")
+  bankStatementRows BankStatementRow[]  @relation("BankStatementRowAccount")
 
   @@unique([organizationId, name])
   @@index([organizationId, active, sortOrder])
@@ -1059,6 +1063,7 @@ model TreasuryMovement {
   organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account          TreasuryAccount           @relation("TreasuryMovementAccount", fields: [accountId], references: [id], onDelete: Cascade)
   counterAccount   TreasuryAccount?          @relation("TreasuryMovementCounterAccount", fields: [counterAccountId], references: [id], onDelete: SetNull)
+  bankStatementRows BankStatementRow[]
 
   @@index([organizationId, occurredAt])
   @@index([accountId, occurredAt])
@@ -1098,6 +1103,104 @@ model Expense {
   @@index([organizationId, category])
   @@index([organizationId, eventId])
   @@index([accountId, date])
+}
+
+/**
+ * Dirección de una fila del extracto según el banco (issue #40): un débito sale
+ * de la cuenta y un crédito entra. El monto se guarda siempre positivo.
+ */
+enum BankStatementRowDirection {
+  DEBIT
+  CREDIT
+}
+
+/**
+ * Estado de la fila del extracto (issue #40): pendiente de conciliar,
+ * conciliada con un movimiento de tesorería (1 a 1) o rechazada a mano.
+ */
+enum BankStatementRowStatus {
+  PENDING
+  MATCHED
+  IGNORED
+}
+
+/**
+ * Extracto del banco importado (issue #40): cabecera del archivo con la cuenta
+ * de tesorería, el período declarado, el actor real y el conteo de la
+ * importación. Las filas viven en `BankStatementRow`; nada de esto toca el saldo
+ * derivado de la cuenta.
+ */
+model BankStatement {
+  id              String             @id
+  organizationId  String
+  accountId       String
+  label           String
+  /// Período declarado del extracto (día de Asunción, mediodía): desde/hasta.
+  periodStart     DateTime
+  periodEnd       DateTime
+  /// Nombre del archivo original, si vino de un CSV subido.
+  originalName    String?
+  /// Filas de datos leídas del archivo (incluye las descartadas).
+  lineCount       Int                @default(0)
+  /// Filas realmente importadas.
+  rowCount        Int                @default(0)
+  errorCount      Int                @default(0)
+  duplicateCount  Int                @default(0)
+  importedById    String?
+  importedByName  String
+  importedByEmail String?
+  createdAt       DateTime           @default(now())
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account         TreasuryAccount    @relation("BankStatementAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  rows            BankStatementRow[]
+
+  @@index([organizationId, accountId, periodStart])
+  @@index([organizationId, createdAt])
+}
+
+/**
+ * Fila del extracto (issue #40): el renglón tal como lo publica el banco, con su
+ * fecha, descripción, referencia, dirección y monto en guaraníes enteros. El
+ * `fingerprint` normalizado detecta el mismo movimiento en dos importaciones y
+ * `movementId` es el match 1 a 1 con tesorería, con el actor y la fecha de la
+ * conciliación. `raw` conserva el renglón original para la trazabilidad.
+ */
+model BankStatementRow {
+  id             String                   @id
+  statementId    String
+  organizationId String
+  accountId      String
+  /// Línea física del archivo de la que salió la fila.
+  line           Int
+  /// Día de Asunción de la fila (mediodía), igual que los movimientos.
+  date           DateTime
+  description    String
+  reference      String?
+  direction      BankStatementRowDirection
+  /// Monto absoluto en guaraníes; el signo lo da `direction`.
+  amount         Int
+  status         BankStatementRowStatus   @default(PENDING)
+  /// Huella normalizada (día | dirección | monto | descripción | referencia).
+  fingerprint    String
+  /// Renglón original del archivo (acotado), para la trazabilidad.
+  raw            String?
+  movementId     String?
+  matchedAt      DateTime?
+  matchedById    String?
+  matchedByName  String?
+  matchedByEmail String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  statement      BankStatement            @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        TreasuryAccount          @relation("BankStatementRowAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  movement       TreasuryMovement?        @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, accountId, date])
+  @@index([organizationId, status])
+  @@index([statementId, line])
+  @@index([organizationId, accountId, fingerprint])
+  @@index([movementId])
 }
 
 model InventoryItem {

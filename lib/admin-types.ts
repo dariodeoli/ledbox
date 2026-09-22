@@ -4,6 +4,7 @@
  */
 
 import { isOverdue, type AdminTone } from "./admin-format";
+import type { StatementDirectionValue, StatementRowStatusValue } from "./bank-statement";
 
 export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
 
@@ -625,6 +626,95 @@ export type AdminExpenseProject = {
   startsAt: string | null;
   client: { id: string; name: string; company: string | null };
 };
+
+// ── Conciliación bancaria (issue #40) ───────────────────────────────────────
+// El extracto del banco se importa fila por fila y se concilia contra los
+// movimientos de tesorería de la misma cuenta: cada fila queda pendiente,
+// conciliada (1 a 1 con un movimiento) o rechazada, con su traza de quién y
+// cuándo. El saldo de la cuenta sigue siendo el derivado de tesorería: el
+// extracto no lo reescribe, lo confirma o deja la diferencia a la vista.
+
+/** Direcciones y estados del extracto: misma lista que el schema (fuente única en `lib/bank-statement`). */
+
+/** Extracto importado (cabecera) con su período y su conteo real de filas. */
+export type AdminBankStatementRow = {
+  id: string;
+  label: string;
+  periodStart: string;
+  periodEnd: string;
+  originalName: string | null;
+  lineCount: number;
+  rowCount: number;
+  errorCount: number;
+  duplicateCount: number;
+  importedByName: string;
+  createdAt: string;
+  account: AdminTreasuryAccountRef;
+};
+
+/** Movimiento de tesorería candidato a conciliar (misma cuenta, sin conciliar). */
+export type AdminBankStatementMovementRef = {
+  id: string;
+  direction: string;
+  amount: number;
+  occurredAt: string;
+  accountId: string;
+  counterAccountId: string | null;
+  account: AdminTreasuryAccountRef;
+  counterAccount: AdminTreasuryAccountRef | null;
+  sourceLabel: string | null;
+};
+
+/** Fila del extracto con su estado, su match y las sugerencias de conciliación. */
+export type AdminBankStatementRowItem = {
+  id: string;
+  line: number;
+  /** Día de Asunción `YYYY-MM-DD`: con esto se calculan las sugerencias. */
+  date: string;
+  /** Instante del día (mediodía de Asunción) para dibujar la fecha. */
+  occurredAt: string;
+  description: string;
+  reference: string | null;
+  direction: StatementDirectionValue;
+  amount: number;
+  status: StatementRowStatusValue;
+  raw: string | null;
+  matchedAt: string | null;
+  matchedByName: string | null;
+  matchedByEmail: string | null;
+  statement: Pick<AdminBankStatementRow, "id" | "label" | "originalName" | "importedByName" | "createdAt">;
+  /** Movimiento vinculado cuando la fila está conciliada. */
+  movement: AdminBankStatementMovementRef | null;
+  account: AdminTreasuryAccountRef;
+};
+
+/** KPIs de la conciliación del período para la cuenta elegida. */
+export type AdminBankStatementSummary = {
+  /** Filas del extracto del período (sin contar las rechazadas). */
+  rows: number;
+  pending: { count: number; net: number };
+  matched: { count: number; net: number };
+  ignored: { count: number; net: number };
+  /** Neto del extracto (créditos − débitos) sin las filas rechazadas. */
+  bankNet: number;
+  /** Neto de los movimientos de tesorería del período en la cuenta. */
+  bookNet: number;
+  /** Extracto − movimientos: lo que falta conciliar de un lado o del otro. */
+  difference: number;
+};
+
+/** Resultado de la vista previa y de la importación del extracto. */
+export type AdminBankStatementImportRow = {
+  line: number;
+  date: string | null;
+  description: string;
+  reference: string | null;
+  direction: StatementDirectionValue | null;
+  amount: number | null;
+  error: string | null;
+  duplicate: boolean;
+};
+
 
 // ── Pagos esperados y confirmación en cuenta (issue #28) ────────────────────
 // Espejo de `ExpectedPayment`: el dinero que el plan del presupuesto promete y
@@ -1375,6 +1465,8 @@ export const AUDIT_ENTITIES = [
   "TreasuryAccount",
   "TreasuryMovement",
   "Expense",
+  "BankStatement",
+  "BankStatementRow",
   "MessageTemplate",
 ] as const;
 
@@ -1679,6 +1771,23 @@ export type AdminApiResponse = {
   expectedPayments?: AdminExpectedPaymentRow[];
   /** Totales de pagos esperados: por confirmar, vencidos y confirmados (issue #28). */
   expectedSummary?: AdminExpectedPaymentSummary;
+  /** Conciliación bancaria (issue #40): filas del extracto, candidatos y KPIs. */
+  statementRows?: AdminBankStatementRowItem[];
+  candidates?: AdminBankStatementMovementRef[];
+  candidatesTruncated?: boolean;
+  rowsTruncated?: boolean;
+  statementCount?: number;
+  /** Cuentas con extractos importados (para elegir la cuenta por defecto). */
+  statementAccountIds?: string[];
+  bankSummary?: AdminBankStatementSummary;
+  /** Resultado de la vista previa o de la importación del extracto. */
+  statementImport?: {
+    rows: AdminBankStatementImportRow[];
+    total: number;
+    ok: number;
+    errors: number;
+    duplicates: number;
+  };
   /** Plantillas de mensajes de WhatsApp de la empresa activa (issue #35). */
   templates?: AdminMessageTemplateRow[];
   /** Correo (issue #30): configuración, historial y resultado del envío. */

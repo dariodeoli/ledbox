@@ -25,7 +25,7 @@ import { clientLabel } from "./notifications";
 
 const MAX_LABEL = 200;
 
-export type MovementSnapshotKind = "client_payment" | "supplier_job" | "expense";
+export type MovementSnapshotKind = "client_payment" | "supplier_job" | "expense" | "bank_statement";
 
 /** Snapshot del hecho que originó un movimiento de tesorería. */
 export type MovementSourceSnapshot = {
@@ -68,7 +68,9 @@ export function parseMovementSourceSnapshot(value: unknown): MovementSourceSnaps
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const kind =
-    row.kind === "client_payment" || row.kind === "supplier_job" || row.kind === "expense" ? row.kind : null;
+    row.kind === "client_payment" || row.kind === "supplier_job" || row.kind === "expense" || row.kind === "bank_statement"
+      ? row.kind
+      : null;
   const label = clean(typeof row.label === "string" ? row.label : null);
   const amount = typeof row.amount === "number" && Number.isFinite(row.amount) ? row.amount : null;
   if (!kind || !label || amount === null) return null;

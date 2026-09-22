@@ -84,6 +84,7 @@ import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminM
 import { DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { BudgetProofDialog } from "./PresupuestosModule";
+import { ConciliacionBancaria } from "./ConciliacionBancaria";
 
 /** Métodos de pago del alta directa (catálogo cerrado, espejo del API). */
 const METHOD_OPTIONS = [...PAYMENT_METHODS];
@@ -2416,6 +2417,15 @@ export function FinanzasModule() {
           </AdminTable>
         </AdminDataState>
       </AdminPanel>
+
+      <ConciliacionBancaria
+        accounts={accounts}
+        defaultAccountId={defaultAccountId}
+        period={period}
+        writable={writable}
+        onNotice={setNotice}
+        onTreasuryChanged={treasury.reload}
+      />
 
       <AdminPanel
         title="Gastos"
