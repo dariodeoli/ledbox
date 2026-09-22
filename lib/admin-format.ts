@@ -1037,6 +1037,51 @@ export function treasuryDirectionTone(value: string | null | undefined): AdminTo
   return TREASURY_DIRECTION_TONES[value] ?? "neutral";
 }
 
+// ── Conciliación bancaria (issue #40) ──────────────────────────────────────
+// La fila del extracto habla de débito/crédito (lo que dice el banco) y su
+// estado es pendiente, conciliada o rechazada; el tono distingue lo que falta.
+
+const STATEMENT_DIRECTION: Record<string, string> = {
+  DEBIT: "Débito",
+  CREDIT: "Crédito",
+};
+
+const STATEMENT_DIRECTION_TONES: Record<string, AdminTone> = {
+  DEBIT: "danger",
+  CREDIT: "ok",
+};
+
+const STATEMENT_STATUS: Record<string, string> = {
+  PENDING: "Pendiente",
+  MATCHED: "Conciliada",
+  IGNORED: "Rechazada",
+};
+
+const STATEMENT_STATUS_TONES: Record<string, AdminTone> = {
+  PENDING: "warn",
+  MATCHED: "ok",
+  IGNORED: "neutral",
+};
+
+export const statementDirectionLabel = (value: string | null | undefined) => label(STATEMENT_DIRECTION, value);
+export const statementStatusLabel = (value: string | null | undefined) => label(STATEMENT_STATUS, value);
+
+export function statementDirectionTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return STATEMENT_DIRECTION_TONES[value] ?? "neutral";
+}
+
+export function statementStatusTone(value: string | null | undefined): AdminTone {
+  if (!value) return "neutral";
+  return STATEMENT_STATUS_TONES[value] ?? "neutral";
+}
+
+/** Monto de una fila del extracto con su signo: el débito sale (−), el crédito entra (+). */
+export function statementAmountLabel(row: { direction: string; amount: number }): string {
+  const sign = row.direction === "DEBIT" ? "− " : "+ ";
+  return `${sign}${formatMoney(row.amount)}`;
+}
+
 // ── Pagos esperados (issue #28) ─────────────────────────────────────────────
 // El estado real de cada concepto del plan. Lo esperado no es plata cobrada: la
 // UI muestra "por confirmar" aparte del cobrado y del disponible.
@@ -1261,6 +1306,8 @@ const AUDIT_ENTITY: Record<string, string> = {
   TreasuryAccount: "Cuenta de tesorería",
   TreasuryMovement: "Movimiento de tesorería",
   Expense: "Gasto",
+  BankStatement: "Extracto bancario",
+  BankStatementRow: "Fila del extracto",
   MessageTemplate: "Plantilla de mensaje",
   System: "Sistema",
   PlanChangeRequest: "Solicitud de plan",
@@ -1399,6 +1446,20 @@ const AUDIT_FIELD: Record<string, string> = {
   direccion: "Dirección",
   razonSocial: "Razón social",
   fiscalDetails: "Datos fiscales",
+  // Conciliación bancaria (issue #40).
+  periodStart: "Desde",
+  periodEnd: "Hasta",
+  originalName: "Archivo",
+  lineCount: "Filas leídas",
+  rowCount: "Filas importadas",
+  errorCount: "Filas con error",
+  duplicateCount: "Duplicadas",
+  matchedAt: "Conciliada el",
+  matchedByName: "Conciliada por",
+  matchedById: "Conciliada por",
+  matchedByEmail: "Correo de quien concilió",
+  movementId: "Movimiento",
+  statementId: "Extracto",
 };
 
 /** Campos cuyo valor se dibuja como monto (PYG entero). */
@@ -1454,12 +1515,13 @@ export function auditValueLabel(entity: string | null | undefined, field: string
     if (entity === "SupplierJob") return jobStatusLabel(text);
     if (entity === "InventoryItem") return inventoryStatusLabel(text);
     if (entity === "Lead") return leadStatusLabel(text);
+    if (entity === "BankStatementRow") return statementStatusLabel(text);
   }
   if (key === "role") return adminRoleLabel(text);
   if (key === "type" && entity === "Client") return clientTypeLabel(text);
   if (key === "type" && entity === "EventTask") return taskTypeLabel(text);
   if (key === "type" && entity === "TreasuryAccount") return treasuryAccountTypeLabel(text);
-  if (key === "direction") return treasuryDirectionLabel(text);
+  if (key === "direction") return entity === "BankStatementRow" ? statementDirectionLabel(text) : treasuryDirectionLabel(text);
   if (key === "origin") return treasuryOriginLabel(text);
   if (key === "category" && entity === "Expense") return expenseCategoryLabel(text);
   if (key === "category" && entity === "MessageTemplate") return messageTemplateCategoryLabel(text);
