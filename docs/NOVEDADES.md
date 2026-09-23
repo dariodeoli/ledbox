@@ -67,3 +67,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - sin sesión el panel va al login sin dibujar el shell
 - nav compacto con acordeón por altura
 
+## v2.1.25 — 2026-09-23
+
+- PIN de 4 o 6 dígitos con cajas y avance automático
+
