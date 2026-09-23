@@ -883,8 +883,6 @@ export function FinanzasModule() {
     payments: payload.clientPayments ?? [],
     jobs: payload.supplierJobs ?? [],
   }));
-  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
-  const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? []);
 
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -892,6 +890,11 @@ export function FinanzasModule() {
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [formError, setFormError] = useState("");
+  // Catálogos del formulario de cobro (issue #59): solo alimentan sus selects, así
+  // que se piden recién al abrirlo (el pago y el presupuesto de la fila ya vienen
+  // con el cobro). Misma data y mismas acciones, sin payload en el primer render.
+  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? [], { enabled: showForm });
+  const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? [], { enabled: showForm });
   const [notice, setNotice] = useState<Notice | null>(null);
   // Recordatorios de cobro (issue #19): envío por email, apertura de WhatsApp y
   // detalle del cobro con su historial.
@@ -1834,7 +1837,10 @@ export function FinanzasModule() {
             value={form.clientId}
             onChange={(value) => setForm({ ...form, clientId: value, budgetId: "" })}
             options={[
-              { value: "", label: "Elegí un cliente…" },
+              {
+                value: "",
+                label: clients.loading ? "Cargando clientes…" : clients.error ? "No pudimos cargar los clientes" : "Elegí un cliente…",
+              },
               ...(clients.data ?? []).map((client) => ({ value: client.id, label: client.company || client.name })),
             ]}
           />
