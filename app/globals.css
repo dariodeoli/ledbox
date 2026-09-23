@@ -1032,6 +1032,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-subtab .admin-icon { color: var(--a-accent); }
 .admin-subtab:hover { border-color: var(--a-line-2); color: var(--a-text); }
 .admin-subtab[data-active="true"], .admin-subtab[aria-current="page"] { border-color: color-mix(in srgb, var(--a-accent) 48%, transparent); background: var(--a-accent-soft); color: var(--a-text-strong); }
+/* Barra de subtabs fuera de un módulo con página propia (issue #56): alinea con
+   el padding del área de contenido. */
+.admin-subtabs-bar { padding: 12px 16px 0; }
 .admin-image-field { align-content: start; }
 .admin-image-body { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .admin-image-preview { display: inline-flex; align-items: center; justify-content: center; padding: 8px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-bg-2); }
@@ -1099,6 +1102,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-pin-slots { gap: 6px; }
   .admin-pin-slot { width: 30px; height: 38px; }
   .admin-pin-slot[data-min-boundary="true"] { margin-left: 8px; }
+  .admin-subtabs-bar { padding: 12px 12px 0; }
 }
 
 /* ── Diálogo del panel (issue #12) ──
@@ -1720,8 +1724,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-board-col[data-tone="danger"] .admin-board-card { border-left-color: var(--a-danger); }
 .admin-board-card[draggable="true"] { cursor: grab; }
 .admin-board-card[draggable="true"]:active { cursor: grabbing; }
+/* Arrastre táctil (issue #55): la pulsación larga mueve la tarjeta; el dedo
+   puede seguir scrolleando cuando el gesto empieza y termina rápido. */
+.admin-board-card[data-movable="true"] { touch-action: manipulation; -webkit-touch-callout: none; }
+.admin-board-card[data-dragging="true"] { opacity: .4; border-style: dashed; }
+.admin-board-ghost { position: fixed; z-index: 60; display: grid; gap: 2px; max-width: 16rem; padding: 8px 12px; border: 1px solid var(--a-accent); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-shadow); color: var(--a-text-strong); font-size: 12.5px; pointer-events: none; transform: translate(-50%, -130%); }
+.admin-board-ghost strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-board-ghost span { color: var(--a-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-board-card:hover { border-color: var(--a-line-2); }
 .admin-board-card[data-moving="true"] { opacity: .5; }
+/* Calendario como vista de Eventos (issue #56): el módulo trae su propio
+   contenedor; acá no se vuelve a paddingear. */
+.admin-events-calendar .admin-module-page { padding: 0; }
 .admin-board-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .admin-board-card-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .admin-board-card-actions { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }

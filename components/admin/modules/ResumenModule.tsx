@@ -124,7 +124,7 @@ export function ResumenModule() {
             title="Qué mirar hoy" icon="bell"
             meta={notificationCounts && notificationCounts.total > 0 ? `${formatNumber(notificationCounts.total)} avisos` : undefined}
             action={
-              <Link className="admin-panel-link" href="/calendario">
+              <Link className="admin-panel-link" href="/eventos?vista=calendario" title="El calendario es una vista de Eventos">
                 Ver calendario →
               </Link>
             }

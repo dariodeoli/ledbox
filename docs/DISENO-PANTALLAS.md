@@ -81,10 +81,28 @@ Responde: *¿qué facturé, qué compras tengo y cómo va el mes?*
 
 Acción principal: **Emitir factura** (desde presupuesto o manual).
 
+## Calendario (vista de Eventos)
+
+Desde la consolidación del 23-09-2026 (issue #56) el calendario **no es un
+destino del nav**: es una vista de Eventos (`/eventos?vista=calendario`, con el
+conmutador Lista · Tablero · Calendario). La ruta vieja `/calendario` redirige
+ahí. En la vista de calendario se mantienen los KPIs de Eventos fuera de foco (no
+se dibujan) y el calendario trae los suyos: mes/semana, con montajes, eventos,
+desmontajes, cobros y checklist.
+
+## Ajustes y Estado (áreas con secciones)
+
+- **Ajustes** (`/ajustes/empresa`, `/ajustes/correo`, `/ajustes/plan`,
+  `/ajustes/usuarios`): barra de subtabs arriba, contenido del módulo debajo.
+  Empresa, Correo y Usuarios son OWNER/ADMIN; Plan se ve en todos los roles.
+- **Estado** (`/estado/sistema`, `/estado/auditoria`): mismo patrón; las dos
+  secciones son OWNER/ADMIN.
+- El PIN y el auto-bloqueo viven **solo** en Mi perfil; no se repiten acá.
+
 ## Plantilla para el resto de los módulos
 
-Todos los demás (Calendario, Inventario, Proveedores, Promotoras, Plantillas,
-Plan, Usuarios, Empresa, Configuración, Auditoría, Sistema) siguen el mismo
+Todos los demás (Calendario como vista, Inventario, Proveedores, Promotoras,
+Plantillas, Plan, Usuarios, Empresa, Correo, Auditoría, Sistema) siguen el mismo
 esqueleto: **KPIs → filtros → contenido → acciones**, con la acción principal
 en el encabezado y el texto descriptivo movido a la ayuda del módulo. Los
 módulos de solo consulta (Auditoría, Sistema) van directo al contenido con su

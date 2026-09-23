@@ -1,24 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, mailCategoryLabel, mailStatusLabel, mailStatusTone } from "@/lib/admin-format";
 import type { AdminMailConfig, AdminMailLogRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
-import { AdminPinSettings } from "../AdminPinSettings";
 import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminNote, AdminPanel, AdminRow, AdminTable } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 
 /**
- * Configuración (issue #30): secciones del panel que son de la empresa.
- *
- * Hoy: **Correo** (remitente, clave del proveedor, prueba y historial de
- * envíos) y **Empresa** (issue #22, que sigue en `/empresa`). Las dos secciones
- * son OWNER/ADMIN: la API responde 403 al resto de los roles.
- *
- * La subnavegación (`admin-subtabs`) es la primera del panel y queda como el
- * objeto de subtabs a reutilizar por las próximas secciones.
+ * Correo (issue #30): remitente, clave del proveedor, prueba e historial de
+ * envíos de la empresa. Es la sección **Correo** de Ajustes (issue #56): la
+ * subnavegación y el resto de las secciones viven en `AjustesModule`.
+ * Es OWNER/ADMIN: la API responde 403 al resto de los roles.
  */
 
 type TestOutcome = {
@@ -27,7 +21,7 @@ type TestOutcome = {
   to: string;
 };
 
-export function ConfiguracionModule({ section = "correo" }: { section?: "correo" | "seguridad" }) {
+export function CorreoModule() {
   const { user } = useAdminSession();
   const resource = useAdminResource("/api/admin/mail", (payload) => ({
     config: (payload.mail ?? null) as AdminMailConfig | null,
@@ -56,25 +50,6 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
 
   return (
     <div className="admin-module-page">
-      <nav className="admin-subtabs" aria-label="Secciones de Configuración">
-        <Link className="admin-subtab" href="/configuracion" aria-current={section === "correo" ? "page" : undefined} data-active={section === "correo" ? "true" : undefined}>
-          <AdminIcon name="mail" size={13} />
-          Correo
-        </Link>
-        <Link className="admin-subtab" href="/configuracion/seguridad" aria-current={section === "seguridad" ? "page" : undefined} data-active={section === "seguridad" ? "true" : undefined}>
-          <AdminIcon name="lock" size={13} />
-          Seguridad
-        </Link>
-        <Link className="admin-subtab" href="/empresa">
-          <AdminIcon name="building" size={13} />
-          Empresa
-        </Link>
-      </nav>
-
-      {section === "seguridad" ? <AdminPinSettings /> : null}
-
-      {section === "correo" ? (
-        <>
       <AdminPanel title="Correo" icon="mail" meta={config ? `${config.provider} · remitente ${config.sender}` : "Cargando…"}>
         <div className="admin-settings">
           {config && !config.configured && config.hint ? <AdminNote tone="error">{config.hint}</AdminNote> : null}
@@ -177,8 +152,6 @@ export function ConfiguracionModule({ section = "correo" }: { section?: "correo"
       <AdminNote>
         Los correos de reset, recordatorios, presupuestos e invitaciones usan la misma plantilla e identidad.
       </AdminNote>
-        </>
-      ) : null}
     </div>
   );
 }

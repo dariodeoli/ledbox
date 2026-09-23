@@ -1,14 +1,6 @@
-import type { Metadata } from "next";
-import { AdminModuleGuard } from "@/components/admin/AdminShell";
-import { ConfiguracionModule } from "@/components/admin/modules/ConfiguracionModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Configuración" };
-
-/** Configuración (issue #30): Correo de la empresa, junto a Empresa. Solo OWNER/ADMIN. */
+/** Ruta vieja de Configuración (issue #56): el correo vive en Ajustes. */
 export default function ConfiguracionPage() {
-  return (
-    <AdminModuleGuard href="/configuracion">
-      <ConfiguracionModule />
-    </AdminModuleGuard>
-  );
+  redirect("/ajustes/correo");
 }

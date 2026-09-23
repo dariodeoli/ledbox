@@ -7,8 +7,8 @@
  * el módulo hace de verdad (nada de features inventadas) y no repiten el título
  * de la pantalla.
  *
- * La ruta se resuelve por prefijo (`/configuracion/seguridad` usa la ayuda de
- * `/configuracion`), igual que el título del topbar (`adminNavLabel`).
+ * La ruta se resuelve por prefijo (`/ajustes/correo` usa la ayuda de
+ * `/ajustes`), igual que el título del topbar (`adminNavLabel`).
  */
 
 export type AdminModuleHelpLink = {
@@ -56,20 +56,35 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     links: [
       { href: "/inventario", label: "Equipos y disponibilidad" },
       { href: "/presupuestos", label: "Presupuestos del evento" },
-      { href: "/calendario", label: "Vista del mes" },
+      { href: "/eventos?vista=calendario", label: "Calendario como vista" },
     ],
   },
-  "/calendario": {
-    title: "Calendario",
-    summary: "La agenda operativa que cruza eventos, cobros, pagos y vencimientos en el mismo calendario.",
+  "/ajustes": {
+    title: "Ajustes",
+    summary: "Lo que se configura de vez en cuando: la empresa, el correo, el plan y el equipo.",
     bullets: [
-      "Vista de mes y de semana (en mobile, lista por día) con montajes, eventos, desmontajes, cobros y checklist.",
-      "Cada día se abre en detalle y muestra de dónde sale cada movimiento.",
-      "El bloque de vencimientos y checklist avisa lo que se viene y lo que quedó atrasado.",
+      "Empresa: nombre, identificador y los logos por tema que usan el panel y las hojas imprimibles.",
+      "Correo: remitente, prueba de envío e historial real de lo que mandó el panel, con el motivo de cada fallo.",
+      "Plan: consumo del mes, topes y pedido de cambio; Usuarios: equipo, roles e invitaciones.",
+      "Cada sección tiene su propia URL: /ajustes/empresa, /ajustes/correo, /ajustes/plan y /ajustes/usuarios.",
     ],
     links: [
-      { href: "/eventos", label: "Eventos y checklist" },
-      { href: "/finanzas", label: "Cobros y pagos" },
+      { href: "/ajustes/empresa", label: "Empresa" },
+      { href: "/ajustes/correo", label: "Correo" },
+      { href: "/ajustes/usuarios", label: "Usuarios" },
+    ],
+  },
+  "/estado": {
+    title: "Estado",
+    summary: "Cómo está el servicio y qué cambió: respaldo, base y el historial auditado de la empresa.",
+    bullets: [
+      "Sistema: estado del respaldo, la base y las migraciones aplicadas.",
+      "Auditoría: quién hizo cada cambio, con el detalle de antes y después.",
+      "Las dos secciones son de OWNER/ADMIN; el API revalida el rol en cada pedido.",
+    ],
+    links: [
+      { href: "/estado/sistema", label: "Sistema" },
+      { href: "/estado/auditoria", label: "Auditoría" },
     ],
   },
   "/clientes": {
@@ -197,11 +212,11 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     ],
     links: [
       { href: "/eventos", label: "Tareas y eventos" },
-      { href: "/calendario", label: "Agenda del mes" },
+      { href: "/eventos?vista=calendario", label: "Calendario como vista" },
     ],
   },
-  "/configuracion": {
-    title: "Configuración",
+  "/ajustes/correo": {
+    title: "Correo",
     summary: "Los ajustes que no viven dentro de cada operación: correo de la empresa y seguridad del panel.",
     bullets: [
       "Correo: remitente, clave del proveedor, envío de prueba e historial de envíos.",
@@ -209,11 +224,11 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "La sección Correo es de OWNER/ADMIN: el API responde 403 al resto de los roles.",
     ],
     links: [
-      { href: "/empresa", label: "Identidad de la empresa" },
+      { href: "/ajustes/empresa", label: "Identidad de la empresa" },
       { href: "/perfil", label: "Mi perfil" },
     ],
   },
-  "/empresa": {
+  "/ajustes/empresa": {
     title: "Empresa",
     summary: "La identidad de la empresa activa en el panel, en el portal y en los papeles.",
     bullets: [
@@ -226,7 +241,7 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       { href: "/facturacion", label: "Datos fiscales" },
     ],
   },
-  "/plan": {
+  "/ajustes/plan": {
     title: "Plan",
     summary: "El plan contratado, el consumo del mes y el camino para cambiarlo.",
     bullets: [
@@ -235,11 +250,11 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "No hay pago en línea: el cambio efectivo lo aplica Owncoding.",
     ],
     links: [
-      { href: "/usuarios", label: "Equipo y topes" },
-      { href: "/sistema", label: "Estado del servicio" },
+      { href: "/ajustes/usuarios", label: "Equipo y topes" },
+      { href: "/estado/sistema", label: "Estado del servicio" },
     ],
   },
-  "/usuarios": {
+  "/ajustes/usuarios": {
     title: "Usuarios",
     summary: "El equipo que entra a la empresa activa y con qué rol.",
     bullets: [
@@ -249,11 +264,11 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "Al cambiar el correo se cierran las sesiones de esa persona.",
     ],
     links: [
-      { href: "/auditoria", label: "Historial de cambios" },
-      { href: "/plan", label: "Topes del plan" },
+      { href: "/estado/auditoria", label: "Historial de cambios" },
+      { href: "/ajustes/plan", label: "Topes del plan" },
     ],
   },
-  "/auditoria": {
+  "/estado/auditoria": {
     title: "Auditoría",
     summary: "El historial de cambios de la empresa activa: quién hizo qué y con qué valores.",
     bullets: [
@@ -262,11 +277,11 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "Solo OWNER y ADMIN entran acá: el API responde 403 al resto.",
     ],
     links: [
-      { href: "/usuarios", label: "Equipo" },
-      { href: "/sistema", label: "Estado del servicio" },
+      { href: "/ajustes/usuarios", label: "Equipo" },
+      { href: "/estado/sistema", label: "Estado del servicio" },
     ],
   },
-  "/sistema": {
+  "/estado/sistema": {
     title: "Sistema",
     summary: "El estado técnico del despliegue: versión, base, migraciones y respaldos.",
     bullets: [
@@ -275,8 +290,8 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "Solo OWNER/ADMIN; la demo pública no expone esta pantalla.",
     ],
     links: [
-      { href: "/auditoria", label: "Historial de cambios" },
-      { href: "/plan", label: "Plan y consumo" },
+      { href: "/estado/auditoria", label: "Historial de cambios" },
+      { href: "/ajustes/plan", label: "Plan y consumo" },
     ],
   },
   "/perfil": {
@@ -289,7 +304,7 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     ],
     links: [
       { href: "/dashboard", label: "Ir al resumen" },
-      { href: "/calendario", label: "Agenda del mes" },
+      { href: "/eventos?vista=calendario", label: "Calendario como vista" },
     ],
   },
 };
@@ -300,8 +315,12 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
  * el botón.
  */
 export function moduleHelpFor(pathname: string): AdminModuleHelp | null {
+  // La coincidencia más específica manda: /ajustes/correo usa la ayuda de Correo
+  // y no la del área /ajustes (issue #56).
+  let best: { href: string; help: AdminModuleHelp } | null = null;
   for (const [href, help] of Object.entries(MODULE_HELP)) {
-    if (pathname === href || pathname.startsWith(`${href}/`)) return help;
+    if (pathname !== href && !pathname.startsWith(`${href}/`)) continue;
+    if (!best || href.length > best.href.length) best = { href, help };
   }
-  return null;
+  return best?.help ?? null;
 }

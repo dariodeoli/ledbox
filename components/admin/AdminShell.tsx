@@ -689,7 +689,7 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
               canEditOrganization ? (
                 <Link
                   className="admin-company"
-                  href="/empresa"
+                  href="/ajustes/empresa"
                   title={`Empresa activa: ${session.organization.name} · Editar nombre y logos`}
                 >
                   <span className="admin-company-label">Empresa</span>
@@ -789,7 +789,7 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
                         </button>
                       ) : null}
                       {canEditOrganization ? (
-                        <Link className="admin-usermenu-item" role="menuitem" href="/empresa">
+                        <Link className="admin-usermenu-item" role="menuitem" href="/ajustes/empresa">
                           <AdminIcon name="building" size={15} />
                           <span>Empresa</span>
                           <small>Nombre y logos</small>

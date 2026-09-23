@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { CalendarioModule } from "@/components/admin/modules/CalendarioModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Calendario" };
-
+/**
+ * Ruta vieja del Calendario (issue #56): ahora es una vista dentro de Eventos.
+ * El parámetro abre el módulo directamente en esa vista.
+ */
 export default function CalendarioPage() {
-  return <CalendarioModule />;
+  redirect("/eventos?vista=calendario");
 }
