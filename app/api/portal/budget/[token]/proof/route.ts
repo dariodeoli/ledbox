@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalProofUpload, PORTAL_MAX_NAME } from "@/lib/server/budget-portal";
+import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { jsonError } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
@@ -59,6 +60,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     : null;
   if (!budget) return jsonError("No encontramos ese presupuesto.", 404);
+  // Issue #52: la empresa demo no escribe; el portal simula el comprobante en el navegador.
+  if (await isDemoOrganizationId(budget.organizationId)) return jsonError("Modo demo: solo lectura", 403);
 
   const openExpected = budget.expectedPayments.filter(
     (expected) => expected.status === "AWAITING" || expected.status === "PROOF",

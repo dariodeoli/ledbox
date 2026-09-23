@@ -10,6 +10,7 @@ import {
   PORTAL_MAX_NAME,
   PORTAL_MAX_NOTE,
 } from "@/lib/server/budget-portal";
+import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
@@ -56,6 +57,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     : null;
   if (!budget) return jsonError("No encontramos ese presupuesto.", 404);
+  // Issue #52: la empresa demo no escribe; el portal simula la propuesta en el navegador.
+  if (await isDemoOrganizationId(budget.organizationId)) return jsonError("Modo demo: solo lectura", 403);
   if (budget.approvedAt) return jsonError("Este presupuesto ya fue aprobado; el equipo de LedBox puede revisarlo.", 409);
   if (!portalBudgetOpen(budget.status)) return jsonError("Este presupuesto ya no está disponible.", 409);
 
