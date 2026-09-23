@@ -2,9 +2,38 @@
  * Reglas puras de campos del panel (fuente única, testeable).
  *
  * Acá viven la normalización y la validación de teléfonos, correos, seriales,
- * montos PYG y porcentajes. La UI dibuja el formato y el API revalida siempre;
- * el front solo ayuda. Un solo mensaje de error por regla.
+ * montos PYG, porcentajes y la ayuda de ciudad. La UI dibuja el formato y el API
+ * revalida siempre; el front solo ayuda. Un solo mensaje de error por regla.
+ *
+ * Adopción de `owncoding-ui` (issues #48 y #49): el teléfono y el monto PYG
+ * delegan en la librería compartida (`parseTelefono`, `componerTelefono`,
+ * `parseGsInput`) y el catálogo de ciudades sale de `CIUDADES_PARAGUAY` +
+ * `departamentoDe`. La validación de teléfono y su mensaje quedan locales a
+ * propósito: la librería es solo-móvil para Paraguay y rechazaría los fijos que
+ * LedBox ya acepta y guarda (owncoding-ui#4).
  */
+
+import {
+  CIUDADES_PARAGUAY,
+  componerTelefono,
+  departamentoDe,
+  parseGsInput,
+  parseTelefono,
+} from "owncoding-ui";
+
+/**
+ * El `.d.ts` de v0.14.0 publica firmas viejas del teléfono (owncoding-ui#4)
+ * mientras el runtime devuelve `{ countryCode, phone }` y `componerTelefono`
+ * recibe un objeto. Se ajustan acá, en un solo lugar, y no en cada consumidor.
+ */
+const parseTelefonoReal = parseTelefono as unknown as (
+  valor: string,
+  countryCodePorDefecto?: string,
+) => { countryCode: string; phone: string };
+const componerTelefonoReal = componerTelefono as unknown as (datos: {
+  countryCode: string;
+  phone: string;
+}) => string | null;
 
 /** Límites por tipo de dato (los mismos que la plantilla general). */
 export const FIELD_LIMITS = {
@@ -81,16 +110,23 @@ export function personNameError(value: string | null | undefined): string | null
   return personNameValid(value) ? null : FIELD_MESSAGES.name;
 }
 
-/** Limpia un pegado de monto PYG: símbolos, espacios y separadores fuera. */
+/**
+ * Limpia un pegado de monto PYG: símbolos, espacios y separadores fuera.
+ * Se mantiene local porque el campo dibuja la máscara de dígitos sin puntos
+ * mientras se tipea (la librería formatea y parsea, no enmascara).
+ */
 export function amountInput(value: string): string {
   return digitsOnly(value).replace(/^0+(?=\d)/, "");
 }
 
-/** Monto PYG limpio; `null` si no hay dígitos o si no es un entero seguro. */
+/**
+ * Monto PYG limpio; `null` si no hay dígitos o si no es un entero seguro.
+ * Delega el parseo en `parseGsInput`; las guardas cubren lo que la librería
+ * devuelve `0` para vacíos o basura, y el redondeo de enteros fuera de rango.
+ */
 export function parseAmount(value: string): number | null {
-  const digits = amountInput(value);
-  if (!digits) return null;
-  const amount = Number(digits);
+  if (!amountInput(value)) return null;
+  const amount = parseGsInput(value);
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
@@ -182,27 +218,22 @@ export type ParsedPhone = {
 /**
  * Parte un teléfono guardado (`+<código> <dígitos>`) o pegado (`0981 000 000`,
  * `+54 9 11 ...`, `00595 ...`) en código de país y parte local.
+ *
+ * Delega en `parseTelefono` de la librería; el prefijo internacional `00…` se
+ * conserva local porque la librería no lo parte (owncoding-ui#4). El contrato no
+ * cambia para los consumidores: `countryCode` sin `+` y `national` solo dígitos.
  */
 export function parsePhone(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): ParsedPhone {
   const raw = (value ?? "").trim();
-  if (raw.startsWith("+")) {
-    const international = raw.match(/^\+\s*(\d{1,4})[\s-]+(.+)$/);
-    if (international) {
-      const national = digitsOnly(international[2]);
-      if (national) return { countryCode: digitsOnly(international[1]), national };
-    }
-    // Pegado sin separadores: si arranca con el código por defecto, se parte ahí.
-    const compact = digitsOnly(raw);
-    const defaultDigits = digitsOnly(defaultCountry);
-    if (defaultDigits && compact.startsWith(defaultDigits) && compact.length > defaultDigits.length + 5) {
-      return { countryCode: defaultDigits, national: compact.slice(defaultDigits.length) };
-    }
-    return { countryCode: defaultCountry, national: compact };
+  if (!raw.startsWith("+")) {
+    const digits = digitsOnly(raw);
+    // Código de país: 1–3 dígitos (E.164). Con 4, `00595 …` se partía mal (5959/81000000).
+    const zeroPrefixed = digits.match(/^00(\d{1,3})(\d{6,})$/);
+    if (zeroPrefixed) return { countryCode: zeroPrefixed[1], national: zeroPrefixed[2] };
   }
-  const digits = digitsOnly(raw);
-  const zeroPrefixed = digits.match(/^00(\d{1,4})(\d{6,})$/);
-  if (zeroPrefixed) return { countryCode: zeroPrefixed[1], national: zeroPrefixed[2] };
-  return { countryCode: defaultCountry, national: digits };
+  const fallback = digitsOnly(defaultCountry) || DEFAULT_PHONE_COUNTRY;
+  const parsed = parseTelefonoReal(raw, `+${fallback}`);
+  return { countryCode: digitsOnly(parsed.countryCode) || fallback, national: digitsOnly(parsed.phone) };
 }
 
 /** Teléfono listo para guardar: `+<código> <dígitos>`; vacío si no hay número. */
@@ -210,10 +241,15 @@ export function normalizePhone(value: string | null | undefined, defaultCountry:
   const { countryCode, national } = parsePhone(value, defaultCountry);
   const code = digitsOnly(countryCode).slice(0, 4) || digitsOnly(defaultCountry) || DEFAULT_PHONE_COUNTRY;
   if (!national) return "";
-  return `+${code} ${national}`;
+  return componerTelefonoReal({ countryCode: `+${code}`, phone: national }) ?? "";
 }
 
-/** Valida la parte local según el país: PY móvil 9 dígitos, fijo 8; resto 6–12. */
+/**
+ * Valida la parte local según el país: PY móvil 9 dígitos, fijo 8; resto 6–12.
+ *
+ * Queda local a propósito: `telefonoValido` de la librería acepta solo móviles de
+ * Paraguay y rechazaría los fijos que LedBox ya guarda y muestra (owncoding-ui#4).
+ */
 export function phoneValid(value: string | null | undefined, defaultCountry: string = DEFAULT_PHONE_COUNTRY): boolean {
   const { countryCode, national } = parsePhone(value, defaultCountry);
   const digits = digitsOnly(national);
@@ -231,4 +267,26 @@ export function phoneError(value: string | null | undefined, defaultCountry: str
 /** Campo obligatorio genérico (un solo mensaje). */
 export function requiredError(value: string | null | undefined): string | null {
   return (value ?? "").trim() ? null : FIELD_MESSAGES.required;
+}
+
+/**
+ * Ciudades del catálogo compartido (issue #48): nombre y departamento, tal como
+ * los publica `owncoding-ui`. Es la lista de sugerencias del campo Ciudad; el
+ * texto libre se acepta igual y no se valida contra el catálogo.
+ */
+export const CITY_OPTIONS: ReadonlyArray<{ ciudad: string; departamento: string }> = CIUDADES_PARAGUAY.map((entry) => ({
+  ciudad: entry.ciudad,
+  departamento: entry.departamento,
+}));
+
+/**
+ * Departamento de una ciudad del catálogo; `null` si el valor es texto libre o
+ * está vacío. La búsqueda de la librería ignora mayúsculas y acentos
+ * (`asuncion` → `Asunción`) y devuelve `""` cuando no hay coincidencia (el
+ * `.d.ts` publica `null`: owncoding-ui#4), así que acá se normaliza.
+ */
+export function cityDepartment(value: string | null | undefined): string | null {
+  const city = (value ?? "").trim();
+  if (!city) return null;
+  return departamentoDe(city) || null;
 }
