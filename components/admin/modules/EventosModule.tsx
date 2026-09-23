@@ -27,7 +27,7 @@ import {
   promoterIsAvailable,
   type AdminClientOption,
   type AdminEventAssignment,
-  type AdminEventRow,
+  type AdminEventPanelRow,
   type AdminInventoryAvailability,
   type AdminInventoryOption,
   type AdminPromoterOption,
@@ -70,6 +70,9 @@ import { CITY_OPTIONS, cityDepartment } from "@/lib/field-rules";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
+
+/** Fila del panel de eventos (issue #68): cliente mínimo y operación completa. */
+type EventRow = AdminEventPanelRow;
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -132,7 +135,7 @@ function movementQueueTitle(action: OfflineAction): string {
 }
 
 /** Evento próximo (ventana de aviso de 7 días) sin tareas cumplidas: riesgo. */
-function isUpcomingEvent(event: AdminEventRow): boolean {
+function isUpcomingEvent(event: EventRow): boolean {
   if (event.status === "CANCELLED" || event.status === "COMPLETED") return false;
   return isUpcomingWithin(event.startsAt);
 }
@@ -148,7 +151,7 @@ function isUpcomingEvent(event: AdminEventRow): boolean {
  * 3 · el resto de lo que viene.
  * 4 · ya pasado o cancelado (del más reciente al más viejo).
  */
-function eventUrgency(event: AdminEventRow): number {
+function eventUrgency(event: EventRow): number {
   if (event.status === "CANCELLED" || event.status === "COMPLETED") return 4;
   const pending = event.tasks.some((task) => !task.completedAt);
   const start = event.startsAt ? new Date(event.startsAt).getTime() : null;
@@ -162,7 +165,7 @@ function eventUrgency(event: AdminEventRow): number {
   return 3;
 }
 
-function compareEventUrgency(a: AdminEventRow, b: AdminEventRow): number {
+function compareEventUrgency(a: EventRow, b: EventRow): number {
   const rank = eventUrgency(a) - eventUrgency(b);
   if (rank !== 0) return rank;
   const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
@@ -188,7 +191,10 @@ function promoterOptions(promoters: AdminPromoterOption[]): Array<{ value: strin
 export function EventosModule() {
   const { role } = useAdminSession();
   const { actions: queuedActions, fieldAction } = useOfflineQueue();
-  const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
+  const operations = useAdminResource(
+    "/api/admin/event-ops?fields=panel",
+    (payload) => (payload as { events?: AdminEventPanelRow[] }).events ?? [],
+  );
   // Clientes e inventario alimentan solo los selectores del formulario y de la
   // asignación de equipos (issue #62): campos mínimos, sin métricas ni historial.
   const clients = useAdminResource(
@@ -237,7 +243,7 @@ export function EventosModule() {
   const [movementBusy, setMovementBusy] = useState(false);
   const [movementError, setMovementError] = useState("");
   /** Cronología real del evento (issue #33). */
-  const [timelineEvent, setTimelineEvent] = useState<AdminEventRow | null>(null);
+  const [timelineEvent, setTimelineEvent] = useState<EventRow | null>(null);
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del evento. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
@@ -267,7 +273,7 @@ export function EventosModule() {
   // La búsqueda sí filtra las tarjetas y el orden por urgencia fija el de cada
   // columna, así el tablero abre en lo que está en juego.
   const orderedSearched = useMemo(() => [...searched].sort(compareEventUrgency), [searched]);
-  const moveEvent = useCallback(async (event: AdminEventRow, nextStatus: string) => {
+  const moveEvent = useCallback(async (event: EventRow, nextStatus: string) => {
     setBoardError("");
     const result = await adminSend("/api/admin/events", { id: event.id, status: nextStatus }, "PATCH");
     return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };

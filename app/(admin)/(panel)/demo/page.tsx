@@ -428,7 +428,7 @@ export default async function DemoPage() {
           title="Avisos operativos" icon="bell"
           meta={`${formatNumber(feed.notificationCounts.overdue)} vencidos · ${formatNumber(feed.notificationCounts.soon)} próximos`}
           action={
-            <Link className="admin-panel-link" href="/calendario">
+            <Link className="admin-panel-link" href="/eventos?vista=calendario">
               Calendario
             </Link>
           }

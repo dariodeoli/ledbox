@@ -19,12 +19,15 @@ import {
   SUPPLIER_CATEGORIES,
   SUPPLIER_JOB_STATUSES,
   type AdminEventOption,
-  type AdminSupplierJobRow,
+  type AdminSupplierJobPanelRow,
   type AdminSupplierRow,
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
+
+/** Fila del panel de trabajos (issue #68): referencias mínimas de proveedor y evento. */
+type JobRow = AdminSupplierJobPanelRow;
 import {
   AdminBadge,
   AdminButton,
@@ -105,7 +108,7 @@ type JobForm = {
   paidAt: string;
 };
 
-type JobPanel = { mode: "create" } | { mode: "edit"; job: AdminSupplierJobRow } | { mode: "status"; job: AdminSupplierJobRow };
+type JobPanel = { mode: "create" } | { mode: "edit"; job: JobRow } | { mode: "status"; job: JobRow };
 
 const EMPTY_SUPPLIER: SupplierForm = {
   id: "",
@@ -147,7 +150,10 @@ function dateInputValue(value: string | Date | null): string {
 export function ProveedoresModule() {
   const { role } = useAdminSession();
   const suppliersResource = useAdminResource("/api/admin/suppliers", (payload) => payload.suppliers ?? []);
-  const jobsResource = useAdminResource("/api/admin/suppliers/jobs", (payload) => payload.jobs ?? []);
+  const jobsResource = useAdminResource(
+    "/api/admin/suppliers/jobs?fields=panel",
+    (payload) => (payload as { jobs?: AdminSupplierJobPanelRow[] }).jobs ?? [],
+  );
   const eventsResource = useAdminResource(
     "/api/admin/events?fields=selector",
     (payload) => (payload as { events?: AdminEventOption[] }).events ?? [],
@@ -169,7 +175,7 @@ export function ProveedoresModule() {
 
   const writable = canWriteFinance(role);
   const suppliers = useMemo<AdminSupplierRow[]>(() => suppliersResource.data ?? [], [suppliersResource.data]);
-  const jobs = useMemo<AdminSupplierJobRow[]>(() => jobsResource.data ?? [], [jobsResource.data]);
+  const jobs = useMemo<JobRow[]>(() => jobsResource.data ?? [], [jobsResource.data]);
   const events = useMemo(() => eventsResource.data ?? [], [eventsResource.data]);
 
   const supplierRows = useMemo(
@@ -203,7 +209,7 @@ export function ProveedoresModule() {
 
   // Tablero de trabajos: respeta la máquina de estados del API (`supplierJobNextStatuses`);
   // el drag/menú solo ofrece transiciones reales y el API revalida.
-  const moveJob = useCallback(async (job: AdminSupplierJobRow, nextStatus: string) => {
+  const moveJob = useCallback(async (job: JobRow, nextStatus: string) => {
     setBoardError("");
     const result = await adminSend("/api/admin/suppliers/jobs", { id: job.id, status: nextStatus }, "PATCH", { idempotencyKey: true });
     return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
@@ -322,7 +328,7 @@ export function ProveedoresModule() {
     setJobPanel({ mode: "create" });
   }
 
-  function openJobEdit(job: AdminSupplierJobRow) {
+  function openJobEdit(job: JobRow) {
     setJobError("");
     setNotice("");
     setJobForm({
@@ -343,7 +349,7 @@ export function ProveedoresModule() {
     setJobPanel({ mode: "edit", job });
   }
 
-  function openJobStatus(job: AdminSupplierJobRow) {
+  function openJobStatus(job: JobRow) {
     setJobError("");
     setNotice("");
     setJobPanel({ mode: "status", job });
@@ -968,7 +974,7 @@ function JobStatusPanel({
   onClose,
   onSaved,
 }: {
-  job: AdminSupplierJobRow;
+  job: JobRow;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {

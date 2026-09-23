@@ -147,6 +147,27 @@ export function joinParts(parts: Array<string | null | undefined>): string | nul
   return text || null;
 }
 
+/** Clave de comparación sin acentos ni mayúsculas (para no repetir la ciudad). */
+function placeKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/**
+ * Lugar del evento con su ciudad (issue #68). «Lugar» (el venue) y «Ciudad» son
+ * campos separados y el lugar se escribe libre, así que se muestran juntos salvo
+ * que el lugar ya nombre la ciudad: ahí repetirla no suma.
+ */
+export function placeLabel(location: string | null | undefined, city: string | null | undefined): string | null {
+  const place = (location ?? "").trim();
+  const town = (city ?? "").trim();
+  if (!place) return town || null;
+  if (!town) return place;
+  return placeKey(place).includes(placeKey(town)) ? place : `${place} · ${town}`;
+}
+
 const pygFormat = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
 
 /** Monto PYG para textos del API (el resto de los avisos no lleva importes). */
