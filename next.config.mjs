@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // owncoding-ui marca su entrada única con "use client": sin esto, los utils
+  // puros (formatGs, issue #46) no se pueden llamar desde el servidor (mails,
+  // timeline, imprimibles, API). Reportar upstream: partir componentes de utils.
+  serverExternalPackages: ["owncoding-ui"],
   images: { formats: ["image/avif", "image/webp"], minimumCacheTTL: 60 * 60 * 24 * 30 },
   poweredByHeader: false,
   async headers() {

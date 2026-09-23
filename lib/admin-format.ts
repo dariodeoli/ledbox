@@ -5,13 +5,14 @@
  * navegador dibujan el mismo día.
  */
 
+import { formatGs } from "owncoding-ui";
+
 import { DEFAULT_PHONE_COUNTRY, normalizePhone, parsePhone, phoneValid } from "./field-rules";
 
 export type AdminTone = "neutral" | "accent" | "ok" | "warn" | "danger" | "info";
 
 const TIME_ZONE = "America/Asuncion";
 
-const moneyFormat = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
 const numberFormat = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
 const dateFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short", year: "numeric" });
 const dateShortFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit", month: "short" });
@@ -24,9 +25,14 @@ function toDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/**
+ * Monto en guaraníes con el formato único de la librería compartida
+ * (`Gs 1.234.567`): delega en `formatGs` de `owncoding-ui` para que el panel,
+ * el portal y las otras apps escriban el mismo número (adopción, issue #46).
+ * Sin dato o no finito se dibuja `Gs 0`, como antes.
+ */
 export function formatMoney(value: number | null | undefined): string {
-  const amount = Number(value);
-  return moneyFormat.format(Number.isFinite(amount) ? amount : 0);
+  return formatGs(value);
 }
 
 export function formatNumber(value: number | null | undefined): string {
