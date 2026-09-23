@@ -64,6 +64,7 @@ import {
   TextField,
 } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { CITY_OPTIONS, cityDepartment } from "@/lib/field-rules";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
@@ -88,7 +89,10 @@ const TASK_TYPE_OPTIONS = [
 /** Tablero kanban: una columna por estado del evento (set de estados, sin máquina). */
 const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.slice(1).map((option) => ({ value: option.value, label: option.label }));
 
-const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", startsAt: "" };
+/** `id` del `<datalist>` con el catálogo de ciudades (owncoding-ui) del campo Ciudad. */
+const EVENT_CITY_LIST_ID = "eventos-ciudad-opciones";
+
+const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", city: "", startsAt: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
 const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
 const EMPTY_MOVEMENT_FORM = { at: "", condition: ITEM_CONDITIONS[0] as string, damaged: "0", missing: "0", notes: "" };
@@ -238,7 +242,7 @@ export function EventosModule() {
 
   /** Búsqueda compartida por lista y tablero: el filtro de estado es de la lista. */
   const searched = useMemo(
-    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.client.company, event.client.name, event.status])),
+    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.city, event.client.company, event.client.name, event.status])),
     [events, query],
   );
 
@@ -269,7 +273,7 @@ export function EventosModule() {
           id: event.id,
           status: event.status,
           title: event.name,
-          subtitle: [event.client.company || event.client.name, event.location || null].filter(Boolean).join(" · "),
+          subtitle: [event.client.company || event.client.name, event.location || null, event.city || null].filter(Boolean).join(" · "),
           date: closed ? null : event.startsAt,
           dateTitle: `Cuánto falta para el inicio: ${event.name}`,
           badges: event.tasks.length > 0 ? [{ label: `Checklist ${progress.label}`, tone: progress.tone, title: progress.title }] : [],
@@ -385,6 +389,9 @@ export function EventosModule() {
     return () => controller.abort();
   }, [equipmentEvent, assignForm.inventoryId, assignForm.startsAt, assignForm.endsAt, existingAssignmentId]);
 
+  /** Departamento del catálogo para la ayuda del campo Ciudad; `null` con texto libre. */
+  const cityArea = cityDepartment(form.city);
+
   async function submitEvent(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
     setBusy(true);
@@ -394,6 +401,7 @@ export function EventosModule() {
       clientId: form.clientId,
       name: form.name,
       location: form.location || undefined,
+      city: form.city || undefined,
       startsAt: form.startsAt || undefined,
     });
     setBusy(false);
@@ -663,6 +671,24 @@ export function EventosModule() {
             onChange={(value) => setForm({ ...form, location: value })}
             placeholder="Ej.: Centro de Convenciones"
           />
+          <TextField
+            label="Ciudad"
+            maxLength={120}
+            list={EVENT_CITY_LIST_ID}
+            value={form.city}
+            onChange={(value) => setForm({ ...form, city: value })}
+            placeholder="Ej.: Asunción"
+            hint={
+              cityArea
+                ? `Departamento: ${cityArea}`
+                : "Se permite texto libre; sugerencias del catálogo de ciudades."
+            }
+          />
+          <datalist id={EVENT_CITY_LIST_ID}>
+            {CITY_OPTIONS.map((option) => (
+              <option key={option.ciudad} value={option.ciudad} label={`${option.ciudad} · ${option.departamento}`} />
+            ))}
+          </datalist>
           <DateTimeField
             label="Inicio"
             hint="Fecha y hora del evento"
@@ -743,7 +769,10 @@ export function EventosModule() {
                       <strong>{event.name}</strong>
                     </AdminCell>
                     <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
-                    <AdminCell title={event.location || "Sin lugar definido"}>{event.location || "—"}</AdminCell>
+                    <AdminCell title={[event.location, event.city].filter(Boolean).join(" · ") || "Sin lugar definido"}>
+                      {event.location || event.city || "—"}
+                      {event.location && event.city ? <small className="admin-cell-sub"> · {event.city}</small> : null}
+                    </AdminCell>
                     <AdminCell end title={equipmentNames || "Sin equipos asignados"}>
                       {formatNumber(units)}
                     </AdminCell>

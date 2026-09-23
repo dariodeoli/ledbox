@@ -647,6 +647,7 @@ model Event {
   clientId       String
   name           String
   location       String?
+  city           String?
   setupAt        DateTime?
   startsAt       DateTime?
   endsAt         DateTime?

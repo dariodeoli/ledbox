@@ -4,6 +4,8 @@ import {
   amountError,
   amountInput,
   amountValid,
+  CITY_OPTIONS,
+  cityDepartment,
   digitsOnly,
   emailError,
   emailValid,
@@ -109,6 +111,33 @@ test("obligatorio: un solo mensaje", () => {
   assert.equal(requiredError(""), FIELD_MESSAGES.required);
   assert.equal(requiredError("  "), FIELD_MESSAGES.required);
   assert.equal(requiredError("ok"), null);
+});
+
+test("monto PYG: la delegación en la librería conserva los bordes del contrato", () => {
+  assert.equal(parseAmount("no"), null);
+  assert.equal(parseAmount("000"), 0);
+  assert.equal(parseAmount("9007199254740993"), null); // fuera del entero seguro
+  assert.equal(amountInput("gs 1.234"), "1234");
+});
+
+test("teléfono: la delegación conserva el prefijo 00, los compactos y los vacíos", () => {
+  assert.deepEqual(parsePhone("00595 981 000 000"), { countryCode: "595", national: "981000000" });
+  assert.deepEqual(parsePhone("+595981000000"), { countryCode: "595", national: "981000000" });
+  assert.deepEqual(parsePhone(""), { countryCode: "595", national: "" });
+  assert.equal(normalizePhone("00595 981 000 000"), "+595 981000000");
+  assert.equal(normalizePhone("+595981000000"), "+595 981000000");
+  assert.equal(normalizePhone("   "), "");
+});
+
+test("ciudad: catálogo compartido y departamento sin distinguir acentos", () => {
+  assert.ok(CITY_OPTIONS.length > 200, "el catálogo de ciudades sale de owncoding-ui");
+  assert.ok(CITY_OPTIONS.some((option) => option.ciudad === "Asunción" && option.departamento === "Asunción"));
+  assert.equal(cityDepartment("Asunción"), "Asunción");
+  assert.equal(cityDepartment("asuncion"), "Asunción");
+  assert.equal(cityDepartment("Ciudad del Este"), "Alto Paraná");
+  assert.equal(cityDepartment("Villa Libre"), null);
+  assert.equal(cityDepartment(""), null);
+  assert.equal(cityDepartment(null), null);
 });
 
 test("nombre de persona: sin espacios de más y con el tope del panel", () => {
