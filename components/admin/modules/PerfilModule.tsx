@@ -11,6 +11,7 @@ import { AdminAvatar } from "../AdminAvatar";
 import { PasswordField, TextField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { AdminPinSettings } from "../AdminPinSettings";
+import { ApiKeysPanel } from "../ApiKeysPanel";
 
 /**
  * Mi perfil (issue #22): cualquier rol edita su **nombre**, su **contraseña**
@@ -274,6 +275,9 @@ export function PerfilModule() {
 
       {/* Seguridad del panel (issue #21): PIN y auto-bloqueo por inactividad. */}
       <AdminPinSettings />
+
+      {/* API keys de servicio (issue #69): solo OWNER. */}
+      {user?.role === "OWNER" ? <ApiKeysPanel /> : null}
     </div>
   );
 }

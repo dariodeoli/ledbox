@@ -61,6 +61,8 @@ export type AdminIconName =
   | "checkin"
   /** Ajustes del panel (`/ajustes/correo`): distinto del correo y de plantillas. */
   | "settings"
+  /** Copiar al portapapeles (API keys de servicio, issue #69). */
+  | "copy"
   /** Colapsar/expandir el sidebar de escritorio (solo íconos). */
   | "panel-left";
 
@@ -1804,6 +1806,8 @@ export const AUDIT_ENTITIES = [
   "BankStatement",
   "BankStatementRow",
   "MessageTemplate",
+  // API key de servicio (issue #69): creación y revocación desde Seguridad.
+  "ApiToken",
   // Alerta de operación del sistema (issue #43): respaldo vencido o fallido.
   "System",
   "PlanChangeRequest",
@@ -1848,6 +1852,18 @@ export type AdminAuditRow = {
 
 /** Actor con actividad registrada en la empresa (para el filtro del historial). */
 export type AdminAuditActor = { id: string; name: string; email: string };
+
+/** API key de servicio (issue #69): el token plano nunca viaja en esta forma. */
+export type AdminApiToken = {
+  id: string;
+  name: string;
+  role: AdminRole;
+  prefix: string;
+  createdByName: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
 
 export type AdminOverview = {
   counts: {
@@ -2063,6 +2079,8 @@ export type AdminApiResponse = {
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
   notifications?: AdminNotification[];
+  /** API keys de servicio (issue #69), sin el token plano. */
+  tokens?: AdminApiToken[];
   notificationCounts?: AdminNotificationCounts;
   error?: string;
   /** Perfil propio (`GET /api/admin/profile`). */

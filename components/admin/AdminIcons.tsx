@@ -308,6 +308,12 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M6.3 8.5h1.2M6.3 12h1.2M6.3 15.5h1.2" />
     </>
   ),
+  copy: (
+    <>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M15 5.5V4.8A1.8 1.8 0 0 0 13.2 3H5.8A1.8 1.8 0 0 0 4 4.8v7.4A1.8 1.8 0 0 0 5.8 14h.7" />
+    </>
+  ),
 };
 
 export function AdminIcon({ name, size = 16 }: { name: AdminIconName; size?: number }) {

@@ -68,6 +68,18 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 - Los montos se guardan enteros (PYG), normalizados; el formato lo dibuja la UI.
 - Migraciones Prisma: archivos en `prisma/migrations`, aditivos, idempotentes y re-ejecutables (nunca editar una aplicada). No ejecutar migraciones contra la base de producción.
 
+## API keys de servicio (issue #69)
+
+- Se crean en **Mi perfil → Seguridad** (solo `OWNER`): nombre + rol acotado (`ADMIN`, `FINANCE` u `OPERATIONS`; nunca `OWNER`). El **token se muestra una sola vez**; en la base vive solo su hash SHA-256 y un prefijo para listarlo. Revocación inmediata desde la misma sección.
+- Entran por `Authorization: Bearer <token>` en cualquier `/api/admin/*`, en lugar de la cookie: la clave resuelve a **su empresa** y a su rol (misma matriz de permisos, rate-limit por clave y auditoría con actor `API · nombre` + `lastUsedAt`). La cookie del panel sigue funcionando igual.
+- **CLI de cargas** (cliente + presupuesto + adjunto opcional), reutilizando la aritmética de costos/margen del panel:
+  ```bash
+  node --import tsx scripts/admin-api.mjs \
+    --token lbx_... --file scripts/admin-api.example.json [--attachment ./plano.pdf]
+  # URL por defecto https://app.ledbox.online (o --url / LEDBOX_API_URL)
+  ```
+- Seguridad: nunca se exponen costos internos al portal (los protege el API), el token no se puede administrar desde una clave y todo queda auditado.
+
 ## Verificación
 
 - `npm run typecheck` y `npm run build` (el build incluye `prisma generate`).

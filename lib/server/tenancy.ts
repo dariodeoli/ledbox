@@ -1,10 +1,14 @@
 import type { AdminRole } from "@prisma/client";
+import { headers } from "next/headers";
+import { parseBearerToken } from "@/lib/api-tokens";
 import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
+import { touchApiToken, verifyApiToken } from "./api-tokens";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { db } from "./db";
 import { jsonError } from "./http";
 import { ensureOrganizationPlan } from "./plan-limits";
 import { roleCan, type AdminCapability } from "./permissions";
+import { rateLimit, rateLimitResponse } from "./rate-limit";
 
 /**
  * Capa de tenancy del panel: resuelve la sesión, la empresa activa y la
@@ -63,11 +67,19 @@ async function findMembership(adminUserId: string, organizationId: string | null
  * Resuelve la sesión, la empresa activa y la membresía. Por defecto una sesión
  * **bloqueada** (PIN, issue #21) no entrega datos ni permite mutar: responde 423
  * y solo los endpoints de sesión/PIN pueden operar con `allowLocked`.
+ *
+ * Si el request trae `Authorization: Bearer <token>` (issue #69), la API key es
+ * el actor: resuelve a la empresa del token con su rol acotado, respeta la misma
+ * matriz de capacidades y la demo sigue siendo de solo lectura. La cookie sigue
+ * siendo el camino normal del panel cuando no hay Bearer.
  */
 export async function requireAdminContext(
   capability?: AdminCapability,
   options?: { allowLocked?: boolean },
 ): Promise<AdminContextResult> {
+  const bearer = parseBearerToken((await headers()).get("authorization"));
+  if (bearer) return requireApiTokenContext(bearer, capability);
+
   const auth = await getAuthenticatedAdmin();
   if (!auth) return { ok: false, response: jsonError("Unauthorized", 401) };
 
@@ -114,6 +126,65 @@ export async function requireAdminContext(
       organization: membership.organization,
       role,
       organizationId: membership.organizationId,
+      demo,
+    },
+  };
+}
+
+/**
+ * Actor por API key (issue #69): resuelve el Bearer a la empresa del token con
+ * su rol acotado. Mismas reglas que la sesión —capacidad, demo de solo lectura—
+ * y rate-limit por clave (misma ventana de 15 minutos que el resto del API).
+ * El token inválido/revocado no distingue el motivo en HTTP (401 genérico).
+ */
+const API_TOKEN_RATE_LIMIT = 300;
+
+async function requireApiTokenContext(token: string, capability?: AdminCapability): Promise<AdminContextResult> {
+  const verified = await verifyApiToken(token);
+  if (!verified.ok) return { ok: false, response: jsonError("Unauthorized", 401) };
+  const apiToken = verified.token;
+
+  const limited = await rateLimit(`api-token:${apiToken.id}`, API_TOKEN_RATE_LIMIT);
+  if (!limited.allowed) return { ok: false, response: rateLimitResponse(limited.retryAfter) };
+
+  const demo = isDemoOrganizationSlug(apiToken.organization.slug);
+  if (capability && demo) {
+    return { ok: false, response: jsonError("Modo demo: solo lectura", 403) };
+  }
+  if (capability && !roleCan(apiToken.role, capability)) {
+    return { ok: false, response: jsonError("Forbidden", 403) };
+  }
+
+  if (!apiToken.organization.planId) {
+    apiToken.organization.planId = await ensureOrganizationPlan(apiToken.organization.id);
+  }
+  await touchApiToken(apiToken);
+
+  return {
+    ok: true,
+    context: {
+      // El actor de auditoría deja la traza de la clave, no de una persona.
+      user: {
+        id: `api:${apiToken.id}`,
+        name: `API · ${apiToken.name}`,
+        email: apiToken.createdByEmail ?? "",
+        role: apiToken.role,
+      },
+      // Contexto sintético: la clave no tiene sesión de navegador ni PIN.
+      session: {
+        id: `api:${apiToken.id}`,
+        userId: "",
+        activeOrganizationId: apiToken.organization.id,
+        expiresAt: new Date(Date.now() + 100 * 365 * 86_400_000),
+        revokedAt: null,
+        lockedAt: null,
+        lockAttempts: 0,
+        lockReason: null,
+        createdAt: new Date(0),
+      },
+      organization: apiToken.organization,
+      role: apiToken.role,
+      organizationId: apiToken.organization.id,
       demo,
     },
   };

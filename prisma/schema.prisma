@@ -139,6 +139,7 @@ model Organization {
   memberships       OrganizationMembership[]
   adminMemberships  AdminMembership[]
   adminSessions     AdminSession[]
+  apiTokens         ApiToken[]
   logos             OrganizationLogo[]
   leads             Lead[]
   quotes            QuoteRequest[]
@@ -305,6 +306,32 @@ model TeamInvitation {
   @@unique([organizationId, email])
   @@index([organizationId, status, expiresAt])
   @@index([email])
+}
+
+/// API key de servicio (issue #69): automatizaciones que cargan datos reales sin
+/// contraseñas. El token plano se muestra una sola vez y acá vive solo su hash
+/// SHA-256; el rol es acotado (se valida contra la misma matriz que la sesión) y
+/// la clave pertenece a **una** empresa. `prefix` permite listarla sin exponerla.
+model ApiToken {
+  id             String       @id
+  organizationId String
+  name           String
+  role           AdminRole    @default(OPERATIONS)
+  /// SHA-256 hex del token; el token plano nunca se persiste.
+  tokenHash      String       @unique
+  /// Primeros caracteres del token (`lbx_XXXXXXXX`), para listar y auditar.
+  prefix         String
+  createdById    String
+  createdByName  String
+  createdByEmail String?
+  createdAt      DateTime     @default(now())
+  /// Último request autenticado con esta clave (se toca con throttle).
+  lastUsedAt     DateTime?
+  /// Revocación inmediata: a partir de acá el token deja de resolver.
+  revokedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, revokedAt])
 }
 
 model AdminSession {

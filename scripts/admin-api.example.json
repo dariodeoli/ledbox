@@ -1,0 +1,26 @@
+{
+  "client": {
+    "name": "Cliente de ejemplo S.A.",
+    "company": "Cliente de ejemplo S.A.",
+    "type": "FINAL",
+    "email": "compras@ejemplo.com.py",
+    "phone": "+595 981 000 000",
+    "contactName": "María Ejemplo",
+    "notes": "Alta de ejemplo para la CLI de API keys (issue #69)."
+  },
+  "budget": {
+    "title": "Alquiler de pantallas · evento corporativo",
+    "items": [
+      { "name": "Pantalla LED 3×2", "quantity": 2, "days": 3, "unitPrice": 2500000, "costPrice": 1200000 },
+      { "name": "Tótem touch", "quantity": 1, "days": 3, "unitPrice": 900000, "costPrice": 500000 }
+    ],
+    "materialCost": 300000,
+    "laborCost": 800000,
+    "marginPercent": 35,
+    "deliveryAt": "2026-10-02",
+    "validUntil": "2026-09-30",
+    "ivaType": "IVA10",
+    "warranty": "6 meses por defectos de fábrica",
+    "notes": "Ejemplo de carga por API key (issue #69)."
+  }
+}

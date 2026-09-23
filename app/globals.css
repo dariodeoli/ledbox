@@ -1020,6 +1020,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-settings-readonly { display: grid; gap: 4px; min-width: 0; }
 .admin-settings-readonly .admin-detail-value { margin: 0; color: var(--a-text-strong); font-size: 13px; overflow-wrap: anywhere; }
 
+/* ── API keys de servicio (issue #69) ──
+   El token se muestra una sola vez al crearlo: caja monoespaciada con el botón
+   de copiar al lado. La lista usa la tabla densa estándar. */
+.admin-api-token { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.admin-api-token code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-panel-2); overflow-wrap: anywhere; }
+
 /* ── Configuración → Correo (issue #30) ──
    La sección Correo vive con Empresa en Configuración: subtabs compartidos
    (`admin-subtabs`, el objeto de subnavegación del panel) y el historial de

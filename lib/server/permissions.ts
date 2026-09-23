@@ -28,7 +28,9 @@ export type AdminCapability =
   // Alta y edición del directorio de proveedores.
   | "suppliers.write"
   // Usuarios y accesos de la empresa activa.
-  | "users.manage";
+  | "users.manage"
+  // API keys de servicio (issue #69): **solo OWNER**.
+  | "api-keys.manage";
 
 export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
   "profile.write",
@@ -64,11 +66,12 @@ const FINANCE_CAPABILITIES: readonly AdminCapability[] = [
   "suppliers.write",
 ];
 
-/** OWNER y ADMIN pueden todo dentro de su empresa. */
+/** OWNER y ADMIN pueden todo dentro de su empresa, salvo las API keys (solo OWNER). */
 const FULL_CAPABILITIES: readonly AdminCapability[] = ADMIN_CAPABILITIES;
+const OWNER_CAPABILITIES: readonly AdminCapability[] = [...ADMIN_CAPABILITIES, "api-keys.manage"];
 
 export const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
-  OWNER: FULL_CAPABILITIES,
+  OWNER: OWNER_CAPABILITIES,
   ADMIN: FULL_CAPABILITIES,
   FINANCE: FINANCE_CAPABILITIES,
   OPERATIONS: OPERATIONS_CAPABILITIES,
