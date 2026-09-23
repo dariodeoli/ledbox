@@ -22,7 +22,7 @@ import {
   whatsappHref,
   type AdminTone,
 } from "@/lib/admin-format";
-import { bankMark } from "@/lib/bank-mark";
+import { bankMark, bankSuggestions } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   budgetApprovalState,
@@ -125,6 +125,9 @@ const EMPTY_FORM = {
   inventory: null as AdminInventoryLink | null,
 };
 const MAX_INSTALLMENTS = 12;
+
+/** `id` del `<datalist>` con el catálogo de bancos (owncoding-ui) de Datos de pago. */
+const BANK_LIST_ID = "datos-pago-banco-opciones";
 
 type ApprovalDecision = "approve" | "request_revision";
 type RequestDecision = "accept" | "reject";
@@ -504,12 +507,18 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
         <div className="admin-plan-grid">
           <TextField
             label="Banco"
-            hint="El logo se dibuja con el monograma mientras no haya asset"
+            hint="Del catálogo o libre; el monograma reemplaza al logo mientras no haya asset"
+            list={BANK_LIST_ID}
             value={details.bank ?? ""}
             onChange={(value) => setDetails({ ...details, bank: value })}
             maxLength={80}
             placeholder="Ej.: Banco Continental"
           />
+          <datalist id={BANK_LIST_ID}>
+            {bankSuggestions(details.bank).map((banco) => (
+              <option key={banco} value={banco} />
+            ))}
+          </datalist>
           <TextField
             label="Titular"
             value={details.holder ?? ""}

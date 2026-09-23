@@ -35,7 +35,7 @@ import {
   whatsappHref,
 } from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
-import { bankMark } from "@/lib/bank-mark";
+import { bankMark, bankSuggestions } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   collectedAmount,
@@ -137,6 +137,9 @@ const EMPTY_EXPECTED_SUMMARY: AdminExpectedPaymentSummary = {
 
 /** Id del campo de monto de la carga rápida: vuelve el foco al guardar y seguir. */
 const EXPENSE_AMOUNT_ID = "gasto-monto";
+
+/** `id` del `<datalist>` con el catálogo de bancos (owncoding-ui) del campo Banco. */
+const BANK_LIST_ID = "tesoreria-banco-opciones";
 
 type AccountForm = {
   id: string;
@@ -2593,14 +2596,22 @@ export function FinanzasModule() {
               options={ACCOUNT_TYPE_OPTIONS}
             />
             {accountForm.type === "BANK" ? (
-              <TextField
-                label="Banco"
-                hint="El logo se dibuja con el monograma"
-                maxLength={120}
-                value={accountForm.bank}
-                onChange={(value) => setAccountForm({ ...accountForm, bank: value })}
-                placeholder="Ueno Bank"
-              />
+              <>
+                <TextField
+                  label="Banco"
+                  hint="Del catálogo del BCP o libre; sin logo versionado se dibuja el monograma"
+                  list={BANK_LIST_ID}
+                  maxLength={120}
+                  value={accountForm.bank}
+                  onChange={(value) => setAccountForm({ ...accountForm, bank: value })}
+                  placeholder="Ueno Bank"
+                />
+                <datalist id={BANK_LIST_ID}>
+                  {bankSuggestions(accountForm.bank).map((banco) => (
+                    <option key={banco} value={banco} />
+                  ))}
+                </datalist>
+              </>
             ) : null}
             <MoneyField
               label="Saldo inicial"

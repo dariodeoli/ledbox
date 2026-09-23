@@ -83,3 +83,11 @@ test("lib/bank-mark.ts no guarda listas locales de bancos", () => {
   assert.match(source, /from "owncoding-ui"/);
   assert.doesNotMatch(source, /BANK_REGISTRY|MONOGRAM_COLORS|STOP_WORDS/);
 });
+
+test("el campo Banco de Tesorería y de Datos de pago usa el catálogo", () => {
+  for (const file of ["components/admin/modules/FinanzasModule.tsx", "components/admin/modules/PresupuestosModule.tsx"]) {
+    const source = repoFile(file);
+    assert.match(source, /bankSuggestions\(/, `${file}: el campo Banco tiene que sugerir el catálogo`);
+    assert.match(source, /<datalist/, `${file}: el campo Banco necesita su datalist del catálogo`);
+  }
+});

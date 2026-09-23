@@ -109,6 +109,8 @@ export type TextFieldProps = {
   readOnly?: boolean;
   name?: string;
   id?: string;
+  /** `id` de un `<datalist>` con el catálogo del campo (bancos, ciudades…). */
+  list?: string;
   className?: string;
   title?: string;
   onFocus?: (event: React.FocusEvent<HTMLInputElement>) => void;
@@ -135,6 +137,7 @@ export function TextField({
   readOnly,
   name,
   id,
+  list,
   className,
   title,
   onFocus,
@@ -159,6 +162,7 @@ export function TextField({
         disabled={disabled}
         readOnly={readOnly}
         name={name}
+        list={list}
         title={title}
         aria-label={label ? undefined : ariaLabel}
         aria-invalid={error ? true : undefined}
