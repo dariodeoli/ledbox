@@ -39,6 +39,9 @@ pide su catálogo y los selects se llenan (Cliente: 4 opciones, Evento, Proveedo
 - **CLS del panel (0,98 en `/finanzas`)**: es el patrón de carga de los módulos
   (esqueleto corto → contenido alto). Los controles lo confirman: `/eventos`
   0,404 y `/dashboard` 0,47 con el mismo patrón. Es de shell/plataforma.
+  **Resuelto en #61** (PANEL): sesión embebida por SSR + GET en vuelo
+  compartidos; con la misma metodología quedó 0,028 / 0 / 0
+  (`docs/DISENO-PANEL.md` §9).
 - **`/api/admin/events` (82,6 kB)** para un selector de eventos: el endpoint es de
   OPS; conviene un `select`/filtro por rango.
 - **`/api/admin/finance` (37 kB)** incluye `client` y `budget` completos (con

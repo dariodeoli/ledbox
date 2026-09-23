@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { AdminOfflineProvider } from "@/components/admin/AdminOffline";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { hostnameOf, publicConfig } from "@/lib/public-config";
+import type { AdminSessionPayload } from "@/lib/admin-types";
+import { buildAdminSessionPayload } from "@/lib/server/admin-session";
 import { getAuthenticatedAdmin } from "@/lib/server/auth";
+import { requireAdminContext } from "@/lib/server/tenancy";
 
 /**
  * Layout del panel.
@@ -40,9 +43,26 @@ export default async function AdminPanelLayout({ children }: Readonly<{ children
     }
     redirect("/login");
   }
+
+  /**
+   * Sesión resuelta en el servidor (issue #61): el shell arranca con los datos,
+   * así no dibuja el esqueleto de carga ni pide `/api/admin/session` al entrar
+   * (menos pedidos fijos y sin salto de layout). Si esta carga falla, el shell
+   * conserva su camino de cliente (fetch + esqueleto).
+   */
+  let initialSession: AdminSessionPayload | null = null;
+  try {
+    const context = await requireAdminContext(undefined, { allowLocked: true });
+    if (context.ok) initialSession = await buildAdminSessionPayload(context.context);
+  } catch {
+    initialSession = null;
+  }
+
   return (
     <AdminOfflineProvider>
-      <AdminShell demoHost={onDemoHost}>{children}</AdminShell>
+      <AdminShell demoHost={onDemoHost} initialSession={initialSession}>
+        {children}
+      </AdminShell>
     </AdminOfflineProvider>
   );
 }
