@@ -115,13 +115,18 @@ Postgres local con datos de demo y Chrome headless por CDP (mismo host demo).
 
 **Lecturas pesadas del índice de la demo** (~30 consultas por visita): se probó
 cachearlas por organización en la Data Cache de Next (`unstable_cache`, tag
-`demo`), pero **se revirtió en el hotfix del 23-09-2026 (v2.1.30)**: la Data
-Cache serializa el resultado con el formato de flight y las `Date` vuelven
+`demo`), pero **se revirtió en el hotfix del 23-09-2026 (v2.1.30, incidente #66)**:
+la Data Cache serializa el resultado con el formato de flight y las `Date` vuelven
 codificadas, lo que rompía el render con `RangeError: Invalid time value`
 (`demo.ledbox.online/` → 500, también en el primer request: el round-trip es
-siempre). Queda como lectura directa. Si se retoma: el loader debe devolver JSON
-puro (ISO strings) y el render parsear en el borde — **ningún `Date` cruza la
-Data Cache**.
+siempre; el error del proxy mostraba `NEXT_REDIRECT;...;/api/demo/session` como
+digest porque el layout redirigía mientras la página reventaba). Queda como
+lectura directa: se pierde el recorte de ~21 ms de TTFB local (34,7 → 13,8 ms) y
+el ahorro de las ~30 consultas por visita del índice. Si se retoma: el loader debe
+devolver **JSON puro** (todas las `Date` → ISO strings y el render parsea en el
+borde), con un test que verifique que la salida sobrevive
+`JSON.parse(JSON.stringify(...))` sin `Date`/`Map`/`Set`; y validar en build de
+producción contra el host demo (primer request y repetido).
 
 **Estrategia conservadora** (lo demás queda dinámico a propósito): sesión, roles
 y membresías no se cachean; las lecturas por organización del panel mantienen
