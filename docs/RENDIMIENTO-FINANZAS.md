@@ -1,5 +1,48 @@
 # Rendimiento del portal y de los módulos de finanzas (issue #59)
 
+## Ronda 2 (issue #63): islas en el portal y recorte de payloads
+
+**Portal del cliente (`/p/[token]`)** — se separó lo que no necesita hidratar:
+
+| Métrica | Antes | Después |
+| --- | --- | --- |
+| First Load JS (build) | 136 kB | **135 kB** |
+| Página (build) | 14 kB | **12.9 kB** |
+| Chunk de la página (sin comprimir) | 51.644 B | **47.454 B (−8 %)** |
+| HTML visible (demo abierta / aprobada) | — | **idéntico** (solo cambia el hash de webpack) |
+
+- El aviso de demo, el encabezado (referencia, título, metadatos) y la
+  **cronología** se dibujan ahora en el servidor (`PortalBudgetStatic.tsx`) y
+  viajan como nodos al componente cliente: el navegador no los hidrata.
+- El pipeline de imagen del comprobante (canvas + magic bytes) vive en
+  `portal-proof-image.ts` y se importa **recién al enviar** el comprobante
+  (chunk diferido de 1,6 kB).
+- Lo interactivo (chips, ítems, acción, comprobante y pedidos) sigue en el
+  cliente porque cambia con lo que hace el visitante —y, en la demo, con la
+  simulación por sesión—. Lo que queda del First Load del portal: 103 kB de
+  framework compartido (plataforma), `admin-format` (27 kB sin comprimir, mapa de
+  etiquetas compartido con el panel) y `owncoding-ui` (21 kB) que resuelve la
+  marca del banco: ese último **no se puede diferir sin sacar el logo del HTML**
+  inicial de los presupuestos aprobados, así que se mantiene (trade-off
+  documentado).
+
+**`/api/admin/finance`** — 36.780 B → **16.195 B (−56 %)** con las mismas filas:
+
+- `client`: 18 campos → 6 (`id`, `name`, `company`, `type`, `email`, `phone`,
+  justo `AdminClientRef`); fuera notas, RUC, dirección, contacto y métricas de la
+  ficha que la lista no dibuja.
+- `budget`: 29 campos → 3 (`id`, `title`, `publicToken`); fuera `costEstimate`,
+  `notes`, `installmentsJson` y la **evidencia interna** (`approvalIp`,
+  `approvalUserAgent`).
+- `supplierJob.supplier`: 11 → 4; `supplierJob.event`: 14 → 4 (`AdminEventRef`).
+- Sin cambios de tipo: el recorte coincide con lo que ya declaraba
+  `lib/admin-types.ts` (`AdminPaymentRow`, `AdminClientRef`, `AdminSupplierJobRow`),
+  así que la ficha de cliente de OPS no se toca.
+
+---
+
+## Ronda 1 (issue #59)
+
 Medición del 23-09-2026 sobre la rama `slot/finanzas` rebasada en `5bf3ade`, con
 el build de producción local (`next build` + `node .next/standalone/server.js`),
 datos de demo y una sesión real, en un Chrome headless con

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   budgetApprovalLabel,
@@ -20,7 +19,6 @@ import {
   formatNumber,
   paymentProofMimeLabel,
   statusTone,
-  timelineKindLabel,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
 import {
@@ -31,12 +29,7 @@ import {
   writePortalDemoState,
   type PortalDemoState,
 } from "@/lib/portal-demo";
-import {
-  detectPaymentProofMime,
-  PAYMENT_PROOF_MAX_BYTES,
-  PAYMENT_PROOF_MIMES,
-  paymentProofExtension,
-} from "@/lib/admin-types";
+import { PAYMENT_PROOF_MIMES, paymentProofExtension } from "@/lib/admin-types";
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 
 /**
@@ -84,10 +77,6 @@ type ActionMode = "authorize" | "discount" | "change";
 const MAX_QUANTITY = 999;
 const MAX_DAYS = 365;
 const MAX_NOTE = 600;
-/** Lado máximo de la foto comprimida y calidad del WebP/JPEG resultante. */
-const PROOF_MAX_SIDE = 1600;
-const PROOF_QUALITY = 0.82;
-
 /** Estado del comprobante en el portal, con su tono de cápsula. */
 const PROOF_STATUS: Record<PortalBudgetProof["status"], { label: string; tone: string }> = {
   received: { label: "Recibido", tone: "info" },
@@ -184,86 +173,6 @@ function changeNote(budget: PortalBudget, draft: Record<string, DraftItem>): str
   return rows.length > 0 ? `Ajusté el presupuesto desde el portal y lo autoricé con estos valores: ${rows.join("; ")}.` : "";
 }
 
-// ── Comprobante de pago (issue #17) ─────────────────────────────────────────
-// La foto se comprime en el navegador (canvas, sin librerías): lado máximo
-// 1600 px y salida WebP con caída a JPEG. El PDF viaja tal cual. El tipo real
-// se valida por magic bytes antes de subir (y el API lo revalida siempre).
-
-type LoadedImage = { image: CanvasImageSource; width: number; height: number; release: () => void };
-
-async function loadImageSource(file: Blob): Promise<LoadedImage | null> {
-  if (typeof createImageBitmap === "function") {
-    try {
-      // `from-image` respeta la orientación EXIF de las fotos de celular.
-      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      return { image: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
-    } catch {
-      // Safari viejo o formato raro: se reintenta con `<img>`.
-    }
-  }
-  const url = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error("No pudimos leer la imagen."));
-      element.src = url;
-    });
-    return {
-      image,
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-      release: () => URL.revokeObjectURL(url),
-    };
-  } catch {
-    URL.revokeObjectURL(url);
-    return null;
-  }
-}
-
-/** Comprime una foto a WebP (o lo que soporte el navegador); `null` si no se pudo. */
-async function compressProofImage(file: File): Promise<Blob | null> {
-  const loaded = await loadImageSource(file);
-  if (!loaded || loaded.width < 1 || loaded.height < 1) {
-    loaded?.release();
-    return null;
-  }
-  try {
-    const scale = Math.min(1, PROOF_MAX_SIDE / Math.max(loaded.width, loaded.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(loaded.width * scale));
-    canvas.height = Math.max(1, Math.round(loaded.height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    context.drawImage(loaded.image, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", PROOF_QUALITY));
-    return blob && blob.size > 0 ? blob : null;
-  } finally {
-    loaded.release();
-  }
-}
-
-/** Prepara el archivo del comprobante: valida la firma real y comprime las fotos. */
-async function prepareProofFile(file: File): Promise<{ blob: Blob; mime: string } | { error: string }> {
-  const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const detected = detectPaymentProofMime(header);
-  if (!detected) {
-    return { error: "El archivo no es un JPG, PNG, WebP o PDF: revisá que no esté renombrado." };
-  }
-  if (detected === "application/pdf") {
-    if (file.size > PAYMENT_PROOF_MAX_BYTES) {
-      return { error: "El PDF supera los 2 MB; subí una versión más liviana." };
-    }
-    return { blob: file, mime: detected };
-  }
-  const compressed = await compressProofImage(file);
-  const blob = compressed && compressed.size < file.size ? compressed : file;
-  if (blob.size > PAYMENT_PROOF_MAX_BYTES) {
-    return { error: "La imagen sigue superando los 2 MB después de comprimirla; probá con otra foto." };
-  }
-  return { blob, mime: detected };
-}
-
 /**
  * Selector segmentado del portal (único objeto del tipo): se usa para la
  * intención de la acción principal y para el tipo de descuento pedido.
@@ -354,10 +263,22 @@ export function PortalBudgetView({
   budget: canonicalBudget,
   token,
   demo = false,
+  demoBanner,
+  headTitle,
+  headFacts,
+  timeline,
 }: {
   budget: PortalBudget;
   token: string;
   demo?: boolean;
+  /** Aviso de datos simulados, ya dibujado en el servidor (issue #63). */
+  demoBanner?: ReactNode;
+  /** Encabezado del documento (servidor): referencia, título y metadatos. */
+  headTitle?: ReactNode;
+  /** Datos del encabezado (servidor): emisión, validez y evento. */
+  headFacts?: ReactNode;
+  /** Cronología del cliente (servidor): solo lectura, sin hidratación. */
+  timeline?: ReactNode;
 }) {
   const router = useRouter();
 
@@ -729,6 +650,9 @@ export function PortalBudgetView({
     setProofBusy(true);
     setProofError("");
     try {
+      // El pipeline de imagen (canvas + magic bytes) se carga recién acá: no hace
+      // falta para leer ni para decidir el presupuesto (issue #63).
+      const { prepareProofFile } = await import("./portal-proof-image");
       const prepared = await prepareProofFile(proofFile);
       if ("error" in prepared) {
         setProofError(prepared.error);
@@ -797,28 +721,11 @@ export function PortalBudgetView({
 
   return (
     <article className="portal-budget">
-      {demo ? (
-        <section className="portal-banner portal-banner--demo" aria-labelledby="portal-demo">
-          <h2 className="portal-banner-title" id="portal-demo">
-            Presupuesto de ejemplo · datos simulados
-          </h2>
-          <p className="portal-banner-note">
-            Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios. Lo que hagas acá se
-            simula <strong>en tu navegador</strong> y no modifica el ejemplo —otro visitante ve el mismo estado—, así que
-            podés probar la autogestión sin compromiso. <Link href="/portal">Volver a la portada</Link>.
-          </p>
-        </section>
-      ) : null}
+      {demoBanner}
 
       <header className="portal-budget-head">
         <div className="portal-budget-head-top">
-          <div className="portal-budget-head-title">
-            <p className="portal-kicker">Presupuesto Nº {budget.reference}</p>
-            <h1 className="portal-budget-title">{budget.title}</h1>
-            <p className="portal-budget-meta">
-              {clientLabel} · preparado por {budget.organization}
-            </p>
-          </div>
+          {headTitle}
           <div className="portal-budget-chips">
             <span className="portal-chip" data-tone={statusTone(budget.status)}>
               {budgetStatusLabel(budget.status)}
@@ -833,35 +740,7 @@ export function PortalBudgetView({
             ) : null}
           </div>
         </div>
-        <dl className="portal-facts portal-facts--head">
-          <div>
-            <dt>Emitido</dt>
-            <dd>{formatDateTime(budget.createdAt)}</dd>
-          </div>
-          <div>
-            <dt>Válido hasta</dt>
-            <dd>
-              {budget.validUntil ? (
-                <>
-                  <span className="portal-nowrap">{formatDate(budget.validUntil)}</span>
-                  <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                    {formatCountdown(budget.validUntil, "client")}
-                  </span>
-                </>
-              ) : (
-                "Sin fecha de vencimiento"
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>Evento</dt>
-            <dd>{budget.event?.name || "Sin evento asociado"}</dd>
-          </div>
-          <div>
-            <dt>Inicio del evento</dt>
-            <dd>{budget.event?.startsAt ? formatDateTime(budget.event.startsAt) : "—"}</dd>
-          </div>
-        </dl>
+        {headFacts}
       </header>
 
       {approved ? (
@@ -1578,34 +1457,7 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
-          {budget.timeline.length > 0 ? (
-            <section className="portal-card" aria-labelledby="portal-timeline">
-              <div className="portal-card-head">
-                <h2 className="portal-card-title" id="portal-timeline">
-                  Cronología
-                </h2>
-                <p className="portal-card-lead">
-                  Todo lo que pasó con tu presupuesto, con la fecha real de cada paso: envío, cambios, autorización, pagos y
-                  evento.
-                </p>
-              </div>
-              <ol className="portal-timeline">
-                {budget.timeline.map((entry) => (
-                  <li className="portal-timeline-step" key={entry.id} data-tone={entry.tone}>
-                    <span className="portal-timeline-when">{formatDateTime(entry.at)}</span>
-                    <span className="portal-timeline-body">
-                      <strong>{entry.title}</strong>
-                      {entry.detail ? <small>{entry.detail}</small> : null}
-                      <small className="portal-timeline-kind">
-                        {timelineKindLabel(entry.kind)}
-                        {entry.actor ? ` · ${entry.actor}` : ""}
-                      </small>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
+          {timeline}
 
           <section className="portal-card portal-help-card" aria-labelledby="portal-help">
             <h2 className="portal-card-title" id="portal-help">
