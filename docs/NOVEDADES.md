@@ -97,3 +97,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - precio, condiciones y adjunto en el panel
 - costos internos separados, margen y precio final
 
+## v2.1.32 — 2026-09-23
+
+- buscador por ciudad y contactos, paleta diferida y fricciones
+
