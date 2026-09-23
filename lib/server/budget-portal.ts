@@ -3,6 +3,7 @@ import { db } from "./db";
 import { BUDGET_CODE_ALPHABET, formatBudgetCode, normalizeBudgetCode } from "@/lib/public-config";
 import { budgetReference } from "@/lib/admin-format";
 import type { AdminTimelineEntry } from "@/lib/admin-types";
+import { isDemoOrganizationSlug } from "./demo-data";
 import { dayKeyOf } from "./notifications";
 import { buildBudgetTimeline } from "./timeline";
 
@@ -22,6 +23,10 @@ import { buildBudgetTimeline } from "./timeline";
  *
  * Los comprobantes de pago (issue #17) viajan solo como metadatos: el binario
  * queda en el panel y se sirve únicamente con sesión.
+ *
+ * La empresa demo (issue #52) viaja marcada (`demo`): el portal simula sus
+ * acciones en el navegador, `loadPublicBudget` nunca sella su `viewedAt` y los
+ * endpoints del portal rechazan cualquier escritura sobre ella.
  */
 
 const CODE_LENGTH = 20;
@@ -161,6 +166,8 @@ export type PortalBudget = {
   /** Enum real del presupuesto (`CommercialStatus`); la UI lo traduce. */
   status: string;
   organization: string;
+  /** La empresa es la demo pública (issue #52): el portal simula, no escribe. */
+  demo: boolean;
   createdAt: string;
   validUntil: string | null;
   notes: string | null;
@@ -178,6 +185,13 @@ export type PortalBudget = {
   paymentPlan: PortalBudgetPaymentPlan;
   /** Solo con el presupuesto aprobado; antes es `null`. */
   paymentDetails: PortalBudgetPaymentDetails | null;
+  /**
+   * Datos de pago de la empresa demo (issue #52): viajan siempre —solo para la
+   * empresa de ejemplo— para que la aprobación simulada de la visita pueda
+   * mostrar el mismo circuito que la real. El portal los dibuja recién con la
+   * aprobación visible.
+   */
+  demoPaymentDetails: PortalBudgetPaymentDetails | null;
   /** Pagos esperados del plan aprobado (issue #28): el estado real de cada concepto. */
   expectedPayments: PortalExpectedPayment[];
   /** Comprobantes ya subidos (metadatos; el archivo se ve solo en el panel). */
@@ -294,7 +308,7 @@ type BudgetForPortal = {
   approvalNote: string | null;
   revisionRequestedAt: Date | null;
   revisionNote: string | null;
-  organization: { name: string; paymentDetails: unknown };
+  organization: { name: string; slug: string; paymentDetails: unknown };
   client: { name: string; company: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; notes: string | null }>;
@@ -492,6 +506,7 @@ function requestView(budget: BudgetForPortal, request: BudgetForPortal["changeRe
 export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelineEntry[] = []): PortalBudget {
   const method = budget.approvalMethod === "manual" ? "manual" : budget.approvalMethod === "digital" ? "digital" : null;
   const approved = Boolean(budget.approvedAt);
+  const demo = isDemoOrganizationSlug(budget.organization.slug);
   const expectedPayments = budget.expectedPayments.map((expected): PortalExpectedPayment => {
     const status: PortalExpectedPaymentStatus =
       expected.status === "PROOF" || expected.status === "CONFIRMED" || expected.status === "CANCELLED"
@@ -522,6 +537,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     title: budget.title,
     status: budget.status,
     organization: budget.organization.name,
+    demo,
     createdAt: budget.createdAt.toISOString(),
     validUntil: iso(budget.validUntil),
     notes: budget.notes,
@@ -544,7 +560,9 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     paymentPlan: paymentPlanOf(budget),
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
+    // La empresa demo los lleva siempre en `demoPaymentDetails` (issue #52).
     paymentDetails: approved ? parsePaymentDetails(budget.organization.paymentDetails) : null,
+    demoPaymentDetails: demo ? parsePaymentDetails(budget.organization.paymentDetails) : null,
     expectedPayments,
     proofs: budget.paymentProofs.map((proof) => ({
       id: proof.id,
@@ -581,7 +599,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
 }
 
 const portalInclude = {
-  organization: { select: { name: true, paymentDetails: true } },
+  organization: { select: { name: true, slug: true, paymentDetails: true } },
   client: { select: { name: true, company: true, contactName: true, contactRole: true } },
   event: { select: { name: true, location: true, startsAt: true } },
   items: { orderBy: { name: "asc" } },
@@ -644,6 +662,10 @@ export async function sealPortalView(budgetId: string): Promise<Date | null> {
  * antes de armar la cronología, así el hito aparece ya en esa misma apertura.
  * Los POST del portal (`approve`, `propose`, `proof`, `revision`) leen sin
  * sellar: la vista la registra el GET.
+ *
+ * El presupuesto de la empresa demo **no sella nunca** (issue #52): la demo es
+ * de solo lectura y una visita no puede marcar `viewedAt`, ni de casualidad por
+ * el `?demo=1` de un link viejo o por el GET JSON del API.
  */
 export async function loadPublicBudget(
   token: string | null | undefined,
@@ -653,7 +675,8 @@ export async function loadPublicBudget(
   if (!code) return null;
   const budget = await db.budget.findUnique({ where: { publicToken: code }, include: portalInclude });
   if (!budget) return null;
-  if (options.sealView) await sealPortalView(budget.id);
+  const demo = isDemoOrganizationSlug(budget.organization.slug);
+  if (options.sealView && !demo) await sealPortalView(budget.id);
   const timeline = await buildBudgetTimeline(budget.organizationId, budget.id, { audience: "client" });
   return portalBudgetView(budget, timeline ?? []);
 }
