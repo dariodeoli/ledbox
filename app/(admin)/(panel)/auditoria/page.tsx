@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
-import { AdminModuleGuard } from "@/components/admin/AdminShell";
-import { AuditoriaModule } from "@/components/admin/modules/AuditoriaModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Auditoría" };
-
+/** Ruta vieja de Auditoría (issue #56): ahora vive en Estado. */
 export default function AuditoriaPage() {
-  return (
-    <AdminModuleGuard href="/auditoria">
-      <AuditoriaModule />
-    </AdminModuleGuard>
-  );
+  redirect("/estado/auditoria");
 }

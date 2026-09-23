@@ -19,6 +19,17 @@ export const ADMIN_ROUTES = [
   "/inventario",
   "/proveedores",
   "/promotoras",
+  // Navegación consolidada (issue #56): Ajustes (Empresa · Correo · Plan ·
+  // Usuarios) y Estado (Sistema · Auditoría). Las rutas viejas siguen listadas
+  // abajo porque redirigen a estas.
+  "/ajustes",
+  "/ajustes/empresa",
+  "/ajustes/correo",
+  "/ajustes/plan",
+  "/ajustes/usuarios",
+  "/estado",
+  "/estado/sistema",
+  "/estado/auditoria",
   "/usuarios",
   "/configuracion",
   "/empresa",

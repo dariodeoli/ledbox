@@ -146,7 +146,7 @@ export async function GET(request: Request) {
       id: user.id,
       title: user.name,
       subtitle: [user.email, adminRoleLabel(user.memberships[0]?.role)].filter(Boolean).join(" · "),
-      href: "/usuarios",
+      href: "/ajustes/usuarios",
     })),
   ];
 

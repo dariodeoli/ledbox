@@ -1,14 +1,9 @@
-import type { Metadata } from "next";
-import { AdminModuleGuard } from "@/components/admin/AdminShell";
-import { ConfiguracionModule } from "@/components/admin/modules/ConfiguracionModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Configuración · Seguridad" };
-
-/** Seguridad (issue #21): PIN y auto-bloqueo por usuario, dentro del área de Configuración. */
+/**
+ * Ruta vieja de Configuración → Seguridad (issue #56): el PIN y el auto-bloqueo
+ * son del usuario y viven en Mi perfil; acá no queda una copia duplicada.
+ */
 export default function ConfiguracionSeguridadPage() {
-  return (
-    <AdminModuleGuard href="/configuracion">
-      <ConfiguracionModule section="seguridad" />
-    </AdminModuleGuard>
-  );
+  redirect("/perfil");
 }

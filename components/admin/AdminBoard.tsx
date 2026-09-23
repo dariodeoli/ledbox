@@ -19,16 +19,36 @@ import { AdminIcon } from "./AdminIcons";
  * pantallas chicas, sin desbordar la página.
  */
 
-export type AdminModuleView = "list" | "board" | "grid";
+export type AdminModuleView = "list" | "board" | "grid" | "calendar";
 
-/** Vistas por defecto del panel: lista y tablero (los módulos con cuadrícula la suman). */
+/** Vistas por defecto del panel: lista y tablero (cuadrícula y calendario se suman por módulo). */
 const DEFAULT_MODULE_VIEWS: readonly AdminModuleView[] = ["list", "board"];
+
+/**
+ * Alias de la vista en la URL: las rutas viejas y los links compartidos hablan
+ * en español (`/calendario` → `/eventos?vista=calendario`, issue #56).
+ */
+const VIEW_ALIASES: Record<string, AdminModuleView> = {
+  list: "list",
+  lista: "list",
+  board: "board",
+  tablero: "board",
+  grid: "grid",
+  cuadricula: "grid",
+  calendar: "calendar",
+  calendario: "calendar",
+};
+
+function viewFromParam(value: string | null): AdminModuleView | null {
+  return value ? VIEW_ALIASES[value.trim().toLowerCase()] ?? null : null;
+}
 
 /**
  * Vista recordada por usuario y módulo (`localStorage`); por defecto, lista.
  * `views` acota lo que el módulo ofrece (`["list","grid"]` para la cuadrícula);
- * pasá una constante estable del módulo. Una vista guardada que el módulo ya no
- * ofrece se ignora (queda la lista).
+ * pasá una constante estable del módulo. Un `?vista=` en la URL manda sobre lo
+ * recordado (issue #56) y una vista guardada que el módulo ya no ofrece se
+ * ignora (queda la lista).
  */
 export function useAdminModuleView(
   module: string,
@@ -40,7 +60,13 @@ export function useAdminModuleView(
   useEffect(() => {
     const allowed = viewsKey.split("|");
     try {
+      const requested = viewFromParam(new URLSearchParams(window.location.search).get("vista"));
       const stored = window.localStorage.getItem(`ledbox-admin-view:${module}`);
+      if (requested && allowed.includes(requested)) {
+        setView(requested);
+        window.localStorage.setItem(`ledbox-admin-view:${module}`, requested);
+        return;
+      }
       if (stored && allowed.includes(stored)) setView(stored as AdminModuleView);
     } catch {
       /* almacenamiento no disponible: la vista vale solo para esta pantalla */
@@ -62,14 +88,19 @@ export function useAdminModuleView(
   return [view, change];
 }
 
-/** Etiqueta e ícono de cada vista; la cuadrícula usa la grilla de 4 cuadros. */
-const MODULE_VIEW_OPTIONS: Record<AdminModuleView, { label: string; icon: "menu" | "overview" }> = {
+/** Etiqueta e ícono de cada vista del conmutador. */
+const MODULE_VIEW_OPTIONS: Record<AdminModuleView, { label: string; icon: "menu" | "overview" | "calendar" }> = {
   list: { label: "Lista", icon: "menu" },
   board: { label: "Tablero", icon: "overview" },
   grid: { label: "Cuadrícula", icon: "overview" },
+  calendar: { label: "Calendario", icon: "calendar" },
 };
 
-/** Conmutador de vistas: una sola pieza para todos los módulos. */
+/**
+ * Conmutador de vistas: una sola pieza para todos los módulos. Por defecto
+ * lista y tablero; los módulos suman cuadrícula o calendario según su `views`
+ * (issues #56 y #57).
+ */
 export function AdminViewSwitch({
   view,
   onChange,
@@ -140,6 +171,13 @@ export type AdminBoardCardData = {
 export type AdminBoardMoveOutcome = { ok: true } | { ok: false; error: string };
 
 const NO_MOVING_IDS: ReadonlySet<string> = new Set<string>();
+
+/** Pulsación larga que inicia el arrastre táctil (issue #55). */
+const TOUCH_LONG_PRESS_MS = 300;
+/** Movimiento que cancela la pulsación: era scroll o swipe, no un arrastre. */
+const TOUCH_SLOP_PX = 8;
+
+type TouchDrag = { id: string; x: number; y: number };
 
 /**
  * Movimiento optimista compartido: la tarjeta cambia de columna al soltar, el
@@ -255,6 +293,31 @@ export function AdminBoard({
 }) {
   const [draggingId, setDraggingId] = useState("");
   const [overColumn, setOverColumn] = useState("");
+  /** Arrastre táctil en curso (issue #55): el HTML5 no dispara con el dedo. */
+  const [touchDrag, setTouchDrag] = useState<TouchDrag | null>(null);
+  const pressRef = useRef<{ pointerId: number; x: number; y: number; timer: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const dragActiveRef = useRef(false);
+
+  /**
+   * Con el arrastre táctil activo hay que frenar el scroll: React registra
+   * `touchmove` como pasivo, así que el `preventDefault` va en un listener nativo
+   * (si no, el navegador cancela el pointer y el arrastre muere al primer
+   * movimiento). Antes de la pulsación larga no se toca: el dedo scrollea normal.
+   */
+  useEffect(() => {
+    dragActiveRef.current = touchDrag !== null;
+  }, [touchDrag]);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const onTouchMove = (event: TouchEvent) => {
+      if (dragActiveRef.current) event.preventDefault();
+    };
+    wrap.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => wrap.removeEventListener("touchmove", onTouchMove);
+  }, []);
 
   // Estados que llegan en los datos sin columna declarada: se dibujan igual,
   // con su valor crudo, para no ocultar filas.
@@ -284,6 +347,60 @@ export function AdminBoard({
   );
 
   const draggingCard = draggingId ? cards.find((card) => card.id === draggingId) ?? null : null;
+  const touchCard = touchDrag ? cards.find((card) => card.id === touchDrag.id) ?? null : null;
+
+  /** Columna bajo el dedo (el fantasma no intercepta: `pointer-events: none`). */
+  function columnUnder(x: number, y: number): string {
+    const element = document.elementFromPoint(x, y);
+    return element?.closest(".admin-board-col")?.getAttribute("data-status") ?? "";
+  }
+
+  function cancelPress() {
+    if (pressRef.current) window.clearTimeout(pressRef.current.timer);
+    pressRef.current = null;
+  }
+
+  /** Tacto y lápiz: pulsación larga sobre la tarjeta para empezar a arrastrar. */
+  function startPress(event: React.PointerEvent<HTMLElement>, card: AdminBoardCardData, movable: boolean) {
+    if (!movable || event.pointerType === "mouse") return;
+    cancelPress();
+    const target = event.currentTarget;
+    const { pointerId, clientX, clientY } = event;
+    const timer = window.setTimeout(() => {
+      pressRef.current = null;
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        /* sin captura el arrastre sigue mientras el dedo no se levante */
+      }
+      setTouchDrag({ id: card.id, x: clientX, y: clientY });
+    }, TOUCH_LONG_PRESS_MS);
+    pressRef.current = { pointerId, x: clientX, y: clientY, timer };
+  }
+
+  function movePress(event: React.PointerEvent<HTMLElement>) {
+    const press = pressRef.current;
+    if (press) {
+      if (Math.abs(event.clientX - press.x) > TOUCH_SLOP_PX || Math.abs(event.clientY - press.y) > TOUCH_SLOP_PX) cancelPress();
+      return;
+    }
+    if (!touchDrag) return;
+    // Durante el arrastre manda el dedo: sin scroll de la página ni del tablero.
+    event.preventDefault();
+    setTouchDrag((current) => (current ? { ...current, x: event.clientX, y: event.clientY } : current));
+    const status = columnUnder(event.clientX, event.clientY);
+    setOverColumn(status && accepts(touchCard, status) ? status : "");
+  }
+
+  function endPress(event: React.PointerEvent<HTMLElement>, card: AdminBoardCardData) {
+    cancelPress();
+    if (!touchDrag) return;
+    const status = columnUnder(event.clientX, event.clientY);
+    setTouchDrag(null);
+    setOverColumn("");
+    if (status && targetsOf(card).includes(status)) onMove?.(card.id, status);
+  }
+
   const accepts = (card: AdminBoardCardData | null, status: string) =>
     Boolean(onMove && canMove && card && !movingIds.has(card.id) && targetsOf(card).includes(status));
 
@@ -293,12 +410,12 @@ export function AdminBoard({
   }
 
   return (
-    <div className="admin-board-wrap">
+    <div className="admin-board-wrap" ref={wrapRef}>
       <div className="admin-board" role="group" aria-label={label}>
         {statuses.map((column) => {
           const columnCards = grouped.get(column.value) ?? [];
           const tone: AdminTone = column.tone ?? statusTone(column.value);
-          const over = overColumn === column.value && accepts(draggingCard, column.value);
+          const over = overColumn === column.value && accepts(draggingCard ?? touchCard, column.value);
           return (
             <section
               key={column.value}
@@ -340,8 +457,18 @@ export function AdminBoard({
                       className="admin-board-card"
                       data-status={card.status}
                       data-moving={movingIds.has(card.id) || undefined}
+                      data-dragging={touchDrag?.id === card.id || undefined}
+                      data-movable={movable || undefined}
                       aria-busy={movingIds.has(card.id) || undefined}
                       draggable={movable}
+                      onPointerDown={(event) => startPress(event, card, movable)}
+                      onPointerMove={movePress}
+                      onPointerUp={(event) => endPress(event, card)}
+                      onPointerCancel={(event) => endPress(event, card)}
+                      /* En táctil la pulsación larga es el arrastre: sin menú contextual. */
+                      onContextMenu={(event) => {
+                        if (movable) event.preventDefault();
+                      }}
                       onDragStart={(event) => {
                         if (!movable) {
                           event.preventDefault();
@@ -417,6 +544,15 @@ export function AdminBoard({
           );
         })}
       </div>
+
+      {/* Fantasma del arrastre táctil (issue #55): sigue al dedo y no intercepta
+          el `elementFromPoint` que decide la columna. */}
+      {touchDrag && touchCard ? (
+        <div className="admin-board-ghost" style={{ left: touchDrag.x, top: touchDrag.y }} aria-hidden="true">
+          <strong>{touchCard.title}</strong>
+          {touchCard.subtitle ? <span>{touchCard.subtitle}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

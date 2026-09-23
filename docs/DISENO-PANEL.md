@@ -80,14 +80,20 @@ se unifican los componentes, sin cambiar datos ni contratos.
 
 | Grupo | Módulos |
 | --- | --- |
-| **General** | Resumen · Calendario |
-| **Operación** | Eventos · Inventario · Proveedores · Promotoras |
+| **General** | Resumen · Eventos |
+| **Operación** | Inventario · Proveedores · Promotoras |
 | **Comercial** | Clientes · Leads · Presupuestos · Plantillas |
 | **Finanzas** | Finanzas · Facturación |
-| **Sistema** | Plan · Usuarios · Empresa · Configuración · Auditoría · Sistema |
+| **Sistema** | Ajustes · Estado |
+
+> **Consolidación del 23-09-2026 (issue #56):** el nav pasó de 18 a 13 destinos.
+> Calendario es una **vista dentro de Eventos** (`/eventos?vista=calendario`), el
+> PIN vive solo en **Mi perfil**, **Ajustes** agrupa Empresa · Correo · Plan ·
+> Usuarios y **Estado** agrupa Sistema · Auditoría. Las rutas viejas siguen
+> entrando con redirect.
 
 Reglas del reordenamiento:
-- Lo que se usa todos los días arriba (Resumen, Calendario, Eventos).
+- Lo que se usa todos los días arriba (Resumen, Eventos).
 - Finanzas y Facturación juntas (son el mismo trabajo con dos caras).
 - Sistema agrupa lo que se toca de vez en cuando y lo restringido (OWNER/ADMIN).
 - Dentro de cada módulo: primero lo urgente/accionable (avisos, pendientes), después lo
@@ -111,3 +117,21 @@ Reglas del reordenamiento:
    con Tab en orden lógico.
 5. Comparar contra el «antes» (`/tmp/antes-oscuro`, `/tmp/antes-claro` del
    22-09-2026) para el antes/después del reporte.
+
+## 9. Mobile y arrastre táctil (23-09-2026, issue #55)
+
+- **Pasada mobile** con Chrome device emulation a **390 y 414 px** sobre las 22
+  rutas del panel: **0 pantallas con scroll horizontal de página** (los scrollers
+  internos de listas/tableros no cuentan) y sin errores de consola. Los diálogos
+  entran con el pulgar: el de «Datos de pago» mide 358 px de ancho a 390 con sus
+  campos y sin scroll interno; el alto se resuelve con el scroll del overlay.
+- **Arrastre táctil de los tableros**: el DnD HTML5 no dispara con el dedo, así
+  que `AdminBoard` suma un camino por Pointer Events con **pulsación larga**
+  (300 ms) y `touch-action: manipulation`; durante el arrastre se frena el
+  `touchmove` con un listener nativo no pasivo (React lo registra pasivo y el
+  navegador cancelaba el pointer). Un swipe normal sigue scrolleando: el arrastre
+  solo empieza después de la pulsación larga y «Mover a…» queda como alternativa
+  accesible.
+- Verificación: con emulación de toque, arrastrar una tarjeta de Borrador a
+  Enviado dispara el PATCH real y la tarjeta queda en la columna destino; un
+  swipe rápido scrollea la página (0 → 336 px) sin activar el arrastre.

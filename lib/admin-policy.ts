@@ -11,15 +11,19 @@ export type AdminNavItem = { href: string; label: string; icon: AdminIconName; r
 export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
 
 /**
- * Módulos restringidos: mismo criterio que el API (usuarios, empresa y configuración: OWNER/ADMIN). El resto se ve siempre; las acciones se gatean por capacidad.
- * El plan (issue #42) se ve en todos los roles: el consumo y los topes son
- * información de la empresa; solo OWNER/ADMIN piden el cambio (`org.manage`).
+ * Módulos restringidos: mismo criterio que el API (empresa, correo, usuarios,
+ * estado y auditoría: OWNER/ADMIN). El resto se ve siempre; las acciones se
+ * gatean por capacidad. Plan (issue #42) se ve en todos los roles: el consumo y
+ * los topes son información de la empresa; solo OWNER/ADMIN piden el cambio
+ * (`org.manage`). Los `href` son los de la navegación consolidada (issue #56):
+ * cada sección de Ajustes/Estado tiene su propia clave.
  */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
-  "/usuarios": ["OWNER", "ADMIN"],
-  "/empresa": ["OWNER", "ADMIN"],
-  "/configuracion": ["OWNER", "ADMIN"],
-  "/sistema": ["OWNER", "ADMIN"],
+  "/ajustes/empresa": ["OWNER", "ADMIN"],
+  "/ajustes/correo": ["OWNER", "ADMIN"],
+  "/ajustes/usuarios": ["OWNER", "ADMIN"],
+  "/estado/sistema": ["OWNER", "ADMIN"],
+  "/estado/auditoria": ["OWNER", "ADMIN"],
 };
 
 /** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
@@ -28,23 +32,23 @@ const PAGE_TITLES: Record<string, string> = {
 };
 
 /**
- * Navegación agrupada del panel (orden fijado en `docs/DISENO-PANEL.md` §6):
- * primero lo que se usa todos los días (Resumen, Calendario, Eventos), después
- * el trabajo operativo y comercial, Finanzas con Facturación (mismo trabajo, dos
- * caras) y al final Sistema, donde vive lo de vez en cuando y lo restringido.
+ * Navegación agrupada del panel (orden fijado en `docs/DISENO-PANEL.md` §6).
+ * Consolidada el 23-09-2026 (issue #56): 13 destinos en vez de 18. Calendario es
+ * una vista dentro de Eventos; **Ajustes** agrupa Empresa, Correo, Plan y
+ * Usuarios; **Estado** agrupa Sistema y Auditoría. Las rutas viejas siguen
+ * funcionando con redirect (`app/(admin)/(panel)/…`).
  */
 export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "General",
     items: [
       { href: "/dashboard", label: "Resumen", icon: "overview" },
-      { href: "/calendario", label: "Calendario", icon: "calendar" },
+      { href: "/eventos", label: "Eventos", icon: "events" },
     ],
   },
   {
     label: "Operación",
     items: [
-      { href: "/eventos", label: "Eventos", icon: "events" },
       { href: "/inventario", label: "Inventario", icon: "inventory" },
       { href: "/proveedores", label: "Proveedores", icon: "suppliers" },
       { href: "/promotoras", label: "Promotoras", icon: "promoters" },
@@ -69,12 +73,8 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Sistema",
     items: [
-      { href: "/plan", label: "Plan", icon: "plan" },
-      { href: "/usuarios", label: "Usuarios", icon: "users", roles: RESTRICTED_MODULES["/usuarios"] },
-      { href: "/empresa", label: "Empresa", icon: "building", roles: RESTRICTED_MODULES["/empresa"] },
-      { href: "/configuracion", label: "Configuración", icon: "settings", roles: RESTRICTED_MODULES["/configuracion"] },
-      { href: "/auditoria", label: "Auditoría", icon: "audit", roles: RESTRICTED_MODULES["/usuarios"] },
-      { href: "/sistema", label: "Sistema", icon: "database", roles: RESTRICTED_MODULES["/sistema"] },
+      { href: "/ajustes", label: "Ajustes", icon: "settings" },
+      { href: "/estado", label: "Estado", icon: "database", roles: RESTRICTED_MODULES["/estado/sistema"] },
     ],
   },
 ];

@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
-import { PlanModule } from "@/components/admin/modules/PlanModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Plan" };
-
-/**
- * Plan de la empresa (issue #42): plan vigente, consumo del mes, comparación del
- * catálogo y solicitud de cambio auditada. Visible para todos los roles; solo
- * OWNER/ADMIN ven la acción de solicitar.
- */
+/** Ruta vieja de Plan (issue #56): ahora vive en Ajustes. */
 export default function PlanPage() {
-  return <PlanModule />;
+  redirect("/ajustes/plan");
 }

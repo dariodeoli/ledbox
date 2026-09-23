@@ -9,6 +9,7 @@ import { normalizePersonName, personNameValid } from "@/lib/field-rules";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
 import { AdminOrgLogo } from "../AdminAvatar";
+import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 
@@ -161,11 +162,22 @@ export function EmpresaModule() {
               >
                 Guardar nombre
               </AdminButton>
-              <Link className="admin-panel-link" href="/presupuestos" title="Los datos de pago se cargan en Presupuestos">
-                Datos de pago de la empresa
-              </Link>
             </div>
           </form>
+        </AdminPanel>
+
+        <AdminPanel title="Datos de pago" icon="bank" meta="Se cargan en Presupuestos">
+          <p className="admin-field-hint">
+            Banco, titular, cuenta y alias son de la empresa y los usa todo el panel (hojas imprimibles y portal del
+            cliente). El formulario vive en Presupuestos → «Datos de pago de la empresa»: acá no hay una copia, solo el
+            acceso.
+          </p>
+          <div className="admin-settings-actions">
+            <Link className="admin-btn" href="/presupuestos" title="Abrir Presupuestos para cargar los datos de pago de la empresa">
+              <AdminIcon name="bank" size={15} />
+              <span>Ir a Datos de pago</span>
+            </Link>
+          </div>
         </AdminPanel>
 
         <AdminPanel title="Logo por tema" icon="image" meta="Se usan según el fondo; en papel siempre el claro">

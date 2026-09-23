@@ -69,6 +69,29 @@ function requestHost(request: NextRequest): string {
   return raw.split(",")[0].trim().toLowerCase();
 }
 
+/**
+ * Rutas viejas del panel (issue #56): van a su canónica sin renderizar nada.
+ * El redirect del middleware cubre la navegación dura (URL escrita, link
+ * externo); las páginas viejas conservan su `redirect()` para la navegación
+ * blanda del cliente, que no pasa por acá.
+ */
+const LEGACY_PANEL_REDIRECTS: Record<string, string> = {
+  "/calendario": "/eventos?vista=calendario",
+  "/empresa": "/ajustes/empresa",
+  "/configuracion": "/ajustes/correo",
+  "/configuracion/seguridad": "/perfil",
+  "/usuarios": "/ajustes/usuarios",
+  "/plan": "/ajustes/plan",
+  "/auditoria": "/estado/auditoria",
+  "/sistema": "/estado/sistema",
+};
+
+function legacyPanelRedirect(request: NextRequest, pathname: string): NextResponse | null {
+  const target = LEGACY_PANEL_REDIRECTS[pathname];
+  if (!target) return null;
+  return NextResponse.redirect(absoluteOnRequestHost(request, target), 308);
+}
+
 function absoluteOnRequestHost(request: NextRequest, path: string): URL {
   const forwardedProto = (request.headers.get("x-forwarded-proto") || "").split(",")[0].trim();
   const proto = forwardedProto || new URL(request.url).protocol.replace(":", "");
@@ -115,6 +138,9 @@ export function middleware(request: NextRequest) {
       const clean = pathname.slice("/admin".length) || "/";
       return NextResponse.redirect(absoluteOnRequestHost(request, `${clean}${search}`), 308);
     }
+    // Rutas viejas del panel (issue #56) → su canónica, sin renderizar el shell.
+    const legacy = legacyPanelRedirect(request, pathname);
+    if (legacy) return legacy;
     // El panel siempre se sirve en el host admin; el resto (API, assets, archivos) pasa igual.
     if (pathname === "/") {
       const url = request.nextUrl.clone();
@@ -141,6 +167,9 @@ export function middleware(request: NextRequest) {
     // `/demo` (igual que el host admin con `/dashboard`), así la URL visible
     // nunca muestra el segmento. `/demo` (links viejos y compartidos) queda
     // como canónica de la raíz; los links profundos siguen entrando igual.
+    // Rutas viejas del panel (issue #56) → su canónica, sin renderizar el shell.
+    const legacy = legacyPanelRedirect(request, pathname);
+    if (legacy) return legacy;
     // En el paso interno del rewrite (`x-demo-original-path`) no se canonicaliza:
     // el destino ya es la entrada de la demo.
     if ((pathname === "/demo" || pathname.startsWith("/demo/")) && !demoRootPath) {
@@ -159,6 +188,13 @@ export function middleware(request: NextRequest) {
       return NextResponse.rewrite(url, { request: { headers: rootHeaders } });
     }
     return pass();
+  }
+
+  // Host público: en desarrollo el panel se sirve sin subdominio, así que las
+  // rutas viejas también redirigen acá (en producción el panel va al host admin).
+  if (process.env.NODE_ENV !== "production") {
+    const legacy = legacyPanelRedirect(request, pathname);
+    if (legacy) return legacy;
   }
 
   // Host público: el panel solo vive en el subdominio de la app (en producción).

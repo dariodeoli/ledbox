@@ -167,6 +167,36 @@ export function AdminCountdown({
 }
 
 /** Aviso inline único del panel: `note` en formularios y bloques, `alert` en las tarjetas de acceso. */
+export type AdminSubtabItem = {
+  href: string;
+  label: string;
+  icon: AdminIconName;
+  active?: boolean;
+};
+
+/**
+ * Subnavegación del panel (issue #56): una sola pieza para las áreas con
+ * secciones (Ajustes, Estado). Los links son rutas reales del panel.
+ */
+export function AdminSubtabs({ label, items }: { label: string; items: readonly AdminSubtabItem[] }) {
+  return (
+    <nav className="admin-subtabs" aria-label={label}>
+      {items.map((item) => (
+        <Link
+          key={item.href}
+          className="admin-subtab"
+          href={item.href}
+          aria-current={item.active ? "page" : undefined}
+          data-active={item.active ? "true" : undefined}
+        >
+          <AdminIcon name={item.icon} size={13} />
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function AdminNote({
   children,
   tone,
@@ -203,7 +233,7 @@ export function AdminNote({
 export function AdminPlanLimitNote({ message }: { message: string }) {
   return (
     <p className="admin-note" role="alert" data-tone="error">
-      {message} <Link className="admin-note-link" href="/plan">Ver planes</Link>
+      {message} <Link className="admin-note-link" href="/ajustes/plan">Ver planes</Link>
     </p>
   );
 }

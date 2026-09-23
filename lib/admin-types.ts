@@ -59,7 +59,7 @@ export type AdminIconName =
   | "lock"
   | "image"
   | "checkin"
-  /** Ajustes del panel (`/configuracion`): distinto del correo y de plantillas. */
+  /** Ajustes del panel (`/ajustes/correo`): distinto del correo y de plantillas. */
   | "settings"
   /** Colapsar/expandir el sidebar de escritorio (solo íconos). */
   | "panel-left";

@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
-import { AdminModuleGuard } from "@/components/admin/AdminShell";
-import { UsuariosModule } from "@/components/admin/modules/UsuariosModule";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Usuarios" };
-
+/** Ruta vieja de Usuarios (issue #56): ahora vive en Ajustes. */
 export default function UsuariosPage() {
-  return (
-    <AdminModuleGuard href="/usuarios">
-      <UsuariosModule />
-    </AdminModuleGuard>
-  );
+  redirect("/ajustes/usuarios");
 }

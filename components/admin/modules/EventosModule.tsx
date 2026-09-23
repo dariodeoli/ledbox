@@ -33,6 +33,7 @@ import {
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
+import { CalendarioModule } from "./CalendarioModule";
 import {
   AdminBadge,
   AdminButton,
@@ -197,7 +198,8 @@ export function EventosModule() {
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
-  const [view, setView] = useAdminModuleView("eventos");
+  // La vista calendario entra por `?vista=calendario` (ruta vieja `/calendario`), #56.
+  const [view, setView] = useAdminModuleView("eventos", ["list", "board", "calendar"]);
   const [taskFilter, setTaskFilter] = useState("PENDING");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_EVENT_FORM);
@@ -592,6 +594,7 @@ export function EventosModule() {
 
   return (
     <div className="admin-module-page">
+      {view === "calendar" ? null : (
       <section className="admin-kpis" aria-label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
         <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
@@ -613,13 +616,16 @@ export function EventosModule() {
           tone={atRiskEvents.length > 0 ? "danger" : "ok"}
         />
       </section>
+      )}
 
       <AdminToolbar>
-        <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
+        {view === "calendar" ? null : (
+          <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
+        )}
         {view === "list" ? (
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         ) : null}
-        <AdminViewSwitch view={view} onChange={setView} label="Vista de eventos" />
+        <AdminViewSwitch view={view} onChange={setView} views={["list", "board", "calendar"]} label="Vista de eventos" />
         {writable ? (
           <AdminButton
             variant="primary"
@@ -700,6 +706,14 @@ export function EventosModule() {
 
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
+      {view === "calendar" ? (
+        /* Calendario como vista del módulo (issue #56): la ruta vieja
+           `/calendario` entra acá con `?vista=calendario`. */
+        <div className="admin-events-calendar">
+          <CalendarioModule />
+        </div>
+      ) : (
+      <>
       <AdminDataState
         loading={operations.loading}
         error={operations.error}
@@ -1260,6 +1274,8 @@ export function EventosModule() {
         <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
 
       ) : null}
+      </>
+      )}
     </div>
   );
 }
