@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
@@ -29,6 +29,7 @@ import {
   whatsappHref,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
+import { ADMIN_NAV_GROUP_KEY } from "@/lib/admin-theme";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import {
   adminAvatarUrl,
@@ -202,6 +203,30 @@ function isDemoEntryPath(): boolean {
     return false;
   }
 }
+
+/**
+ * Grupo abierto del acordeón del nav (issue #50): la elección manual se guarda
+ * por usuario y, sin preferencia, manda el grupo de la ruta activa.
+ */
+function readStoredNavGroup(): string | null {
+  try {
+    return window.localStorage.getItem(ADMIN_NAV_GROUP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeNavGroup(label: string | null): void {
+  try {
+    if (label) window.localStorage.setItem(ADMIN_NAV_GROUP_KEY, label);
+    else window.localStorage.removeItem(ADMIN_NAV_GROUP_KEY);
+  } catch {
+    /* almacenamiento no disponible: el acordeón vale para esta vista */
+  }
+}
+
+/** Mide antes del pintado en el navegador; en el render del servidor no hay DOM. */
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function AdminShell({ children, demoHost = false }: { children: React.ReactNode; demoHost?: boolean }) {
   const pathname = usePathname();
@@ -446,6 +471,68 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
   }, [autoLockMs, session.locked, session.loading, lockPanel]);
 
   const navGroups = useMemo(() => adminNavGroups(session.role), [session.role]);
+
+  // ── Nav denso (issue #50) ──────────────────────────────────────────────────
+  // La densidad la pone el CSS por altura de la ventana; acá se decide la forma:
+  // todo abierto si entra y, si no, acordeón con un grupo por vez. El scroll del
+  // nav queda como último recurso en alturas extremas.
+  const activeNavGroup = useMemo(
+    () =>
+      navGroups.find((group) => group.items.some((item) => isAdminNavActive(pathname, item.href)))?.label ??
+      navGroups[0]?.label ??
+      null,
+    [navGroups, pathname],
+  );
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const navNaturalHeightRef = useRef(0);
+  const navAccordionRef = useRef(false);
+  const [navAccordion, setNavAccordion] = useState(false);
+  const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => {
+      // Con el nav completo se cachea su alto natural: en acordeón el contenido
+      // se achica y la comparación tiene que ser contra el alto real, no el actual.
+      if (!navAccordionRef.current) navNaturalHeightRef.current = nav.scrollHeight;
+      const natural = navNaturalHeightRef.current;
+      const available = nav.clientHeight;
+      if (natural > 0 && available > 0) setNavAccordion(natural > available + 2);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [navGroups]);
+
+  useEffect(() => {
+    navAccordionRef.current = navAccordion;
+  }, [navAccordion]);
+
+  // Grupo abierto: la preferencia guardada manda; si el rol actual no la tiene,
+  // abre el de la ruta activa. Al navegar, el grupo activo se abre para no
+  // perder de vista dónde se está.
+  useEffect(() => {
+    setOpenNavGroup((current) => {
+      const stored = current ?? readStoredNavGroup();
+      if (stored && navGroups.some((group) => group.label === stored)) return stored;
+      return activeNavGroup;
+    });
+  }, [activeNavGroup, navGroups]);
+
+  const toggleNavGroup = useCallback((label: string) => {
+    setOpenNavGroup((current) => {
+      const next = current === label ? null : label;
+      storeNavGroup(next);
+      return next;
+    });
+  }, []);
+
   const title = adminNavLabel(pathname);
   // Eyebrow del topbar: la empresa activa (LedBox, LedBox Demo…) y el área del
   // módulo según el agrupamiento nuevo; antes era «LedBox · Operación» fijo,
@@ -535,32 +622,50 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
             </button>
           </div>
 
-          <div className="admin-sidebar-nav">
-            {navGroups.map((group) => (
-              <div className="admin-nav-group" key={group.label}>
-                <p className="admin-nav-label">{group.label}</p>
-                <ul className="admin-nav-list">
-                  {group.items.map((item) => {
-                    const active = isAdminNavActive(pathname, item.href);
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          className="admin-nav-link"
-                          data-active={active ? "true" : undefined}
-                          aria-current={active ? "page" : undefined}
-                          title={item.label}
-                          aria-label={item.label}
-                        >
-                          <AdminIcon name={item.icon} size={16} />
-                          <span className="admin-nav-text">{item.label}</span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+          <div className="admin-sidebar-nav" ref={navRef}>
+            {navGroups.map((group, index) => {
+              const groupOpen = !navAccordion || openNavGroup === group.label;
+              const listId = `admin-nav-group-${index}`;
+              return (
+                <div className="admin-nav-group" key={group.label}>
+                  {navAccordion ? (
+                    <button
+                      type="button"
+                      className="admin-nav-label admin-nav-toggle"
+                      aria-expanded={groupOpen}
+                      aria-controls={listId}
+                      onClick={() => toggleNavGroup(group.label)}
+                      title={`${groupOpen ? "Ocultar" : "Mostrar"} ${group.label} en el menú`}
+                    >
+                      <span>{group.label}</span>
+                      <AdminIcon name="chevron-down" size={13} />
+                    </button>
+                  ) : (
+                    <p className="admin-nav-label">{group.label}</p>
+                  )}
+                  <ul className="admin-nav-list" id={listId} hidden={!groupOpen}>
+                    {group.items.map((item) => {
+                      const active = isAdminNavActive(pathname, item.href);
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className="admin-nav-link"
+                            data-active={active ? "true" : undefined}
+                            aria-current={active ? "page" : undefined}
+                            title={item.label}
+                            aria-label={item.label}
+                          >
+                            <AdminIcon name={item.icon} size={16} />
+                            <span className="admin-nav-text">{item.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
 
           <div className="admin-sidebar-foot">

@@ -77,6 +77,17 @@ function absoluteOnRequestHost(request: NextRequest, path: string): URL {
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  // La ruta pedida viaja al panel en todas las superficies: el layout del panel
+  // la usa para distinguir la entrada a la demo (`/demo`, issue #14) del resto de
+  // las pantallas sin sesión, que van al login (issue #51).
+  const requestHeaders = new Headers(request.headers);
+  // El rewrite interno de la raíz de la demo (`/` → `/demo`, issue #53) vuelve a
+  // entrar al middleware con el path del destino: la marca conserva la ruta que
+  // pidió el visitante (para el `next` de la sesión demo) y evita que ese paso
+  // interno aplique la canónica `/demo` → `/`, que sería un bucle.
+  const demoRootPath = requestHeaders.get("x-demo-original-path");
+  requestHeaders.set("x-pathname", demoRootPath || `${pathname}${search}`);
+  const pass = () => NextResponse.next({ request: { headers: requestHeaders } });
   const legacyAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const onAdminHost = requestHost(request) === adminHost();
   const onClientHost = requestHost(request) === clientHost();
@@ -95,7 +106,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/producto";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onAdminHost) {
@@ -110,7 +121,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/dashboard";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onClientHost) {
@@ -122,7 +133,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/portal";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onDemoHost) {
@@ -130,25 +141,31 @@ export function middleware(request: NextRequest) {
     // `/demo` (igual que el host admin con `/dashboard`), así la URL visible
     // nunca muestra el segmento. `/demo` (links viejos y compartidos) queda
     // como canónica de la raíz; los links profundos siguen entrando igual.
-    if (pathname === "/demo" || pathname.startsWith("/demo/")) {
+    // En el paso interno del rewrite (`x-demo-original-path`) no se canonicaliza:
+    // el destino ya es la entrada de la demo.
+    if ((pathname === "/demo" || pathname.startsWith("/demo/")) && !demoRootPath) {
       const clean = pathname.slice("/demo".length) || "/";
       return NextResponse.redirect(absoluteOnRequestHost(request, `${clean}${search}`), 308);
     }
-    // El layout del panel lee `x-pathname` para devolver al visitante a la misma
-    // pantalla después de crear la sesión demo (links profundos incluidos).
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-pathname", `${pathname}${search}`);
+    // El layout del panel lee `x-pathname` (seteado arriba) para devolver al
+    // visitante a la misma pantalla después de crear la sesión demo (links
+    // profundos incluidos) y para distinguir la entrada a la demo del resto de
+    // las pantallas sin sesión, que van al login (issue #51).
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/demo";
-      return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+      const rootHeaders = new Headers(requestHeaders);
+      rootHeaders.set("x-demo-original-path", `${pathname}${search}`);
+      return NextResponse.rewrite(url, { request: { headers: rootHeaders } });
     }
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    return pass();
   }
 
   // Host público: el panel solo vive en el subdominio de la app (en producción).
-  // La demo y la landing de EventOS tienen su propio host.
-  if (process.env.NODE_ENV === "production" && pathname === "/demo") {
+  // La demo y la landing de EventOS tienen su propio host. El paso interno del
+  // rewrite de la raíz de la demo no rebota acá (evita un bucle si el host real
+  // no llegara en los headers del rewrite).
+  if (process.env.NODE_ENV === "production" && pathname === "/demo" && !demoRootPath) {
     return NextResponse.redirect(new URL("/", DEMO_URL), 308);
   }
   if (process.env.NODE_ENV === "production" && pathname === "/producto") {
@@ -159,7 +176,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`${clean}${search}`, ADMIN_URL), 308);
   }
 
-  return NextResponse.next();
+  return pass();
 }
 
 export const config = {

@@ -4,10 +4,12 @@
  * como atributos en `.admin-root` antes del primer pintado:
  * - `data-theme`: modo claro/oscuro.
  * - `data-sidebar`: sidebar de escritorio expandido (default) o colapsado a íconos.
+ * - `ADMIN_NAV_GROUP_KEY`: grupo abierto del nav en acordeón (issue #50).
  */
 
 export const ADMIN_THEME_KEY = "ledbox-admin-theme";
 export const ADMIN_SIDEBAR_KEY = "ledbox-admin-sidebar";
+export const ADMIN_NAV_GROUP_KEY = "ledbox-admin-nav-group";
 export const ADMIN_ROOT_ID = "admin-root";
 
 export type AdminTheme = "dark" | "light";
