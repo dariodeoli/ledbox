@@ -40,6 +40,7 @@ import {
   type AdminOrganizationLogos,
   type AdminRole,
   type AdminSessionLock,
+  type AdminSessionPayload,
   type AdminSessionUser,
 } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
@@ -184,6 +185,27 @@ function pickSessionData(raw: unknown): {
 }
 
 /**
+ * Datos de sesión del payload que embebe el layout (issue #61). Usa el mismo
+ * parser que la respuesta del API, así los dos caminos no divergen.
+ */
+function sessionDataFromPayload(payload: AdminSessionPayload): AdminSessionData {
+  const { user, organization, organizations, demo, locked, lockReason, lock } = pickSessionData(payload);
+  const role = user ? asAdminRole(user.role) : null;
+  return {
+    user: user ? { ...user, role: role ?? user.role } : null,
+    role,
+    organization,
+    organizations,
+    demo,
+    locked,
+    lockReason,
+    lock,
+    loading: false,
+    error: user ? "" : "No pudimos cargar tu sesión.",
+  };
+}
+
+/**
  * Entrada de la demo (issue #14): si el shell se monta en `/demo` sin sesión,
  * el 401 sale al endpoint que provisiona la sesión demo en vez del login.
  *
@@ -228,10 +250,23 @@ function storeNavGroup(label: string | null): void {
 /** Mide antes del pintado en el navegador; en el render del servidor no hay DOM. */
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export function AdminShell({ children, demoHost = false }: { children: React.ReactNode; demoHost?: boolean }) {
+export function AdminShell({
+  children,
+  demoHost = false,
+  initialSession = null,
+}: {
+  children: React.ReactNode;
+  demoHost?: boolean;
+  /** Sesión resuelta en el servidor (issue #61); sin ella el shell la pide al entrar. */
+  initialSession?: AdminSessionPayload | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
-  const [session, setSession] = useState<AdminSessionData>(EMPTY_SESSION);
+  const [session, setSession] = useState<AdminSessionData>(() =>
+    initialSession ? sessionDataFromPayload(initialSession) : EMPTY_SESSION,
+  );
+  /** La sesión embebida se consume una vez: después manda `loadSession`. */
+  const skipInitialLoadRef = useRef(Boolean(initialSession));
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -300,6 +335,12 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
   }, []);
 
   useEffect(() => {
+    // Con la sesión embebida (issue #61) no hay pedido al entrar: el shell ya
+    // tiene los datos; `reload()` sigue refrescando a demanda tras un cambio.
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      return;
+    }
     void loadSession();
   }, [loadSession]);
 

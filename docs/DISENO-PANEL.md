@@ -118,7 +118,38 @@ Reglas del reordenamiento:
 5. Comparar contra el «antes» (`/tmp/antes-oscuro`, `/tmp/antes-claro` del
    22-09-2026) para el antes/después del reporte.
 
-## 9. Mobile y arrastre táctil (23-09-2026, issue #55)
+## 9. Rendimiento del shell (23-09-2026, issue #61)
+
+Medición con el build de producción local, sesión real y Chrome headless con 3G
+rápido (150 ms, 1,6 Mbps) y caché deshabilitada, en `/dashboard`, `/eventos` y
+`/finanzas` (mismos datos que `docs/RENDIMIENTO-FINANZAS.md`).
+
+| Pantalla | CLS antes | CLS después | API antes | API después |
+| --- | --- | --- | --- | --- |
+| `/dashboard` | 0,135 | **0,028** | 6 | **5** |
+| `/eventos` | 0,112 | **0** | 6 | **5** |
+| `/finanzas` | 0,112 | **0** | 8 | 7 |
+
+Qué se cambió:
+
+- **Sesión embebida**: el layout del panel resuelve la sesión en el servidor
+  (`buildAdminSessionPayload`, el mismo payload de `/api/admin/session`) y el
+  shell arranca con ella. Se eliminó el esqueleto de 6 filas que se reemplazaba
+  por el contenido (el salto de layout) y el pedido fijo de entrada. Frescura y
+  permisos iguales: la sesión es del request y `reload()` sigue refrescando
+  contra el API.
+- **GET en vuelo compartidos** (`lib/admin-api.ts`): dos componentes que piden lo
+  mismo al mismo tiempo (la campana y el Resumen piden `notifications`) comparten
+  la promesa; los pedidos con `signal` propio siguen siendo suyos.
+- La navegación cliente no repite pedidos del shell: `session` y `notifications`
+  se piden una vez por carga de documento (verificado: 0 pedidos de sesión al
+  movernos entre Eventos, Finanzas, Presupuestos y Resumen).
+
+Lo que queda (fuera de PANEL): el CLS restante de `/dashboard` (0,028) es el
+bloque «Qué mirar hoy» creciendo con sus avisos; y `/finanzas` pide el extracto
+dos veces con filtros distintos (lista completa y por cuenta), decisión de FIN.
+
+## 10. Mobile y arrastre táctil (23-09-2026, issue #55)
 
 - **Pasada mobile** con Chrome device emulation a **390 y 414 px** sobre las 22
   rutas del panel: **0 pantallas con scroll horizontal de página** (los scrollers

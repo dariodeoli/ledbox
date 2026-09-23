@@ -20,6 +20,8 @@ let redirectingToLogin = false;
 /** Vacía la caché corta de GET (la usan las mutaciones y el cambio de sesión). */
 export function clearAdminApiCache(): void {
   getCache.clear();
+  // Los GET en vuelo ya no se comparten: quien pida después del cambio va a la red.
+  inFlightGets.clear();
 }
 
 export function redirectToLogin(): void {
@@ -103,10 +105,11 @@ async function requestJson(path: string, { method = "GET", body, timeoutMs, sign
   }
 }
 
-/** GET idénticos en vuelo comparten promesa (issue #64): dos componentes que
- * montan a la vez el mismo recurso (campana + Resumen con
- * `/api/admin/notifications`) generan un solo request. No aplica a `fresh`
- * (fuerza red) ni a los GET cancelables con `signal`. */
+/**
+ * GET idénticos en vuelo comparten la misma promesa (issue #61): la campana y el
+ * Resumen piden `/api/admin/notifications` al mismo tiempo, y Finanzas repite el
+ * extracto; sin esto salen dos requests iguales por pantalla.
+ */
 const inFlightGets = new Map<string, Promise<AdminApiResult<unknown>>>();
 
 /**
@@ -121,45 +124,47 @@ export async function adminApiGet<T = AdminApiResponse>(
   if (!options.fresh && cached && Date.now() - cached.storedAt < GET_TTL_MS) {
     return { ok: true, data: cached.data as T };
   }
-  const shareable = !options.fresh && !options.signal;
-  if (shareable) {
-    const inFlight = inFlightGets.get(path);
-    if (inFlight) return inFlight as Promise<AdminApiResult<T>>;
+  // Un pedido con `signal` propio no se comparte: quien lo cancela espera su propia request.
+  const joinable = !options.fresh && !options.signal;
+  if (joinable) {
+    const joined = inFlightGets.get(path);
+    if (joined) return joined as Promise<AdminApiResult<T>>;
   }
+
   const request = (async (): Promise<AdminApiResult<T>> => {
-  const outcome = await requestJson(path, { timeoutMs: GET_TIMEOUT_MS, signal: options.signal });
-  if (!outcome) {
-    return { ok: false, error: "No pudimos conectar con el panel.", aborted: Boolean(options.signal?.aborted) };
-  }
-  if (outcome.status === 401 || outcome.status === 403) {
-    // 403 con código (hoy solo `plan_limit`, issue #42): la operación la rechazó
-    // una regla de negocio, no la sesión; se muestra inline sin cerrar sesión.
-    const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
-    if (code) {
-      const message =
-        typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
-      return { ok: false, error: message, code };
+    const outcome = await requestJson(path, { timeoutMs: GET_TIMEOUT_MS, signal: options.signal });
+    if (!outcome) {
+      return { ok: false, error: "No pudimos conectar con el panel.", aborted: Boolean(options.signal?.aborted) };
     }
-    if (!options.skipSessionRedirect) invalidateSession();
-    return { ok: false, error: "La sesión venció. Volvé a iniciar sesión.", sessionInvalid: true };
-  }
-  // 423: el panel quedó bloqueado por PIN (issue #21); el shell dibuja la pantalla.
-  if (outcome.status === 423) {
-    notifyPanelLocked();
-    return { ok: false, error: "El panel está bloqueado." };
-  }
-  if (outcome.status < 200 || outcome.status >= 300) {
-    const message = typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
-    return { ok: false, error: message };
-  }
-  getCache.set(path, { storedAt: Date.now(), data: outcome.payload });
-  return { ok: true, data: outcome.payload as T };
+    if (outcome.status === 401 || outcome.status === 403) {
+      // 403 con código (hoy solo `plan_limit`, issue #42): la operación la rechazó
+      // una regla de negocio, no la sesión; se muestra inline sin cerrar sesión.
+      const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
+      if (code) {
+        const message =
+          typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
+        return { ok: false, error: message, code };
+      }
+      if (!options.skipSessionRedirect) invalidateSession();
+      return { ok: false, error: "La sesión venció. Volvé a iniciar sesión.", sessionInvalid: true };
+    }
+    // 423: el panel quedó bloqueado por PIN (issue #21); el shell dibuja la pantalla.
+    if (outcome.status === 423) {
+      notifyPanelLocked();
+      return { ok: false, error: "El panel está bloqueado." };
+    }
+    if (outcome.status < 200 || outcome.status >= 300) {
+      const message = typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
+      return { ok: false, error: message };
+    }
+    getCache.set(path, { storedAt: Date.now(), data: outcome.payload });
+    return { ok: true, data: outcome.payload as T };
   })();
-  if (shareable) {
-    const shared = request as Promise<AdminApiResult<unknown>>;
-    inFlightGets.set(path, shared);
+
+  if (joinable) {
+    inFlightGets.set(path, request as Promise<AdminApiResult<unknown>>);
     void request.finally(() => {
-      if (inFlightGets.get(path) === shared) inFlightGets.delete(path);
+      if (inFlightGets.get(path) === (request as Promise<AdminApiResult<unknown>>)) inFlightGets.delete(path);
     });
   }
   return request;
