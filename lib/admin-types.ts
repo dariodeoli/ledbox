@@ -154,6 +154,18 @@ export type AdminClientRow = AdminClientRef & {
   metrics: AdminClientMetrics;
 };
 
+/**
+ * Cliente mínimo para selectores (issue #62): lo que devuelve
+ * `/api/admin/clients?fields=selector`, sin métricas ni logo.
+ */
+export type AdminClientOption = {
+  id: string;
+  name: string;
+  company: string | null;
+  type: string;
+  active: boolean;
+};
+
 export type AdminEventRef = {
   id: string;
   name: string;
@@ -213,6 +225,19 @@ export type AdminEventRow = {
   client: AdminClientRef;
   assignments: AdminEventAssignment[];
   tasks: AdminEventTask[];
+};
+
+/**
+ * Evento mínimo para selectores (issue #62): lo que devuelve
+ * `/api/admin/events?fields=selector`, sin asignaciones ni checklist.
+ */
+export type AdminEventOption = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  status: string;
+  clientId: string;
+  client: { id: string; name: string; company: string | null };
 };
 
 export type AdminBudgetItem = {
@@ -1364,6 +1389,18 @@ export type AdminInventoryItemRow = AdminInventoryRow & {
   };
 };
 
+/**
+ * Ítem mínimo para selectores (issue #62): lo que devuelve
+ * `/api/admin/inventory?fields=selector`, con la disponibilidad de hoy y sin el
+ * historial de asignaciones.
+ */
+export type AdminInventoryOption = Pick<
+  AdminInventoryRow,
+  "id" | "name" | "sku" | "category" | "kind" | "status" | "quantity"
+> & {
+  availability: { committedNow: number; availableNow: number; overcommittedNow: boolean };
+};
+
 export type AdminPromoterRow = {
   id: string;
   name: string;
@@ -1390,6 +1427,15 @@ export type AdminPromoterRef = Pick<
 export function promoterIsAvailable(promoter: Pick<AdminPromoterRow, "availability"> | null | undefined): boolean {
   return !promoter || promoter.availability === "AVAILABLE";
 }
+
+/**
+ * Promotora mínima para selectores (issue #62): lo que devuelve
+ * `/api/admin/resources?only=promoters&fields=selector`, sin foto ni especialidades.
+ */
+export type AdminPromoterOption = Pick<
+  AdminPromoterRow,
+  "id" | "name" | "availability" | "availabilityNote" | "unavailableUntil"
+>;
 
 /** Valores del enum `PromoterAvailability`: fuente única de los selectores del panel. */
 export const PROMOTER_AVAILABILITIES = ["AVAILABLE", "UNAVAILABLE", "TO_DEFINE"] as const;

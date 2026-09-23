@@ -8,6 +8,7 @@ import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import {
   BLOCKED_INVENTORY_STATUSES,
   EVENT_RANGE_SELECT,
+  assignmentIsActiveNow,
   assignmentRange,
   availabilityForRange,
   buildAvailability,
@@ -31,6 +32,9 @@ export const dynamic = "force-dynamic";
  * - `GET ?inventoryId&startsAt&endsAt[&excludeId]`: disponibilidad del ítem en el
  *   rango pedido, con el detalle de las asignaciones que se solapan y los
  *   **sustitutos** de la misma categoría con stock libre en el rango.
+ * - `GET ?fields=selector` (issue #62): opción mínima para los selectores —ítem
+ *   con su disponibilidad de hoy y **sin** el historial de asignaciones—. Sin el
+ *   parámetro la respuesta es la de siempre (compatible).
  * - `POST`: `status` (estado del ítem), `assignment` (alta/edición con
  *   validación de disponibilidad), `checkout` (salida), `checkin` (devolución
  *   con estado, daños y faltantes) y `assignment-delete`.
@@ -68,6 +72,45 @@ export async function GET(request: Request) {
     return Response.json({ availability, substitutes });
   }
 
+  if (url.searchParams.get("fields") === "selector") {
+    const items = await db.inventoryItem.findMany({
+      where: { organizationId },
+      orderBy: { name: "asc" },
+      take: 300,
+      select: { id: true, name: true, sku: true, category: true, kind: true, status: true, quantity: true },
+    });
+    const rows = items.length
+      ? await db.eventInventory.findMany({
+          where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
+          select: {
+            inventoryId: true,
+            quantity: true,
+            startsAt: true,
+            endsAt: true,
+            checkedIn: true,
+            checkedInAt: true,
+            event: { select: EVENT_RANGE_SELECT },
+          },
+        })
+      : [];
+    const now = new Date();
+    const inventory = items.map((item) => {
+      const committedNow = rows
+        .filter((row) => row.inventoryId === item.id && assignmentIsActiveNow(row, now))
+        .reduce((sum, row) => sum + row.quantity, 0);
+      const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+      return {
+        ...item,
+        availability: {
+          committedNow,
+          availableNow: blocked ? 0 : Math.max(0, item.quantity - committedNow),
+          overcommittedNow: committedNow > item.quantity,
+        },
+      };
+    });
+    return Response.json({ inventory });
+  }
+
   const items = await db.inventoryItem.findMany({ where: { organizationId }, orderBy: { name: "asc" }, take: 300 });
   const assignments = items.length
     ? await db.eventInventory.findMany({
@@ -87,14 +130,7 @@ export async function GET(request: Request) {
   const now = new Date();
   const inventory = items.map((item) => {
     const rows = assignments.filter((assignment) => assignment.inventoryId === item.id);
-    const activeNow = rows.filter((row) => {
-      if (row.checkedInAt || row.checkedIn) return false;
-      const { start, end } = assignmentRange(row);
-      if (!start && !end) return true;
-      if (start && start.getTime() > now.getTime()) return false;
-      if (end && end.getTime() < now.getTime()) return false;
-      return true;
-    });
+    const activeNow = rows.filter((row) => assignmentIsActiveNow(row, now));
     const committedNow = activeNow.reduce((sum, row) => sum + row.quantity, 0);
     const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
     const rangeAvailability = range ? buildAvailability(item, rows, range.start, range.end) : null;

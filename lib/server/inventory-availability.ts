@@ -102,6 +102,27 @@ export function rangeLabel(startsAt: Date, endsAt: Date): string {
   return `${rangeFormat.format(startsAt)} → ${rangeFormat.format(endsAt)}`;
 }
 
+/**
+ * ¿La asignación compromete unidades ahora? Devuelta no cuenta; el rango
+ * efectivo es el propio y, si falta, el del evento (`assignmentRange`), así que
+ * una asignación sin fechas propias sigue el montaje/desmontaje del evento y una
+ * sin fechas en ninguno de los dos ocupa siempre.
+ *
+ * La usan la lista de inventario y su selector (issue #62): la columna «Libres
+ * ahora» y el selector muestran el mismo número.
+ */
+export function assignmentIsActiveNow(
+  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event"> & { checkedIn: boolean; checkedInAt: Date | null },
+  now: Date,
+): boolean {
+  if (row.checkedInAt || row.checkedIn) return false;
+  const { start, end } = assignmentRange(row);
+  if (!start && !end) return true;
+  if (start && start.getTime() > now.getTime()) return false;
+  if (end && end.getTime() < now.getTime()) return false;
+  return true;
+}
+
 /** Rango efectivo de una asignación: el propio y, si falta, el del evento. */
 export function assignmentRange(assignment: {
   startsAt: Date | null;

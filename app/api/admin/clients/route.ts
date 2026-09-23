@@ -20,12 +20,25 @@ export const dynamic = "force-dynamic";
  * Cada fila trae además la versión de su logo (issue #36), sin el binario: la
  * identidad de la lista lo pide con sesión a `/clients/[id]/logo`.
  *
+ * `GET ?fields=selector` (issue #62): opción mínima para los selectores —id,
+ * nombre, empresa, tipo y activo—, sin métricas, logo ni conteos. Sin el
+ * parámetro la respuesta es la de siempre (compatible).
+ *
  * `POST`: alta de cliente (`clients.write`) con los datos de contacto y links.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
+  if (new URL(request.url).searchParams.get("fields") === "selector") {
+    const clients = await db.client.findMany({
+      where: { organizationId },
+      orderBy: { name: "asc" },
+      take: 300,
+      select: { id: true, name: true, company: true, type: true, active: true },
+    });
+    return Response.json({ clients });
+  }
   const clients = await db.client.findMany({
     where: { organizationId },
     orderBy: { createdAt: "desc" },
