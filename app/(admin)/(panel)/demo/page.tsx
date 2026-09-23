@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import { DemoIntro } from "@/components/admin/DemoIntro";
+import { DemoTour } from "@/components/admin/DemoTour";
 import { AdminBadge, AdminCountdown, AdminEmpty, AdminKpi, AdminPanel } from "@/components/admin/AdminUI";
 import {
   adminRoleLabel,
@@ -31,6 +32,7 @@ import {
   treasuryDirectionTone,
 } from "@/lib/admin-format";
 import { adminNavGroups } from "@/lib/admin-policy";
+import { DEMO_STRONG_CASES, type DemoStrongCaseId } from "@/lib/demo-tour";
 import type { AdminAuditDetail } from "@/lib/admin-types";
 import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
@@ -290,6 +292,20 @@ export default async function DemoPage() {
   const acceptedInvitations = invitationRows.filter((row) => row.status === "accepted").length;
   const failedMails = mailRows.filter((row) => row.status === "failed").length;
 
+  // Accesos rápidos a los casos fuertes (issue #58): el conteo es el real de la
+  // base y el tipo exige que estén todos los casos declarados en `lib/demo-tour`.
+  const strongCaseCounts: Record<DemoStrongCaseId, number> = {
+    mora: overdueCount,
+    cheques: rejectedCheques,
+    comprobantes: expectedPendingCount,
+    checklist: riskEventCount,
+    equipos: damagedTotal,
+    promotoras: unavailablePromoters,
+    gastos: toDefineExpenses,
+    proveedores: openJobCount,
+    leads: newLeadCount,
+  };
+
   return (
     <div className="admin-module-page admin-demo-page">
       <DemoIntro
@@ -299,13 +315,20 @@ export default async function DemoPage() {
         resetForm={
           <form method="post" action="/api/demo/session">
             <input type="hidden" name="next" value={nextPath} />
-            <button className="admin-btn" type="submit" title="Vuelve a generar los datos simulados con fechas de hoy">
+            <input type="hidden" name="reset" value="1" />
+            <button
+              className="admin-btn"
+              type="submit"
+              title="Reinicia la demo: vuelve a sembrar los datos simulados con las fechas de hoy (no toca datos reales)"
+            >
               <AdminIcon name="refresh" size={15} />
-              <span>Reiniciar los datos</span>
+              <span>Reiniciar la demo</span>
             </button>
           </form>
         }
       />
+
+      <DemoTour />
 
       <section className="admin-kpis" aria-label="Datos simulados de la demo">
         <AdminKpi label="Clientes" icon="clients" value={formatNumber(clientCount)} note="finales y revendedores" />
@@ -374,6 +397,30 @@ export default async function DemoPage() {
           tone={feed.notificationCounts.overdue > 0 ? "warn" : undefined}
           note={`${formatNumber(feed.notificationCounts.overdue)} vencidos · ${formatNumber(feed.notificationCounts.soon)} próximos`}
         />
+      </section>
+
+      <section className="admin-demo-cases" aria-label="Casos fuertes de la demo">
+        <header className="admin-demo-cases-head">
+          <h2 className="admin-panel-title">Casos fuertes</h2>
+          <span className="admin-panel-meta">Los problemas que la demo siembra a propósito, con su conteo real</span>
+        </header>
+        <div className="admin-demo-cases-grid">
+          {DEMO_STRONG_CASES.map((strongCase) => {
+            const count = strongCaseCounts[strongCase.id];
+            return (
+              <Link className="admin-demo-case" key={strongCase.id} href={strongCase.href} title={strongCase.hint}>
+                <span className="admin-demo-case-count" data-tone={count > 0 ? strongCase.tone : undefined}>
+                  {count > 0 ? formatNumber(count) : "—"}
+                </span>
+                <span className="admin-demo-case-text">
+                  <strong>{strongCase.label}</strong>
+                  <small>{strongCase.hint}</small>
+                </span>
+                <AdminIcon name="arrow-right" size={14} />
+              </Link>
+            );
+          })}
+        </div>
       </section>
 
       <div className="admin-panel-grid">

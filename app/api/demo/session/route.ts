@@ -38,11 +38,14 @@ function redirectTo(path: string, status: 303 | 307): Response {
   return new Response(null, { status, headers: { Location: path } });
 }
 
-async function enterDemo(request: Request, nextValue: string | null): Promise<Response> {
+async function enterDemo(request: Request, nextValue: string | null, options?: { reset?: boolean }): Promise<Response> {
   const limited = await rateLimit(`demo:session:${getClientIp(request)}`, RATE_LIMIT);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
-  const demo = await ensureDemoData();
+  // `reset` vuelve a sembrar el dataset (issue #58: «Reiniciar la demo» tiene
+  // que reiniciar de verdad, no solo asegurar lo que ya está). La entrada
+  // normal (GET) nunca reinicia: eso borraría el estado de una visita anterior.
+  const demo = await ensureDemoData(options?.reset ? { reset: true } : undefined);
   const session = await createSession({ id: demo.user.id, email: demo.user.email, role: demo.user.role }, demo.organizationId);
   await setSessionCookie(session.jwt, session.expiresAt);
   return redirectTo(safeNext(nextValue), 303);
@@ -52,24 +55,32 @@ export async function GET(request: Request) {
   return enterDemo(request, new URL(request.url).searchParams.get("next"));
 }
 
-/** `next` puede venir en la query, en un formulario o en JSON. */
-async function postNext(request: Request): Promise<string | null> {
-  const fromQuery = new URL(request.url).searchParams.get("next");
+/** `next` y `reset` pueden venir en la query, en un formulario o en JSON. */
+async function postIntent(request: Request): Promise<{ next: string | null; reset: boolean }> {
+  const query = new URL(request.url).searchParams;
+  const truthy = (value: unknown) => value === true || value === "1" || value === "true" || value === "on";
   const contentType = (request.headers.get("content-type") || "").toLowerCase();
   if (contentType.includes("application/json")) {
-    const body = (await request.json().catch(() => null)) as { next?: unknown } | null;
-    return typeof body?.next === "string" ? body.next : fromQuery;
+    const body = (await request.json().catch(() => null)) as { next?: unknown; reset?: unknown } | null;
+    return {
+      next: typeof body?.next === "string" ? body.next : query.get("next"),
+      reset: truthy(body?.reset) || truthy(query.get("reset")),
+    };
   }
   if (contentType.includes("form")) {
     const form = await request.formData().catch(() => null);
     const value = form?.get("next");
-    return typeof value === "string" ? value : fromQuery;
+    return {
+      next: typeof value === "string" ? value : query.get("next"),
+      reset: truthy(form?.get("reset")) || truthy(query.get("reset")),
+    };
   }
-  return fromQuery;
+  return { next: query.get("next"), reset: truthy(query.get("reset")) };
 }
 
 export async function POST(request: Request) {
-  return enterDemo(request, await postNext(request));
+  const intent = await postIntent(request);
+  return enterDemo(request, intent.next, { reset: intent.reset });
 }
 
 export async function DELETE() {

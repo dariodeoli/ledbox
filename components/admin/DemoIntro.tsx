@@ -51,6 +51,14 @@ export function DemoIntro({
     setOpen(false);
   }
 
+  /** Cierra la bienvenida y baja al recorrido guiado de la portada (issue #58). */
+  function startTour() {
+    dismiss();
+    window.setTimeout(() => {
+      document.getElementById("recorrido")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
   const portalActions = (
     <>
       {pendingUrl ? (
@@ -113,7 +121,8 @@ export function DemoIntro({
             <strong>«A definir»</strong>, comprobantes <strong>por confirmar</strong> y recordatorios que fallan,
             igual que en una semana real de operación. También vas a ver un logo y avatares propios: la empresa de
             ejemplo tiene identidad. La sesión es automática y todo el panel es de <strong>solo lectura</strong>: no
-            se guardan cambios ni se toca información real.
+            se guardan cambios ni se toca información real, y lo que simules en el portal del cliente vive solo en tu
+            pestaña.
           </p>
           <p className="admin-dialog-text">
             EventOS es la app; {organizationName} es la empresa de ejemplo que la usa en esta demo (el portal del
@@ -123,14 +132,16 @@ export function DemoIntro({
             comprobantes en revisión: la demo muestra también lo que sale mal. La cuenta demo entra como{" "}
             <strong>VIEWER sin PIN ni auto-bloqueo</strong>: no se bloquea sola y los módulos de administración
             (Usuarios, Empresa, Configuración y Auditoría) quedan para OWNER/ADMIN — acá se resumen en la portada.
-            Para salir de la demo usá «Salir de la demo» en el aviso superior.
+            Para salir de la demo usá «Salir de la demo» en el aviso superior. Si querés volver al estado inicial,
+            «Reiniciar la demo» vuelve a sembrar los datos simulados con las fechas de hoy.
           </p>
           <div className="admin-dialog-actions">
-            <button type="button" className="admin-btn admin-btn--primary" onClick={dismiss}>
-              <AdminIcon name="check" size={15} />
-              <span>Recorrer la demo</span>
+            <button type="button" className="admin-btn admin-btn--primary" onClick={startTour}>
+              <AdminIcon name="overview" size={15} />
+              <span>Empezar el recorrido</span>
             </button>
             {portalActions}
+            {resetForm}
           </div>
         </AdminDialog>
       ) : null}
