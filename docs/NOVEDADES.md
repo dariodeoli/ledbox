@@ -71,3 +71,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - PIN de 4 o 6 dígitos con cajas y avance automático
 
+## v2.1.26 — 2026-09-23
+
+- recorrido guiado, casos fuertes con conteo real y reinicio que reinicia
+- lista y cuadrícula recordadas por usuario en inventario, clientes y proveedores
+- los catálogos de los selectores se piden al abrir el diálogo
+
