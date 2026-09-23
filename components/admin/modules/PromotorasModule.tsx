@@ -53,9 +53,9 @@ const MAX_AVAILABILITY_NOTE = 300;
 
 export function PromotorasModule() {
   const { role } = useAdminSession();
-  const resources = useAdminResource("/api/admin/resources", (payload) => ({
-    suppliers: payload.suppliers ?? [],
-    inventory: payload.inventory ?? [],
+  // El catálogo combinado trae proveedores, inventario y promotoras; esta
+  // pantalla solo muestra promotoras, así que pide nada más ese slice (issue #62).
+  const resources = useAdminResource("/api/admin/resources?only=promoters", (payload) => ({
     promoters: payload.promoters ?? [],
   }));
 

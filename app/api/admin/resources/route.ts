@@ -12,6 +12,17 @@ export const dynamic = "force-dynamic";
 /** Límite de la nota de disponibilidad (mismo criterio que las notas cortas del panel). */
 const MAX_AVAILABILITY_NOTE = 300;
 
+/** Catálogos que sirve el endpoint combinado (issue #62: `only` recorta los que no se usan). */
+const RESOURCE_KINDS = ["suppliers", "inventory", "promoters"] as const;
+type ResourceKind = (typeof RESOURCE_KINDS)[number];
+
+/** Campos mínimos de cada catálogo para los selectores (`fields=selector`). */
+const SELECTOR_FIELDS = {
+  suppliers: { id: true, name: true },
+  inventory: { id: true, name: true, sku: true },
+  promoters: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true },
+} as const;
+
 /**
  * Disponibilidad declarada (enum `PromoterAvailability`, issue #24). Sin valor
  * devuelve `null` (no cambia) y con un valor desconocido, `false`.
@@ -72,14 +83,46 @@ function availabilityData(body: Record<string, unknown>):
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
+  const url = new URL(request.url);
+  // Recortes del catálogo combinado (issue #62), aditivos: sin parámetros la
+  // respuesta es la de siempre. `only` pide solo los catálogos que el módulo usa
+  // (los demás vuelven vacíos) y `fields=selector` devuelve lo mínimo del
+  // selector en lugar de la fila completa.
+  const only = (url.searchParams.get("only") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value): value is ResourceKind => (RESOURCE_KINDS as readonly string[]).includes(value));
+  const selector = url.searchParams.get("fields") === "selector";
+  const wanted = (kind: ResourceKind) => only.length === 0 || only.includes(kind);
   const [suppliers, inventory, promoters] = await Promise.all([
-    db.supplier.findMany({ where: { organizationId }, orderBy: { name: "asc" }, take: 200 }),
-    db.inventoryItem.findMany({ where: { organizationId }, orderBy: { name: "asc" }, take: 300 }),
-    db.promoter.findMany({ where: { organizationId, active: true }, orderBy: { name: "asc" }, take: 200 }),
+    wanted("suppliers")
+      ? db.supplier.findMany({
+          where: { organizationId },
+          orderBy: { name: "asc" },
+          take: 200,
+          ...(selector ? { select: SELECTOR_FIELDS.suppliers } : {}),
+        })
+      : [],
+    wanted("inventory")
+      ? db.inventoryItem.findMany({
+          where: { organizationId },
+          orderBy: { name: "asc" },
+          take: 300,
+          ...(selector ? { select: SELECTOR_FIELDS.inventory } : {}),
+        })
+      : [],
+    wanted("promoters")
+      ? db.promoter.findMany({
+          where: { organizationId, active: true },
+          orderBy: { name: "asc" },
+          take: 200,
+          ...(selector ? { select: SELECTOR_FIELDS.promoters } : {}),
+        })
+      : [],
   ]);
   return Response.json({ suppliers, inventory, promoters });
 }

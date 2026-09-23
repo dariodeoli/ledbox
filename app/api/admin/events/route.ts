@@ -6,6 +6,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
+import { dayStart, isValidDayKey, nextDayKey } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,25 @@ export const dynamic = "force-dynamic";
 const EVENT_AUDIT_FIELDS = ["name", "location", "city", "startsAt", "endsAt", "setupAt", "status"] as const;
 
 /**
+ * Rango por fecha de inicio para el selector (`from`/`to` en `YYYY-MM-DD`, día
+ * completo de Asunción). Sin días válidos, `undefined`: el selector trae todos.
+ */
+function selectorStartsAt(url: URL): { gte?: Date; lt?: Date } | undefined {
+  const fromDay = url.searchParams.get("from");
+  const toDay = url.searchParams.get("to");
+  const from = fromDay && isValidDayKey(fromDay) ? dayStart(fromDay) : null;
+  const to = toDay && isValidDayKey(toDay) ? dayStart(nextDayKey(toDay)) : null;
+  if (!from && !to) return undefined;
+  return { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) };
+}
+
+/**
  * `GET /api/admin/events`: eventos de la empresa activa.
+ * `GET ?fields=selector[&from=YYYY-MM-DD&to=YYYY-MM-DD]` (issue #62): opción
+ * mínima para los selectores —id, nombre, estado, inicio y cliente—, sin
+ * asignaciones ni checklist, y con rango opcional por fecha de inicio. Los
+ * eventos sin fecha de inicio quedan fuera al filtrar. Sin `fields=selector` la
+ * respuesta es la de siempre (compatible).
  * `POST`: alta con checklist base (`events.write`).
  *
  * `PATCH` (issue #26): cambio de estado del evento desde el tablero, con la
@@ -21,9 +40,26 @@ const EVENT_AUDIT_FIELDS = ["name", "location", "city", "startsAt", "endsAt", "s
  * repetir el mismo estado no toca la fila ni ensucia el historial) y siempre
  * acotado a la empresa activa: un evento de otra empresa responde 404.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
+  const url = new URL(request.url);
+  if (url.searchParams.get("fields") === "selector") {
+    const events = await db.event.findMany({
+      where: { organizationId: auth.context.organizationId, startsAt: selectorStartsAt(url) },
+      orderBy: { startsAt: "asc" },
+      take: 300,
+      select: {
+        id: true,
+        name: true,
+        startsAt: true,
+        status: true,
+        clientId: true,
+        client: { select: { id: true, name: true, company: true } },
+      },
+    });
+    return Response.json({ events });
+  }
   const events = await db.event.findMany({
     where: { organizationId: auth.context.organizationId },
     orderBy: { startsAt: "asc" },

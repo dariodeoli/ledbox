@@ -18,6 +18,7 @@ import {
   supplierJobTransitions,
   SUPPLIER_CATEGORIES,
   SUPPLIER_JOB_STATUSES,
+  type AdminEventOption,
   type AdminSupplierJobRow,
   type AdminSupplierRow,
 } from "@/lib/admin-types";
@@ -147,7 +148,10 @@ export function ProveedoresModule() {
   const { role } = useAdminSession();
   const suppliersResource = useAdminResource("/api/admin/suppliers", (payload) => payload.suppliers ?? []);
   const jobsResource = useAdminResource("/api/admin/suppliers/jobs", (payload) => payload.jobs ?? []);
-  const eventsResource = useAdminResource("/api/admin/events", (payload) => payload.events ?? []);
+  const eventsResource = useAdminResource(
+    "/api/admin/events?fields=selector",
+    (payload) => (payload as { events?: AdminEventOption[] }).events ?? [],
+  );
 
   const [query, setQuery] = useState("");
   const [jobStatus, setJobStatus] = useState("ALL");

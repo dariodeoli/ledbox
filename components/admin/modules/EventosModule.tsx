@@ -25,11 +25,12 @@ import {
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import {
   promoterIsAvailable,
+  type AdminClientOption,
   type AdminEventAssignment,
   type AdminEventRow,
   type AdminInventoryAvailability,
-  type AdminInventoryItemRow,
-  type AdminPromoterRow,
+  type AdminInventoryOption,
+  type AdminPromoterOption,
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
@@ -171,7 +172,7 @@ function compareEventUrgency(a: AdminEventRow, b: AdminEventRow): number {
 }
 
 /** Opciones de promotora para el checklist: el estado real viaja en la etiqueta. */
-function promoterOptions(promoters: AdminPromoterRow[]): Array<{ value: string; label: string }> {
+function promoterOptions(promoters: AdminPromoterOption[]): Array<{ value: string; label: string }> {
   return [
     { value: "", label: "Sin promotora (equipo)" },
     ...promoters.map((promoter) => ({
@@ -188,13 +189,21 @@ export function EventosModule() {
   const { role } = useAdminSession();
   const { actions: queuedActions, fieldAction } = useOfflineQueue();
   const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
-  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
+  // Clientes e inventario alimentan solo los selectores del formulario y de la
+  // asignación de equipos (issue #62): campos mínimos, sin métricas ni historial.
+  const clients = useAdminResource(
+    "/api/admin/clients?fields=selector",
+    (payload) => (payload as { clients?: AdminClientOption[] }).clients ?? [],
+  );
   const inventoryResource = useAdminResource(
-    "/api/admin/inventory",
-    (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[],
+    "/api/admin/inventory?fields=selector",
+    (payload) => (payload as { inventory?: AdminInventoryOption[] }).inventory ?? [],
   );
   // Promotoras con su disponibilidad real: la asignación avisa, no bloquea (issue #24).
-  const promotersResource = useAdminResource("/api/admin/resources", (payload) => payload.promoters ?? []);
+  const promotersResource = useAdminResource(
+    "/api/admin/resources?only=promoters&fields=selector",
+    (payload) => (payload as { promoters?: AdminPromoterOption[] }).promoters ?? [],
+  );
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
