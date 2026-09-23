@@ -747,11 +747,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-shell { display: grid; grid-template-columns: var(--a-sidebar) minmax(0, 1fr); min-height: 100vh; }
 .admin-sidebar { position: sticky; top: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; border-right: 1px solid var(--a-line); background: var(--a-panel); }
 .admin-sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--a-topbar); padding: 0 12px; border-bottom: 1px solid var(--a-line); }
-.admin-sidebar-nav { flex: 1; display: grid; align-content: start; gap: 12px; overflow-y: auto; padding: 12px 12px; }
-.admin-nav-group { display: grid; gap: 4px; }
+.admin-sidebar-nav { flex: 1; display: grid; align-content: start; gap: 12px; overflow-y: auto; overscroll-behavior: contain; padding: 12px 12px; }
+.admin-nav-group { display: grid; gap: 4px; min-width: 0; }
 .admin-nav-label { padding: 0 8px; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .admin-nav-list { display: grid; gap: 4px; list-style: none; }
-.admin-nav-link { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--a-muted-2); font-size: 13px; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+.admin-nav-link { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 8px 12px; border-radius: 8px; color: var(--a-muted-2); font-size: 13px; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+.admin-nav-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-nav-link:hover { background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-nav-link[data-active="true"] { background: var(--a-accent-soft); color: var(--a-accent); box-shadow: inset 2px 0 0 0 var(--a-accent); }
 .admin-sidebar-foot { display: grid; gap: 8px; padding: 12px; border-top: 1px solid var(--a-line); }
@@ -843,6 +844,51 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-root[data-sidebar="collapsed"] .admin-sidebar-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   /* El menú del usuario se abre al costado del sidebar, no dentro de sus 72 px. */
   .admin-root[data-sidebar="collapsed"] .admin-usermenu--sidebar .admin-usermenu-panel { bottom: 0; left: calc(100% + 8px); right: auto; width: min(16rem, calc(100vw - 96px)); }
+}
+
+/* ── Nav en acordeón y densidad por altura (issue #50) ──
+   El menú tiene que entrar sin deslizar. La densidad se ajusta por altura de la
+   ventana y, si aun así el contenido no entra, el shell lo mide y pasa a
+   acordeón (un grupo por vez, el activo abierto) con headers clickeables,
+   `aria-expanded`/`aria-controls` y la elección recordada por usuario. El scroll
+   del nav queda como último recurso en alturas extremas; los targets se
+   mantienen cómodos (≥28 px en la densidad más baja). Solo aplica al sidebar de
+   escritorio: el drawer de mobile conserva la densidad táctil de siempre. */
+.admin-nav-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 24px; padding: 0 8px; border: 0; background: transparent; color: inherit; font-family: var(--font-body); font-weight: inherit; text-align: left; cursor: pointer; }
+.admin-nav-toggle:hover { color: var(--a-accent); }
+.admin-nav-toggle .admin-icon { flex: 0 0 auto; transition: transform .15s ease; }
+.admin-nav-toggle[aria-expanded="true"] .admin-icon { transform: rotate(180deg); }
+.admin-nav-list[hidden] { display: none; }
+/* El modo colapsado (solo íconos) manda: ahí el acordeón no aplica, así que
+   todos los grupos quedan a la vista y los headers, como las etiquetas, fuera
+   del flujo visual (siguen en el DOM para lectores de pantalla). */
+.admin-root[data-sidebar="collapsed"] .admin-nav-list[hidden] { display: grid; }
+@media (min-width: 981px) and (max-height: 1080px) {
+  .admin-sidebar-nav { gap: 6px; padding: 8px 10px; }
+  .admin-nav-group { gap: 2px; }
+  .admin-nav-label { font-size: 9.5px; letter-spacing: .14em; }
+  .admin-nav-list { gap: 2px; }
+  .admin-nav-link { min-height: 30px; padding: 5px 10px; font-size: 12.5px; }
+  .admin-sidebar-foot { gap: 6px; padding: 8px 10px; }
+  .admin-company { padding: 6px 10px; }
+  .admin-user--sidebar { padding: 6px 8px; }
+}
+@media (min-width: 981px) and (max-height: 940px) {
+  /* Sin la nota del pie: es decorativa y libera alto para el menú. */
+  .admin-sidebar-note { display: none; }
+}
+@media (min-width: 981px) and (max-height: 860px) {
+  /* Última densidad: los grupos quedan separados por una línea (la etiqueta
+     sigue para lectores de pantalla) y los links bajan a 28 px. */
+  .admin-sidebar-nav { gap: 4px; padding: 6px 8px; }
+  .admin-nav-group { gap: 1px; }
+  .admin-nav-group + .admin-nav-group { padding-top: 3px; border-top: 1px solid var(--a-line); }
+  .admin-nav-label:not(.admin-nav-toggle) { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .admin-nav-list { gap: 2px; }
+  .admin-nav-link { min-height: 28px; padding: 4px 9px; }
+  .admin-sidebar-foot { gap: 4px; padding: 6px 8px; }
+  .admin-company { padding: 5px 8px; }
+  .admin-user--sidebar { padding: 5px 6px; }
 }
 
 /* ── Controles ── */
