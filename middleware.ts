@@ -9,6 +9,8 @@ import { publicConfig } from "@/lib/public-config";
  * - Las páginas del panel son rutas raíz reales dentro de `app/(admin)/*`
  *   (`/login`, `/eventos`, `/finanzas`, …); no hay prefijo /admin.
  * - En el host admin, `/` muestra el dashboard (`app/(admin)/dashboard`).
+ * - En el host de la demo (issue #53), `/` muestra la entrada de la demo con
+ *   rewrite a `/demo`: la URL visible queda limpia, sin el segmento.
  * - En el host del cliente (portal del cliente, issue #12), `/` muestra el
  *   validador de presupuestos (`app/(portal)/portal`).
  * - En el host público, las rutas del panel se redirigen al subdominio admin.
@@ -124,18 +126,23 @@ export function middleware(request: NextRequest) {
   }
 
   if (onDemoHost) {
-    // Demo pública (issue #15): la raíz **redirige** a `/demo` —la entrada que
-    // crea la sesión demo— para que la ruta visible sea la que el panel espera y
-    // el visitante nunca caiga en el login (bug del 22-09-2026).
-    if (pathname === "/") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/demo";
-      return NextResponse.redirect(url, 308);
+    // Demo pública (issues #15 y #53): la entrada se sirve en `/` con rewrite a
+    // `/demo` (igual que el host admin con `/dashboard`), así la URL visible
+    // nunca muestra el segmento. `/demo` (links viejos y compartidos) queda
+    // como canónica de la raíz; los links profundos siguen entrando igual.
+    if (pathname === "/demo" || pathname.startsWith("/demo/")) {
+      const clean = pathname.slice("/demo".length) || "/";
+      return NextResponse.redirect(absoluteOnRequestHost(request, `${clean}${search}`), 308);
     }
     // El layout del panel lee `x-pathname` para devolver al visitante a la misma
     // pantalla después de crear la sesión demo (links profundos incluidos).
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-pathname", `${pathname}${search}`);
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/demo";
+      return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    }
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
@@ -64,10 +65,15 @@ export const metadata: Metadata = {
  */
 export default async function DemoPage() {
   const auth = await getAuthenticatedAdmin();
-  if (!auth) redirect("/api/demo/session?next=/demo");
+  // En el host de la demo la URL visible puede ser `/` (rewrite, issue #53): el
+  // `next` vuelve a esa misma ruta original. Fuera de ese host (dev o admin),
+  // el índice sigue siendo `/demo`.
+  const requestHeaders = await headers();
+  const nextPath = requestHeaders.get("x-pathname") || "/demo";
+  if (!auth) redirect(`/api/demo/session?next=${encodeURIComponent(nextPath)}`);
 
   if (!(await isDemoOrganizationId(auth.session.activeOrganizationId))) {
-    return <DemoInvite userName={auth.user.name} />;
+    return <DemoInvite userName={auth.user.name} nextPath={nextPath} />;
   }
   const organizationId = auth.session.activeOrganizationId as string;
   const now = new Date();
@@ -291,7 +297,7 @@ export default async function DemoPage() {
         approvedUrl={approvedUrl}
         resetForm={
           <form method="post" action="/api/demo/session">
-            <input type="hidden" name="next" value="/demo" />
+            <input type="hidden" name="next" value={nextPath} />
             <button className="admin-btn" type="submit" title="Vuelve a generar los datos simulados con fechas de hoy">
               <AdminIcon name="refresh" size={15} />
               <span>Reiniciar los datos</span>
@@ -799,7 +805,7 @@ export default async function DemoPage() {
 }
 
 /** Sesión real abierta: entrar a la demo reemplaza la sesión, así que se confirma. */
-function DemoInvite({ userName }: { userName: string }) {
+function DemoInvite({ userName, nextPath }: { userName: string; nextPath: string }) {
   return (
     <div className="admin-module-page">
       <section className="admin-demo-hero">
@@ -812,7 +818,7 @@ function DemoInvite({ userName }: { userName: string }) {
         </p>
         <div className="admin-demo-actions">
           <form method="post" action="/api/demo/session">
-            <input type="hidden" name="next" value="/demo" />
+            <input type="hidden" name="next" value={nextPath} />
             <button className="admin-btn admin-btn--primary" type="submit">
               <AdminIcon name="power" size={15} />
               <span>Entrar a la demo</span>

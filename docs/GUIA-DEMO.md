@@ -11,7 +11,7 @@ La demo es pública, con datos simulados y **solo lectura** (no se puede romper 
 | Portal del cliente — **autogestión** (pendiente) | https://clientes.ledbox.online/p/D3M9-F3R4-A2PY-Q7SC-K4VT |
 | Portal del cliente — **aprobado** (con datos de pago) | https://clientes.ledbox.online/p/D3M9-5G97-4XKW-2M8R-T3HN |
 
-No hace falta usuario ni contraseña: `demo.ledbox.online` redirige a `/demo` y ahí el sistema crea la sesión de demostración automáticamente (también funciona un link directo a un módulo, p. ej. `demo.ledbox.online/finanzas`). La primera visita abre un **popup de bienvenida** («Recorrer la demo» o la X) que no vuelve a mostrarse en ese navegador; la barra fina de la portada lo reabre y deja a mano el portal, el resumen y el reinicio de datos. El chip **DEMO** y el aviso fijo recuerdan que es una demo.
+No hace falta usuario ni contraseña: `demo.ledbox.online` abre la demo en la raíz (la URL queda limpia, sin `/demo`) y ahí el sistema crea la sesión de demostración automáticamente (también funciona un link directo a un módulo, p. ej. `demo.ledbox.online/finanzas`). La primera visita abre un **popup de bienvenida** («Recorrer la demo» o la X) que no vuelve a mostrarse en ese navegador; la barra fina de la portada lo reabre y deja a mano el portal, el resumen y el reinicio de datos. El chip **DEMO** y el aviso fijo recuerdan que es una demo.
 
 ## Recorrido de 8 minutos
 
@@ -29,5 +29,5 @@ No hace falta usuario ni contraseña: `demo.ledbox.online` redirige a `/demo` y 
 
 - Los estados **no son todos verdes**: hay mora, checklist incompleto, equipos dañados, un proveedor atrasado y un evento cancelado.
 - Las **fechas se mantienen vivas solas**: los eventos reales de Paraguay se proyectan a la ventana ±6 meses y los estados se derivan de la fecha (el cronograma cubre todo el año).
-- Los códigos de los portales pueden cambiar si la demo se reprovisiona; siempre están publicados en la landing de `/demo`.
+- Los códigos de los portales pueden cambiar si la demo se reprovisiona; siempre están publicados en la portada de la demo.
 - La demo muestra también **tesorería, gastos, conciliación, invitaciones, correos, logos/avatares y la cronología** (issue #32).

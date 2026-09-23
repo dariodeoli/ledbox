@@ -30,7 +30,7 @@ const HOSTS = [
   "https://app.ledbox.online/login",
   "https://eventos.ledbox.online/",
   "https://clientes.ledbox.online/",
-  "https://demo.ledbox.online/demo",
+  "https://demo.ledbox.online/",
 ];
 const CONFIG_FILE = "scripts/orquestador.config.json";
 const config = (() => {
@@ -93,7 +93,7 @@ function saveState(next) {
   writeFileSync(STATE_FILE, JSON.stringify({ ...state(), ...next }, null, 2) + "\n");
 }
 function curl(url, timeout = 15) {
-  // Con jar de cookies: el flujo de la demo (raíz → sesión → /demo) completa y
+  // Con jar de cookies: el flujo de la demo (raíz → sesión → raíz) completa y
   // termina en 200 en vez de cortar en el 303 del endpoint de sesión.
   const jar = join(CONFIG_DIR, "pp-cookies.txt");
   const r = spawnSync(

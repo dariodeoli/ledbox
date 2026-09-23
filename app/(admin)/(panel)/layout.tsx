@@ -17,17 +17,16 @@ import { getAuthenticatedAdmin } from "@/lib/server/auth";
  */
 export default async function AdminPanelLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const auth = await getAuthenticatedAdmin();
-  if (!auth) {
-    const requestHeaders = await headers();
-    const host = (requestHeaders.get("host") || "").split(":")[0].toLowerCase();
-    if (host && host === hostnameOf(publicConfig.demoUrl)) {
-      const pathname = requestHeaders.get("x-pathname") || "/demo";
-      redirect(`/api/demo/session?next=${encodeURIComponent(pathname)}`);
-    }
+  const requestHeaders = await headers();
+  const host = (requestHeaders.get("host") || "").split(":")[0].toLowerCase();
+  const onDemoHost = Boolean(host && host === hostnameOf(publicConfig.demoUrl));
+  if (!auth && onDemoHost) {
+    const pathname = requestHeaders.get("x-pathname") || "/demo";
+    redirect(`/api/demo/session?next=${encodeURIComponent(pathname)}`);
   }
   return (
     <AdminOfflineProvider>
-      <AdminShell>{children}</AdminShell>
+      <AdminShell demoHost={onDemoHost}>{children}</AdminShell>
     </AdminOfflineProvider>
   );
 }

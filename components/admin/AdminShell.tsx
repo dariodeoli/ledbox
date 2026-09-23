@@ -188,8 +188,9 @@ function pickSessionData(raw: unknown): {
  *
  * Vale el path `/demo` (host público y desarrollo) y **cualquier ruta del host
  * de la demo** (`demo.ledbox.online`, issue #39): ahí el visitante entra por la
- * raíz o directo a un módulo compartido, y en ambos casos corresponde crear la
- * sesión demo en vez de mandarlo al login (bug del 22-09-2026).
+ * raíz (servida con rewrite, sin `/demo`, issue #53) o directo a un módulo
+ * compartido, y en ambos casos corresponde crear la sesión demo en vez de
+ * mandarlo al login (bug del 22-09-2026).
  */
 function isDemoEntryPath(): boolean {
   if (typeof window === "undefined") return false;
@@ -202,7 +203,7 @@ function isDemoEntryPath(): boolean {
   }
 }
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children, demoHost = false }: { children: React.ReactNode; demoHost?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const [session, setSession] = useState<AdminSessionData>(EMPTY_SESSION);
@@ -214,6 +215,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [lockError, setLockError] = useState("");
   const [lockBusy, setLockBusy] = useState(false);
   const [lockRequireLogin, setLockRequireLogin] = useState(false);
+  /**
+   * En el host de la demo la presentación es la raíz `/` (issue #53: rewrite sin
+   * segmento visible); en el resto de los hosts sigue siendo la ruta `/demo`.
+   * Se resuelve después de montar, así el SSR y la hidratación coinciden.
+   */
+  const [demoHome, setDemoHome] = useState("/demo");
+  useEffect(() => {
+    try {
+      if (window.location.hostname.toLowerCase() === new URL(publicConfig.demoUrl).hostname.toLowerCase()) setDemoHome("/");
+    } catch {
+      /* se queda en `/demo` */
+    }
+  }, []);
   const lastActivityRef = useRef(Date.now());
   const lockChannelRef = useRef<BroadcastChannel | null>(null);
 
@@ -449,9 +463,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
   /**
    * Entrada a la demo: mientras no haya sesión, la campana de avisos no se monta
-   * (su 401 manda al login y competiría con la creación de la sesión demo).
+   * (su 401 manda al login y competiría con la creación de la sesión demo). En el
+   * host de la demo vale cualquier ruta, incluida `/` (rewrite, issue #53).
    */
-  const demoEntryPending = session.loading && !session.user && (pathname === "/demo" || pathname.startsWith("/demo/"));
+  const demoEntryPending =
+    session.loading && !session.user && (demoHost || pathname === "/demo" || pathname.startsWith("/demo/"));
 
   /** Sale de la demo: revoca la sesión demo, limpia la cookie y va al sitio. */
   const exitDemo = useCallback(async () => {
@@ -714,7 +730,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               {session.demo ? (
                 <Link
                   className="admin-demo-chip"
-                  href="/demo"
+                  href={demoHome}
                   title="Estás en la demo de LedBox con datos simulados · Volver a la presentación"
                 >
                   DEMO
@@ -738,7 +754,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
           {session.demo ? (
             <div className="admin-demo-banner">
-              <Link className="admin-demo-badge" href="/demo" title="Volver a la presentación de la demo">
+              <Link className="admin-demo-badge" href={demoHome} title="Volver a la presentación de la demo">
                 DEMO
               </Link>
               <p className="admin-demo-banner-text">
