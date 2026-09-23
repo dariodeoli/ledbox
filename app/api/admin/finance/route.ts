@@ -124,9 +124,13 @@ export async function GET() {
       where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 200,
+      // Recorte por referencia (issue #63): el cobro embebe solo lo que la lista
+      // y el detalle dibujan (`AdminPaymentRow`): nada de la ficha del cliente
+      // —notas, RUC, dirección— ni de la evidencia interna del presupuesto
+      // (`approvalIp`, `approvalUserAgent`), que no tienen por qué viajar.
       include: {
-        client: true,
-        budget: true,
+        client: { select: { id: true, name: true, company: true, type: true, email: true, phone: true } },
+        budget: { select: { id: true, title: true, publicToken: true } },
         // Historial de recordatorios del cobro (issue #19) para el "enviado hoy"
         // de la fila y el detalle del cobro.
         reminders: { orderBy: { sentAt: "desc" }, take: 20 },
@@ -138,7 +142,10 @@ export async function GET() {
       where: { organizationId },
       orderBy: { dueAt: "asc" },
       take: 200,
-      include: { supplier: true, event: true },
+      include: {
+        supplier: { select: { id: true, name: true, phone: true, category: true } },
+        event: { select: { id: true, name: true, startsAt: true, status: true } },
+      },
     }),
   ]);
   return Response.json({ clientPayments, supplierJobs });
