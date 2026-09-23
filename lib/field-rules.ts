@@ -96,6 +96,33 @@ export function pinError(value: string): string | null {
   return pinValid(value) ? null : FIELD_MESSAGES.pin;
 }
 
+/**
+ * Pausa que cierra un PIN más corto que el máximo (issue #54): el panel no
+ * guarda cuántos dígitos tiene el PIN, así que con 4 o más espera un instante a
+ * que la persona termine de teclear antes de enviarlo. Quien va a escribir 6
+ * sigue tecleando y la pausa se reinicia sola.
+ */
+export const PIN_SETTLE_MS = 900;
+
+/**
+ * ¿Ya se puede enviar el PIN que se está tecleando? (issue #54.)
+ *
+ * - Con `expectedLength` conocido (por ejemplo, el mismo largo del PIN nuevo al
+ *   repetirlo): recién al llegar a ese largo, sin pausa ni adelantos.
+ * - Sin largo conocido: al llegar al máximo (6) se envía al instante; con 4 o más
+ *   dígitos, una pausa de `pausedMs` cierra el PIN corto.
+ * - Menos de `PIN_MIN_DIGITS` dígitos: nunca.
+ */
+export function pinEntryComplete(value: string, pausedMs = 0, expectedLength?: number | null): boolean {
+  const pin = pinInput(value);
+  if (!pinValid(pin)) return false;
+  if (typeof expectedLength === "number" && expectedLength >= PIN_MIN_DIGITS && expectedLength <= PIN_MAX_DIGITS) {
+    return pin.length >= expectedLength;
+  }
+  if (pin.length >= PIN_MAX_DIGITS) return true;
+  return pausedMs >= PIN_SETTLE_MS;
+}
+
 /** Nombre de persona como se guarda: sin espacios de más (el límite es `FIELD_LIMITS.name`). */
 export function normalizePersonName(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ");

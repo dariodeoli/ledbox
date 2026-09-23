@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime } from "@/lib/admin-format";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinError } from "@/lib/field-rules";
@@ -49,6 +49,12 @@ export function AdminPinSettings() {
   const [autoLockValue, setAutoLockValue] = useState("10");
   const [autoLockError, setAutoLockError] = useState("");
   const [savingAutoLock, setSavingAutoLock] = useState(false);
+  // Avance automático del PIN (issue #54): al completar un campo el foco pasa al
+  // siguiente y, si el repetido coincide, el formulario se envía solo.
+  const pinFormRef = useRef<HTMLFormElement | null>(null);
+  const pinCurrentRef = useRef<HTMLInputElement | null>(null);
+  const pinNewRef = useRef<HTMLInputElement | null>(null);
+  const pinRepeatRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (security) setAutoLockValue(security.autoLock.enabled ? String(security.autoLock.minutes) : "never");
@@ -100,6 +106,15 @@ export function AdminPinSettings() {
     );
     pinConfig.reload();
     reload();
+  }
+
+  /**
+   * Repetir PIN completo (issue #54): si coincide con el nuevo, guarda sin
+   * apretar el botón. Las validaciones siguen en `savePin` (un solo lugar).
+   */
+  function completePinRepeat(value: string) {
+    if (readOnly || !security || value !== pinNew) return;
+    pinFormRef.current?.requestSubmit();
   }
 
   /** Quita el PIN (mismas credenciales que el cambio): sin PIN no hay bloqueo rápido. */
@@ -161,11 +176,11 @@ export function AdminPinSettings() {
     <AdminPanel title="PIN y bloqueo por inactividad" icon="lock" meta={hasPin ? "PIN activo" : "Sin PIN"}>
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
 
-      <form className="admin-settings" onSubmit={savePin}>
+      <form className="admin-settings" onSubmit={savePin} ref={pinFormRef}>
         {security && !hasPin ? (
           <AdminNote>
             Configurá un PIN de {PIN_MIN_DIGITS} a {PIN_MAX_DIGITS} dígitos para reabrir el panel sin volver a iniciar sesión.
-            Sin PIN, el auto-bloqueo por inactividad no se activa.
+            Al completar cada campo pasás solo al siguiente. Sin PIN, el auto-bloqueo por inactividad no se activa.
           </AdminNote>
         ) : null}
         <div className="admin-settings-grid">
@@ -175,6 +190,9 @@ export function AdminPinSettings() {
               value={pinCurrent}
               onChange={(value) => touch(() => setPinCurrent(value))}
               length={PIN_MAX_DIGITS}
+              autoSubmit
+              onComplete={() => pinNewRef.current?.focus()}
+              inputRef={pinCurrentRef}
               hint="Para cambiar el PIN; si no lo recordás, usá tu contraseña."
               disabled={readOnly || !security}
             />
@@ -194,7 +212,10 @@ export function AdminPinSettings() {
             value={pinNew}
             onChange={(value) => touch(() => setPinNew(value))}
             length={PIN_MAX_DIGITS}
-            hint={`${PIN_MIN_DIGITS} a ${PIN_MAX_DIGITS} dígitos, solo números. Nunca se muestra ni se guarda en claro.`}
+            autoSubmit
+            onComplete={() => pinRepeatRef.current?.focus()}
+            inputRef={pinNewRef}
+            hint={`${PIN_MIN_DIGITS} a ${PIN_MAX_DIGITS} dígitos, solo números; al completarlo pasás al siguiente campo. Nunca se muestra ni se guarda en claro.`}
             disabled={readOnly || !security}
           />
           <PinField
@@ -202,6 +223,11 @@ export function AdminPinSettings() {
             value={pinRepeat}
             onChange={(value) => touch(() => setPinRepeat(value))}
             length={PIN_MAX_DIGITS}
+            autoSubmit
+            expectedLength={pinNew.length >= PIN_MIN_DIGITS ? pinNew.length : null}
+            onComplete={completePinRepeat}
+            inputRef={pinRepeatRef}
+            hint="Si coincide con el PIN nuevo, se guarda sin apretar nada."
             disabled={readOnly || !security}
           />
         </div>

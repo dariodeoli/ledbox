@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   amountInput,
   DEFAULT_PHONE_COUNTRY,
@@ -12,7 +12,11 @@ import {
   parsePhone,
   percentInput,
   PIN_MAX_DIGITS,
+  PIN_MIN_DIGITS,
+  PIN_SETTLE_MS,
+  pinEntryComplete,
   pinInput,
+  pinValid,
 } from "@/lib/field-rules";
 import { AdminIcon } from "./AdminIcons";
 
@@ -871,6 +875,7 @@ export function PinField({
   length = PIN_MAX_DIGITS,
   autoSubmit,
   onComplete,
+  expectedLength,
   hint,
   error,
   wide,
@@ -890,6 +895,11 @@ export function PinField({
   /** Al completar `length` dígitos llama a `onComplete` (validación inmediata). */
   autoSubmit?: boolean;
   onComplete?: (value: string) => void;
+  /**
+   * Largo conocido del PIN (issue #54): al llegar a esa cantidad se envía sin
+   * pausa. Sirve para repetir un PIN nuevo sin adivinar si es de 4 o de 6.
+   */
+  expectedLength?: number | null;
   hint?: string;
   error?: string | null;
   wide?: boolean;
@@ -904,6 +914,11 @@ export function PinField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const localRef = useRef<HTMLInputElement | null>(null);
   const [focused, setFocused] = useState(false);
+  const completeRef = useRef(onComplete);
+
+  useEffect(() => {
+    completeRef.current = onComplete;
+  }, [onComplete]);
 
   function assignRef(node: HTMLInputElement | null) {
     localRef.current = node;
@@ -912,17 +927,41 @@ export function PinField({
   }
 
   function emit(next: string) {
-    const digits = pinInput(next);
-    onChange(digits);
-    if (autoSubmit && digits.length === length) onComplete?.(digits);
+    onChange(pinInput(next));
   }
+
+  /**
+   * Envío automático (issue #54): al llegar al largo esperado (o a 6) se envía al
+   * instante; con 4 o más dígitos, una pausa breve cierra el PIN corto sin Enter.
+   * Cada tecla reinicia la pausa, así quien va a escribir 6 no se corta.
+   */
+  useEffect(() => {
+    if (!autoSubmit || disabled) return;
+    if (pinEntryComplete(value, 0, expectedLength)) {
+      completeRef.current?.(value);
+      return;
+    }
+    if (!pinValid(value)) return;
+    const timer = window.setTimeout(() => {
+      if (pinEntryComplete(value, PIN_SETTLE_MS, expectedLength)) completeRef.current?.(value);
+    }, PIN_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [value, autoSubmit, disabled, expectedLength]);
 
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-pin" data-focused={focused ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
-        <span className="admin-pin-dots" aria-hidden="true">
+        <span className="admin-pin-slots" aria-hidden="true">
           {Array.from({ length }, (_, index) => (
-            <span key={index} className="admin-pin-dot" data-filled={index < value.length ? "true" : undefined} />
+            <span
+              key={index}
+              className="admin-pin-slot"
+              data-filled={index < value.length ? "true" : undefined}
+              data-active={index === value.length && !disabled ? "true" : undefined}
+              data-min-boundary={index === PIN_MIN_DIGITS ? "true" : undefined}
+            >
+              <span className="admin-pin-slot-dot" />
+            </span>
           ))}
         </span>
         <input

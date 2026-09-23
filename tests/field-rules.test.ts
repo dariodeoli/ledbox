@@ -26,6 +26,12 @@ import {
   personNameValid,
   phoneError,
   phoneValid,
+  PIN_MAX_DIGITS,
+  PIN_MIN_DIGITS,
+  PIN_SETTLE_MS,
+  pinEntryComplete,
+  pinInput,
+  pinValid,
   requiredError,
   serialError,
   serialValid,
@@ -177,4 +183,47 @@ test("URLs de identidad: avatar y logo con la versión que corta la caché", () 
   assert.equal(isLogoVariant("light"), true);
   assert.equal(isLogoVariant("dark"), true);
   assert.equal(isLogoVariant("claro"), false);
+});
+
+/**
+ * PIN del panel (issues #21 y #54): de 4 a 6 dígitos, con envío automático al
+ * completarlo y una pausa que no corta a quien va a escribir 6.
+ */
+
+test("PIN: acepta de 4 a 6 dígitos y capa el pegado", () => {
+  assert.equal(PIN_MIN_DIGITS, 4);
+  assert.equal(PIN_MAX_DIGITS, 6);
+  assert.equal(pinInput("12"), "12");
+  assert.equal(pinInput("1234"), "1234");
+  assert.equal(pinInput("123456"), "123456");
+  assert.equal(pinInput("1234567"), "123456");
+  assert.equal(pinInput("12 34-56"), "123456");
+  assert.equal(pinInput("abc"), "");
+  assert.equal(pinValid("123"), false);
+  assert.equal(pinValid("1234"), true);
+  assert.equal(pinValid("12345"), true);
+  assert.equal(pinValid("123456"), true);
+  assert.equal(pinValid("1234567"), false);
+  assert.equal(pinValid(""), false);
+});
+
+test("PIN: el envío automático espera la pausa y no corta a quien escribe 6", () => {
+  // Menos del mínimo: nunca se envía.
+  assert.equal(pinEntryComplete("123", PIN_SETTLE_MS), false);
+  // Cuatro dígitos recién tecleados: puede seguir con dos más (no se corta).
+  assert.equal(pinEntryComplete("1234", 0), false);
+  // Cuatro dígitos y pausa: el PIN corto se envía solo (issue #54).
+  assert.equal(pinEntryComplete("1234", PIN_SETTLE_MS), true);
+  // Seis dígitos: se envía al instante, sin esperar la pausa.
+  assert.equal(pinEntryComplete("123456", 0), true);
+  assert.equal(pinEntryComplete("12345", PIN_SETTLE_MS), true);
+});
+
+test("PIN: con largo conocido (repetir el nuevo) manda ese largo", () => {
+  assert.equal(pinEntryComplete("1234", 0, 4), true);
+  assert.equal(pinEntryComplete("1234", PIN_SETTLE_MS, 6), false);
+  assert.equal(pinEntryComplete("123456", 0, 6), true);
+  // Un largo fuera del rango permitido se ignora y cae al máximo.
+  assert.equal(pinEntryComplete("1234", PIN_SETTLE_MS, 3), true);
+  assert.equal(pinEntryComplete("1234", PIN_SETTLE_MS, 9), true);
 });
