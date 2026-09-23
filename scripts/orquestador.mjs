@@ -305,6 +305,8 @@ function ht() {
         continue;
       }
       const suiteOk =
+        // Con migraciones nuevas el cliente generado queda viejo: regenerar antes de tipar.
+        run(`${slot.branch}: prisma generate`, "npm", ["run", "prisma:generate"], { quiet: true }) &&
         run(`${slot.branch}: typecheck`, "npm", ["run", "typecheck"], { quiet: true }) &&
         run(`${slot.branch}: tests`, "npm", ["run", "test:rules"], { quiet: true }) &&
         run(`${slot.branch}: campos`, "npm", ["run", "check:fields"], { quiet: true }) &&
