@@ -18,6 +18,7 @@ import {
   pinInput,
   pinValid,
 } from "@/lib/field-rules";
+import { detectPaymentProofMime } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
 
 /**
@@ -1062,5 +1063,102 @@ export function SegmentedField({
       </div>
       {message}
     </div>
+  );
+}
+
+/**
+ * Archivo adjunto (docs/REGLAS-GENERALES.md): JPG/PNG/WebP/PDF hasta 5 MiB,
+ * validado por MIME real (magic bytes) antes de entregarlo. Un solo objeto para
+ * todos los adjuntos del panel; el que sube decide el destino (endpoint).
+ */
+export function AttachmentInput({
+  label = "Adjunto",
+  ariaLabel,
+  hint,
+  error,
+  wide,
+  accept = "image/jpeg,image/png,image/webp,application/pdf",
+  maxBytes = 5 * 1024 * 1024,
+  disabled,
+  onSelect,
+  id,
+}: {
+  label?: string;
+  ariaLabel?: string;
+  hint?: string;
+  error?: string | null;
+  wide?: boolean;
+  accept?: string;
+  maxBytes?: number;
+  disabled?: boolean;
+  onSelect: (file: File | null) => void;
+  id?: string;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds(id);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [localError, setLocalError] = useState("");
+  const shown = error || localError || null;
+
+  async function pick(file: File | null) {
+    setLocalError("");
+    if (!file) {
+      onSelect(null);
+      return;
+    }
+    if (file.size === 0) {
+      setLocalError("El archivo está vacío; probá con otro.");
+      return;
+    }
+    if (file.size > maxBytes) {
+      setLocalError(`El archivo supera los ${Math.round(maxBytes / (1024 * 1024))} MB.`);
+      return;
+    }
+    const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    if (!detectPaymentProofMime(header)) {
+      setLocalError("El archivo no es un JPG, PNG, WebP o PDF real: revisá que no esté renombrado.");
+      return;
+    }
+    onSelect(file);
+  }
+
+  return (
+    <FieldChrome
+      label={label}
+      ariaLabel={ariaLabel}
+      hint={hint}
+      error={shown}
+      wide={wide}
+      htmlFor={fieldId}
+      hintId={hintId}
+      errorId={errorId}
+    >
+      <span className="admin-attachment">
+        <input
+          id={label ? fieldId : id}
+          ref={inputRef}
+          className="sr-only"
+          type="file"
+          accept={accept}
+          disabled={disabled}
+          onChange={(event) => {
+            void pick(event.target.files?.[0] ?? null);
+          }}
+          aria-label={label ? undefined : ariaLabel}
+          aria-invalid={shown ? true : undefined}
+          aria-describedby={describedBy(shown, hint, hintId, errorId)}
+        />
+        <button
+          className="admin-btn admin-btn--ghost"
+          type="button"
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+          title="Elegir el archivo"
+          aria-label="Elegir el archivo"
+        >
+          <AdminIcon name="upload" size={15} />
+          <span>Elegir archivo</span>
+        </button>
+      </span>
+    </FieldChrome>
   );
 }

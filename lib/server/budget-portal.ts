@@ -170,6 +170,12 @@ export type PortalBudget = {
   demo: boolean;
   createdAt: string;
   validUntil: string | null;
+  /** Fecha de entrega comprometida (issue #65); nunca se publica nada interno. */
+  deliveryAt: string | null;
+  /** Condición de IVA del presupuesto (issue #65): IVA10, IVA5 o EXEMPT. */
+  ivaType: string | null;
+  /** Garantía ofrecida (issue #65), texto libre del equipo. */
+  warranty: string | null;
   notes: string | null;
   /**
    * Cliente, solo lo que la vista pública muestra. `contactName`/`contactRole`
@@ -298,6 +304,9 @@ type BudgetForPortal = {
   paymentTerms: string | null;
   installmentsJson: unknown;
   validUntil: Date | null;
+  deliveryAt: Date | null;
+  ivaType: string | null;
+  warranty: string | null;
   notes: string | null;
   createdAt: Date;
   /** Primera vista del portal (issue #33); `null` si el cliente nunca abrió el link. */
@@ -540,6 +549,12 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     demo,
     createdAt: budget.createdAt.toISOString(),
     validUntil: iso(budget.validUntil),
+    // Campos del cliente (issue #65). Los costos internos (materiales, mano de
+    // obra, costo por ítem y estimado) **no** se mapean acá: no existen en la
+    // vista pública y no pueden salir al navegador.
+    deliveryAt: iso(budget.deliveryAt),
+    ivaType: budget.ivaType,
+    warranty: budget.warranty,
     notes: budget.notes,
     client: { name: budget.client.name, company: budget.client.company, contactName: budget.client.contactName, contactRole: budget.client.contactRole },
     event: budget.event

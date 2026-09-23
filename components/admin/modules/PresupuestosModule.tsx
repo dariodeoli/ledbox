@@ -23,6 +23,8 @@ import {
   type AdminTone,
 } from "@/lib/admin-format";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
+import { internalCostOf } from "@/lib/budget-costs";
+import { BudgetPricingDialog } from "./BudgetPricingDialog";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import {
   budgetApprovalState,
@@ -744,6 +746,8 @@ export function PresupuestosModule() {
   const [notice, setNotice] = useState("");
   const [boardError, setBoardError] = useState("");
   const [view, setView] = useAdminModuleView("presupuestos");
+  /** Precio, costos y condiciones del presupuesto (issue #65). */
+  const [pricing, setPricing] = useState<AdminBudgetRow | null>(null);
 
   // Portal del cliente (issue #12): diálogo de link/QR y diálogo de aprobación.
   const [portalBudget, setPortalBudget] = useState<AdminBudgetRow | null>(null);
@@ -1508,7 +1512,14 @@ export function PresupuestosModule() {
             {rows.map((budget) => {
               const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
-              const margin = budget.total - budget.costEstimate;
+              // Margen sobre el costo interno completo (issue #65): materiales +
+              // mano de obra + costo de los ítems, no solo el estimado por ítem.
+              const internalCost = internalCostOf({
+                materialCost: budget.materialCost ?? 0,
+                laborCost: budget.laborCost ?? 0,
+                items: budget.items,
+              });
+              const margin = budget.total - internalCost.total;
               const approvalState = budgetApprovalState(budget);
               const approved = approvalState === "APROBADO_DIGITAL" || approvalState === "APROBADO_MANUAL";
               const open = budget.status !== "LOST" && budget.status !== "CANCELLED";
@@ -1546,7 +1557,7 @@ export function PresupuestosModule() {
                   <AdminCell end title={formatMoney(balance)}>
                     <strong>{formatMoney(balance)}</strong>
                   </AdminCell>
-                  <AdminCell end title={`${formatMoney(budget.total - budget.costEstimate)} de margen estimado`}>
+                  <AdminCell end title={`${formatMoney(margin)} de margen sobre un costo interno de ${formatMoney(internalCost.total)} (materiales ${formatMoney(internalCost.materials)} · mano de obra ${formatMoney(internalCost.labor)} · ítems ${formatMoney(internalCost.items)})`}>
                     {formatMoney(margin)}
                   </AdminCell>
                   <AdminCell>
@@ -1632,6 +1643,14 @@ export function PresupuestosModule() {
                           title={`Ver ${budgetProofs.length === 1 ? "el comprobante" : `los ${proofLabel}`} de ${budget.title}`}
                           aria-label={`Ver ${budgetProofs.length === 1 ? "el comprobante" : `los ${proofLabel}`} de ${budget.title}`}
                           onClick={() => setProofDialog(budget)}
+                        />
+                      ) : null}
+                      {writable ? (
+                        <AdminButton
+                          icon="edit"
+                          title={`Precio, costos internos y condiciones: ${budget.title}`}
+                          aria-label={`Precio, costos internos y condiciones: ${budget.title}`}
+                          onClick={() => setPricing(budget)}
                         />
                       ) : null}
                       {writable ? (
@@ -2012,6 +2031,17 @@ export function PresupuestosModule() {
             </AdminButton>
           </div>
         </AdminDialog>
+      ) : null}
+
+      {pricing ? (
+        <BudgetPricingDialog
+          budget={pricing}
+          onClose={() => setPricing(null)}
+          onSaved={(message) => {
+            setNotice(message);
+            budgetsResource.reload();
+          }}
+        />
       ) : null}
 
       {plan ? (

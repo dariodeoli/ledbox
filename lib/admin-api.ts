@@ -293,3 +293,42 @@ export function useAdminResource<T>(
 
   return { data, loading, error, reload };
 }
+
+/**
+ * Subida de un archivo del panel (multipart): mismo contrato de sesión y errores
+ * que las mutaciones —limpia la caché de GET, 401/403 invalidan la sesión y 423
+ * avisa el bloqueo por PIN— con su propio timeout. La usa el adjunto del
+ * presupuesto (issue #65); no manda `Idempotency-Key` (el archivo se elige una
+ * vez y el reintento lo decide la persona).
+ */
+export async function adminApiUpload<T = AdminApiResponse>(
+  path: string,
+  form: FormData,
+  options: { timeoutMs?: number; fallbackError?: string } = {},
+): Promise<AdminSendResult<T>> {
+  clearAdminApiCache();
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), options.timeoutMs ?? 30_000);
+  try {
+    const response = await fetch(path, { method: "POST", body: form, signal: controller.signal });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (response.status === 401 || response.status === 403) {
+      invalidateSession();
+      return { ok: false, error: "La sesión venció. Volvé a iniciar sesión." };
+    }
+    if (response.status === 423) {
+      notifyPanelLocked();
+      return { ok: false, error: "El panel está bloqueado." };
+    }
+    if (response.status < 200 || response.status >= 300) {
+      const message = typeof payload.error === "string" ? payload.error : options.fallbackError || "No pudimos subir el archivo.";
+      return { ok: false, error: message };
+    }
+    return { ok: true, data: payload as T };
+  } catch {
+    return { ok: false, error: options.fallbackError || "No pudimos conectar con el panel." };
+  } finally {
+    window.clearTimeout(timer);
+    clearAdminApiCache();
+  }
+}
