@@ -44,3 +44,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - bordes de controles con contraste AA y aviso de datos fiscales incompletos
 
+## v2.1.22 — 2026-09-23
+
+- estado del paso 4 de bancos y frontera «use client»
+- datos bancarios del presupuesto en isla cliente
+- el campo Banco sugiere el catálogo del BCP
+- catálogo y marcas de bancos desde owncoding-ui
+- montos del panel con el formateador de owncoding-ui (Refs #46)
+
