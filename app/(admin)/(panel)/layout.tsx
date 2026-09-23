@@ -20,7 +20,15 @@ import { getAuthenticatedAdmin } from "@/lib/server/auth";
 export default async function AdminPanelLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const auth = await getAuthenticatedAdmin();
   const requestHeaders = await headers();
-  const host = (requestHeaders.get("host") || "").split(":")[0].toLowerCase();
+  // Mismo criterio de host que el middleware (`x-forwarded-host` primero): en el
+  // paso interno del rewrite de la raíz (issue #53) Next reemplaza `host` por la
+  // dirección del server, y sin esto el host de la demo se perdería y el
+  // visitante caería al login en vez de entrar a la demo.
+  const requestHost = (requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const host = requestHost.split(":")[0];
   const onDemoHost = Boolean(host && host === hostnameOf(publicConfig.demoUrl));
   const pathname = requestHeaders.get("x-pathname") || "";
   if (!auth) {
