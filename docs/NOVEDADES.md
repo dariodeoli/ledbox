@@ -91,3 +91,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - sesión embebida por SSR y GET en vuelo compartidos
 
+## v2.1.31 — 2026-09-23
+
+- la versión del cliente suma entrega, IVA y garantía
+- precio, condiciones y adjunto en el panel
+- costos internos separados, margen y precio final
+
