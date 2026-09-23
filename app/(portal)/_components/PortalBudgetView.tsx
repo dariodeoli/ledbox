@@ -24,6 +24,14 @@ import {
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
 import {
+  applyPortalDemoState,
+  emptyPortalDemoState,
+  readPortalDemoState,
+  reducePortalDemo,
+  writePortalDemoState,
+  type PortalDemoState,
+} from "@/lib/portal-demo";
+import {
   detectPaymentProofMime,
   PAYMENT_PROOF_MAX_BYTES,
   PAYMENT_PROOF_MIMES,
@@ -59,8 +67,13 @@ import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpect
  *
  * El comprobante de pago (issue #17) sigue igual: la foto se comprime en el
  * navegador, el archivo se valida por magic bytes y el binario nunca se sirve
- * en el portal. Con `demo` (issue #29) se muestra arriba el aviso de datos
- * simulados; los links reales no lo llevan.
+ * en el portal.
+ *
+ * Con `demo` (issue #29, issue #52) la vista muestra arriba el aviso de datos
+ * simulados y **no escribe nada**: las acciones del cliente se resuelven en el
+ * navegador (`lib/portal-demo.ts`) y se guardan por sesión, así sobreviven la
+ * navegación de esa visita sin tocar el presupuesto de ejemplo. Los links reales
+ * no llevan el modo y funcionan exactamente igual que siempre.
  */
 
 type DraftItem = { quantity: number; days: number };
@@ -337,8 +350,28 @@ function Stepper({
   );
 }
 
-export function PortalBudgetView({ budget, token, demo = false }: { budget: PortalBudget; token: string; demo?: boolean }) {
+export function PortalBudgetView({
+  budget: canonicalBudget,
+  token,
+  demo = false,
+}: {
+  budget: PortalBudget;
+  token: string;
+  demo?: boolean;
+}) {
   const router = useRouter();
+
+  // Simulación de la visita en modo demo (issue #52): el servidor no la conoce,
+  // se lee de la sesión al montar y se escribe con cada acción simulada.
+  const [demoState, setDemoState] = useState<PortalDemoState | null>(null);
+  useEffect(() => {
+    if (demo) setDemoState(readPortalDemoState(token));
+  }, [demo, token]);
+  /** Vista visible: la canónica, con lo simulado encima cuando es la demo. */
+  const budget = useMemo(
+    () => (demo && demoState ? applyPortalDemoState(canonicalBudget, demoState) : canonicalBudget),
+    [canonicalBudget, demo, demoState],
+  );
 
   // Identidad del cliente: el responsable cargado en la empresa (issue #36) es
   // el valor inicial de quien autoriza y de quien sube el comprobante.
@@ -489,9 +522,24 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
   }
 
   /**
+   * Guarda la simulación de la visita (solo demo): `sessionStorage` por token,
+   * así el estado sobrevive la navegación y otro visitante ve el canónico.
+   */
+  function commitDemo(next: PortalDemoState) {
+    setDemoState(next);
+    writePortalDemoState(token, next);
+  }
+
+  /** Estado simulado vigente (la demo siempre montó con el suyo). */
+  const demoBase = demoState ?? emptyPortalDemoState();
+
+  /**
    * Acción principal única. Autoriza (con o sin ajustes, encadenando `propose`
    * y `approve`) o envía la petición de rebaja o de cambio según la intención
    * elegida, siempre con el nombre del responsable.
+   *
+   * En modo demo la misma acción se resuelve en el navegador (issue #52): no hay
+   * POST ni escritura, y el resultado queda en la sesión de la visita.
    */
   async function runAction(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -509,6 +557,22 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
           return;
         }
         const changes = canEdit ? changedItems(budget, draft) : [];
+        const at = new Date().toISOString();
+        const noteText = note.trim();
+        if (demo) {
+          commitDemo(
+            reducePortalDemo(demoBase, budget, {
+              type: "approve",
+              at,
+              name: name.trim(),
+              note: noteText || null,
+              items: changes,
+              itemsNote: noteText || changeNote(budget, draft) || null,
+            }),
+          );
+          setJustApproved({ already: false });
+          return;
+        }
         if (changes.length > 0) {
           // El ajuste se registra como propuesta para que el panel lo aplique;
           // la autorización viaja en la misma acción, con los montos a la vista.
@@ -546,6 +610,21 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
           setActionError("El monto pedido no puede superar el subtotal del presupuesto.");
           return;
         }
+        const at = new Date().toISOString();
+        if (demo) {
+          commitDemo(
+            reducePortalDemo(demoBase, budget, {
+              type: "discount",
+              at,
+              name: name.trim(),
+              note: note.trim(),
+              discount: { type: discountType, value: discountType === "percent" ? discountNumber : discountAmount, amount: discountAmount },
+            }),
+          );
+          setJustRequested({ kind: "discount", at, note: note.trim() });
+          setNote("");
+          return;
+        }
         await postPortal("propose", {
           kind: "discount",
           name: name.trim(),
@@ -560,6 +639,13 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
 
       if (!note.trim()) {
         setActionError("Contanos qué cambio necesitás.");
+        return;
+      }
+      const revisionAt = new Date().toISOString();
+      if (demo) {
+        commitDemo(reducePortalDemo(demoBase, budget, { type: "revision", at: revisionAt, name: name.trim(), note: note.trim() }));
+        setJustRequested({ kind: "change", at: revisionAt, note: note.trim() });
+        setNote("");
         return;
       }
       await postPortal("revision", { name: name.trim(), note: note.trim() });
@@ -625,7 +711,11 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
     }
   }
 
-  /** Sube el comprobante (foto comprimida o PDF) y refresca la vista del presupuesto. */
+  /**
+   * Sube el comprobante (foto comprimida o PDF) y refresca la vista del
+   * presupuesto. En modo demo no hay subida: se guarda el metadato en la sesión
+   * de la visita, igual que los demás comprobantes del portal (issue #52).
+   */
   async function submitProof(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (proofName.trim().length < 3) {
@@ -642,6 +732,24 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
       const prepared = await prepareProofFile(proofFile);
       if ("error" in prepared) {
         setProofError(prepared.error);
+        return;
+      }
+      if (demo) {
+        commitDemo(
+          reducePortalDemo(demoBase, budget, {
+            type: "proof",
+            at: new Date().toISOString(),
+            proof: {
+              uploadedByName: proofName.trim(),
+              mime: prepared.mime,
+              size: prepared.blob.size,
+              expectedPaymentId: proofExpectedId || null,
+            },
+          }),
+        );
+        setProofSent(true);
+        setProofFile(null);
+        if (proofInputRef.current) proofInputRef.current.value = "";
         return;
       }
       const form = new FormData();
@@ -695,8 +803,9 @@ export function PortalBudgetView({ budget, token, demo = false }: { budget: Port
             Presupuesto de ejemplo · datos simulados
           </h2>
           <p className="portal-banner-note">
-            Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios y podés probar la
-            autogestión sin compromiso. <Link href="/portal">Volver a la portada</Link>.
+            Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios. Lo que hagas acá se
+            simula <strong>en tu navegador</strong> y no modifica el ejemplo —otro visitante ve el mismo estado—, así que
+            podés probar la autogestión sin compromiso. <Link href="/portal">Volver a la portada</Link>.
           </p>
         </section>
       ) : null}

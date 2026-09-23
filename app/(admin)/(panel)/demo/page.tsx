@@ -222,9 +222,10 @@ export default async function DemoPage() {
     db.mailLog.findMany({ where: { organizationId }, orderBy: [{ createdAt: "desc" }], take: 5 }),
   ]);
 
-  // Autogestión siempre viva (22-09-2026): si el ejemplo abierto se consumió
-  // (un visitante ensayó la aprobación en el portal), se vuelve a sembrar el
-  // dataset —igual que la entrada del portal— para que la demo conserve el caso.
+  // Autogestión siempre viva: red de seguridad (issue #52). El portal de la demo
+  // ya no escribe —las acciones se simulan en el navegador—, así que el caso no
+  // debería consumirse; si otra vía lo cerró, se vuelve a sembrar el dataset,
+  // igual que la entrada del portal, para que la demo conserve el caso.
   let openBudget = openBudgetRow;
   if (!openBudget) {
     await ensureDemoData({ reset: true });
@@ -716,8 +717,8 @@ export default async function DemoPage() {
             </h3>
             <p>
               {openBudget ? `«${openBudget.title}»` : "Un presupuesto abierto"} está sin aprobar: entrá con el link o el QR
-              y probá la autogestión del cliente — cambá cantidades y días, o pedí una rebaja. La solicitud queda pendiente
-              para que el equipo la resuelva desde el panel.
+              y probá la autogestión del cliente — cambá cantidades y días, o pedí una rebaja. La simulación corre en tu
+              navegador (la demo no se escribe) y la solicitud pendiente del panel sigue siendo la del dataset.
             </p>
             {pendingUrl && pendingQr && openBudget?.publicToken ? (
               <div className="admin-demo-portal">

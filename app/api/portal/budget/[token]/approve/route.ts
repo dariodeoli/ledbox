@@ -1,6 +1,7 @@
 import { db } from "@/lib/server/db";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { approvalEvidence, loadPublicBudget, portalBudgetOpen } from "@/lib/server/budget-portal";
+import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
@@ -52,6 +53,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     : null;
   if (!budget) return jsonError("No encontramos ese presupuesto.", 404);
+  // Issue #52: la empresa demo no escribe. El portal simula la aprobación en el
+  // navegador; un POST viejo o de un cliente suelto también queda rechazado.
+  if (await isDemoOrganizationId(budget.organizationId)) return jsonError("Modo demo: solo lectura", 403);
   if (!portalBudgetOpen(budget.status)) return jsonError("Este presupuesto ya no está disponible para aprobar.", 409);
 
   const body = (await readJson(request)) as Record<string, unknown>;

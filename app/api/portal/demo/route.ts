@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
  * `SENT` con link público activo (el de autogestión, para poder ajustar ítems,
  * pedir rebaja y enviar propuesta) y:
  *
- * - con navegador (default) responde `303` a `/p/<código>?demo=1`, el aviso de
- *   «Presupuesto de ejemplo · datos simulados»;
+ * - con navegador (default) responde `303` a `/p/<código>` —sin marcador: el
+ *   modo demo se detecta en el servidor por la empresa del presupuesto
+ *   (issue #52)—;
  * - con `Accept: application/json` o `?format=json` responde `{ code, path }`
  *   para consumirlo por fetch sin navegar.
  *
@@ -33,9 +34,13 @@ function wantsJson(request: Request): boolean {
   return (request.headers.get("accept") || "").toLowerCase().includes("application/json");
 }
 
-/** `demo=1` enciende el aviso de datos simulados en el presupuesto. */
+/**
+ * Path del presupuesto de ejemplo. Sin `?demo=1` (issue #52): el modo demo se
+ * detecta en el servidor por la empresa del presupuesto, así el link del panel,
+ * el QR y el enlace guardado funcionan igual.
+ */
 function demoPath(code: string): string {
-  return `/p/${code}?demo=1`;
+  return `/p/${code}`;
 }
 
 /** Demo no disponible: mensaje claro en JSON o vuelta a la portada con aviso. */
@@ -53,9 +58,10 @@ export async function GET(request: Request) {
     const demo = await ensureDemoData();
     let budget = await loadDemoPortalBudget(demo.organizationId);
     if (!budget) {
-      // Una visita anterior pudo aprobar el presupuesto de autogestión: se vuelve
-      // al dataset canónico (wipe + alta idempotente con advisory lock) para que
-      // la demo nunca se quede sin el caso de autogestión.
+      // Red de seguridad (issue #52): el portal de la demo ya no escribe, así
+      // que el caso de autogestión no debería consumirse; si una visita vieja
+      // —o cualquier otra vía— lo cerró, se vuelve al dataset canónico
+      // (wipe + alta idempotente con advisory lock).
       await ensureDemoData({ reset: true });
       budget = await loadDemoPortalBudget(demo.organizationId);
     }
