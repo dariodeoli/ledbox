@@ -186,9 +186,7 @@ export function FacturacionModule() {
     purchases: payload.purchases ?? [],
     periods: payload.fiscalPeriods ?? [],
   }));
-  const clients = useAdminResource("/api/admin/clients", (payload) => (payload.clients ?? []) as AdminClientRow[]);
   const budgets = useAdminResource("/api/admin/budgets", (payload) => (payload.budgets ?? []) as AdminBudgetRow[]);
-  const suppliers = useAdminResource("/api/admin/suppliers", (payload) => (payload.suppliers ?? []) as AdminSupplierRow[]);
 
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
@@ -202,6 +200,15 @@ export function FacturacionModule() {
   const [voidTarget, setVoidTarget] = useState<AdminInvoiceRow | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [purchaseForm, setPurchaseForm] = useState<PurchaseForm | null>(null);
+  // Catálogos de los diálogos (issue #59): clientes y proveedores solo alimentan
+  // sus formularios, así que se piden al abrirlos. Los presupuestos aprobados se
+  // siguen pidiendo al entrar: la pestaña los lista para facturar.
+  const clients = useAdminResource("/api/admin/clients", (payload) => (payload.clients ?? []) as AdminClientRow[], {
+    enabled: invoiceForm !== null,
+  });
+  const suppliers = useAdminResource("/api/admin/suppliers", (payload) => (payload.suppliers ?? []) as AdminSupplierRow[], {
+    enabled: purchaseForm !== null,
+  });
   const [deleteTarget, setDeleteTarget] = useState<AdminPurchaseInvoiceRow | null>(null);
   // Cierre y reapertura.
   const [confirmClose, setConfirmClose] = useState(false);

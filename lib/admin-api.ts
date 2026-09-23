@@ -219,10 +219,21 @@ async function sendMutation<T>(
   return { ok: true, data: outcome.payload as T };
 }
 
-/** Bloque de datos del panel: carga, error, reintento y `reload` que saltea la caché. */
-export function useAdminResource<T>(path: string, pick: (payload: AdminApiResponse) => T) {
+/**
+ * Recurso GET del panel: carga, error, reintento y `reload` que saltea la caché.
+ *
+ * `enabled` (issue #59) permite diferir el pedido hasta que haga falta (por
+ * ejemplo, los catálogos que solo alimentan selects de un diálogo): con `false`
+ * no se pide nada y `loading` queda en `false`; al pasar a `true` se carga.
+ */
+export function useAdminResource<T>(
+  path: string,
+  pick: (payload: AdminApiResponse) => T,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = options.enabled ?? true;
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
   const pickRef = useRef(pick);
 
@@ -231,10 +242,10 @@ export function useAdminResource<T>(path: string, pick: (payload: AdminApiRespon
   });
 
   const load = useCallback(
-    async (options?: { fresh?: boolean }) => {
+    async (loadOptions?: { fresh?: boolean }) => {
       setLoading(true);
       setError("");
-      const result = await adminApiGet<AdminApiResponse>(path, { fresh: options?.fresh ?? false });
+      const result = await adminApiGet<AdminApiResponse>(path, { fresh: loadOptions?.fresh ?? false });
       if (!result.ok) {
         if (!result.sessionInvalid) setError(result.error);
         setLoading(false);
@@ -247,8 +258,8 @@ export function useAdminResource<T>(path: string, pick: (payload: AdminApiRespon
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (enabled) void load();
+  }, [enabled, load]);
 
   const reload = useCallback(() => {
     void load({ fresh: true });

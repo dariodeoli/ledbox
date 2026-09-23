@@ -729,8 +729,6 @@ export function PresupuestosModule() {
     budgets: payload.budgets ?? [],
     requests: payload.budgetRequests ?? [],
   }));
-  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
-  const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? []);
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -738,6 +736,11 @@ export function PresupuestosModule() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  // Catálogos del alta de presupuesto (issue #59): cliente y evento solo se usan
+  // en ese formulario, así que se piden al abrirlo y no en el primer render (la
+  // lista ya trae cliente y evento de cada presupuesto).
+  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? [], { enabled: showForm });
+  const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? [], { enabled: showForm });
   const [notice, setNotice] = useState("");
   const [boardError, setBoardError] = useState("");
   const [view, setView] = useAdminModuleView("presupuestos");
@@ -1311,7 +1314,10 @@ export function PresupuestosModule() {
             value={form.clientId}
             onChange={(value) => setForm({ ...form, clientId: value })}
             options={[
-              { value: "", label: "Elegí un cliente…" },
+              {
+                value: "",
+                label: clients.loading ? "Cargando clientes…" : clients.error ? "No pudimos cargar los clientes" : "Elegí un cliente…",
+              },
               ...clientOptions.map((client) => ({ value: client.id, label: client.company || client.name })),
             ]}
           />
@@ -1320,7 +1326,10 @@ export function PresupuestosModule() {
             hint="Opcional"
             value={form.eventId}
             onChange={(value) => setForm({ ...form, eventId: value })}
-            options={[{ value: "", label: "Sin evento asociado" }, ...eventOptions.map((event) => ({ value: event.id, label: event.name }))]}
+            options={[
+              { value: "", label: events.loading ? "Cargando eventos…" : "Sin evento asociado" },
+              ...eventOptions.map((event) => ({ value: event.id, label: event.name })),
+            ]}
           />
           <TextField
             label="Título"
