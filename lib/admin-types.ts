@@ -319,7 +319,16 @@ export type AdminBudgetRow = {
   discount: number;
   total: number;
   costEstimate: number;
+  /** Costos internos separados (issue #65): materiales y mano de obra. */
+  materialCost: number;
+  laborCost: number;
   validUntil: string | null;
+  /** Fecha de entrega comprometida (issue #65). */
+  deliveryAt: string | null;
+  /** Condición de IVA del presupuesto (issue #65). */
+  ivaType: AdminInvoiceTaxType | null;
+  /** Garantía ofrecida al cliente (issue #65). */
+  warranty: string | null;
   createdAt: string;
   notes: string | null;
   client: AdminClientRef;
@@ -341,7 +350,50 @@ export type AdminBudgetRow = {
   approvalNote: string | null;
   revisionRequestedAt: string | null;
   revisionNote: string | null;
+  /** Adjuntos internos (issue #65): metadatos, el binario se sirve con sesión. */
+  attachments?: AdminBudgetAttachmentRow[];
 };
+
+// ── Adjuntos del presupuesto (issue #65) ────────────────────────────────────
+// El PDF original (u otro archivo de trabajo) vive en la base y nunca se
+// publica: mismo patrón que los comprobantes de pago (issue #17).
+
+/** Formatos aceptados para un adjunto: los mismos archivos que el kit sube (≤5 MiB). */
+export const BUDGET_ATTACHMENT_MIMES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+export type BudgetAttachmentMime = (typeof BUDGET_ATTACHMENT_MIMES)[number];
+/** Tope del adjunto (docs/REGLAS-GENERALES.md: adjuntos hasta 5 MiB). */
+export const BUDGET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const BUDGET_ATTACHMENT_MAX_NAME = 160;
+
+/** Metadatos de un adjunto (sin el binario). */
+export type AdminBudgetAttachmentRow = {
+  id: string;
+  budgetId: string;
+  name: string;
+  mime: string;
+  size: number;
+  uploadedByName: string;
+  createdAt: string;
+};
+
+/**
+ * Nombre ASCII del adjunto servido con sesión: conserva el nombre original
+ * (sin caracteres raros) y cae a `adjunto-<referencia>.<ext>` si no sirve.
+ */
+export function budgetAttachmentFileName(name: string, mime: string, reference: string): string {
+  const clean = String(name ?? "")
+    .trim()
+    .replace(/[^\w.\- ]+/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+  if (clean && clean.includes(".")) return clean;
+  const ref = String(reference ?? "").trim().toUpperCase() || "presupuesto";
+  return `adjunto-${ref}.${paymentProofExtension(mime)}`;
+}
+
+/** Condición de IVA de la versión que ve el cliente (issue #65). */
+export const BUDGET_IVA_TYPES = ["GRAVADA_10", "GRAVADA_5", "EXENTA"] as const;
+export type BudgetIvaType = (typeof BUDGET_IVA_TYPES)[number];
 
 // ── Solicitudes del portal (issue #14) ──────────────────────────────────────
 // El cliente propone cantidades/días o pide una rebaja; el equipo acepta

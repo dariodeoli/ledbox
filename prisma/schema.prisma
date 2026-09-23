@@ -150,6 +150,7 @@ model Organization {
   expectedPayments  ExpectedPayment[]
   paymentReminders  PaymentReminderLog[]
   paymentProofs     BudgetPaymentProof[]
+  budgetAttachments BudgetAttachment[]
   mailLogs          MailLog[]
   messageTemplates  MessageTemplate[]
   suppliers         Supplier[]
@@ -681,7 +682,18 @@ model Budget {
   discount             Int                   @default(0)
   total                Int                   @default(0)
   costEstimate         Int                   @default(0)
+  // Costos internos (issue #65): materiales y mano de obra se guardan aparte
+  // del costo por ítem (`BudgetItem.costPrice`) y del estimado (`costEstimate`).
+  // Nunca salen al cliente: el portal y el imprimible los excluyen por contrato.
+  materialCost         Int                   @default(0)
+  laborCost            Int                   @default(0)
   validUntil           DateTime?
+  /// Fecha de entrega comprometida (issue #65); la vigencia es `validUntil`.
+  deliveryAt           DateTime?
+  /// Condición de IVA del presupuesto (issue #65): `GRAVADA_10`, `GRAVADA_5` o `EXENTA`.
+  ivaType              String?
+  /// Garantía ofrecida al cliente (issue #65), texto libre.
+  warranty             String?
   notes                String?
   // Plan de pagos (issue #14): anticipo y cuotas visibles en el portal.
   // `installmentsJson` guarda `[{ label, amount, dueAt }]` (dueAt `YYYY-MM-DD`).
@@ -714,6 +726,8 @@ model Budget {
   payments             ClientPayment[]
   changeRequests       BudgetChangeRequest[]
   paymentProofs        BudgetPaymentProof[]
+  /// Adjuntos internos del presupuesto (issue #65): el PDF original u otro archivo.
+  attachments          BudgetAttachment[]
   /// Pagos esperados del plan (issue #28): anticipo, cuotas y saldo.
   expectedPayments     ExpectedPayment[]
   invoices             Invoice[]
@@ -906,6 +920,27 @@ model BudgetPaymentProof {
   @@index([paymentId])
 }
 
+/// Adjunto interno de un presupuesto (issue #65): el PDF original del cliente u
+/// otro archivo de trabajo. Mismo patrón que los comprobantes (issue #17): el
+/// binario vive en la base —compatible con los backups, sin almacenamiento
+/// externo— y se sirve solo con sesión (`/api/admin/budgets/attachments/[id]`).
+/// Nunca se publica en el portal ni en el imprimible.
+model BudgetAttachment {
+  id             String       @id
+  organizationId String
+  budgetId       String
+  uploadedByName String
+  name           String
+  mime           String
+  size           Int
+  data           Bytes
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  budget         Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, budgetId, createdAt])
+}
+
 enum ExpectedPaymentConcept {
   advance
   installment
@@ -1090,24 +1125,24 @@ enum ExpenseCategory {
  * con `sortOrder`.
  */
 model TreasuryAccount {
-  id               String              @id
-  organizationId   String
-  name             String
-  type             TreasuryAccountType @default(CASH)
-  bank             String?
-  currency         String              @default("PYG")
-  openingBalance   Int                 @default(0)
-  sortOrder        Int                 @default(0)
-  active           Boolean             @default(true)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  movements        TreasuryMovement[]  @relation("TreasuryMovementAccount")
-  counterMovements TreasuryMovement[]  @relation("TreasuryMovementCounterAccount")
-  clientPayments   ClientPayment[]
-  expectedPayments ExpectedPayment[]   @relation("ExpectedPaymentAccount")
-  expenses         Expense[]
-  bankStatements   BankStatement[]      @relation("BankStatementAccount")
+  id                String              @id
+  organizationId    String
+  name              String
+  type              TreasuryAccountType @default(CASH)
+  bank              String?
+  currency          String              @default("PYG")
+  openingBalance    Int                 @default(0)
+  sortOrder         Int                 @default(0)
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  movements         TreasuryMovement[]  @relation("TreasuryMovementAccount")
+  counterMovements  TreasuryMovement[]  @relation("TreasuryMovementCounterAccount")
+  clientPayments    ClientPayment[]
+  expectedPayments  ExpectedPayment[]   @relation("ExpectedPaymentAccount")
+  expenses          Expense[]
+  bankStatements    BankStatement[]     @relation("BankStatementAccount")
   bankStatementRows BankStatementRow[]  @relation("BankStatementRowAccount")
 
   @@unique([organizationId, name])
@@ -1122,24 +1157,24 @@ model TreasuryAccount {
  * correo) para que la traza sobreviva a renombres o bajas de cuentas.
  */
 model TreasuryMovement {
-  id               String                    @id
-  organizationId   String
-  accountId        String
+  id                String                    @id
+  organizationId    String
+  accountId         String
   /**
    * Cuenta destino de una transferencia; `null` en entradas y salidas.
    */
-  counterAccountId String?
-  direction        TreasuryMovementDirection
-  amount           Int
+  counterAccountId  String?
+  direction         TreasuryMovementDirection
+  amount            Int
   /**
    * Fecha real del movimiento (día de Asunción, mediodía).
    */
-  occurredAt       DateTime
-  origin           TreasuryMovementOrigin    @default(adjustment)
+  occurredAt        DateTime
+  origin            TreasuryMovementOrigin    @default(adjustment)
   /**
    * Id del hecho que lo generó (cobro, trabajo de proveedor o gasto).
    */
-  sourceId         String?
+  sourceId          String?
   /**
    * Snapshot inmutable del hecho que originó el movimiento (issue #20): la
    * etiqueta y los datos que importaban al registrarlo (`{ kind, label, amount,
@@ -1148,15 +1183,15 @@ model TreasuryMovement {
    * la historia. Los movimientos anteriores a la migración caen a la lectura
    * viva de la fuente.
    */
-  sourceSnapshot   Json?
-  notes            String?
-  createdById      String?
-  createdByName    String
-  createdByEmail   String?
-  createdAt        DateTime                  @default(now())
-  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  account          TreasuryAccount           @relation("TreasuryMovementAccount", fields: [accountId], references: [id], onDelete: Cascade)
-  counterAccount   TreasuryAccount?          @relation("TreasuryMovementCounterAccount", fields: [counterAccountId], references: [id], onDelete: SetNull)
+  sourceSnapshot    Json?
+  notes             String?
+  createdById       String?
+  createdByName     String
+  createdByEmail    String?
+  createdAt         DateTime                  @default(now())
+  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account           TreasuryAccount           @relation("TreasuryMovementAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  counterAccount    TreasuryAccount?          @relation("TreasuryMovementCounterAccount", fields: [counterAccountId], references: [id], onDelete: SetNull)
   bankStatementRows BankStatementRow[]
 
   @@index([organizationId, occurredAt])
@@ -1260,7 +1295,7 @@ model BankStatement {
  * conciliación. `raw` conserva el renglón original para la trazabilidad.
  */
 model BankStatementRow {
-  id             String                   @id
+  id             String                    @id
   statementId    String
   organizationId String
   accountId      String
@@ -1273,7 +1308,7 @@ model BankStatementRow {
   direction      BankStatementRowDirection
   /// Monto absoluto en guaraníes; el signo lo da `direction`.
   amount         Int
-  status         BankStatementRowStatus   @default(PENDING)
+  status         BankStatementRowStatus    @default(PENDING)
   /// Huella normalizada (día | dirección | monto | descripción | referencia).
   fingerprint    String
   /// Renglón original del archivo (acotado), para la trazabilidad.
@@ -1283,12 +1318,12 @@ model BankStatementRow {
   matchedById    String?
   matchedByName  String?
   matchedByEmail String?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
-  statement      BankStatement            @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  account        TreasuryAccount          @relation("BankStatementRowAccount", fields: [accountId], references: [id], onDelete: Cascade)
-  movement       TreasuryMovement?        @relation(fields: [movementId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  statement      BankStatement             @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        TreasuryAccount           @relation("BankStatementRowAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  movement       TreasuryMovement?         @relation(fields: [movementId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, accountId, date])
   @@index([organizationId, status])
