@@ -77,6 +77,12 @@ function absoluteOnRequestHost(request: NextRequest, path: string): URL {
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  // La ruta pedida viaja al panel en todas las superficies: el layout del panel
+  // la usa para distinguir la entrada a la demo (`/demo`, issue #14) del resto de
+  // las pantallas sin sesión, que van al login (issue #51).
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", `${pathname}${search}`);
+  const pass = () => NextResponse.next({ request: { headers: requestHeaders } });
   const legacyAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const onAdminHost = requestHost(request) === adminHost();
   const onClientHost = requestHost(request) === clientHost();
@@ -95,7 +101,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/producto";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onAdminHost) {
@@ -110,7 +116,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/dashboard";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onClientHost) {
@@ -122,7 +128,7 @@ export function middleware(request: NextRequest) {
       url.pathname = "/portal";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
+    return pass();
   }
 
   if (onDemoHost) {
@@ -134,16 +140,16 @@ export function middleware(request: NextRequest) {
       const clean = pathname.slice("/demo".length) || "/";
       return NextResponse.redirect(absoluteOnRequestHost(request, `${clean}${search}`), 308);
     }
-    // El layout del panel lee `x-pathname` para devolver al visitante a la misma
-    // pantalla después de crear la sesión demo (links profundos incluidos).
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-pathname", `${pathname}${search}`);
+    // El layout del panel lee `x-pathname` (seteado arriba) para devolver al
+    // visitante a la misma pantalla después de crear la sesión demo (links
+    // profundos incluidos) y para distinguir la entrada a la demo del resto de
+    // las pantallas sin sesión, que van al login (issue #51).
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/demo";
       return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
     }
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    return pass();
   }
 
   // Host público: el panel solo vive en el subdominio de la app (en producción).
@@ -159,7 +165,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`${clean}${search}`, ADMIN_URL), 308);
   }
 
-  return NextResponse.next();
+  return pass();
 }
 
 export const config = {
