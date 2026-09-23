@@ -17,6 +17,9 @@ o encaminados.
   Se pasa a Corporativo (sin tope) si el volumen lo pide.
 - **Rama `lib` de la librería**: nuestra línea queda en **v0.14.0** (publicada);
   la cosecha de PagaYa/ScaleOS sale como **v0.15.0** cuando su dueño la cierre.
+- **Token de build para la librería**: **resuelto** — `dariodeoli/owncoding-ui`
+  es público: v0.14.0 se instaló sin token (`e1fae8b`) y el build de Coolify
+  tampoco lo necesita (detalle en `docs/ADOPCION-OWNCODING-UI.md`, §7).
 
 ## Pendientes del dueño (acción tuya)
 
@@ -26,6 +29,3 @@ o encaminados.
 - **Datos fiscales**: cargar RUC/razón social/**timbrado**/establecimiento en
   `/facturacion → Datos fiscales`. Mientras falten, el módulo muestra un aviso
   con el paso a paso (y el imprimible sale incompleto).
-- **Token de build para la librería**: al adoptar `owncoding-ui` (ya publicado
-  v0.14.0), Coolify necesita un token de lectura del repo privado
-  (`GITHUB_TOKEN`; detalle en `docs/ADOPCION-OWNCODING-UI.md`, §7).
