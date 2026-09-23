@@ -81,3 +81,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - nav consolidado 18→13 y pasada mobile con arrastre táctil
 
+## v2.1.28 — 2026-09-23
+
+- /api/admin/finance devuelve solo lo que la pantalla usa
+- el documento va del servidor y el comprobante se carga al enviar
+- selectores con campos mínimos y catálogo recortado
+
