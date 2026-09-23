@@ -66,6 +66,11 @@ import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminM
 import { EmailField, PhoneField, SearchField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { FIELD_LIMITS, FIELD_MESSAGES, emailValid } from "@/lib/field-rules";
+import { AdminViewSwitch, useAdminModuleView } from "../AdminBoard";
+import { AdminCardGrid, type AdminCardData } from "../AdminCards";
+
+/** Vistas de la cartera (issue #57): lista densa y cuadrícula de fichas. */
+const CLIENTES_VIEWS = ["list", "grid"] as const;
 
 const TYPE_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -299,6 +304,7 @@ export function ClientesModule() {
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
   const [detail, setDetail] = useState<AdminClientRow | null>(null);
+  const [view, setView] = useAdminModuleView("clientes", CLIENTES_VIEWS);
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente elegido. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
@@ -492,6 +498,7 @@ export function ClientesModule() {
         <AdminSelect value={type} onChange={setType} label="Filtrar por tipo" options={TYPE_OPTIONS} />
         <AdminSelect value={filter} onChange={setFilter} label="Filtrar la cartera" options={FILTER_OPTIONS} />
         <AdminSelect value={order} onChange={setOrder} label="Ordenar clientes por" options={ORDER_OPTIONS} />
+        <AdminViewSwitch view={view} onChange={setView} label="Vista de clientes" views={CLIENTES_VIEWS} />
         {writable ? (
           <AdminButton
             variant="primary"
@@ -683,6 +690,95 @@ export function ClientesModule() {
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro." />
+        ) : view === "grid" ? (
+          <AdminCardGrid label="Clientes" cards={rows.map((client): AdminCardData => {
+            const name = clientLabel(client);
+            const metrics = client.metrics;
+            const contact = [client.contactPhone || client.phone, client.contactEmail || client.email].filter(Boolean).join(" · ");
+            const lastActivity = metrics.lastActivityAt ? formatDateShort(metrics.lastActivityAt) : null;
+            return {
+              id: client.id,
+              title: (
+                <>
+                  <ClientLogo client={client} size={22} />
+                  <strong>{name}</strong>
+                </>
+              ),
+              titleTooltip: `${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`,
+              subtitle: [client.company && client.company !== name ? client.company : null, contact].filter(Boolean).join(" · ") || null,
+              badges: [
+                { label: clientTypeLabel(client.type), tone: client.type === "RESELLER" ? "accent" : "neutral" },
+                { label: client.active ? "Activo" : "Inactivo", tone: client.active ? "ok" : "neutral" },
+                ...(client.contactName
+                  ? []
+                  : [
+                      {
+                        label: "Sin responsable",
+                        tone: "warn" as const,
+                        title: `Sin responsable cargado: el portal no puede prellenar quién autoriza el presupuesto de ${name}`,
+                      },
+                    ]),
+              ],
+              fields: [
+                {
+                  label: "Contratado",
+                  value: metrics.contracts > 0 ? formatMoney(metrics.contracted) : "—",
+                  title:
+                    metrics.contracts > 0
+                      ? `${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"} · ticket promedio ${formatMoney(metrics.averageTicket)}`
+                      : "Sin contratos aprobados",
+                },
+                { label: "Eventos", value: formatNumber(client._count.events), title: `${client._count.events} eventos` },
+                { label: "Presupuestos", value: formatNumber(client._count.budgets), title: `${client._count.budgets} presupuestos` },
+                {
+                  label: "Deuda vencida",
+                  value: metrics.overdue > 0 ? formatMoney(metrics.overdue) : "—",
+                  title:
+                    metrics.overdue > 0
+                      ? `${formatMoney(metrics.overdue)} en ${formatNumber(metrics.overdueCount)} cobro${metrics.overdueCount === 1 ? "" : "s"} vencido${metrics.overdueCount === 1 ? "" : "s"}`
+                      : "Sin cobros vencidos",
+                },
+                {
+                  label: "Última actividad",
+                  value: lastActivity ?? "—",
+                  title: metrics.lastActivityAt
+                    ? `Última actividad comercial: ${formatDate(metrics.lastActivityAt)}`
+                    : "Sin actividad comercial registrada",
+                },
+              ],
+              footer: (
+                <span className="admin-actions">
+                  <AdminButton
+                    icon="eye"
+                    title={`Ver la ficha de ${name}`}
+                    aria-label={`Ver la ficha de ${name}`}
+                    onClick={() => setDetail(client)}
+                  />
+                  <ClientLinks client={client} name={name} compact skipWhatsapp={writable} />
+                  {writable && whatsappHref(client.whatsapp || client.phone) ? (
+                    <AdminWhatsappTemplateButton
+                      title={`Enviar por WhatsApp con plantilla a ${name}`}
+                      onClick={() =>
+                        setTemplateTarget({
+                          kind: "client",
+                          id: client.id,
+                          label: name,
+                          phone: client.whatsapp || client.phone,
+                        })
+                      }
+                    />
+                  ) : null}
+                  {client.contactEmail || client.email ? (
+                    <AdminIconLink
+                      href={`mailto:${client.contactEmail || client.email}`}
+                      icon="mail"
+                      label={`Enviar correo a ${name}`}
+                    />
+                  ) : null}
+                </span>
+              ),
+            };
+          })} />
         ) : (
           <AdminTable
             view="clientes"

@@ -251,9 +251,11 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
   /**
    * En el host de la demo la presentación es la raíz `/` (issue #53: rewrite sin
    * segmento visible); en el resto de los hosts sigue siendo la ruta `/demo`.
-   * Se resuelve después de montar, así el SSR y la hidratación coinciden.
+   * El servidor ya sabe en qué host está (`demoHost`, issue #58): se usa desde el
+   * primer render para que el chip nunca apunte a `/demo` en la URL limpia (el
+   * chequeo del navegador queda como respaldo).
    */
-  const [demoHome, setDemoHome] = useState("/demo");
+  const [demoHome, setDemoHome] = useState(demoHost ? "/" : "/demo");
   useEffect(() => {
     try {
       if (window.location.hostname.toLowerCase() === new URL(publicConfig.demoUrl).hostname.toLowerCase()) setDemoHome("/");
@@ -852,7 +854,7 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
                 <Link
                   className="admin-demo-chip"
                   href={demoHome}
-                  title="Estás en la demo de LedBox con datos simulados · Volver a la presentación"
+                  title="Estás en la demo de EventOS · datos simulados y solo lectura · Volver a la presentación"
                 >
                   DEMO
                 </Link>
@@ -878,9 +880,12 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
               <Link className="admin-demo-badge" href={demoHome} title="Volver a la presentación de la demo">
                 DEMO
               </Link>
-              <p className="admin-demo-banner-text">
+              <p className="admin-demo-banner-text" title="Demo de EventOS con datos simulados: solo lectura, no se guardan cambios y no se toca información real. Lo que simules en el portal del cliente vive solo en tu pestaña.">
                 <strong>Datos simulados</strong>
-                <span>Recorré el panel completo: es de solo lectura y no toca datos reales.</span>
+                <span>
+                  Recorré el panel completo: es de solo lectura, no se guardan cambios y no toca información real; lo que
+                  simules en el portal vive solo en tu pestaña.
+                </span>
               </p>
               <button
                 type="button"

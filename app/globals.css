@@ -1680,6 +1680,38 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-demo-qr svg { display: block; width: 116px; height: auto; }
 .admin-demo-portal-data { display: grid; gap: 8px; justify-items: start; min-width: min(100%, 16rem); }
 .admin-demo-portal-link { margin: 0; color: var(--a-muted-2); font-size: 11px; overflow-wrap: anywhere; }
+
+/* Recorrido guiado y casos fuertes de la demo (issue #58). El recorrido es un
+   panel compacto con pasos numerados; los casos fuertes, accesos directos al
+   caso difícil con su conteo real. */
+.admin-demo-tour { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-demo-tour-head { display: flex; align-items: center; gap: 8px; }
+.admin-demo-tour-head .admin-panel-meta { margin-left: auto; }
+.admin-demo-tour-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.admin-demo-tour-step { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid var(--a-line); border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .04em; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.admin-demo-tour-step:hover { border-color: var(--a-line-2); color: var(--a-accent); }
+.admin-demo-tour-step[aria-current="step"] { border-color: color-mix(in srgb, var(--a-accent) 45%, transparent); background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-demo-tour-num { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--a-panel-2); color: var(--a-muted-2); font: 800 10px var(--font-body); font-variant-numeric: tabular-nums; }
+.admin-demo-tour-step[aria-current="step"] .admin-demo-tour-num { background: var(--a-panel); color: var(--a-accent); }
+.admin-demo-tour-body { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-demo-tour-what { margin: 0; color: var(--a-text-strong); font-size: 12.5px; line-height: 1.5; }
+.admin-demo-tour .admin-demo-actions--inline { margin-top: 0; }
+
+.admin-demo-cases { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-demo-cases-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.admin-demo-cases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 8px; }
+.admin-demo-case { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 12px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; transition: border-color .15s, background .15s; }
+.admin-demo-case:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
+.admin-demo-case-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 8px; background: var(--a-panel); color: var(--a-muted-2); font: 800 13px var(--font-body); font-variant-numeric: tabular-nums; }
+.admin-demo-case-count[data-tone="accent"] { color: var(--a-accent); }
+.admin-demo-case-count[data-tone="ok"] { color: var(--a-ok); }
+.admin-demo-case-count[data-tone="warn"] { color: var(--a-warn); }
+.admin-demo-case-count[data-tone="danger"] { color: var(--a-danger); }
+.admin-demo-case-text { display: grid; min-width: 0; }
+.admin-demo-case-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-demo-case-text small { overflow: hidden; color: var(--a-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-demo-case > .admin-icon { color: var(--a-muted); }
+
 @media (max-width: 720px) {
   .admin-demo-banner { flex-wrap: wrap; padding: 8px 12px; }
   .admin-demo-banner-text span { display: none; }
@@ -1738,6 +1770,29 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-board-move { width: 100%; max-width: none; height: 28px; font-size: 11px; }
 @media (max-width: 720px) {
   .admin-board { --a-board-col: min(78vw, 16.5rem); }
+}
+
+/* ── Vista cuadrícula (issue #57) ──
+   Tarjetas con pie anclado y misma altura por fila para los módulos sin
+   pipeline (inventario, clientes, proveedores). El ancho es fluido: en mobile
+   cae a una sola columna. */
+.admin-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); margin: 0; padding: 0; list-style: none; }
+.admin-cards-item { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-cards-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-cards-title { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--a-text-strong); font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-title .admin-cell-sub { overflow: hidden; font-weight: 400; text-overflow: ellipsis; }
+.admin-cards-badges { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.admin-cards-sub { margin: 0; overflow: hidden; color: var(--a-muted-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-fields { display: grid; gap: 4px; margin: 0; }
+.admin-cards-field { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.admin-cards-field dt { flex: 0 0 auto; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-cards-field dd { min-width: 0; margin: 0; overflow: hidden; color: var(--a-text); font-size: 12.5px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-field dd .admin-filter { max-width: 100%; }
+.admin-cards-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--a-line); }
+.admin-cards-foot > .admin-actions { flex: 1 1 auto; }
+.admin-cards-foot > .admin-filter { flex: 0 1 9.5rem; margin-right: auto; }
+@media (max-width: 480px) {
+  .admin-cards { grid-template-columns: 1fr; }
 }
 
 /* ── Plan de la empresa (issue #42) ──
