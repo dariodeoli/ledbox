@@ -77,3 +77,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - lista y cuadrícula recordadas por usuario en inventario, clientes y proveedores
 - los catálogos de los selectores se piden al abrir el diálogo
 
+## v2.1.27 — 2026-09-23
+
+- nav consolidado 18→13 y pasada mobile con arrastre táctil
+
