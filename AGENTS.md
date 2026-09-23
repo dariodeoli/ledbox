@@ -8,11 +8,29 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 - **Reglas generales de la app (obligatorias)**: `docs/REGLAS-GENERALES.md` — buscar antes de crear, un objeto por tipo, formatos normalizados, estados honestos, endpoints públicos con token, versionado y publicación. Ningún cambio nuevo puede contradecirlas.
 - Stack, estructura y puesta en marcha: `README.md`.
 
+## Topología: orquestador + implementador + 3 slots (23-09-2026)
+
+Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa: `~/.herdr/worktrees/ledbox/orquestador/` (`PLAYBOOK.md`, `SLOTS.md`, `BRIEF.md`, `COMANDOS.md`).
+
+| Agente | Workspace | Rol |
+| --- | --- | --- |
+| `lbx-orquestador` | `LedBox · Orquestador` | Interlocutor único del dueño: abre issues, elige slot por dominio, briefea con `herdr agent prompt`, verifica handovers y ordena la integración. No mergea, no pushea, no despliega, no edita código. |
+| `lbx-implementador` | `LedBox · Implementador` (`~/Documents/GitHub/ledbox`) | Implementa lo transversal/plataforma, integra las ramas de los slots con `npm run ht`/`hd` y despliega. Único que toca la rama viva. |
+| `lbx-panel` | `LBX-PANEL · Panel/UX` | Slot `slot/panel` — Panel/UX/diseño. |
+| `lbx-ops` | `LBX-OPS · Operación` | Slot `slot/operacion` — Operación (eventos, inventario, proveedores, clientes). |
+| `lbx-fin` | `LBX-FIN · Finanzas` | Slot `slot/finanzas` — Finanzas/fiscal/portal cliente. |
+
+- Worktrees de slots: `~/.herdr/worktrees/ledbox/{LBX-PANEL,LBX-OPS,LBX-FIN}`.
+- **Base de todo trabajo: `origin/codex/ledbox-gestion-multiempresa`** (la rama viva). `main` no se usa como base.
+- Ciclo de un pedido: dueño → orquestador (issue + brief) → slot (`git fetch origin --prune` + rebase sobre la rama viva → implementación → checks → push de **su** rama → handover) → orquestador verifica el handover → implementador integra (`npm run ht`/`hd`).
+- Guardas: solo el implementador toca la rama viva; cada slot pushea únicamente su rama; prohibido `push --force` y reescribir historia compartida; no se toca el worktree ni la rama de otro agente.
+- Automatización: el auto-HD (`npm run watch-hd`) corre de fondo en el checkout del implementador (≥15 commits sin integrar, cooldown 20 min); `vigia.sh` del orquestador reparte `cola.tsv` a los slots libres — disponible, sin arrancar.
+
 ## Ramas, entrega y deploy
 
-- Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify publica ledbox.online, app.ledbox.online, eventos.ledbox.online, clientes.ledbox.online y demo.ledbox.online). Solo el integrador mergea ahí; ningún workstream pushea directo a esa rama ni a `main`.
-- Cada workstream trabaja en su propio worktree y rama `feat/<slug>`, con commits convencionales por unidad de trabajo y sin atribución de IA.
-- Antes de empezar: `git fetch origin --prune` y partir de la rama base indicada en el brief.
+- Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify publica ledbox.online, app.ledbox.online, eventos.ledbox.online, clientes.ledbox.online y demo.ledbox.online). Solo el implementador/integrador mergea y pushea ahí; ningún otro agente pushea directo a esa rama ni a `main`.
+- Cada workstream trabaja en su propio worktree y rama: los slots en su rama persistente (`slot/panel`, `slot/operacion`, `slot/finanzas`), el resto en `feat/<slug>` según el brief. Commits convencionales por unidad de trabajo y sin atribución de IA.
+- Antes de empezar: `git fetch origin --prune` y partir de `origin/codex/ledbox-gestion-multiempresa` (o de la rama base indicada en el brief; `main` no se usa como base).
 - Entrega: `npm run typecheck` y `npm run build` en verde; `npx prisma validate` si se tocó el schema; sin marcadores de conflicto; handover con rama, commits, rutas tocadas y verificaciones.
 - No hay deploy manual: al integrar a la rama viva, Coolify reconstruye.
 - No tocar el worktree ni la rama de otro agente.
