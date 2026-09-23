@@ -240,6 +240,22 @@ export type AdminEventOption = {
   client: { id: string; name: string; company: string | null };
 };
 
+/** Cliente embebido mínimo del panel de eventos (issue #68). */
+export type AdminEventClientRef = Pick<AdminClientRef, "id" | "name" | "company" | "phone">;
+
+/**
+ * Evento del panel de operación (issue #68): lo que devuelve
+ * `/api/admin/event-ops?fields=panel`, con el cliente mínimo (sin métricas ni
+ * contacto) y las tareas y asignaciones completas.
+ */
+export type AdminEventPanelRow = Omit<AdminEventRow, "client"> & { client: AdminEventClientRef };
+
+/**
+ * Evento con su checklist mínimo para el dashboard (issue #68): lo que devuelve
+ * `/api/admin/event-ops?fields=checklist`.
+ */
+export type AdminEventChecklistRow = Pick<AdminEventRow, "id" | "name" | "tasks">;
+
 export type AdminBudgetItem = {
   id: string;
   name: string;
@@ -1186,6 +1202,16 @@ export type AdminSupplierJobRow = {
   notes: string | null;
   supplier: { id: string; name: string; phone: string | null; category: string };
   event: AdminEventRef | null;
+};
+
+/**
+ * Trabajo de proveedor con las referencias mínimas (issue #68): lo que devuelve
+ * `/api/admin/suppliers/jobs?fields=panel`, sin el contacto del proveedor ni el
+ * rango del evento (que no se dibujan en la pantalla).
+ */
+export type AdminSupplierJobPanelRow = Omit<AdminSupplierJobRow, "supplier" | "event"> & {
+  supplier: { id: string; name: string };
+  event: Pick<AdminEventRef, "id" | "name"> | null;
 };
 
 export type AdminSupplierRow = {

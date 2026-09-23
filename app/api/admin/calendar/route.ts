@@ -11,6 +11,7 @@ import {
   joinParts,
   monthEndKey,
   nextDayKey,
+  placeLabel,
 } from "@/lib/server/notifications";
 import type { AdminCalendarItem, AdminCalendarItemKind } from "@/lib/admin-types";
 
@@ -58,6 +59,8 @@ type CalendarEvent = {
   id: string;
   name: string;
   location: string | null;
+  /** Ciudad del evento (issue #68): completa el lugar del marcador. */
+  city: string | null;
   setupAt: Date | null;
   startsAt: Date | null;
   endsAt: Date | null;
@@ -82,7 +85,7 @@ function eventItem(
     endAt: multiDay && event.endsAt ? event.endsAt.toISOString() : null,
     endDate: multiDay && event.endsAt ? dayKeyOf(event.endsAt) : null,
     title: event.name,
-    subtitle: joinParts([event.client.company || event.client.name, event.location]),
+    subtitle: joinParts([event.client.company || event.client.name, placeLabel(event.location, event.city)]),
     href: "/eventos",
     tone: kind === "strike" ? "warn" : kind === "event" ? "accent" : "info",
     tag: event.status,
@@ -122,7 +125,20 @@ export async function GET(request: Request) {
       },
       orderBy: { startsAt: "asc" },
       take: 200,
-      include: { client: { select: { name: true, company: true } } },
+      // Select explícito: el marcador solo usa estos campos, más «Ciudad»
+      // (issue #68) para armar el lugar sin repetirla.
+      select: {
+        id: true,
+        name: true,
+        location: true,
+        city: true,
+        setupAt: true,
+        startsAt: true,
+        endsAt: true,
+        strikeAt: true,
+        status: true,
+        client: { select: { name: true, company: true } },
+      },
     }),
     db.eventTask.findMany({
       where: {

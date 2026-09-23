@@ -22,7 +22,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { adminNavLabel, canWriteOperations } from "@/lib/admin-policy";
-import { collectedAmount, supplierJobBalance, type AdminEventTask, type AdminOverview } from "@/lib/admin-types";
+import { collectedAmount, supplierJobBalance, type AdminEventChecklistRow, type AdminEventTask, type AdminOverview } from "@/lib/admin-types";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import {
   AdminBadge,
@@ -45,7 +45,10 @@ export function ResumenModule() {
   const overview = useAdminResource<AdminOverview | null>("/api/admin/overview", (payload) =>
     payload.counts && payload.finance ? { counts: payload.counts, finance: payload.finance, upcoming: payload.upcoming ?? [] } : null,
   );
-  const operations = useAdminResource("/api/admin/event-ops", (payload) => payload.events ?? []);
+  const operations = useAdminResource(
+    "/api/admin/event-ops?fields=checklist",
+    (payload) => (payload as { events?: AdminEventChecklistRow[] }).events ?? [],
+  );
   const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? []);
   const finance = useAdminResource("/api/admin/finance", (payload) => ({
     payments: payload.clientPayments ?? [],

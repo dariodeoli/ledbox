@@ -12,9 +12,53 @@ const promoterSelect = {
   promoter: { select: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true } },
 } as const;
 
-export async function GET() {
+/**
+ * Eventos del panel con su operación (checklist y equipos).
+ *
+ * `GET ?fields=checklist` (issue #68): lo mínimo del checklist del dashboard
+ * —id, nombre y tareas—, sin cliente, equipos ni la disponibilidad de la
+ * promotora. `GET ?fields=panel` (issue #68): el evento del panel de operación
+ * con el **cliente mínimo** (id, nombre, empresa y teléfono) y las tareas y
+ * asignaciones completas. Sin `fields` la respuesta es la de siempre
+ * (compatible).
+ */
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
+  const { organizationId } = auth.context;
+  const fields = new URL(request.url).searchParams.get("fields");
+
+  if (fields === "checklist") {
+    const events = await db.event.findMany({
+      where: { organizationId },
+      orderBy: { startsAt: "asc" },
+      take: 200,
+      select: {
+        id: true,
+        name: true,
+        tasks: {
+          orderBy: { dueAt: "asc" },
+          select: { id: true, eventId: true, title: true, type: true, dueAt: true, completedAt: true },
+        },
+      },
+    });
+    return Response.json({ events });
+  }
+
+  if (fields === "panel") {
+    const events = await db.event.findMany({
+      where: { organizationId },
+      orderBy: { startsAt: "asc" },
+      take: 200,
+      include: {
+        client: { select: { id: true, name: true, company: true, phone: true } },
+        tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
+        assignments: { include: { inventory: true } },
+      },
+    });
+    return Response.json({ events });
+  }
+
   const events = await db.event.findMany({
     where: { organizationId: auth.context.organizationId },
     orderBy: { startsAt: "asc" },

@@ -102,14 +102,22 @@ function parseDate(value: unknown): ParsedDate | undefined {
   return Number.isNaN(date.getTime()) ? { ok: false } : { ok: true, value: date };
 }
 
-export async function GET() {
+/**
+ * `GET ?fields=panel` (issue #68): el trabajo con las referencias mínimas
+ * —proveedor (id, nombre) y evento (id, nombre)—, que es todo lo que dibuja la
+ * pantalla de proveedores; sin el parámetro la respuesta es la de siempre.
+ */
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
+  const panel = new URL(request.url).searchParams.get("fields") === "panel";
   const jobs = await db.supplierJob.findMany({
     where: { organizationId: auth.context.organizationId },
     orderBy: [{ dueAt: "asc" }, { description: "asc" }],
     take: 300,
-    include: jobInclude,
+    include: panel
+      ? { supplier: { select: { id: true, name: true } }, event: { select: { id: true, name: true } } }
+      : jobInclude,
   });
   return Response.json({ jobs });
 }
