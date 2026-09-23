@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
+import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
 import {
   countdownTone,
@@ -692,6 +692,7 @@ export function AdminLockScreen({
   error,
   busy,
   requireLogin,
+  pinDigits,
   onUnlock,
   onFullLogin,
 }: {
@@ -703,6 +704,8 @@ export function AdminLockScreen({
   busy: boolean;
   /** La sesión quedó invalidada (5 PIN fallidos): solo se sale con login completo. */
   requireLogin: boolean;
+  /** Largo del PIN aprendido en este navegador (issue #54); `null` si no se sabe. */
+  pinDigits?: number | null;
   onUnlock: (pin: string) => Promise<void>;
   onFullLogin: () => void;
 }) {
@@ -788,12 +791,13 @@ export function AdminLockScreen({
               label="PIN del panel"
               value={pin}
               onChange={setPin}
-              length={6}
+              length={PIN_MAX_DIGITS}
               autoSubmit
+              expectedLength={pinDigits ?? null}
               onComplete={(completed) => void submitPin(completed)}
               inputRef={inputRef}
               error={error || null}
-              hint={error ? undefined : "4 a 6 dígitos. Se valida al completarlo o con «Desbloquear»."}
+              hint={error ? undefined : "4 a 6 dígitos: se valida solo al completarlo."}
               autoFocus
               disabled={busy}
             />

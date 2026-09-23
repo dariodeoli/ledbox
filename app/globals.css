@@ -1062,13 +1062,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 /* Campo de PIN: los puntos son la parte visible; el input va encima, invisible,
    para que el teclado del celular y el pegado funcionen igual. Nunca se muestra. */
-.admin-pin { position: relative; display: block; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); transition: border-color .15s, box-shadow .15s; }
-.admin-pin:focus-within, .admin-pin[data-focused="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+/* PIN (issues #21 y #54): una caja por dígito, con la frontera de los 4 dígitos
+   mínimos marcada para que se lea que el PIN puede ser de 4 o de 6. El input
+   real es transparente y cubre las cajas: manda el teclado numérico del sistema. */
+.admin-pin { position: relative; display: block; }
 .admin-pin[data-disabled="true"] { opacity: .5; }
-.admin-pin:has(input[aria-invalid="true"]) { border-color: var(--a-danger); }
-.admin-pin-dots { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 46px; padding: 0 12px; }
-.admin-pin-dot { width: 12px; height: 12px; border: 1.5px solid var(--a-line-2); border-radius: 999px; }
-.admin-pin-dot[data-filled="true"] { border-color: var(--a-accent); background: var(--a-accent); }
+.admin-pin-slots { display: flex; align-items: center; gap: 8px; min-height: 52px; }
+.admin-pin-slot { display: grid; place-items: center; width: 34px; height: 42px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); transition: border-color .15s, box-shadow .15s; }
+.admin-pin-slot[data-min-boundary="true"] { margin-left: 12px; }
+.admin-pin-slot[data-active="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-pin-slot-dot { width: 10px; height: 10px; border-radius: 999px; background: transparent; }
+.admin-pin-slot[data-filled="true"] .admin-pin-slot-dot { background: var(--a-text-strong); }
+.admin-pin:has(input[aria-invalid="true"]) .admin-pin-slot { border-color: var(--a-danger); }
 .admin-pin .admin-pin-input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; background: transparent; color: transparent; caret-color: transparent; opacity: 0; cursor: text; }
 
 /* Teclado numérico de la pantalla de bloqueo: teclas grandes para el dedo. */
@@ -1091,7 +1096,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-lock { place-items: start center; padding: 16px 12px 24px; }
   .admin-lock-card { padding: 16px 12px; }
   .admin-pin-pad-key { min-height: 52px; font-size: 18px; }
-  .admin-pin-dots { gap: 8px; }
+  .admin-pin-slots { gap: 6px; }
+  .admin-pin-slot { width: 30px; height: 38px; }
+  .admin-pin-slot[data-min-boundary="true"] { margin-left: 8px; }
 }
 
 /* ── Diálogo del panel (issue #12) ──

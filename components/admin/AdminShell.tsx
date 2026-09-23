@@ -29,7 +29,7 @@ import {
   whatsappHref,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
-import { ADMIN_NAV_GROUP_KEY } from "@/lib/admin-theme";
+import { ADMIN_NAV_GROUP_KEY, readStoredPinDigits, storePinDigits } from "@/lib/admin-theme";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import {
   adminAvatarUrl,
@@ -241,6 +241,14 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
   const [lockBusy, setLockBusy] = useState(false);
   const [lockRequireLogin, setLockRequireLogin] = useState(false);
   /**
+   * Largo del PIN aprendido en este navegador (issue #54): solo la cantidad de
+   * dígitos del último desbloqueo correcto, para enviarlo exacto sin pausa.
+   */
+  const [pinDigits, setPinDigits] = useState<number | null>(null);
+  useEffect(() => {
+    setPinDigits(session.user ? readStoredPinDigits(session.user.id) : null);
+  }, [session.user]);
+  /**
    * En el host de la demo la presentación es la raíz `/` (issue #53: rewrite sin
    * segmento visible); en el resto de los hosts sigue siendo la ruta `/demo`.
    * Se resuelve después de montar, así el SSR y la hidratación coinciden.
@@ -373,10 +381,17 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string; requireLogin?: boolean };
       if (!response.ok) {
+        // El largo aprendido puede estar viejo (el PIN cambió de 4 a 6): se
+        // olvida y el próximo intento vuelve a la pausa (issue #54).
+        storePinDigits(session.user?.id, null);
+        setPinDigits(null);
         setLockError(payload.error || "No pudimos validar el PIN.");
         if (payload.requireLogin) setLockRequireLogin(true);
         return;
       }
+      // Desbloqueo correcto: queda aprendido el largo para enviar exacto la próxima.
+      storePinDigits(session.user?.id, pin.length);
+      setPinDigits(pin.length);
       clearAdminApiCache();
       lastActivityRef.current = Date.now();
       setSession((current) => ({ ...current, locked: false }));
@@ -388,7 +403,7 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
     } finally {
       setLockBusy(false);
     }
-  }, []);
+  }, [session.user?.id]);
 
   /** Login completo: cierra la sesión (o lo que quede de ella) y va al login. */
   const fullLogin = useCallback(async () => {
@@ -597,6 +612,7 @@ export function AdminShell({ children, demoHost = false }: { children: React.Rea
           error={lockError}
           busy={lockBusy}
           requireLogin={lockRequireLogin}
+          pinDigits={pinDigits}
           onUnlock={unlockPanel}
           onFullLogin={() => void fullLogin()}
         />
