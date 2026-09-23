@@ -130,7 +130,8 @@ function slots() {
     for (const name of out ? out.split("\n") : []) {
       const short = name.replace(/^origin\//, "");
       if (short === "HEAD" || short === LIVE_BRANCH || short === "main") continue;
-      if (!/^feat\//.test(short)) continue;
+      // Ramas de trabajo: `feat/*` (workstreams) y `slot/*` (topología herdr).
+      if (!/^(feat|slot)\//.test(short)) continue;
       if (EXCLUDE.some((pattern) => pattern.test(short))) continue;
       names.add(short);
     }
