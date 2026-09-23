@@ -255,6 +255,8 @@ function al() {
 function novedadesEntry(version, subjects) {
   const bullets = [];
   for (const subject of subjects) {
+    // Los commits de merge no son novedades de producto (pasan al resolver a mano).
+    if (/^Merge\b/.test(subject)) continue;
     const clean = subject
       .replace(/^(\w+)(\([^)]*\))?!?:\s*/, "")
       .replace(/\s*(\(?Refs #\d+(?:,\s*#\d+)*\)?)\s*$/i, "")
