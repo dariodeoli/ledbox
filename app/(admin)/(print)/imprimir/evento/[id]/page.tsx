@@ -79,6 +79,7 @@ export default async function EventoImprimiblePage({ params }: { params: Promise
           <div className="lbprint-grid">
             <PrintField label="Nombre" value={event.name} />
             <PrintField label="Lugar" value={event.location || "Sin lugar definido"} />
+            <PrintField label="Ciudad" value={event.city || "—"} />
             <PrintField label="Montaje" value={event.setupAt ? formatDateTime(event.setupAt) : "—"} />
             <PrintField label="Inicio" value={event.startsAt ? formatDateTime(event.startsAt) : "A confirmar"} />
             <PrintField label="Fin" value={event.endsAt ? formatDateTime(event.endsAt) : "—"} />

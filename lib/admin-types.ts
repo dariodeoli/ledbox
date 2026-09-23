@@ -202,6 +202,8 @@ export type AdminEventRow = {
   id: string;
   name: string;
   location: string | null;
+  /** Ciudad del evento (issue #48); `null` mientras no se cargue. */
+  city: string | null;
   setupAt: string | null;
   startsAt: string | null;
   endsAt: string | null;

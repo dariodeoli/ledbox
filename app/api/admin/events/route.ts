@@ -10,7 +10,7 @@ import { planLimitViolation } from "@/lib/server/plan-limits";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const EVENT_AUDIT_FIELDS = ["name", "location", "startsAt", "endsAt", "setupAt", "status"] as const;
+const EVENT_AUDIT_FIELDS = ["name", "location", "city", "startsAt", "endsAt", "setupAt", "status"] as const;
 
 /**
  * `GET /api/admin/events`: eventos de la empresa activa.
@@ -54,6 +54,8 @@ export async function POST(request: Request) {
       clientId: client.id,
       name: body.name.trim(),
       location: typeof body.location === "string" ? body.location.trim() : undefined,
+      // Ciudad (issue #48): dato aparte del lugar; vacío se guarda como nulo.
+      city: typeof body.city === "string" ? body.city.trim() || null : undefined,
       startsAt: typeof body.startsAt === "string" ? new Date(body.startsAt) : undefined,
       endsAt: typeof body.endsAt === "string" ? new Date(body.endsAt) : undefined,
       setupAt: typeof body.setupAt === "string" ? new Date(body.setupAt) : undefined,
