@@ -209,8 +209,11 @@ function pp() {
 
   console.log("\n▌ Pendientes del dueño");
   const pend = existsSync("docs/PENDIENTES-DUENO.md") ? readFileSync("docs/PENDIENTES-DUENO.md", "utf8") : "";
+  // Solo secciones pendientes: «Resueltos …» no se lista.
   const bullets = pend
-    .split(/\n(?=- )/)
+    .split(/\n(?=##\s)/)
+    .filter((seccion) => !/^##\s+Resuelt/i.test(seccion))
+    .flatMap((seccion) => seccion.split(/\n(?=- )/))
     .filter((block) => block.trim().startsWith("- "))
     .map((block) => "  " + block.replace(/\s+/g, " ").trim().slice(0, 130));
   console.log(bullets.length ? bullets.join("\n") : "  (nada anotado)");
@@ -252,7 +255,10 @@ function al() {
 function novedadesEntry(version, subjects) {
   const bullets = [];
   for (const subject of subjects) {
-    const clean = subject.replace(/^(\w+)(\([^)]*\))?!?:\s*/, "");
+    const clean = subject
+      .replace(/^(\w+)(\([^)]*\))?!?:\s*/, "")
+      .replace(/\s*(\(?Refs #\d+(?:,\s*#\d+)*\)?)\s*$/i, "")
+      .trim();
     if (!bullets.includes(clean)) bullets.push(clean);
   }
   const today = new Date().toISOString().slice(0, 10);
