@@ -8,6 +8,7 @@ import {
   formatDateTime,
   formatMoney,
   formatNumber,
+  invoiceTaxTypeLabel,
 } from "@/lib/admin-format";
 import { organizationLogoUrl } from "@/lib/admin-types";
 import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
@@ -213,7 +214,11 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
         <PrintSection title="Condiciones">
           <div className="lbprint-grid">
             <PrintField label="Validez de la oferta" value={budget.validUntil ? `Hasta el ${formatDate(budget.validUntil)}` : "Sin fecha de vencimiento"} />
+            {/* Campos del cliente (issue #65). Los costos internos no se imprimen nunca. */}
+            <PrintField label="Entrega" value={budget.deliveryAt ? formatDate(budget.deliveryAt) : "A coordinar"} />
+            <PrintField label="IVA" value={budget.ivaType ? invoiceTaxTypeLabel(budget.ivaType) : "—"} />
             <PrintField label="Moneda" value="Guaraníes (PYG), sin decimales" />
+            {budget.warranty ? <PrintField label="Garantía" value={budget.warranty} wide /> : null}
             <PrintField label="Notas" value={budget.notes || "Sin notas adicionales."} wide />
           </div>
         </PrintSection>

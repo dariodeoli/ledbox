@@ -17,6 +17,7 @@ import {
   formatDateTime,
   formatMoney,
   formatNumber,
+  invoiceTaxTypeLabel,
   paymentProofMimeLabel,
   statusTone,
 } from "@/lib/admin-format";
@@ -1235,6 +1236,41 @@ export function PortalBudgetView({
               </p>
             ) : null}
           </section>
+
+          {budget.deliveryAt || budget.ivaType || budget.warranty ? (
+            <section className="portal-card" aria-labelledby="portal-terms">
+              <div className="portal-card-head">
+                <h2 className="portal-card-title" id="portal-terms">
+                  Condiciones de la propuesta
+                </h2>
+              </div>
+              <dl className="portal-facts portal-facts--pay">
+                {budget.deliveryAt ? (
+                  <div>
+                    <dt>Entrega</dt>
+                    <dd>{formatDate(budget.deliveryAt)}</dd>
+                  </div>
+                ) : null}
+                {budget.ivaType ? (
+                  <div>
+                    <dt>IVA</dt>
+                    <dd>{invoiceTaxTypeLabel(budget.ivaType)}</dd>
+                  </div>
+                ) : null}
+                {budget.validUntil ? (
+                  <div>
+                    <dt>Válida hasta</dt>
+                    <dd>{formatDate(budget.validUntil)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {budget.warranty ? (
+                <p className="portal-note">
+                  <strong>Garantía:</strong> {budget.warranty}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           {approved ? (
             <section className="portal-card portal-card--pay" aria-labelledby="portal-payment-data">
