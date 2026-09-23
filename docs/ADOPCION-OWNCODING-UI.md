@@ -19,8 +19,9 @@ npm install github:dariodeoli/owncoding-ui#v0.14.0 qrcode
 - **Preflight apagado**: el reset de Tailwind rompería el panel entero.
 - **Tema**: la librería usa `html.dark`; el panel usa `[data-theme]` en
   `#admin-root` → el shim de tema vive en un solo lugar (§4).
-- **Repo privado**: en CI/Coolify hace falta un token de lectura de GitHub para
-  instalar la dependencia (`git+https://x-access-token:$TOKEN@github.com/...`).
+- **Repo público**: la dependencia se instala sin token
+  (`github:dariodeoli/owncoding-ui#v0.14.0`); el `GITHUB_TOKEN` de build ya no se
+  usa (§7).
 - **Prefijo de contenido del preset**: Tailwind 3.4 ignora el `content` que trae
   el preset; hay que repetir los `src/**/*.jsx` de la librería en el `content`
   de la app (si no, los íconos salen gigantes). Está reportado upstream (#3).
@@ -111,7 +112,7 @@ Nada de Tailwind, nada de estilos: son funciones y catálogos.
 
 | Paso | Archivo(s) | Cambio |
 | --- | --- | --- |
-| 1 | `package.json`, `.npmrc`/env | fijar `owncoding-ui#v0.14.0` y documentar el token de build |
+| 1 | `package.json`, `package-lock.json` | fijar `owncoding-ui#v0.14.0` (repo público, sin token; §7) |
 | 2 | `lib/admin-format.ts` | `formatMoney`/`formatMoneyInput` delegan en `formatGs`/`formatGsInput`/`parseGsInput`; se borra el `Intl` duplicado |
 | 3 | `lib/field-rules.ts` | el teléfono usa `parseTelefono`/`componerTelefono`/`telefonoValidado` (mismo contrato de `FIELD_*`: los mensajes no cambian) |
 | 4 | Tesorería/Conciliación/Datos de pago | el catálogo de bancos y sus logos salen de `BANCOS_PARAGUAY` + `logoDeBanco`, sin listas locales |
@@ -123,11 +124,17 @@ Verificación: los valores de pantalla **no cambian** (mismo `Gs 1.234.567`, mis
 
 ## 7. Requisito de deploy (Coolify)
 
-Al adoptar la librería, el build necesita un token de lectura del repo privado:
+`owncoding-ui` es **público** (`github.com/dariodeoli/owncoding-ui`): no hace
+falta token de lectura ni `.npmrc`. Se instala directo desde el tag:
 
-- Crear un *fine-grained token* de GitHub con acceso de lectura a
-  `dariodeoli/owncoding-ui` y cargarlo en Coolify como `GITHUB_TOKEN` del build.
-- En `package.json` la dependencia queda como
-  `git+https://x-access-token:${GITHUB_TOKEN}@github.com/dariodeoli/owncoding-ui.git#v0.13.1`
-  (o `.npmrc` con `//github.com/:_authToken=${GITHUB_TOKEN}`).
-- Probar el build en una rama antes de mergear a la rama viva.
+```bash
+npm install github:dariodeoli/owncoding-ui#v0.14.0
+# package.json → "owncoding-ui": "github:dariodeoli/owncoding-ui#v0.14.0"
+```
+
+El build de Coolify (y cualquier `npm install` en un checkout limpio) resuelve
+el paquete por HTTPS sin credenciales. **El `GITHUB_TOKEN` de build ya no es
+necesario.** Si el repo volviera a ser privado, se reinstaura el token de
+lectura (fine-grained, solo lectura de `dariodeoli/owncoding-ui`) como
+`GITHUB_TOKEN` de build, o `//github.com/:_authToken=${GITHUB_TOKEN}` en
+`.npmrc`.
