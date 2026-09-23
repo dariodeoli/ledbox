@@ -89,6 +89,13 @@ npm run dev -- -p 3001   # panel en http://localhost:3001
 pg_ctl -D "$PGDATA" stop  # al terminar
 ```
 
+## CI (GitHub Actions, 23-09-2026)
+
+- Workflow: `.github/workflows/ci.yml`; corre en **push y PR** a `codex/ledbox-gestion-multiempresa`.
+- Pasos (Node 22 + caché de npm, timeout 20 min): `actions/checkout` → `actions/setup-node` → `npm ci` → `npx prisma generate` → `npm run typecheck` → `npm run test:rules` → `npm run build`.
+- `owncoding-ui` es pública: `npm ci` no necesita token ni `--legacy-peer-deps` (verificado en limpio).
+- El build no necesita base de datos: `migrate-deploy.mjs` corre con `--best-effort` cuando falta `DATABASE_URL`.
+
 ## Prohibiciones
 
 - No commitear secretos ni `.env` reales; no tocar la base de producción.
