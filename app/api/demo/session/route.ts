@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { clearSessionCookie, createSession, getAuthenticatedAdmin, revokeCurrentSession, setSessionCookie } from "@/lib/server/auth";
 import { ensureDemoData, isDemoOrganizationId } from "@/lib/server/demo-data";
 import { jsonError } from "@/lib/server/http";
@@ -46,6 +47,9 @@ async function enterDemo(request: Request, nextValue: string | null, options?: {
   // que reiniciar de verdad, no solo asegurar lo que ya está). La entrada
   // normal (GET) nunca reinicia: eso borraría el estado de una visita anterior.
   const demo = await ensureDemoData(options?.reset ? { reset: true } : undefined);
+  // «Reiniciar la demo» (issue #58) invalida la lectura cacheada del índice
+  // (issue #64) para que la próxima visita vea los datos recién sembrados.
+  if (options?.reset) revalidateTag("demo");
   const session = await createSession({ id: demo.user.id, email: demo.user.email, role: demo.user.role }, demo.organizationId);
   await setSessionCookie(session.jwt, session.expiresAt);
   return redirectTo(safeNext(nextValue), 303);

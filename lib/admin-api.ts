@@ -103,6 +103,12 @@ async function requestJson(path: string, { method = "GET", body, timeoutMs, sign
   }
 }
 
+/** GET idénticos en vuelo comparten promesa (issue #64): dos componentes que
+ * montan a la vez el mismo recurso (campana + Resumen con
+ * `/api/admin/notifications`) generan un solo request. No aplica a `fresh`
+ * (fuerza red) ni a los GET cancelables con `signal`. */
+const inFlightGets = new Map<string, Promise<AdminApiResult<unknown>>>();
+
 /**
  * GET con caché corta (solo lectura). `fresh` saltea la caché y `signal` permite
  * cancelar (por ejemplo, al cambiar un filtro).
@@ -115,6 +121,12 @@ export async function adminApiGet<T = AdminApiResponse>(
   if (!options.fresh && cached && Date.now() - cached.storedAt < GET_TTL_MS) {
     return { ok: true, data: cached.data as T };
   }
+  const shareable = !options.fresh && !options.signal;
+  if (shareable) {
+    const inFlight = inFlightGets.get(path);
+    if (inFlight) return inFlight as Promise<AdminApiResult<T>>;
+  }
+  const request = (async (): Promise<AdminApiResult<T>> => {
   const outcome = await requestJson(path, { timeoutMs: GET_TIMEOUT_MS, signal: options.signal });
   if (!outcome) {
     return { ok: false, error: "No pudimos conectar con el panel.", aborted: Boolean(options.signal?.aborted) };
@@ -142,6 +154,15 @@ export async function adminApiGet<T = AdminApiResponse>(
   }
   getCache.set(path, { storedAt: Date.now(), data: outcome.payload });
   return { ok: true, data: outcome.payload as T };
+  })();
+  if (shareable) {
+    const shared = request as Promise<AdminApiResult<unknown>>;
+    inFlightGets.set(path, shared);
+    void request.finally(() => {
+      if (inFlightGets.get(path) === shared) inFlightGets.delete(path);
+    });
+  }
+  return request;
 }
 
 /**

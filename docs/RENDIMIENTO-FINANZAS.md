@@ -48,3 +48,46 @@ pide su catálogo y los selects se llenan (Cliente: 4 opciones, Evento, Proveedo
   (LCP 112 ms en escritorio, 872 ms en 3G). Su costo restante es el JS de la
   vista (135 kB First Load), el más bajo de las cuatro pantallas.
 - **Bundle global 103 kB** y shell: plataforma/PANEL.
+
+## Ronda de plataforma (issue #64, 23-09-2026)
+
+Medición local con build de producción (`node .next/standalone/.../server.js`),
+Postgres local con datos de demo y Chrome headless por CDP (mismo host demo).
+
+**Pedidos fijos al entrar al panel** (`/dashboard`, sesión demo):
+
+| Métrica | Antes | Después |
+| --- | --- | --- |
+| Pedidos `/api/*` | **9** | **8** |
+| Archivos JS | 12 | 12 |
+| TTFB | 68–108 ms | 53 ms |
+
+- El pedido duplicado era `/api/admin/notifications`: lo comparten la campana del
+  topbar y el bloque del Resumen, y al montar a la vez los dos disparaban fetch
+  antes de que el primero terminara. `adminApiGet` ahora comparte la **promesa en
+  vuelo** para GET idénticos (ni `fresh` ni `signal`): un solo request (issue #64).
+
+**Lecturas pesadas del índice de la demo** (server, ~30 consultas por visita):
+
+| Métrica | Antes | Después (cache-hit) |
+| --- | --- | --- |
+| TTFB local de `demo.ledbox.online/` | 34,7 ms | **13,8 ms** |
+
+- Se cachea por organización en la Data Cache de Next (`lib/server/demo-overview.ts`),
+  con bucket de 2 minutos (las fechas se derivan de `now`) y tag `demo`. El
+  «Reiniciar la demo» (`POST /api/demo/session?reset=1`) invalida con
+  `revalidateTag("demo")`; la entrada normal no toca la caché. Nunca se cachea
+  entre empresas (la organización entra en la clave).
+
+**Estrategia conservadora** (lo demás queda dinámico a propósito): sesión, roles
+y membresías no se cachean; las lecturas por organización del panel mantienen
+frescura; el portal `/p/[token]` queda dinámico porque el cliente aprueba/cambia
+el presupuesto. Avatares y logos ya venían con `Cache-Control: private, max-age=600`
+y `?v=` de versión.
+
+**Bundle**: el «shared by all» de 103 kB es el runtime de Next/React (no hay
+imports de app ahí). `owncoding-ui` entra tree-shaken (solo los utils usados; no
+quedan `DataTable`/`CeldaMoneda`/`qrDataUrl` en chunks cliente). El común del panel
+(shell + paleta + primitivas) es el chunk `7521` (~63 kB sin comprimir); diferir la
+paleta con `next/dynamic` solo ahorra ~2 kB de crítico y suma un request post-hidratación:
+no conviene sin partir el diálogo del disparador (candidato a una ronda de PANEL).
