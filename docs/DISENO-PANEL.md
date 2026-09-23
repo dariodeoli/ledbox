@@ -166,3 +166,29 @@ dos veces con filtros distintos (lista completa y por cuenta), decisión de FIN.
 - Verificación: con emulación de toque, arrastrar una tarjeta de Borrador a
   Enviado dispara el PATCH real y la tarjeta queda en la columna destino; un
   swipe rápido scrollea la página (0 → 336 px) sin activar el arrastre.
+
+## 11. Buscador global y paleta diferida (23-09-2026, issue #67)
+
+- **Cobertura del buscador** (⌘/Ctrl + K): suma `Event.city` y los contactos
+  directos del cliente —teléfono, WhatsApp, Instagram y sitio— a lo que ya
+  cubría (nombre, empresa, RUC, correo, teléfono, persona encargada, título de
+  presupuesto, eventos y usuarios del equipo). La consulta de teléfono se
+  **normaliza**: «0981 222 333», «0981222333» y «+595 981222333» encuentran al
+  mismo cliente. El subtítulo del evento muestra lugar y ciudad.
+  Límite conocido: la búsqueda no ignora acentos (`contains` de Prisma);
+  ignorarlos pediría `unaccent` en Postgres (migración, plataforma).
+- **Paleta diferida**: `AdminCommandPalette` se carga con `next/dynamic`
+  (`ssr: false`) desde el shell, con prefetch ocioso para que la primera
+  apertura sea instantánea. Su chunk propio (4,7 kB crudos) **ya no está entre
+  los scripts del HTML inicial** (verificado en el navegador: no figura en
+  `script[src]` y se pide recién al quedar ocioso el shell). El botón del topbar
+  y el atajo ⌘/Ctrl + K viven en `AdminShell`.
+- **Fricciones corregidas y verificadas**: la primera apertura de la paleta se
+  cerraba sola (el efecto de «cerrar al navegar» corría también en el montaje) y
+  ⌘K con la paleta abierta borraba la consulta; el foco arranca en el buscador,
+  Escape cierra y el botón del topbar sigue ahí. Al navegar, la página vuelve
+  arriba (comportamiento de Next, verificado: 304 → 0 px de scroll).
+- **CLS de `/dashboard` (0,028)**: el salto restante es el crecimiento de los
+  bloques de lista al llegar sus datos. No se reservan más filas a propósito:
+  con la lista vacía el bloque se encoge, así que reservar de más empeora el
+  caso opuesto; queda bajo el objetivo (< 0,1) y documentado.

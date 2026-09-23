@@ -30,12 +30,12 @@ const RESULT_ICONS: Record<AdminSearchResultType, AdminIconName> = {
 type AdminSearchPayload = { results?: AdminSearchResult[] };
 
 /**
- * Buscador global del panel (⌘/Ctrl + K): botón en el topbar + paleta con
- * resultados agrupados por tipo.
+ * Paleta del buscador global del panel (issue #10). Llega **diferida** desde el
+ * shell (issue #67): el botón y el atajo ⌘/Ctrl + K viven en `AdminShell`, así
+ * este código no está en el arranque del panel.
  *
- * - Se abre con **⌘/Ctrl + K** en cualquier pantalla del panel o con el botón
- *   del topbar; se cierra con Escape, con el clic afuera o al elegir un
- *   resultado (que navega a su módulo).
+ * - Se abre con **⌘/Ctrl + K** o con el botón del topbar; se cierra con Escape,
+ *   con el clic afuera o al elegir un resultado (que navega a su módulo).
  * - El input es el campo canónico de búsqueda (`SearchField`) y el resultado lo
  *   decide el API (`/api/admin/search`), que filtra por empresa activa y rol:
  *   acá no se buscan ni se muestran datos de otras empresas.
@@ -45,10 +45,9 @@ type AdminSearchPayload = { results?: AdminSearchResult[] };
  *   `backdrop-filter` y eso lo convertiría en el bloque contenedor de un
  *   `position: fixed`, dejando la paleta recortada contra la barra.
  */
-export function AdminCommandPalette() {
+export function AdminCommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AdminSearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -57,32 +56,33 @@ export function AdminCommandPalette() {
   const [attempt, setAttempt] = useState(0);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const openPalette = useCallback(() => {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Cada apertura arranca limpia: sin consulta vieja ni resultados pegados.
+  useEffect(() => {
+    if (!open) return;
     setQuery("");
     setResults(null);
     setLoading(false);
     setError("");
     setActive(0);
-    setOpen(true);
-  }, []);
-
-  const closePalette = useCallback(() => setOpen(false), []);
-
-  // Atajo global del panel: ⌘/Ctrl + K abre la paleta desde cualquier módulo.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.altKey) return;
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
-      event.preventDefault();
-      openPalette();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openPalette]);
+  }, [open]);
 
   // Al navegar (o si el drawer abre otra pantalla) la paleta se cierra sola.
+  // Solo con un cambio real de ruta: en el montaje no se toca (si no, la primera
+  // apertura se cerraría sola, issue #67).
+  const openRef = useRef(open);
+  const pathnameRef = useRef(pathname);
   useEffect(() => {
-    setOpen(false);
+    openRef.current = open;
+  }, [open]);
+  useEffect(() => {
+    if (pathnameRef.current === pathname) return;
+    pathnameRef.current = pathname;
+    if (openRef.current) onCloseRef.current();
   }, [pathname]);
 
   // Búsqueda con debounce y cancelación: la consulta vieja no pisa a la nueva.
@@ -147,7 +147,7 @@ export function AdminCommandPalette() {
 
   const goTo = useCallback(
     (result: AdminSearchResult) => {
-      setOpen(false);
+      onCloseRef.current();
       router.push(result.href);
     },
     [router],
@@ -180,26 +180,10 @@ export function AdminCommandPalette() {
     }
   }
 
-  return (
-    <>
-      <button
-        type="button"
-        className="admin-searchbtn"
-        onClick={openPalette}
-        aria-label="Buscar en el panel"
-        aria-haspopup="dialog"
-        title="Buscar en el panel · Ctrl/⌘ + K"
-      >
-        <AdminIcon name="search" size={15} />
-        <span className="admin-searchbtn-label">Buscar</span>
-        <kbd className="admin-searchbtn-key" aria-hidden="true">
-          ⌘K
-        </kbd>
-      </button>
+  if (!open) return null;
 
-      {open
-        ? createPortal(
-            <AdminDialog title="Buscar en el panel" size="wide" onClose={closePalette}>
+  return createPortal(
+    <AdminDialog title="Buscar en el panel" size="wide" onClose={onClose}>
               <div className="admin-palette" ref={rootRef} onKeyDown={onKeyDown}>
                 <div className="admin-palette-search">
                   <SearchField
@@ -271,10 +255,7 @@ export function AdminCommandPalette() {
                   </span>
                 </p>
               </div>
-            </AdminDialog>,
-            document.getElementById(ADMIN_ROOT_ID) ?? document.body,
-          )
-        : null}
-    </>
+    </AdminDialog>,
+    document.getElementById(ADMIN_ROOT_ID) ?? document.body,
   );
 }

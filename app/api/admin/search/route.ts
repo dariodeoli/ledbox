@@ -1,4 +1,4 @@
-import { adminRoleLabel, budgetStatusLabel, clientTypeLabel, eventStatusLabel, formatDate, formatMoney } from "@/lib/admin-format";
+import { adminRoleLabel, budgetStatusLabel, clientTypeLabel, eventStatusLabel, formatDate, formatMoney, normalizeContactPhone } from "@/lib/admin-format";
 import { SEARCH_LIMIT_PER_TYPE, SEARCH_MIN_QUERY, type AdminSearchResult } from "@/lib/admin-search";
 import { db } from "@/lib/server/db";
 import { roleCan } from "@/lib/server/permissions";
@@ -13,9 +13,11 @@ export const dynamic = "force-dynamic";
  * Busca en la **empresa activa** y devuelve resultados planos
  * `{ type, id, title, subtitle, href }`:
  *
- * - clientes: nombre, empresa, RUC, correo, teléfono y persona encargada;
+ * - clientes: nombre, empresa, RUC, correo, teléfono, persona encargada y sus
+ *   contactos directos (teléfono, WhatsApp, Instagram y sitio —guardados
+ *   normalizados, issue #36);
  * - presupuestos: título y datos del cliente;
- * - eventos: nombre, lugar y datos del cliente;
+ * - eventos: nombre, lugar, **ciudad** (issue #67) y datos del cliente;
  * - usuarios del equipo: solo para los roles con `users.manage` (OWNER/ADMIN),
  *   siempre con membresía en la empresa activa.
  *
@@ -36,6 +38,12 @@ export async function GET(request: Request) {
 
   const contains = { contains: query, mode: "insensitive" as const };
   const canSeeUsers = roleCan(role, "users.manage");
+  /**
+   * Teléfonos: la persona los escribe como los conoce («0981 222 333») pero se
+   * guardan normalizados («+595 981222333»); se busca también esa forma.
+   */
+  const phoneQuery = /\d{6,}/.test(query.replace(/[^\d]/g, "")) ? normalizeContactPhone(query) : "";
+  const phoneContains = phoneQuery && phoneQuery !== query ? { contains: phoneQuery, mode: "insensitive" as const } : null;
 
   const [clients, budgets, events, users] = await Promise.all([
     db.client.findMany({
@@ -49,6 +57,11 @@ export async function GET(request: Request) {
           { phone: contains },
           { contactName: contains },
           { contactEmail: contains },
+          { contactPhone: contains },
+          { whatsapp: contains },
+          { instagram: contains },
+          { website: contains },
+          ...(phoneContains ? [{ phone: phoneContains }, { whatsapp: phoneContains }, { contactPhone: phoneContains }] : []),
         ],
       },
       orderBy: { createdAt: "desc" },
@@ -80,6 +93,7 @@ export async function GET(request: Request) {
         OR: [
           { name: contains },
           { location: contains },
+          { city: contains },
           { client: { name: contains } },
           { client: { company: contains } },
         ],
@@ -90,6 +104,7 @@ export async function GET(request: Request) {
         id: true,
         name: true,
         location: true,
+        city: true,
         startsAt: true,
         status: true,
         client: { select: { name: true } },
@@ -128,19 +143,24 @@ export async function GET(request: Request) {
       subtitle: [budget.client.name, formatMoney(budget.total), budgetStatusLabel(budget.status)].join(" · "),
       href: "/presupuestos",
     })),
-    ...events.map((event) => ({
-      type: "event" as const,
-      id: event.id,
-      title: event.name,
-      subtitle: [
-        event.client.name,
-        event.startsAt ? formatDate(event.startsAt) : event.location,
-        eventStatusLabel(event.status),
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      href: "/eventos",
-    })),
+    ...events.map((event) => {
+      // Lugar y ciudad juntos cuando existen: el buscador ahora también entra
+      // por ciudad (issue #67), así el resultado muestra por qué apareció.
+      const place = [event.location, event.city].filter(Boolean).join(", ");
+      return {
+        type: "event" as const,
+        id: event.id,
+        title: event.name,
+        subtitle: [
+          event.client.name,
+          [event.startsAt ? formatDate(event.startsAt) : "", place].filter(Boolean).join(" · "),
+          eventStatusLabel(event.status),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: "/eventos",
+      };
+    }),
     ...users.map((user) => ({
       type: "user" as const,
       id: user.id,
