@@ -113,17 +113,15 @@ Postgres local con datos de demo y Chrome headless por CDP (mismo host demo).
   antes de que el primero terminara. `adminApiGet` ahora comparte la **promesa en
   vuelo** para GET idénticos (ni `fresh` ni `signal`): un solo request (issue #64).
 
-**Lecturas pesadas del índice de la demo** (server, ~30 consultas por visita):
-
-| Métrica | Antes | Después (cache-hit) |
-| --- | --- | --- |
-| TTFB local de `demo.ledbox.online/` | 34,7 ms | **13,8 ms** |
-
-- Se cachea por organización en la Data Cache de Next (`lib/server/demo-overview.ts`),
-  con bucket de 2 minutos (las fechas se derivan de `now`) y tag `demo`. El
-  «Reiniciar la demo» (`POST /api/demo/session?reset=1`) invalida con
-  `revalidateTag("demo")`; la entrada normal no toca la caché. Nunca se cachea
-  entre empresas (la organización entra en la clave).
+**Lecturas pesadas del índice de la demo** (~30 consultas por visita): se probó
+cachearlas por organización en la Data Cache de Next (`unstable_cache`, tag
+`demo`), pero **se revirtió en el hotfix del 23-09-2026 (v2.1.30)**: la Data
+Cache serializa el resultado con el formato de flight y las `Date` vuelven
+codificadas, lo que rompía el render con `RangeError: Invalid time value`
+(`demo.ledbox.online/` → 500, también en el primer request: el round-trip es
+siempre). Queda como lectura directa. Si se retoma: el loader debe devolver JSON
+puro (ISO strings) y el render parsear en el borde — **ningún `Date` cruza la
+Data Cache**.
 
 **Estrategia conservadora** (lo demás queda dinámico a propósito): sesión, roles
 y membresías no se cachean; las lecturas por organización del panel mantienen
