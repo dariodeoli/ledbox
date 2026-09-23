@@ -87,3 +87,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - el documento va del servidor y el comprobante se carga al enviar
 - selectores con campos mínimos y catálogo recortado
 
+## v2.1.29 — 2026-09-23
+
+- sesión embebida por SSR y GET en vuelo compartidos
+
