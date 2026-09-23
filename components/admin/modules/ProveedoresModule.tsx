@@ -23,6 +23,7 @@ import {
 } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
+import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import {
   AdminBadge,
   AdminButton,
@@ -71,6 +72,9 @@ const JOB_STATUS_OPTIONS = [
 
 /** Tablero kanban de trabajos: una columna por estado real de la máquina del API. */
 const JOB_BOARD_COLUMNS: AdminBoardColumn[] = SUPPLIER_JOB_STATUSES.map((value) => ({ value, label: jobStatusLabel(value) }));
+
+/** Vistas del directorio de proveedores (issue #57): lista densa y cuadrícula de contactos. */
+const PROVEEDORES_VIEWS = ["list", "grid"] as const;
 
 type SupplierForm = {
   id: string;
@@ -148,6 +152,7 @@ export function ProveedoresModule() {
   const [query, setQuery] = useState("");
   const [jobStatus, setJobStatus] = useState("ALL");
   const [jobsView, setJobsView] = useAdminModuleView("trabajos");
+  const [suppliersView, setSuppliersView] = useAdminModuleView("proveedores", PROVEEDORES_VIEWS);
   const [supplierForm, setSupplierForm] = useState<SupplierForm | null>(null);
   const [supplierBusy, setSupplierBusy] = useState(false);
   const [supplierError, setSupplierError] = useState("");
@@ -748,11 +753,14 @@ export function ProveedoresModule() {
         title="Proveedores" icon="suppliers"
         meta={`${formatNumber(supplierRows.length)} de ${formatNumber(suppliers.length)}`}
         action={
-          writable ? (
-            <AdminButton variant="primary" icon="plus" onClick={openSupplierCreate} aria-expanded={supplierForm !== null && !supplierForm.id}>
-              Nuevo proveedor
-            </AdminButton>
-          ) : null
+          <span className="admin-panel-actions">
+            <AdminViewSwitch view={suppliersView} onChange={setSuppliersView} label="Vista de proveedores" views={PROVEEDORES_VIEWS} />
+            {writable ? (
+              <AdminButton variant="primary" icon="plus" onClick={openSupplierCreate} aria-expanded={supplierForm !== null && !supplierForm.id}>
+                Nuevo proveedor
+              </AdminButton>
+            ) : null}
+          </span>
         }
       >
         {supplierError && supplierForm === null ? <AdminNote tone="error">{supplierError}</AdminNote> : null}
@@ -839,6 +847,49 @@ export function ProveedoresModule() {
         >
           {supplierRows.length === 0 ? (
             <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda." />
+          ) : suppliersView === "grid" ? (
+            <AdminCardGrid label="Proveedores" cards={supplierRows.map((supplier): AdminCardData => {
+              const jobCount = supplier._count?.jobs ?? 0;
+              return {
+                id: supplier.id,
+                title: supplier.name,
+                titleTooltip: `${supplier.name} · ${formatNumber(jobCount)} trabajos`,
+                subtitle: supplier.company || null,
+                badges: [
+                  {
+                    label: supplierCategoryLabel(supplier.category),
+                    tone: supplier.category === "OTHER" ? "neutral" : "info",
+                  },
+                  { label: supplier.active ? "Activo" : "Inactivo", tone: supplier.active ? "ok" : "neutral" },
+                ],
+                fields: [
+                  { label: "Trabajos", value: formatNumber(jobCount), title: `${formatNumber(jobCount)} trabajos` },
+                  { label: "Teléfono", value: supplier.phone || "—", title: supplier.phone || "Sin teléfono" },
+                  { label: "Correo", value: supplier.email || "—", title: supplier.email || "Sin correo" },
+                  {
+                    label: "Condiciones",
+                    value: supplier.paymentTerms || "—",
+                    title: supplier.paymentTerms || "Sin condiciones cargadas",
+                  },
+                ],
+                footer: (
+                  <span className="admin-actions">
+                    <AdminWhatsappLink phone={supplier.phone} name={supplier.name} />
+                    {supplier.email ? (
+                      <AdminIconLink href={`mailto:${supplier.email}`} icon="mail" label={`Enviar correo a ${supplier.name}`} />
+                    ) : null}
+                    {writable ? (
+                      <AdminButton
+                        icon="edit"
+                        title={`Editar proveedor: ${supplier.name}`}
+                        aria-label={`Editar proveedor: ${supplier.name}`}
+                        onClick={() => openSupplierEdit(supplier)}
+                      />
+                    ) : null}
+                  </span>
+                ),
+              };
+            })} />
           ) : (
             <AdminTable
               view="proveedores"

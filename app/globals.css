@@ -1733,6 +1733,29 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-board { --a-board-col: min(78vw, 16.5rem); }
 }
 
+/* ── Vista cuadrícula (issue #57) ──
+   Tarjetas con pie anclado y misma altura por fila para los módulos sin
+   pipeline (inventario, clientes, proveedores). El ancho es fluido: en mobile
+   cae a una sola columna. */
+.admin-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); margin: 0; padding: 0; list-style: none; }
+.admin-cards-item { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-cards-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-cards-title { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--a-text-strong); font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-title .admin-cell-sub { overflow: hidden; font-weight: 400; text-overflow: ellipsis; }
+.admin-cards-badges { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.admin-cards-sub { margin: 0; overflow: hidden; color: var(--a-muted-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-fields { display: grid; gap: 4px; margin: 0; }
+.admin-cards-field { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.admin-cards-field dt { flex: 0 0 auto; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-cards-field dd { min-width: 0; margin: 0; overflow: hidden; color: var(--a-text); font-size: 12.5px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.admin-cards-field dd .admin-filter { max-width: 100%; }
+.admin-cards-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--a-line); }
+.admin-cards-foot > .admin-actions { flex: 1 1 auto; }
+.admin-cards-foot > .admin-filter { flex: 0 1 9.5rem; margin-right: auto; }
+@media (max-width: 480px) {
+  .admin-cards { grid-template-columns: 1fr; }
+}
+
 /* ── Plan de la empresa (issue #42) ──
    Plan vigente, consumo del mes con barra y comparación del catálogo en tarjetas
    con pie anclado (misma altura por fila). Las solicitudes usan la tabla densa

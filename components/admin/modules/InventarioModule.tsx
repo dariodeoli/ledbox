@@ -40,6 +40,8 @@ import {
 } from "../AdminUI";
 import { DateField, NumberField, SearchField, SelectField, TextField } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { AdminViewSwitch, useAdminModuleView } from "../AdminBoard";
+import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 
 const KIND_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -58,6 +60,9 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_PICK_OPTIONS = STATUS_OPTIONS.filter((option) => option.value !== "ALL");
+
+/** Vistas del inventario (issue #57): lista densa y cuadrícula de tarjetas. */
+const INVENTARIO_VIEWS = ["list", "grid"] as const;
 
 const EMPTY_FORM = { name: "", category: "", inventoryKind: "REUSABLE", quantity: "1" };
 
@@ -100,6 +105,7 @@ export function InventarioModule() {
   const [statusBusyId, setStatusBusyId] = useState("");
   const [statusError, setStatusError] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS);
 
   // Disponibilidad del ítem abierto en el rango pedido (issue #18).
   const [rangeAvailability, setRangeAvailability] = useState<AdminInventoryAvailability | null>(null);
@@ -326,6 +332,7 @@ export function InventarioModule() {
             Hoy
           </AdminButton>
         ) : null}
+        <AdminViewSwitch view={view} onChange={setView} label="Vista de inventario" views={INVENTARIO_VIEWS} />
         <span className="admin-export">
           <AdminButton
             icon="download"
@@ -410,6 +417,60 @@ export function InventarioModule() {
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá los filtros." />
+        ) : view === "grid" ? (
+          <AdminCardGrid label="Inventario" cards={rows.map((item): AdminCardData => {
+            const { availableNow, overcommittedNow, range } = item.availability;
+            const available = rangeActive ? (range?.available ?? 0) : availableNow;
+            const overcommitted = rangeActive ? (range?.overcommitted ?? false) : overcommittedNow;
+            const conflictEvents = range?.conflicts ?? [];
+            const availableTitle = `${formatNumber(available)} libres de ${formatNumber(item.quantity)} · comprometidas ${
+              rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
+            }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`;
+            return {
+              id: item.id,
+              title: item.name,
+              titleTooltip: item.sku ? `${item.name} · ${item.sku}` : item.name,
+              subtitle: item.sku ? `SKU ${item.sku} · ${item.category}` : item.category,
+              badges: [
+                { label: inventoryKindLabel(item.kind), tone: statusTone(item.kind) },
+                ...(overcommitted ? [{ label: "Conflicto", tone: "danger" as const, title: "Hay más unidades comprometidas que las que tiene el ítem." }] : []),
+              ],
+              fields: [
+                { label: "Cantidad", value: formatNumber(item.quantity), title: `${formatNumber(item.quantity)} unidades` },
+                { label: rangeActive ? "Libres en rango" : "Libres ahora", value: formatNumber(available), title: availableTitle },
+                { label: "Reposición", value: formatMoney(item.replacementCost), title: formatMoney(item.replacementCost) },
+                { label: "Costo diario", value: formatMoney(item.dailyCost), title: formatMoney(item.dailyCost) },
+                {
+                  label: "Estado",
+                  value: <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>,
+                  title: inventoryStatusLabel(item.status),
+                },
+              ],
+              footer: (
+                <>
+                  {writable ? (
+                    <AdminSelect
+                      className="admin-filter admin-filter--cell"
+                      value={item.status}
+                      disabled={statusBusyId === item.id}
+                      onChange={(value) => void changeStatus(item, value)}
+                      label={`Cambiar estado: ${item.name}`}
+                      title={`Cambiar estado: ${item.name}`}
+                      options={STATUS_PICK_OPTIONS}
+                    />
+                  ) : null}
+                  <span className="admin-actions">
+                    <AdminButton
+                      icon="info"
+                      title={`Ver asignaciones y disponibilidad: ${item.name}`}
+                      aria-label={`Ver asignaciones y disponibilidad: ${item.name}`}
+                      onClick={() => setSelectedId((current) => (current === item.id ? "" : item.id))}
+                    />
+                  </span>
+                </>
+              ),
+            };
+          })} />
         ) : (
           <AdminTable
             view="inventario"

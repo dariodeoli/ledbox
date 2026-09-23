@@ -19,20 +19,33 @@ import { AdminIcon } from "./AdminIcons";
  * pantallas chicas, sin desbordar la página.
  */
 
-export type AdminModuleView = "list" | "board";
+export type AdminModuleView = "list" | "board" | "grid";
 
-/** Vista recordada por usuario y módulo (`localStorage`); por defecto, lista. */
-export function useAdminModuleView(module: string): [AdminModuleView, (view: AdminModuleView) => void] {
+/** Vistas por defecto del panel: lista y tablero (los módulos con cuadrícula la suman). */
+const DEFAULT_MODULE_VIEWS: readonly AdminModuleView[] = ["list", "board"];
+
+/**
+ * Vista recordada por usuario y módulo (`localStorage`); por defecto, lista.
+ * `views` acota lo que el módulo ofrece (`["list","grid"]` para la cuadrícula);
+ * pasá una constante estable del módulo. Una vista guardada que el módulo ya no
+ * ofrece se ignora (queda la lista).
+ */
+export function useAdminModuleView(
+  module: string,
+  views: readonly AdminModuleView[] = DEFAULT_MODULE_VIEWS,
+): [AdminModuleView, (view: AdminModuleView) => void] {
   const [view, setView] = useState<AdminModuleView>("list");
+  const viewsKey = views.join("|");
 
   useEffect(() => {
+    const allowed = viewsKey.split("|");
     try {
       const stored = window.localStorage.getItem(`ledbox-admin-view:${module}`);
-      if (stored === "board" || stored === "list") setView(stored);
+      if (stored && allowed.includes(stored)) setView(stored as AdminModuleView);
     } catch {
       /* almacenamiento no disponible: la vista vale solo para esta pantalla */
     }
-  }, [module]);
+  }, [module, viewsKey]);
 
   const change = useCallback(
     (next: AdminModuleView) => {
@@ -49,27 +62,41 @@ export function useAdminModuleView(module: string): [AdminModuleView, (view: Adm
   return [view, change];
 }
 
-/** Conmutador lista/tablero: una sola pieza para todos los módulos. */
+/** Etiqueta e ícono de cada vista; la cuadrícula usa la grilla de 4 cuadros. */
+const MODULE_VIEW_OPTIONS: Record<AdminModuleView, { label: string; icon: "menu" | "overview" }> = {
+  list: { label: "Lista", icon: "menu" },
+  board: { label: "Tablero", icon: "overview" },
+  grid: { label: "Cuadrícula", icon: "overview" },
+};
+
+/** Conmutador de vistas: una sola pieza para todos los módulos. */
 export function AdminViewSwitch({
   view,
   onChange,
   label,
+  views = DEFAULT_MODULE_VIEWS,
 }: {
   view: AdminModuleView;
   onChange: (view: AdminModuleView) => void;
   /** Nombre de la vista para lectores («Vista de leads»). */
   label: string;
+  /** Vistas ofrecidas, en orden; por defecto lista y tablero. */
+  views?: readonly AdminModuleView[];
 }) {
   return (
     <div className="admin-viewswitch" role="group" aria-label={label}>
-      <button type="button" className="admin-viewswitch-btn" aria-pressed={view === "list"} onClick={() => onChange("list")}>
-        <AdminIcon name="menu" size={14} />
-        Lista
-      </button>
-      <button type="button" className="admin-viewswitch-btn" aria-pressed={view === "board"} onClick={() => onChange("board")}>
-        <AdminIcon name="overview" size={14} />
-        Tablero
-      </button>
+      {views.map((option) => (
+        <button
+          key={option}
+          type="button"
+          className="admin-viewswitch-btn"
+          aria-pressed={view === option}
+          onClick={() => onChange(option)}
+        >
+          <AdminIcon name={MODULE_VIEW_OPTIONS[option].icon} size={14} />
+          {MODULE_VIEW_OPTIONS[option].label}
+        </button>
+      ))}
     </div>
   );
 }
