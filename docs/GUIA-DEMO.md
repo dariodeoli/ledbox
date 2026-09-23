@@ -31,3 +31,11 @@ No hace falta usuario ni contraseña: `demo.ledbox.online` abre la demo en la ra
 - Las **fechas se mantienen vivas solas**: los eventos reales de Paraguay se proyectan a la ventana ±6 meses y los estados se derivan de la fecha (el cronograma cubre todo el año).
 - Los códigos de los portales pueden cambiar si la demo se reprovisiona; siempre están publicados en la portada de la demo.
 - La demo muestra también **tesorería, gastos, conciliación, invitaciones, correos, logos/avatares y la cronología** (issue #32).
+
+## Portal de la demo: simulado y sin persistencia (issue #52)
+
+- El modo demo ya no depende de `?demo=1`: la página detecta que el presupuesto es de la empresa de ejemplo y muestra el aviso de datos simulados. Los links viejos con el marcador siguen funcionando (compatibilidad).
+- La demo **no escribe nada** en el portal: no se marca `viewedAt` y las acciones del cliente (autorizar con ajustes, pedir rebaja, pedir un cambio, subir el comprobante) se resuelven en el navegador y se guardan por sesión (`sessionStorage`, clave por token). Sobreviven la navegación de esa visita y **otro visitante ve el estado canónico**.
+- Los endpoints del portal rechazan cualquier escritura sobre la demo (403 «Modo demo: solo lectura»), igual que hace el panel con la sesión demo.
+- Los re-seed de `/api/portal/demo` y de la landing del panel quedan como **red de seguridad**: con el portal sin escrituras no deberían dispararse, así que más adelante se pueden simplificar.
+- La cronología sigue siendo la canónica: los hitos simulados no se inventan.
