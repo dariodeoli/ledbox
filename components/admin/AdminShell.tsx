@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppFooter } from "@/components/app-footer";
@@ -46,7 +47,14 @@ import {
 import { AdminIcon } from "./AdminIcons";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen } from "./AdminUI";
-import { AdminCommandPalette } from "./AdminCommandPalette";
+/**
+ * Paleta del buscador (issue #67): llega diferida. Su código no entra en el
+ * arranque del panel; con el shell ocioso se prefetchea el chunk para que la
+ * primera apertura sea instantánea. El botón y el atajo viven acá abajo.
+ */
+const AdminCommandPalette = dynamic(() => import("./AdminCommandPalette").then((mod) => mod.AdminCommandPalette), {
+  ssr: false,
+});
 import { AdminMobileNav } from "./AdminMobileNav";
 import { AdminModuleHelp } from "./AdminModuleHelp";
 import { AdminThemeToggle, AdminSidebarToggle } from "./admin-theme";
@@ -269,6 +277,8 @@ export function AdminShell({
   const skipInitialLoadRef = useRef(Boolean(initialSession));
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteMounted, setPaletteMounted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   // Bloqueo por PIN (issue #21): error/estado de la pantalla y canal entre pestañas.
@@ -343,6 +353,34 @@ export function AdminShell({
     }
     void loadSession();
   }, [loadSession]);
+
+  /** Abre la paleta: monta el componente diferido y lo deja abierto. */
+  const openPalette = useCallback(() => {
+    setPaletteMounted(true);
+    setPaletteOpen(true);
+  }, []);
+
+  // Atajo global del panel (⌘/Ctrl + K): vive acá porque la paleta llega diferida.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.altKey) return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      openPalette();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [openPalette]);
+
+  // Prefetch ocioso del chunk: la primera apertura no espera la red.
+  useEffect(() => {
+    const load = () => void import("./AdminCommandPalette");
+    const idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(load, { timeout: 4000 }) : window.setTimeout(load, 2500);
+    return () => {
+      if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+    };
+  }, []);
 
   // El menú lateral se cierra al cambiar de pantalla: antes el drawer (y el
   // fondo oscuro del panel) quedaba abierto sobre la página nueva.
@@ -890,7 +928,21 @@ export function AdminShell({
             <AdminModuleHelp />
 
             <div className="admin-topbar-tools">
-              <AdminCommandPalette />
+              <button
+                type="button"
+                className="admin-searchbtn"
+                onClick={openPalette}
+                aria-label="Buscar en el panel"
+                aria-haspopup="dialog"
+                title="Buscar en el panel · Ctrl/⌘ + K"
+              >
+                <AdminIcon name="search" size={15} />
+                <span className="admin-searchbtn-label">Buscar</span>
+                <kbd className="admin-searchbtn-key" aria-hidden="true">
+                  ⌘K
+                </kbd>
+              </button>
+              {paletteMounted ? <AdminCommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} /> : null}
               {session.demo ? (
                 <Link
                   className="admin-demo-chip"
