@@ -52,3 +52,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - catálogo y marcas de bancos desde owncoding-ui
 - montos del panel con el formateador de owncoding-ui (Refs #46)
 
+## v2.1.23 — 2026-09-23
+
+- campo Ciudad con catálogo compartido y sugerencias
+- teléfono, monto PYG y ciudad usan owncoding-ui
+
