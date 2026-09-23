@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { formatGs } from "owncoding-ui";
 import {
   clientWhatsappMessage,
   contactPhoneValid,
@@ -8,6 +9,7 @@ import {
   daysUntilDue,
   formatCountdown,
   formatDayWhen,
+  formatMoney,
   instagramHref,
   instagramLabel,
   inventoryAssignmentCountdown,
@@ -148,4 +150,29 @@ test("teléfono de contacto: normaliza el 0 local y rechaza lo inválido", () =>
 test("el WhatsApp prellenado del cliente saluda por su nombre", () => {
   assert.equal(clientWhatsappMessage("María González"), "Hola María González: te escribimos de LedBox.");
   assert.equal(clientWhatsappMessage("  "), "Hola: te escribimos de LedBox.");
+});
+
+/**
+ * Montos del panel (issue #46): `formatMoney` delega en el formateador de la
+ * librería compartida, así el mismo número se escribe igual en todas las apps.
+ * El texto es el acordado (`Gs 1.234.567`) y los bordes no inventan valores:
+ * sin dato sigue dibujando `Gs 0`.
+ */
+
+test("monto PYG: un solo formato en todo el panel (Gs 1.234.567)", () => {
+  assert.equal(formatMoney(1234567), "Gs 1.234.567");
+  assert.equal(formatMoney(18994000), "Gs 18.994.000");
+  assert.equal(formatMoney(250000), "Gs 250.000");
+  assert.equal(formatMoney(0), "Gs 0");
+  assert.equal(formatMoney(-5000), "Gs -5.000");
+  assert.equal(formatMoney(1234.6), "Gs 1.235");
+  assert.equal(formatMoney(null), "Gs 0");
+  assert.equal(formatMoney(undefined), "Gs 0");
+  assert.equal(formatMoney(Number.NaN), "Gs 0");
+});
+
+test("formatMoney no duplica el formateador: es el de owncoding-ui", () => {
+  for (const value of [0, 1, 999, 1000, 1234567, 18994000, -5000]) {
+    assert.equal(formatMoney(value), formatGs(value));
+  }
 });
