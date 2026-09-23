@@ -122,6 +122,33 @@ Nada de Tailwind, nada de estilos: son funciones y catálogos.
 Verificación: los valores de pantalla **no cambian** (mismo `Gs 1.234.567`, mismo
 `+595 982 029 217`, mismas ciudades) y los imprimibles siguen idénticos.
 
+### Estado del paso 4 (23-09-2026, issue #47)
+
+Bancos adoptados: el catálogo es `BANCOS_PARAGUAY` y las marcas salen de
+`logoDeBanco` (alias incluidos); las sugerencias del campo Banco, de
+`sugerenciasDeBanco` (`lib/bank-mark.ts`). Se borraron el registro y la paleta
+locales.
+
+- El campo Banco de Tesorería y de Datos de pago sugiere el catálogo con un
+  `<datalist>` nativo (única prop nueva del kit de campos: `list` en `TextField`).
+- Sin asset versionado se dibuja el monograma de la librería
+  (`inicialesDeBanco`/`colorDeBanco`): cambian iniciales y colores respecto de la
+  paleta local, y los nombres cortos que la librería no lista como alias
+  («continental», «bnf») caen al monograma genérico.
+- El registro apunta a archivos del host (`/bancos/<archivo>`) que la app no
+  versiona: `REPO_ASSETS` en `lib/bank-mark.ts` mapea `marca:ueno` →
+  `public/assets/banks/ueno.svg` (lo de hoy). Versionar un logo nuevo es sumar la
+  línea al mapa.
+- **Para los pasos siguientes**: `dist/index.js` de la librería es un bundle
+  `"use client"`; no se puede llamar desde componentes de servidor. La hoja
+  imprimible del presupuesto usa la isla cliente
+  `app/(admin)/(print)/_components/PrintBankData.tsx`. El paso 2 (montos) toca
+  `lib/admin-format.ts`, que usan las hojas imprimibles del servidor: necesita el
+  mismo tratamiento (o un subcamino puro en la librería).
+- Los `.d.ts` de v0.14.0 declaran `BANCOS_PARAGUAY` como objetos y `logoDeBanco`
+  como `string | null`, mientras el runtime devuelve los nombres y el registro:
+  el ajuste vive documentado en `lib/bank-mark.ts` y conviene reportarlo upstream.
+
 ## 7. Requisito de deploy (Coolify)
 
 `owncoding-ui` es **público** (`github.com/dariodeoli/owncoding-ui`): no hace

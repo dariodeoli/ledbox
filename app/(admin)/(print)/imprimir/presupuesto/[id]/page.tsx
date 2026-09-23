@@ -9,7 +9,6 @@ import {
   formatMoney,
   formatNumber,
 } from "@/lib/admin-format";
-import { bankMark } from "@/lib/bank-mark";
 import { organizationLogoUrl } from "@/lib/admin-types";
 import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
@@ -17,6 +16,7 @@ import { loadOrganizationLogos } from "@/lib/server/branding";
 import { parsePaymentDetails, paymentPlanOf } from "@/lib/server/budget-portal";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { PrintBankData } from "../../../_components/PrintBankData";
 import { PrintAmount, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
 import { PrintToolbar } from "../../../_components/PrintToolbar";
 
@@ -69,7 +69,6 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
   const plan = paymentPlanOf(budget);
   const details = parsePaymentDetails(budget.organization.paymentDetails);
-  const mark = bankMark(details?.bank);
   // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
   const logos = await loadOrganizationLogos(auth.context.organizationId);
   const logo = logos.light ? organizationLogoUrl("light", logos.light.updatedAt) : null;
@@ -228,22 +227,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                 <span className="lbprint-pay-total lbprint-num">de {formatMoney(budget.total)}</span>
               </div>
               {details ? (
-                <div className="lbprint-bank">
-                  {mark?.asset ? (
-                    <img className="lbprint-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
-                  ) : (
-                    <span className="lbprint-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
-                      {mark?.initials ?? "B"}
-                    </span>
-                  )}
-                  <div className="lbprint-bank-data">
-                    <span className="lbprint-bank-name">{mark?.label ?? details.bank ?? "Datos de pago"}</span>
-                    {details.holder ? <span className="lbprint-bank-line">Titular: {details.holder}</span> : null}
-                    {details.ruc ? <span className="lbprint-bank-line">RUC: {details.ruc}</span> : null}
-                    {details.account ? <span className="lbprint-bank-line">Cuenta: {details.account}</span> : null}
-                    {details.alias ? <span className="lbprint-bank-line">Alias: {details.alias}</span> : null}
-                  </div>
-                </div>
+                <PrintBankData details={details} />
               ) : (
                 <p className="lbprint-note">La empresa todavía no cargó sus datos bancarios en el panel.</p>
               )}
