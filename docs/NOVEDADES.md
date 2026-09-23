@@ -57,3 +57,13 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - campo Ciudad con catálogo compartido y sugerencias
 - teléfono, monto PYG y ciudad usan owncoding-ui
 
+## v2.1.24 — 2026-09-23
+
+- portal simulado sin persistencia y qué se puede simplificar
+- la demo no escribe — endpoints del portal en solo lectura
+- acciones del cliente simuladas por sesión en la demo
+- el modo demo se detecta en el servidor y la URL va sin marcador
+- raíz de la demo sin bucle y host resuelto como el middleware
+- sin sesión el panel va al login sin dibujar el shell
+- nav compacto con acordeón por altura
+
