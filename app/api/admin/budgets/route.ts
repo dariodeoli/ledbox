@@ -8,8 +8,13 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
-import { isValidDayKey } from "@/lib/server/notifications";
+import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import {
+  budgetCommercialChanges,
+  budgetCommercialGuard,
+  type BudgetCommercialSnapshot,
+} from "@/lib/budget-commercial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -609,64 +614,82 @@ async function patchBudgetCommercial(params: {
   });
   if (!budget) return jsonError("Budget not found.", 404);
 
-  const data: Prisma.BudgetUpdateInput = {};
-  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  // Qué se puede tocar: el precio y las condiciones del cliente quedan
+  // congelados con la aprobación; los costos internos se corrigen siempre.
+  const guard = budgetCommercialGuard({ approved: Boolean(budget.approvedAt), status: budget.status }, body);
+  if (!guard.ok) return jsonError(guard.error, guard.status);
 
-  // Costos internos: siempre editables (registro del dueño).
+  // Valores propuestos ya normalizados (montos enteros, fechas como día).
+  const patch: Partial<BudgetCommercialSnapshot> = {};
+  const data: Prisma.BudgetUpdateInput = {};
+
   if (body.materialCost !== undefined) {
     const materialCost = moneyField(body.materialCost);
     if (materialCost === null) return jsonError("El costo de materiales debe ser un entero en guaraníes.", 400);
+    patch.materialCost = materialCost;
     data.materialCost = materialCost;
-    if (materialCost !== budget.materialCost) changes.materialCost = { from: budget.materialCost, to: materialCost };
   }
   if (body.laborCost !== undefined) {
     const laborCost = moneyField(body.laborCost);
     if (laborCost === null) return jsonError("El costo de mano de obra debe ser un entero en guaraníes.", 400);
+    patch.laborCost = laborCost;
     data.laborCost = laborCost;
-    if (laborCost !== budget.laborCost) changes.laborCost = { from: budget.laborCost, to: laborCost };
   }
-
-  // Datos de la versión del cliente: se congelan con la aprobación registrada.
-  const clientFields = ["discount", "validUntil", "deliveryAt", "ivaType", "warranty", "notes"] as const;
-  const touchesClientFields = clientFields.some((field) => body[field] !== undefined);
-  if (touchesClientFields) {
-    if (budget.approvedAt) return jsonError("El presupuesto ya está aprobado: la versión del cliente no se cambia.", 409);
-    if (budget.status === "LOST" || budget.status === "CANCELLED") return jsonError("Este presupuesto ya no está en juego.", 409);
-  }
-
   if (body.discount !== undefined) {
     const discount = moneyField(body.discount);
     if (discount === null) return jsonError("El descuento debe ser un entero en guaraníes.", 400);
     if (discount > budget.subtotal) {
       return jsonError("El precio final no puede quedar por debajo de cero: el descuento supera la suma de los ítems.", 400);
     }
+    patch.discount = discount;
     data.discount = discount;
     data.total = Math.max(0, budget.subtotal - discount);
-    if (discount !== budget.discount) changes.discount = { from: budget.discount, to: discount };
   }
   if (body.validUntil !== undefined) {
     const valid = dayField(body.validUntil);
     if (!valid.ok) return jsonError("La vigencia no es válida.", 400);
+    patch.validUntil = valid.value ? dayKeyOf(valid.value) : null;
     data.validUntil = valid.value;
   }
   if (body.deliveryAt !== undefined) {
     const delivery = dayField(body.deliveryAt);
     if (!delivery.ok) return jsonError("La fecha de entrega no es válida.", 400);
+    patch.deliveryAt = delivery.value ? dayKeyOf(delivery.value) : null;
     data.deliveryAt = delivery.value;
   }
   if (body.ivaType !== undefined) {
     const ivaType = ivaField(body.ivaType);
     if (ivaType === undefined) return jsonError("La condición de IVA no es válida.", 400);
+    patch.ivaType = ivaType;
     data.ivaType = ivaType;
   }
   if (body.warranty !== undefined) {
-    data.warranty = textField(body.warranty, MAX_WARRANTY);
+    const warranty = textField(body.warranty, MAX_WARRANTY);
+    patch.warranty = warranty;
+    data.warranty = warranty;
   }
   if (body.notes !== undefined) {
-    data.notes = textField(body.notes, MAX_NOTES);
+    const notes = textField(body.notes, MAX_NOTES);
+    patch.notes = notes;
+    data.notes = notes;
   }
 
-  if (Object.keys(data).length === 0 || Object.keys(changes).length === 0) {
+  // El `unchanged` sale de comparar TODOS los campos comerciales (issue #70):
+  // cambiar solo las notas, la garantía o el IVA se guarda y se audita.
+  const changes = budgetCommercialChanges(
+    {
+      materialCost: budget.materialCost,
+      laborCost: budget.laborCost,
+      discount: budget.discount,
+      validUntil: budget.validUntil ? dayKeyOf(budget.validUntil) : null,
+      deliveryAt: budget.deliveryAt ? dayKeyOf(budget.deliveryAt) : null,
+      ivaType: budget.ivaType,
+      warranty: budget.warranty,
+      notes: budget.notes,
+    },
+    patch,
+  );
+  if (!changes) {
     const current = await db.budget.findUnique({
       where: { id: budget.id },
       select: {

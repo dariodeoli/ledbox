@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "test:rules": "node --import tsx --test tests/field-rules.test.ts tests/admin-format.test.ts tests/admin-ux.test.ts tests/admin-views.test.ts tests/api-tokens.test.ts tests/demo-tour.test.ts tests/inventory-availability.test.ts tests/calendar-labels.test.ts tests/bank-mark.test.ts tests/bank-statement.test.ts tests/budget-costs.test.ts tests/budget-privacy.test.ts tests/portal-demo.test.ts tests/offline-queue.test.ts tests/invitation-token.test.ts tests/sso-messages.test.ts tests/message-templates.test.ts tests/backup-status.test.ts tests/plan-limits.test.ts tests/fiscal.test.ts && node scripts/check-fields.mjs",
+    "test:rules": "node --import tsx --test tests/field-rules.test.ts tests/admin-format.test.ts tests/admin-ux.test.ts tests/admin-views.test.ts tests/api-tokens.test.ts tests/demo-tour.test.ts tests/inventory-availability.test.ts tests/calendar-labels.test.ts tests/bank-mark.test.ts tests/bank-statement.test.ts tests/budget-costs.test.ts tests/budget-commercial.test.ts tests/budget-privacy.test.ts tests/portal-demo.test.ts tests/offline-queue.test.ts tests/invitation-token.test.ts tests/sso-messages.test.ts tests/message-templates.test.ts tests/backup-status.test.ts tests/plan-limits.test.ts tests/fiscal.test.ts && node scripts/check-fields.mjs",
     "check:fields": "node scripts/check-fields.mjs",
     "release:prepare": "npm run typecheck && npm run test:rules && npm run build",
     "deploy:patch": "node scripts/deploy.mjs",
