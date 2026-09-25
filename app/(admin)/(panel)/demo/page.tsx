@@ -763,9 +763,10 @@ export default async function DemoPage() {
               Autogestión <AdminBadge tone="warn">Pendiente</AdminBadge>
             </h3>
             <p>
-              {openBudget ? `«${openBudget.title}»` : "Un presupuesto abierto"} está sin aprobar: entrá con el link o el QR
-              y probá la autogestión del cliente — cambá cantidades y días, o pedí una rebaja. La simulación corre en tu
-              navegador (la demo no se escribe) y la solicitud pendiente del panel sigue siendo la del dataset.
+              {openBudget ? `«${openBudget.title}»` : "Un presupuesto abierto"} está sin aprobar: entrá con el link o el QR,
+              probá la autogestión del cliente —cambá cantidades y días, pedí una rebaja— y <strong>aprobá el presupuesto</strong>{" "}
+              con el botón «Autorizar el presupuesto». La simulación corre en tu navegador (la demo no se escribe) y la
+              solicitud pendiente del panel sigue siendo la del dataset.
             </p>
             {pendingUrl && pendingQr && openBudget?.publicToken ? (
               <div className="admin-demo-portal">

@@ -1217,6 +1217,12 @@ export const DEMO_PORTAL_BUDGET_ID = "demo_budget_pendiente";
  * Devuelve el presupuesto de ejemplo solo si sigue abierto para la autogestión
  * (sin aprobar y en un estado en juego, el mismo criterio que usa la demo del
  * panel); si no, `null` para que la entrada al ejemplo re-siembre el dataset.
+ *
+ * **Invariante (issue #74)**: el presupuesto de la entrada no puede arrastrar
+ * pedidos pendientes ni cambios solicitados —cualquiera de los dos esconde la
+ * acción de aprobar en el portal—, así el visitante de la demo siempre ve el
+ * botón «Autorizar el presupuesto» y puede aprobar de punta a punta (simulado).
+ * El pedido pendiente de ejemplo vive en el presupuesto «en cambios».
  */
 export async function loadDemoPortalBudget(
   organizationId: string,
@@ -1809,6 +1815,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   // probar la autogestión. ──
   const nextContact = clientContact(next.clientId);
   const secondContact = clientContact(second.clientId);
+  const thirdContact = clientContact(third.clientId);
   const changeRequestsData: Prisma.BudgetChangeRequestUncheckedCreateInput[] = [
     {
       id: "demo_request_rebaja_aceptada",
@@ -1841,21 +1848,23 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       responseNote: "No llegamos a ese descuento: el margen del evento está ajustado. Sumamos un tótem sin cargo.",
     },
     {
+      // El pedido pendiente vive en el presupuesto «en cambios», no en el de la
+      // entrada del portal (issue #74): un pedido pendiente esconde la acción de
+      // aprobar en el portal y la demo tiene que poder aprobar de punta a punta.
       id: "demo_request_items_pendiente",
       ...org,
-      budgetId: "demo_budget_pendiente",
+      budgetId: "demo_budget_cambios",
       kind: "items",
       status: "pending",
       payload: {
         items: [
-          { id: "demo_budget_item_b1", quantity: 8, days: 2 },
-          { id: "demo_budget_item_b2", quantity: 10, days: 2 },
-          { id: "demo_budget_item_b3", quantity: 1, days: 3 },
+          { id: "demo_budget_item_c1", quantity: 2, days: 2 },
+          { id: "demo_budget_item_c2", quantity: 3, days: 2 },
         ],
       } as unknown as Prisma.InputJsonValue,
-      note: "Sumamos dos pantallas más y un día de operación para la transmisión.",
-      requestedByName: secondContact.name,
-      requestedByEmail: secondContact.email,
+      note: "Sumamos dos tótems touch más para la zona de acceso.",
+      requestedByName: thirdContact.name,
+      requestedByEmail: thirdContact.email,
       createdAt: at(base, -1, 10, 15),
     },
   ];
