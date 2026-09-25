@@ -125,3 +125,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 ## v2.1.37 — 2026-09-25
 
 - el respaldo no falla en la ventana del deploy: si el cliente PostgreSQL todavía se está instalando, espera unos segundos y reintenta
+## v2.1.38 — 2026-09-25
+
+- el presupuesto de la entrada del portal se puede aprobar
+
