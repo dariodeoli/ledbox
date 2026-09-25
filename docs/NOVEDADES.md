@@ -121,3 +121,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - las dos tareas de Coolify (respaldo diario y chequeo cada 6 h) ya no quedan atadas al contenedor viejo
 - checklist post-deploy para el equipo y el caso real del 24-09 documentados en `docs/OPERACION.md`
 - el respaldo deja de ser un pendiente del dueño: ciclo automático confirmado
+
+## v2.1.37 — 2026-09-25
+
+- el respaldo no falla en la ventana del deploy: si el cliente PostgreSQL todavía se está instalando, espera unos segundos y reintenta
