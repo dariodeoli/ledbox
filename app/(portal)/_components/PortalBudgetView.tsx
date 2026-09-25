@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { AdminIcon } from "@/components/admin/AdminIcons";
 import {
   budgetApprovalLabel,
   budgetApprovalMethodLabel,
@@ -32,6 +33,8 @@ import {
 } from "@/lib/portal-demo";
 import { PAYMENT_PROOF_MIMES, paymentProofExtension } from "@/lib/admin-types";
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
+import { PortalCardTitle } from "./PortalCardTitle";
+import { PortalPending, type PortalPendingItem } from "./PortalPending";
 
 /**
  * Vista pública del presupuesto (issue #12) rediseñada: el cliente la lee de
@@ -431,6 +434,96 @@ export function PortalBudgetView({
   const mark = bankMark(budget.paymentDetails?.bank);
   const lastRequest = pendingRequests[0] ?? null;
 
+  /**
+   * Pendientes del cliente (25-09-2026): lo que falta hacer sale del estado
+   * real —decisión, pedido en revisión, transferencia, comprobante y vigencia—,
+   * nunca de un dato inventado. Vacío = no hay nada pendiente.
+   */
+  const pendingItems: PortalPendingItem[] = [];
+  if (!approved && canEdit) {
+    pendingItems.push({
+      id: "decide",
+      icon: "check",
+      tone: "accent",
+      title: "Falta tu decisión",
+      detail: `Autorizá el presupuesto por ${formatMoney(actionTotal)} o pedí una rebaja o un cambio.`,
+      href: "#portal-action",
+      action: "Decidir",
+    });
+  }
+  if (waitingRequest || revisionPending) {
+    pendingItems.push({
+      id: "review",
+      icon: "clock",
+      tone: "info",
+      title: "Tu pedido está en revisión",
+      detail: "El equipo de LedBox te responde por este mismo link; mientras tanto podés autorizar el presupuesto tal como está.",
+      href: budget.requests.length > 0 ? "#portal-requests" : undefined,
+      action: budget.requests.length > 0 ? "Ver pedido" : undefined,
+    });
+  }
+  if (!approved && budget.validUntil) {
+    const tone = countdownTone(budget.validUntil);
+    pendingItems.push({
+      id: "validity",
+      icon: "calendar",
+      tone: tone === "danger" ? "danger" : tone === "warn" ? "warn" : "neutral",
+      title: "La oferta tiene fecha de vencimiento",
+      detail: `Válida hasta ${formatDate(budget.validUntil)} · ${formatCountdown(budget.validUntil, "client")}.`,
+    });
+  }
+  if (approved) {
+    const inReview = budget.expectedPayments.filter((expected) => expected.status === "PROOF");
+    if (transferNow) {
+      pendingItems.push({
+        id: "transfer",
+        icon: "bank",
+        tone: "accent",
+        title: `Transferí ${transferNow.label}`,
+        detail: `${formatMoney(transferNow.amount)} · los datos bancarios están en esta misma página.`,
+        href: "#portal-payment-data",
+        action: "Ver datos",
+      });
+    }
+    if (inReview.length > 0) {
+      pendingItems.push({
+        id: "proof-review",
+        icon: "clock",
+        tone: "info",
+        title:
+          inReview.length === 1
+            ? `Comprobante en revisión: ${inReview[0]?.label ?? "pago"}`
+            : `${formatNumber(inReview.length)} comprobantes en revisión`,
+        detail: "El equipo de LedBox confirma el cobro; no hace falta hacer nada más.",
+      });
+    }
+    if (budget.proofUpload.allowed && openExpected.length > 0) {
+      pendingItems.push({
+        id: "proof",
+        icon: "upload",
+        tone: "accent",
+        title: "Enviá el comprobante de tu transferencia",
+        detail: "JPG, PNG, WebP o PDF de hasta 2 MB; queda vinculado al pago que elijas.",
+        href: "#portal-proof",
+        action: "Subir",
+      });
+    }
+  }
+
+  /** Avance real del plan de cobros: confirmados sobre el total vigente. */
+  const paymentProgress = (() => {
+    if (!approved) return null;
+    const active = budget.expectedPayments.filter((expected) => expected.status !== "CANCELLED");
+    if (active.length === 0) return null;
+    const confirmed = active.filter((expected) => expected.status === "CONFIRMED");
+    return {
+      confirmed: confirmed.length,
+      total: active.length,
+      confirmedAmount: formatMoney(confirmed.reduce((sum, expected) => sum + expected.amount, 0)),
+      totalAmount: formatMoney(active.reduce((sum, expected) => sum + expected.amount, 0)),
+    };
+  })();
+
   /** POST del portal con el token del link; devuelve el error real del API. */
   async function postPortal(path: string, body: unknown): Promise<{ error?: string; alreadyApproved?: boolean }> {
     const response = await fetch(`/api/portal/budget/${encodeURIComponent(token)}/${path}`, {
@@ -747,7 +840,8 @@ export function PortalBudgetView({
       {approved ? (
         <section className="portal-banner portal-banner--ok" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
           <h2 className="portal-banner-title" id="portal-approved">
-            {justApproved?.already ? "Este presupuesto ya estaba autorizado" : "Presupuesto autorizado"}
+            <AdminIcon name="check" size={16} />
+            <span>{justApproved?.already ? "Este presupuesto ya estaba autorizado" : "Presupuesto autorizado"}</span>
           </h2>
           <p>
             {justApproved?.already
@@ -784,7 +878,8 @@ export function PortalBudgetView({
       ) : revisionPending ? (
         <section className="portal-banner portal-banner--warn" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-revision">
           <h2 className="portal-banner-title" id="portal-revision">
-            Pediste cambios
+            <AdminIcon name="edit" size={16} />
+            <span>Pediste cambios</span>
           </h2>
           <p>
             Recibimos tu pedido{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox lo revisa y te
@@ -795,7 +890,8 @@ export function PortalBudgetView({
       ) : waitingRequest ? (
         <section className="portal-banner portal-banner--info" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-waiting">
           <h2 className="portal-banner-title" id="portal-waiting">
-            Tu pedido está en revisión
+            <AdminIcon name="clock" size={16} />
+            <span>Tu pedido está en revisión</span>
           </h2>
           <p>
             Ya nos llegó {lastRequest ? requestIntent(lastRequest) : justRequested?.kind === "discount" ? "la rebaja" : "el ajuste"} y
@@ -816,13 +912,15 @@ export function PortalBudgetView({
         </section>
       ) : null}
 
+      <PortalPending items={pendingItems} progress={paymentProgress} />
+
       <div className="portal-budget-grid">
         <div className="portal-budget-main">
           <section className="portal-card" aria-labelledby="portal-items">
             <div className="portal-card-head">
-              <h2 className="portal-card-title" id="portal-items">
+              <PortalCardTitle id="portal-items" icon="budgets">
                 {canEdit ? "Ajustá tu presupuesto" : "Detalle del presupuesto"}
-              </h2>
+              </PortalCardTitle>
               {canEdit && budget.items.length > 0 ? (
                 <p className="portal-card-lead">
                   Cambiá cantidades y días: el precio unitario queda fijo y el total se actualiza en vivo. Si dejás todo
@@ -940,9 +1038,9 @@ export function PortalBudgetView({
           {!approved && !revisionPending ? (
             <section className="portal-card portal-card--action" aria-labelledby="portal-action">
               <div className="portal-card-head">
-                <h2 className="portal-card-title" id="portal-action">
+                <PortalCardTitle id="portal-action" icon="check">
                   Tu decisión
-                </h2>
+                </PortalCardTitle>
                 <p className="portal-card-lead">
                   {canEdit
                     ? "Elegí una sola cosa: autorizás el presupuesto tal como queda (con tus ajustes, si los hiciste) o nos pedís una rebaja o un cambio. El equipo de LedBox responde por este mismo link."
@@ -1108,9 +1206,9 @@ export function PortalBudgetView({
 
           <section className="portal-card" aria-labelledby="portal-payments">
             <div className="portal-card-head">
-              <h2 className="portal-card-title" id="portal-payments">
+              <PortalCardTitle id="portal-payments" icon="wallet">
                 {approved ? "Plan de pagos" : "Plan de pagos propuesto"}
-              </h2>
+              </PortalCardTitle>
               <p className="portal-card-lead">
                 {budget.expectedPayments.length > 0
                   ? "Cada concepto del plan con su estado real; el equipo confirma el cobro cuando llega la transferencia."
@@ -1240,9 +1338,9 @@ export function PortalBudgetView({
           {budget.deliveryAt || budget.ivaType || budget.warranty ? (
             <section className="portal-card" aria-labelledby="portal-terms">
               <div className="portal-card-head">
-                <h2 className="portal-card-title" id="portal-terms">
+                <PortalCardTitle id="portal-terms" icon="plan">
                   Condiciones de la propuesta
-                </h2>
+                </PortalCardTitle>
               </div>
               <dl className="portal-facts portal-facts--pay">
                 {budget.deliveryAt ? (
@@ -1275,9 +1373,9 @@ export function PortalBudgetView({
           {approved ? (
             <section className="portal-card portal-card--pay" aria-labelledby="portal-payment-data">
               <div className="portal-card-head">
-                <h2 className="portal-card-title" id="portal-payment-data">
+                <PortalCardTitle id="portal-payment-data" icon="bank">
                   Datos para transferir
-                </h2>
+                </PortalCardTitle>
               </div>
               {transferNow ? (
                 <div className="portal-pay-now">
@@ -1344,9 +1442,9 @@ export function PortalBudgetView({
           {budget.proofUpload.allowed ? (
             <section className="portal-card portal-print-hide" aria-labelledby="portal-proof" ref={proofRef} tabIndex={-1}>
               <div className="portal-card-head">
-                <h2 className="portal-card-title" id="portal-proof">
+                <PortalCardTitle id="portal-proof" icon="upload">
                   Enviar comprobante
-                </h2>
+                </PortalCardTitle>
                 <p className="portal-card-lead">
                   Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago
                   estás comprobando para que quede vinculado a ese concepto; el equipo de LedBox lo revisa desde el panel.
@@ -1438,9 +1536,9 @@ export function PortalBudgetView({
 
           {budget.proofs.length > 0 ? (
             <section className="portal-card" aria-labelledby="portal-proofs">
-              <h2 className="portal-card-title" id="portal-proofs">
+              <PortalCardTitle id="portal-proofs" icon="receipt">
                 Tus comprobantes
-              </h2>
+              </PortalCardTitle>
               <ul className="portal-proofs">
                 {budget.proofs.map((proof) => (
                   <li key={proof.id} className="portal-proof">
@@ -1462,9 +1560,9 @@ export function PortalBudgetView({
 
           {budget.requests.length > 0 ? (
             <section className="portal-card" aria-labelledby="portal-requests">
-              <h2 className="portal-card-title" id="portal-requests">
+              <PortalCardTitle id="portal-requests" icon="edit">
                 Tus pedidos
-              </h2>
+              </PortalCardTitle>
               <ul className="portal-requests">
                 {budget.requests.map((request) => (
                   <li key={request.id} className="portal-request" data-status={request.status}>
@@ -1496,9 +1594,9 @@ export function PortalBudgetView({
           {timeline}
 
           <section className="portal-card portal-help-card" aria-labelledby="portal-help">
-            <h2 className="portal-card-title" id="portal-help">
+            <PortalCardTitle id="portal-help" icon="info">
               ¿Necesitás algo más?
-            </h2>
+            </PortalCardTitle>
             <p className="portal-card-lead">
               Escribinos respondiendo el correo con el que te enviamos este presupuesto y citá el Nº {budget.reference}: el
               equipo de LedBox te contesta por el mismo canal.
@@ -1528,9 +1626,9 @@ export function PortalBudgetView({
 
         <aside className="portal-budget-aside" aria-labelledby="portal-summary">
           <div className="portal-card portal-summary">
-            <h2 className="portal-card-title" id="portal-summary">
+            <PortalCardTitle id="portal-summary" icon="overview">
               Resumen de lo pedido
-            </h2>
+            </PortalCardTitle>
             <p className="portal-summary-client">{clientLabel}</p>
             <div className="portal-budget-chips">
               <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>

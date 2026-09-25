@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { AdminIcon } from "@/components/admin/AdminIcons";
 import type { AdminTimelineEntry } from "@/lib/admin-types";
 import { countdownTone, formatCountdown, formatDate, formatDateTime, timelineKindLabel } from "@/lib/admin-format";
 import type { PortalBudget } from "@/lib/server/budget-portal";
+import { PortalCardTitle } from "./PortalCardTitle";
 
 /**
  * Secciones **estáticas** del portal (issue #63): no dependen de ningún estado
@@ -20,7 +22,8 @@ export function PortalDemoBanner() {
   return (
     <section className="portal-banner portal-banner--demo" aria-labelledby="portal-demo">
       <h2 className="portal-banner-title" id="portal-demo">
-        Presupuesto de ejemplo · datos simulados
+        <AdminIcon name="info" size={16} />
+        <span>Presupuesto de ejemplo · datos simulados</span>
       </h2>
       <p className="portal-banner-note">
         Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios. Lo que hagas acá se simula{" "}
@@ -92,9 +95,9 @@ export function PortalTimeline({ entries }: { entries: AdminTimelineEntry[] }) {
   return (
     <section className="portal-card" aria-labelledby="portal-timeline">
       <div className="portal-card-head">
-        <h2 className="portal-card-title" id="portal-timeline">
+        <PortalCardTitle id="portal-timeline" icon="clock">
           Cronología
-        </h2>
+        </PortalCardTitle>
         <p className="portal-card-lead">
           Todo lo que pasó con tu presupuesto, con la fecha real de cada paso: envío, cambios, autorización, pagos y evento.
         </p>
