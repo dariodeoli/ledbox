@@ -114,3 +114,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - avance de pagos confirmados sobre el plan, en monto y cantidad
 - iconos por sección en todo el presupuesto, como en el panel
 - cuando no falta nada, el portal lo dice: «Sin pendientes»
+
+## v2.1.36 — 2026-09-25
+
+- el respaldo de la base se instala y se programa solo en cada deploy: el contenedor nuevo ya trae el cliente PostgreSQL 18
+- las dos tareas de Coolify (respaldo diario y chequeo cada 6 h) ya no quedan atadas al contenedor viejo
+- checklist post-deploy para el equipo y el caso real del 24-09 documentados en `docs/OPERACION.md`
+- el respaldo deja de ser un pendiente del dueño: ciclo automático confirmado
