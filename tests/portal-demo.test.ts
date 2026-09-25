@@ -242,3 +242,29 @@ test("la entrada al ejemplo deja una URL sin marcador demo", () => {
   const page = repoFile("app/(portal)/p/[token]/page.tsx");
   assert.match(page, /budget\.demo/, "el modo demo se detecta por la empresa del presupuesto");
 });
+
+test("el presupuesto de la entrada de la demo se puede aprobar (issue #74)", () => {
+  const data = repoFile("lib/server/demo-data.ts");
+  const portalId = data.match(/export const DEMO_PORTAL_BUDGET_ID = "([^"]+)"/)?.[1] ?? "";
+  assert.ok(portalId, "la entrada de la demo declara su presupuesto");
+
+  // 1) El presupuesto de la entrada nace abierto: sin aprobación ni revisión.
+  const seedStart = data.indexOf(`id: "${portalId}"`);
+  assert.ok(seedStart > 0, "el presupuesto de la entrada está en el dataset");
+  const seed = data.slice(seedStart, data.indexOf("\n    },\n", seedStart));
+  assert.doesNotMatch(seed, /approval:/, "la entrada no puede estar aprobada");
+  assert.doesNotMatch(seed, /revision:/, "la entrada no puede tener cambios solicitados");
+  assert.match(seed, /status: "(SENT|NEGOTIATING)"/);
+
+  // 2) Ningún pedido pendiente apunta a la entrada: escondería el botón de
+  //    aprobar (la acción del portal que la demo tiene que mostrar).
+  const requests = data.split('id: "demo_request_').slice(1);
+  const blocked = requests.filter((part) => {
+    const head = part.slice(0, 1_200);
+    return head.includes(`budgetId: "${portalId}"`) && head.includes('status: "pending"');
+  });
+  assert.deepEqual(blocked, [], `un pedido pendiente en ${portalId} esconde la acción de aprobar`);
+
+  // 3) El pedido pendiente de ejemplo sigue existiendo, en el presupuesto «en cambios».
+  assert.match(data, /budgetId: "demo_budget_cambios",\s*\n\s*kind: "items",\s*\n\s*status: "pending"/);
+});

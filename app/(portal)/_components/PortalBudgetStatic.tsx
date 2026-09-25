@@ -28,7 +28,8 @@ export function PortalDemoBanner() {
       <p className="portal-banner-note">
         Estás en el modo demo del portal: el cliente, los ítems y los montos son ficticios. Lo que hagas acá se simula{" "}
         <strong>en tu navegador</strong> y no modifica el ejemplo —otro visitante ve el mismo estado—, así que podés probar
-        la autogestión sin compromiso. <Link href="/portal">Volver a la portada</Link>.
+        la autogestión sin compromiso: bajá al <strong>bloque de decisión</strong> y tocá «Autorizar el presupuesto» para ver
+        el circuito completo. <Link href="/portal">Volver a la portada</Link>.
       </p>
     </section>
   );

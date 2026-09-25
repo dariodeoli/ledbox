@@ -19,7 +19,7 @@ No hace falta usuario ni contraseña: `demo.ledbox.online` abre la demo en la ra
 2. **Calendario**: mes con montajes, eventos, cobros y vencimientos; alertas de atrasados (hoy: 66 movimientos, 7 atrasados) y el cronograma hasta fin de año.
 3. **Eventos**: checklist operativo por evento (avance real: completos, parciales y pendientes), con tareas vencidas a la vista.
 4. **Clientes**: la lista con **Contratado · Presup. · Deuda vencida · Última actividad**; al abrir uno, la **ficha 360** con contratos, totales, frecuencia de contratación e historial. Y **Leads** para el pipeline comercial.
-5. **Presupuestos → link/QR → Portal**: abrí el portal de **autogestión**: ajustar cantidad y días, ver el total en vivo, **pedir rebaja** y enviar la propuesta.
+5. **Presupuestos → link/QR → Portal**: abrí el portal de **autogestión**: ajustar cantidad y días, ver el total en vivo, **pedir rebaja** y **aprobar el presupuesto** con el botón «Autorizar el presupuesto» (simulado: el circuito completo —plan y datos de pago— aparece sin escribir nada).
 6. **Portal aprobado**: evidencia de la aprobación digital, plan de cuotas, **datos de pago** (Ueno Bank con su logo) y la **cronología completa** del presupuesto (envío, primera vista, cambios, aprobación, pagos, evento).
 7. **Inventario y Proveedores**: asignaciones con disponibilidad y conflictos, equipos dañados/faltantes, trabajos en distintos estados con anticipos y saldos.
 8. **Finanzas**: cobrado, por cobrar y mora, **Por confirmar** (comprobantes del cliente en revisión) y **Tesorería** por cuentas (efectivo / banco / cheques) con los saldos derivados y los **gastos** (dos "A definir" para ver la asignación desde la fila).
@@ -35,6 +35,7 @@ No hace falta usuario ni contraseña: `demo.ledbox.online` abre la demo en la ra
 ## Portal de la demo: simulado y sin persistencia (issue #52)
 
 - El modo demo ya no depende de `?demo=1`: la página detecta que el presupuesto es de la empresa de ejemplo y muestra el aviso de datos simulados. Los links viejos con el marcador siguen funcionando (compatibilidad).
+- **El presupuesto de la entrada siempre se puede aprobar** (issue #74): está sin aprobar y sin pedidos pendientes ni cambios solicitados —cualquiera de los dos escondería la acción de aprobar—, así el visitante ve el bloque de decisión con «Autorizar el presupuesto». El pedido pendiente de ejemplo vive en el presupuesto «en cambios».
 - La demo **no escribe nada** en el portal: no se marca `viewedAt` y las acciones del cliente (autorizar con ajustes, pedir rebaja, pedir un cambio, subir el comprobante) se resuelven en el navegador y se guardan por sesión (`sessionStorage`, clave por token). Sobreviven la navegación de esa visita y **otro visitante ve el estado canónico**.
 - Los endpoints del portal rechazan cualquier escritura sobre la demo (403 «Modo demo: solo lectura»), igual que hace el panel con la sesión demo.
 - Los re-seed de `/api/portal/demo` y de la landing del panel quedan como **red de seguridad**: con el portal sin escrituras no deberían dispararse, así que más adelante se pueden simplificar.
