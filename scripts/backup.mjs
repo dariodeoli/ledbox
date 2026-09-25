@@ -16,6 +16,9 @@
  *    el panel dice que no hay respaldos).
  *  - `--check`: falla (exit 1) si no hay respaldos, si el último intento falló,
  *    si el último respaldo supera el umbral o si el archivo ya no está.
+ *  - Cliente `pg_dump`: si `PG_DUMP_BIN` no está, se usa el más nuevo instalado
+ *    por versión mayor; si todavía es más viejo que la base (la ventana en la
+ *    que el deploy está instalando el suyo), espera y reintenta en vez de fallar.
  *
  * Uso:
  *   node scripts/backup.mjs                 # respalda, verifica, poda y registra
@@ -60,6 +63,14 @@ const DEFAULT_MIN_KEEP = 7;
 const DEFAULT_HISTORY = 20;
 const TIME_ZONE = "America/Asuncion";
 const MAX_ERROR = 500;
+/**
+ * El deploy de Coolify marca «finished» unos segundos antes de que su hook
+ * termine de instalar el cliente nuevo (ventana real medida: ~20 s, issue #71).
+ * Si la corrida cae justo ahí, `pg_dump` del sistema es más viejo que la base:
+ * en vez de fallar se espera y se reintenta con el binario ya actualizado.
+ */
+const MISMATCH_RETRY_MS = 20_000;
+const MISMATCH_ATTEMPTS = 3;
 
 const logger = {
   info: (message) => console.log(`[backup] ${message}`),
@@ -118,6 +129,8 @@ function loadConfig() {
     historyLimit: positiveInt(process.env.BACKUP_HISTORY, DEFAULT_HISTORY),
     verify: process.env.BACKUP_VERIFY !== "0",
     pgDumpBin: resolvePgDump(process.env.PG_DUMP_BIN),
+    /** ¿El binario lo eligió una persona? Entonces no se reintenta por versión. */
+    pgDumpExplicit: Boolean((process.env.PG_DUMP_BIN || "").trim()),
     databaseUrl: (process.env.DATABASE_URL || "").trim(),
   };
 }
@@ -420,9 +433,28 @@ async function backup(config, now) {
 
   try {
     await mkdir(config.dir, { recursive: true });
-    pgDump = await pgDumpVersion(config.pgDumpBin);
+    let dumpBin = config.pgDumpBin;
+    pgDump = await pgDumpVersion(dumpBin);
     logger.info(`Respaldando ${target.user}@${target.host}:${target.port}/${target.database} con pg_dump ${pgDump}…`);
-    await dumpToFile({ bin: config.pgDumpBin, env: pgEnv(config.databaseUrl), plainFile, target });
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await dumpToFile({ bin: dumpBin, env: pgEnv(config.databaseUrl), plainFile, target });
+        break;
+      } catch (caught) {
+        const detail = caught instanceof Error ? caught.message : String(caught);
+        // Cliente más viejo que la base en la ventana del deploy: se espera a
+        // que el hook termine y se vuelve a resolver el binario (issue #71).
+        const waitingForDeployClient =
+          !config.pgDumpExplicit && attempt < MISMATCH_ATTEMPTS && /server version mismatch/i.test(detail);
+        if (!waitingForDeployClient) throw caught;
+        logger.warn(
+          `El cliente no coincide con la base (intento ${attempt}/${MISMATCH_ATTEMPTS}): espero ${MISMATCH_RETRY_MS / 1000} s por el cliente que instala el deploy…`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, MISMATCH_RETRY_MS));
+        dumpBin = resolvePgDump(process.env.PG_DUMP_BIN);
+      }
+    }
+    if (dumpBin !== config.pgDumpBin) pgDump = await pgDumpVersion(dumpBin);
 
     file = await freeBackupName(config.dir, config.prefix, stamp);
     const gzipFile = join(config.dir, file);

@@ -196,6 +196,10 @@ una y su corrección, para reconocerlas rápido si vuelven.
   sigue mandando si se lo necesita.
 - **Ojo**: Coolify **no falla el deploy** si el hook falla (solo lo loguea); la verificación es
   el checklist de §6.
+- **Ventana del deploy**: Coolify marca el deploy «finished» unos segundos antes de que el hook
+  termine (medido: ~20 s el 25-09-2026). Si una corrida programada cae justo ahí, `backup.mjs`
+  espera y reintenta (hasta 2 veces, 20 s cada una) en vez de fallar; queda registrado en
+  `cron.log`.
 
 ### 7.3 Las tareas quedaban atadas al contenedor viejo
 

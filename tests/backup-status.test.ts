@@ -42,6 +42,8 @@ test("el respaldo resuelve solas las versiones de pg_dump (issue #71)", () => {
   assert.match(script, /\/usr\/lib\/postgresql/, "busca el cliente por versión mayor instalada");
   assert.match(script, /PG_DUMP_BIN/, "PG_DUMP_BIN sigue mandando si está");
   assert.match(script, /resolvePgDump/, "la resolución está aislada y es explícita");
+  assert.match(script, /server version mismatch/, "espera y reintenta si el cliente es más viejo que la base");
+  assert.match(script, /MISMATCH_ATTEMPTS/);
   // El instalador del deploy existe y es idempotente.
   const installer = readFileSync(new URL("../scripts/install-pgdump.sh", import.meta.url), "utf8");
   assert.match(installer, /set -eu/);
