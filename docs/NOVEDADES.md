@@ -102,3 +102,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - event-ops y trabajos con campos mínimos + ciudad en el calendario
 - buscador por ciudad y contactos, paleta diferida y fricciones
 
+## v2.1.34 — 2026-09-25
+
+- el PATCH comercial guarda los campos del cliente
+
