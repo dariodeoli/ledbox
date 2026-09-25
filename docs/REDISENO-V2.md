@@ -213,8 +213,9 @@ pantalla.
 
 1. Elegida la dirección: su bloque de tokens + reglas entra en
    `app/globals.css` (una sección, como hoy) y las familias se versionan en
-   `public/fonts` con `@font-face` (OFL; solo los pesos usados: Inter 3–4 pesos +
-   display 3 ≈ 200–270 KB).
+   `public/fonts` con `@font-face` (OFL; solo los pesos usados: Inter 3–4 pesos
+   ≈ 150–190 KB + display 3 pesos: 75 KB Sora / 200 KB Fraunces / 65 KB Space
+   Grotesk).
 2. Barrido por módulo respetando `docs/DISENO-PANEL.md` y
    `docs/DISENO-PANTALLAS.md` (orden y densidad no cambian; esto es piel y
    terminación).
