@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { backupStatusOf, formatAgeLabel } from "../lib/backup-status";
 
@@ -30,4 +31,20 @@ test("antigüedad legible del respaldo: horas con coma y días", () => {
   assert.equal(formatAgeLabel(100), "4 días");
   assert.equal(formatAgeLabel(null), "sin datos");
   assert.equal(formatAgeLabel(-1), "sin datos");
+});
+
+test("el respaldo resuelve solas las versiones de pg_dump (issue #71)", () => {
+  // Aserción de fuente: el script no puede quedar atado a `pg_dump` del PATH
+  // (en el contenedor el del sistema puede ser más viejo que la base) ni a una
+  // ruta fija de versión (cuando la base sube de mayor, el hook instala la
+  // nueva y el script tiene que encontrarla solo).
+  const script = readFileSync(new URL("../scripts/backup.mjs", import.meta.url), "utf8");
+  assert.match(script, /\/usr\/lib\/postgresql/, "busca el cliente por versión mayor instalada");
+  assert.match(script, /PG_DUMP_BIN/, "PG_DUMP_BIN sigue mandando si está");
+  assert.match(script, /resolvePgDump/, "la resolución está aislada y es explícita");
+  // El instalador del deploy existe y es idempotente.
+  const installer = readFileSync(new URL("../scripts/install-pgdump.sh", import.meta.url), "utf8");
+  assert.match(installer, /set -eu/);
+  assert.match(installer, /if \[ -x "\$PG_DUMP" \]/, "si el binario ya está, no reinstala");
+  assert.match(installer, /postgresql-client-\$\{PG_MAJOR\}/);
 });

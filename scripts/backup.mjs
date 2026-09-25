@@ -34,14 +34,14 @@
  *   BACKUP_MIN_KEEP         respaldos que nunca se borran (default 7)
  *   BACKUP_HISTORY          corridas que guarda el estado (default 20)
  *   BACKUP_VERIFY           `0` desactiva la verificación del dump (default activa)
- *   PG_DUMP_BIN             binario de pg_dump (default `pg_dump` del PATH)
+ *   PG_DUMP_BIN             binario de pg_dump (default: el más nuevo instalado)
  *
  * El procedimiento de restauración y el cron están en `docs/OPERACION.md`.
  * La contraseña de la base viaja por entorno del proceso hijo (PGPASSWORD),
  * nunca por la línea de comandos ni por el estado.
  */
 import { spawn } from "node:child_process";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, readdirSync } from "node:fs";
 import { access, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -79,6 +79,32 @@ function positiveInt(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * Binario de `pg_dump` a usar (issue #71): `PG_DUMP_BIN` manda; si no está, se
+ * elige el cliente **más nuevo por versión mayor** de `/usr/lib/postgresql/<N>/
+ * bin/pg_dump` —lo que deja el instalador del deploy (`scripts/install-pgdump.sh`)
+ * cuando el contenedor arranca— y, como último recurso, el `pg_dump` del PATH.
+ * Así la configuración no queda atada a una ruta fija si la base sube de versión:
+ * el binario correcto aparece solo cuando el hook lo instala.
+ */
+function resolvePgDump(explicit) {
+  const requested = (explicit || "").trim();
+  if (requested) return requested;
+  try {
+    const majors = readdirSync("/usr/lib/postgresql")
+      .map((name) => Number.parseInt(name, 10))
+      .filter((major) => Number.isInteger(major) && major > 0)
+      .sort((a, b) => b - a);
+    for (const major of majors) {
+      const candidate = `/usr/lib/postgresql/${major}/bin/pg_dump`;
+      if (existsSync(candidate)) return candidate;
+    }
+  } catch {
+    /* sin directorio de versiones (otros sistemas): se usa el del PATH */
+  }
+  return "pg_dump";
+}
+
 function loadConfig() {
   const dir = resolve(process.env.BACKUP_DIR || join(process.cwd(), "backups"));
   return {
@@ -91,7 +117,7 @@ function loadConfig() {
     minKeep: positiveInt(process.env.BACKUP_MIN_KEEP, DEFAULT_MIN_KEEP),
     historyLimit: positiveInt(process.env.BACKUP_HISTORY, DEFAULT_HISTORY),
     verify: process.env.BACKUP_VERIFY !== "0",
-    pgDumpBin: (process.env.PG_DUMP_BIN || "pg_dump").trim() || "pg_dump",
+    pgDumpBin: resolvePgDump(process.env.PG_DUMP_BIN),
     databaseUrl: (process.env.DATABASE_URL || "").trim(),
   };
 }
@@ -544,7 +570,7 @@ function help() {
       "",
       "Variables: BACKUP_DIR, BACKUP_STATE_FILE, BACKUP_LOG, BACKUP_FILE_PREFIX,",
       "BACKUP_MAX_AGE_HOURS, BACKUP_RETENTION_DAYS, BACKUP_MIN_KEEP, BACKUP_HISTORY,",
-      "BACKUP_VERIFY=0, PG_DUMP_BIN. Ver docs/OPERACION.md.",
+      "BACKUP_VERIFY=0, PG_DUMP_BIN (default: el más nuevo instalado). Ver docs/OPERACION.md.",
     ].join("\n"),
   );
 }
