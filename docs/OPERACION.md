@@ -38,21 +38,41 @@ Variables de entorno (todas opcionales salvo `DATABASE_URL`):
 | `BACKUP_MIN_KEEP` | `7` | Respaldos que nunca se borran |
 | `BACKUP_HISTORY` | `20` | Corridas que guarda el estado |
 | `BACKUP_VERIFY` | activa | `0` desactiva la verificación del dump |
-| `PG_DUMP_BIN` | `pg_dump` | Binario de `pg_dump` |
+| `PG_DUMP_BIN` | automático | Binario de `pg_dump`; si no está, el más nuevo de `/usr/lib/postgresql/<N>/bin` (y si no, el del PATH) |
 
 En el deploy de Coolify conviene fijar `BACKUP_DIR` a un volumen persistente (por ejemplo
 `/data/backups`) y usar el mismo valor en el entorno de la app, que es la que lee el estado.
 
-### Cron
+### Programación en producción (Coolify)
 
-Una corrida diaria alcanza con el umbral de 26 h (deja margen si una corrida se atrasa):
+En producción no hay cron del sistema: son **dos tareas programadas de Coolify** sobre la
+aplicación `ledbox:main`. La configuración vive fuera del repo y es esta:
+
+| Tarea | Frecuencia | Comando |
+| --- | --- | --- |
+| `EventOS backup diario` | `0 3 * * *` | `cd /app && BACKUP_DIR=/data/backups node scripts/backup.mjs >> /data/backups/cron.log 2>&1` |
+| `EventOS backup check` | `15 */6 * * *` | `cd /app && BACKUP_DIR=/data/backups node scripts/backup.mjs --check >> /data/backups/check.log 2>&1` |
+
+Notas de la configuración (aprendidas en el incidente del 24-09-2026, ver §7):
+
+- **`Container` va vacío** en las dos tareas: la tarea corre en el contenedor que esté
+  vivo. Si se fija el nombre, Coolify v4.3.23 **no lo actualiza al desplegar** y la tarea
+  queda apuntando a un contenedor muerto (con un solo contenedor corriendo igual funciona,
+  por eso falla solo a veces).
+- `BACKUP_DIR=/data/backups` en la tarea y en el entorno de la app (el panel lee el estado
+  del mismo directorio).
+- Las 03:00 son del **servidor (UTC)**: en Paraguay la corrida diaria cae a las 00:00.
+- El `pg_dump` del contenedor lo instala el **hook de deploy**
+  (`post_deployment_command: sh /app/scripts/install-pgdump.sh`), no la imagen base.
+
+Fuera de Coolify (cron del sistema) es el equivalente, ajustando la hora del servidor:
 
 ```cron
 # Respaldo diario a las 03:00 (hora del servidor)
-0 3 * * * cd /app && BACKUP_DIR=/data/backups DATABASE_URL="postgresql://…" /usr/bin/node scripts/backup.mjs >> /data/backups/cron.log 2>&1
+0 3 * * * cd /app && BACKUP_DIR=/data/backups DATABASE_URL="postgresql://…" node scripts/backup.mjs >> /data/backups/cron.log 2>&1
 
 # Chequeo cada 6 h: falla (exit 1) si el respaldo falta, está vencido o el último intento falló
-15 */6 * * * cd /app && BACKUP_DIR=/data/backups /usr/bin/node scripts/backup.mjs --check >> /data/backups/check.log 2>&1
+15 */6 * * * cd /app && BACKUP_DIR=/data/backups node scripts/backup.mjs --check >> /data/backups/check.log 2>&1
 ```
 
 El `--check` no necesita `DATABASE_URL`: lee el estado y el archivo real del último respaldo ok.
@@ -133,3 +153,64 @@ intenta el envío y la alerta queda visible igual en el panel.
 pendientes antes de atender tráfico (en el build es best-effort). No hay paso manual de migración
 en el deploy; la migración de este issue (`202609220001_backup_alert_mail`) es aditiva e
 idempotente y solo agrega el valor `alert` al enum `MailCategory`.
+
+## 6. Post-deploy (checklist del respaldo)
+
+Cada deploy crea un contenedor nuevo; el volumen y la configuración de Coolify sobreviven, el
+contenedor no. Cuatro verificaciones (2 minutos, en el contenedor nuevo):
+
+1. **Cliente PostgreSQL**: `pg_dump --version` → **18.x**. El hook del deploy
+   (`sh /app/scripts/install-pgdump.sh`) es el que lo instaló; si falta, se puede correr a mano.
+2. **Corrida manual**: `cd /app && BACKUP_DIR=/data/backups node scripts/backup.mjs`
+   → `Respaldo ok: ledbox-….sql.gz` y un archivo nuevo en `/data/backups`.
+3. **Chequeo**: `cd /app && BACKUP_DIR=/data/backups node scripts/backup.mjs --check`
+   → `OK: Último respaldo hace … h` y exit 0.
+4. **Tareas de Coolify**: las dos siguen `enabled`, con `Container` **vacío** y la frecuencia
+   de §1 (si el campo quedó con un nombre viejo, vaciarlo).
+
+El volumen `/data/backups` no se toca en el deploy: los respaldos anteriores siguen ahí. Después
+del checklist, el panel (`/sistema`) debe mostrar el respaldo al día sin alerta.
+
+## 7. Troubleshooting (caso real, 24-09-2026)
+
+El aviso «Sin respaldos» de `/sistema` destapó tres fallas encadenadas; esta es la causa de cada
+una y su corrección, para reconocerlas rápido si vuelven.
+
+### 7.1 El respaldo vivía dentro del contenedor
+
+- **Síntoma**: `/sistema` dice «Sin respaldos» aunque el respaldo hubiera corrido, o desaparece
+  después de un deploy.
+- **Causa**: `BACKUP_DIR` con el default (`./backups`) apunta al filesystem efímero; cada deploy
+  reemplaza el contenedor y se lleva los archivos.
+- **Corrección**: volumen persistente de Coolify montado en `/data/backups` y `BACKUP_DIR` con
+  ese valor en la tarea y en el entorno de la app.
+
+### 7.2 pg_dump más viejo que la base
+
+- **Síntoma** (log real): `pg_dump: error: aborting because of server version mismatch ·
+  detail: server version: 18.6; pg_dump version: 15.19 (Debian 15.19-0+deb12u1)`.
+- **Causa**: la imagen del contenedor trae el cliente 15 y la base corre PostgreSQL 18.6.
+- **Corrección**: `scripts/install-pgdump.sh` como `post_deployment_command` en cada deploy
+  (instala `postgresql-client-18` desde PGDG). `scripts/backup.mjs` elige solo el cliente más
+  nuevo instalado por versión mayor, así que la tarea no queda atada a una ruta; `PG_DUMP_BIN`
+  sigue mandando si se lo necesita.
+- **Ojo**: Coolify **no falla el deploy** si el hook falla (solo lo loguea); la verificación es
+  el checklist de §6.
+
+### 7.3 Las tareas quedaban atadas al contenedor viejo
+
+- **Síntoma**: después de un deploy, la tarea falla con «No valid container was found» o «More
+  than one container exists but no container name was provided».
+- **Causa**: el nombre del contenedor cambia en cada deploy (`<uuid>-<timestamp>`); Coolify
+  v4.3.23 no reescribe el campo `Container` de las tareas al desplegar. Con un solo contenedor
+  corriendo la tarea igual funciona, así que el fallo es intermitente.
+- **Corrección**: dejar `Container` **vacío** en las dos tareas (§1) para que el planificador
+  resuelva el contenedor vigente.
+
+### 7.4 Volumen sin permiso de escritura
+
+- **Síntoma**: `EACCES` al crear el directorio o el archivo en `/data/backups`.
+- **Causa**: el volumen quedó montado con un dueño distinto al del proceso. En este incidente no
+  pasó, pero es la otra falla clásica; los procesos de Coolify corren como root.
+- **Corrección**: montar el volumen escribible para el contenedor o ajustar el dueño; comprobar
+  con `ls -la /data/backups` antes de dar por sano el deploy.
