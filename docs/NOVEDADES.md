@@ -106,3 +106,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - el PATCH comercial guarda los campos del cliente
 
+
+## v2.1.35 — 2026-09-25
+
+- portal del cliente con modo claro y oscuro a elección, con el botón en la barra superior
+- el presupuesto abre con «Tus pendientes»: decisión, transferencia, comprobante o pedido en revisión, con acceso directo a cada paso
+- avance de pagos confirmados sobre el plan, en monto y cantidad
+- iconos por sección en todo el presupuesto, como en el panel
+- cuando no falta nada, el portal lo dice: «Sin pendientes»
