@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   amountError,
+  amountExceeds,
   amountInput,
+  amountLimitTitle,
   amountValid,
+  caretAfterDigits,
   CITY_OPTIONS,
   cityDepartment,
   digitsOnly,
@@ -12,6 +15,8 @@ import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
   formatPercent,
+  moneyInputDisplay,
+  moneyInputMaxLength,
   normalizeEmail,
   normalizePersonName,
   normalizePhone,
@@ -66,10 +71,12 @@ test("monto PYG: tolera pegado con símbolo y separadores y entrega entero limpi
 });
 
 test("porcentaje: coma decimal, 0–100 y hasta 2 decimales", () => {
-  assert.equal(percentInput("12,5"), "12.5");
-  assert.equal(percentInput("12,345"), "12.34");
+  assert.equal(percentInput("12,5"), "12,5");
+  assert.equal(percentInput("12.5"), "12,5");
+  assert.equal(percentInput("12,345"), "12,34");
   assert.equal(percentInput("abc10%"), "10");
-  assert.equal(percentInput("0,50"), "0.50");
+  assert.equal(percentInput("0,50"), "0,50");
+  assert.equal(percentInput("150"), "150"); // se puede tipear; la regla 0–100 lo rechaza
   assert.equal(parsePercent("12,5"), 12.5);
   assert.equal(parsePercent("100"), 100);
   assert.equal(parsePercent("101"), null);
@@ -124,6 +131,19 @@ test("monto PYG: la delegación en la librería conserva los bordes del contrato
   assert.equal(parseAmount("000"), 0);
   assert.equal(parseAmount("9007199254740993"), null); // fuera del entero seguro
   assert.equal(amountInput("gs 1.234"), "1234");
+});
+
+test("monto PYG: el campo se dibuja con separadores y avisa si supera el tope", () => {
+  assert.equal(moneyInputDisplay("89898999"), "89.898.999");
+  assert.equal(moneyInputDisplay("1000"), "1.000");
+  assert.equal(moneyInputDisplay(""), "");
+  assert.equal(amountExceeds("10000000000", FIELD_LIMITS.amountGeneral), false);
+  assert.equal(amountExceeds("10000000001", FIELD_LIMITS.amountGeneral), true);
+  assert.equal(amountLimitTitle(FIELD_LIMITS.amountGeneral), `${FIELD_MESSAGES.amountLimit} (Gs 10.000.000.000)`);
+  assert.equal(moneyInputMaxLength(FIELD_LIMITS.amountGeneral), 14); // 11 dígitos + 3 separadores
+  // El caret no salta al final cuando el formateo agrega separadores.
+  assert.equal(caretAfterDigits("1.234", 3), 4);
+  assert.equal(caretAfterDigits("1.234", 4), 5);
 });
 
 test("teléfono: la delegación conserva el prefijo 00, los compactos y los vacíos", () => {

@@ -2,13 +2,20 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  amountExceeds,
   amountInput,
+  amountLimitTitle,
+  caretAfterDigits,
   DEFAULT_PHONE_COUNTRY,
   digitsOnly,
   FIELD_LIMITS,
+  FIELD_MESSAGES,
+  moneyInputDisplay,
+  moneyInputMaxLength,
   normalizeEmail,
   normalizePhone,
   normalizeSerial,
+  parsePercent,
   parsePhone,
   percentInput,
   PIN_MAX_DIGITS,
@@ -237,7 +244,12 @@ export function TextAreaField({
   );
 }
 
-/** Monto PYG: entrega el número limpio (solo dígitos) y tolera pegado con símbolos. */
+/**
+ * Monto PYG con el manejo de `MoneyInput` de la librería (vía los utils puros):
+ * separadores de miles al tipear, letras bloqueadas (teclado y pegado) y tope
+ * marcado con `aria-invalid` + `title`. El valor de transporte sigue siendo el
+ * entero limpio (solo dígitos), como antes.
+ */
 export function MoneyField({
   label,
   ariaLabel,
@@ -252,6 +264,7 @@ export function MoneyField({
   readOnly,
   name,
   id,
+  limit = FIELD_LIMITS.amountGeneral,
 }: {
   label?: string;
   ariaLabel?: string;
@@ -266,30 +279,58 @@ export function MoneyField({
   readOnly?: boolean;
   name?: string;
   id?: string;
+  /** Tope del campo (marca el aviso; el API revalida siempre). */
+  limit?: number;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const amount = amountInput(value);
+  const exceeds = amountExceeds(amount, limit);
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
+        ref={inputRef}
         id={label ? fieldId : id}
         type="text"
-        inputMode="decimal"
-        value={value}
-        onChange={(event) => onChange(amountInput(event.target.value))}
+        inputMode="numeric"
+        value={moneyInputDisplay(amount)}
+        maxLength={moneyInputMaxLength(limit)}
+        onKeyDown={(event) => {
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          if (event.key.length === 1 && !/^\d$/.test(event.key)) event.preventDefault();
+        }}
+        onChange={(event) => {
+          const input = event.currentTarget;
+          const before = input.value.slice(0, input.selectionStart ?? input.value.length);
+          const digitsBefore = (before.match(/\d/g) || []).length;
+          onChange(amountInput(input.value));
+          // El formateo no mueve el caret: se reubica tras la misma cantidad de dígitos.
+          requestAnimationFrame(() => {
+            const node = inputRef.current;
+            if (!node || document.activeElement !== node) return;
+            const caret = caretAfterDigits(node.value, digitsBefore);
+            node.setSelectionRange?.(caret, caret);
+          });
+        }}
         required={required}
         placeholder={placeholder}
         disabled={disabled}
         readOnly={readOnly}
         name={name}
         aria-label={label ? undefined : ariaLabel}
-        aria-invalid={error ? true : undefined}
+        aria-invalid={error || exceeds ? true : undefined}
         aria-describedby={describedBy(error, hint, hintId, errorId)}
+        title={exceeds ? amountLimitTitle(limit) : undefined}
       />
     </FieldChrome>
   );
 }
 
-/** Porcentaje 0–100 con coma decimal y hasta 2 decimales; el `%` va en la etiqueta. */
+/**
+ * Porcentaje 0–100 con coma decimal y hasta 2 decimales, como el `PercentField`
+ * de la librería: letras bloqueadas (teclado y pegado) y aviso marcado cuando
+ * el valor supera 100.
+ */
 export function PercentField({
   label,
   ariaLabel,
@@ -318,21 +359,29 @@ export function PercentField({
   id?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
+  const clean = percentInput(value);
+  const outOfRange = clean !== "" && parsePercent(clean) === null;
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         type="text"
         inputMode="decimal"
-        value={value}
+        value={clean}
+        maxLength={6}
+        onKeyDown={(event) => {
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          if (event.key.length === 1 && !/^[\d,]$/.test(event.key)) event.preventDefault();
+        }}
         onChange={(event) => onChange(percentInput(event.target.value))}
         required={required}
         placeholder={placeholder}
         disabled={disabled}
         name={name}
         aria-label={label ? undefined : ariaLabel}
-        aria-invalid={error ? true : undefined}
+        aria-invalid={error || outOfRange ? true : undefined}
         aria-describedby={describedBy(error, hint, hintId, errorId)}
+        title={outOfRange ? FIELD_MESSAGES.percent : undefined}
       />
     </FieldChrome>
   );

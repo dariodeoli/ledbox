@@ -15,8 +15,14 @@
 
 import {
   CIUDADES_PARAGUAY,
+  caretTrasDigitos,
   componerTelefono,
   departamentoDe,
+  excedeMonto,
+  formatGsInput,
+  largoMaximoMonto,
+  limpiarPercent,
+  normalizarMontoInput,
   parseGsInput,
   parseTelefono,
 } from "owncoding-ui";
@@ -138,12 +144,42 @@ export function personNameError(value: string | null | undefined): string | null
 }
 
 /**
- * Limpia un pegado de monto PYG: símbolos, espacios y separadores fuera.
- * Se mantiene local porque el campo dibuja la máscara de dígitos sin puntos
- * mientras se tipea (la librería formatea y parsea, no enmascara).
+ * Limpia un pegado de monto PYG y devuelve el entero de transporte (solo
+ * dígitos). Delega en `normalizarMontoInput` de la librería: entiende grupos de
+ * miles (`1.234.567`), no deja letras y en PYG descarta la cola decimal. El
+ * campo dibuja el valor con `moneyInputDisplay`.
  */
 export function amountInput(value: string): string {
-  return digitsOnly(value).replace(/^0+(?=\d)/, "");
+  return normalizarMontoInput(value, "PYG", { integerOnly: true });
+}
+
+/**
+ * Texto del campo de monto PYG: dígitos con separadores de miles (`8.000.000`),
+ * la presentación del `MoneyInput` de la librería. El valor de transporte sigue
+ * siendo el entero limpio de `amountInput`.
+ */
+export function moneyInputDisplay(value: string): string {
+  return formatGsInput(value);
+}
+
+/** Tope de escritura del campo: el monto máximo permitido entra completo (MoneyInput). */
+export function moneyInputMaxLength(limit: number = FIELD_LIMITS.amountGeneral): number {
+  return largoMaximoMonto(limit);
+}
+
+/** ¿El monto supera el tope del campo? El campo marca `aria-invalid` + `title`. */
+export function amountExceeds(value: string, limit: number = FIELD_LIMITS.amountGeneral): boolean {
+  return excedeMonto(value, limit);
+}
+
+/** Título del campo cuando el monto supera el tope. */
+export function amountLimitTitle(limit: number = FIELD_LIMITS.amountGeneral): string {
+  return `${FIELD_MESSAGES.amountLimit} (Gs ${new Intl.NumberFormat("es-PY").format(limit)})`;
+}
+
+/** Posición del caret tras N dígitos: el formateo no mueve el cursor. */
+export function caretAfterDigits(display: string, digits: number): number {
+  return caretTrasDigitos(display, digits);
 }
 
 /**
@@ -171,21 +207,19 @@ export function amountError(value: string, limit: number = FIELD_LIMITS.amountGe
 }
 
 /**
- * Limpia un porcentaje mientras se tipea: dígitos, un solo separador decimal y
- * hasta 2 decimales (la coma se acepta como separador).
+ * Limpia un porcentaje mientras se tipea con el criterio de `PercentField` de
+ * la librería: dígitos y una sola coma decimal (los puntos se vuelven comas),
+ * hasta 2 decimales, 3 dígitos enteros (0–100) y 6 caracteres.
  */
 export function percentInput(value: string): string {
-  const raw = (value ?? "").replace(/,/g, ".").replace(/[^\d.]/g, "");
-  const [integer = "", ...rest] = raw.split(".");
-  const decimals = rest.join("").slice(0, 2);
-  const cleanInteger = integer.replace(/^0+(?=\d)/, "").slice(0, 3);
-  if (!rest.length) return cleanInteger;
-  return `${cleanInteger || "0"}.${decimals}`;
+  return limpiarPercent(value);
 }
 
 /** Porcentaje 0–100 con hasta 2 decimales; `null` si no es válido. */
 export function parsePercent(value: string): number | null {
-  const raw = percentInput(value);
+  // `percentInput` dibuja con coma (criterio de la librería): acá se vuelve a
+  // punto para el cálculo.
+  const raw = percentInput(value).replace(",", ".");
   if (!raw || raw === ".") return null;
   const percent = Number(raw);
   if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
