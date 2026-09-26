@@ -32,6 +32,7 @@ import {
   AdminErrorState,
   AdminKpi,
   AdminLoadingRows,
+  AdminModuleContext,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -121,6 +122,7 @@ export function ResumenModule() {
 
   return (
     <div className="admin-module-page">
+      <AdminModuleContext breadcrumb="Resumen" hint="Prioridades operativas, agenda y saldos que requieren atención." />
       <div className="admin-panel-grid">
         <div className="admin-panel-wide">
           <AdminPanel
@@ -139,6 +141,7 @@ export function ResumenModule() {
               empty={todayNotifications.length === 0}
               emptyTitle="Nada urgente" emptyIcon="check"
               emptyHint="No hay vencimientos, checklist pendiente ni cobros con saldo para mirar hoy."
+              emptyAction={<Link className="admin-empty-link" href="/eventos">Revisar eventos →</Link>}
               rows={3}
             >
               <AdminTable
@@ -209,6 +212,7 @@ export function ResumenModule() {
             empty={(overview.data?.upcoming.length ?? 0) === 0}
             emptyTitle="Sin eventos en agenda" emptyIcon="calendar"
             emptyHint="Cargá el primer evento para verlo acá con su checklist."
+            emptyAction={<Link className="admin-empty-link" href="/eventos">Cargar un evento →</Link>}
           >
             <AdminTable
               view="resumen-eventos"
@@ -265,6 +269,7 @@ export function ResumenModule() {
             empty={pendingTasks.length === 0}
             emptyTitle="Checklist al día" emptyIcon="check"
             emptyHint="No quedan tareas pendientes en los eventos cargados."
+            emptyAction={<Link className="admin-empty-link" href="/eventos">Abrir operaciones →</Link>}
             rows={4}
           >
             <ChecklistTable
@@ -294,6 +299,7 @@ export function ResumenModule() {
             empty={overdueTasks.length === 0}
             emptyTitle="Sin tareas vencidas" emptyIcon="check"
             emptyHint="Ninguna tarea pendiente pasó su fecha de vencimiento."
+            emptyAction={<Link className="admin-empty-link" href="/eventos">Ver calendario →</Link>}
             rows={3}
           >
             <AdminTable
@@ -336,6 +342,7 @@ export function ResumenModule() {
             empty={receivables.length === 0}
             emptyTitle="Nada pendiente de cobro" emptyIcon="check"
             emptyHint="Los presupuestos aprobados y enviados aparecen acá con su saldo."
+            emptyAction={<Link className="admin-empty-link" href="/presupuestos">Revisar presupuestos →</Link>}
             rows={4}
           >
             <AdminTable
@@ -382,6 +389,7 @@ export function ResumenModule() {
             empty={payables.length === 0}
             emptyTitle="Sin saldos con proveedores" emptyIcon="check"
             emptyHint="Los trabajos contratados con saldo pendiente aparecen acá."
+            emptyAction={<Link className="admin-empty-link" href="/finanzas">Abrir finanzas →</Link>}
             rows={4}
           >
             <AdminTable

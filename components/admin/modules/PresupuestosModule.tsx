@@ -54,6 +54,7 @@ import {
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
+  AdminModuleContext,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -1242,6 +1243,11 @@ export function PresupuestosModule() {
 
   return (
     <div className="admin-module-page">
+      <AdminModuleContext
+        breadcrumb="Ventas / Presupuestos"
+        hint="Vigencia, margen, portal del cliente y próximos pasos comerciales."
+        meta={`${formatNumber(rows.length)} visibles`}
+      />
       <section className="admin-kpis" aria-label="Indicadores de presupuestos">
         <AdminKpi
           label="Vigentes" icon="budgets"
@@ -1475,6 +1481,7 @@ export function PresupuestosModule() {
         empty={budgetRows.length === 0}
         emptyTitle="Todavía no hay presupuestos" emptyIcon="budgets"
         emptyHint="Creá un presupuesto para seguir venta, costos, margen y cobros."
+        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => { setFormError(""); setShowForm(true); }}>Crear presupuesto →</button> : undefined}
       >
         {view === "board" ? (
           searched.length === 0 ? (

@@ -48,25 +48,27 @@ export function buildInvitationMail(input: InvitationMailInput): InvitationMailC
   const subject = `Invitación al equipo de ${input.organizationName} · LedBox`;
 
   const rows: MailRow[] = [
-    { label: "Empresa", value: input.organizationName, strong: true },
-    { label: "Rol", value: role },
+    { label: "Organización", value: input.organizationName, strong: true },
+    { label: "Acceso", value: role },
     { label: "Invita", value: input.invitedByName },
-    { label: "Vence", value: expiry },
+    { label: "Vigencia", value: expiry },
   ];
 
   const content: MailContent = {
     title: input.resend ? `Tu invitación sigue abierta` : `Te invitaron al panel de ${input.organizationName}`,
     intro: [
-      `Hola:`,
+      `Hola,`,
       input.resend
-        ? `${input.invitedByName} te reenvió la invitación para sumarte al equipo de ${input.organizationName} en el panel de LedBox.`
-        : `${input.invitedByName} te invitó a sumarte al equipo de ${input.organizationName} en el panel de LedBox.`,
-      `Vas a entrar con el rol ${role}. El link de abajo es personal: elegí tu contraseña (o entrá con Google si ya usás esa cuenta) y quedás dentro.`,
+        ? `${input.invitedByName} volvió a enviarte la invitación para sumarte al equipo de ${input.organizationName} en EventOS.`
+        : `${input.invitedByName} te invitó a sumarte al equipo de ${input.organizationName} en EventOS.`,
+      `Vas a ingresar con el rol ${role}. El enlace es personal: elegí tu contraseña o continuá con Google si ya usás esa cuenta.`,
     ],
     rows,
-    cta: { label: "Aceptar la invitación", url, note: `El link vence el ${expiry}.` },
-    note: "Si no esperabas esta invitación, ignorá este correo: sin aceptar no se crea ningún acceso.",
+    cta: { label: "Aceptar invitación", url, note: `El enlace vence el ${expiry}.` },
+    note: "Si no esperabas esta invitación, podés ignorar este correo. No se crea ningún acceso sin aceptarla.",
     preheader: `${input.organizationName} · rol ${role} · vence el ${expiry}`,
+    eyebrow: "Invitación · acceso al equipo",
+    status: { label: "Acción requerida", tone: "accent" },
     organization: input.organizationName,
     reason: `te invitamos a sumarte al equipo de ${input.organizationName}`,
   };

@@ -142,16 +142,18 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
       ? `Presupuesto aprobado · ${budget.title}`
       : `Presupuesto · ${budget.title}`,
     intro: [
-      `Hola ${clientLabel(budget.client)}:`,
-      `Te enviamos el presupuesto «${budget.title}» de ${input.organizationName}.`,
+      `Hola ${clientLabel(budget.client)},`,
+      `Compartimos el presupuesto «${budget.title}» de ${input.organizationName} para que puedas revisarlo y decidir con toda la información a mano.`,
       ...(message ? [message] : []),
     ],
     rows,
-    cta: { label: "Ver el presupuesto en el portal", url: portalUrl },
+    cta: { label: "Revisar presupuesto en el portal", url: portalUrl },
     note: approved
-      ? "El presupuesto ya está aprobado: los datos de pago están arriba y el detalle completo, en el portal."
-      : "Desde el portal podés aprobar el presupuesto, ajustar cantidades y días o pedir cambios. El código de arriba es tu acceso.",
+      ? "El presupuesto ya está aprobado. Los datos de pago están arriba y el detalle completo, en el portal."
+      : "Desde el portal podés aprobarlo, ajustar cantidades y días o pedir cambios. El código de arriba es tu acceso.",
     preheader: `${formatMoney(budget.total)} · ${budget.items.length} ítem${budget.items.length === 1 ? "" : "s"} · código ${code}`,
+    eyebrow: "Presupuesto · decisión del cliente",
+    status: approved ? { label: "Aprobado", tone: "success" } : { label: "Requiere revisión", tone: "accent" },
     organization: input.organizationName,
     reason: mailReason(input),
   };

@@ -5,6 +5,46 @@ const DEFAULT_DEMO_URL = "https://demo.ledbox.online";
 const DEFAULT_PRODUCT_URL = "https://eventos.ledbox.online";
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
+export type SiteProfile = {
+  kind: "ledbox" | "eventos" | "app" | "admin";
+  siteUrl: string;
+  title: string;
+  description: string;
+  indexable: boolean;
+};
+
+const LEDBOX_PROFILE: SiteProfile = {
+  kind: "ledbox",
+  siteUrl: DEFAULT_SITE_URL,
+  title: "LedBox Paraguay — Pantallas LED y tecnología para eventos",
+  description: "Alquiler de pantallas LED, tótems, kioskos touch y soluciones visuales para eventos en todo Paraguay.",
+  indexable: true,
+};
+
+const EVENTOS_PROFILE: SiteProfile = {
+  kind: "eventos",
+  siteUrl: process.env.NEXT_PUBLIC_EVENTOS_URL || "https://eventos.ledbox.online",
+  title: "EventOS — Gestión profesional de eventos",
+  description: "Planificá eventos, presupuestos, equipos, proveedores, pagos y rentabilidad desde un solo lugar.",
+  indexable: true,
+};
+
+const APP_PROFILE: SiteProfile = {
+  kind: "app",
+  siteUrl: process.env.NEXT_PUBLIC_APP_URL || "https://app.ledbox.online",
+  title: "EventOS — Sistema de gestión para eventos",
+  description: "Espacio privado para organizar clientes, eventos, inventario, proveedores, finanzas y operaciones.",
+  indexable: false,
+};
+
+export function siteProfileForHost(hostname?: string): SiteProfile {
+  const host = (hostname || "").split(":")[0].toLowerCase();
+  if (host === "eventos.ledbox.online" || host.endsWith(".eventos.com.py")) return EVENTOS_PROFILE;
+  if (host === "app.ledbox.online") return APP_PROFILE;
+  if (host === "admin.ledbox.online") return { ...APP_PROFILE, kind: "admin", siteUrl: "https://admin.ledbox.online" };
+  return LEDBOX_PROFILE;
+}
+
 export const publicConfig = {
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, ""),
   /** App de EventOS (instancia de la empresa): el panel vive acá (issue #39). */

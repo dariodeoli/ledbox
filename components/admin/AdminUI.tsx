@@ -238,12 +238,23 @@ export function AdminPlanLimitNote({ message }: { message: string }) {
   );
 }
 
-export function AdminEmpty({ title, hint, icon = "info" }: { title: string; hint?: string; icon?: AdminIconName }) {
+export function AdminEmpty({
+  title,
+  hint,
+  icon = "info",
+  action,
+}: {
+  title: string;
+  hint?: string;
+  icon?: AdminIconName;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="admin-empty">
       <AdminIcon name={icon} size={22} />
       <p className="admin-empty-title">{title}</p>
       {hint ? <p className="admin-empty-hint">{hint}</p> : null}
+      {action ? <div className="admin-empty-action">{action}</div> : null}
     </div>
   );
 }
@@ -280,6 +291,7 @@ export function AdminDataState({
   empty,
   emptyTitle,
   emptyHint,
+  emptyAction,
   emptyIcon,
   rows,
   children,
@@ -290,6 +302,7 @@ export function AdminDataState({
   empty?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
+  emptyAction?: React.ReactNode;
   /** Ícono del estado vacío; sin él se usa el genérico de `AdminEmpty`. */
   emptyIcon?: AdminIconName;
   rows?: number;
@@ -297,7 +310,7 @@ export function AdminDataState({
 }) {
   if (loading) return <AdminLoadingRows rows={rows} />;
   if (error) return <AdminErrorState message={error} onRetry={onRetry} />;
-  if (empty) return <AdminEmpty title={emptyTitle || "Sin registros"} hint={emptyHint} icon={emptyIcon} />;
+  if (empty) return <AdminEmpty title={emptyTitle || "Sin registros"} hint={emptyHint} action={emptyAction} icon={emptyIcon} />;
   return <>{children}</>;
 }
 
@@ -601,6 +614,29 @@ export function AdminToolbar({ children }: { children: React.ReactNode }) {
   return <div className="admin-toolbar">{children}</div>;
 }
 
+/** Contexto corto de página: mantiene breadcrumb y ayuda visibles sin repetir el título del topbar. */
+export function AdminModuleContext({
+  breadcrumb,
+  hint,
+  meta,
+}: {
+  breadcrumb: string;
+  hint: string;
+  meta?: string;
+}) {
+  return (
+    <div className="admin-module-context">
+      <div className="admin-module-context-copy">
+        <p className="admin-module-context-trail">
+          EventOS <span aria-hidden="true">/</span> <strong>{breadcrumb}</strong>
+        </p>
+        <p className="admin-module-context-hint">{hint}</p>
+      </div>
+      {meta ? <span className="admin-module-context-meta">{meta}</span> : null}
+    </div>
+  );
+}
+
 export function AdminKpi({ label, value, note, tone, icon }: { label: string; value: string; note?: string; tone?: AdminTone; icon?: AdminIconName }) {
   return (
     <div className="admin-kpi" data-tone={tone}>
@@ -661,7 +697,7 @@ export function AdminTable({
   children: React.ReactNode;
 }) {
   return (
-    <div className="admin-table-wrap">
+    <div className="admin-table-wrap" role="region" aria-label={`${label} · tabla`} tabIndex={0}>
       <div className={`admin-table admin-table--${view}`} role="table" aria-label={label}>
         <div className="admin-table-head" role="row">
           {columns.map((column, index) => (

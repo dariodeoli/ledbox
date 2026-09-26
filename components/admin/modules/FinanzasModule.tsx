@@ -72,6 +72,7 @@ import {
   AdminEmpty,
   AdminFormPanel,
   AdminKpi,
+  AdminModuleContext,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -1734,6 +1735,11 @@ export function FinanzasModule() {
 
   return (
     <div className="admin-module-page">
+      <AdminModuleContext
+        breadcrumb="Operación / Finanzas"
+        hint="Cobros, tesorería, gastos y pagos a proveedores con trazabilidad."
+        meta={periodLabel}
+      />
       <section className="admin-kpis" aria-label="Indicadores de finanzas">
         <AdminKpi
           label="Cobrado a clientes" icon="finance"

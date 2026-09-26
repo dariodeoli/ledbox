@@ -45,6 +45,7 @@ import {
   AdminFormPanel,
   AdminIconLink,
   AdminKpi,
+  AdminModuleContext,
   AdminNote,
   AdminPanel,
   AdminPlanLimitNote,
@@ -609,6 +610,11 @@ export function EventosModule() {
 
   return (
     <div className="admin-module-page">
+      <AdminModuleContext
+        breadcrumb="Operación / Eventos"
+        hint="Agenda, checklist de campo y equipos asignados por evento."
+        meta={`${formatNumber(events.length)} eventos`}
+      />
       {view === "calendar" ? null : (
       <section className="admin-kpis" aria-label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
@@ -736,6 +742,7 @@ export function EventosModule() {
         empty={events.length === 0}
         emptyTitle="Todavía no hay eventos" emptyIcon="events"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
+        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => { setFormError(""); setFormLimit(""); setShowForm(true); }}>Crear evento →</button> : undefined}
       >
         {view === "board" ? (
           searched.length === 0 ? (

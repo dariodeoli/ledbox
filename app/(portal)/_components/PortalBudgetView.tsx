@@ -214,6 +214,47 @@ function PortalSegmented<T extends string>({
   );
 }
 
+function PortalDecisionOptions({
+  value,
+  options,
+  onChange,
+}: {
+  value: ActionMode;
+  options: Array<{ value: ActionMode; label: string; title: string; helper: string }>;
+  onChange: (value: ActionMode) => void;
+}) {
+  return (
+    <fieldset className="portal-decision-options">
+      <legend className="portal-field-label">Qué querés hacer</legend>
+      <div className="portal-decision-options-list">
+        {options.map((option) => {
+          const active = value === option.value;
+          const helperId = `portal-decision-${option.value}-help`;
+          return (
+            <label className="portal-decision-option" data-active={active ? "true" : undefined} key={option.value}>
+              <input
+                type="radio"
+                name="portal-action-mode"
+                value={option.value}
+                checked={active}
+                onChange={() => onChange(option.value)}
+                aria-describedby={helperId}
+              />
+              <span className="portal-decision-option-copy">
+                <span className="portal-decision-option-title">{option.label}</span>
+                <span className="portal-decision-option-helper" id={helperId}>
+                  {option.helper}
+                </span>
+              </span>
+              <span className="portal-decision-option-mark" aria-hidden="true" />
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 function Stepper({
   value,
   max,
@@ -331,8 +372,11 @@ export function PortalBudgetView({
 
   const approvedRef = useRef<HTMLElement | null>(null);
   const revisionRef = useRef<HTMLElement | null>(null);
+  const actionRef = useRef<HTMLElement | null>(null);
   const proofRef = useRef<HTMLElement | null>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
+  const [actionBelowViewport, setActionBelowViewport] = useState(false);
+  const [footerVisible, setFooterVisible] = useState(false);
 
   const approved = Boolean(budget.approval.approvedAt) || Boolean(justApproved);
   const revisionPending = !approved && (Boolean(budget.approval.revisionRequestedAt) || justRequested?.kind === "change");
@@ -341,6 +385,33 @@ export function PortalBudgetView({
   const waitingRequest = !approved && !revisionPending && (pendingRequests.length > 0 || Boolean(justRequested));
   /** El cliente todavía no envió nada: puede ajustar, autorizar o pedir. */
   const canEdit = !approved && !revisionPending && !waitingRequest;
+
+  useEffect(() => {
+    if (!canEdit) {
+      setActionBelowViewport(false);
+      setFooterVisible(false);
+      return;
+    }
+    const action = actionRef.current;
+    if (!action) return;
+    const footer = document.querySelector<HTMLElement>(".app-footer--portal");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const rect = entry.boundingClientRect;
+          const visible = rect.bottom > 0 && rect.top < window.innerHeight;
+          if (entry.target === action) {
+            setActionBelowViewport(!visible && rect.top >= window.innerHeight);
+          }
+          if (entry.target === footer) setFooterVisible(visible);
+        }
+      },
+      { threshold: 0 },
+    );
+    observer.observe(action);
+    if (footer) observer.observe(footer);
+    return () => observer.disconnect();
+  }, [canEdit]);
 
   // El foco acompaña el cambio de estado para que un lector de pantalla anuncie
   // el resultado de la acción (el bloque nuevo entra al tabulado).
@@ -812,9 +883,18 @@ export function PortalBudgetView({
     { value: "discount", label: "Rebaja", title: "Pedir una rebaja" },
     { value: "change", label: "Otro cambio", title: "Pedir un cambio que no se resuelve con cantidades" },
   ];
+  const decisionOptions = modeOptions.map((option) => ({
+    ...option,
+    helper:
+      option.value === "authorize"
+        ? "Confirmá el detalle y autorizá el total visible."
+        : option.value === "discount"
+          ? "Pedí una rebaja indicando el monto y el motivo."
+          : "Contanos qué necesitás modificar para preparar una nueva versión.",
+  }));
 
   return (
-    <article className="portal-budget">
+    <article className={`portal-budget${canEdit ? " portal-budget--can-edit" : ""}`}>
       {demoBanner}
 
       <header className="portal-budget-head">
@@ -1018,10 +1098,13 @@ export function PortalBudgetView({
                   <span className="portal-num">− {formatMoney(budget.discount)}</span>
                 </div>
               ) : null}
-              <div className="portal-total-row portal-total-row--strong">
-                <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
-                <span className="portal-num">{formatMoney(summaryTotal)}</span>
-              </div>
+            <div className="portal-total-row portal-total-row--strong">
+              <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
+              <span className="portal-num">{formatMoney(summaryTotal)}</span>
+            </div>
+            <p className="portal-total-formula">
+              Precio unitario × cantidad × días = subtotal · subtotal − descuento = total
+            </p>
             </div>
             <p className="portal-help">
               Montos en guaraníes (PYG), sin decimales. {canEdit && itemsChanged ? "Los ajustes se revisan con tu autorización: el equipo aplica el precio unitario vigente." : ""}
@@ -1036,11 +1119,14 @@ export function PortalBudgetView({
           </section>
 
           {!approved && !revisionPending ? (
-            <section className="portal-card portal-card--action" aria-labelledby="portal-action">
-              <div className="portal-card-head">
-                <PortalCardTitle id="portal-action" icon="check">
-                  Tu decisión
-                </PortalCardTitle>
+        <section className="portal-card portal-card--action" aria-labelledby="portal-action" ref={actionRef}>
+          <div className="portal-card-head">
+                <div className="portal-action-heading">
+                  <PortalCardTitle id="portal-action" icon="check">
+                    Tu decisión
+                  </PortalCardTitle>
+                  <span className="portal-action-step">Paso 2 de 3</span>
+                </div>
                 <p className="portal-card-lead">
                   {canEdit
                     ? "Elegí una sola cosa: autorizás el presupuesto tal como queda (con tus ajustes, si los hiciste) o nos pedís una rebaja o un cambio. El equipo de LedBox responde por este mismo link."
@@ -1048,10 +1134,16 @@ export function PortalBudgetView({
                 </p>
               </div>
 
+              <ol className="portal-decision-progress" aria-label="Progreso de tu decisión">
+                <li data-active="true"><span>1</span> Revisar</li>
+                <li data-active={actionMode !== "authorize" || consent ? "true" : undefined}><span>2</span> Elegir</li>
+                <li data-active={sending ? "true" : undefined}><span>3</span> Confirmar</li>
+              </ol>
+
               <form className="portal-form" onSubmit={(event) => void runAction(event)}>
                 {canEdit ? (
                   <>
-                    <PortalSegmented label="Qué querés hacer" value={mode} options={modeOptions} onChange={setMode} wide />
+                    <PortalDecisionOptions value={mode} options={decisionOptions} onChange={setMode} />
                     <p className="portal-action-intent" role="status">
                       {actionMode === "authorize" ? (
                         <>
@@ -1189,12 +1281,16 @@ export function PortalBudgetView({
                   disabled={sending}
                   aria-busy={sending || undefined}
                 >
-                  {sending
-                    ? "Enviando…"
-                    : actionMode === "authorize"
-                      ? `Autorizar por ${formatMoney(actionTotal)}`
-                      : ACTION_BUTTON[actionMode]}
+                  {sending ? <span className="portal-spinner" aria-hidden="true" /> : null}
+                  <span>{sending ? "Enviando…" : actionMode === "authorize" ? `Autorizar por ${formatMoney(actionTotal)}` : ACTION_BUTTON[actionMode]}</span>
                 </button>
+                <p className="portal-submit-state" role="status" aria-live="polite">
+                  {sending
+                    ? "Estamos registrando tu respuesta de forma segura."
+                    : actionMode === "authorize"
+                      ? "Tu autorización queda registrada con tu nombre y la fecha de envío."
+                      : "Tu pedido queda en revisión y no modifica el presupuesto por sí solo."}
+                </p>
                 <p className="portal-help">
                   {actionMode === "authorize"
                     ? "La autorización queda registrada con tu nombre, la fecha y el detalle que ves en pantalla."
@@ -1673,6 +1769,9 @@ export function PortalBudgetView({
                 <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
                 <span className="portal-num">{formatMoney(summaryTotal)}</span>
               </div>
+              <p className="portal-total-formula">
+                Precio unitario × cantidad × días = subtotal · subtotal − descuento = total
+              </p>
             </div>
             {approved && transferNow ? (
               <div className="portal-pay-now portal-pay-now--aside">
@@ -1684,6 +1783,22 @@ export function PortalBudgetView({
           </div>
         </aside>
       </div>
+      {canEdit && actionBelowViewport && !footerVisible ? (
+        <div className="portal-mobile-sticky" role="region" aria-label="Decisión y total">
+          <div className="portal-mobile-sticky-total">
+            <span>Total actual</span>
+            <strong className="portal-num">{formatMoney(actionTotal)}</strong>
+          </div>
+          <button
+            type="button"
+            className="portal-btn portal-btn--primary portal-mobile-sticky-action"
+            onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            aria-controls="portal-action"
+          >
+            Ver decisión
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }

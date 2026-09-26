@@ -699,6 +699,7 @@ export function AdminShell({
         />
       ) : (
       <div className="admin-shell">
+        <a className="admin-skip-link" href="#admin-main-content">Saltar al contenido</a>
         <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
           <div className="admin-sidebar-head">
             <Link href="/dashboard" className="admin-brand" aria-label="EventOS · Ir al resumen" title="EventOS · Ir al resumen">
@@ -1001,7 +1002,7 @@ export function AdminShell({
 
           <AdminOfflineBanner />
 
-          <main className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
+          <main id="admin-main-content" className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
 
           <footer className="admin-main-foot">
             <AppFooter variant="app" className="app-footer--panel" />

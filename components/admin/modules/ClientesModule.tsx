@@ -53,6 +53,7 @@ import {
   AdminIconLink,
   AdminImageUpload,
   AdminKpi,
+  AdminModuleContext,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -470,6 +471,11 @@ export function ClientesModule() {
 
   return (
     <div className="admin-module-page">
+      <AdminModuleContext
+        breadcrumb="Comercial / Clientes"
+        hint="Cartera, responsables y actividad comercial en una vista operativa."
+        meta={`${formatNumber(rows.length)} visibles`}
+      />
       <section className="admin-kpis" aria-label="Indicadores de clientes">
         <AdminKpi label="Clientes" icon="clients" value={formatNumber(totals.total)} note="en cartera" />
         <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
@@ -687,9 +693,15 @@ export function ClientesModule() {
         empty={(clients.data ?? []).length === 0}
         emptyTitle="Todavía no hay clientes" emptyIcon="clients"
         emptyHint="Registrá el primer cliente para asociarle eventos y presupuestos."
+        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={openCreate}>Registrar cliente →</button> : undefined}
       >
         {rows.length === 0 ? (
-          <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro." />
+          <AdminEmpty
+            icon="search"
+            title="Sin resultados"
+            hint="Probá con otro término de búsqueda o cambiá el filtro."
+            action={query ? <button type="button" className="admin-empty-link" onClick={() => setQuery("")}>Limpiar búsqueda →</button> : undefined}
+          />
         ) : view === "grid" ? (
           <AdminCardGrid label="Clientes" cards={rows.map((client): AdminCardData => {
             const name = clientLabel(client);

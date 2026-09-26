@@ -49,9 +49,11 @@ export async function POST(request: Request) {
       { label: "Remitente", value: appEmailSender() },
       { label: "Enviado", value: formatDateTime(new Date()), strong: true },
     ],
-    cta: { label: "Abrir el panel", url: publicConfig.adminUrl },
-    note: "Si estás leyendo esto, el envío de correo del panel está funcionando. Este mensaje queda en el historial de Configuración → Correo.",
+    cta: { label: "Abrir EventOS", url: publicConfig.adminUrl },
+    note: "Si estás leyendo esto, el envío de correo del panel está funcionando. El intento queda en el historial de Configuración → Correo.",
     preheader: "Prueba de envío del panel · LedBox",
+    eyebrow: "Configuración · correo",
+    status: { label: "Prueba de envío" },
     organization: organization.name,
     reason: `pediste una prueba de la configuración de correo de ${organization.name}`,
   };
