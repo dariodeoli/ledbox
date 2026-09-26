@@ -794,7 +794,7 @@ export function EventosModule() {
                       }
                     >
                       {event.status === "IN_PROGRESS" ? (
-                        <AdminBadge tone="info">En curso</AdminBadge>
+                        <AdminBadge tone="warn">En curso</AdminBadge>
                       ) : closed || !event.startsAt ? (
                         <span className="admin-muted">—</span>
                       ) : (

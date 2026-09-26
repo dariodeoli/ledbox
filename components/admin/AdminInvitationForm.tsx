@@ -7,6 +7,7 @@ import type { AdminInvitationPublicView } from "@/lib/admin-types";
 import { AdminCountdown, AdminError, AdminNote, AdminSpinner, AdminSuccess } from "./AdminUI";
 import { HoneypotField, PasswordField, TextField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
+import { GoogleMark } from "./GoogleMark";
 import { authErrorMessage } from "@/lib/google-auth";
 
 /**
@@ -155,7 +156,7 @@ export function AdminInvitationForm({
             <InvitationFacts view={view} />
 
             <a className="admin-google-button admin-invitation-google" href={googleUrl}>
-              <span aria-hidden="true">G</span> Continuar con Google
+              <span aria-hidden="true"><GoogleMark /></span> Continuar con Google
             </a>
 
             <div className="admin-divider" aria-hidden="true">

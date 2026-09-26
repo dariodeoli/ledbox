@@ -5,6 +5,11 @@ Guía para el rediseño integral de la UI del panel, pedido por el dueño el
 fuente única del lenguaje visual: todo componente nuevo o tocado la respeta.
 No contradice `docs/REGLAS-GENERALES.md` ni `AGENTS.md`: los completa.
 
+> **Piel fase 2 (26-09-2026, issue #72)**: sobre esta guía se aplicó la
+> identidad elegida por el dueño — oscuro **C · Vitrina** (vidrio y aurora,
+> aprobado en la fase 1) y claro **C1 · Aurora viva** (elegido el 26-09). Los
+> valores están en **§12** y los tres tonos de estado (issue #75) en **§3**.
+
 ## 1. Objetivo
 
 Que la app **se entienda de un vistazo**: jerarquía clara, íconos que asocien
@@ -32,16 +37,27 @@ se unifican los componentes, sin cambiar datos ni contratos.
 
 - **Tipografía**: display (títulos de pantalla y montos grandes) · body 12.5–13
   px (filas, campos, notas) · micro 10–11 px (etiquetas en mayúscula, chips,
-  cabeceras de tabla). Nada intermedio suelto.
+  cabeceras de tabla). Nada intermedio suelto. Desde la fase 2 (§12) la display
+  es **Space Grotesk** y el cuerpo **Inter**, self-hosted.
 - **Espaciado**: 4 · 8 · 12 · 16 · 24 · 32 (todo padding/gap sale de acá).
-- **Radios**: 8 (controles) · 10 (paneles/chips) · 14 (tarjetas y diálogos).
-- **Sombras**: una sola (`--a-shadow`) para paneles flotantes y diálogos.
+- **Radios**: controles en píldora (999) · paneles/chips con `--a-radius` y
+  tarjetas/diálogos con `--a-radius-lg`; el valor depende del tema (§12): C usa
+  14/20 y C1 usa 18/26.
+- **Sombras**: `--a-shadow` para flotantes y `--a-shadow-card` para las
+  superficies de la piel; el color de la sombra acompaña al tema.
+- **Estados (issue #75)**: el color de estado se dice con **tres tonos** y cada
+  uno tiene base, superficie y texto (`--a-ok|warn|danger`,
+  `--a-*-surface`, `--a-*-text`): **verde** aprobado / confirmado / cobrado ·
+  **naranja** pendiente / en curso · **rojo** esperando aprobación / vencido /
+  rechazado. El texto del estado no cambia: el color acompaña. `accent`, `info`
+  y `neutral` quedan para lo que no es estado (roles, tipos, categorías, IVA).
 - **Bordes**: `--a-line` para separadores internos, `--a-line-2` para el borde
   de los objetos; en modo claro marcan el objeto (calibrados el 22-09-2026).
 - **Estados**: hover (acento suave), activo/seleccionado (acento), foco visible
   (`:focus-visible` con acento), deshabilitado (opacidad .5).
-- **Modo claro/oscuro**: mismos tokens, dos valores; cualquier color nuevo se
-  define en ambos temas y se verifica contraste AA (texto ≥ 4.5, UI ≥ 3).
+- **Modo claro/oscuro**: los tokens se definen en ambos temas y se verifica
+  contraste AA (texto ≥ 4.5, UI ≥ 3). Desde la fase 2 el claro **no espeja** al
+  oscuro: tiene su propio lenguaje (§12).
 
 ## 4. Shell del panel
 
@@ -192,3 +208,105 @@ dos veces con filtros distintos (lista completa y por cuenta), decisión de FIN.
   bloques de lista al llegar sus datos. No se reservan más filas a propósito:
   con la lista vacía el bloque se encoge, así que reservar de más empeora el
   caso opuesto; queda bajo el objetivo (< 0,1) y documentado.
+
+## 12. Piel fase 2 (26-09-2026, issues #72 y #75)
+
+Identidad elegida por el dueño sobre las direcciones de `docs/rediseno-v2/`
+(fase 1 en `origin/feat/experimento-rediseno-v2`, solo doc y capturas):
+
+- **Oscuro C · Vitrina** (aprobado en la fase 1): luz de escenario, vidrio y
+  aurora, acento en degradado.
+- **Claro C1 · Aurora viva** (elegido el 26-09): aurora pastel con color de
+  verdad, superficies que flotan sin borde, curvas amplias. **No espeja** al
+  oscuro: tiene su propio lenguaje.
+
+Todo vive en `app/globals.css`: los tokens en `.admin-root` /
+`.admin-root[data-theme="light"]` y la terminación en el bloque «PIEL FASE 2».
+**Cero cambios de marcado** para la piel; la densidad, las plantillas
+`--<vista>-cols` y los contratos no cambian.
+
+### 12.1 Tokens
+
+| Token | Oscuro C | Claro C1 |
+| --- | --- | --- |
+| `--a-bg` / `--a-bg-art` | `#0a0a13` + 3 auroras (cian, violeta, rosa) fijas | `#f6f8ff` + 4 auroras (cian, lila, rosa, menta) sobre lavado periwinkle |
+| `--a-panel` / `--a-panel-2` | `rgba(255,255,255,.045)` / `.075` | `rgba(255,255,255,.84)` / `#fff` |
+| `--a-line` / `--a-line-2` | `rgba(255,255,255,.10)` / `.20` | `rgba(28,34,74,.07)` / `.16` |
+| `--a-line-control` | `rgba(255,255,255,.40)` | `rgba(28,34,74,.55)` |
+| `--a-text` / `--a-text-strong` | `#eceefb` / `#fff` | `#141a33` / `#0a0e20` |
+| `--a-muted` / `--a-muted-2` | `#9ea1c0` / `#c9cce6` | `#545a80` / `#343a5e` |
+| `--a-accent` / `-strong` / `-soft` | `#5ad9ff` / `#93e7ff` / `.12` | `#0b6f8f` / `#085a75` / `.10` |
+| `--a-grad-accent` | `120deg, #5ad9ff → #a78bfa` | `120deg, #7dd3fc → #c4b5fd` |
+| `--a-grad-action` (acción primaria) | el degradado de acento, tinta `#0d1026` | `120deg, #0b6f8f → #4f46e5`, tinta `#fff` |
+| `--a-grad-ink` (título del login) | degradado de acento | `120deg, #0891b2 → #4f46e5` |
+| `--a-radius` / `--a-radius-lg` | 14 / 20 | 18 / 26 |
+| `--a-shadow` / `--a-shadow-card` | largas y negras + luz interna | color (`rgba(76,61,186,…)`) |
+| `--a-blur` | `blur(18px) saturate(1.3)` | `blur(18px) saturate(1.2)` |
+| `--a-sticky-bg` | `#16171f` | `#fff` |
+
+Reglas de la piel:
+
+- **Vidrio acotado**: `backdrop-filter` solo en superficies fijas (sidebar,
+  topbar, menú/avisos, login y diálogos). **Nunca** en filas ni tarjetas de
+  lista (rendimiento; la fase 1 ya lo había medido con 0 blur por fila).
+- **Fila sticky opaca**: la columna de acciones (#73) y el encabezado sticky
+  usan `--a-sticky-bg`, porque con superficies translúcidas el contenido de
+  abajo se transparentaba.
+- **Formas**: en C1 el sidebar termina en curva (`0 30px 30px 0`), los paneles
+  y KPI pierden borde y flotan con sombra de color, las filas son tiras
+  blancas (radio 17) que se elevan 1 px al pasar el mouse. En C el sidebar y la
+  topbar son vidrio con línea fina, los paneles llevan luz interna y las filas
+  son tiras translúcidas.
+- **KPI**: grilla de 2 columnas en mobile y 4 en escritorio; los tonos pintan
+  la superficie (`--a-*-surface`), el valor (`--a-*-text`) y el chip del ícono.
+- **Navegación**: el ítem activo es una píldora con `--a-grad-accent` y tinta
+  oscura; hover sin color de acento pleno.
+
+### 12.2 Tipografía self-hosted
+
+La app declaraba `Space Grotesk`/`Archivo Black` pero **no cargaba ninguna**
+(hallazgo de la fase 1: 0 recursos de fuente y todo caía al genérico). Desde la
+fase 2:
+
+- **Space Grotesk** (display: títulos de pantalla, paneles, KPI, montos) y
+  **Inter** (cuerpo) en woff2 **variable**, subset latin, OFL, en
+  `public/fonts/` (`space-grotesk-latin-var.woff2` 22 KB +
+  `inter-latin-var.woff2` 48 KB) con `@font-face` en `globals.css`.
+- Las familias se llaman **«Space Grotesk Panel»** e **«Inter Panel»** a
+  propósito: adentro del panel son reales y el **sitio público y las hojas
+  `lbprint` quedan igual que antes** (declaran `Space Grotesk`/`Archivo Black`
+  por nombre y siguen cayendo al genérico del sistema). Sin librerías nuevas.
+- Licencias en `public/fonts/LICENSE-*.txt`.
+
+### 12.3 Contraste (AA medido)
+
+Pares reales con la luminancia relativa de los tokens finales, considerando la
+aurora en su campo más saturado (texto ≥ 4.5, controles ≥ 3):
+
+| Par | Oscuro C | Claro C1 |
+| --- | --- | --- |
+| Texto / panel | 11.2 | 16.4 |
+| Texto / fila | 9.9 | 17.1 |
+| Muted / panel | 5.1 | 6.4 |
+| Muted / aurora (peor campo) | 5.3 | 5.1 |
+| Acento / panel | 7.9 | 5.5 |
+| Texto ok / superficie ok | 6.5 | 5.7 |
+| Texto warn / superficie warn | 6.4 | 6.2 |
+| Texto danger / superficie danger | 5.3 | 5.7 |
+| Borde de control / panel | 3.4 | 3.5 |
+| Tinta de la acción primaria / degradado | 6.9–11.4 | 5.7–6.3 |
+| Tinta del nav activo / degradado | 6.9–11.4 | 10.2–11.3 |
+
+Único ajuste durante la ronda: en C el borde de control subió de `.34` a `.40`
+de blanco para llegar a 3:1 sobre la aurora violeta.
+
+### 12.4 Alcance de esta ola y lo que sigue
+
+- **Hecho acá**: tokens y tipografía, shell (sidebar, topbar, navegación,
+  búsqueda), command palette, login (con el botón de Google existente) y foco
+  visible; **Resumen** completo (KPIs, «Qué mirar hoy», agenda) y los tres tonos
+  de estado en badges/chips, celdas, KPIs y filas del shell + Resumen.
+- **Próxima ola**: barrido del resto de los módulos (celdas de estado, filas y
+  KPIs propios de cada uno) con los mismos tokens; los badges ya heredan los
+  tres tonos porque el mapa de estados (`lib/admin-format.ts`) es único.
+- **Fuera**: hojas `lbprint` y el sitio público (no cambian).
