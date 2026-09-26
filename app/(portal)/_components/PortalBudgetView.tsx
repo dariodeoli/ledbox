@@ -32,6 +32,13 @@ import {
   type PortalDemoState,
 } from "@/lib/portal-demo";
 import { PAYMENT_PROOF_MIMES, paymentProofExtension } from "@/lib/admin-types";
+import {
+  amountInput,
+  caretAfterDigits,
+  moneyInputDisplay,
+  moneyInputMaxLength,
+  percentInput,
+} from "@/lib/field-rules";
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 import { PortalCardTitle } from "./PortalCardTitle";
 import { PortalPending, type PortalPendingItem } from "./PortalPending";
@@ -375,6 +382,7 @@ export function PortalBudgetView({
   const actionRef = useRef<HTMLElement | null>(null);
   const proofRef = useRef<HTMLElement | null>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
+  const discountInputRef = useRef<HTMLInputElement | null>(null);
   const [actionBelowViewport, setActionBelowViewport] = useState(false);
   const [footerVisible, setFooterVisible] = useState(false);
 
@@ -493,15 +501,25 @@ export function PortalBudgetView({
   const summaryTotal = itemsChanged ? proposedTotal : budget.total;
 
   // Rebaja pedida: monto resultante y total que quedaría si el equipo la acepta.
+  // Rebaja (issues #76 y #77): el valor vive limpio (dígitos en monto, coma en
+  // porcentaje) y el campo lo dibuja con separadores. La validación es en vivo:
+  // el monto no puede superar el subtotal y el porcentaje va de 0 a 100; el
+  // mensaje explica el tope en vez de mostrar un total calculado en 0.
   const discountRaw = discountType === "percent" ? discountValue.replace(",", ".").trim() : discountValue.replace(/\D/g, "");
   const discountNumber = Number(discountRaw);
+  const discountError = !Number.isFinite(discountNumber) || discountNumber <= 0
+    ? null
+    : discountType === "percent" && discountNumber > 100
+      ? "El porcentaje va de 0 a 100."
+      : discountType === "amount" && discountNumber > budget.subtotal
+        ? `La rebaja no puede superar el subtotal del presupuesto (${formatMoney(budget.subtotal)}).`
+        : null;
   const discountAmount = !Number.isFinite(discountNumber) || discountNumber <= 0
     ? 0
     : discountType === "percent"
       ? Math.round((budget.subtotal * Math.min(100, discountNumber)) / 100)
       : Math.round(discountNumber);
   const discountTotal = Math.max(0, budget.total - discountAmount);
-
   const mark = bankMark(budget.paymentDetails?.bank);
   const lastRequest = pendingRequests[0] ?? null;
 
@@ -1154,7 +1172,11 @@ export function PortalBudgetView({
                           .
                         </>
                       ) : actionMode === "discount" ? (
-                        discountAmount > 0 ? (
+                        discountError ? (
+                          <span className="portal-error" role="alert">
+                            {discountError}
+                          </span>
+                        ) : discountAmount > 0 ? (
                           <>
                             Vas a pedir una rebaja de <strong className="portal-num">{formatMoney(discountAmount)}</strong>
                             {discountType === "percent" ? ` (${formatNumber(discountNumber)} %)` : ""}. Si el equipo la acepta,
@@ -1197,13 +1219,38 @@ export function PortalBudgetView({
                     <label className="portal-field" htmlFor="portal-discount-value">
                       <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
                       <input
+                        ref={discountInputRef}
                         id="portal-discount-value"
                         name="discount-value"
+                        type="text"
                         inputMode={discountType === "percent" ? "decimal" : "numeric"}
-                        value={discountValue}
-                        onChange={(event) => setDiscountValue(event.target.value)}
-                        maxLength={discountType === "percent" ? 6 : 12}
+                        value={discountType === "percent" ? discountValue : moneyInputDisplay(discountValue)}
+                        onKeyDown={(event) => {
+                          if (event.ctrlKey || event.metaKey || event.altKey) return;
+                          const permitido = discountType === "percent" ? /^[\d,]$/ : /^\d$/;
+                          if (event.key.length === 1 && !permitido.test(event.key)) event.preventDefault();
+                        }}
+                        onChange={(event) => {
+                          if (discountType === "percent") {
+                            setDiscountValue(percentInput(event.target.value));
+                            return;
+                          }
+                          // El formateo no mueve el caret (mismo criterio que MoneyField).
+                          const input = event.currentTarget;
+                          const before = input.value.slice(0, input.selectionStart ?? input.value.length);
+                          const digitsBefore = (before.match(/\d/g) || []).length;
+                          setDiscountValue(amountInput(input.value));
+                          requestAnimationFrame(() => {
+                            const node = discountInputRef.current;
+                            if (!node || document.activeElement !== node) return;
+                            const caret = caretAfterDigits(node.value, digitsBefore);
+                            node.setSelectionRange?.(caret, caret);
+                          });
+                        }}
+                        maxLength={discountType === "percent" ? 6 : moneyInputMaxLength()}
                         placeholder={discountType === "percent" ? "Ej.: 10" : "Ej.: 500000"}
+                        aria-invalid={discountError ? true : undefined}
+                        title={discountError ?? undefined}
                         required
                       />
                     </label>
