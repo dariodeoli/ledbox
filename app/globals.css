@@ -2841,3 +2841,51 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-bottomnav-item { border-radius: 16px; }
   .admin-bottomnav-item[data-active="true"] { background: var(--a-grad-accent); color: var(--a-nav-ink); }
 }
+
+/* ── Superficies de módulos: paneles, KPI y listas (ola Resumen) ──
+   La misma piel, aplicada a las superficies que Resumen comparte con el
+   resto de los módulos: paneles, KPI, tablas y filas. El barrido fino de
+   cada módulo va en la próxima ola. */
+.admin-panel, .admin-kpi, .admin-empty, .admin-facts, .admin-dialog-facts, .admin-dialog-table,
+.admin-demo-bar, .admin-demo-hero {
+  border: var(--a-panel-line);
+  background: var(--a-panel);
+  box-shadow: var(--a-panel-shadow);
+}
+/* ── Paneles, KPI y listas ── */
+.admin-panel { overflow: hidden; }
+.admin-panel-icon { border-radius: 999px; }
+.admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.admin-kpi { border-top: 0; }
+.admin-root[data-theme="light"] .admin-kpi[data-tone] { border-top: 0; }
+.admin-kpi[data-tone="ok"] { background: var(--a-ok-surface); }
+.admin-kpi[data-tone="warn"] { background: var(--a-warn-surface); }
+.admin-kpi[data-tone="danger"] { background: var(--a-danger-surface); }
+.admin-kpi[data-tone="accent"] { background: color-mix(in srgb, var(--a-accent) 10%, var(--a-panel)); }
+.admin-kpi[data-tone="ok"] .admin-kpi-value { color: var(--a-ok-text); }
+.admin-kpi[data-tone="warn"] .admin-kpi-value { color: var(--a-warn-text); }
+.admin-kpi[data-tone="danger"] .admin-kpi-value { color: var(--a-danger-text); }
+.admin-kpi[data-tone="ok"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-ok) 20%, transparent); color: var(--a-ok-text); }
+.admin-kpi[data-tone="warn"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-warn) 20%, transparent); color: var(--a-warn-text); }
+.admin-kpi[data-tone="danger"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-danger) 20%, transparent); color: var(--a-danger-text); }
+.admin-kpi[data-tone="accent"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-accent) 20%, transparent); }
+.admin-table-head { color: var(--a-muted); }
+.admin-table-row { border-color: var(--a-row-line); background: var(--a-row-bg); box-shadow: var(--a-row-shadow); transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.admin-table-row:hover { border-color: color-mix(in srgb, var(--a-accent) 35%, var(--a-line-2)); background: var(--a-panel-2); transform: translateY(-1px); }
+.admin-table-row:hover > .admin-cell--actions { background: var(--a-panel-2); }
+.admin-table-row[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 35%, var(--a-row-line)); }
+.admin-table-row[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 32%, var(--a-row-line)); }
+
+/* La columna sticky (issue #73) necesita fondo opaco: con las superficies de la
+   piel (translúcidas) el contenido que pasa por debajo se transparentaba. */
+.admin-root { --a-sticky-bg: #16171f; }
+.admin-root[data-theme="light"] { --a-sticky-bg: #ffffff; }
+.admin-table-wrap, .admin-panel .admin-table-wrap { --a-fila-fondo: var(--a-sticky-bg); }
+@media (max-width: 1379px) {
+  .admin-table-head > .admin-cell:last-child { background: var(--a-sticky-bg); }
+}
+.admin-table-wrap { border: 0; background: transparent; }
+.admin-kpi-value { font: 600 22px/1.1 var(--font-display); letter-spacing: -.01em; }
+.admin-module-context { border: var(--a-panel-line); border-left: 2px solid var(--a-accent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-accent) 7%, var(--a-panel)); box-shadow: var(--a-panel-shadow); }
+.admin-panel-head { border-bottom: 1px solid var(--a-line); background: transparent; }
