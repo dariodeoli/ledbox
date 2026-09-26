@@ -138,3 +138,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - acciones sticky en las tablas de Finanzas
 - icono oficial de Google en el login
 
+## v2.1.42 — 2026-09-26
+
+- Resumen y superficies de módulos con la piel nueva
+- piel fase 2 y tonos de estado — base, shell y login (Refs #72,
+
