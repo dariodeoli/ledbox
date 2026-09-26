@@ -399,7 +399,7 @@ export function ConciliacionBancaria({
                         <span className="admin-muted">Sin candidato</span>
                       )}
                     </AdminCell>
-                    <AdminCell end>
+                    <AdminCell end className="admin-cell--actions">
                       <span className="admin-actions">
                         {row.status === "PENDING" && writable ? (
                           <>

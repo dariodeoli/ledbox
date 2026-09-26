@@ -2071,7 +2071,7 @@ export function FinanzasModule() {
                   <AdminCell end title={`Monto ${formatMoney(row.amount)}`}>
                     <strong>{formatMoney(row.amount)}</strong>
                   </AdminCell>
-                  <AdminCell end>
+                  <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       <AdminButton
                         icon="clock"
@@ -2228,7 +2228,7 @@ export function FinanzasModule() {
                       <span className="admin-muted">—</span>
                     )}
                   </AdminCell>
-                  <AdminCell end>
+                  <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       {writable ? (
                         <AdminButton
@@ -2501,7 +2501,7 @@ export function FinanzasModule() {
                   <AdminCell>
                     <AdminBadge tone={statusTone(job.status)}>{jobStatusLabel(job.status)}</AdminBadge>
                   </AdminCell>
-                  <AdminCell end>
+                  <AdminCell end className="admin-cell--actions">
                     {writable && !settled && balance > 0 ? (
                       <AdminButton
                         icon="finance"
@@ -2691,7 +2691,7 @@ export function FinanzasModule() {
                 <AdminCell>
                   <AdminBadge tone={account.active ? "ok" : "neutral"}>{account.active ? "Activa" : "Inactiva"}</AdminBadge>
                 </AdminCell>
-                <AdminCell end>
+                <AdminCell end className="admin-cell--actions">
                   <span className="admin-actions">
                     {writable ? (
                       <AdminButton
