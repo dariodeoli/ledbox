@@ -58,10 +58,10 @@ test("fuera del catálogo: monograma estable del fallback de la librería", () =
   assert.equal(mark?.initials, inicialesDeBanco("Banco Zeta"));
   assert.equal(mark?.color, colorDeBanco("Banco Zeta"));
   assert.deepEqual(bankMark("Banco Zeta"), mark);
-  // Nombre corto que el registro de la librería no lista como alias: cae al
-  // monograma genérico (el campo lo sugiere como «Banco Continental»).
+  // El registro de la librería (v0.39.0) cubre «continental» como alias del
+  // canónico: ya no cae al monograma genérico.
   const corto = bankMark("continental");
-  assert.equal(corto?.label, "continental");
+  assert.equal(corto?.label, "Banco Continental");
   assert.equal(corto?.asset, null);
   assert.ok(bankSuggestions("continental").includes("Banco Continental"));
 });
