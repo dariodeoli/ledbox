@@ -148,3 +148,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - ola 3 en la guía — superficies, estados y pulidos
 - ola 3 — barrido de módulos, superficies de estado y tipografía heredada (Refs #72,
 
+## v2.1.44 — 2026-09-26
+
+- rebaja con monto formateado y tope validado en vivo (Refs #76,
+- monto Gs y porcentaje con el manejo de owncoding-ui
+
