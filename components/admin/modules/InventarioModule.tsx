@@ -544,6 +544,7 @@ export function InventarioModule() {
                         label={`Cambiar estado: ${item.name}`}
                         title={`Cambiar estado: ${item.name}`}
                         options={STATUS_PICK_OPTIONS}
+                        tone={statusTone(item.status)}
                       />
                     ) : (
                       <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>

@@ -580,6 +580,7 @@ export function AdminSelect({
   title,
   disabled,
   required,
+  tone,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -590,6 +591,8 @@ export function AdminSelect({
   title?: string;
   disabled?: boolean;
   required?: boolean;
+  /** Tono del estado que muestra el control (issue #75): pinta el select. */
+  tone?: AdminTone;
 }) {
   return (
     <select
@@ -600,6 +603,7 @@ export function AdminSelect({
       title={title}
       disabled={disabled}
       required={required}
+      data-tone={tone}
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>

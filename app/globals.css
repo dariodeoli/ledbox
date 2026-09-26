@@ -695,6 +695,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--a-bg-art);
   background-attachment: fixed;
   color: var(--a-text);
+  /* Inter llega también a los textos heredados: sin esto, lo que no declara
+     font-family propia caía al genérico del sistema (QA v2.1.42). */
+  font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -1294,7 +1297,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 @media (max-width: 1379px) {
   .admin-table-head > .admin-cell:last-child,
-  .admin-table-row > .admin-cell--actions { position: sticky; right: 0; z-index: 1; background: var(--a-fila-fondo); }
+  .admin-table-row > .admin-cell--actions { position: sticky; right: -12px; z-index: 1; background: var(--a-fila-fondo); }
   .admin-table-head > .admin-cell:last-child { padding-right: 12px; }
   .admin-table-row > .admin-cell--actions { margin-right: -11px; padding-right: 11px; border-radius: 0 calc(var(--a-radius) - 1px) calc(var(--a-radius) - 1px) 0; box-shadow: -16px 0 16px -16px rgba(0, 0, 0, .55); }
   .admin-table-row:hover > .admin-cell--actions { background: var(--a-panel-2); }
@@ -1335,7 +1338,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    vencimiento con la cuenta regresiva, método con el cheque, recordatorio del
    día, monto, comprobante del portal y acciones. Fila compacta: entra sin
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
-.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 6.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 53rem; }
+.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
 .admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.5fr) 5.5rem 5.75rem 4rem 4rem 5.5rem minmax(5rem, .9fr) 5.75rem 6.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 55rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
@@ -1385,7 +1388,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--cliente-presupuestos { --cliente-presupuestos-cols: 6.5rem minmax(12rem, 2fr) 8rem 9rem 9rem; --admin-cols: var(--cliente-presupuestos-cols); --admin-table-min: 48rem; }
 .admin-table--cliente-eventos { --cliente-eventos-cols: 7.5rem minmax(14rem, 2fr) 8rem 7rem; --admin-cols: var(--cliente-eventos-cols); --admin-table-min: 39rem; }
 .admin-table--cliente-pagos { --cliente-pagos-cols: 7.5rem minmax(12rem, 2fr) 7.5rem 9rem 7.5rem; --admin-cols: var(--cliente-pagos-cols); --admin-table-min: 46.5rem; }
-.admin-table--por-confirmar { --por-confirmar-cols: minmax(8.5rem, 1.4fr) minmax(6rem, 1fr) 6rem 5rem 5.5rem 5.75rem 6.25rem 6.5rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 53rem; }
+.admin-table--por-confirmar { --por-confirmar-cols: minmax(8.5rem, 1.4fr) minmax(6rem, 1fr) 6rem 5rem 5.5rem 5.75rem 6.25rem 11.5rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 58rem; }
 /* Plantillas de mensajes (issue #35): título, mensaje en una línea, estado y acciones. */
 .admin-table--plantillas { --plantillas-cols: minmax(8rem, 1.1fr) minmax(12rem, 2.2fr) 5.5rem 6.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 33.5rem; }
 /* Respaldo de la base (issue #43): fecha, resultado, tamaño, tablas, duración,
@@ -2889,3 +2892,75 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-kpi-value { font: 600 22px/1.1 var(--font-display); letter-spacing: -.01em; }
 .admin-module-context { border: var(--a-panel-line); border-left: 2px solid var(--a-accent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-accent) 7%, var(--a-panel)); box-shadow: var(--a-panel-shadow); }
 .admin-panel-head { border-bottom: 1px solid var(--a-line); background: transparent; }
+
+/* ═══ PIEL FASE 2 · OLA 3 — módulos (issues #72 y #75) ══════════════════════
+   Barrido de módulos con los mismos tokens: sin estructura nueva ni cambios de
+   densidad. Acá viven las superficies de estado de #75 que faltaban (filas,
+   tableros, celdas con control y chips de calendario) y la terminación de los
+   objetos que todavía se veían planos. */
+
+/* ── Filas con tono (#75): el filete del estado tiñe también el fondo ── */
+.admin-table-row[data-tone="ok"] { border-color: color-mix(in srgb, var(--a-ok) 30%, var(--a-row-line)); background: color-mix(in srgb, var(--a-ok-surface) 30%, var(--a-row-bg)); }
+.admin-table-row[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 30%, var(--a-row-line)); background: color-mix(in srgb, var(--a-warn-surface) 28%, var(--a-row-bg)); }
+.admin-table-row[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 32%, var(--a-row-line)); background: color-mix(in srgb, var(--a-danger-surface) 28%, var(--a-row-bg)); }
+
+/* ── Tableros kanban: la columna lleva el lavado del tono y la tarjeta flota ── */
+.admin-board-col { border: var(--a-panel-line); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
+.admin-board-col[data-tone="accent"] { background: color-mix(in srgb, var(--a-accent) 8%, var(--a-panel)); }
+.admin-board-col[data-tone="info"] { background: color-mix(in srgb, var(--a-info) 8%, var(--a-panel)); }
+.admin-board-col[data-tone="ok"] { background: color-mix(in srgb, var(--a-ok-surface) 50%, var(--a-panel)); }
+.admin-board-col[data-tone="warn"] { background: color-mix(in srgb, var(--a-warn-surface) 50%, var(--a-panel)); }
+.admin-board-col[data-tone="danger"] { background: color-mix(in srgb, var(--a-danger-surface) 50%, var(--a-panel)); }
+.admin-board-card { border-color: var(--a-row-line); background: var(--a-row-bg); box-shadow: var(--a-row-shadow); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.admin-board-card:hover { border-color: color-mix(in srgb, var(--a-accent) 35%, var(--a-line-2)); transform: translateY(-1px); box-shadow: var(--a-shadow-card); }
+.admin-board-col-count { background: color-mix(in srgb, var(--a-panel-2) 78%, transparent); }
+.admin-board-col[data-tone="ok"] .admin-board-col-count { background: var(--a-ok-surface); color: var(--a-ok-text); }
+.admin-board-col[data-tone="warn"] .admin-board-col-count { background: var(--a-warn-surface); color: var(--a-warn-text); }
+.admin-board-col[data-tone="danger"] .admin-board-col-count { background: var(--a-danger-surface); color: var(--a-danger-text); }
+
+/* ── Cuadrícula de tarjetas (inventario, clientes, proveedores) ── */
+.admin-cards-item { border: var(--a-panel-line); background: var(--a-panel); box-shadow: var(--a-panel-shadow); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.admin-cards-item:hover { transform: translateY(-1px); box-shadow: var(--a-shadow-card); }
+
+/* ── Celdas de estado con control: el select se pinta con el tono ── */
+select[data-tone] { font-weight: 600; }
+select[data-tone="accent"] { border-color: color-mix(in srgb, var(--a-accent) 36%, transparent); background: color-mix(in srgb, var(--a-accent) 12%, transparent); color: var(--a-accent); }
+select[data-tone="ok"] { border-color: color-mix(in srgb, var(--a-ok) 36%, transparent); background: var(--a-ok-surface); color: var(--a-ok-text); }
+select[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 36%, transparent); background: var(--a-warn-surface); color: var(--a-warn-text); }
+select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36%, transparent); background: var(--a-danger-surface); color: var(--a-danger-text); }
+
+/* ── Calendario: celdas y chips con la piel ── */
+.admin-cal-cell { background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
+.admin-cal-cell[data-today="true"] { border-color: color-mix(in srgb, var(--a-accent) 60%, var(--a-line)); background: color-mix(in srgb, var(--a-accent) 7%, var(--a-row-bg)); }
+.admin-cal-day-row { background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
+.admin-cal-item[data-tone="accent"] { background: color-mix(in srgb, var(--a-accent) 12%, var(--a-panel-2)); }
+.admin-cal-item[data-tone="info"] { background: color-mix(in srgb, var(--a-info) 12%, var(--a-panel-2)); }
+.admin-cal-item[data-tone="ok"] { background: color-mix(in srgb, var(--a-ok-surface) 60%, var(--a-panel-2)); }
+.admin-cal-item[data-tone="warn"] { background: color-mix(in srgb, var(--a-warn-surface) 60%, var(--a-panel-2)); }
+.admin-cal-item[data-tone="danger"] { background: color-mix(in srgb, var(--a-danger-surface) 60%, var(--a-panel-2)); }
+.admin-cal-alert { background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
+.admin-cal-alert[data-level="overdue"] { background: color-mix(in srgb, var(--a-danger-surface) 45%, var(--a-panel)); }
+.admin-cal-alert[data-level="soon"] { background: color-mix(in srgb, var(--a-warn-surface) 42%, var(--a-panel)); }
+
+/* ── Checklist y recordatorios ── */
+.admin-check input:checked + .admin-check-box { color: var(--a-ink); }
+.admin-check-box { border-radius: 6px; }
+.admin-reminder-item { background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
+
+/* ── Segmentados (lista/tablero/calendario y pestañas internas) ── */
+.admin-viewswitch { border: var(--a-panel-line); border-radius: 999px; background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
+.admin-viewswitch-btn { border-radius: 999px; }
+.admin-viewswitch-btn[aria-pressed="true"] { background: var(--a-grad-accent); color: var(--a-nav-ink); }
+.admin-subtab { border: var(--a-panel-line); border-radius: 999px; background: color-mix(in srgb, var(--a-panel) 70%, transparent); box-shadow: var(--a-panel-shadow); }
+.admin-subtab:hover { border-color: var(--a-line-2); color: var(--a-text-strong); }
+.admin-subtab[data-active="true"], .admin-subtab[aria-current="page"] { border-color: transparent; background: var(--a-grad-accent); color: var(--a-nav-ink); }
+.admin-subtab[data-active="true"] .admin-icon { color: inherit; }
+.admin-subtab[data-active="true"] .admin-subtab-count, .admin-subtab[aria-current="page"] .admin-subtab-count { background: color-mix(in srgb, var(--a-nav-ink) 16%, transparent); color: var(--a-nav-ink); }
+
+/* ── Identidad y superficies de ficha/detalle ── */
+.admin-avatar { background: var(--a-grad-accent); color: var(--a-nav-ink); }
+.admin-avatar:has(.admin-avatar-img) { background: var(--a-panel-2); }
+.admin-avatar--logo { background: transparent; color: var(--a-muted-2); }
+.admin-client-head, .admin-client-person-card { border: var(--a-panel-line); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
+.admin-client-person-card { background: var(--a-row-bg); }
+.admin-detail-item { border: var(--a-panel-line); background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
