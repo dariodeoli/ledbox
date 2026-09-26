@@ -1170,6 +1170,34 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table-wrap { overflow-x: auto; padding: 8px 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); scrollbar-width: thin; scrollbar-color: var(--a-line-2) transparent; }
 .admin-table-wrap::-webkit-scrollbar { height: 8px; }
 .admin-table-wrap::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--a-line-2); }
+
+/* ── Calidad del panel (issue #73) ──────────────────────────────────────────
+   Regla: el único deslizamiento lateral del panel es el tablero (kanban). Las
+   listas se recalibraron con el ancho real de sus datos para entrar completas
+   en escritorio; si una pantalla es tan chica que la lista no entra (o hay
+   muchas columnas), el contenedor se desliza por dentro pero:
+   1. la página nunca se mueve de costado,
+   2. la columna de acciones queda pegada al borde derecho, siempre a la vista,
+      con su fondo y su sombra (nada recortado ni escondido). */
+.admin-table-wrap { --a-fila-fondo: var(--a-panel-2); }
+.admin-panel .admin-table-wrap { --a-fila-fondo: var(--a-panel); }
+
+@media (max-width: 1379px) {
+  .admin-table-head > .admin-cell:last-child,
+  .admin-table-row > .admin-cell--actions { position: sticky; right: 0; z-index: 1; background: var(--a-fila-fondo); }
+  .admin-table-head > .admin-cell:last-child { padding-right: 12px; }
+  .admin-table-row > .admin-cell--actions { margin-right: -11px; padding-right: 11px; border-radius: 0 calc(var(--a-radius) - 1px) calc(var(--a-radius) - 1px) 0; box-shadow: -16px 0 16px -16px rgba(0, 0, 0, .55); }
+  .admin-table-row:hover > .admin-cell--actions { background: var(--a-panel-2); }
+}
+
+/* Escritorio compacto: entre 981 y 1399 px el sidebar cede 46 px y el cuerpo
+   ajusta su padding, para que las plantillas de lista entren sin deslizarse. */
+@media (min-width: 981px) and (max-width: 1399px) {
+  .admin-root { --a-sidebar: 190px; }
+  .admin-main-body { padding: 12px 12px 32px; }
+  .admin-panel-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .admin-table { min-width: var(--admin-table-min, 48rem); }
 .admin-table-head, .admin-table-row { display: grid; grid-template-columns: var(--admin-cols); gap: 0 8px; align-items: center; }
 .admin-table-head { min-height: 30px; padding: 0 12px 4px; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
@@ -1189,17 +1217,17 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    La columna de acciones (issue #36) entra con los links compactos de contacto
    (WhatsApp, Instagram, web y correo, más la ficha); el ancho mínimo entra sin
    scroll horizontal en desktop (1440). */
-.admin-table--clientes { --clientes-cols: minmax(7.25rem, 1.5fr) minmax(5.25rem, 1.1fr) 6rem 7.25rem 4.25rem 5rem 7.5rem 8.75rem 4.25rem 10rem; --admin-cols: var(--clientes-cols); --admin-table-min: 65.5rem; }
-.admin-table--eventos { --eventos-cols: 8rem 8.5rem minmax(11rem, 1.6fr) minmax(8rem, 1.1fr) minmax(6rem, 1fr) 4.5rem 5rem 6.5rem 7rem; --admin-cols: var(--eventos-cols); --admin-table-min: 69.5rem; }
-.admin-table--presupuestos { --presupuestos-cols: minmax(10.5rem, 1.5fr) minmax(8.5rem, 1.1fr) 4rem 6.5rem 6rem 6rem 6rem 7.5rem minmax(8rem, 1.1fr) 12rem 13rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 94rem; }
-.admin-table--cobros { --cobros-cols: 8rem minmax(9rem, 1.2fr) minmax(9rem, 1.1fr) 8rem 8rem 7rem minmax(7rem, 1fr) 7rem; --admin-cols: var(--cobros-cols); --admin-table-min: 69rem; }
+.admin-table--clientes { --clientes-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.2fr) 5.5rem 5.5rem 2.75rem 2.75rem 5.25rem minmax(4.5rem, .9fr) 4.75rem 9.75rem; --admin-cols: var(--clientes-cols); --admin-table-min: 62rem; }
+.admin-table--eventos { --eventos-cols: 7.5rem 7rem minmax(8.5rem, 1.6fr) minmax(6.5rem, 1.1fr) minmax(5.5rem, 1fr) 4rem 4.5rem 5.75rem 7.5rem; --admin-cols: var(--eventos-cols); --admin-table-min: 61rem; }
+.admin-table--presupuestos { --presupuestos-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 2.75rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 5.5rem 5rem 5.25rem 7.5rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 70rem; }
+.admin-table--cobros { --cobros-cols: 5.75rem minmax(7rem, 1.2fr) minmax(8rem, 1.4fr) 4.5rem minmax(6.25rem, 1fr) 5.5rem 5.5rem 5.25rem; --admin-cols: var(--cobros-cols); --admin-table-min: 51.5rem; }
 /* Cobros a plazo (issues #16, #17 y #19): identidad, factura con su emisión,
    vencimiento con la cuenta regresiva, método con el cheque, recordatorio del
    día, monto, comprobante del portal y acciones. Fila compacta: entra sin
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
-.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(12rem, 1.6fr) minmax(9.5rem, 1.1fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8rem 7.5rem 6.5rem 12rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 74rem; }
-.admin-table--pagar { --pagar-cols: minmax(9rem, 1.1fr) minmax(10rem, 1.3fr) minmax(8rem, 1fr) 6.5rem 8rem 8rem 8rem 7.5rem 7rem; --admin-cols: var(--pagar-cols); --admin-table-min: 77rem; }
-.admin-table--inventario { --inventario-cols: minmax(11rem, 1.5fr) minmax(6.5rem, 1fr) 6.5rem 5rem 9.5rem 7rem 6.5rem 8rem 6rem; --admin-cols: var(--inventario-cols); --admin-table-min: 66.5rem; }
+.admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 6.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 53rem; }
+.admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
+.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.5fr) 5.5rem 5.75rem 4rem 4rem 5.5rem minmax(5rem, .9fr) 5.75rem 6.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 55rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
@@ -1209,36 +1237,36 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    pendiente y con qué eventos choca. */
 .admin-table--presupuestos-reserva { --presupuestos-reserva-cols: minmax(9rem, 1.3fr) minmax(9rem, 1.3fr) 5rem 6rem 7.5rem minmax(13rem, 2fr); --admin-cols: var(--presupuestos-reserva-cols); --admin-table-min: 55.5rem; }
 .admin-table--evento-equipos { --evento-equipos-cols: minmax(8.5rem, 1.3fr) 4.5rem 11.5rem 8rem 8rem 10.5rem minmax(6rem, 1fr) 10rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 71rem; }
-.admin-table--proveedores { --proveedores-cols: minmax(10rem, 1.3fr) minmax(9rem, 1.1fr) 7.5rem 9rem minmax(9rem, 1.1fr) minmax(8rem, 1fr) 6.5rem 7.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 71rem; }
-.admin-table--trabajos { --trabajos-cols: minmax(8rem, 1.1fr) minmax(9rem, 1.4fr) minmax(6rem, 1fr) 11.5rem 6.5rem 6.5rem 6.5rem 7rem 5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 71rem; }
-.admin-table--promotoras { --promotoras-cols: minmax(10rem, 1.4fr) 9rem minmax(8.5rem, 1fr) minmax(9rem, 1.1fr) 12rem 7rem 6.5rem 5.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 69rem; }
-.admin-table--leads { --leads-cols: 5rem minmax(9rem, 1.4fr) minmax(9rem, 1.2fr) 5rem 13rem minmax(7rem, 1fr) 6.5rem 5rem 7rem; --admin-cols: var(--leads-cols); --admin-table-min: 71rem; }
+.admin-table--proveedores { --proveedores-cols: minmax(7rem, 1.2fr) minmax(6.5rem, 1.1fr) 5.75rem 5.5rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem 6.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 54rem; }
+.admin-table--trabajos { --trabajos-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 64rem; }
+.admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 6.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 52rem; }
+.admin-table--leads { --leads-cols: 4.75rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem minmax(6.5rem, 1.2fr) minmax(5.5rem, 1fr) 5.75rem 5.5rem 7.5rem; --admin-cols: var(--leads-cols); --admin-table-min: 59rem; }
 .admin-table--leads-productos { --leads-productos-cols: minmax(11rem, 1.6fr) 5.5rem 7rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39rem; }
 .admin-table--usuarios { --usuarios-cols: minmax(10rem, 1.2fr) minmax(12rem, 1.4fr) 8.5rem 6.5rem 7.5rem 5.5rem; --admin-cols: var(--usuarios-cols); --admin-table-min: 53rem; }
-.admin-table--checklist { --checklist-cols: 9.5rem minmax(12rem, 1.8fr) minmax(9rem, 1.1fr) 7rem 12rem; --admin-cols: var(--checklist-cols); --admin-table-min: 52.5rem; }
-.admin-table--checklist-resumen { --checklist-resumen-cols: 7rem minmax(8.5rem, 1.5fr) minmax(6.5rem, 1fr) 8.5rem; --admin-cols: var(--checklist-resumen-cols); --admin-table-min: 33rem; }
-.admin-table--resumen-eventos { --resumen-eventos-cols: 10.5rem minmax(7.5rem, 1.5fr) minmax(5rem, 1fr) 4rem 5rem; --admin-cols: var(--resumen-eventos-cols); --admin-table-min: 34.5rem; }
-.admin-table--resumen-cobrar { --resumen-cobrar-cols: minmax(6rem, 1.1fr) minmax(7.5rem, 1.4fr) 6.5rem 7rem; --admin-cols: var(--resumen-cobrar-cols); --admin-table-min: 29rem; }
-.admin-table--resumen-pagar { --resumen-pagar-cols: minmax(6.5rem, 1.1fr) minmax(7.5rem, 1.4fr) 8.5rem 6.5rem; --admin-cols: var(--resumen-pagar-cols); --admin-table-min: 31.5rem; }
-.admin-table--resumen-avisos { --resumen-avisos-cols: 5.5rem minmax(9rem, 1.8fr) 6.5rem 7.5rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 30rem; }
-.admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(9rem, 1.6fr) minmax(7.5rem, 1.2fr) 8.5rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 27rem; }
+.admin-table--checklist { --checklist-cols: 7rem minmax(9rem, 1.6fr) minmax(6rem, 1fr) 5rem 7rem; --admin-cols: var(--checklist-cols); --admin-table-min: 36rem; }
+.admin-table--checklist-resumen { --checklist-resumen-cols: 4.75rem minmax(6.5rem, 1.5fr) minmax(5.5rem, 1fr) 5.75rem; --admin-cols: var(--checklist-resumen-cols); --admin-table-min: 24rem; }
+.admin-table--resumen-eventos { --resumen-eventos-cols: 6.5rem minmax(6.5rem, 1.5fr) minmax(5.5rem, 1fr) 3.5rem 5rem; --admin-cols: var(--resumen-eventos-cols); --admin-table-min: 29rem; }
+.admin-table--resumen-cobrar { --resumen-cobrar-cols: minmax(5.5rem, 1.1fr) minmax(6.5rem, 1.4fr) 5.75rem 5.25rem; --admin-cols: var(--resumen-cobrar-cols); --admin-table-min: 24.5rem; }
+.admin-table--resumen-pagar { --resumen-pagar-cols: minmax(5.5rem, 1.1fr) minmax(6.5rem, 1.4fr) 5.5rem 5.25rem; --admin-cols: var(--resumen-pagar-cols); --admin-table-min: 24.5rem; }
+.admin-table--resumen-avisos { --resumen-avisos-cols: 5rem minmax(8rem, 1.8fr) 5.5rem 6rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 26rem; }
+.admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(7rem, 1.6fr) minmax(6.5rem, 1.2fr) 6rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 20.5rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
-.admin-table--solicitudes { --solicitudes-cols: 10rem minmax(9rem, 1.2fr) minmax(13rem, 1.8fr) minmax(9rem, 1.2fr) 7.5rem 6rem 7rem; --admin-cols: var(--solicitudes-cols); --admin-table-min: 65rem; }
+.admin-table--solicitudes { --solicitudes-cols: minmax(6.5rem, 1.1fr) minmax(7.5rem, 1.2fr) minmax(8.5rem, 1.5fr) minmax(8rem, 1.4fr) 6rem 5.75rem 6.5rem; --admin-cols: var(--solicitudes-cols); --admin-table-min: 52rem; }
 /* Correo (issue #30): fecha, destinatario con su actor, tipo, asunto, estado y
    motivo del fallo. Entra sin scroll horizontal en desktop; en mobile se desplaza. */
-.admin-table--correo { --correo-cols: 10.5rem minmax(12rem, 1.5fr) 8.5rem minmax(14rem, 1.8fr) 7rem minmax(12rem, 1.6fr); --admin-cols: var(--correo-cols); --admin-table-min: 66rem; }
+.admin-table--correo { --correo-cols: minmax(9.5rem, 1.5fr) minmax(9rem, 1.4fr) 6.5rem minmax(9rem, 1.5fr) 5.75rem minmax(8rem, 1.4fr); --admin-cols: var(--correo-cols); --admin-table-min: 51rem; }
 /* Invitaciones al equipo (issue #31): correo, rol, quién invita, vencimiento con
    cuenta regresiva, último envío real y acciones compactas. */
-.admin-table--invitaciones { --invitaciones-cols: minmax(12rem, 1.6fr) 8.5rem minmax(9rem, 1.1fr) 10rem 8rem 5.5rem; --admin-cols: var(--invitaciones-cols); --admin-table-min: 55rem; }
+.admin-table--invitaciones { --invitaciones-cols: 9.5rem minmax(8rem, 1.2fr) 5.5rem 7.5rem 6.5rem 6.5rem; --admin-cols: var(--invitaciones-cols); --admin-table-min: 46rem; }
 /* Tesorería y gastos (issue #27): cuentas con su saldo derivado, movimientos del
    período (con la cuenta y el hecho de origen) y gastos con el proyecto inline. */
-.admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(11rem, 1.5fr) 8.5rem minmax(8rem, 1fr) 8rem 9.5rem 6.5rem 7.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 63rem; }
-.admin-table--tesoreria-movimientos { --tesoreria-movimientos-cols: 6.5rem 7.5rem minmax(11rem, 1.4fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) 8.5rem; --admin-cols: var(--tesoreria-movimientos-cols); --admin-table-min: 60rem; }
-.admin-table--gastos { --gastos-cols: 5.5rem minmax(12rem, 1.7fr) 7.5rem minmax(9.5rem, 1.2fr) minmax(7.5rem, 1fr) minmax(7rem, 1fr) 8.5rem; --admin-cols: var(--gastos-cols); --admin-table-min: 62rem; }
+.admin-table--tesoreria-cuentas { --tesoreria-cuentas-cols: minmax(7rem, 1.4fr) 5.5rem 6rem 5.75rem minmax(6.25rem, 1fr) 5rem 6.5rem; --admin-cols: var(--tesoreria-cuentas-cols); --admin-table-min: 45rem; }
+.admin-table--tesoreria-movimientos { --tesoreria-movimientos-cols: 5rem minmax(6.5rem, 1fr) minmax(7rem, 1.2fr) minmax(9rem, 1.8fr) minmax(6.5rem, 1.2fr) 6.25rem; --admin-cols: var(--tesoreria-movimientos-cols); --admin-table-min: 43rem; }
+.admin-table--gastos { --gastos-cols: 5rem minmax(8rem, 1.6fr) 5.75rem minmax(7rem, 1.3fr) 4.5rem 6rem 6.25rem; --admin-cols: var(--gastos-cols); --admin-table-min: 46rem; }
 /* Conciliación bancaria (issue #40): fila del extracto con su traza (fecha,
    descripción, referencia, tipo, monto), el estado real y la coincidencia
    sugerida; acciones compactas al final. Entra sin scroll en desktop 1440. */
-.admin-table--conciliacion { --conciliacion-cols: 6rem minmax(13rem, 1.8fr) 7rem 5.5rem 9rem 7.5rem minmax(9rem, 1.2fr) 8.5rem; --admin-cols: var(--conciliacion-cols); --admin-table-min: 72rem; }
+.admin-table--conciliacion { --conciliacion-cols: 5rem minmax(9rem, 1.7fr) 5rem 4.75rem minmax(6.25rem, 1fr) 5.5rem minmax(6.5rem, 1.1fr) 6.5rem; --admin-cols: var(--conciliacion-cols); --admin-table-min: 52rem; }
 /* Vista previa del extracto en el diálogo de importación: una fila por renglón
    leído, con la línea del archivo y el estado (lista, duplicada o con error). */
 .admin-table--extracto-preview { --extracto-preview-cols: 4rem 6rem minmax(11rem, 1.6fr) 7rem 5.5rem 8.5rem 7rem; --admin-cols: var(--extracto-preview-cols); --admin-table-min: 55rem; }
@@ -1247,23 +1275,23 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--cliente-presupuestos { --cliente-presupuestos-cols: 6.5rem minmax(12rem, 2fr) 8rem 9rem 9rem; --admin-cols: var(--cliente-presupuestos-cols); --admin-table-min: 48rem; }
 .admin-table--cliente-eventos { --cliente-eventos-cols: 7.5rem minmax(14rem, 2fr) 8rem 7rem; --admin-cols: var(--cliente-eventos-cols); --admin-table-min: 39rem; }
 .admin-table--cliente-pagos { --cliente-pagos-cols: 7.5rem minmax(12rem, 2fr) 7.5rem 9rem 7.5rem; --admin-cols: var(--cliente-pagos-cols); --admin-table-min: 46.5rem; }
-.admin-table--por-confirmar { --por-confirmar-cols: minmax(10rem, 1.4fr) 6.5rem 7.5rem minmax(7rem, 1fr) 7.5rem 7rem 8rem 12rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 68rem; }
+.admin-table--por-confirmar { --por-confirmar-cols: minmax(8.5rem, 1.4fr) minmax(6rem, 1fr) 6rem 5rem 5.5rem 5.75rem 6.25rem 6.5rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 53rem; }
 /* Plantillas de mensajes (issue #35): título, mensaje en una línea, estado y acciones. */
-.admin-table--plantillas { --plantillas-cols: minmax(11rem, 1.1fr) minmax(18rem, 2.6fr) 6.5rem 8.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 48rem; }
+.admin-table--plantillas { --plantillas-cols: minmax(8rem, 1.1fr) minmax(12rem, 2.2fr) 5.5rem 6.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 33.5rem; }
 /* Respaldo de la base (issue #43): fecha, resultado, tamaño, tablas, duración,
    archivo y error real de cada corrida. */
-.admin-table--respaldos { --respaldos-cols: 10.5rem 7rem 7.5rem 5rem 6.5rem minmax(11rem, 1.3fr) minmax(12rem, 1.5fr); --admin-cols: var(--respaldos-cols); --admin-table-min: 66rem; }
+.admin-table--respaldos { --respaldos-cols: 9.5rem 6rem 6.5rem 4.5rem 5.75rem minmax(8rem, 1.3fr) minmax(9rem, 1.5fr); --admin-cols: var(--respaldos-cols); --admin-table-min: 52.5rem; }
 
 /* Registro fiscal interno (issue #41): listas del módulo de facturación.
    Facturas, presupuestos facturables, compras, libro de IVA y cierres. Los
    anchos entran sin scroll horizontal en desktop (1440) y las acciones de fila
    siempre quedan a la vista. */
-.admin-table--facturas { --facturas-cols: 6rem 6rem minmax(8.5rem, 1.6fr) 6.5rem 6.5rem 7.5rem 6.5rem 7rem 8.5rem; --admin-cols: var(--facturas-cols); --admin-table-min: 68rem; }
-.admin-table--facturables { --facturables-cols: minmax(12rem, 1.8fr) minmax(10rem, 1.3fr) 9rem 5rem; --admin-cols: var(--facturables-cols); --admin-table-min: 40rem; }
-.admin-table--compras { --compras-cols: 6rem minmax(8.5rem, 1.5fr) 6.5rem minmax(7.5rem, 1fr) 7rem 7.5rem 7rem 7.5rem 7rem; --admin-cols: var(--compras-cols); --admin-table-min: 69.5rem; }
-.admin-table--libro-ventas { --libro-ventas-cols: 6rem 5.5rem minmax(7.5rem, 1.4fr) 6rem 6.5rem 6rem 6.5rem 6rem 6rem 7.5rem; --admin-cols: var(--libro-ventas-cols); --admin-table-min: 69rem; }
-.admin-table--libro-compras { --libro-compras-cols: 5.5rem minmax(7.5rem, 1.4fr) 6rem 6.5rem 6.5rem 6rem 6.5rem 6rem 6rem 7.5rem; --admin-cols: var(--libro-compras-cols); --admin-table-min: 69.5rem; }
-.admin-table--cierres { --cierres-cols: 9rem 7.5rem 8.5rem 8.5rem 8.5rem minmax(11rem, 1.3fr) minmax(11rem, 1.3fr); --admin-cols: var(--cierres-cols); --admin-table-min: 64.5rem; }
+.admin-table--facturas { --facturas-cols: 4.5rem 5.5rem minmax(8.5rem, 1.6fr) 5rem 5.25rem minmax(6.25rem, 1fr) 4.75rem 6.5rem 6.5rem; --admin-cols: var(--facturas-cols); --admin-table-min: 57rem; }
+.admin-table--facturables { --facturables-cols: minmax(10rem, 1.8fr) minmax(9rem, 1.3fr) 6rem 5rem; --admin-cols: var(--facturables-cols); --admin-table-min: 30rem; }
+.admin-table--compras { --compras-cols: 5.5rem minmax(7.5rem, 1.5fr) 5.75rem minmax(6.5rem, 1fr) minmax(6.25rem, 1fr) 6.25rem 6.25rem 6.5rem 6.5rem; --admin-cols: var(--compras-cols); --admin-table-min: 60.5rem; }
+.admin-table--libro-ventas { --libro-ventas-cols: 5.5rem 5rem minmax(7rem, 1.4fr) 5.5rem 5.75rem 5.5rem 5.75rem 5.5rem 5.5rem 6.5rem; --admin-cols: var(--libro-ventas-cols); --admin-table-min: 62rem; }
+.admin-table--libro-compras { --libro-compras-cols: 5rem minmax(7rem, 1.4fr) 5.5rem 5.75rem 5.75rem 5.5rem 5.75rem 5.5rem 5.5rem 6.5rem; --admin-cols: var(--libro-compras-cols); --admin-table-min: 62.5rem; }
+.admin-table--cierres { --cierres-cols: 8rem 6.5rem 7rem 7rem 7rem minmax(9rem, 1.3fr) minmax(9rem, 1.3fr); --admin-cols: var(--cierres-cols); --admin-table-min: 56.5rem; }
 .admin-table--factura-items { --factura-items-cols: minmax(9rem, 1.6fr) 4.5rem 7.5rem minmax(6.5rem, 1fr) 7.5rem; --admin-cols: var(--factura-items-cols); --admin-table-min: 37.5rem; }
 
 /* Alta de factura (issue #41): una fila por ítem con su importe desagregado y
