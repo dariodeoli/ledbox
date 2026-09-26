@@ -595,72 +595,164 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .prod-order .btn-led, .prod-order .btn-line { width: 100%; justify-content: center; }
 }
 
-/* ─── PANEL ADMIN (rediseño 21-09-2026) ───
-   Identidad negro + cyan eléctrico. Tokens propios en `.admin-root`; modo claro por `data-theme`.
+/* ─── PANEL ADMIN (rediseño 21-09-2026 · piel fase 2, 26-09-2026) ───
+   Dirección visual elegida (issue #72): oscuro **C · Vitrina** (vidrio y aurora,
+   aprobado en la fase 1) y claro **C1 · Aurora viva** (elegido el 26-09; tiene
+   su propio lenguaje, no espeja al oscuro). Los tokens `--a-*` son la fuente
+   única de la piel; el claro redefine los suyos en `data-theme="light"`.
    Densidad: filas de 44–52 px, una plantilla de columnas por vista (`--<vista>-cols`).
-   Escala única (22-09-2026): espaciado 4·8·12·16·24·32; radios 8 (controles) ·
-   10 (`--a-radius`: paneles, chips) · 14 (`--a-radius-lg`: tarjetas, diálogos) y
-   píldoras 999; una sombra (`--a-shadow`); tipografía display (títulos y montos
-   grandes) · body 12.5–13 (filas, campos, notas) · micro 10–11 (etiquetas, chips,
-   cabeceras de tabla); estados hover/activo/foco visible (`:focus-visible`) y
-   deshabilitado (opacidad .5). Nada fuera de la escala. */
+   Escala única (22-09-2026): espaciado 4·8·12·16·24·32; radios por tema (C: 14/20,
+   C1: 18/26) y píldoras 999; tipografía display (títulos y montos grandes) ·
+   body 12.5–13 (filas, campos, notas) · micro 10–11 (etiquetas, chips, cabeceras
+   de tabla); estados hover/activo/foco visible (`:focus-visible`) y deshabilitado
+   (opacidad .5). Nada fuera de la escala. */
+
+/* Tipografía real self-hosted (fase 2, issue #72). Space Grotesk (display,
+   300–700) e Inter (cuerpo, 100–900) en woff2 variable, subset latin, OFL
+   (licencias en `public/fonts`). Las familias llevan « Panel» en el nombre para
+   no tocar el sitio público, que declara 'Space Grotesk'/'Archivo Black' sin
+   cargarlas: adentro del panel son reales; afuera queda todo como estaba. */
+@font-face {
+  font-family: "Space Grotesk Panel";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-var.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Panel";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 .admin-root {
   color-scheme: dark;
-  --a-bg: #05080a;
-  --a-bg-2: #0a0e11;
-  --a-panel: #0b1013;
-  --a-panel-2: #111719;
-  --a-line: #1a2227;
-  --a-line-2: #28333a;
-  /* Borde de controles interactivos: contraste >= 3:1 (AA de componentes). */
-  --a-line-control: #556670;
-  --a-text: #e9eff2;
+  /* C · Vitrina: luz de escenario con vidrio y aurora. */
+  --a-bg: #0a0a13;
+  --a-bg-2: rgba(255, 255, 255, .055);
+  --a-panel: rgba(255, 255, 255, .045);
+  --a-panel-2: rgba(255, 255, 255, .075);
+  --a-line: rgba(255, 255, 255, .10);
+  --a-line-2: rgba(255, 255, 255, .20);
+  /* Borde de controles interactivos: contraste >= 3:1 (AA de componentes).
+     C·Vitrina pedía .34; sobre la aurora violeta no llegaba a 3, así que sube a .40. */
+  --a-line-control: rgba(255, 255, 255, .40);
+  --a-text: #eceefb;
   --a-text-strong: #ffffff;
-  --a-muted: #7d8c96;
-  --a-muted-2: #b6c3ca;
-  --a-accent: #00e5ff;
-  --a-accent-strong: #7df3ff;
-  --a-accent-soft: rgba(0, 229, 255, .1);
-  --a-ok: #3ddc97;
-  --a-warn: #f5c451;
-  --a-danger: #ff6b85;
-  --a-info: #9aa8ff;
-  --a-radius: 10px;
-  --a-radius-lg: 14px;
+  --a-muted: #9ea1c0;
+  --a-muted-2: #c9cce6;
+  --a-accent: #5ad9ff;
+  --a-accent-strong: #93e7ff;
+  --a-accent-soft: rgba(90, 217, 255, .12);
+  --a-ink: #0d1026;
+  --a-grad-accent: linear-gradient(120deg, #5ad9ff, #a78bfa);
+  --a-grad-action: linear-gradient(120deg, #5ad9ff, #a78bfa);
+  --a-grad-ink: linear-gradient(120deg, #5ad9ff, #a78bfa);
+  --a-action-ink: #0d1026;
+  --a-nav-ink: #0d1026;
+  /* Tres tonos de estado (issue #75): base, superficie y texto sobre la
+     superficie. AA medido en docs/DISENO-PANEL.md §3. */
+  --a-ok: #52e39b;
+  --a-warn: #fbc35f;
+  --a-danger: #ff7d92;
+  --a-info: #a78bfa;
+  --a-ok-surface: rgba(82, 227, 155, .16);
+  --a-warn-surface: rgba(251, 195, 95, .16);
+  --a-danger-surface: rgba(255, 125, 146, .16);
+  --a-ok-text: #7df0b8;
+  --a-warn-text: #ffd489;
+  --a-danger-text: #ffa4b3;
+  --a-radius: 14px;
+  --a-radius-lg: 20px;
   --a-sidebar: 224px;
   --a-topbar: 54px;
   --a-row: 46px;
-  --a-shadow: 0 22px 54px rgba(0, 0, 0, .5);
+  --a-shadow: 0 30px 64px -40px rgba(0, 0, 0, .9);
+  --a-shadow-card: 0 18px 40px -30px rgba(0, 0, 0, .85), inset 0 1px 0 rgba(255, 255, 255, .05);
+  --a-blur: blur(18px) saturate(1.3);
+  --a-ring: rgba(255, 255, 255, .12);
+  --a-sidebar-bg: rgba(10, 10, 19, .72);
+  --a-sidebar-line: 1px solid rgba(255, 255, 255, .10);
+  --a-sidebar-radius: 0;
+  --a-topbar-bg: rgba(10, 10, 19, .55);
+  --a-topbar-line: 1px solid rgba(255, 255, 255, .08);
+  --a-panel-line: 1px solid rgba(255, 255, 255, .10);
+  --a-panel-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+  --a-row-bg: rgba(255, 255, 255, .04);
+  --a-row-line: rgba(255, 255, 255, .10);
+  --a-row-shadow: 0 10px 22px -18px rgba(0, 0, 0, .9);
+  --a-bg-art: radial-gradient(90rem 60rem at 10% -12%, rgba(56, 189, 248, .22), transparent 62%),
+    radial-gradient(80rem 55rem at 104% 4%, rgba(167, 139, 250, .20), transparent 64%),
+    radial-gradient(72rem 60rem at 48% 118%, rgba(244, 114, 182, .13), transparent 60%),
+    #0a0a13;
+  --font-display: "Space Grotesk Panel", "Inter Panel", system-ui, sans-serif;
+  --font-body: "Inter Panel", system-ui, sans-serif;
   min-height: 100vh;
-  background: var(--a-bg);
+  background: var(--a-bg-art);
+  background-attachment: fixed;
   color: var(--a-text);
   font-size: 13px;
   line-height: 1.5;
 }
 .admin-root[data-theme="light"] {
   color-scheme: light;
-  --a-bg: #f2f6f8;
-  --a-bg-2: #ffffff;
-  --a-panel: #ffffff;
-  --a-panel-2: #f6fafb;
-  /* Calibrados el 22-09-2026: el cyan del modo claro queda legible como texto
-     (≥4.5), los tonos de estado también, y los bordes marcan los objetos. */
-  --a-line: #d3dee5;
-  --a-line-2: #aec0cb;
-  --a-line-control: #7f919d;
-  --a-text: #16232a;
-  --a-text-strong: #0a1418;
-  --a-muted: #57686f;
-  --a-muted-2: #35474f;
-  --a-accent: #00798c;
-  --a-accent-strong: #00697a;
-  --a-accent-soft: rgba(0, 121, 140, .12);
-  --a-ok: #0f7a52;
-  --a-warn: #8f6005;
+  /* C1 · Aurora viva: aurora pastel con color de verdad, superficies que flotan
+     sin borde, curvas amplias. Lenguaje propio del claro. */
+  --a-bg: #f6f8ff;
+  --a-bg-2: rgba(255, 255, 255, .92);
+  --a-panel: rgba(255, 255, 255, .84);
+  --a-panel-2: #ffffff;
+  --a-line: rgba(28, 34, 74, .07);
+  --a-line-2: rgba(28, 34, 74, .16);
+  --a-line-control: rgba(28, 34, 74, .55);
+  --a-text: #141a33;
+  --a-text-strong: #0a0e20;
+  --a-muted: #545a80;
+  --a-muted-2: #343a5e;
+  --a-accent: #0b6f8f;
+  --a-accent-strong: #085a75;
+  --a-accent-soft: rgba(11, 111, 143, .10);
+  --a-ink: #ffffff;
+  --a-grad-accent: linear-gradient(120deg, #7dd3fc, #c4b5fd);
+  --a-grad-action: linear-gradient(120deg, #0b6f8f, #4f46e5);
+  --a-grad-ink: linear-gradient(120deg, #0891b2, #4f46e5);
+  --a-action-ink: #ffffff;
+  --a-nav-ink: #0d1026;
+  --a-ok: #0b7a4b;
+  --a-warn: #8a5a06;
   --a-danger: #bd2c47;
-  --a-info: #4453cc;
-  --a-shadow: 0 14px 34px rgba(18, 48, 58, .12);
+  --a-info: #4f46e5;
+  --a-ok-surface: #e0f4e9;
+  --a-warn-surface: #fbefd6;
+  --a-danger-surface: #fbe3e8;
+  --a-ok-text: #0b6b43;
+  --a-warn-text: #7a5005;
+  --a-danger-text: #a82640;
+  --a-radius: 18px;
+  --a-radius-lg: 26px;
+  --a-shadow: 0 34px 66px -46px rgba(76, 61, 186, .55);
+  --a-shadow-card: 0 26px 50px -40px rgba(76, 61, 186, .5), 0 2px 8px -4px rgba(76, 61, 186, .16);
+  --a-blur: blur(18px) saturate(1.2);
+  --a-ring: rgba(28, 34, 74, .12);
+  --a-sidebar-bg: rgba(255, 255, 255, .72);
+  --a-sidebar-line: 0;
+  --a-sidebar-radius: 0 30px 30px 0;
+  --a-topbar-bg: rgba(255, 255, 255, .66);
+  --a-topbar-line: 0;
+  --a-panel-line: 0;
+  --a-panel-shadow: var(--a-shadow-card);
+  --a-row-bg: rgba(255, 255, 255, .88);
+  --a-row-line: rgba(28, 34, 74, .06);
+  --a-row-shadow: 0 12px 24px -18px rgba(76, 61, 186, .45);
+  --a-bg-art: radial-gradient(70rem 50rem at 6% -4%, rgba(110, 231, 249, .58), transparent 60%),
+    radial-gradient(60rem 46rem at 102% 2%, rgba(186, 172, 255, .50), transparent 62%),
+    radial-gradient(76rem 56rem at 92% 108%, rgba(251, 197, 232, .42), transparent 58%),
+    radial-gradient(60rem 46rem at 8% 102%, rgba(167, 243, 208, .42), transparent 58%),
+    linear-gradient(180deg, #f2f4ff, #f6f8ff 42%, #f6f8ff);
 }
 .admin-root :focus-visible { outline: 2px solid var(--a-accent); outline-offset: 3px; }
 .admin-root :focus:not(:focus-visible) { outline: none; }
@@ -2639,3 +2731,161 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 @media print {
   .admin-bottomnav { display: none; }
 }
+
+/* ═══ PIEL FASE 2 · issue #72 ═══════════════════════════════════════════════
+   Oscuro **C · Vitrina** (vidrio y aurora, aprobado en la fase 1) y claro
+   **C1 · Aurora viva** (26-09). Terminación, no estructura: la densidad, las
+   plantillas de columnas y los contratos no cambian. Reglas de la piel:
+   - el vidrio (`backdrop-filter`) vive solo en superficies fijas —sidebar,
+     topbar, menú/avisos, login y diálogos—; nunca en filas ni tarjetas de
+     lista (rendimiento, medido en la fase 1: 0 blur por fila);
+   - el color de estado es de los tres tonos (issue #75): verde = aprobado /
+     confirmado / cobrado, naranja = pendiente / en curso, rojo = esperando
+     aprobación / vencido / rechazado; el texto del estado nunca cambia;
+   - claro y oscuro tienen lenguajes propios: C1 usa curvas grandes (18/26),
+     superficies que flotan sin borde y aurora con color; C usa vidrio fino,
+     radios 14/20 y el acento como degradado. */
+
+/* ── Fondo, arte de acceso y superficies de vidrio ── */
+.admin-root .admin-page .admin-grid { opacity: 1; background-image: none; mask-image: none; }
+.admin-page .admin-grid::before,
+.admin-page .admin-grid::after { content: ""; position: absolute; border: 1px solid var(--a-ring); border-radius: 50%; }
+.admin-page .admin-grid::before { top: -18rem; right: -8rem; width: 46rem; height: 46rem; }
+.admin-page .admin-grid::after { bottom: -22rem; left: -10rem; width: 40rem; height: 40rem; }
+
+.admin-sidebar { background: var(--a-sidebar-bg); border-right: var(--a-sidebar-line); border-radius: var(--a-sidebar-radius); backdrop-filter: var(--a-blur); }
+.admin-topbar { border-bottom: var(--a-topbar-line); background: var(--a-topbar-bg); backdrop-filter: var(--a-blur); box-shadow: var(--a-shadow-card); }
+.admin-card, .admin-dialog, .admin-usermenu-panel, .admin-notif-panel {
+  border: var(--a-panel-line);
+  background: var(--a-panel);
+  box-shadow: var(--a-panel-shadow);
+}
+.admin-main-foot { border-top: var(--a-topbar-line); }
+.admin-sidebar-head { border-bottom: var(--a-sidebar-line); }
+.admin-sidebar-foot { border-top: var(--a-sidebar-line); }
+.admin-dialog { backdrop-filter: var(--a-blur); }
+.admin-dialog-overlay { background: color-mix(in srgb, var(--a-bg) 72%, transparent); }
+.admin-notif-panel, .admin-usermenu-panel { backdrop-filter: var(--a-blur); }
+
+/* ── Tipografía y jerarquía ── */
+.admin-topbar-heading { font: 600 17px/1.2 var(--font-display); letter-spacing: 0; text-transform: none; }
+.admin-topbar-icon { border-radius: 999px; }
+.admin-brand { font: 600 13px var(--font-display); letter-spacing: 1.2px; }
+.admin-brand-mark { border-radius: 10px; }
+.admin-title { font: 600 clamp(32px, 7vw, 46px)/.98 var(--font-display); letter-spacing: -.02em; text-transform: none; }
+.admin-title span { background: var(--a-grad-ink); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.admin-panel-title, .admin-dialog-title, .admin-cards-title, .admin-notif-head strong { font-family: var(--font-display); letter-spacing: .07em; }
+.admin-kpi-label { letter-spacing: .08em; }
+
+/* ── Controles: píldoras, degradado y campos tipo hueco ── */
+.admin-btn, .admin-searchbtn, .admin-search, .admin-filter, .admin-google-button { border-radius: 999px; }
+.admin-btn { border-color: var(--a-line-2); background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
+.admin-btn:hover:not(:disabled) { border-color: var(--a-accent); }
+.admin-btn--primary { border-color: transparent; background: var(--a-grad-action); color: var(--a-action-ink); box-shadow: 0 12px 26px -16px color-mix(in srgb, var(--a-accent) 70%, transparent); }
+.admin-btn--primary:hover:not(:disabled) { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
+.admin-iconbtn { border-color: var(--a-line-2); border-radius: 999px; }
+.admin-root .btn-led { border-radius: 999px; background: var(--a-grad-action); color: var(--a-action-ink); }
+.admin-root .btn-led:hover { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
+.admin-submit { min-height: 44px; }
+.admin-btn--only-icon, .admin-actions .admin-btn, .admin-actions .admin-iconbtn { border-radius: 999px; }
+.admin-field input, .admin-field select, .admin-field textarea,
+.admin-search input, .admin-dialog-counter input { border-radius: var(--a-radius); }
+.admin-field input, .admin-field select, .admin-field textarea { background: var(--a-bg-2); box-shadow: inset 0 2px 5px color-mix(in srgb, var(--a-bg) 35%, transparent); }
+.admin-switch-track { border-radius: 999px; }
+
+/* ── Navegación ── */
+.admin-nav-link { border-radius: 999px; }
+.admin-nav-link:hover { background: color-mix(in srgb, var(--a-accent) 10%, transparent); color: var(--a-text-strong); }
+.admin-nav-link[data-active="true"] { background: var(--a-grad-accent); color: var(--a-nav-ink); box-shadow: 0 14px 26px -18px color-mix(in srgb, var(--a-accent) 80%, transparent); }
+.admin-nav-link[data-active="true"] .admin-icon { color: inherit; }
+.admin-nav-link[data-active="true"]:hover { color: var(--a-nav-ink); }
+.admin-company, .admin-user--sidebar { border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-panel) 60%, transparent); }
+.admin-user { background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
+
+/* ── Estados con color (issue #75): badges y chips ── */
+.admin-badge { padding: 4px 10px; border-color: var(--a-line-2); letter-spacing: .04em; }
+.admin-badge[data-tone="ok"] { border-color: color-mix(in srgb, var(--a-ok) 30%, transparent); background: var(--a-ok-surface); color: var(--a-ok-text); }
+.admin-badge[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 30%, transparent); background: var(--a-warn-surface); color: var(--a-warn-text); }
+.admin-badge[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 30%, transparent); background: var(--a-danger-surface); color: var(--a-danger-text); }
+.admin-badge[data-tone="accent"] { border-color: color-mix(in srgb, var(--a-accent) 32%, transparent); background: color-mix(in srgb, var(--a-accent) 12%, transparent); }
+.admin-badge[data-tone="info"] { border-color: color-mix(in srgb, var(--a-info) 32%, transparent); background: color-mix(in srgb, var(--a-info) 12%, transparent); }
+.admin-note[data-tone="ok"] { color: var(--a-ok-text); }
+.admin-note[data-tone="warn"] { color: var(--a-warn-text); }
+.admin-countdown[data-tone="danger"], .admin-countdown--inline[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-countdown[data-tone="warn"], .admin-countdown--inline[data-tone="warn"] { color: var(--a-warn-text); }
+.admin-countdown[data-tone="ok"], .admin-countdown--inline[data-tone="ok"] { color: var(--a-ok-text); }
+.admin-notif-item[data-level="overdue"] { border-left-color: var(--a-danger); background: color-mix(in srgb, var(--a-danger-surface) 55%, var(--a-panel)); }
+.admin-notif-item[data-level="soon"] { border-left-color: var(--a-warn); background: color-mix(in srgb, var(--a-warn-surface) 45%, var(--a-panel)); }
+.admin-notif-item[data-level="info"] { border-left-color: var(--a-info); }
+.admin-notif-item { border-radius: var(--a-radius); }
+.admin-notif-count { background: var(--a-grad-action); color: var(--a-action-ink); border-color: transparent; }
+
+/* ── Login y pantallas de acceso ── */
+.admin-card--narrow, .admin-card--center { border: var(--a-panel-line); border-top: var(--a-panel-line); background: var(--a-panel); box-shadow: var(--a-shadow-card); backdrop-filter: var(--a-blur); }
+.admin-card-index { display: inline-flex; align-items: center; padding: 4px 12px; border: 1px solid color-mix(in srgb, var(--a-accent) 30%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--a-accent) 10%, transparent); color: var(--a-accent); }
+.admin-google-button { border-color: var(--a-line-2); background: color-mix(in srgb, var(--a-panel) 80%, transparent); }
+.admin-google-button:hover, .admin-google-button:focus-visible { border-color: var(--a-accent); background: color-mix(in srgb, var(--a-accent) 10%, transparent); }
+.admin-brandbar { border-bottom: var(--a-topbar-line); }
+.admin-brand-note { letter-spacing: .14em; }
+
+/* ── Diálogos y paleta ── */
+.admin-dialog, .admin-dialog-facts, .admin-dialog-table { border: var(--a-panel-line); }
+.admin-palette-option { border-radius: var(--a-radius); }
+.admin-palette-option[data-active="true"] { border-color: transparent; background: color-mix(in srgb, var(--a-accent) 12%, var(--a-panel-2)); box-shadow: none; }
+.admin-palette-option:hover { border-color: var(--a-line-2); }
+.admin-palette-kbd, .admin-searchbtn-key { border-radius: 8px; }
+
+/* ── Mobile ── */
+@media (max-width: 720px) {
+  .admin-bottomnav { border-top: var(--a-topbar-line); background: var(--a-topbar-bg); backdrop-filter: var(--a-blur); }
+  .admin-bottomnav-item { border-radius: 16px; }
+  .admin-bottomnav-item[data-active="true"] { background: var(--a-grad-accent); color: var(--a-nav-ink); }
+}
+
+/* ── Superficies de módulos: paneles, KPI y listas (ola Resumen) ──
+   La misma piel, aplicada a las superficies que Resumen comparte con el
+   resto de los módulos: paneles, KPI, tablas y filas. El barrido fino de
+   cada módulo va en la próxima ola. */
+.admin-panel, .admin-kpi, .admin-empty, .admin-facts, .admin-dialog-facts, .admin-dialog-table,
+.admin-demo-bar, .admin-demo-hero {
+  border: var(--a-panel-line);
+  background: var(--a-panel);
+  box-shadow: var(--a-panel-shadow);
+}
+/* ── Paneles, KPI y listas ── */
+.admin-panel { overflow: hidden; }
+.admin-panel-icon { border-radius: 999px; }
+.admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.admin-kpi { border-top: 0; }
+.admin-root[data-theme="light"] .admin-kpi[data-tone] { border-top: 0; }
+.admin-kpi[data-tone="ok"] { background: var(--a-ok-surface); }
+.admin-kpi[data-tone="warn"] { background: var(--a-warn-surface); }
+.admin-kpi[data-tone="danger"] { background: var(--a-danger-surface); }
+.admin-kpi[data-tone="accent"] { background: color-mix(in srgb, var(--a-accent) 10%, var(--a-panel)); }
+.admin-kpi[data-tone="ok"] .admin-kpi-value { color: var(--a-ok-text); }
+.admin-kpi[data-tone="warn"] .admin-kpi-value { color: var(--a-warn-text); }
+.admin-kpi[data-tone="danger"] .admin-kpi-value { color: var(--a-danger-text); }
+.admin-kpi[data-tone="ok"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-ok) 20%, transparent); color: var(--a-ok-text); }
+.admin-kpi[data-tone="warn"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-warn) 20%, transparent); color: var(--a-warn-text); }
+.admin-kpi[data-tone="danger"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-danger) 20%, transparent); color: var(--a-danger-text); }
+.admin-kpi[data-tone="accent"] .admin-kpi-icon { background: color-mix(in srgb, var(--a-accent) 20%, transparent); }
+.admin-table-head { color: var(--a-muted); }
+.admin-table-row { border-color: var(--a-row-line); background: var(--a-row-bg); box-shadow: var(--a-row-shadow); transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.admin-table-row:hover { border-color: color-mix(in srgb, var(--a-accent) 35%, var(--a-line-2)); background: var(--a-panel-2); transform: translateY(-1px); }
+.admin-table-row:hover > .admin-cell--actions { background: var(--a-panel-2); }
+.admin-table-row[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 35%, var(--a-row-line)); }
+.admin-table-row[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 32%, var(--a-row-line)); }
+
+/* La columna sticky (issue #73) necesita fondo opaco: con las superficies de la
+   piel (translúcidas) el contenido que pasa por debajo se transparentaba. */
+.admin-root { --a-sticky-bg: #16171f; }
+.admin-root[data-theme="light"] { --a-sticky-bg: #ffffff; }
+.admin-table-wrap, .admin-panel .admin-table-wrap { --a-fila-fondo: var(--a-sticky-bg); }
+@media (max-width: 1379px) {
+  .admin-table-head > .admin-cell:last-child { background: var(--a-sticky-bg); }
+}
+.admin-table-wrap { border: 0; background: transparent; }
+.admin-kpi-value { font: 600 22px/1.1 var(--font-display); letter-spacing: -.01em; }
+.admin-module-context { border: var(--a-panel-line); border-left: 2px solid var(--a-accent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-accent) 7%, var(--a-panel)); box-shadow: var(--a-panel-shadow); }
+.admin-panel-head { border-bottom: 1px solid var(--a-line); background: transparent; }
