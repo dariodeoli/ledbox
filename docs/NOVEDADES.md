@@ -143,3 +143,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Resumen y superficies de módulos con la piel nueva
 - piel fase 2 y tonos de estado — base, shell y login (Refs #72,
 
+## v2.1.43 — 2026-09-26
+
+- ola 3 en la guía — superficies, estados y pulidos
+- ola 3 — barrido de módulos, superficies de estado y tipografía heredada (Refs #72,
+
