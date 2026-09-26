@@ -129,3 +129,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - el presupuesto de la entrada del portal se puede aprobar
 
+## v2.1.39 — 2026-09-26
+
+- tablas sin scroll lateral y acciones dentro del container
+
