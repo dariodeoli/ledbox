@@ -133,3 +133,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - tablas sin scroll lateral y acciones dentro del container
 
+## v2.1.41 — 2026-09-26
+
+- acciones sticky en las tablas de Finanzas
+- icono oficial de Google en el login
+
