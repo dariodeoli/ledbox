@@ -12,6 +12,7 @@ import {
   invoiceStatusLabel,
   invoiceTaxTypeLabel,
   purchaseTaxTypeLabel,
+  statusTone,
   todayDayKey,
 } from "@/lib/admin-format";
 import { downloadCsv, csvDay, type CsvBlock } from "@/lib/admin-export";
@@ -711,7 +712,7 @@ export function FacturacionModule() {
                         <span className="admin-nowrap">{formatMoney(invoice.iva10 + invoice.iva5)}</span>
                       </AdminCell>
                       <AdminCell>
-                        <AdminBadge tone={invoice.status === "PAID" ? "ok" : invoice.status === "VOID" ? "danger" : "info"}>
+                        <AdminBadge tone={statusTone(invoice.status)}>
                           {invoiceStatusLabel(invoice.status)}
                         </AdminBadge>
                         {invoice.status === "VOID" && invoice.voidedByName ? <small className="admin-cell-sub"> · {invoice.voidedByName}</small> : null}

@@ -99,7 +99,7 @@ function ChecklistToggle({
   const done = queued ? queued.body.completed === true : Boolean(task.completedAt);
 
   if (!canToggle) {
-    return <AdminBadge tone={done ? "ok" : "neutral"}>{done ? "Listo" : "Pendiente"}</AdminBadge>;
+    return <AdminBadge tone={done ? "ok" : "warn"}>{done ? "Listo" : "Pendiente"}</AdminBadge>;
   }
 
   async function toggle() {
