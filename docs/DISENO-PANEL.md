@@ -9,6 +9,7 @@ No contradice `docs/REGLAS-GENERALES.md` ni `AGENTS.md`: los completa.
 > identidad elegida por el dueño — oscuro **C · Vitrina** (vidrio y aurora,
 > aprobado en la fase 1) y claro **C1 · Aurora viva** (elegido el 26-09). Los
 > valores están en **§12** y los tres tonos de estado (issue #75) en **§3**.
+> La **ola 3** (§12.5) completó el barrido de todos los módulos.
 
 ## 1. Objetivo
 
@@ -306,7 +307,52 @@ de blanco para llegar a 3:1 sobre la aurora violeta.
   búsqueda), command palette, login (con el botón de Google existente) y foco
   visible; **Resumen** completo (KPIs, «Qué mirar hoy», agenda) y los tres tonos
   de estado en badges/chips, celdas, KPIs y filas del shell + Resumen.
-- **Próxima ola**: barrido del resto de los módulos (celdas de estado, filas y
-  KPIs propios de cada uno) con los mismos tokens; los badges ya heredan los
-  tres tonos porque el mapa de estados (`lib/admin-format.ts`) es único.
 - **Fuera**: hojas `lbprint` y el sitio público (no cambian).
+
+### 12.5 Ola 3 — barrido de módulos (26-09-2026, issues #72 y #75)
+
+Mismos tokens, sin estructura nueva: la piel llegó a **Calendario, Eventos,
+Clientes (lista, cuadrícula y ficha 360), Leads (lista y detalle), Inventario
+(lista y detalle), Proveedores (lista, tablero y fichas), Promotoras,
+Checklist, Presupuestos (lista, tablero, detalle y trazabilidad), Finanzas (por
+confirmar, cobros, cobros a plazo, pagar, tesorería cuentas/movimientos, gastos
+y conciliación), Facturación (facturas, facturables, compras, libro de IVA,
+cierre y datos fiscales), Correo, Usuarios/Invitaciones, Ajustes (empresa,
+correo, plan), Estado (sistema y auditoría), Perfil, Plantillas, Configuración,
+Demo, más los diálogos y el mobile.**
+
+Superficies de estado (#75) aplicadas en esta ola:
+
+- **Filas**: el tono del estado tiñe fondo y filete
+  (`data-tone="ok|warn|danger"` en `AdminRow`, mismo lenguaje que los chips).
+- **Tableros**: la columna lleva el lavado de su tono (acento, info, verde,
+  naranja, rojo) y el contador; las tarjetas flotan con la superficie de fila y
+  se elevan 1 px al pasar el mouse.
+- **Celdas de estado con control**: el `AdminSelect` acepta `tone` y se pinta
+  con la superficie/texto del tono (Inventario).
+- **Calendario**: celdas y filas de día con la superficie de la piel; los chips
+  de evento llevan el lavado de su tono; avisos vencidos/próximos con rojo y
+  naranja suaves.
+- **Cuadrícula de tarjetas** (inventario, clientes, proveedores) y **detalle de
+  ficha**: superficie y sombra de la piel con hover de 1 px.
+- **Estados sin badge**: se alinearon al mapa único (`Pendiente` de checklist →
+  naranja; `Emitida` de facturación → naranja, «por cobrar»).
+
+Pulidos de la ronda:
+
+- **Tipografía heredada**: `.admin-root { font-family: var(--font-body) }`
+  cierra el hallazgo del QA de v2.1.42 — lo que no declara familia propia ya no
+  cae al genérico del sistema (Inter llega a todo el panel; sitio y `lbprint`
+  siguen igual).
+- **Acciones de Finanzas**: la última columna de «cobros a plazo» pasa de 6.5 a
+  10.5 rem y la de «por confirmar» de 6.5 a 11.5 rem (los cinco botones y el
+  «Confirmar» con texto entran completos); el resto de las plantillas y la
+  densidad no cambian.
+- **Sticky (#73)**: las celdas pegadas corren 12 px hacia el borde
+  (`right: -12px`), así el strip de padding del contenedor deja de mostrar la
+  celda vecina al deslizar; el fondo sigue siendo el opaco de la piel.
+
+Pendientes (próxima ronda, sin bloquear): medir el costo del `backdrop-filter`
+en equipos de gama baja (riesgo declarado de C·Vitrina) y revisar si algún tono
+de estado fuera de las tres canastas (p. ej. urgencias «faltan N días») merece
+su propia escala.
