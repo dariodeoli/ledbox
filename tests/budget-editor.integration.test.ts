@@ -28,6 +28,33 @@ test("FIN #173 real PostgreSQL: duplicate IDs, atomic plan rollback and sync/col
     const remainder = { label: "Saldo", type: "remainder", moment: "Antes del montaje" };
     const q = await fixture();
     const item = { id: q.items[0].id, name: "Service", quantity: 1, days: 1, unitPrice: 100, costPrice: 0 };
+    const createBody = { clientId: client.id, title: "A04 strict discount", items: [{ name: "Service", quantity: 1, days: 1, unitPrice: 100 }] };
+    const initialCount = await db.budget.count({ where: { organizationId: org } });
+    const initialItems = await db.budgetItem.count({ where: { budget: { organizationId: org } } });
+    const invalidDiscounts = [-1, "1", "-1", "", 0.5, 2147483648, true, false, [], {}];
+    for (const discount of invalidDiscounts) {
+      const response = await fetch(base + "/api/admin/budgets", { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ ...createBody, discount }) });
+      assert.equal(response.status, 400, `A04 POST discount ${JSON.stringify(discount)} must reject`);
+      assert.equal(await db.budget.count({ where: { organizationId: org } }), initialCount);
+      assert.equal(await db.budgetItem.count({ where: { budget: { organizationId: org } } }), initialItems, "no partial item creation");
+      for (const kind of ["editor", "commercial"]) {
+        assert.equal((await call({ budgetId: q.id, kind, items: [item], discount })).status, 400, `${kind} discount must also be strict`);
+        const unchanged = await db.budget.findUniqueOrThrow({ where: { id: q.id } });
+        assert.equal(unchanged.total, 100); assert.equal(unchanged.discount, 0); assert.equal(unchanged.updatedAt.toISOString(), q.updatedAt.toISOString());
+      }
+    }
+    // JSON numeric overflow parses to Infinity; never serialize NaN as null,
+    // because null/omitted have the explicitly documented ??0 default.
+    const infinite = await fetch(base + "/api/admin/budgets", { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(createBody).replace(/}$/, ',"discount":1e309}') });
+    assert.equal(infinite.status, 400);
+    assert.equal(await db.budget.count({ where: { organizationId: org } }), initialCount);
+    for (const discount of [undefined, 0, 20]) {
+      const response = await fetch(base + "/api/admin/budgets", { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ ...createBody, discount }) });
+      assert.equal(response.status, 201);
+      const created = (await response.json()).budget;
+      assert.equal(created.discount, discount ?? 0); assert.equal(created.total, 100 - (discount ?? 0));
+    }
+    console.log("A04 strict POST/editor/commercial: invalid discounts400 atomic, omitted/0/20 valid; no coercion or clamp");
     for (const kind of ["items", "editor"]) {
       const response = await call({ budgetId: q.id, kind, items: [item, item] });
       assert.equal(response.status, 400, `${kind} duplicates must fail`);

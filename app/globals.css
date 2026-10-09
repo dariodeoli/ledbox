@@ -1373,7 +1373,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-kpi-label { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; max-width: 100%; min-width: 0; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .admin-kpi-label-text { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
 .admin-kpi-icon { display: inline-grid; place-items: center; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 6px; background: var(--a-accent-soft); color: var(--a-accent); }
-.admin-kpi-value { flex: 0 0 auto; overflow: hidden; color: var(--a-text-strong); font: 700 18px/1.2 var(--font-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.admin-kpi-value { flex: 0 0 auto; color: var(--a-text-strong); font: 700 18px/1.2 var(--font-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* La nota es la primera en ceder: el label y el número no se recortan si la
    nota puede truncarse (su texto completo queda en el `title`). */
 .admin-kpi-note { flex: 1 1000 0%; min-width: 0; color: var(--a-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3831,8 +3831,9 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 /* ── Paneles, KPI y listas ── */
 .admin-panel { overflow: hidden; }
 .admin-panel-icon { border-radius: 999px; }
-.admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 900px) { .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* El monto agregado puede superar Int4 aunque cada registro sea válido.
+   Ceder una columna antes de recortar el valor (Refs #173, Pilot F06). */
+.admin-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
 .admin-kpi { border-top: 0; }
 .admin-root[data-theme="light"] .admin-kpi[data-tone] { border-top: 0; }
 .admin-kpi[data-tone="ok"] { background: var(--a-ok-surface); }
@@ -3862,7 +3863,7 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
   .admin-table-head > .admin-cell:last-child { background: var(--a-sticky-bg); }
 }
 .admin-table-wrap { border: 0; background: transparent; }
-.admin-kpi-value { font: 600 22px/1.1 var(--font-display); letter-spacing: -.01em; }
+.admin-kpi-value { font: 600 22px/1.1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .admin-module-context { border: var(--a-panel-line); border-left: 2px solid var(--a-accent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-accent) 7%, var(--a-panel)); box-shadow: var(--a-panel-shadow); }
 .admin-panel-head { border-bottom: 1px solid var(--a-line); background: transparent; }
 

@@ -191,6 +191,8 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
+  const discount = body.discount ?? 0;
+  if (typeof discount !== "number" || !budgetMoneyValid(discount)) return jsonError("El descuento debe ser un entero no negativo en guaraníes dentro del límite Int.", 400);
   if (typeof body.clientId !== "string" || typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 160) {
     return jsonError("Elegí el cliente y escribí el título del presupuesto.", 400);
   }
@@ -215,9 +217,8 @@ export async function POST(request: Request) {
   }
   if (items.length !== rawItems.length) return jsonError("Completá nombre, cantidad, duración y montos válidos de todos los ítems.", 400);
   const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
-  const discount = Math.max(0, Number(body.discount || 0));
-  const total = Math.max(0, subtotal - discount);
-  if (!budgetMoneyValid(subtotal) || !budgetMoneyValid(discount) || discount > subtotal) return jsonError("Subtotal o descuento inválido: revisá el límite Int.", 400);
+  const total = subtotal - discount;
+  if (!budgetMoneyValid(subtotal) || discount > subtotal) return jsonError("Subtotal o descuento inválido: revisá el límite Int.", 400);
   const costEstimate = items.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
   // Costos internos y campos del cliente (issue #65): el presupuesto nace en
   // Borrador con lo que cargó el dueño; el precio final se define antes de enviar.
@@ -669,8 +670,8 @@ async function patchBudgetCommercial(params: {
     data.laborCost = laborCost;
   }
   if (body.discount !== undefined) {
-    const discount = moneyField(body.discount);
-    if (discount === null) return jsonError("El descuento debe ser un entero en guaraníes.", 400);
+    const discount = body.discount;
+    if (typeof discount !== "number" || !budgetMoneyValid(discount)) return jsonError("El descuento debe ser un entero no negativo en guaraníes dentro del límite Int.", 400);
     if (discount > budget.subtotal) {
       return jsonError("El precio final no puede quedar por debajo de cero: el descuento supera la suma de los ítems.", 400);
     }

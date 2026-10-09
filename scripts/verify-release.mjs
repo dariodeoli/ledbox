@@ -21,7 +21,7 @@ const results = await Promise.all(hosts.map(async ([origin, surface]) => {
     const health = await response.json();
     // No seguir redirects hacia endpoints de sesión/demo con efectos laterales.
     const page = await fetch(`${host}${surface}`, { redirect: "manual", signal: AbortSignal.timeout(20000) });
-    const reachable = page.ok || [301, 302, 303, 307, 308].includes(page.status);
+    const reachable = page.status === 200;
     const ok = response.ok && reachable && health.status === "ok" && health.database === "ok"
       && Number.isInteger(health.migrations) && health.version === version && health.sha === sha.toLowerCase();
     return { host, ok, surfaceStatus: page.status, healthStatus: response.status,

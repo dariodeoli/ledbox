@@ -1,6 +1,6 @@
 # Formularios y presupuestos — entrega #173
 
-Alcance autorizado el 09/10/2026: [OwnCoding/ledbox#173](https://github.com/OwnCoding/ledbox/issues/173).
+Alcance autorizado el 09/10/2026: [dariodeoli/ledbox#173](https://github.com/dariodeoli/ledbox/issues/173).
 Plan fuente: `/Users/fredd/.opencode/plan/ledbox-formularios-presupuestos.md`.
 
 ## Base y recuperación (fase 0)
@@ -79,8 +79,49 @@ candidato conjunto. Identidad en `event-ops?fields=panel`: incremental
 plataforma `905861c`, integrado con `96221d2`, expone fantasía y razón social
 sin transformar históricos; typecheck y build integrados en verde (sin DB).
 Con FIN y OPS reunidos: 509 pruebas, 498 pass, 11 skips, cero fallos;
-no es PASS independiente final. Siguen pendientes cuenta predeterminada
-PYG, conflicto ledger 409 y preview provisional.
+no es PASS independiente final. En esa revisión se detectaron pendientes de
+cuenta predeterminada PYG, conflicto ledger 409 y preview provisional.
+
+Esos tres incrementales FIN quedaron en `8c8d6c2`, integrado con `46c2657`.
+Pilot evaluó exclusivamente ese SHA: **FAIL**, contrato SHA256
+`7ec0319dfb47ff5438f47dd93d9b16c32d00f50e802e7d0421cb0fdd9d50929e`.
+F01/F02 pasaron en PostgreSQL real; faltaba rechazar descuento negativo
+(A04/F05) y evitar desborde del KPI agregado en 360 px (F06). El contrato
+registra además cobertura parcial/bloqueada: no es aprobación global.
+
+- FIN `1c4d699`: descuento numérico entero no negativo, sin coerción ni clamp;
+  integrado con `f35d57b`.
+- PANEL local `dbe6f97`: fix canónico F06 y alias de dependencia; integrado
+  desde `slot/panel` con `ec6bc5d`, sin push del alias.
+- PLATAFORMA local `35effc8`: automatización scoped a umbral 10 y canónico
+  GitHub vigente; integrado desde `slot/plataforma` con `6fa42cf`.
+- El integrador incluye `test:automation` en `test:rules` después del handoff
+  PANEL: las pruebas de locks, scope, gates y retries forman parte del CI.
+
+La nueva QA requiere SHA integrado, checks sellados y revalidación afectada
+API/KPI/alias/automatización, además de cerrar los vectores ejecutables parciales.
+No se hereda PASS del candidato anterior ni de los checks de los carriles.
+
+### Transferencia GitHub y barrera vigente
+
+El dueño restituyó el owner **dariodeoli**. Repo LedBox ID `1312274819`
+conservado; los seis worktrees comparten origin HTTPS
+`https://github.com/dariodeoli/ledbox.git`. UI es pública, ID `1380660800`;
+`v0.67.1` conserva SHA `9dc9ec44216d22e92fad72fc1ad08bf3296a8da2`.
+Package y lock cambian únicamente el owner del alias; no la versión de UI.
+Issues/PR/releases/consultas gh usan `dariodeoli/ledbox`. No hay referencias
+OwnCoding en CI ni cambio de Docker por esta transferencia.
+
+La pausa global se conserva. La orden posterior explícita **HD** permite publicar
+únicamente #173 después de checks, PASS independiente de Pilot y gates Hub;
+no autoriza publicar el candidato FAIL ni activar backlog general.
+No hay watcher activo, PID de ciclo publicado ni primer deployment #173.
+`docs/AUTOMATIZACION.md` documenta comando, locks, logs, gate y estado; activar
+requiere completar checks/Pilot y verificar permisos y sello del build.
+La lectura Hub volvió a 200 con la credencial renovada; el ajuste autorizado
+`include_source_commit_in_build=true` fue rechazado con PATCH 403 y GET posterior
+confirmó `false`. No confundir acceso de lectura con permiso de cambio/trigger.
+Auditoría externa: `evidencia/plan-formularios/AUDITORIA-DEPLOY-173.md`.
 
 La selección pública **no necesita un hook persistente nuevo**: `propose`
 solo crea una solicitud pendiente; la aceptación en

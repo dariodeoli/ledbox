@@ -104,12 +104,29 @@ test("kit real: normalización, selectores, teclado/modal y evidencia responsive
     for (const theme of ["light", "dark"] as const) for (const width of [360, 390, 1440]) {
       await page.setViewport({ width, height: width < 500 ? 844 : 1000 });
       await page.$eval("#admin-root", (node, theme) => node.setAttribute("data-theme", theme), theme);
+      const kpis = await page.$$eval("#high-total-kpis .admin-kpi-value", (nodes) => nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        const card = node.closest(".admin-kpi")!.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const text = range.getBoundingClientRect();
+        return { value: node.textContent, left: box.left, right: box.right, cardRight: card.right, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth, textRight: text.right, whiteSpace: style.whiteSpace, numbers: style.fontVariantNumeric, overflow: style.overflow };
+      }));
+      assert.equal(kpis.at(-1)!.value, "Gs 2.148.384.798", "F06: suma real preservada completa");
+      for (const kpi of kpis) {
+        assert.ok(kpi.left >= 0 && kpi.right <= width && kpi.textRight <= kpi.cardRight, `${theme}/${width}: KPI fuera de tarjeta/página: ${JSON.stringify(kpi)}`);
+        assert.ok(kpi.scrollWidth <= kpi.clientWidth, "sin recortar dígitos");
+        assert.equal(kpi.whiteSpace, "nowrap");
+        assert.equal(kpi.numbers, "tabular-nums");
+        assert.equal(kpi.overflow, "visible");
+      }
       const probe = await page.evaluate(() => ({ width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth, phoneWidth: document.getElementById("phone")!.getBoundingClientRect().width, phoneHeight: document.getElementById("phone")!.getBoundingClientRect().height, countryHeight: document.querySelector('.admin-shared-phone button[role="combobox"]')!.getBoundingClientRect().height }));
       assert.equal(probe.overflow, false, `${theme}/${width}: desborde de página`);
       await page.screenshot({ path: resolve(evidence, `kit-${theme}-${width}.png`), fullPage: true });
       assert.ok(probe.phoneWidth > 100, JSON.stringify(probe));
       if (width < 500) assert.ok(probe.phoneHeight >= 44 && probe.countryHeight >= 44);
-      probes.push({ theme, ...probe });
+      probes.push({ theme, ...probe, kpis });
       await page.screenshot({ path: resolve(evidence, `kit-${theme}-${width}.png`), fullPage: true });
       await page.click("#open-dialog");
       await page.click('.admin-shared-phone button[role="combobox"]');

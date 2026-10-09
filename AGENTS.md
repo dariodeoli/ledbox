@@ -24,7 +24,7 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 - **Base de todo trabajo: `origin/codex/ledbox-gestion-multiempresa`** (la rama viva). `main` no se usa como base.
 - Ciclo de un pedido: dueño → orquestador (issue + brief) → slot (`git fetch origin --prune` + rebase sobre la rama viva → implementación → checks → push de **su** rama → handover) → orquestador verifica el handover → implementador integra (`npm run ht`/`hd`).
 - Guardas: solo el implementador toca la rama viva; cada slot pushea únicamente su rama; prohibido `push --force` y reescribir historia compartida; no se toca el worktree ni la rama de otro agente.
-- Automatización: el auto-HD (`npm run watch-hd`) corre de fondo en el checkout del implementador (≥15 commits sin integrar, cooldown 20 min); `vigia.sh` del orquestador reparte `cola.tsv` a los slots libres — disponible, sin arrancar.
+- Automatización autorizada el 09-10-2026: auto-HD (`npm run watch-hd`) usa ≥10 cambios funcionales únicos del alcance #173 y cooldown 20 min. Requiere habilitación scoped, checks, Pilot por SHA y verificación del SHA servido; no activa backlog ni `vigia.sh`. Fuente: `docs/AUTOMATIZACION.md`. La orden explícita HD permite publicar este alcance únicamente tras PASS de Pilot y gates Hub; mientras falten, publicación y watcher permanecen deshabilitados.
 
 ## Ramas, entrega y deploy
 
