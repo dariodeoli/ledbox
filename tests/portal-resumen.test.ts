@@ -127,7 +127,8 @@ test("quote document separates verbatim observations, payment terms, conditions 
   assert.match(view, /Emitido por/);
   assert.match(view, /\{budget.organization\}/);
   const editor = readFileSync(join(root, "components/admin/modules/BudgetPricingDialog.tsx"), "utf8");
-  const installmentDateFormatter = /installment\.dueAt \? ` · \$\{(\w+)\(installment\.dueAt\)\}`/.exec(editor)?.[1] ?? "";
+  const planEditor = readFileSync(join(root, "components/admin/modules/BudgetPaymentPlanEditor.tsx"), "utf8");
+  const installmentDateFormatter = /(formatDayKey)\(row\.dueAt\)/.exec(planEditor)?.[1] ?? "";
   assert.ok(["formatDate", "formatDayKey"].includes(installmentDateFormatter), "the readonly installment must use an existing date formatter");
   const dateChecks = ["America/Asuncion", "UTC"].map((timeZone) => {
     const output = execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
@@ -144,9 +145,9 @@ test("quote document separates verbatim observations, payment terms, conditions 
     assert.equal(displayed, calendarDay, `${timeZone}: readonly installment must display the canonical calendar day, not 18 October`);
     assert.doesNotMatch(displayed, /^18\b/, `${timeZone}: the installment date must not shift to the previous day`);
   }
-  const dateImport = /^import \{([^}]+)\} from "@\/lib\/admin-format";/m.exec(editor)?.[1] ?? "";
+  const dateImport = /^import \{([^}]+)\} from "@\/lib\/admin-format";/m.exec(planEditor)?.[1] ?? "";
   assert.match(dateImport, /\bformatDayKey\b/, "the dialog must import the existing date-only helper");
-  assert.match(editor, /formatDayKey\(installment\.dueAt\)/, "the readonly installment line must use the date-only helper");
+  assert.match(planEditor, /formatDayKey\(row\.dueAt\)/, "the installment preview must use the date-only helper");
   for (const name of ["observations", "payments", "conditions", "issuer"]) {
     assert.match(editor, new RegExp(`quote-document-section quote-document-section--${name}`));
   }

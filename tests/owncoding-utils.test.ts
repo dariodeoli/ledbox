@@ -34,15 +34,15 @@ test("los utils migrados entran por owncoding-ui/utils, no por el root", () => {
     assert.match(source, /from "owncoding-ui\/utils"/, `${file}: falta el subcamino de utils`);
     assert.doesNotMatch(source, /from "owncoding-ui";/, `${file}: no debe importar del root`);
   }
-  // `field-rules.ts` migró todo salvo `limpiarPercent` (excepción documentada).
+  // Ninguna regla server-side puede ejecutar el entry "use client".
   const rules = repoFile("lib/field-rules.ts");
   const rootImports = rules.match(/from "owncoding-ui";/g) ?? [];
-  assert.equal(rootImports.length, 1, "field-rules solo puede tocar el root para limpiarPercent");
+  assert.equal(rootImports.length, 0, "field-rules no puede ejecutar helpers del entry cliente");
 });
 
-test("limpiarPercent queda como la única excepción del root (pedido upstream)", () => {
+test("limpiarPercent sigue pendiente en utils; el kit conserva una regla pura", () => {
   const rules = repoFile("lib/field-rules.ts");
-  assert.match(rules, /import \{ limpiarPercent \} from "owncoding-ui";/);
+  assert.match(rules, /export function percentInput/);
   const library = repoFile("node_modules/owncoding-ui/src/utils/index.js");
   assert.doesNotMatch(library, /limpiarPercent/, "si upstream la publica en utils, migrar y borrar la excepción");
 });

@@ -24,6 +24,7 @@ import {
   whatsappHref,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import {
   promoterIsAvailable,
   type AdminClientOption,
@@ -61,6 +62,7 @@ import {
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { ClientQuickDialog } from "./ClientQuickForm";
+import { EMPTY_EVENT_QUICK, EventQuickFields, eventQuickError, eventQuickPayload } from "./EventQuickForm";
 import {
   Combobox,
   DateField,
@@ -72,7 +74,6 @@ import {
   TextField,
 } from "../AdminFields";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
-import { CITY_OPTIONS, cityDepartment } from "@/lib/field-rules";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
@@ -101,10 +102,7 @@ const TASK_TYPE_OPTIONS = [
  *  sigue entrando por URL (`/calendario` → `?vista=calendario`, issue #56). */
 const EVENTOS_VIEWS = ["list", "grid"] as const;
 
-/** `id` del `<datalist>` con el catálogo de ciudades (owncoding-ui) del campo Ciudad. */
-const EVENT_CITY_LIST_ID = "eventos-ciudad-opciones";
-
-const EMPTY_EVENT_FORM = { clientId: "", name: "", location: "", city: "", startsAt: "", endsAt: "" };
+const EMPTY_EVENT_FORM = { ...EMPTY_EVENT_QUICK, clientId: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
 const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
 const EMPTY_MOVEMENT_FORM = { at: "", condition: ITEM_CONDITIONS[0] as string, damaged: "0", missing: "0", notes: "" };
@@ -242,6 +240,7 @@ export function EventosModule() {
   }
   const [taskFilter, setTaskFilter] = useState("PENDING");
   const [showForm, setShowForm] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_EVENT_FORM);
   const [taskForm, setTaskForm] = useState(EMPTY_TASK_FORM);
   const [busy, setBusy] = useState(false);
@@ -282,11 +281,10 @@ export function EventosModule() {
   const clientChoices = useMemo(
     () =>
       clientOptions.map((client) => {
-        const company = client.company?.trim() || "";
         return {
           value: client.id,
-          label: company || client.name,
-          description: company && company !== client.name ? client.name : undefined,
+          label: clientDisplayName(client),
+          description: clientLegalName(client) ?? undefined,
         };
       }),
     [clientOptions],
@@ -299,7 +297,7 @@ export function EventosModule() {
 
   /** Búsqueda compartida por lista y cuadrícula; el filtro de estado aplica a las dos. */
   const searched = useMemo(
-    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.city, event.client.company, event.client.name, event.status])),
+    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status])),
     [events, query],
   );
 
@@ -313,6 +311,7 @@ export function EventosModule() {
   function eventActions(event: EventRow) {
     return (
       <span className="admin-actions">
+        {writable ? <AdminButton icon="edit" title={`Editar evento: ${event.name}`} aria-label={`Editar evento: ${event.name}`} onClick={() => openEventEdit(event)} /> : null}
         <AdminButton
           icon="audit"
           title={`Ver la cronología: ${event.name}`}
@@ -327,12 +326,12 @@ export function EventosModule() {
         />
         {writable && whatsappHref(event.client.phone) ? (
           <AdminWhatsappTemplateButton
-            title={`Enviar por WhatsApp con plantilla a ${event.client.company || event.client.name}`}
+            title={`Enviar por WhatsApp con plantilla a ${clientDisplayName(event.client)}`}
             onClick={() =>
               setTemplateTarget({
                 kind: "event",
                 id: event.id,
-                label: event.client.company || event.client.name,
+                label: clientDisplayName(event.client),
                 phone: event.client.phone,
               })
             }
@@ -356,7 +355,7 @@ export function EventosModule() {
       id: event.id,
       title: event.name,
       titleTooltip: `${event.name} · ${eventStatusLabel(event.status)}`,
-      subtitle: event.client.company || event.client.name,
+      subtitle: clientDisplayName(event.client),
       badges: [{ label: eventStatusLabel(event.status), tone: statusTone(event.status) }],
       fields: [
         {
@@ -495,11 +494,9 @@ export function EventosModule() {
     return () => controller.abort();
   }, [equipmentEvent, assignForm.inventoryId, assignForm.startsAt, assignForm.endsAt, existingAssignmentId]);
 
-  /** Departamento del catálogo para la ayuda del campo Ciudad; `null` con texto libre. */
-  const cityArea = cityDepartment(form.city);
-
   async function submitEvent(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
+    if (busy) return;
     setFormError("");
     setFormLimit("");
     setFormNotice("");
@@ -509,15 +506,18 @@ export function EventosModule() {
       setFormError("Elegí el cliente del evento.");
       return;
     }
+    const invalid = eventQuickError(form);
+    if (invalid) { setFormError(invalid); return; }
+    const fields: Partial<ReturnType<typeof eventQuickPayload>> = eventQuickPayload(form);
+    const original = editingEventId ? events.find((event) => event.id === editingEventId) : null;
+    // La edición de otros datos conserva las fechas originales, incluso segundos.
+    if (original && form.startsAt === inputDateTime(original.startsAt)) delete fields.startsAt;
+    if (original && form.endsAt === inputDateTime(original.endsAt)) delete fields.endsAt;
     setBusy(true);
     const result = await adminSend("/api/admin/events", {
-      clientId: form.clientId,
-      name: form.name,
-      location: form.location || undefined,
-      city: form.city || undefined,
-      startsAt: form.startsAt || undefined,
-      endsAt: form.endsAt || undefined,
-    });
+      ...fields,
+      ...(editingEventId ? { id: editingEventId } : { clientId: form.clientId }),
+    }, editingEventId ? "PATCH" : "POST");
     setBusy(false);
     if (!result.ok) {
       // Tope del plan (issue #42): el cupo es de altas del mes; se explica con
@@ -527,8 +527,24 @@ export function EventosModule() {
       return;
     }
     setForm(EMPTY_EVENT_FORM);
+    setEditingEventId(null);
     setShowForm(false);
     operations.reload();
+  }
+
+  function openEventEdit(event: EventRow) {
+    setEditingEventId(event.id);
+    setForm({
+      ...EMPTY_EVENT_FORM,
+      clientId: event.client.id, name: event.name, location: event.location ?? "", city: event.city ?? "",
+      department: event.department ?? "", address: event.address ?? "", addressReference: event.addressReference ?? "", locationUrl: event.locationUrl ?? "",
+      venueContactName: event.venueContactName ?? "", venueContactPhone: event.venueContactPhone ?? "", venueContactEmail: event.venueContactEmail ?? "",
+      responsibleName: event.responsibleName ?? "", responsiblePhone: event.responsiblePhone ?? "", responsibleEmail: event.responsibleEmail ?? "",
+      modality: event.modality ?? "", attendees: event.attendees == null ? "" : String(event.attendees),
+      startsAt: inputDateTime(event.startsAt), endsAt: inputDateTime(event.endsAt),
+    });
+    setFormError(""); setFormLimit(""); setFormNotice("");
+    setShowForm(true);
   }
 
   /**
@@ -538,7 +554,7 @@ export function EventosModule() {
   function selectCreatedClient(client: AdminClientOption) {
     setNewClientName(null);
     setForm((current) => ({ ...current, clientId: client.id }));
-    setFormNotice(`Cliente «${client.company?.trim() || client.name}» creado y elegido.`);
+    setFormNotice(`Cliente «${clientDisplayName(client)}» creado y elegido.`);
     clients.reload();
   }
 
@@ -767,7 +783,9 @@ export function EventosModule() {
             onClick={() => {
               setFormError("");
               setFormLimit("");
-              setShowForm((open) => !open);
+              setEditingEventId(null);
+              setForm(EMPTY_EVENT_FORM);
+              setShowForm(editingEventId ? true : !showForm);
             }}
             aria-expanded={showForm}
           >
@@ -778,8 +796,8 @@ export function EventosModule() {
 
       {writable && showForm ? (
         <AdminFormPanel
-          title="Nuevo evento"
-          submitLabel="Crear evento"
+          title={editingEventId ? "Editar evento" : "Nuevo evento"}
+          submitLabel={editingEventId ? "Guardar cambios" : "Crear evento"}
           onSubmit={submitEvent}
           onCancel={() => setShowForm(false)}
           onEscape={() => setShowForm(false)}
@@ -793,33 +811,26 @@ export function EventosModule() {
             ) : undefined
           }
         >
-          {/* Alta rápida (issue #106): Nombre con foco + Cliente + Inicio; el
-              lugar, la ciudad y el fin viven en «Más datos» y no se pierden al
-              plegarlos (el fin se sumó en #131). */}
-          <TextField
-            label="Nombre del evento"
-            required
-            autoFocus
-            maxLength={120}
-            value={form.name}
-            onChange={(value) => setForm({ ...form, name: value })}
-            placeholder="Ej.: Lanzamiento Samsung"
-          />
+          <EventQuickFields key={editingEventId ?? "nuevo"} values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
+            moreOpen={Boolean(editingEventId)}
+            locationOptions={[...new Set(events.flatMap((event) => event.location ? [event.location] : []))]}>
           <div className="admin-field-action">
             <Combobox
               label="Cliente"
               required
+              disabled={Boolean(editingEventId)}
               value={form.clientId}
               onChange={(value) => setForm({ ...form, clientId: value })}
               options={clientChoices}
               placeholder="Buscá por nombre o empresa…"
               emptyLabel={clients.loading ? "Cargando clientes…" : "No hay clientes cargados."}
-              onCreate={(name) => setNewClientName(name)}
+              onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
               createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
             />
             <AdminButton
               type="button"
               icon="plus"
+              disabled={Boolean(editingEventId)}
               title="Crear un cliente nuevo y dejarlo elegido"
               aria-label="Crear un cliente nuevo y dejarlo elegido"
               onClick={() => {
@@ -830,45 +841,7 @@ export function EventosModule() {
               Nuevo cliente
             </AdminButton>
           </div>
-          <DateTimeField
-            label="Inicio"
-            hint="Fecha y hora del evento"
-            value={form.startsAt}
-            onChange={(value) => setForm({ ...form, startsAt: value })}
-          />
-          <AdminDisclosure title="Más datos" hint="lugar, ciudad y fin">
-            <TextField
-              label="Lugar"
-              maxLength={160}
-              value={form.location}
-              onChange={(value) => setForm({ ...form, location: value })}
-              placeholder="Ej.: Centro de Convenciones"
-            />
-            <TextField
-              label="Ciudad"
-              maxLength={120}
-              list={EVENT_CITY_LIST_ID}
-              value={form.city}
-              onChange={(value) => setForm({ ...form, city: value })}
-              placeholder="Ej.: Asunción"
-              hint={
-                cityArea
-                  ? `Departamento: ${cityArea}`
-                  : "Se permite texto libre; sugerencias del catálogo de ciudades."
-              }
-            />
-            <DateTimeField
-              label="Fin"
-              hint="Fecha y hora de cierre"
-              value={form.endsAt}
-              onChange={(value) => setForm({ ...form, endsAt: value })}
-            />
-            <datalist id={EVENT_CITY_LIST_ID}>
-              {CITY_OPTIONS.map((option) => (
-                <option key={option.ciudad} value={option.ciudad} label={`${option.ciudad} · ${option.departamento}`} />
-              ))}
-            </datalist>
-          </AdminDisclosure>
+          </EventQuickFields>
         </AdminFormPanel>
       ) : null}
 
@@ -941,7 +914,7 @@ export function EventosModule() {
                     <AdminCell title={event.name}>
                       <strong>{event.name}</strong>
                     </AdminCell>
-                    <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
+                    <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
                     <AdminCell title={[event.location, event.city].filter(Boolean).join(" · ") || "Sin lugar definido"}>
                       {event.location || event.city || "—"}
                       {event.location && event.city ? <small className="admin-cell-sub"> · {event.city}</small> : null}

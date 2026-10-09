@@ -5,9 +5,11 @@ import {
   AdminButton,
   AdminDialog,
   AdminNote,
+  AdminDisclosure,
 } from "@/components/admin/AdminUI";
 import {
   AttachmentInput,
+  Combobox,
   DateField,
   MoneyField,
   NumberField,
@@ -18,18 +20,24 @@ import {
   TextField,
 } from "@/components/admin/AdminFields";
 import { BudgetReferenceLinks } from "./BudgetReferenceLinks";
-import { InventoryLinkPicker } from "./BudgetInventoryPicker";
-import { quoteProductPrice } from "@/lib/quote-sharing";
+import { BudgetItemsEditor } from "./BudgetItemsEditor";
+import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload } from "./BudgetPaymentPlanEditor";
+import { budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
+import { resolveBudgetPaymentPlan, BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
+import { clientDisplayName } from "@/lib/client-identity";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { useAdminSession } from "@/components/admin/AdminShell";
 import { AdminIcon } from "@/components/admin/AdminIcons";
-import { adminApiUpload, adminSend } from "@/lib/admin-api";
+import { adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
+import { ClientQuickCreateDialog, EventQuickCreateDialog } from "./BudgetQuickCreate";
+import { canWriteClients, canWriteOperations } from "@/lib/admin-policy";
 import { budgetReference, formatDayKey, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
 import {
   BUDGET_ATTACHMENT_MAX_BYTES,
   type AdminBudgetAttachmentRow,
   type AdminInventoryLink,
   type AdminBudgetRow,
+  type AdminClientOption,
 } from "@/lib/admin-types";
 import { discountForPrice, distributePrice, internalCostOf, marginOf, priceForMargin } from "@/lib/budget-costs";
 
@@ -45,16 +53,7 @@ import { discountForPrice, distributePrice, internalCostOf, marginOf, priceForMa
  * del cliente se editan; los costos internos se pueden corregir siempre.
  */
 
-type ItemDraft = {
-  excluded?: boolean;
-  inventory: AdminInventoryLink | null;
-  id: string | null;
-  name: string;
-  quantity: string;
-  days: string;
-  unitPrice: string;
-  costPrice: string;
-};
+type ItemDraft = BudgetItemDraft;
 
 type Draft = {
   items: ItemDraft[];
@@ -87,6 +86,7 @@ function toItemDraft(item: AdminBudgetRow["items"][number]): ItemDraft {
     days: String(item.days),
     unitPrice: String(item.unitPrice),
     costPrice: String(item.costPrice),
+    notes: item.notes ?? "",
   };
 }
 
@@ -120,24 +120,33 @@ export function BudgetPricingDialog({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const { organization } = useAdminSession();
+  const { organization, role } = useAdminSession();
+  const [clientId, setClientId] = useState(budget.client.id);
+  const [eventId, setEventId] = useState(budget.event?.id ?? "");
+  const [title, setTitle] = useState(budget.title);
+  const [newClient, setNewClient] = useState<string | null>(null);
+  const [newEvent, setNewEvent] = useState<string | null>(null);
+  const clients = useAdminResource("/api/admin/clients?fields=selector", (payload) => payload.clients as AdminClientOption[]);
+  const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? []);
   const [draft, setDraft] = useState<Draft>(() => draftFrom(budget));
   const [attachments, setAttachments] = useState<AdminBudgetAttachmentRow[]>(budget.attachments ?? []);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [section, setSection] = useState("items");
+  const [conditions, setConditions] = useState(() => conditionDrafts(budget.installmentsJson ?? []));
   const approved = Boolean(budget.approvedAt);
   const closed = budget.status === "LOST" || budget.status === "CANCELLED";
 
   const priced = useMemo(
     () =>
       draft.items.map((item) => {
-        const quantity = Math.max(1, number(item.quantity));
-        const days = Math.max(1, number(item.days));
+        const quantity = Number(item.quantity);
+        const days = Number(item.days);
         const unitPrice = number(item.unitPrice);
         const costPrice = number(item.costPrice);
-        return { inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, quantity, days, unitPrice, costPrice, excluded: item.excluded, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
+        return { inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, notes: item.notes, quantity, days, unitPrice, costPrice, excluded: item.excluded, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
       }),
     [draft.items],
   );
@@ -155,16 +164,8 @@ export function BudgetPricingDialog({
   const repriced = needsRepricing ? distributePrice(activePriced, price) : null;
   const marginPercentValue = draft.marginPercent ? Number(draft.marginPercent.replace(",", ".")) : null;
   const suggested = marginPercentValue !== null && Number.isFinite(marginPercentValue) ? priceForMargin(cost.total, marginPercentValue) : null;
-
-  function updateItem(index: number, patch: Partial<ItemDraft>) {
-    setDraft((current) => {
-      const old = current.items[index];
-      const next = { ...old, ...patch };
-      const subtotal = (item: ItemDraft) => item.excluded ? 0 : Math.max(1, number(item.quantity)) * Math.max(1, number(item.days)) * number(item.unitPrice);
-      const items = current.items.map((item, position) => position === index ? next : item);
-      return { ...current, price: String(Math.max(0, items.reduce((sum, item) => sum + subtotal(item), 0) + current.priceAdjustment)), items };
-    });
-  }
+  const planResult = resolveBudgetPaymentPlan(conditionPayload(conditions), price, budget.advanceAmount);
+  const itemsError = priced.map(budgetItemError).find(Boolean);
 
   /** Ajusta los precios unitarios para llegar al precio final escrito (misma suma). */
   function applySuggestedMargin() {
@@ -183,10 +184,10 @@ export function BudgetPricingDialog({
       setError("El presupuesto necesita al menos un ítem con nombre.");
       return;
     }
+    if (itemsError || !planResult.ok || price > BUDGET_INT_MAX) { setError(itemsError || (!planResult.ok ? planResult.error : "El precio supera el límite Int.")); return; }
     setBusy(true);
     try {
-      // 1) Ítems: se guardan si cambió algo (o si el precio final obliga a
-      //    repartirlo entre los precios unitarios).
+      // A single atomic request preserves items, exclusions, discount and plan.
       const itemsPayload = priced.map((item) => ({
         id: item.id ?? undefined,
         name: item.name,
@@ -195,7 +196,17 @@ export function BudgetPricingDialog({
         unitPrice: needsRepricing && !item.excluded ? repriced?.items[activePriced.indexOf(item)]?.unitPrice ?? item.unitPrice : item.unitPrice,
         costPrice: item.costPrice,
         inventoryId: item.inventoryId,
+        notes: item.notes,
       }));
+      // Integer unit prices can miss the target by a few guaraníes. Round the
+      // repriced subtotal upward and use an explicit discount to close exactly.
+      let payloadSubtotal = itemsPayload.reduce((sum, item, index) => sum + (priced[index].excluded ? 0 : item.unitPrice * item.quantity * item.days), 0);
+      if (needsRepricing && payloadSubtotal < price && activePriced.length) {
+        const index = priced.findIndex((item) => !item.excluded);
+        const item = itemsPayload[index];
+        item.unitPrice += Math.ceil((price - payloadSubtotal) / (item.quantity * item.days));
+        payloadSubtotal = itemsPayload.reduce((sum, row, n) => sum + (priced[n].excluded ? 0 : row.unitPrice * row.quantity * row.days), 0);
+      }
       const itemsChanged =
         needsRepricing ||
         priced.length !== budget.items.length ||
@@ -212,34 +223,21 @@ export function BudgetPricingDialog({
             item.costPrice !== original.costPrice
           );
         });
-      if (itemsChanged) {
-        if (approved || closed) {
-          setError("El presupuesto ya está aprobado o cerrado: sus ítems no se pueden cambiar.");
-          return;
-        }
-        const itemsResult = await adminSend(`/api/admin/budgets`, { kind: "items", budgetId: budget.id, items: itemsPayload }, "PATCH");
-        if (!itemsResult.ok) {
-          setError(itemsResult.error);
-          return;
-        }
-      }
+      if (itemsChanged && (approved || closed)) { setError("El presupuesto ya está aprobado o cerrado: sus ítems no se pueden cambiar."); return; }
 
       // 2) Precio final y condiciones: el precio se aplica como descuento cuando
       //    entra en los ítems; si hubo reparto de precios, no hay descuento.
-      const discount = needsRepricing ? 0 : intent.ok ? intent.discount : 0;
+      const discount = payloadSubtotal - price;
       const result = await adminSend(
         "/api/admin/budgets",
         {
-          kind: "commercial",
+          kind: approved ? "commercial" : "editor",
           budgetId: budget.id,
-          discount,
+          expectedUpdatedAt: budget.updatedAt,
+          ...(!approved ? { items: itemsPayload, title, clientId, eventId: eventId || null, discount, installmentsJson: conditionPayload(conditions) } : {}),
           materialCost: number(draft.materialCost),
           laborCost: number(draft.laborCost),
-          validUntil: draft.validUntil || null,
-          deliveryAt: draft.deliveryAt || null,
-          ivaType: draft.ivaType || null,
-          warranty: draft.warranty,
-          notes: draft.notes,
+          ...(!approved ? { validUntil: draft.validUntil || null, deliveryAt: draft.deliveryAt || null, ivaType: draft.ivaType || null, warranty: draft.warranty, notes: draft.notes } : {}),
         },
         "PATCH",
       );
@@ -303,7 +301,7 @@ export function BudgetPricingDialog({
   return (
     <AdminDialog title={`Precio y condiciones · ${budget.title}`} size="wide" icon="finance" onClose={onClose}>
       <p className="admin-dialog-text">
-        Presupuesto Nº {budgetReference(budget.id)} de {budget.client.company?.trim() || budget.client.name}. El cliente ve el
+        Presupuesto Nº {budgetReference(budget.id)} de {clientDisplayName(budget.client)}. El cliente ve el
         precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.
       </p>
       {approved ? (
@@ -314,78 +312,22 @@ export function BudgetPricingDialog({
       ) : null}
       {closed ? <AdminNote tone="warn">Este presupuesto está {budget.status === "LOST" ? "perdido" : "cancelado"}: no se edita.</AdminNote> : null}
 
+      <nav className="admin-subtabs" aria-label="Editar presupuesto">
+        {[{ value: "items", label: "Ítems y precio" }, { value: "conditions", label: "Condiciones" }, { value: "payments", label: "Plan de pagos" }].map((tab) => <AdminButton type="button" key={tab.value} aria-pressed={section === tab.value} onClick={() => setSection(tab.value)}>{tab.label}</AdminButton>)}
+      </nav>
       <form onSubmit={(event) => void save(event)}>
+        <div hidden={section !== "items"}>
+        <div className="admin-plan-grid">
+          <Combobox label="Cliente" required value={clientId} disabled={approved || closed || busy} options={(clients.data ?? []).map((client) => ({ value: client.id, label: clientDisplayName(client) }))} onChange={setClientId} onCreate={canWriteClients(role) ? setNewClient : undefined} createLabel={(query) => `Crear cliente «${query}»`} />
+          <Combobox label="Evento" hint="Opcional · distinto del título del presupuesto" value={eventId} disabled={approved || closed || busy} options={(events.data ?? []).map((event) => ({ value: event.id, label: event.name }))} onChange={setEventId} onCreate={canWriteOperations(role) ? setNewEvent : undefined} createLabel={(query) => `Crear evento «${query}»`} />
+          <TextField label="Título del presupuesto" required value={title} maxLength={160} disabled={approved || closed || busy} onChange={setTitle} />
+        </div>
         <h3 className="quote-document-subtitle">Productos y precio final</h3>
         <p className="admin-dialog-text">Cantidades, días y precios. Los costos unitarios son internos.</p>
-        <div className="admin-plan-list">
-          {draft.items.map((item, index) => (
-            <div className="admin-plan-list" key={item.id ?? `nuevo-${index}`}>
-              {item.excluded ? <AdminNote>Retirado / no incluido. Se conserva la línea original.</AdminNote> : null}
-              <InventoryLinkPicker label={`Producto del ítem ${index + 1} (opcional)`} hint="Elegir un producto completa nombre y precio editable; no reserva stock. Sin vínculo, se conserva una línea de servicio libre." range={null} selected={item.inventory} disabled={approved || closed || busy} onSelect={(product) => updateItem(index, { inventory: product, ...(product ? { name: product.name, unitPrice: String(quoteProductPrice(product, number(item.days))) } : {}) })} />
-              <div className="admin-plan-grid">
-              <TextField
-                label={`Ítem ${index + 1}`}
-                required
-                value={item.name}
-                maxLength={160}
-                disabled={approved || closed}
-                onChange={(value) => updateItem(index, { name: value })}
-              />
-              <NumberField
-                label="Cantidad"
-                value={item.quantity}
-                maxLength={4}
-                disabled={approved || closed}
-                onChange={(value) => updateItem(index, { quantity: value })}
-              />
-              <NumberField
-                label="Días"
-                value={item.days}
-                maxLength={3}
-                disabled={approved || closed}
-                onChange={(value) => updateItem(index, { days: value })}
-              />
-              <MoneyField
-                label="Precio unitario (Gs)"
-                value={item.unitPrice}
-                disabled={approved || closed}
-                onChange={(value) => updateItem(index, { unitPrice: value })}
-              />
-              <MoneyField
-                label="Costo unitario (Gs)"
-                hint="Interno"
-                value={item.costPrice}
-                disabled={approved || closed}
-                onChange={(value) => updateItem(index, { costPrice: value })}
-              />
-              {!approved && !closed && draft.items.length > 1 ? (
-                <AdminButton
-                  icon="close"
-                  title={`Quitar el ítem ${index + 1}`}
-                  aria-label={`Quitar el ítem ${index + 1}`}
-                  onClick={() => setDraft({ ...draft, items: draft.items.filter((_, position) => position !== index) })}
-                />
-              ) : null}
-              </div>
-            </div>
-          ))}
-          {!approved && !closed ? (
-            <AdminButton
-              icon="plus"
-              type="button"
-              onClick={() =>
-                setDraft({
-                  ...draft,
-                  items: [...draft.items, { inventory: null, id: null, name: "", quantity: "1", days: "1", unitPrice: "0", costPrice: "0" }],
-                })
-              }
-            >
-              Agregar ítem
-            </AdminButton>
-          ) : null}
-        </div>
+        <BudgetItemsEditor items={draft.items} disabled={approved || closed || busy} onChange={(items) => setDraft((current) => ({ ...current, items, price: String(Math.max(0, items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0) + current.priceAdjustment)) }))} />
 
-        <p className="admin-dialog-text">Costos internos y precio final (no los ve el cliente).</p>
+        <MoneyField label="Precio final (Gs)" hint="Total final, incluido el descuento vigente" limit={BUDGET_INT_MAX} value={draft.price} disabled={approved || closed || busy} onChange={(value) => setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal })} />
+        <AdminDisclosure title="Costos internos y margen" hint="no los ve el cliente">
         <div className="admin-plan-grid">
           <MoneyField
             label="Materiales (Gs)"
@@ -398,13 +340,6 @@ export function BudgetPricingDialog({
             hint="Costo interno"
             value={draft.laborCost}
             onChange={(value) => setDraft({ ...draft, laborCost: value })}
-          />
-          <MoneyField
-            label="Precio final (Gs)"
-            hint="Lo que paga el cliente"
-            value={draft.price}
-            disabled={approved || closed}
-            onChange={(value) => setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal })}
           />
           <PercentField
             label="Margen deseado (%)"
@@ -424,7 +359,9 @@ export function BudgetPricingDialog({
           {margin ? `margen ${formatNumber(margin.percent)} % (${formatMoney(margin.amount)})` : "sin margen calculable: cargá el costo interno y el precio final"}.
           {needsRepricing && repriced ? " Al guardar, el precio se reparte entre los precios unitarios de los ítems." : ""}
         </AdminNote>
-
+        </AdminDisclosure>
+        </div>
+        <div hidden={section !== "conditions"}>
         <section className="quote-document-section quote-document-section--conditions" aria-labelledby="quote-editor-conditions">
           <h3 id="quote-editor-conditions" className="quote-document-subtitle">Condiciones y fechas</h3>
           <div className="admin-plan-grid">
@@ -460,6 +397,7 @@ export function BudgetPricingDialog({
           </div>
         </section>
         <section className="quote-document-section quote-document-section--observations" aria-labelledby="quote-editor-observations">
+          <AdminDisclosure title="Observaciones" hint="notas para el cliente">
           <h3 id="quote-editor-observations" className="quote-document-subtitle">Observaciones</h3>
           <TextAreaField
             label="Observaciones para el cliente"
@@ -470,21 +408,22 @@ export function BudgetPricingDialog({
             disabled={approved || closed}
             onChange={(value) => setDraft({ ...draft, notes: value })}
           />
+          </AdminDisclosure>
         </section>
+        </div>
+        <div hidden={section !== "payments"}>
         <section className="quote-document-section quote-document-section--payments" aria-labelledby="quote-editor-payments">
           <h3 id="quote-editor-payments" className="quote-document-subtitle">Plan y condiciones de pago</h3>
           <p className="quote-document-copy">{budget.paymentTerms || "Sin condiciones de pago registradas."}</p>
           <p>Anticipo: <strong>{formatMoney(budget.advanceAmount)}</strong></p>
-          {budget.installmentsJson?.length ? <ul className="quote-document-copy">{budget.installmentsJson.map((installment, index) => (
-            <li key={index}>{installment.label}: {formatMoney(installment.amount)}{installment.dueAt ? ` · ${formatDayKey(installment.dueAt)}` : ""}</li>
-          ))}</ul> : null}
-          <p className="admin-dialog-text">Vista del plan registrado. Se gestiona desde el plan de pagos del presupuesto.</p>
+          <BudgetPaymentPlanEditor total={price} advance={budget.advanceAmount} rows={conditions} onChange={setConditions} disabled={approved || closed || busy} />
         </section>
         {organization ? <section className="quote-document-section quote-document-section--issuer" aria-labelledby="quote-editor-issuer">
           <h3 id="quote-editor-issuer" className="quote-document-subtitle">Emitido por</h3>
           <p className="quote-document-copy"><strong>{organization.name}</strong></p>
           <p className="admin-dialog-text">La firma electrónica se gestiona por separado.</p>
         </section> : null}
+        </div>
 
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
         <div className="admin-dialog-foot">
@@ -492,7 +431,8 @@ export function BudgetPricingDialog({
             Cancelar
           </AdminButton>
           <span className="admin-dialog-spacer" />
-          <AdminButton type="submit" variant="primary" disabled={busy} aria-busy={busy || undefined}>
+          <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</a>
+          <AdminButton type="submit" variant="primary" disabled={busy || closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0} aria-busy={busy || undefined}>
             {busy ? "Guardando…" : needsRepricing ? "Ajustar precios y guardar" : "Guardar"}
           </AdminButton>
         </div>
@@ -542,6 +482,8 @@ export function BudgetPricingDialog({
         )}
       </div>
       <BudgetReferenceLinks budgetId={budget.id} initial={budget.referenceLinks ?? []} />
+      {newClient !== null ? <ClientQuickCreateDialog initialName={newClient} onClose={() => setNewClient(null)} onCreated={(client) => { setClientId(client.id); setNewClient(null); clients.reload(); }} /> : null}
+      {newEvent !== null ? <EventQuickCreateDialog initialName={newEvent} clientId={clientId} clients={clients.data ?? []} clientsLoading={clients.loading} onClose={() => setNewEvent(null)} onCreated={(event, id) => { setEventId(event.id); setClientId(clientId || id); setNewEvent(null); events.reload(); }} /> : null}
     </AdminDialog>
   );
 }

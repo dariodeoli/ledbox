@@ -64,6 +64,7 @@ const CATALOGO = BANCOS_PARAGUAY as unknown as string[];
  */
 const REPO_ASSETS: Record<string, string> = {
   "marca:ueno": "/assets/banks/ueno.svg",
+  "archivo:ueno-horizontal.svg": "/assets/banks/ueno.svg",
 };
 
 function repoAsset(logo: LogoBanco): string | null {

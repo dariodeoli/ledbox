@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { MoneyInput } from "owncoding-ui";
+import {
+  MoneyInput,
+  PhoneField as SharedPhoneField,
+  EmailField as SharedEmailField,
+  PercentField as SharedPercentField,
+  CityAutocomplete as SharedCityAutocomplete,
+  BancoCombobox as SharedBancoCombobox,
+} from "owncoding-ui";
 import {
   amountExceeds,
   amountInput,
@@ -10,6 +17,7 @@ import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
   normalizeEmail,
+  moneyInputDisplay,
   normalizePhone,
   normalizeSerial,
   rucInput,
@@ -99,6 +107,23 @@ function useFieldIds(id?: string) {
   const generated = useId();
   const fieldId = id ?? generated;
   return { fieldId, hintId: `${fieldId}-hint`, errorId: `${fieldId}-error` };
+}
+
+/** Completa atributos que algunos controles compartidos no exponen aún. */
+function useSharedInputAttributes(attributes: { id: string; value: string; error?: string | null; describedBy?: string; ariaLabel?: string; name?: string; required?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const input = ref.current?.querySelector('input[type="tel"]') ?? ref.current?.querySelector("input:not([type=hidden])");
+    if (!input) return;
+    input.id = attributes.id;
+    if (attributes.name) input.setAttribute("name", attributes.name);
+    if (attributes.ariaLabel) input.setAttribute("aria-label", attributes.ariaLabel);
+    input.toggleAttribute("required", Boolean(attributes.required));
+    if (attributes.error) input.setAttribute("aria-invalid", "true");
+    if (attributes.describedBy) input.setAttribute("aria-describedby", attributes.describedBy);
+    else input.removeAttribute("aria-describedby");
+  });
+  return ref;
 }
 
 export type TextFieldProps = {
@@ -255,11 +280,10 @@ export function TextAreaField({
  * + `title`. El kit solo lo envuelve con su `FieldChrome` y traduce el valor:
  * el contrato del panel sigue siendo el entero limpio (solo dígitos).
  *
- * Dos detalles de la v0.39.0 se resuelven acá, sin subir el pin:
- * - `onValueChange` entrega un número (o `""` al vaciar), no el string del kit.
- * - el componente pisa `aria-invalid` con su propio cálculo del tope, así que
- *   el error del campo (y el tope) se sincronizan después del render; el borde
- *   rojo sigue saliendo de `.admin-field input[aria-invalid="true"]`.
+ * Adaptación v0.67.1 (Refs #173): el tope efectivo es Int4; conserva el texto
+ * original antes de la conversión Number y usa BigInt para representarlo.
+ * Quita el maxlength del componente para avisar, nunca truncar, un exceso.
+ * Sincroniza aria-invalid con el error de campo y el límite persistible.
  */
 export function MoneyField({
   label,
@@ -295,31 +319,44 @@ export function MoneyField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const invalid = Boolean(error) || amountExceeds(amountInput(value), limit);
+  const effectiveLimit = Math.min(limit, FIELD_LIMITS.amountStorage);
+  const limitError = amountExceeds(amountInput(value), effectiveLimit) ? FIELD_MESSAGES.amountLimit : null;
+  const fieldError = error || limitError;
+  const invalid = Boolean(fieldError);
   // El `MoneyInput` de la librería decide `aria-invalid` por su cuenta (tope):
   // acá se completa con el error del campo, que la librería no ve.
   useEffect(() => {
     const input = wrapperRef.current?.querySelector("input");
     if (!input) return;
-    if (invalid) input.setAttribute("aria-invalid", "true");
-    else input.removeAttribute("aria-invalid");
+    function sync() {
+      if (!input) return;
+      input.removeAttribute("maxlength");
+      input.value = moneyInputDisplay(value);
+      if (invalid) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    }
+    sync();
+    // React restaura el input controlado al terminar el evento. Reparar antes
+    // del siguiente paint evita la conversión Number de la librería.
+    const frame = window.requestAnimationFrame(sync);
+    return () => window.cancelAnimationFrame(frame);
   }, [invalid, value]);
   return (
-    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div className="admin-money" ref={wrapperRef}>
         <MoneyInput
           id={label ? fieldId : id}
           name={name}
           value={value}
-          onValueChange={(next) => onChange(next === "" ? "" : String(next))}
-          max={limit}
+          onValueChange={() => onChange(amountInput(wrapperRef.current?.querySelector("input")?.value ?? ""))}
+          max={effectiveLimit}
           integerOnly
           required={required}
           placeholder={placeholder}
           disabled={disabled}
           readOnly={readOnly}
           aria-label={label ? undefined : ariaLabel}
-          aria-describedby={describedBy(error, hint, hintId, errorId)}
+          aria-describedby={describedBy(fieldError, hint, hintId, errorId)}
         />
       </div>
     </FieldChrome>
@@ -363,17 +400,14 @@ export function PercentField({
   const outOfRange = clean !== "" && parsePercent(clean) === null;
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedPercentField
         id={label ? fieldId : id}
-        type="text"
-        inputMode="decimal"
         value={clean}
-        maxLength={6}
         onKeyDown={(event) => {
           if (event.ctrlKey || event.metaKey || event.altKey) return;
           if (event.key.length === 1 && !/^[\d,]$/.test(event.key)) event.preventDefault();
         }}
-        onChange={(event) => onChange(percentInput(event.target.value))}
+        onChange={(next) => onChange(percentInput(next))}
         required={required}
         placeholder={placeholder}
         disabled={disabled}
@@ -476,45 +510,67 @@ export function PhoneField({
   id?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
-  const { countryCode, national } = parsePhone(value, defaultCountry);
-
-  function emit(code: string, nextNational: string) {
-    onChange(normalizePhone(`+${code} ${nextNational}`, defaultCountry));
-  }
+  const parsed = parsePhone(value, defaultCountry);
+  const [emptyCountry, setEmptyCountry] = useState(defaultCountry);
+  const countryCode = value.trim() ? parsed.countryCode : emptyCountry;
+  const national = parsed.national;
+  const sharedRef = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
 
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <span className="admin-phone">
-        <span className="admin-phone-prefix" aria-hidden="true">
-          +
-        </span>
-        <input
-          className="admin-phone-code"
-          type="text"
-          inputMode="numeric"
-          value={countryCode}
-          maxLength={4}
-          disabled={disabled}
-          aria-label={label ? "Código de país" : `${ariaLabel ?? "Teléfono"}: código de país`}
-          placeholder={defaultCountry}
-          onChange={(event) => emit(digitsOnly(event.target.value).slice(0, 4), national)}
-        />
-        <input
-          id={fieldId}
-          name={name}
-          type="tel"
-          value={national}
-          maxLength={20}
-          required={required}
-          placeholder={placeholder}
-          autoComplete="tel"
-          disabled={disabled}
-          onChange={(event) => emit(countryCode, event.target.value.replace(/[^\d\s().-]/g, ""))}
-          aria-label={label ? undefined : ariaLabel}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy(error, hint, hintId, errorId)}
-        />
-      </span>
+      <div ref={sharedRef} className="admin-phone-field-control">
+      <SharedPhoneField
+        className="admin-shared-phone"
+        id={fieldId}
+        name={name}
+        countryCode={`+${countryCode}`}
+        phone={national}
+        onInternationalChange={(_e164, meta) => {
+          setEmptyCountry(digitsOnly(meta.countryCode));
+          onChange(normalizePhone(`${meta.countryCode} ${meta.phone}`, defaultCountry));
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+        phoneAriaLabel={label ?? ariaLabel ?? "Teléfono"}
+        mensajeInvalido={FIELD_MESSAGES.phone}
+        inputProps={{ id: fieldId, required, "aria-describedby": describedBy(error, hint, hintId, errorId) }}
+      />
+      </div>
+    </FieldChrome>
+  );
+}
+
+/** Ciudad libre; cada cambio limpia/resuelve el departamento dependiente. */
+export function CityField({ label, ariaLabel, value, onChange, onSelect, hint, error, wide, required, disabled, placeholder, id, name }: {
+  label?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
+  onSelect: (city: string, department: string) => void;
+  hint?: string; error?: string | null; wide?: boolean; required?: boolean; disabled?: boolean;
+  placeholder?: string; id?: string; name?: string;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds(id);
+  const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
+  return (
+    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+      <div ref={ref} className="admin-shared-autocomplete">
+        <SharedCityAutocomplete value={value} onChange={onChange} onSelect={(city: string, department?: string) => onSelect(city, department ?? "")} disabled={disabled} placeholder={placeholder} maxLength={FIELD_LIMITS.name} inputProps={{ id: fieldId, required, name, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy(error, hint, hintId, errorId) }} />
+      </div>
+    </FieldChrome>
+  );
+}
+
+/** Banco libre con catálogo y selección explícita; el servidor revalida. */
+export function BancoField({ label, ariaLabel, value, onChange, hint, error, wide, required, disabled, placeholder, id, name }: {
+  label?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
+  hint?: string; error?: string | null; wide?: boolean; required?: boolean; disabled?: boolean;
+  placeholder?: string; id?: string; name?: string;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds(id);
+  const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
+  return (
+    <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+      <div ref={ref} className="admin-shared-autocomplete">
+        <SharedBancoCombobox id={fieldId} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} />
+      </div>
     </FieldChrome>
   );
 }
@@ -552,11 +608,10 @@ export function EmailField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome label={label} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedEmailField
         id={label ? fieldId : id}
-        type="email"
         value={value}
-        onChange={(event) => onChange(normalizeEmail(event.target.value))}
+        onChange={(next) => onChange(normalizeEmail(next))}
         maxLength={FIELD_LIMITS.email}
         required={required}
         placeholder={placeholder}

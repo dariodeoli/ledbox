@@ -5,14 +5,17 @@ restaura. El estado real se ve en el panel (OWNER/ADMIN) en **`/sistema`**.
 
 ## 0. Runtime (Node)
 
-EventOS corre en **Node 22 LTS o superior**:
+EventOS requiere **Node >=24.15.0 y <25** (kit `owncoding-ui` v0.67.1, Refs #173):
 
-- `package.json` → `engines.node: ">=22"`: es el pin que usan Railpack/Coolify para el contenedor
-  (antes `>=20.9`, que dejaba el deploy en Node 20).
-- CI (`.github/workflows/ci.yml`) → `actions/setup-node` con `node-version: 22`.
-- El e2e visual (`scripts/e2e-smoke.mjs`) usa `puppeteer-core`, que **requiere Node 22+**: con
-  versiones anteriores imprime su aviso de compatibilidad. Con Node 22+ no hay aviso.
-- Node 24 (local del equipo) es compatible: los requisitos no fijan un tope.
+- `package.json` fija el rango y `.node-version`/CI fijan **24.21.0**.
+- `nixpacks.toml` selecciona Node 24; comprobar `node --version` del candidato:
+  una versión 24 anterior a 24.15.0 no cumple el contrato. No usar Node 22/25.
+- El Dockerfile fija **node:24.21.0-bookworm-slim** en build y runtime; conserva
+  `npm run start` y su migración al arrancar. El build no recibe credenciales DB.
+- `npm run test:rules` incluye `tests/*.test.ts`, también regresiones puras
+  `quote-*`. Integraciones DB/UI mantienen sus gates explícitos de entorno local.
+- Esta configuración es candidata: la versión/SHA y el runtime desplegados se
+  verifican en Fase 7; cambiar el repo no certifica un deploy.
 
 ## 1. Respaldo (`scripts/backup.mjs`)
 

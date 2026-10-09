@@ -21,6 +21,10 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { PrintBankData } from "../../../_components/PrintBankData";
 import { PrintAmount, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
 import { PrintToolbar } from "../../../_components/PrintToolbar";
+import { AdminImageBox } from "@/components/admin/AdminImageBox";
+import { inventoryImageUrl } from "@/lib/server/inventory-images";
+import { budgetUsesDays } from "@/lib/budget-items";
+import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +58,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
     include: {
       client: true,
       event: true,
-      items: { orderBy: { name: "asc" } },
+      items: { orderBy: { name: "asc" }, include: { inventory: { select: { id: true, imageUrl: true, imageMime: true, updatedAt: true } } } },
       // Solo los cobros cobrados (issue #16): un cobro a plazo pendiente no es
       // plata cobrada y no se imprime como pago del presupuesto.
       payments: { where: { status: "RECEIVED" }, orderBy: { paidAt: "asc" } },
@@ -83,7 +87,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
     <>
       <PrintToolbar backHref="/presupuestos" backLabel="Volver a Presupuestos" />
 
-      <article className="lbprint-sheet" aria-label={`Presupuesto ${budget.title}`}>
+      <article className="lbprint-sheet budget-print-sheet" aria-label={`Presupuesto ${budget.title}`}>
         <PrintHeader
           title="Presupuesto"
           reference={reference}
@@ -96,8 +100,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
 
         <PrintSection title="Cliente">
           <div className="lbprint-grid">
-            <PrintField label="Razón social" value={budget.client.company || budget.client.name} />
-            <PrintField label="Contacto" value={budget.client.company ? budget.client.name : "—"} />
+            <PrintField label="Cliente" value={clientDisplayName(budget.client)} />
+            <PrintField label="Razón social" value={clientLegalName(budget.client) || "—"} />
+            <PrintField label="Contacto" value={budget.client.contactName || "—"} />
             <PrintField label="RUC" value={budget.client.ruc || "—"} />
             <PrintField label="Teléfono" value={budget.client.phone || "—"} />
             <PrintField label="Correo" value={budget.client.email || "—"} wide />
@@ -123,25 +128,17 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                 <tr>
                   <th scope="col">Producto / servicio</th>
                   <th scope="col" className="lbprint-num">
-                    Cantidad
-                  </th>
-                  <th scope="col" className="lbprint-num">
-                    Días
-                  </th>
-                  <th scope="col" className="lbprint-num">
                     Precio unitario
                   </th>
                   <th scope="col" className="lbprint-num">
-                    Subtotal
+                    Total
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {budget.items.map((item) => (
                   <tr key={item.id} data-excluded={item.excluded ? "true" : undefined}>
-                    <td>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}</td>
-                    <td className="lbprint-num">{formatNumber(item.quantity)}</td>
-                    <td className="lbprint-num">{formatNumber(item.days)}</td>
+                    <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
                     <td className="lbprint-num">{formatMoney(item.unitPrice)}</td>
                     <td className="lbprint-num">{formatMoney(item.subtotal)}</td>
                   </tr>
@@ -229,11 +226,11 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
           </div>
         </PrintSection>
 
-        {budget.approvedAt && plan.dueNow ? (
+        {plan.dueNow ? (
           <PrintSection title="Pago">
-            <div className="lbprint-pay">
+            {budget.approvedAt ? <div className="lbprint-pay">
               <div className="lbprint-pay-now">
-                <span className="lbprint-label">{plan.dueNow.label} · a transferir ahora</span>
+                <span className="lbprint-label">{plan.dueNow.label} · importe del plan</span>
                 <strong className="lbprint-pay-amount lbprint-num">{formatMoney(plan.dueNow.amount)}</strong>
                 <span className="lbprint-pay-total lbprint-num">de {formatMoney(budget.total)}</span>
               </div>
@@ -242,7 +239,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
               ) : (
                 <p className="lbprint-note">La empresa todavía no cargó sus datos bancarios en el panel.</p>
               )}
-            </div>
+            </div> : null}
             {plan.installments.length > 0 ? (
               <table className="lbprint-table lbprint-table--plan">
                 <thead>
@@ -266,7 +263,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                     <tr key={`${installment.label}-${index}`}>
                       <td>{installment.label}</td>
                       <td className="lbprint-num">{formatMoney(installment.amount)}</td>
-                      <td>{dueDateLabel(installment.dueAt)}</td>
+                      <td>{installment.dueAt ? dueDateLabel(installment.dueAt) : installment.moment || "A coordinar"}</td>
                     </tr>
                   ))}
                 </tbody>

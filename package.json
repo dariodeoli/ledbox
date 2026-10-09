@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "test:rules": "node --import tsx --test tests/field-rules.test.ts tests/admin-format.test.ts tests/admin-ux.test.ts tests/admin-views.test.ts tests/mobile-listas.test.ts tests/operacion-movil.test.ts tests/altas-manuales.test.ts tests/api-tokens.test.ts tests/demo-tour.test.ts tests/inventory-availability.test.ts tests/inventory-catalog.test.ts tests/inventory-prices.test.ts tests/inventory-image-box.test.ts tests/inventory-photo.test.ts tests/inventory-item-edit.test.ts tests/inventory-units.test.ts tests/calendar-labels.test.ts tests/client-event-quick.test.ts tests/bank-mark.test.ts tests/bank-statement.test.ts tests/brand-logos.test.ts tests/budget-costs.test.ts tests/budget-commercial.test.ts tests/budget-privacy.test.ts tests/portal-demo.test.ts tests/offline-queue.test.ts tests/invitation-token.test.ts tests/sso-messages.test.ts tests/message-templates.test.ts tests/backup-status.test.ts tests/system-diagnostics.test.ts tests/plan-limits.test.ts tests/fiscal.test.ts tests/signature-flow.test.ts tests/site-privacy.test.ts tests/site-floats.test.ts tests/site-catalog.test.ts tests/money-field.test.ts tests/field-kit.test.ts tests/admin-forms.test.ts tests/site-ruc-consulta.test.ts tests/owncoding-utils.test.ts tests/admin-selects.test.ts tests/admin-kpi.test.ts tests/admin-layout.test.ts tests/admin-account.test.ts tests/admin-panel-padding.test.ts tests/admin-notif-mobile.test.ts tests/admin-ajustes-layout.test.ts tests/producto-landing.test.ts tests/ia-carga.test.ts tests/ia-carga-acciones.test.ts tests/ia-carga-confianza.test.ts tests/ia-carga-texto.test.ts tests/ia-carga-lote.test.ts tests/collections-partial.test.ts tests/ia-carga-anular.test.ts tests/login-redirect.test.ts tests/ia-carga-precios.test.ts tests/finanzas-sections.test.ts tests/facturacion-mobile.test.ts tests/presupuestos-movil.test.ts tests/portal-resumen.test.ts tests/kanban-desborde.test.ts tests/plataforma-mobile.test.ts tests/eventos-legal.test.ts && node scripts/check-fields.mjs",
+    "test:rules": "node --import tsx --test tests/*.test.ts && node scripts/check-fields.mjs",
     "check:fields": "node scripts/check-fields.mjs",
     "release:prepare": "npm run typecheck && npm run test:rules && npm run build",
     "deploy:patch": "node scripts/deploy.mjs",
@@ -29,7 +29,7 @@
     "bcryptjs": "^3.0.2",
     "jose": "^6.1.0",
     "next": "15.5.27",
-    "owncoding-ui": "github:dariodeoli/owncoding-ui#v0.55.0",
+    "owncoding-ui": "github:OwnCoding/owncoding-ui#9dc9ec44216d22e92fad72fc1ad08bf3296a8da2",
     "pdf-lib": "1.17.1",
     "prisma": "^6.16.2",
     "qrcode": "^1.5.4",
@@ -43,18 +43,22 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.5.29",
     "puppeteer-core": "^25.12.0",
+    "tailwindcss": "^3.4.19",
     "tsx": "^4.19.2",
     "typescript": "^5.9.2"
   },
   "overrides": {
-    "postcss": "^8.5.28",
+    "postcss": "$postcss",
     "deepmerge-ts": "^8.0.2",
     "sharp": "0.35.5",
     "source-map-js": "1.2.2"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=24.15.0 <25"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

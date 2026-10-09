@@ -14,22 +14,22 @@ const money = fields.slice(fields.indexOf("export function MoneyField"), fields.
 const css = readFileSync(join(process.cwd(), "app", "globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
 test("MoneyField usa el componente de la librería", () => {
-  assert.match(fields, /import \{ MoneyInput \} from "owncoding-ui"/, "falta el import de la librería");
+  assert.match(fields, /MoneyInput,[\s\S]*from "owncoding-ui"/, "falta el import de la librería");
   assert.match(money, /<MoneyInput/, "el campo no usa el MoneyInput de la librería");
   assert.doesNotMatch(money, /<input\b/, "no puede dibujar el input a mano");
 });
 
 test("conserva el contrato del kit: entero limpio, tope y PYG", () => {
   assert.match(money, /onValueChange=/, "el valor entra por onValueChange");
-  assert.match(money, /next === "" \? "" : String\(next\)/, "traduce el número de la librería al string del kit");
-  assert.match(money, /max=\{limit\}/, "el tope del campo viaja al componente");
+  assert.match(money, /onChange\(amountInput\(wrapperRef/, "conserva el entero original sin redondear Number");
+  assert.match(money, /max=\{effectiveLimit\}/, "el tope compatible con Int viaja al componente");
   assert.match(money, /integerOnly/, "PYG va entero");
   assert.match(money, /limit = FIELD_LIMITS\.amountGeneral/, "tope por defecto del kit");
 });
 
 test("el error del campo sigue marcando aria-invalid", () => {
   assert.match(money, /setAttribute\("aria-invalid", "true"\)/, "el error del campo no llega al input");
-  assert.match(money, /amountExceeds\(amountInput\(value\), limit\)/, "el tope se evalúa con las reglas del panel");
+  assert.match(money, /amountExceeds\(amountInput\(value\), effectiveLimit\)/, "el tope se evalúa con las reglas del panel");
 });
 
 test("el prefijo de la moneda se dibuja dentro del campo", () => {

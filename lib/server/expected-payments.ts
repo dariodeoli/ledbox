@@ -6,6 +6,8 @@ import { parseInstallments } from "./budget-portal";
 import { clientLabel, dayKeyOf, dayStart, isValidDayKey } from "./notifications";
 import { auditChanges, recordAudit, type AuditContext } from "./audit";
 import { collectionSnapshotOf } from "./finance-snapshots";
+import { budgetPlanLedgerError } from "../budget-payment-plan";
+import { QuoteComparisonError } from "./quote-comparison";
 
 /**
  * Pagos esperados del plan de un presupuesto (issue #28): el dinero que el
@@ -34,6 +36,7 @@ export type ExpectedConceptValue = "advance" | "installment" | "balance";
 export type ExpectedStatusValue = "AWAITING" | "PROOF" | "PARTIAL" | "CONFIRMED" | "CANCELLED";
 
 export type ExpectedPlanItem = {
+  accountId?: string | null;
   /** Ranura estable dentro del plan: `advance`, `installment:N` o `balance`. */
   slot: string;
   concept: ExpectedConceptValue;
@@ -57,7 +60,7 @@ export type ExpectedPaymentWithRefs = Prisma.ExpectedPaymentGetPayload<{ include
 /** Cuenta de tesorería esperada por defecto: la primera activa (orden del panel). */
 async function firstActiveAccount(organizationId: string) {
   return db.treasuryAccount.findFirst({
-    where: { organizationId, active: true },
+    where: { organizationId, active: true, currency: "PYG" },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: accountSelect,
   });
@@ -91,12 +94,14 @@ export function budgetExpectedPlan(input: {
     });
   }
   installments.forEach((installment, index) => {
+    if (installment.amount <= 0) return;
     items.push({
       slot: `installment:${index + 1}`,
       concept: "installment",
       installmentNumber: index + 1,
       label: installment.label || `Cuota ${index + 1}`,
       amount: installment.amount,
+      accountId: installment.accountId,
       dueAt: installment.dueAt ? dayStart(installment.dueAt) : null,
     });
   });
@@ -132,6 +137,8 @@ export type ExpectedSyncResult = {
  * a los valores vigentes (monto, vencimiento y etiqueta).
  */
 export async function syncBudgetExpectedPayments(input: {
+  /** Commercial revisions pass their transaction so ledger and quote commit together. */
+  tx?: Prisma.TransactionClient;
   organizationId: string;
   budgetId: string;
   actor?: AuditContext | null;
@@ -139,7 +146,8 @@ export async function syncBudgetExpectedPayments(input: {
   reason?: string;
 }): Promise<ExpectedSyncResult> {
   const result: ExpectedSyncResult = { created: 0, updated: 0, cancelled: 0, total: 0 };
-  const budget = await db.budget.findFirst({
+  const database = input.tx ?? db;
+  const budget = await database.budget.findFirst({
     where: { id: input.budgetId, organizationId: input.organizationId },
     select: {
       id: true,
@@ -160,20 +168,25 @@ export async function syncBudgetExpectedPayments(input: {
           dueAt: true,
           status: true,
           expectedAccountId: true,
+          paidAmount: true,
+          proofId: true,
+          paymentId: true,
         },
       },
     },
   });
   // Sin aprobación no hay promesa de pago: no se inventa dinero esperado.
-  if (!budget || !budget.approvedAt) return result;
+  if (!budget || (!budget.approvedAt && budget.expectedPayments.length === 0)) return result;
 
   const desired = budgetExpectedPlan(budget);
+  const ledgerError = budgetPlanLedgerError(desired, budget.expectedPayments);
+  if (ledgerError) throw new QuoteComparisonError(409, ledgerError);
   const existing = new Map(budget.expectedPayments.map((row) => [row.slot, row]));
   const now = new Date();
   let defaultAccountId: string | null | undefined;
   const resolveDefaultAccount = async () => {
     if (defaultAccountId === undefined) {
-      defaultAccountId = (await firstActiveAccount(input.organizationId))?.id ?? null;
+      defaultAccountId = (await database.treasuryAccount.findFirst({ where: { organizationId: input.organizationId, active: true, currency: "PYG" }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: accountSelect }))?.id ?? null;
     }
     return defaultAccountId;
   };
@@ -181,8 +194,8 @@ export async function syncBudgetExpectedPayments(input: {
   for (const item of desired) {
     const current = existing.get(item.slot);
     if (!current) {
-      const accountId = await resolveDefaultAccount();
-      await db.expectedPayment.create({
+      const accountId = item.accountId ?? await resolveDefaultAccount();
+      await database.expectedPayment.create({
         data: {
           id: randomUUID(),
           organizationId: input.organizationId,
@@ -203,11 +216,11 @@ export async function syncBudgetExpectedPayments(input: {
     existing.delete(item.slot);
     // Lo confirmado y lo parcial no se pisan: la plata ya entró con sus valores
     // reales y el saldo pendiente se completa o se divide a mano (issue #129).
-    if (current.status === "CONFIRMED" || current.status === "PARTIAL") continue;
+    if (current.status === "CONFIRMED" || current.status === "PARTIAL" || current.status === "PROOF" || current.paidAmount > 0 || current.proofId || current.paymentId || current.label.includes(" · parte ") || current.slot.startsWith("split:")) continue;
 
     const nextStatus: ExpectedStatusValue = current.status === "CANCELLED" ? "AWAITING" : (current.status as ExpectedStatusValue);
     const reviving = current.status === "CANCELLED";
-    const expectedAccountId = current.expectedAccountId ?? (await resolveDefaultAccount());
+    const expectedAccountId = item.accountId ?? current.expectedAccountId ?? (await resolveDefaultAccount());
     const changes = auditChanges(
       {
         label: current.label,
@@ -230,8 +243,8 @@ export async function syncBudgetExpectedPayments(input: {
       ["label", "amount", "dueAt", "concept", "installmentNumber", "status", "expectedAccountId"],
     );
     if (!changes) continue;
-    await db.expectedPayment.update({
-      where: { id: current.id },
+    const applied = await database.expectedPayment.updateMany({
+      where: { id: current.id, status: current.status, amount: current.amount, paidAmount: current.paidAmount, proofId: current.proofId, paymentId: current.paymentId },
       data: {
         label: item.label,
         amount: item.amount,
@@ -244,17 +257,19 @@ export async function syncBudgetExpectedPayments(input: {
         ...(reviving ? { reviewNote: null, reviewedAt: null, reviewedByName: null, cancelledAt: null } : {}),
       },
     });
+    if (!applied.count) throw new QuoteComparisonError(409, "El concepto cambió mientras se sincronizaba. Actualizá el plan: se conservó el cobro o comprobante concurrente.");
     result.updated += 1;
   }
 
   // Conceptos que salieron del plan: se cancelan (lo confirmado queda). Las
   // partes de una división manual (`split:`) no son del plan: se respetan.
   for (const row of existing.values()) {
-    if (row.status === "CONFIRMED" || row.status === "CANCELLED" || row.slot.startsWith("split:")) continue;
-    await db.expectedPayment.update({
-      where: { id: row.id },
+    if (row.status === "CONFIRMED" || row.status === "PARTIAL" || row.status === "PROOF" || row.status === "CANCELLED" || row.paidAmount > 0 || row.proofId || row.paymentId || row.label.includes(" · parte ") || row.slot.startsWith("split:")) continue;
+    const applied = await database.expectedPayment.updateMany({
+      where: { id: row.id, status: row.status, amount: row.amount, paidAmount: row.paidAmount, proofId: row.proofId, paymentId: row.paymentId },
       data: { status: "CANCELLED", cancelledAt: now },
     });
+    if (!applied.count) throw new QuoteComparisonError(409, "El concepto cambió mientras se cancelaba. Se conservó el cobro o comprobante concurrente.");
     result.cancelled += 1;
   }
 
@@ -437,6 +452,9 @@ export async function confirmExpectedPayment(input: {
         organizationId: input.organizationId,
         status: { in: ["AWAITING", "PROOF", "PARTIAL"] },
         paidAmount: expected.paidAmount,
+        amount: expected.amount,
+        proofId: expected.proofId,
+        paymentId: expected.paymentId,
       },
       data: isPartial
         ? {

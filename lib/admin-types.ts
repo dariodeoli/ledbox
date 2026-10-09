@@ -126,11 +126,36 @@ export type AdminSessionPayload = {
   lock?: AdminSessionLock | null;
 };
 
+/** Contactos adicionales: role es la función libre, no un permiso de acceso. */
+export type AdminClientContact = { name: string; role: string | null; phone: string | null; email: string | null };
+
+export type AdminClientRucSnapshot = {
+  fullRuc: string;
+  nameOfficial: string;
+  environment: "test" | "live";
+  equivalenceRaw: string | null;
+  stateRaw: string | null;
+  sourcePartition?: number;
+  provenance: {
+    source: "dnit_official_snapshot";
+    sourcePage: string;
+    publicationDate: string;
+    publishedText: string;
+    importedAt: string;
+    snapshotHash: string;
+  };
+  lookedUpAt: string;
+  confirmedAt: string;
+};
+
 /** Cliente embebido en eventos/presupuestos/finanzas (relación `client: true`). */
 export type AdminClientRef = {
   id: string;
   name: string;
   company: string | null;
+  /** Mostrar con clientDisplayName (tradeName.trim() || name), nunca company. */
+  tradeName?: string | null;
+  legalName?: string | null;
   type: string;
   email: string | null;
   phone: string | null;
@@ -143,6 +168,14 @@ export type AdminClientRef = {
 
 export type AdminClientRow = AdminClientRef & {
   ruc: string | null;
+  billingEmail?: string | null;
+  city?: string | null;
+  department?: string | null;
+  address?: string | null;
+  addressReference?: string | null;
+  locationUrl?: string | null;
+  contacts?: AdminClientContact[];
+  rucSnapshot?: AdminClientRucSnapshot | null;
   /** Persona encargada del cliente (issue #36) y sus datos de contacto directo. */
   contactName: string | null;
   contactRole: string | null;
@@ -170,6 +203,8 @@ export type AdminClientOption = {
   id: string;
   name: string;
   company: string | null;
+  tradeName?: string | null;
+  legalName?: string | null;
   type: string;
   active: boolean;
 };
@@ -224,6 +259,18 @@ export type AdminEventRow = {
   location: string | null;
   /** Ciudad del evento (issue #48); `null` mientras no se cargue. */
   city: string | null;
+  department?: string | null;
+  address?: string | null;
+  addressReference?: string | null;
+  locationUrl?: string | null;
+  venueContactName?: string | null;
+  venueContactPhone?: string | null;
+  venueContactEmail?: string | null;
+  responsibleName?: string | null;
+  responsiblePhone?: string | null;
+  responsibleEmail?: string | null;
+  modality?: string | null;
+  attendees?: number | null;
   setupAt: string | null;
   startsAt: string | null;
   endsAt: string | null;
@@ -245,11 +292,14 @@ export type AdminEventOption = {
   startsAt: string | null;
   status: string;
   clientId: string;
-  client: { id: string; name: string; company: string | null };
+  location?: string | null;
+  city?: string | null;
+  department?: string | null;
+  client: { id: string; name: string; company: string | null; tradeName?: string | null; legalName?: string | null };
 };
 
 /** Cliente embebido mínimo del panel de eventos (issue #68). */
-export type AdminEventClientRef = Pick<AdminClientRef, "id" | "name" | "company" | "phone">;
+export type AdminEventClientRef = Required<Pick<AdminClientRef, "id" | "name" | "company" | "phone" | "tradeName" | "legalName">>;
 
 /**
  * Evento del panel de operación (issue #68): lo que devuelve
@@ -265,6 +315,7 @@ export type AdminEventPanelRow = Omit<AdminEventRow, "client"> & { client: Admin
 export type AdminEventChecklistRow = Pick<AdminEventRow, "id" | "name" | "tasks">;
 
 export type AdminBudgetItem = {
+  notes?: string | null;
   excluded?: boolean;
   id: string;
   name: string;
@@ -279,7 +330,7 @@ export type AdminBudgetItem = {
 };
 
 /** Cuota del plan de pagos (issue #14); `dueAt` es `YYYY-MM-DD`. */
-export type AdminBudgetInstallment = { label: string; amount: number; dueAt: string | null };
+export type AdminBudgetInstallment = import("./budget-payment-plan").BudgetPaymentCondition;
 
 export type AdminPayment = {
   id: string;
@@ -337,6 +388,7 @@ export function overdueCount(
 }
 
 export type AdminBudgetRow = {
+  updatedAt?: string;
   comparisonId?: string | null;
   id: string;
   title: string;

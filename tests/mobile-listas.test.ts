@@ -28,7 +28,7 @@ test("eventos: tarjetas en ancho compacto con el nombre primero", () => {
   // La tarjeta arranca por el nombre y suma cliente, fecha/lugar, urgencia,
   // avance y equipos (el nombre era lo que desaparecía en móvil).
   assert.match(module, /const eventCards: AdminCardData\[\] = rows\.map\([\s\S]{0,700}title: event\.name/);
-  assert.match(module, /subtitle: event\.client\.company \|\| event\.client\.name/);
+  assert.match(module, /subtitle: clientDisplayName\(event\.client\)/);
   for (const label of ["Fecha", "Falta", "Lugar", "Equipos", "Checklist"]) {
     assert.ok(module.includes(`label: "${label}"`), `falta «${label}» en la tarjeta del evento`);
   }

@@ -5,6 +5,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
+import { clientDisplayName } from "@/lib/client-identity";
 export const dynamic = "force-dynamic";
 
 const select = { id: true, publicToken: true, publicTokenCreatedAt: true } as const;
@@ -27,10 +28,10 @@ export async function POST(request: Request) {
 
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
-    select: { publicToken: true, publicTokenCreatedAt: true, id: true, title: true, client: { select: { name: true, company: true } } },
+    select: { publicToken: true, publicTokenCreatedAt: true, id: true, title: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
-  const clientLabel = budget.client.company?.trim() || budget.client.name;
+  const clientLabel = clientDisplayName(budget.client);
 
   if (action === "ensure") {
     if (!budget.publicToken) {

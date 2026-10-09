@@ -5,6 +5,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditPick, recordAudit } from "@/lib/server/audit";
 import { clientMetrics, factsByClient, type ClientMetricFacts } from "./metrics";
 import { parseClientFields } from "./client-fields";
+import { clientRucPatch } from "@/lib/server/ruc-confirmation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
       where: { organizationId },
       orderBy: { name: "asc" },
       take: 300,
-      select: { id: true, name: true, company: true, type: true, active: true },
+      select: { id: true, name: true, company: true, tradeName: true, legalName: true, type: true, active: true },
     });
     return Response.json({ clients });
   }
@@ -84,6 +85,7 @@ export async function GET(request: Request) {
 
 /** Campos que se auditan al crear un cliente (sin el binario del logo). */
 const CLIENT_AUDIT_FIELDS = [
+  "tradeName", "legalName", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
   "name",
   "company",
   "type",
@@ -102,16 +104,23 @@ const CLIENT_AUDIT_FIELDS = [
 export async function POST(request: Request) {
   const auth = await requireAdminContext("clients.write");
   if (!auth.ok) return auth.response;
-  const parsed = parseClientFields(await readJson(request));
+  const body = await readJson(request);
+  const parsed = parseClientFields(body);
   if (!parsed.ok) return jsonError(parsed.error, 400);
-  if (parsed.data.name === undefined) return jsonError("Ingresá el nombre del cliente.", 400);
+  // Altas nuevas sólo con fantasía son posibles; no convierte registros existentes.
+  const name = parsed.data.name ?? parsed.data.tradeName;
+  if (!name) return jsonError("Ingresá el nombre fantasía o el nombre del cliente.", 400);
+  let fiscal;
+  try { fiscal = await clientRucPatch(body as Record<string, unknown>, auth.context.organizationId, auth.context.user.id); }
+  catch (error) { return jsonError(error instanceof Error ? error.message : "Confirmación de RUC inválida.", 400); }
 
   const client = await db.client.create({
     data: {
       id: randomUUID(),
       organizationId: auth.context.organizationId,
       ...parsed.data,
-      name: parsed.data.name,
+      ...fiscal,
+      name,
       type: parsed.data.type ?? "FINAL",
     },
   });

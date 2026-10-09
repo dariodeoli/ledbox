@@ -630,6 +630,20 @@ model Client {
   name           String
   company        String?
   ruc            String?
+  /// Identidad comercial explícita; name/company históricos no se convierten.
+  tradeName      String?
+  /// Razón social oficial o manual, independiente de fantasía y contacto.
+  legalName      String?
+  billingEmail   String?
+  city           String?
+  department     String?
+  address        String?
+  addressReference String?
+  locationUrl    String?
+  /// Contactos adicionales por función: [{ name, role, phone, email }].
+  contacts       Json            @default("[]")
+  /// Snapshot confirmado de OwnData, con procedencia/fecha; nunca inferido.
+  rucSnapshot    Json?
   email          String?
   phone          String?
   /**
@@ -687,6 +701,18 @@ model Event {
   name           String
   location       String?
   city           String?
+  department     String?
+  address        String?
+  addressReference String?
+  locationUrl    String?
+  venueContactName String?
+  venueContactPhone String?
+  venueContactEmail String?
+  responsibleName String?
+  responsiblePhone String?
+  responsibleEmail String?
+  modality       String?
+  attendees      Int?
   setupAt        DateTime?
   startsAt       DateTime?
   endsAt         DateTime?

@@ -1,4 +1,4 @@
-import { rateLimit, rateLimitResponse, getClientIp } from "@/lib/server/rate-limit";
+import { rateLimit, getClientIp } from "@/lib/server/rate-limit";
 import { consultarRucProveedor, normalizarRuc, proveedorRucConfigurado, rucConForma } from "@/lib/server/ruc";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ function errorRuc(mensaje: string, status: number): Response {
  */
 export async function GET(request: Request) {
   const limited = await rateLimit(`ruc:consulta:${getClientIp(request)}`, LIMITE);
-  if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
+  if (!limited.allowed) return Response.json({ error: "Alcanzaste el límite de consultas. Completá los datos a mano.", manualEntryAllowed: true }, { status: 429, headers: { "Retry-After": String(limited.retryAfter) } });
 
   const numero = normalizarRuc(new URL(request.url).searchParams.get("numero"));
   if (!rucConForma(numero)) {

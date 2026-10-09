@@ -18,7 +18,8 @@ const promoterSelect = {
  * `GET ?fields=checklist` (issue #68): lo mínimo del checklist del dashboard
  * —id, nombre y tareas—, sin cliente, equipos ni la disponibilidad de la
  * promotora. `GET ?fields=panel` (issue #68): el evento del panel de operación
- * con el **cliente mínimo** (id, nombre, empresa y teléfono) y las tareas y
+ * con el **cliente mínimo** (id, nombre histórico, empresa, fantasía, razón
+ * social y teléfono) y las tareas y
  * asignaciones completas. Sin `fields` la respuesta es la de siempre
  * (compatible).
  */
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
       orderBy: { startsAt: "asc" },
       take: 200,
       include: {
-        client: { select: { id: true, name: true, company: true, phone: true } },
+        client: { select: { id: true, name: true, company: true, tradeName: true, legalName: true, phone: true } },
         tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
         assignments: { include: { inventory: true } },
       },

@@ -28,17 +28,15 @@ import {
   esRuc,
   excedeMonto,
   extraerRuc,
-  formatGsInput,
   largoMaximoMonto,
   limpiarTaxId,
   normalizarMontoInput,
   parseGsInput,
   parseTelefono,
 } from "owncoding-ui/utils";
-// Excepción de la Tanda 1 (#105): `limpiarPercent` hoy vive solo en el entry
-// root (dentro de `PercentField`), no en `owncoding-ui/utils`. Queda anotado el
-// pedido upstream (Tanda 5 del plan #100).
-import { limpiarPercent } from "owncoding-ui";
+// v0.67.1 sigue sin exportar limpiarPercent por /utils. El root es "use client":
+// no puede ejecutar reglas desde API/SSR. La normalización pura vive aquí hasta
+// que upstream exponga el helper, con equivalencia testeada frente al runtime.
 
 /**
  * El `.d.ts` de v0.14.0 publica firmas viejas del teléfono (owncoding-ui#4)
@@ -80,6 +78,8 @@ export const FIELD_LIMITS = {
   amountGeneral: 10_000_000_000,
   /** Monto de ventas: presupuestos y precios unitarios. */
   amountSales: 99_000_000_000,
+  /** Prisma Int / PostgreSQL INT4. La entrada se conserva; el campo avisa. */
+  amountStorage: 2_147_483_647,
 } as const;
 
 /** Código de país por defecto de los teléfonos (+595 Paraguay). */
@@ -183,7 +183,9 @@ export function amountInput(value: string): string {
  * siendo el entero limpio de `amountInput`.
  */
 export function moneyInputDisplay(value: string): string {
-  return formatGsInput(value);
+  const digits = amountInput(value);
+  // BigInt evita redondear un pegado fuera de rango antes de mostrar el error.
+  return digits ? new Intl.NumberFormat("es-PY").format(BigInt(digits)) : "";
 }
 
 /** Tope de escritura del campo: el monto máximo permitido entra completo (MoneyInput). */
@@ -231,7 +233,9 @@ export function amountError(value: string, limit: number = FIELD_LIMITS.amountGe
  * hasta 2 decimales, 3 dígitos enteros (0–100) y 6 caracteres.
  */
 export function percentInput(value: string): string {
-  return limpiarPercent(value);
+  const [integer = "", ...decimal] = String(value ?? "").replace(/\./g, ",").replace(/[^\d,]/g, "").split(",");
+  const digits = integer.slice(0, 3);
+  return decimal.length ? `${digits},${decimal.join("").slice(0, 2)}`.slice(0, 6) : digits.slice(0, 6);
 }
 
 /**

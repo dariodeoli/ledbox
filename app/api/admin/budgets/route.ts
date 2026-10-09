@@ -1,5 +1,8 @@
 import { withQuoteApproval, withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
+import { budgetItemError } from "@/lib/budget-items";
+import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { assertBudgetPlanLedger, recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
 import { CommercialStatus, type Prisma } from "@prisma/client";
 import { budgetStatusLabel } from "@/lib/admin-format";
 import { INVOICE_TAX_TYPES } from "@/lib/fiscal";
@@ -22,8 +25,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_TERMS = 600;
-const MAX_INSTALLMENTS = 12;
-const MAX_INSTALLMENT_LABEL = 60;
 /** Campos del cliente (issue #65). */
 const MAX_WARRANTY = 400;
 const MAX_NOTES = 2000;
@@ -32,8 +33,8 @@ const MAX_NOTES = 2000;
 function moneyField(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return null;
-  return Math.max(0, Math.round(amount));
+  if (typeof value === "boolean" || !budgetMoneyValid(amount)) return null;
+  return amount;
 }
 
 /** Día `YYYY-MM-DD` del body a fecha real (mediodía de Asunción); `null` si no vino. */
@@ -115,7 +116,7 @@ export async function GET() {
             subtotal: true,
             discount: true,
             total: true,
-            client: { select: { name: true, company: true } },
+            client: { select: { name: true, company: true, tradeName: true, legalName: true } },
             items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true } },
           },
         },
@@ -126,6 +127,7 @@ export async function GET() {
 }
 
 type ParsedBudgetItem = {
+  notes: string | null;
   /** Id del ítem existente cuando el body lo manda (PATCH de ítems); `null` si es nuevo. */
   id: string | null;
   name: string;
@@ -146,15 +148,17 @@ function parseBudgetItems(rawItems: unknown[], validInventoryIds: Set<string>): 
   return rawItems.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const value = item as Record<string, unknown>;
+    if ([value.quantity, value.days, value.unitPrice, value.costPrice].some((field) => typeof field === "boolean")) return [];
     const name = typeof value.name === "string" ? value.name.trim() : "";
-    const quantity = Number(value.quantity || 1);
-    const days = Number(value.days || 1);
-    const unitPrice = Number(value.unitPrice || 0);
-    const costPrice = Number(value.costPrice || 0);
+    const quantity = Number(value.quantity ?? 1);
+    const days = Number(value.days ?? 1);
+    const unitPrice = Number(value.unitPrice ?? 0);
+    const costPrice = Number(value.costPrice ?? 0);
     const inventoryId = typeof value.inventoryId === "string" && validInventoryIds.has(value.inventoryId.trim()) ? value.inventoryId.trim() : null;
     const id = typeof value.id === "string" && value.id.trim() ? value.id.trim() : null;
-    if (!name || !Number.isFinite(quantity) || !Number.isFinite(days) || !Number.isFinite(unitPrice)) return [];
+    if (budgetItemError({ name, quantity, days, unitPrice, costPrice })) return [];
     return [{
+      notes: textField(value.notes, 400),
       id,
       name,
       quantity: Math.max(1, quantity),
@@ -187,7 +191,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
-  if (typeof body.clientId !== "string" || typeof body.title !== "string") {
+  if (typeof body.clientId !== "string" || typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 160) {
     return jsonError("Elegí el cliente y escribí el título del presupuesto.", 400);
   }
   const client = await db.client.findFirst({ where: { id: body.clientId, organizationId }, select: { id: true } });
@@ -209,9 +213,11 @@ export async function POST(request: Request) {
   if (items.length === 0) {
     return jsonError("El presupuesto necesita al menos un ítem con nombre.", 400);
   }
+  if (items.length !== rawItems.length) return jsonError("Completá nombre, cantidad, duración y montos válidos de todos los ítems.", 400);
   const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
   const discount = Math.max(0, Number(body.discount || 0));
   const total = Math.max(0, subtotal - discount);
+  if (!budgetMoneyValid(subtotal) || !budgetMoneyValid(discount) || discount > subtotal) return jsonError("Subtotal o descuento inválido: revisá el límite Int.", 400);
   const costEstimate = items.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
   // Costos internos y campos del cliente (issue #65): el presupuesto nace en
   // Borrador con lo que cargó el dueño; el precio final se define antes de enviar.
@@ -265,31 +271,6 @@ export async function POST(request: Request) {
   return Response.json({ budget }, { status: 201 });
 }
 
-type ParsedInstallments =
-  | { ok: true; value: Array<{ label: string; amount: number; dueAt: string }> }
-  | { ok: false; error: string };
-
-/** Cuotas del plan de pagos: etiqueta, monto entero y vencimiento real (`YYYY-MM-DD`). */
-function parseInstallments(raw: unknown): ParsedInstallments {
-  if (!Array.isArray(raw)) return { ok: false, error: "Las cuotas deben venir en una lista." };
-  if (raw.length > MAX_INSTALLMENTS) return { ok: false, error: `Podés cargar hasta ${MAX_INSTALLMENTS} cuotas.` };
-  const value: Array<{ label: string; amount: number; dueAt: string }> = [];
-  for (const [index, row] of raw.entries()) {
-    const position = index + 1;
-    if (!row || typeof row !== "object" || Array.isArray(row)) return { ok: false, error: `La cuota ${position} tiene un formato inválido.` };
-    const record = row as Record<string, unknown>;
-    const label = typeof record.label === "string" ? record.label.trim() : "";
-    if (!label) return { ok: false, error: `La cuota ${position} necesita una etiqueta.` };
-    if (label.length > MAX_INSTALLMENT_LABEL) return { ok: false, error: `La etiqueta de la cuota ${position} no puede superar los ${MAX_INSTALLMENT_LABEL} caracteres.` };
-    const amount = Number(record.amount);
-    if (!Number.isInteger(amount) || amount <= 0) return { ok: false, error: `El monto de la cuota ${position} debe ser un entero mayor a cero.` };
-    const dueAt = typeof record.dueAt === "string" ? record.dueAt.trim() : "";
-    if (!isValidDayKey(dueAt)) return { ok: false, error: `El vencimiento de la cuota ${position} no es una fecha válida.` };
-    value.push({ label, amount, dueAt });
-  }
-  return { ok: true, value };
-}
-
 /**
  * `PATCH /api/admin/budgets` (issues #14, #18 y #26).
  *
@@ -323,7 +304,7 @@ async function patchBudget(request: Request) {
     if (!Object.values(CommercialStatus).includes(status as CommercialStatus)) return jsonError("El estado del presupuesto no es válido.", 400);
     const budget = await db.budget.findFirst({
       where: { id: budgetId, organizationId },
-      select: { id: true, title: true, status: true, client: { select: { name: true, company: true } } },
+      select: { id: true, title: true, status: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
     });
     if (!budget) return jsonError("Presupuesto no encontrado.", 404);
     if (budget.status === status) {
@@ -359,7 +340,7 @@ async function patchBudget(request: Request) {
       select: {
         id: true,
         title: true,
-        client: { select: { name: true, company: true } },
+        client: { select: { name: true, company: true, tradeName: true, legalName: true } },
         items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
       },
     });
@@ -398,6 +379,11 @@ async function patchBudget(request: Request) {
     return Response.json({ item: updated });
   }
 
+  if (body.kind === "editor") {
+    const { saveBudgetEditor } = await import("@/lib/server/budget-editor");
+    return saveBudgetEditor(auth.context, budgetId, body);
+  }
+
   if (body.kind === "items") {
     return patchBudgetItems({ context: auth.context, organizationId, budgetId, body });
   }
@@ -415,7 +401,7 @@ async function patchBudget(request: Request) {
       advanceAmount: true,
       paymentTerms: true,
       installmentsJson: true,
-      client: { select: { name: true, company: true } },
+      client: { select: { name: true, company: true, tradeName: true, legalName: true } },
     },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
@@ -423,7 +409,7 @@ async function patchBudget(request: Request) {
   const data: Prisma.BudgetUpdateInput = {};
   if (body.advanceAmount !== undefined) {
     const advance = Number(body.advanceAmount);
-    if (!Number.isInteger(advance) || advance < 0) return jsonError("El anticipo debe ser un entero en guaraníes.", 400);
+    if (typeof body.advanceAmount !== "number" || !budgetMoneyValid(advance)) return jsonError("El anticipo debe ser un entero en guaraníes.", 400);
     if (advance > budget.total) return jsonError("El anticipo no puede superar el total del presupuesto.", 400);
     data.advanceAmount = advance;
   }
@@ -435,10 +421,10 @@ async function patchBudget(request: Request) {
   const storedInstallments = readStoredInstallments(budget.installmentsJson);
   let installments = storedInstallments;
   if (body.installmentsJson !== undefined) {
-    const parsed = parseInstallments(body.installmentsJson);
+    const parsed = resolveBudgetPaymentPlan(body.installmentsJson, budget.total, Number(body.advanceAmount ?? budget.advanceAmount));
     if (!parsed.ok) return jsonError(parsed.error, 400);
-    installments = parsed.value;
-    data.installmentsJson = parsed.value as unknown as Prisma.InputJsonValue;
+    installments = parsed.rows;
+    data.installmentsJson = parsed.rows as unknown as Prisma.InputJsonValue;
   }
 
   const advance = typeof data.advanceAmount === "number" ? data.advanceAmount : budget.advanceAmount;
@@ -451,7 +437,7 @@ async function patchBudget(request: Request) {
   // cambiar solo una fecha también es un cambio de plan —la sincronización de
   // pagos esperados y la auditoría tienen que verlo—.
   const installmentsSignature = (rows: Array<{ label: string; amount: number; dueAt: string | null }>) =>
-    rows.map((row) => `${row.label} ${row.amount} ${row.dueAt ?? "sin fecha"}`).join(" · ") || "sin cuotas";
+    JSON.stringify(rows);
   const nextTerms = data.paymentTerms === undefined ? budget.paymentTerms : data.paymentTerms;
   const changes = auditChanges(
     { advanceAmount: budget.advanceAmount, paymentTerms: budget.paymentTerms },
@@ -471,7 +457,14 @@ async function patchBudget(request: Request) {
     return Response.json({ budget: current, unchanged: true });
   }
 
-  const updated = await withQuoteCommercialEdit(budget.id, organizationId, true, (tx) => tx.budget.update({
+  const updated = await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
+    const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { total: true } });
+    const checked = resolveBudgetPaymentPlan(installments, fresh.total, advance);
+    if (!checked.ok) throw new QuoteComparisonError(400, checked.error);
+    await validateBudgetPlanAccounts(tx, organizationId, checked.rows);
+    await assertBudgetPlanLedger(tx, budget.id, fresh.total, advance, checked.rows);
+    data.installmentsJson = checked.rows as unknown as Prisma.InputJsonValue;
+    const saved = await tx.budget.update({
     where: { id: budget.id },
     data,
     select: {
@@ -481,7 +474,10 @@ async function patchBudget(request: Request) {
       installmentsJson: true,
       total: true,
     },
-  }));
+    });
+    await recalculateBudgetPaymentPlan(tx, budget.id);
+    return saved;
+  });
   await recordAudit({
     context: auth.context,
     action: "update",
@@ -527,7 +523,7 @@ async function patchBudgetItems(params: {
       discount: true,
       subtotal: true,
       total: true,
-      client: { select: { name: true, company: true } },
+      client: { select: { name: true, company: true, tradeName: true, legalName: true } },
       items: { select: { id: true, name: true, inventoryId: true, excluded: true } },
     },
   });
@@ -541,8 +537,11 @@ async function patchBudgetItems(params: {
   if (!validInventoryIds) return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
   const parsed = parseBudgetItems(rawItems, validInventoryIds);
   if (parsed.length === 0) return jsonError("El presupuesto necesita al menos un ítem con nombre.", 400);
+  if (parsed.length !== rawItems.length) return jsonError("Completá todos los ítems con cantidades y montos válidos.", 400);
 
   const existingIds = new Set(budget.items.map((item) => item.id));
+  const suppliedIds = parsed.flatMap((item) => item.id ? [item.id] : []);
+  if (new Set(suppliedIds).size !== suppliedIds.length) return jsonError("No repitas el identificador de un ítem.", 400);
   if (parsed.some((item) => item.id && !existingIds.has(item.id))) {
     return jsonError("Uno de los ítems no pertenece a este presupuesto.", 400);
   }
@@ -552,6 +551,7 @@ async function patchBudgetItems(params: {
   const subtotal = parsed.reduce((sum, item) => sum + item.subtotal, 0);
   const discount = Math.min(budget.discount, subtotal);
   const total = Math.max(0, subtotal - discount);
+  if (!budgetMoneyValid(subtotal)) return jsonError("El subtotal supera el límite Int.", 400);
   const costEstimate = parsed.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
   const keepIds = new Set(parsed.flatMap((item) => (item.id ? [item.id] : [])));
   // El vínculo con el inventario se conserva si el payload no lo manda (el
@@ -567,6 +567,7 @@ async function patchBudgetItems(params: {
       const raw = rawItems.find((row) => row && typeof row === "object" && (row as Record<string, unknown>).id === item.id) as Record<string, unknown> | undefined;
       const inventoryId = raw && Object.hasOwn(raw, "inventoryId") ? item.inventoryId : item.inventoryId ?? (item.id ? linksById.get(item.id) ?? null : null);
       const data = {
+        ...(raw && Object.hasOwn(raw, "notes") ? { notes: item.notes } : {}),
         name: item.name,
         quantity: item.quantity,
         days: item.days,
@@ -582,6 +583,7 @@ async function patchBudgetItems(params: {
       }
     }
     await tx.budget.update({ where: { id: budget.id }, data: { subtotal, discount, total, costEstimate } });
+    await recalculateBudgetPaymentPlan(tx, budget.id);
   });
 
   await recordAudit({
@@ -640,7 +642,7 @@ async function patchBudgetCommercial(params: {
       ivaType: true,
       warranty: true,
       notes: true,
-      client: { select: { name: true, company: true } },
+      client: { select: { name: true, company: true, tradeName: true, legalName: true } },
     },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
@@ -740,7 +742,8 @@ async function patchBudgetCommercial(params: {
     return Response.json({ budget: current, unchanged: true });
   }
 
-  const updated = await withQuoteCommercialEdit(budget.id, organizationId, touchesBudgetClientFields(body), (tx) => tx.budget.update({
+  const updated = await withQuoteCommercialEdit(budget.id, organizationId, touchesBudgetClientFields(body), async (tx) => {
+    const updated = await tx.budget.update({
     where: { id: budget.id },
     data,
     select: {
@@ -756,7 +759,10 @@ async function patchBudgetCommercial(params: {
       warranty: true,
       notes: true,
     },
-  }));
+    });
+    await recalculateBudgetPaymentPlan(tx, budget.id);
+    return updated;
+  });
   await recordAudit({
     context,
     action: "update",

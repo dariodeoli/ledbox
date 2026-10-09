@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Button as SharedButton } from "owncoding-ui";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
@@ -58,10 +59,10 @@ export function AdminButton({ variant = "ghost", icon, iconNode, busy, children,
   if (!children) classes.push("admin-btn--only-icon");
   if (className) classes.push(className);
   return (
-    <button {...rest} className={classes.join(" ")} disabled={disabled || busy} aria-busy={busy || undefined}>
+    <SharedButton {...rest} type={rest.type ?? "submit"} variant={variant === "primary" ? "primary" : "ghost"} className={classes.join(" ")} disabled={disabled || busy} aria-busy={busy || undefined}>
       {busy ? <AdminSpinner label="Guardando" /> : iconNode ? iconNode : icon ? <AdminIcon name={icon} /> : null}
       {children ? <span>{children}</span> : null}
-    </button>
+    </SharedButton>
   );
 }
 
@@ -623,7 +624,7 @@ export function AdminDialog({
     const ownsFocus = active instanceof HTMLElement && Boolean(active.closest(".admin-dialog"));
     if (!ownsFocus) closeRef.current?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !event.defaultPrevented) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

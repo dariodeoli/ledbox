@@ -45,5 +45,5 @@ test("los módulos usan RucField y no arman la máscara a mano", () => {
 test("las reglas de porcentaje y correo siguen delegando en la librería", () => {
   assert.match(rules, /limpiarPercent/, "el porcentaje delega en limpiarPercent");
   assert.match(rules, /export function rucInput/, "el RUC tiene su regla propia sobre limpiarTaxId");
-  assert.match(fields, /import \{ MoneyInput \} from "owncoding-ui"/, "el monto usa el componente de la librería (#99)");
+  assert.match(fields, /MoneyInput,[\s\S]*from "owncoding-ui"/, "el monto usa el componente de la librería (#99)");
 });

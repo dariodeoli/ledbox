@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
+import packageJson from "@/package.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const { database, migrations } = await probe();
-  return NextResponse.json({ status: "ok", service: "ledbox", database, migrations });
+  return NextResponse.json({
+    status: "ok", service: "ledbox", database, migrations,
+    version: packageJson.version,
+    sha: process.env.LEDBOX_BUILD_SHA || null,
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 async function probe(): Promise<{ database: "ok" | "unavailable"; migrations: number | null }> {

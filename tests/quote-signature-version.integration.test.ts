@@ -17,7 +17,7 @@ test("grouped signatures reject stale commercial versions atomically, including 
     const { createSession } = await import("../lib/server/auth");
     const cookie = `ledbox_session=${(await createSession(user, org)).jwt}`;
     async function call(path: string, body: unknown, method = "POST", auth = true) {
-      return fetch(base + path, { method, headers: { "Content-Type": "application/json", ...(auth ? { Cookie: cookie } : {}) }, body: JSON.stringify(body) });
+      return fetch(base + path, { method, headers: { "Content-Type": "application/json", "X-Forwarded-For": `qa-signature-${suffix}`, ...(auth ? { Cookie: cookie } : {}) }, body: JSON.stringify(body) });
     }
     async function fixture(attachment = false) {
       const rows: Array<{ id: string }> = [];
@@ -67,6 +67,7 @@ test("grouped signatures reject stale commercial versions atomically, including 
     // Concurrent HTTP requests: whichever obtains the quote lock first wins.
     // Edits first => stale signature409; signature first => commercial edit409.
     const edits = [
+      { kind: "editor", title: "Edited atomically", items: [{ name: "Service", quantity: 1, days: 1, unitPrice: 2000 }], installmentsJson: [{ label: "Saldo", type: "remainder", moment: "Antes del montaje" }] },
       { kind: "items", items: [{ name: "Service", quantity: 1, days: 1, unitPrice: 2000 }] },
       { kind: "commercial", warranty: "Changed warranty" },
       { paymentTerms: "Changed payment conditions" },

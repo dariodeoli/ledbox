@@ -31,7 +31,7 @@ test("la nota y el label truncan, con el texto completo en el title", () => {
 });
 
 test("mobile: el label ocupa su línea y el KPI usa dos", () => {
-  const mobile = /@media \(max-width: 720px\) \{[\s\S]*?\n\}/.exec(css)?.[0] ?? "";
+  const mobile = [...css.matchAll(/@media \(max-width: 720px\) \{[\s\S]*?\n\}/g)].map((match) => match[0]).join("\n");
   assert.match(mobile, /\.admin-kpi\s*\{\s*flex-wrap:\s*wrap/, "en mobile envuelve");
   assert.match(mobile, /\.admin-kpi-label\s*\{\s*flex-basis:\s*100%/, "el label va arriba");
 });

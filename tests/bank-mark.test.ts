@@ -17,7 +17,7 @@ const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, im
 test("las sugerencias salen del catálogo de la librería", () => {
   assert.ok(bankSuggestions("").length >= 20, "el catálogo del BCP llega completo");
   assert.deepEqual(bankSuggestions("cont"), sugerenciasDeBanco("cont"));
-  assert.ok(bankSuggestions("itau").includes("Banco Itaú Paraguay"));
+  assert.ok(bankSuggestions("itau").includes("Itaú"));
   assert.ok(bankSuggestions("").includes("Bancop"));
 });
 
@@ -37,8 +37,8 @@ test("banco del catálogo: etiqueta canónica y monograma de la librería", () =
 });
 
 test("los alias y el tipeo suelto se resuelven con el registro de la librería", () => {
-  assert.equal(bankMark("itau")?.label, "Banco Itaú Paraguay");
-  assert.equal(bankMark("ITAU")?.label, "Banco Itaú Paraguay");
+  assert.equal(bankMark("itau")?.label, "Itaú");
+  assert.equal(bankMark("ITAU")?.label, "Itaú");
   assert.equal(bankMark("banco continental")?.label, "Banco Continental");
 });
 

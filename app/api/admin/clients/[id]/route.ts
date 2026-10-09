@@ -5,6 +5,7 @@ import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { clientMetrics } from "../metrics";
 import { parseClientFields } from "../client-fields";
+import { clientRucPatch } from "@/lib/server/ruc-confirmation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +56,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         id: true,
         name: true,
         location: true,
+        city: true,
+        department: true,
         startsAt: true,
         endsAt: true,
         status: true,
@@ -117,6 +120,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 /** Campos que se auditan al editar un cliente (sin el binario del logo). */
 const CLIENT_AUDIT_FIELDS = [
+  "tradeName", "legalName", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
   "name",
   "company",
   "type",
@@ -148,12 +152,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const before = await db.client.findFirst({ where: { id, organizationId } });
   if (!before) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
 
-  const parsed = parseClientFields(await readJson(request));
+  const body = await readJson(request);
+  const parsed = parseClientFields(body);
   if (!parsed.ok) return jsonError(parsed.error, 400);
+  if (parsed.data.city !== undefined && parsed.data.city !== before.city && parsed.data.department === undefined) parsed.data.department = null;
+  let fiscal;
+  try {
+    const raw = body as Record<string, unknown>;
+    fiscal = await clientRucPatch(raw.rucConfirmationToken !== undefined ? raw : { ...raw, ...parsed.data }, organizationId, auth.context.user.id, before);
+  } catch (error) { return jsonError(error instanceof Error ? error.message : "Confirmación de RUC inválida.", 400); }
 
   const updated = await db.client.update({
     where: { id: before.id },
-    data: parsed.data,
+    data: { ...parsed.data, ...fiscal },
     include: { logo: { select: { updatedAt: true } } },
   });
   const { logo, ...clientRow } = updated;

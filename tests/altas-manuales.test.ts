@@ -31,21 +31,23 @@ test("inventario: «Precios» y «Foto y web» plegados, SKU en «Más datos» y
 
 test("evento: check es-PY del cliente y «Fin» en Más datos", () => {
   const module = repoFile("components/admin/modules/EventosModule.tsx");
+  const shared = repoFile("components/admin/modules/EventQuickForm.tsx");
   assert.match(
     module,
     /if \(!form\.clientId\.trim\(\)\) \{\n\s+setFormError\("Elegí el cliente del evento\."\);\n\s+return;\n\s+\}/,
     "falta el check es-PY del cliente",
   );
-  assert.match(module, /const EMPTY_EVENT_FORM = \{[^}]*endsAt: ""/, "el fin tiene estado propio");
-  assert.match(module, /label="Fin"[\s\S]{0,200}endsAt: value/, "el fin se edita en Más datos");
-  assert.match(module, /endsAt: form\.endsAt \|\| undefined/, "el fin viaja en el alta completa");
+  assert.match(module, /const EMPTY_EVENT_FORM = \{ \.\.\.EMPTY_EVENT_QUICK/, "el módulo usa el estado compartido");
+  assert.match(repoFile("components/admin/modules/OperationQuickRules.ts"), /endsAt: ""/, "el fin tiene estado propio");
+  assert.match(shared, /label="Fin"[\s\S]{0,200}onChange=/, "el fin se edita en Más datos");
+  assert.match(module, /eventQuickPayload\(form\)/, "el fin viaja en el alta completa");
 });
 
 test("cliente: el nombre se valida en el front con el mensaje del kit", () => {
   const quick = repoFile("components/admin/modules/ClientQuickForm.tsx");
-  assert.match(quick, /name: values\.name\.trim\(\) && !personNameValid\(values\.name\) \? FIELD_MESSAGES\.name : null/);
+  assert.match(quick, /name: values\.name\.length > 200/, "el nombre histórico valida como texto comercial sin truncar");
   assert.match(quick, /error=\{errors\?\.name \?\? null\}/, "el campo muestra el aviso");
-  assert.match(quick, /if \(!values\.name\.trim\(\)\) \{\n\s+setError\(FIELD_MESSAGES\.name\);/, "el diálogo usa el mensaje del kit");
+  assert.match(quick, /if \(!values\.name\.trim\(\) && !values\.tradeName\.trim\(\)\) \{\n\s+setError\(FIELD_MESSAGES\.name\);/, "el diálogo acepta solo nombre comercial");
   assert.equal(quick.includes('"Ingresá el nombre del cliente."'), false, "sin mensaje propio paralelo");
 });
 

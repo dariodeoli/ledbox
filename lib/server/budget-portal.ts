@@ -37,6 +37,7 @@ const CODE_LENGTH = 20;
 export type PortalBudgetApprovalState = "PENDIENTE" | "APROBADO_DIGITAL" | "APROBADO_MANUAL" | "CAMBIOS_SOLICITADOS";
 
 export type PortalBudgetItem = {
+  usesDays?: boolean;
   id: string;
   name: string;
   quantity: number;
@@ -54,7 +55,7 @@ export type PortalBudgetItem = {
 };
 
 /** Cuota del plan de pagos (forma documentada; `dueAt` es `YYYY-MM-DD`). */
-export type PortalBudgetInstallment = { label: string; amount: number; dueAt: string | null };
+export type PortalBudgetInstallment = import("../budget-payment-plan").BudgetPaymentCondition;
 
 export type PortalBudgetPaymentPlan = {
   /** Anticipo a transferir con la aprobación (0 = no hay anticipo separado). */
@@ -201,7 +202,7 @@ export type PortalBudget = {
    * (issue #36) son el responsable cargado en la empresa: el portal los usa
    * para prellenar quién autoriza; nunca viaja nada más de la ficha.
    */
-  client: { name: string; company: string | null; contactName: string | null; contactRole: string | null };
+  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: string | null } | null;
   items: PortalBudgetItem[];
   subtotal: number;
@@ -339,7 +340,7 @@ type BudgetForPortal = {
   revisionRequestedAt: Date | null;
   revisionNote: string | null;
   organization: { name: string; slug: string; paymentDetails: unknown };
-  client: { name: string; company: string | null; contactName: string | null; contactRole: string | null };
+  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
@@ -419,12 +420,16 @@ export function parseInstallments(value: unknown): PortalBudgetInstallment[] {
   return value.flatMap((row) => {
     if (!isRecord(row)) return [];
     const amount = asAmount(row.amount);
-    if (amount === null || amount <= 0) return [];
+    if (amount === null || (amount <= 0 && row.type !== "percent" && row.type !== "remainder")) return [];
     return [
       {
         label: asText(row.label, 60) || "Cuota",
         amount,
         dueAt: asText(row.dueAt, 10),
+        moment: asText(row.moment, 120),
+        type: row.type === "percent" || row.type === "remainder" || row.type === "fixed" ? row.type : undefined,
+        value: typeof row.value === "number" ? row.value : undefined,
+        accountId: asText(row.accountId, 160),
       },
     ];
   });
@@ -585,11 +590,12 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     ivaType: budget.ivaType,
     warranty: budget.warranty,
     notes: budget.notes,
-    client: { name: budget.client.name, company: budget.client.company, contactName: budget.client.contactName, contactRole: budget.client.contactRole },
+    client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole },
     event: budget.event
       ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
       : null,
     items: budget.items.map((item) => ({
+      usesDays: Boolean(item.inventory) || item.days > 1,
       id: item.id,
       name: item.name,
       quantity: item.quantity,
@@ -653,7 +659,7 @@ export const portalInclude = {
   attachments: { where: { clientVisible: true, mime: "application/pdf" }, select: { id: true, organizationId: true, name: true, mime: true, size: true, clientVisible: true } },
   referenceLinks: { where: { clientVisible: true }, select: { organizationId: true, label: true, url: true, clientVisible: true } },
   organization: { select: { name: true, slug: true, paymentDetails: true } },
-  client: { select: { name: true, company: true, contactName: true, contactRole: true } },
+  client: true,
   event: { select: { name: true, location: true, startsAt: true } },
   // La imagen del producto vinculado viaja con el ítem (issue #107): solo la
   // URL, nunca costos ni stock del inventario.

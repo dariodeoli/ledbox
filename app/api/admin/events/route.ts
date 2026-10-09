@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { EventStatus } from "@prisma/client";
 import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -7,11 +6,12 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
 import { dayStart, isValidDayKey, nextDayKey } from "@/lib/server/notifications";
+import { eventDateViolation, parseEventFields } from "./event-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const EVENT_AUDIT_FIELDS = ["name", "location", "city", "startsAt", "endsAt", "setupAt", "status"] as const;
+const EVENT_AUDIT_FIELDS = ["name", "location", "city", "department", "address", "addressReference", "locationUrl", "venueContactName", "venueContactPhone", "venueContactEmail", "responsibleName", "responsiblePhone", "responsibleEmail", "modality", "attendees", "notes", "startsAt", "endsAt", "setupAt", "strikeAt", "status"] as const;
 
 /**
  * Rango por fecha de inicio para el selector (`from`/`to` en `YYYY-MM-DD`, día
@@ -55,7 +55,10 @@ export async function GET(request: Request) {
         startsAt: true,
         status: true,
         clientId: true,
-        client: { select: { id: true, name: true, company: true } },
+        location: true,
+        city: true,
+        department: true,
+        client: { select: { id: true, name: true, company: true, tradeName: true, legalName: true } },
       },
     });
     return Response.json({ events });
@@ -73,7 +76,11 @@ export async function POST(request: Request) {
   const auth = await requireAdminContext("events.write");
   if (!auth.ok) return auth.response;
   const body = await readJson(request) as Record<string, unknown>;
-  if (typeof body.clientId !== "string" || typeof body.name !== "string") return jsonError("Client and event name are required.", 400);
+  const parsed = parseEventFields(body);
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  if (typeof body.clientId !== "string" || !body.clientId.trim() || !parsed.data.name) return jsonError("Ingresá el cliente y el nombre del evento.", 400);
+  const invalidDates = eventDateViolation(parsed.data);
+  if (invalidDates) return jsonError(invalidDates, 400);
   const client = await db.client.findFirst({
     where: { id: body.clientId, organizationId: auth.context.organizationId },
     select: { id: true, name: true },
@@ -88,13 +95,8 @@ export async function POST(request: Request) {
       id: randomUUID(),
       organizationId: auth.context.organizationId,
       clientId: client.id,
-      name: body.name.trim(),
-      location: typeof body.location === "string" ? body.location.trim() : undefined,
-      // Ciudad (issue #48): dato aparte del lugar; vacío se guarda como nulo.
-      city: typeof body.city === "string" ? body.city.trim() || null : undefined,
-      startsAt: typeof body.startsAt === "string" ? new Date(body.startsAt) : undefined,
-      endsAt: typeof body.endsAt === "string" ? new Date(body.endsAt) : undefined,
-      setupAt: typeof body.setupAt === "string" ? new Date(body.setupAt) : undefined,
+      ...parsed.data,
+      name: parsed.data.name,
       status: "DRAFT",
       tasks: {
         create: [
@@ -124,29 +126,32 @@ export async function PATCH(request: Request) {
   const body = (await readJson(request)) as Record<string, unknown>;
   const id = typeof body.id === "string" ? body.id.trim() : "";
   if (!id) return jsonError("Event id is required.", 400);
-  const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
-  if (!Object.values(EventStatus).includes(status as EventStatus)) return jsonError("Invalid event status.", 400);
+  const parsed = parseEventFields(body);
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  if (!Object.keys(parsed.data).length) return jsonError("Ingresá los cambios del evento.", 400);
 
   const event = await db.event.findFirst({
     where: { id, organizationId: auth.context.organizationId },
-    select: { id: true, name: true, status: true, client: { select: { name: true } } },
   });
   if (!event) return jsonError("Event not found.", 404);
-  if (event.status === status) return Response.json({ event, unchanged: true });
+  if (parsed.data.city !== undefined && parsed.data.city !== event.city && parsed.data.department === undefined) parsed.data.department = null;
+  const proposed = { ...event, ...parsed.data };
+  const invalidDates = eventDateViolation(proposed);
+  if (invalidDates) return jsonError(invalidDates, 400);
+  const changes = auditChanges(event, proposed, EVENT_AUDIT_FIELDS);
+  if (!changes) return Response.json({ event, unchanged: true });
 
   const updated = await db.event.update({
     where: { id: event.id },
-    data: { status: status as EventStatus },
-    select: { id: true, name: true, status: true, startsAt: true, endsAt: true },
+    data: parsed.data,
   });
-  const changes = auditChanges({ status: event.status }, { status: updated.status }, ["status"]);
   if (changes) {
     await recordAudit({
       context: auth.context,
-      action: "status",
+      action: "status" in changes && Object.keys(changes).length === 1 ? "status" : "update",
       entity: "Event",
       entityId: event.id,
-      summary: `Cambió el estado del evento «${event.name}» a ${eventStatusLabel(updated.status)}`,
+      summary: "status" in changes && Object.keys(changes).length === 1 ? `Cambió el estado del evento «${event.name}» a ${eventStatusLabel(updated.status)}` : `Editó el evento «${updated.name}»`,
       detail: { changes },
     });
   }

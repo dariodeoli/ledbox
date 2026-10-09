@@ -38,30 +38,33 @@ test("Clientes usa el alta mínima compartida y pliega el resto", () => {
 
 test("el formulario mínimo compartido no duplica campos y usa el endpoint existente", () => {
   const quick = repoFile("components/admin/modules/ClientQuickForm.tsx");
-  assert.match(quick, /label="Nombre"[\s\S]{0,200}autoFocus=\{autoFocus\}/, "Nombre con foco automático");
+  assert.match(quick, /label="Nombre fantasía \/ comercial"[\s\S]{0,200}autoFocus=\{autoFocus\}/, "Nombre comercial con foco automático");
   assert.match(quick, /<PhoneField/, "teléfono visible en el alta mínima");
   assert.match(quick, /<EmailField/, "correo visible en el alta mínima");
   assert.match(quick, /<AdminDisclosure title="Más datos"/, "el resto vive en «Más datos»");
-  for (const label of ["Empresa", "Tipo", "RUC / CI", "Nombre del encargado", "Cargo", "Sitio web", "Instagram", "WhatsApp"]) {
+  for (const label of ["Empresa", "Tipo", "Nombre del encargado", "Cargo", "Sitio web", "Instagram", "WhatsApp"]) {
     assert.ok(quick.includes(`label="${label}"`), `falta «${label}» dentro de Más datos`);
   }
+  assert.match(repoFile("components/admin/modules/ClientFiscalFields.tsx"), /label="RUC \/ CI"/);
   assert.match(quick, /adminSend<\{ client\?: AdminClientOption \}>\("\/api\/admin\/clients"/, "el alta usa el endpoint existente");
   assert.match(quick, /export function ClientQuickDialog/, "falta el diálogo para el evento");
 });
 
 test("Eventos deja lo mínimo a la vista y crea clientes desde el selector", () => {
   const module = repoFile("components/admin/modules/EventosModule.tsx");
+  const shared = repoFile("components/admin/modules/EventQuickForm.tsx");
   // Orden mínimo: Nombre (foco), Cliente con «+ Nuevo cliente» e Inicio.
-  assert.match(module, /label="Nombre del evento"[\s\S]{0,120}autoFocus/, "el Nombre del evento va con foco");
+  assert.match(module, /<EventQuickFields[\s\S]{0,200}autoFocus/, "el formulario único lleva foco al nombre");
+  assert.match(shared, /label="Nombre del evento"[\s\S]{0,120}autoFocus/, "el Nombre del evento va con foco");
   assert.match(module, /<Combobox[\s\S]{0,600}label="Cliente"/, "el selector de cliente es el combobox del kit");
   assert.match(module, /className="admin-field-action"/, "el botón tiene que ir junto al selector");
   assert.match(module, /Nuevo cliente\n/, "falta el botón «+ Nuevo cliente»");
   assert.match(module, /setNewClientName\(name\)/, "el combobox ofrece crear con el texto tipeado");
   assert.match(module, /<ClientQuickDialog/, "falta el diálogo de alta rápida");
-  assert.match(module, /<AdminDisclosure title="Más datos" hint="lugar, ciudad y fin">/, "lugar, ciudad y fin van plegados");
+  assert.match(shared, /<AdminDisclosure title="Más datos"/, "los datos operativos van plegados");
   // El fin se sumó al alta completa en #131 (el quick de presupuestos ya lo mandaba).
-  assert.match(module, /label="Fin"[\s\S]{0,200}onChange=\{\(value\) => setForm\(\{ \.\.\.form, endsAt: value \}\)\}/, "falta el «Fin» en Más datos");
-  assert.match(module, /endsAt: form\.endsAt \|\| undefined/, "el fin tiene que viajar en el alta");
+  assert.match(shared, /label="Fin"[\s\S]{0,200}onChange=/, "falta el «Fin» en Más datos");
+  assert.match(module, /eventQuickPayload\(form\)/, "el fin viaja en el payload único");
   assert.match(module, /Elegí el cliente del evento\./, "el check del cliente va en es-PY");
   // Al crear, el cliente queda elegido y el catálogo se refresca.
   assert.match(module, /function selectCreatedClient[\s\S]{0,300}clientId: client\.id[\s\S]{0,200}clients\.reload\(\)/, "el cliente creado tiene que quedar elegido");
@@ -74,16 +77,18 @@ test("Eventos deja lo mínimo a la vista y crea clientes desde el selector", () 
  */
 test("el alta de presupuesto pliega el costo interno y el API rechaza sin ítems (issue #132)", () => {
   const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
-  const formSection = module.match(/title="Nuevo presupuesto"[\s\S]*?<\/AdminFormPanel>/)?.[0] ?? "";
+  const formSection = module.match(/<form className="admin-form-panel"[\s\S]*?<\/form>/)?.[0] ?? "";
   assert.ok(formSection, "el alta de presupuesto existe");
-  const priceIndex = formSection.indexOf('label="Precio unitario"');
-  const disclosureIndex = formSection.indexOf('title="Más datos"');
-  const costIndex = formSection.indexOf('label="Costo unitario"');
+  assert.match(formSection, /<BudgetItemsEditor/, "creación consume el editor compartido");
+  const editor = repoFile("components/admin/modules/BudgetItemsEditor.tsx");
+  const priceIndex = editor.indexOf('label="Precio unitario"');
+  const disclosureIndex = editor.indexOf('title="Detalles"');
+  const costIndex = editor.indexOf('label="Costo unitario (interno)"');
   assert.ok(priceIndex > 0, "el precio unitario queda a la vista");
   assert.ok(disclosureIndex > priceIndex && costIndex > disclosureIndex, "el costo interno va plegado después del precio");
   assert.match(
-    formSection,
-    /<AdminDisclosure title="Más datos" hint="costo interno">[\s\S]*?label="Costo unitario"[\s\S]*?<\/AdminDisclosure>/,
+    editor,
+    /<AdminDisclosure title="Detalles"[\s\S]*?label="Costo unitario \(interno\)"[\s\S]*?<\/AdminDisclosure>/,
     "el costo unitario vive dentro de «Más datos»",
   );
 
