@@ -25,6 +25,15 @@ test("FIN-PRINT-01 actual HTTP/PG/A4: decimal BPS line/global at 390/1280 withou
     const page = await browser.newPage();
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(String(error)));
+    // Compiled production routing needs the panel host while every request stays local.
+    await page.setExtraHTTPHeaders({ "x-forwarded-host": "app.ledbox.online" });
+    const denied: string[] = [];
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (["data:", "blob:", "about:"].includes(url.protocol) || url.origin === base) void request.continue();
+      else { denied.push(url.origin); void request.abort(); }
+    });
     await page.setCookie({ name: "ledbox_session", value: (await createSession(owner, org)).jwt, url: base!, httpOnly: true });
     // Independent fixture arithmetic: quotient/remainder half-up, no commercial helper/formatter oracle.
     const percent = (amount: number, bps: number) => {
@@ -80,6 +89,7 @@ test("FIN-PRINT-01 actual HTTP/PG/A4: decimal BPS line/global at 390/1280 withou
       }
     }
     assert.deepEqual(errors, []);
+    assert.deepEqual(denied, [], "no production or external-provider requests");
     writeFileSync(`${output}/results.json`, JSON.stringify({ sha: process.env.QUOTE_CANDIDATE_SHA, cases: results, browserErrors: errors }, null, 2));
   } finally {
     await browser.close();
