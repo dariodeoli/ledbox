@@ -89,8 +89,15 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.match(original.htmlText, /Frozen fantasy original/); assert.match(original.htmlText, /Frozen legal original/);
     assert.doesNotMatch(original.htmlText, /Not fiscal historical/);
     for (const text of ["Al confirmar", "Antes del montaje", "Después", "270.000", "200.000", "430.000"]) assert.ok(original.htmlText.includes(text), text);
-    const { formatDate } = await import("../lib/admin-format");
-    for (const row of conditions()) assert.ok(original.htmlText.includes(formatDate(row.dueAt)), row.dueAt);
+    const { formatDayKey } = await import("../lib/admin-format");
+    // dueAt is a calendar key, not a UTC instant. Keep an independent UTC/noon
+    // oracle so a formatter regression cannot be copied into the expectation.
+    const calendarOracle = (day: string) => new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
+    for (const row of conditions()) {
+      assert.equal(formatDayKey(row.dueAt).replace(/\./g, ""), calendarOracle(row.dueAt).replace(/\./g, ""), row.dueAt);
+      assert.ok(original.htmlText.includes(formatDayKey(row.dueAt)), row.dueAt);
+      if (original.pdfText) assert.ok(original.pdfText.includes(calendarOracle(row.dueAt).replace(/\s+/g, "")), row.dueAt);
+    }
     const signedPlanEdit = await call("/api/admin/budgets", "PATCH", { budgetId: q.id, installmentsJson: conditions(40) }, true);
     assert.equal(signedPlanEdit.status, 409, "API preserves signed commercial conditions; direct historical edit below still cannot change snapshot");
     const changed = await call(`/api/admin/clients/${client.id}`, "PATCH", { name: "Changed contact", company: "Changed historical company", tradeName: "Changed fantasy", legalName: "Changed legal" }, true);
