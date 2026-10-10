@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
 import { PORTAL_BOOT_SCRIPT, PORTAL_ROOT_ID } from "@/lib/portal-theme";
@@ -38,7 +37,6 @@ export default function PortalLayout({ children }: Readonly<{ children: React.Re
 
       <main className="portal-main">{children}</main>
 
-      <AppFooter variant="portal" />
     </div>
   );
 }

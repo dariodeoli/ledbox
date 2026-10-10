@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { StructuredData } from "@/components/public/StructuredData";
 import { SITE_BOOT_SCRIPT, SITE_ROOT_ID } from "@/lib/site-theme";
 import { siteGraph } from "@/lib/structured-data";
+import { PublicCartProvider } from "@/components/cart/PublicCartProvider";
 
 /**
  * Layout del sitio público (issue #38): emite una sola vez por página el grafo
@@ -18,7 +19,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     <div className="site" id={SITE_ROOT_ID} data-theme="dark" suppressHydrationWarning>
       <script dangerouslySetInnerHTML={{ __html: SITE_BOOT_SCRIPT }} />
       <StructuredData graph={siteGraph()} />
-      {children}
+      <PublicCartProvider>{children}</PublicCartProvider>
     </div>
   );
 }

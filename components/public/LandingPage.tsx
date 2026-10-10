@@ -1,14 +1,15 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { CartDrawer, type CartItem } from "@/components/cart/CartDrawer";
+import { CartDrawer } from "@/components/cart/CartDrawer";
+import { usePublicCart } from "@/components/cart/PublicCartProvider";
+import { addCartProduct } from "@/lib/public-cart";
 import { LeadCaptureDialog } from "@/components/leads/LeadCaptureDialog";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { type Product } from "@/lib/catalog";
 import { type Brand } from "@/lib/brand-logos";
 import { InstagramIcon } from "@/components/public/InstagramIcon";
 import { PublicFaq } from "@/components/public/PublicFaq";
-import { PublicFooter } from "@/components/public/PublicFooter";
 import { PublicNav } from "@/components/public/PublicNav";
 import { PublicWhatsappFloat } from "@/components/public/PublicWhatsappFloat";
 import { StructuredData } from "@/components/public/StructuredData";
@@ -32,7 +33,7 @@ const steps = [["01", "Contanos tu idea", "Fecha, lugar, objetivo y todo lo que 
 const reasons = [["◈", "Equipos propios", "Disponibilidad y control sobre cada equipo que alquilás."], ["⌁", "Soporte incluido", "Instalación, operación y asistencia técnica en el evento."], ["✦", "Experiencia real", "Más de 10 años creando experiencias para marcas."], ["↗", "Todo Paraguay", "Llegamos donde tu evento necesita impacto visual."]];
 
 export function LandingPage({ brands }: { brands: Brand[] }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const { cart, setCart } = usePublicCart();
   const [leadOpen, setLeadOpen] = useState(false);
   const [stickyClosed, setStickyClosed] = useState(false);
   const [stickyVisible, setStickyVisible] = useState(false);
@@ -49,7 +50,7 @@ export function LandingPage({ brands }: { brands: Brand[] }) {
     document.body.classList.toggle("has-sticky", stickyVisible && !stickyClosed);
     return () => document.body.classList.remove("has-sticky");
   }, [stickyClosed, stickyVisible]);
-  const addProduct = (product: Product) => { setCart(current => { const existing = current.find(item => item.product.id === product.id); return existing ? current.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { product, quantity: 1, duration: 1 }]; }); setLeadOpen(true); };
+  const addProduct = (product: Product) => { setCart(current => addCartProduct(current, product)); setLeadOpen(true); };
   const openLead = () => setLeadOpen(true);
   // Datos estructurados de la landing (issue #38): el catálogo enlaza cada
   // producto con su URL propia y el FAQPage acompaña la sección visible.
@@ -91,7 +92,6 @@ export function LandingPage({ brands }: { brands: Brand[] }) {
       <section id="contacto" aria-labelledby="contact-title"><div className="c-left"><div><div className="sec-kicker">Hablemos</div><h2 id="contact-title" className="c-title rise">Tu evento.<br /><span className="led">En grande.</span></h2><p className="c-desc">Contanos qué estás preparando y armamos una propuesta a la medida de tu evento.</p></div><div className="c-meta"><a href={whatsapp("Hola LedBox! Quiero consultar disponibilidad.")} target="_blank" rel="noopener noreferrer"><b>WhatsApp:</b> +595 982 029 217 →</a><a href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer"><b>Instagram:</b> @ledboxpy</a><span><b>Santiago J. Rodas</b> · Gerente</span><span>Asunción · Alquileres en todo Paraguay 🇵🇾</span></div></div><div className="c-right rise"><p className="chips-title">Consultas rápidas — un toque y te ayudamos</p><div className="chips"><button className="chip" type="button" onClick={openLead}>▣ Pantalla LED →</button><button className="chip" type="button" onClick={openLead}>◫ Tótem / Kiosko Touch →</button><button className="chip" type="button" onClick={openLead}>⌂ Stand para evento →</button><button className="chip" type="button" onClick={openLead}>🎥 Cobertura digital →</button></div><button className="btn-led" type="button" onClick={openLead}>Solicitar cotización →</button><p className="f-note contact-note">Te pedimos solo los datos necesarios para responderte y preparar tu cotización.</p></div></section>
     </main>
 
-    <PublicFooter />
     <CartDrawer items={cart} onChange={setCart} onQuote={openLead} />
     <PublicWhatsappFloat />
     {!stickyClosed && <div id="sticky-cta" className={stickyVisible ? "show" : ""} role="complementary" aria-label="Consultar disponibilidad" aria-hidden={!stickyVisible} inert={!stickyVisible}><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}

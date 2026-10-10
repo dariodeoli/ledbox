@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
+import { AdminAvatar } from "@/components/admin/AdminAvatar";
+import { clientLogoUrl } from "@/lib/admin-types";
 import { notFound, redirect } from "next/navigation";
 import {
   budgetApprovalMethodLabel,
@@ -57,7 +59,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const budget = await db.budget.findFirst({
     where: { id, organizationId: auth.context.organizationId },
     include: {
-      client: true,
+      client: { include: { logo: { select: { updatedAt: true } } } },
       event: true,
       items: { orderBy: { name: "asc" }, include: { inventory: { select: { id: true, imageUrl: true, imageMime: true, updatedAt: true } } } },
       // Solo los cobros cobrados (issue #16): un cobro a plazo pendiente no es
@@ -99,9 +101,8 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
           logo={logo}
         />
 
-        <PrintSection title="Cliente">
+        <PrintSection title="Cliente" action={<span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logo ? clientLogoUrl(budget.client.id, budget.client.logo.updatedAt) : null} className="admin-avatar--logo" size={32} /><span>{clientDisplayName(budget.client)}</span></span>}>
           <div className="lbprint-grid">
-            <PrintField label="Cliente" value={clientDisplayName(budget.client)} />
             <PrintField label="Razón social" value={clientLegalName(budget.client) || "—"} />
             <PrintField label="Contacto" value={budget.client.contactName || "—"} />
             <PrintField label="RUC" value={budget.client.ruc || "—"} />

@@ -1,5 +1,7 @@
 "use client";
 import { clientDisplayName } from "@/lib/client-identity";
+import { budgetCollectionStep } from "@/lib/budget-collection-step";
+import { AdminAvatar } from "@/components/admin/AdminAvatar";
 import { resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 
 import { PortalQuoteResources } from "./PortalQuoteResources";
@@ -486,25 +488,23 @@ export function PortalBudgetView({
     (expected) => expected.status === "AWAITING" || expected.status === "PROOF" || expected.status === "PARTIAL",
   );
   /** Concepto que corresponde transferir ahora: el primero sin nada cobrado; si no, una seña con saldo. */
-  const dueNowExpected =
-    openExpected.find((expected) => expected.status === "AWAITING") ??
-    openExpected.find((expected) => expected.status === "PARTIAL") ??
-    null;
+  const collectionStep = budgetCollectionStep({ total: budget.total, collected: budget.collectedAmount ?? 0, advanceAmount: budget.paymentPlan.advanceAmount, expectedPayments: budget.expectedPayments });
+  const dueNowExpected = collectionStep.concept;
   const persistedPaymentPlan = budget.paymentPlan;
   /**
    * Qué se transfiere ahora: con pagos esperados manda el primer concepto abierto
    * (el que el plan muestra como «a transferir ahora»); sin ellos, lo dice el plan.
    * Si ya no queda nada abierto, no hay monto a transferir.
    */
-  const transferNow = budget.expectedPayments.length > 0
+  const transferNow = collectionStep.kind !== "payment" ? null : budget.expectedPayments.length > 0
     ? dueNowExpected
       ? {
           label: dueNowExpected.label,
           // De una seña se transfiere el saldo, no el total del concepto (#129).
-          amount: dueNowExpected.status === "PARTIAL" ? dueNowExpected.remaining : dueNowExpected.amount,
+          amount: collectionStep.amount,
         }
       : null
-    : persistedPaymentPlan.dueNow;
+    : { label: collectionStep.label.replace(/^Cobrar /, ""), amount: collectionStep.amount };
 
   // El concepto elegido sigue a los pagos abiertos: si hay uno solo, se
   // preselecciona; cuando se confirma o desaparece, la selección se limpia.
@@ -617,6 +617,7 @@ export function PortalBudgetView({
     });
   }
   if (approved) {
+    if (collectionStep.kind === "complete") pendingItems.push({ id: "collected", icon: "check", tone: "ok", title: collectionStep.label, detail: "No hay saldo pendiente de transferencia." });
     const inReview = budget.expectedPayments.filter((expected) => expected.status === "PROOF");
     if (transferNow) {
       pendingItems.push({
@@ -641,7 +642,7 @@ export function PortalBudgetView({
         detail: "El equipo de LedBox confirma el cobro; no hace falta hacer nada más.",
       });
     }
-    if (budget.proofUpload.allowed && openExpected.length > 0) {
+    if (collectionStep.kind === "payment" && budget.proofUpload.allowed && openExpected.length > 0) {
       pendingItems.push({
         id: "proof",
         icon: "upload",
@@ -991,7 +992,7 @@ export function PortalBudgetView({
           {approved ? "Plan de pagos" : "Plan de pagos propuesto"}
         </PortalCardTitle>
         <p className="portal-card-lead">
-          {itemsChanged ? "Vista previa provisional de tu selección. No está aceptada: la oferta y los cobros registrados no cambian hasta que el equipo resuelva la solicitud." : budget.expectedPayments.length > 0
+          {itemsChanged ? "Vista previa provisional de tu selección. No está aceptada: la oferta y los cobros registrados no cambian hasta que el equipo resuelva la solicitud." : approved && collectionStep.kind === "complete" ? "El total ya está cobrado. Estos son los conceptos registrados del plan; no representan una nueva solicitud de transferencia." : budget.expectedPayments.length > 0
             ? "Cada concepto del plan con su estado real; el equipo confirma el cobro cuando llega la transferencia."
             : "Cada cuota con su vencimiento; los datos para transferir se muestran cuando el presupuesto esté autorizado."}
         </p>
@@ -1114,7 +1115,7 @@ export function PortalBudgetView({
         <p className="portal-empty">{itemsChanged ? "Pago único provisional" : "El presupuesto se paga en un solo pago"}: {formatMoney(actionTotal)}.</p>
       )}
 
-      {!provisionalPlanError && paymentPlan.pending > 0 ? (
+      {!provisionalPlanError && paymentPlan.pending > 0 && (!approved || collectionStep.kind !== "complete") ? (
         <p className="portal-help">
           Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
         </p>
@@ -1143,8 +1144,12 @@ export function PortalBudgetView({
           </div>
           <span className="portal-pay-total portal-num">Total del presupuesto: {formatMoney(budget.total)}</span>
         </div>
+      ) : collectionStep.kind === "complete" ? (
+        <p className="portal-help">El cobro registrado cubre el total de este presupuesto: no queda saldo por transferir.</p>
+      ) : collectionStep.kind === "review" ? (
+        <p className="portal-help">Tu comprobante está en revisión; todavía no es un cobro confirmado. Esperá la respuesta del equipo.</p>
       ) : budget.expectedPayments.length > 0 ? (
-        <p className="portal-help">Ya confirmamos todos los pagos de este presupuesto: no queda nada por transferir.</p>
+        <p className="portal-help">No hay conceptos abiertos para transferir. Consultá al equipo por el saldo registrado.</p>
       ) : null}
 
       {budget.paymentDetails ? (
@@ -1185,6 +1190,8 @@ export function PortalBudgetView({
           <p className="portal-help" aria-live="polite">
             {copied
               ? "Los datos quedaron en el portapapeles para pegarlos donde los necesites."
+              : collectionStep.kind === "complete" ? "Estos datos quedan como referencia; el presupuesto no tiene saldo por transferir."
+              : collectionStep.kind === "review" ? "El equipo revisa tu comprobante; no se te pide otra transferencia."
               : "Transferí el monto indicado y enviá el comprobante al equipo de LedBox."}
           </p>
         </div>
@@ -1197,7 +1204,7 @@ export function PortalBudgetView({
     </section>
   ) : null;
 
-  const proofCard = budget.proofUpload.allowed ? (
+  const proofCard = collectionStep.kind !== "complete" && budget.proofUpload.allowed ? (
     <section className="portal-card portal-print-hide" aria-labelledby="portal-proof" ref={proofRef} tabIndex={-1}>
       <div className="portal-card-head">
         <PortalCardTitle id="portal-proof" icon="upload">
@@ -1313,6 +1320,7 @@ export function PortalBudgetView({
             ) : null}
           </div>
         </div>
+        <p className="admin-identity"><AdminAvatar name={clientLabel} src={budget.client.logoUrl} className="admin-avatar--logo" size={32} /><span>{clientLabel}</span></p>
         {headFacts}
       </header>
 
@@ -1902,7 +1910,7 @@ export function PortalBudgetView({
             <PortalCardTitle id="portal-summary" icon="overview">
               Resumen
             </PortalCardTitle>
-            <p className="portal-summary-client">{clientLabel}</p>
+            <p className="portal-summary-client admin-identity"><AdminAvatar name={clientLabel} src={budget.client.logoUrl} className="admin-avatar--logo" size={28} /><span>{clientLabel}</span></p>
             <div className="portal-budget-chips">
               <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
                 {budgetApprovalLabel(approvalState)}

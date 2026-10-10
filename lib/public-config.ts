@@ -42,6 +42,7 @@ export function siteProfileForHost(hostname?: string): SiteProfile {
   if (host === "eventos.ledbox.online" || host.endsWith(".eventos.com.py")) return EVENTOS_PROFILE;
   if (host === "app.ledbox.online") return APP_PROFILE;
   if (host === "admin.ledbox.online") return { ...APP_PROFILE, kind: "admin", siteUrl: "https://admin.ledbox.online" };
+  if (host === "clientes.ledbox.online" || host === "demo.ledbox.online") return { ...APP_PROFILE, siteUrl: `https://${host}`, indexable: false };
   return LEDBOX_PROFILE;
 }
 

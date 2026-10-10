@@ -1,5 +1,8 @@
 "use client";
 import { BudgetComparisons } from "./BudgetComparisons";
+import { budgetCollectionStep } from "@/lib/budget-collection-step";
+import { AdminAvatar } from "../AdminAvatar";
+import { clientLogoUrl } from "@/lib/admin-types";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -273,7 +276,10 @@ function budgetNextStep(budget: AdminBudgetRow): { label: string; hint: string }
     return { label: "Esperar respuesta", hint: "Enviado y pendiente del cliente" };
   }
   if (budget.status === "NEGOTIATING") return { label: "Acordar condiciones", hint: "Hay una negociación abierta" };
-  if (budget.status === "APPROVED") return { label: "Cobrar anticipo", hint: "Aprobado: sigue el plan de pagos" };
+  if (budget.status === "APPROVED") {
+    const step = budgetCollectionStep({ ...budget, collected: collectedAmount(budget.payments) });
+    return { label: step.label, hint: step.kind === "complete" ? "Sin saldo por cobrar" : step.kind === "review" ? "El comprobante todavía no es un cobro confirmado" : `Pendiente ${formatMoney(step.amount)} según saldo y plan de pagos` };
+  }
   if (budget.status === "LOST") return { label: "Reactivar o cerrar", hint: "Perdido: definir si se reintenta" };
   return { label: "Archivado", hint: "Cancelado: sin acción pendiente" };
 }
@@ -979,6 +985,7 @@ export function PresupuestosModule() {
             { label: next.label, tone: "neutral", title: next.hint },
           ],
           fields: [
+            { label: "Cliente", value: <span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={28} /><span>{clientDisplayName(budget.client)}</span></span> },
             { label: "Total", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
             {
               label: "Vence",
@@ -1708,7 +1715,7 @@ export function PresupuestosModule() {
                     <strong className="admin-quote-title">{budget.title}</strong>
                     {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
                   </AdminCell>
-                  <AdminCell title={clientDisplayName(budget.client)}>{clientDisplayName(budget.client)}</AdminCell>
+                  <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
                   <AdminCell end title={formatMoney(budget.total)}>
                     {formatMoney(budget.total)}
                   </AdminCell>

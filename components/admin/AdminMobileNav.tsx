@@ -24,7 +24,7 @@ const MOBILE_NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: Admin
  * marcado con `aria-current` y el padding del layout corre el contenido y el
  * footer para que la barra no tape nada. En escritorio no se dibuja.
  */
-export function AdminMobileNav({ menuOpen, onOpenMenu }: { menuOpen: boolean; onOpenMenu: () => void }) {
+export function AdminMobileNav({ menuOpen, onOpenMenu }: { menuOpen: boolean; onOpenMenu: (opener: HTMLButtonElement) => void }) {
   const pathname = usePathname();
 
   return (
@@ -49,7 +49,7 @@ export function AdminMobileNav({ menuOpen, onOpenMenu }: { menuOpen: boolean; on
       <button
         type="button"
         className="admin-bottomnav-item admin-bottomnav-more"
-        onClick={onOpenMenu}
+        onClick={(event) => onOpenMenu(event.currentTarget)}
         aria-label="Más módulos"
         aria-controls="admin-sidebar"
         aria-expanded={menuOpen}

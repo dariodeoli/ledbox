@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { AdminThemeToggle } from "./admin-theme";
 
@@ -24,7 +23,6 @@ export function AdminFrame({ children, eyebrow = "LedBox · Panel privado" }: { 
         <p className="admin-kicker">{eyebrow}</p>
         {children}
       </div>
-      <AppFooter variant="app" className="app-footer--access" />
     </main>
   );
 }

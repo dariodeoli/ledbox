@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
-import { siteProfileForHost } from "@/lib/public-config";
+import { publicConfig, siteProfileForHost } from "@/lib/public-config";
+import { isAdminRoute } from "@/lib/admin-routes";
+import { AppFooter } from "@/components/app-footer";
+import { PublicFooter } from "@/components/public/PublicFooter";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -39,4 +42,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#050606" };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="es"><body>{children}</body></html>; }
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const requestHeaders = await headers();
+  const host = (requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "").split(",")[0].trim().split(":")[0];
+  const pathname = (requestHeaders.get("x-pathname") || "/").split("?")[0];
+  const profile = siteProfileForHost(host);
+  const portal = host === new URL(publicConfig.clientUrl).hostname || /^\/(p|firma|comparar)\//.test(pathname) || pathname === "/portal";
+  const product = profile.kind === "eventos" || pathname === "/producto" || pathname.startsWith("/producto/");
+  const app = profile.kind === "app" || profile.kind === "admin" || host === new URL(publicConfig.demoUrl).hostname || isAdminRoute(pathname);
+  return <html lang="es"><body>{children}{portal ? <AppFooter variant="portal" /> : product ? <AppFooter variant="product" /> : app ? <AppFooter variant="app" /> : <PublicFooter />}</body></html>;
+}

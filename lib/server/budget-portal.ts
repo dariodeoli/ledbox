@@ -203,13 +203,15 @@ export type PortalBudget = {
    * (issue #36) son el responsable cargado en la empresa: el portal los usa
    * para prellenar quién autoriza; nunca viaja nada más de la ficha.
    */
-  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null };
+  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logoUrl?: string | null };
   event: { name: string; location: string | null; startsAt: string | null } | null;
   items: PortalBudgetItem[];
   subtotal: number;
   discount: number;
   total: number;
   paymentPlan: PortalBudgetPaymentPlan;
+  /** Received money only; proofs/pending payments are not collections (#143). */
+  collectedAmount?: number;
   /** Solo con el presupuesto aprobado; antes es `null`. */
   paymentDetails: PortalBudgetPaymentDetails | null;
   /**
@@ -314,6 +316,7 @@ export function portalProofUpload(budget: {
 }
 
 type BudgetForPortal = {
+  publicToken?: string | null;
   attachments?: Array<{ id: string; organizationId: string; name: string; size: number; mime: string; clientVisible: boolean }>;
   referenceLinks?: Array<{ organizationId: string; label: string; url: string; clientVisible: boolean }>;
   id: string;
@@ -341,11 +344,11 @@ type BudgetForPortal = {
   revisionRequestedAt: Date | null;
   revisionNote: string | null;
   organization: { name: string; slug: string; paymentDetails: unknown };
-  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null };
+  client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logo?: { updatedAt: Date } | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
-  payments: Array<{ id: string; amount: number }>;
+  payments: Array<{ id: string; amount: number; status?: string }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
   expectedPayments: Array<{
     id: string;
@@ -591,7 +594,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     ivaType: budget.ivaType,
     warranty: budget.warranty,
     notes: budget.notes,
-    client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole },
+    client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole, logoUrl: budget.client.logo && budget.publicToken ? `/api/portal/budget/${encodeURIComponent(budget.publicToken)}/client-logo?v=${encodeURIComponent(budget.client.logo.updatedAt.toISOString())}` : null },
     event: budget.event
       ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
       : null,
@@ -616,6 +619,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     discount: budget.discount,
     total: budget.total,
     paymentPlan: paymentPlanOf(budget),
+    collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED").reduce((sum, payment) => sum + payment.amount, 0),
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     // La empresa demo los lleva siempre en `demoPaymentDetails` (issue #52).
@@ -638,7 +642,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     proofUpload: portalProofUpload({
       status: budget.status,
       approvedAt: budget.approvedAt,
-      pendingPayments: budget.payments.length,
+      pendingPayments: budget.payments.filter((payment) => !payment.status || payment.status === "PENDING").length,
       expectedPayments: budget.expectedPayments.length,
       openExpectedPayments: openExpected,
     }),
@@ -660,13 +664,13 @@ export const portalInclude = {
   attachments: { where: { clientVisible: true, mime: "application/pdf" }, select: { id: true, organizationId: true, name: true, mime: true, size: true, clientVisible: true } },
   referenceLinks: { where: { clientVisible: true }, select: { organizationId: true, label: true, url: true, clientVisible: true } },
   organization: { select: { name: true, slug: true, paymentDetails: true } },
-  client: true,
+  client: { include: { logo: { select: { updatedAt: true } } } },
   event: { select: { name: true, location: true, startsAt: true } },
   // La imagen del producto vinculado viaja con el ítem (issue #107): solo la
   // URL, nunca costos ni stock del inventario.
   items: { orderBy: { name: "asc" }, include: { inventory: { select: { imageUrl: true, organizationId: true, id: true, imageMime: true } } } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
-  payments: { where: { status: "PENDING" }, select: { id: true, amount: true } },
+  payments: { select: { id: true, amount: true, status: true } },
   // Pagos esperados (issue #28): estado real de cada concepto y cuenta destino.
   // No viaja el motivo interno de cancelación ni la observación técnica: solo lo
   // que el cliente necesita para transferir y seguir su pago.

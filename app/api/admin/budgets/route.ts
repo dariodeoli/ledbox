@@ -83,9 +83,10 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       take: 200,
       include: {
-        client: true,
+        client: { include: { logo: { select: { updatedAt: true } } } },
         event: true,
         items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } },
+        expectedPayments: { where: { status: { not: "CANCELLED" } }, orderBy: [{ installmentNumber: "asc" }, { createdAt: "asc" }], select: { status: true, concept: true, label: true, amount: true, paidAmount: true } },
         payments: true,
         // Adjuntos internos (issue #65): metadatos, el binario se sirve aparte
         // con sesión (`/api/admin/budgets/attachments/[id]`).
@@ -116,7 +117,10 @@ export async function GET() {
       },
     }),
   ]);
-  return Response.json({ budgets: budgets.map((budget) => ({ ...budget, items: stableOrderBudgetItems(budget.items) })), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
+  return Response.json({ budgets: budgets.map((budget) => {
+    const { logo, ...client } = budget.client;
+    return { ...budget, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
+  }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
 type ParsedBudgetItem = {
@@ -246,7 +250,7 @@ export async function POST(request: Request) {
       notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
       items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
     },
-    include: { client: true, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
+    include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
   });
   await recordAudit({
     context: auth.context,
@@ -264,7 +268,8 @@ export async function POST(request: Request) {
       },
     },
   });
-  return Response.json({ budget: { ...budget, items: stableOrderBudgetItems(budget.items) } }, { status: 201 });
+  const { logo, ...clientRow } = budget.client;
+  return Response.json({ budget: { ...budget, client: { ...clientRow, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) } }, { status: 201 });
 }
 
 /**

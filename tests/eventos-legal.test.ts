@@ -91,12 +91,13 @@ test("el pie del producto enlaza privacidad, términos, estado, soporte y empres
   const footer = read("components/app-footer.tsx");
   const landing = read("app/(product)/producto/page.tsx");
   assert.match(footer, /variant === "product"/, "falta la variante del pie de EventOS");
-  for (const link of ['href="/privacidad"', 'href="/terminos"', 'href="/status"']) {
+  for (const link of ['${publicConfig.productUrl}/privacidad', '${publicConfig.productUrl}/terminos', '${publicConfig.productUrl}/status']) {
     assert.ok(footer.includes(link), `el pie no enlaza ${link}`);
   }
-  assert.match(footer, /Soporte<\/a>/, "falta el enlace de soporte");
-  assert.match(footer, /Operado por[\s\S]{0,80}LedBox Paraguay/, "falta la empresa responsable");
-  assert.match(landing, /<AppFooter variant="product" \/>/, "la landing no usa el pie del producto");
+  assert.match(footer, /etiqueta: "Soporte"/, "falta el enlace de soporte");
+  assert.match(footer, /Operado por LedBox Paraguay/, "falta la empresa responsable");
+  assert.match(read("app/layout.tsx"), /<AppFooter variant="product" \/>/, "el layout raíz usa el pie del producto");
+  assert.doesNotMatch(landing, /<AppFooter/, "la landing no duplica el pie global");
 });
 
 test("la 404 de EventOS tiene identidad y rutas de recuperación", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initials } from "@/lib/admin-format";
 import { ADMIN_ROOT_ID } from "@/lib/admin-theme";
 import type { LogoVariant } from "@/lib/admin-types";
@@ -60,10 +60,14 @@ function IdentityFrame({
   title?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
-  // Una URL nueva (otra persona u otra versión) vuelve a intentar la imagen.
+  // El error puede ocurrir antes de que React hidrate y conecte onError.
+  // Una imagen completa sin ancho natural ya falló: mostrar iniciales también
+  // en ese caso. Una URL nueva vuelve a intentar la imagen.
   useEffect(() => {
-    setFailed(false);
+    const image = imageRef.current;
+    setFailed(Boolean(image?.complete && image.naturalWidth === 0));
   }, [src]);
 
   const classes = ["admin-avatar"];
@@ -76,6 +80,7 @@ function IdentityFrame({
     <span className={classes.join(" ")} style={box} title={title} aria-hidden="true">
       {src && !failed ? (
         <img
+          ref={imageRef}
           className="admin-avatar-img"
           src={src}
           alt=""

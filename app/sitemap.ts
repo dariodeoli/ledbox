@@ -24,8 +24,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
   return [
     { url: `${profile.siteUrl}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
-    { url: `${profile.siteUrl}/#productos`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
-    { url: `${profile.siteUrl}/#contacto`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     // Política de privacidad (issue #92): pública e indexable, igual que la landing.
     { url: `${profile.siteUrl}/privacidad`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     ...products.map(product => ({

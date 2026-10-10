@@ -26,6 +26,8 @@ import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload } from "./Bu
 import { budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { resolveBudgetPaymentPlan, BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { clientDisplayName } from "@/lib/client-identity";
+import { AdminAvatar } from "../AdminAvatar";
+import { clientLogoUrl } from "@/lib/admin-types";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { useAdminSession } from "@/components/admin/AdminShell";
 import { AdminIcon } from "@/components/admin/AdminIcons";
@@ -312,7 +314,7 @@ export function BudgetPricingDialog({
   return (
     <AdminDialog title={`Precio y condiciones · ${budget.title}`} size="wide" icon="finance" onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}>
       <p className="admin-dialog-text">
-        Presupuesto Nº {budgetReference(budget.id)} de {clientDisplayName(budget.client)}. El cliente ve el
+        <span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={32} /><span>{clientDisplayName(budget.client)}</span></span> · Presupuesto Nº {budgetReference(budget.id)}. El cliente ve el
         precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.
       </p>
       {approved ? (

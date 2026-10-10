@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatGs, type BillingUnit, type Product } from "@/lib/catalog";
+import { formatGs, type BillingUnit } from "@/lib/catalog";
 import { whatsappUrl } from "@/lib/public-config";
 
-type CartItem = { product: Product; quantity: number; duration: number };
+import type { CartItem } from "@/lib/public-cart";
 
 export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; onChange: (items: CartItem[]) => void; onQuote: () => void }) {
   const [open, setOpen] = useState(false);

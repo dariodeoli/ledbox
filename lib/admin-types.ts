@@ -161,7 +161,7 @@ export type AdminClientRef = {
   phone: string | null;
   /**
    * Versión del logo del cliente (issue #36); la traen la lista y la ficha. Los
-   * refs embebidos (eventos, presupuestos y finanzas) no la incluyen.
+   * Presupuestos también la proyecta para su identidad; otros refs pueden omitirla.
    */
   logoUpdatedAt?: string | null;
 };
@@ -413,6 +413,8 @@ export type AdminBudgetRow = {
   event: AdminEventRef | null;
   items: AdminBudgetItem[];
   payments: AdminPayment[];
+  /** Read-only ledger concepts for the next collection instruction (#143/#129). */
+  expectedPayments?: import("./budget-collection-step").BudgetCollectionConcept[];
   /** Plan de pagos (issue #14): anticipo, condiciones y cuotas. */
   advanceAmount: number;
   paymentTerms: string | null;

@@ -20,7 +20,7 @@ test("la política existe, es pública y trae lo que pide la ley", () => {
 
   assert.match(source, /alternates: \{ canonical: "\/privacidad" \}/, "la URL canónica es /privacidad");
   assert.match(source, /PublicNav/, "usa la navegación del sitio");
-  assert.match(source, /PublicFooter/, "usa el pie del sitio");
+  assert.match(read("app/layout.tsx"), /<PublicFooter \/>/, "el layout raíz usa el pie del sitio");
 
   // Contenido mínimo exigido por el issue.
   assert.match(source, /responsable del tratamiento/i);
@@ -50,8 +50,7 @@ test("los datos societarios quedan pendientes: no se inventan", () => {
 test("la política se enlaza desde el footer del sitio", () => {
   const footer = read("components/public/PublicFooter.tsx");
   assert.match(footer, /<Link href="\/privacidad">Privacidad<\/Link>/, "el pie del sitio enlaza la política");
-  const appFooter = read("components/app-footer.tsx");
-  assert.match(appFooter, /siteUrl}\/privacidad/, "la variante company del pie también enlaza la política");
+  assert.match(footer, /<AppFooter variant="company"/, "la navegación pública comparte el pie company y su crédito");
 });
 
 test("el formulario de consulta avisa la finalidad antes de enviar", () => {
