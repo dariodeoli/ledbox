@@ -767,11 +767,10 @@ export function EventosModule() {
         {activeView === "calendar" ? null : (
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         )}
-        {/* En ancho compacto lista y cuadrícula se ven igual (tarjetas): el
-            conmutador no aporta y se retira de la barra (issue #139). */}
-        {narrow ? null : (
+        {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
+        <div className="admin-cal-view-switch">
           <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
-        )}
+        </div>
         {writable ? (
           <AdminButton
             variant="primary"

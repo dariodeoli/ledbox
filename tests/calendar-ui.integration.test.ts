@@ -32,6 +32,13 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
     const session = await createSession(user, org);
     const page = await browser.newPage();
     page.on("pageerror", error => report.errors.push(String(error)));
+    await page.setExtraHTTPHeaders({ "x-forwarded-host": "app.ledbox.online" });
+    await page.setRequestInterception(true);
+    page.on("request", request => {
+      const url = new URL(request.url());
+      if (["localhost", "127.0.0.1"].includes(url.hostname) && ["GET", "HEAD"].includes(request.method())) void request.continue();
+      else void request.abort();
+    });
     await page.setCookie({ name: "ledbox_session", value: session.jwt, url: base!, httpOnly: true });
     for (const theme of ["dark", "light"]) for (const width of [360, 390, 1440]) {
       await page.setViewport({ width, height: 900, hasTouch: width < 500 });
