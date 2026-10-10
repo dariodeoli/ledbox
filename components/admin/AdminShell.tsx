@@ -297,6 +297,12 @@ export function AdminShell({
   /** La sesión embebida se consume una vez: después manda `loadSession`. */
   const skipInitialLoadRef = useRef(Boolean(initialSession));
   const [menuOpen, setMenuOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const menuOpenerRef = useRef<HTMLElement | null>(null);
+  const openMenu = useCallback((opener: HTMLButtonElement) => {
+    menuOpenerRef.current = opener;
+    setMenuOpen(true);
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMounted, setPaletteMounted] = useState(false);
   const [cargaOpen, setCargaOpen] = useState(false);
@@ -386,14 +392,14 @@ export function AdminShell({
   // Atajo global del panel (⌘/Ctrl + K): vive acá porque la paleta llega diferida.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.altKey) return;
+      if (event.defaultPrevented || event.altKey || menuOpen) return;
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
       openPalette();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openPalette]);
+  }, [openPalette, menuOpen]);
 
   // Prefetch ocioso de los chunks diferidos: la primera apertura no espera la red.
   useEffect(() => {
@@ -414,20 +420,61 @@ export function AdminShell({
     setMenuOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!menuOpen) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
+    if (!sidebarRef.current) return;
+    const sidebar = sidebarRef.current;
+    const desktop = window.matchMedia("(min-width: 981px)");
+    if (desktop.matches) { setMenuOpen(false); return; }
+    const overflow = document.body.style.overflow;
+    const background: Array<{ element: HTMLElement; inert: boolean }> = [];
+    // Aislar todos los hermanos del camino hasta body, incluido el pie global.
+    // El backdrop sigue clickeable pero no participa en el recorrido de foco.
+    for (let branch: HTMLElement = sidebar; branch.parentElement; branch = branch.parentElement) {
+      for (const sibling of branch.parentElement.children) {
+        if (!(sibling instanceof HTMLElement) || sibling === branch || sibling.classList.contains("admin-sidebar-backdrop")) continue;
+        background.push({ element: sibling, inert: sibling.inert });
+        sibling.inert = true;
+      }
+      if (branch.parentElement === document.body) break;
     }
-    document.addEventListener("keydown", closeOnEscape);
+    const focusable = () => Array.from(sidebar.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]'))
+      .filter((element) => element.tabIndex >= 0 && !element.matches(":disabled") && !element.closest("[inert]") && element.getClientRects().length > 0);
+    const initialFocus = () => (sidebar.querySelector<HTMLElement>(".admin-sidebar-close") ?? focusable()[0] ?? sidebar).focus({ preventScroll: true });
+    function containFocus(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setMenuOpen(false); return; }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      if (!items.length) { event.preventDefault(); sidebar.focus(); return; }
+      if (index < 0 || (!event.shiftKey && index === items.length - 1) || (event.shiftKey && index === 0)) {
+        event.preventDefault();
+        (event.shiftKey ? items[items.length - 1] : items[0]).focus();
+      }
+    }
+    function recoverFocus(event: FocusEvent) {
+      if (event.target instanceof Node && !sidebar.contains(event.target)) initialFocus();
+    }
+    const onResize = () => { if (desktop.matches) setMenuOpen(false); };
+    document.addEventListener("keydown", containFocus, true);
+    document.addEventListener("focusin", recoverFocus);
+    desktop.addEventListener("change", onResize);
     document.body.style.overflow = "hidden";
+    initialFocus();
     return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.body.style.overflow = "";
+      document.removeEventListener("keydown", containFocus, true);
+      document.removeEventListener("focusin", recoverFocus);
+      desktop.removeEventListener("change", onResize);
+      for (const { element, inert } of background) element.inert = inert;
+      document.body.style.overflow = overflow;
+      const opener = menuOpenerRef.current;
+      // Esperar el commit/actualización de inert antes de devolver el foco.
+      // Una reapertura rápida no debe recibir un callback de cierre anterior.
+      window.requestAnimationFrame(() => {
+        if (sidebar.classList.contains("is-open")) return;
+        if (opener?.isConnected && opener.getClientRects().length) opener.focus({ preventScroll: true });
+        else sidebar.querySelector<HTMLElement>(".admin-brand")?.focus({ preventScroll: true });
+      });
     };
   }, [menuOpen]);
 
@@ -707,7 +754,7 @@ export function AdminShell({
       ) : (
       <div className="admin-shell">
         <a className="admin-skip-link" href="#admin-main-content">Saltar al contenido</a>
-        <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel">
+        <aside ref={sidebarRef} id="admin-sidebar" className={menuOpen ? "admin-sidebar is-open" : "admin-sidebar"} aria-label="Módulos del panel" role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen || undefined} tabIndex={menuOpen ? -1 : undefined}>
           <div className="admin-sidebar-head">
             <Link href="/dashboard" className="admin-brand" aria-label="EventOS · Ir al resumen" title="EventOS · Ir al resumen">
               <BrandMark className="admin-brand-mark" size={30} />
@@ -848,7 +895,7 @@ export function AdminShell({
         </aside>
 
         {menuOpen ? (
-          <button type="button" className="admin-sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú" />
+          <button type="button" className="admin-sidebar-backdrop" onClick={() => setMenuOpen(false)} tabIndex={-1} aria-hidden="true" aria-label="Cerrar menú" />
         ) : null}
 
         <div className="admin-main">
@@ -856,7 +903,7 @@ export function AdminShell({
             <button
               type="button"
               className="admin-iconbtn admin-menu-btn"
-              onClick={() => setMenuOpen(true)}
+              onClick={(event) => openMenu(event.currentTarget)}
               aria-label="Abrir menú"
               aria-controls="admin-sidebar"
               aria-expanded={menuOpen}
@@ -964,7 +1011,7 @@ export function AdminShell({
 
         {/* Barra inferior de mobile (≤720 px): cuatro módulos + «Más», que abre
             el drawer de siempre. En escritorio no se dibuja. */}
-        <AdminMobileNav menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)} />
+        <AdminMobileNav menuOpen={menuOpen} onOpenMenu={openMenu} />
       </div>
       )}
     </AdminSessionContext.Provider>
