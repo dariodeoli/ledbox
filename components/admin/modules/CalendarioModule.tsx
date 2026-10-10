@@ -209,7 +209,7 @@ function CalendarItemLink({ item, variant, onSelect }: { item: AdminCalendarItem
       ? ` · ${formatDateTime(item.at)} → ${formatDateTime(item.endAt)}`
       : "";
   return (
-    <button type="button" className="admin-cal-item" onClick={() => onSelect(item)} data-kind={item.kind} data-tone={item.tone} title={`${itemTitleText(item)}${range}`} aria-label={`Ver resumen: ${item.title}`}>
+    <button type="button" className="admin-cal-item" onClick={() => onSelect(item)} data-variant={variant} data-kind={item.kind} data-tone={item.tone} title={`${itemTitleText(item)}${range}`} aria-label={`Ver resumen: ${item.title}`}>
       <span className="admin-cal-item-time">{formatTime(item.at)}</span>
       <span className="admin-cal-item-main">
         <span className="admin-cal-item-title">{item.title}</span>

@@ -31,12 +31,14 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
     await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "Fin medianoche QA", startsAt: new Date(midnight - 3600000), endsAt: new Date(midnight) } });
     const session = await createSession(user, org);
     const page = await browser.newPage();
+    let calendarFailure = false;
     page.on("pageerror", error => report.errors.push(String(error)));
     await page.setExtraHTTPHeaders({ "x-forwarded-host": "app.ledbox.online" });
     await page.setRequestInterception(true);
     page.on("request", request => {
       const url = new URL(request.url());
-      if (["localhost", "127.0.0.1"].includes(url.hostname) && ["GET", "HEAD"].includes(request.method())) void request.continue();
+      if (calendarFailure && url.pathname === "/api/admin/calendar") void request.abort();
+      else if (["localhost", "127.0.0.1"].includes(url.hostname) && ["GET", "HEAD"].includes(request.method())) void request.continue();
       else void request.abort();
     });
     await page.setCookie({ name: "ledbox_session", value: session.jwt, url: base!, httpOnly: true });
@@ -44,8 +46,10 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
       await page.setViewport({ width, height: 900, hasTouch: width < 500 });
       await page.goto(`${base}/eventos?vista=calendario`, { waitUntil: "networkidle0" });
       await page.waitForSelector('.admin-events-calendar .admin-cal-item');
+      assert.equal(await page.$$eval("button", nodes => nodes.some(node => node.textContent?.includes("Nuevo evento"))), false, "VIEWER must not see event mutations");
       await page.$eval(".admin-root", (node, value) => node.setAttribute("data-theme", value), theme);
       assert.equal(await page.$eval('[aria-label="Vista de eventos"] button[aria-label="Calendario"]', node => node.getAttribute("aria-pressed")), "true");
+      assert.ok(await page.$eval('[aria-label="Vista de eventos"] button[aria-label="Calendario"]', node => node.getBoundingClientRect().height >= 44));
       for (const view of ["month", "week", "next30", "twoMonths"]) {
         const loaded = view === "month" ? null : page.waitForResponse(response => response.url().includes("/api/admin/calendar?") && response.status() === 200);
         await page.select('select[aria-label="Vista del calendario"]', view);
@@ -63,6 +67,8 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
         if (view === "twoMonths" && width === 1440) {
           const positions = await page.$$eval('.admin-cal-month-section', nodes => nodes.map(n => ({ left: n.getBoundingClientRect().left, top: n.getBoundingClientRect().top })));
           assert.equal(positions.length, 2); assert.equal(positions[0].top, positions[1].top); assert.ok(positions[1].left > positions[0].left);
+          const cells = await page.$$eval('.admin-cal-cell', nodes => nodes.map(n => ({ height: n.getBoundingClientRect().height, textWidth: n.querySelector('.admin-cal-item-main')?.getBoundingClientRect().width ?? 0 })));
+          assert.ok(cells.every(cell => cell.height < 500 && cell.textWidth > 30), "two-month cell collapsed the text track or inflated its height");
         }
         await page.evaluate(() => { const node = Array.from(document.querySelectorAll<HTMLButtonElement>('.admin-cal-item[aria-label="Ver resumen: Duración contenedora QA"]')).find(n => n.getClientRects().length); node?.focus(); });
         await page.keyboard.press("Enter");
@@ -89,6 +95,23 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
       await page.waitForSelector('.admin-events-calendar');
       assert.equal(await page.evaluate(() => localStorage.getItem("ledbox-admin-view:eventos")), "calendar");
     }
+    const emptyOrg = `calendar-empty-${randomUUID()}`;
+    await db.organization.create({ data: { id: emptyOrg, slug: emptyOrg, name: "Calendar empty QA" } });
+    await db.adminMembership.create({ data: { id: randomUUID(), organizationId: emptyOrg, adminUserId: user.id, role: "VIEWER" } });
+    await page.setCookie({ name: "ledbox_session", value: (await createSession(user, emptyOrg)).jwt, url: base!, httpOnly: true });
+    await page.reload({ waitUntil: "networkidle0" });
+    await page.waitForFunction(() => document.querySelector('.admin-events-calendar')?.textContent?.includes("Sin movimientos en el período"));
+    assert.equal(await page.$$('.admin-cal-item').then(nodes => nodes.length), 0);
+    report.cases.push({ state: "empty", source: "real API; own empty organization" });
+    if (evidence) await page.screenshot({ path: join(evidence, "empty.png") });
+    calendarFailure = true;
+    await page.reload({ waitUntil: "networkidle0" });
+    await page.waitForFunction(() => document.querySelector('.admin-events-calendar')?.textContent?.includes("No pudimos conectar"));
+    if (evidence) await page.screenshot({ path: join(evidence, "network-error.png") });
+    calendarFailure = false;
+    await page.evaluate(() => { const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('.admin-events-calendar button')).find(n => /Reintentar/.test(n.textContent ?? "")); retry?.click(); });
+    await page.waitForFunction(() => !document.querySelector('.admin-events-calendar')?.textContent?.includes("No pudimos conectar") && document.querySelector('.admin-events-calendar')?.textContent?.includes("Sin movimientos en el período"));
+    report.cases.push({ state: "network-error-retry", source: "induced browser transport abort; retry recovers against real local API" });
     assert.deepEqual(report.errors, []); report.status = "LOCAL_REAL_API_PASS";
   } catch (error) { report.status = "FAIL"; report.failure = String(error); throw error; }
   finally {

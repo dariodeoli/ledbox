@@ -2181,6 +2181,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-month { gap: 4px; }
 .admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-cell { padding: 4px; }
 .admin-events-calendar .admin-cal-item { width: 100%; min-height: 44px; text-align: left; cursor: pointer; }
+.admin-events-calendar .admin-cal-item[data-variant="grid"] { display: flex; flex-direction: column; align-items: stretch; padding: 4px; }
+.admin-events-calendar .admin-cal-item[data-variant="grid"] .admin-cal-item-title,
+.admin-events-calendar .admin-cal-item[data-variant="grid"] .admin-cal-item-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .admin-events-calendar .admin-cal-item:focus-visible,
 .admin-events-calendar .admin-cal-day:focus-visible,
 .admin-events-calendar .admin-cal-more:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
