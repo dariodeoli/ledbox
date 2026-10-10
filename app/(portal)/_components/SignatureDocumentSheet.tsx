@@ -1,4 +1,5 @@
-import { formatDate, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
+import { formatDate, formatDayKey, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
+import { formatPercent } from "@/lib/field-rules";
 import type { SignatureBudgetDocument } from "@/lib/server/signature/document";
 
 export function SignatureDocumentUnavailable({ message }: { message: string }) {
@@ -13,8 +14,8 @@ export function SignatureDocumentUnavailable({ message }: { message: string }) {
  */
 export function SignatureDocumentSheet({ document, compact = false }: { document: SignatureBudgetDocument; compact?: boolean }) {
   const plan = document.plan;
-  const clientLabel = document.documentVersion === 2 ? document.client.displayName : document.client.company?.trim() || document.client.name;
-  const hasPlan = plan.advanceAmount > 0 || plan.installments.length > 0;
+  const clientLabel = (document.documentVersion ?? 1) >= 2 ? document.client.displayName : document.client.company?.trim() || document.client.name;
+  const hasPlan = plan.advanceAmount > 0 || plan.installments.length > 0 || (document.documentVersion === 3 && document.commercialTerms?.advancePercentBps != null);
   return (
     <article className="portal-signature-sheet" aria-label={`Documento ${document.title}`}>
       <header className="portal-signature-sheet-head">
@@ -32,7 +33,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
           <dt>Cliente</dt>
           <dd>{clientLabel}</dd>
         </div>
-        {document.documentVersion === 2 && document.client.legalName ? <div><dt>Razón social</dt><dd>{document.client.legalName}</dd></div> : null}
+        {(document.documentVersion ?? 1) >= 2 && document.client.legalName ? <div><dt>Razón social</dt><dd>{document.client.legalName}</dd></div> : null}
         <div>
           <dt>Evento</dt>
           <dd>{document.event?.name ?? "Sin evento asociado"}</dd>
@@ -87,6 +88,12 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
                 <td className="portal-item-cell">
                   <span className="portal-item-name">{item.name}</span>{item.excluded ? <small>Retirado / no incluido</small> : null}
                   {item.notes ? <small className="portal-item-note">{item.notes}</small> : null}
+                  {document.documentVersion === 3 && item.commercialTerms ? <>
+                    {item.commercialTerms.priceMode ? <small className="portal-item-note">{item.commercialTerms.priceMode === "MANUAL" ? "Precio pactado" : `Tarifa ${item.commercialTerms.tariffSnapshot?.front === "WHOLESALE" ? "mayorista" : "final"}`}</small> : null}
+                    {item.commercialTerms.tariffSnapshot ? <small className="portal-item-note">Normal: {formatMoney(item.commercialTerms.tariffSnapshot.normalPrice)}{item.commercialTerms.tariffSnapshot.fromDays > 0 && item.commercialTerms.tariffSnapshot.fromPrice > 0 ? ` · Desde ${item.commercialTerms.tariffSnapshot.fromDays} días: ${formatMoney(item.commercialTerms.tariffSnapshot.fromPrice)}` : ""}</small> : null}
+                    {item.commercialTerms.minimumPrice !== null ? <small className="portal-item-note">Piso unitario neto: {formatMoney(item.commercialTerms.minimumPrice)}</small> : null}
+                    {item.commercialTerms.discountMode ? <small className="portal-item-note">Descuento de línea{item.commercialTerms.discountMode === "PERCENT" ? ` (${formatPercent(item.commercialTerms.discountValue! / 100)}%)` : ""}: {formatMoney(item.commercialTerms.discountAmount)}</small> : null}
+                  </> : null}
                 </td>
                 <td className="portal-num" data-label="Cantidad">
                   {formatNumber(item.quantity)}
@@ -109,6 +116,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
       </div>
 
       <div className="portal-totals">
+        {document.documentVersion === 3 && document.commercialTerms?.discountMode ? <p className="portal-help">Descuento global: {document.commercialTerms.discountMode === "PERCENT" ? `${formatPercent(document.commercialTerms.discountValue! / 100)}%` : formatMoney(document.commercialTerms.discountValue)}</p> : null}
         <div className="portal-total-row">
           <span>Subtotal</span>
           <span>{formatMoney(document.subtotal)}</span>
@@ -128,6 +136,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
       {hasPlan ? (
         <div className="portal-signature-plan">
           <h3 className="portal-card-title">Plan de pagos</h3>
+          {document.documentVersion === 3 && document.commercialTerms?.advancePercentBps != null ? <p className="portal-help">Seña automática: {formatPercent(document.commercialTerms.advancePercentBps / 100)}% del total</p> : null}
           <ul className="portal-signature-plan-list">
             {plan.advanceAmount > 0 ? (
               <li>
@@ -140,8 +149,8 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
                 <strong>{installment.label}</strong>
                 <span>
                   {formatMoney(installment.amount)}
-                  {installment.dueAt ? ` · ${formatDate(installment.dueAt)}` : ""}
-                  {document.documentVersion === 2 && installment.moment ? ` · ${installment.moment}` : ""}
+                  {installment.dueAt ? ` · ${formatDayKey(installment.dueAt)}` : ""}
+                  {(document.documentVersion ?? 1) >= 2 && installment.moment ? ` · ${installment.moment}` : ""}
                 </span>
               </li>
             ))}
