@@ -108,6 +108,40 @@ test("AL real HTTP/PG/browser: tariff days, discounts once, advance, persistence
       await page.waitForFunction(() => !document.querySelector(".admin-dialog"));
       assert.deepEqual(await values(), days === 3 ? [80001, 432005, 21600, 410405, 123122] : [100001, 360004, 18000, 342004, 102601]);
     }
+    for (const [percent, bps, total, advance] of [["5,25", 525, 409325, 122798], ["5", 500, 410405, 123122]] as const) {
+      await page.goto(`${base}/presupuestos?vista=list`, { waitUntil: "networkidle0" });
+      await page.waitForSelector('button[aria-label="Editar presupuesto: AL negotiated"]'); await page.click('button[aria-label="Editar presupuesto: AL negotiated"]');
+      const field = await page.evaluate(() => [...document.querySelectorAll<HTMLLabelElement>(".admin-dialog label")].find((node) => node.textContent?.trim() === "Descuento global (%)")?.htmlFor);
+      assert.ok(field);
+      const input = await page.$(`[id="${field}"]`); assert.ok(input);
+      await input.click({ count: 3 }); await input.press("Backspace"); await input.type(percent);
+      await clickText("Guardar"); await page.waitForFunction(() => !document.querySelector(".admin-dialog"));
+      const persisted = await snapshot();
+      assert.equal(persisted.discountValue, bps); assert.equal(persisted.total, total); assert.equal(persisted.advanceAmount, advance);
+    }
+    const manualSource = (await snapshot()).items[0];
+    const manualPatch = (patch: Record<string, unknown>) => call("/api/admin/budgets", "PATCH", { kind: "editor", budgetId: q.id, items: [{ id: manualSource.id, name: manualSource.name, quantity: 2, days: 3, unitPrice: 80001, costPrice: manualSource.costPrice, priceMode: "MANUAL", ...patch }] });
+    assert.equal((await manualPatch({})).status, 200);
+    const retained = await snapshot();
+    assert.deepEqual(retained.items[0].tariffSnapshot, manualSource.tariffSnapshot);
+    assert.equal((await manualPatch({ unitPrice: 40000 })).status, 400);
+    assert.equal((await manualPatch({ tariffSnapshot: null })).status, 400);
+    assert.deepEqual(await snapshot(), retained);
+    const manualPublic = await (await fetch(`${base}/api/portal/budget/${token}`)).json();
+    assert.equal(manualPublic.budget.items[0].commercialTerms.tariffSnapshot, null);
+    assert.equal(manualPublic.budget.items[0].commercialTerms.minimumPrice, 50000);
+    assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: q.id, advancePercentBps: null, advanceAmount: 100000 })).status, 200);
+    assert.equal((await snapshot()).advanceAmount, 100000);
+    assert.equal((await snapshot()).advancePercentBps, null);
+    assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: q.id, advancePercentBps: 3000 })).status, 200);
+    const wholesale = await create({ items: [{ ...rawLine, tariffSnapshot: { ...rawLine.tariffSnapshot, front: "WHOLESALE" }, discountMode: null, discountValue: null }], discountMode: "AMOUNT", discountValue: 0, advancePercentBps: 2000 });
+    assert.equal(wholesale.items[0].unitPrice, 70001);
+    for (const days of [5, 3]) {
+      assert.equal((await call("/api/admin/budgets", "PATCH", { kind: "items", budgetId: wholesale.id, items: [{ id: wholesale.items[0].id, name: product.name, quantity: 2, days, unitPrice: 1 }] })).status, 200);
+      const persisted = await db.budget.findUniqueOrThrow({ where: { id: wholesale.id }, include: { items: true } });
+      assert.equal(persisted.items[0].unitPrice, days === 5 ? 60001 : 70001);
+      assert.equal((persisted.items[0].tariffSnapshot as { front: string }).front, "WHOLESALE");
+    }
     const saved = await snapshot();
     await db.expectedPayment.create({ data: { id: randomUUID(), organizationId: org, budgetId: q.id, concept: "advance", slot: "advance", label: "Seña", amount: saved.advanceAmount, paidAmount: 10000, status: "PARTIAL" } });
     await db.clientPayment.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, budgetId: q.id, amount: 10000, status: "RECEIVED", method: "Efectivo" } });

@@ -146,14 +146,15 @@ export function BudgetPricingDialog({
   const [section, setSection] = useState("items");
   const [conditions, setConditions] = useState(() => conditionDrafts(budget.installmentsJson ?? []));
   const [globalMode, setGlobalMode] = useState<"LEGACY" | "AMOUNT" | "PERCENT">(budget.discountMode ?? "LEGACY");
-  const [globalValue, setGlobalValue] = useState(String(budget.discountValue ?? budget.discount));
+  const [globalValue, setGlobalValue] = useState(budget.discountMode === "PERCENT" ? formatPercent((budget.discountValue ?? 0) / 100) : String(budget.discountValue ?? budget.discount));
+  const globalDiscountValue = globalMode === "PERCENT" ? Math.round((parsePercent(globalValue) ?? NaN) * 100) : Number(globalValue);
   const [advanceMode, setAdvanceMode] = useState(budget.advancePercentBps == null ? "FIXED" : "PERCENT");
   const [advanceValue, setAdvanceValue] = useState(budget.advancePercentBps == null ? String(budget.advanceAmount) : formatPercent(budget.advancePercentBps / 100));
   const commercialEditing = globalMode !== "LEGACY" || advanceMode === "PERCENT" || draft.items.some((item) => item.commercialTerms?.priceMode || item.commercialTerms?.discountMode);
   const effective = useMemo(() => {
-    try { return { result: calculateBudgetCommercial(draft.items.map(budgetDraftCommercialLine), { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : Number(globalValue), advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null }, Number(globalValue), advanceMode === "FIXED" ? Number(advanceValue) : budget.advanceAmount), error: null }; }
+    try { return { result: calculateBudgetCommercial(draft.items.map(budgetDraftCommercialLine), { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : globalDiscountValue, advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null }, Number(globalValue), advanceMode === "FIXED" ? Number(advanceValue) : budget.advanceAmount), error: null }; }
     catch (error) { return { result: null, error: error instanceof Error ? error.message : "Términos inválidos." }; }
-  }, [draft.items, globalMode, globalValue, advanceMode, advanceValue, budget.advanceAmount]);
+  }, [draft.items, globalMode, globalValue, globalDiscountValue, advanceMode, advanceValue, budget.advanceAmount]);
   const approved = Boolean(budget.approvedAt);
   const closed = budget.status === "LOST" || budget.status === "CANCELLED";
 
@@ -257,7 +258,7 @@ export function BudgetPricingDialog({
           kind: approved ? "commercial" : "editor",
           budgetId: budget.id,
           expectedUpdatedAt: budget.updatedAt,
-          ...(!approved ? { items: itemsPayload, title, clientId, eventId: eventId || null, ...(commercialEditing ? { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : Number(globalValue), discount: globalMode === "LEGACY" ? Number(globalValue) : undefined } : { discount }), advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null, ...(advanceMode === "FIXED" ? { advanceAmount: Number(advanceValue) } : {}), installmentsJson: conditionPayload(conditions) } : {}),
+          ...(!approved ? { items: itemsPayload, title, clientId, eventId: eventId || null, ...(commercialEditing ? { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : globalDiscountValue, discount: globalMode === "LEGACY" ? Number(globalValue) : undefined } : { discount }), advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null, ...(advanceMode === "FIXED" ? { advanceAmount: Number(advanceValue) } : {}), installmentsJson: conditionPayload(conditions) } : {}),
           materialCost: number(draft.materialCost),
           laborCost: number(draft.laborCost),
           ...(!approved ? { validUntil: draft.validUntil || null, deliveryAt: draft.deliveryAt || null, ivaType: draft.ivaType || null, warranty: draft.warranty, notes: draft.notes } : {}),
@@ -357,7 +358,7 @@ export function BudgetPricingDialog({
         <BudgetItemsEditor items={draft.items} disabled={approved || closed || busy} onChange={(items) => setDraft((current) => ({ ...current, items, price: String(Math.max(0, items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0) + current.priceAdjustment)) }))} />
 
         <SelectField label="Alcance del descuento global" value={globalMode} disabled={approved || closed || busy} options={[{ value: "LEGACY", label: "Monto global histórico" }, { value: "AMOUNT", label: "Monto global explícito sobre líneas netas" }, { value: "PERCENT", label: "Porcentaje global sobre líneas netas" }]} onChange={(value) => { setGlobalMode(value as typeof globalMode); setGlobalValue("0"); }} />
-        {globalMode === "PERCENT" ? <PercentField label="Descuento global (%)" value={formatPercent(Number(globalValue) / 100)} disabled={approved || closed || busy} onChange={(value) => setGlobalValue(String(Math.round((parsePercent(value) ?? 0) * 100)))} /> : globalMode === "AMOUNT" ? <MoneyField label="Descuento global (Gs)" value={globalValue} limit={BUDGET_INT_MAX} disabled={approved || closed || busy} onChange={setGlobalValue} /> : null}
+        {globalMode === "PERCENT" ? <PercentField label="Descuento global (%)" value={globalValue} disabled={approved || closed || busy} onChange={setGlobalValue} /> : globalMode === "AMOUNT" ? <MoneyField label="Descuento global (Gs)" value={globalValue} limit={BUDGET_INT_MAX} disabled={approved || closed || busy} onChange={setGlobalValue} /> : null}
         <MoneyField label="Precio final (Gs)" hint="Total final después de descuentos de línea y global" limit={BUDGET_INT_MAX} value={commercialEditing ? String(price) : draft.price} disabled={approved || closed || busy} onChange={(value) => { if (commercialEditing) { setGlobalMode("AMOUNT"); setGlobalValue(String(itemsSubtotal - number(value))); } else setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal }); }} />
         {commercialEditing && effective.error ? <AdminNote tone="error">{effective.error}</AdminNote> : null}
         <AdminDisclosure title="Costos internos y margen" hint="no los ve el cliente">
