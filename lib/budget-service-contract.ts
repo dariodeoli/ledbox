@@ -5,6 +5,7 @@ const id = z.string().min(1).max(200);
 const days = z.number().int().min(1).max(9999);
 const threshold = z.number().int().min(0).max(9999).nullable();
 const revision = z.number().int().min(1).max(2147483647);
+export const serviceConfigurationRevisionSchema = revision;
 export const serviceKindSchema = z.enum(["TRANSPORT", "INSTALLATION", "GUARD", "PROMOTER"]);
 export const serviceModeSchema = z.enum(["PERSON_DAY", "FIXED_EVENT"]);
 export const serviceUnitSchema = z.enum(["PYG_PER_PERSON_DAY", "PYG_PER_EXECUTION", "PYG_PER_EVENT"]);
@@ -100,6 +101,16 @@ export const adminBudgetServiceApplicationSchema = z.object({ ...applicationShap
   if (value.inclusion !== "INCLUDED_CHARGED" && Object.keys(materializedShape).some(key => value[key as keyof typeof materializedShape] !== 0)) ctx.addIssue({ code: "custom", message: "Servicio sin cargo no tiene venta materializada." });
 });
 
+/** Explicit internal projection after strict admin-row validation. Never strips
+ * unknown authority/cost fields; only the five known FIN amounts are omitted.
+ */
+export function serviceApplicationTerms(input: unknown) {
+  const app = adminBudgetServiceApplicationSchema.parse(input);
+  return persistedBudgetServiceApplicationSchema.parse(Object.fromEntries(
+    Object.keys(applicationShape).map(key => [key, app[key as keyof typeof app]]),
+  ));
+}
+
 /** Selector único sin multiplicaciones, descuentos, pisos ni allocator. */
 export function resolveServiceTariffSelection(snapshot: z.infer<typeof serviceTariffSnapshotV1Schema>, serviceDays: number | null, contextualServiceDays: number | null): { known: boolean; price: number | null; source: "NORMAL" | "FROM_DAYS" | null } {
   const parsed = serviceTariffSnapshotV1Schema.parse(snapshot);
@@ -154,7 +165,7 @@ export const publicServiceV1Schema = z.object(publicShape).strict().superRefine(
 /** Reconstruct allowlist from a validated company-bound DTO. Never spread rows. */
 export function publicBudgetServiceTerms(input: unknown, coverage: unknown, context: ServiceBindingContext): z.infer<typeof publicServiceV1Schema> {
   const app = adminBudgetServiceApplicationSchema.parse(input);
-  const termsInput = Object.fromEntries(Object.keys(applicationShape).map(key => [key, app[key as keyof typeof app]]));
+  const termsInput = serviceApplicationTerms(app);
   const bound = validateServiceCompanyBinding(termsInput, coverage, context);
   return publicServiceV1Schema.parse({ id: app.id, publicName: app.publicName, kind: app.kind, scope: app.scope,
     coverageItemIds: bound.coverage.filter(row => row.active).map(row => row.parentLineId).sort(), inclusion: app.inclusion,

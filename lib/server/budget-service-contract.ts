@@ -4,9 +4,9 @@ import { roleCan } from "./permissions";
 import { QuoteComparisonError } from "./quote-comparison";
 import type { AdminContext } from "./tenancy";
 import { adminInventoryServiceConfigurationSchema, persistedInventoryServiceConfigurationSchema,
-  inventoryServiceConfigurationInputSchema, adminBudgetServiceApplicationSchema,
+  inventoryServiceConfigurationInputSchema, adminBudgetServiceApplicationSchema, serviceConfigurationRevisionSchema,
   persistedBudgetServiceApplicationSchema, budgetServiceMutationInputSchema, serviceSnapshotFromConfiguration,
-  validateServiceSnapshotRetention, validateServiceCompanyBinding, validateServiceCostBindings, serviceCoverageArraySchema, serviceCostAllocationInputSchema,
+  validateServiceSnapshotRetention, validateServiceCompanyBinding, validateServiceCostBindings, serviceCoverageArraySchema, serviceCostAllocationInputSchema, serviceApplicationTerms,
   type ServiceBindingContext } from "../budget-service-contract";
 
 /** Pure validation adapter. DB loaders/CAS/transaction wiring are a later stage. */
@@ -39,6 +39,17 @@ export function toServiceFinancialInput(input: unknown, budgetIvaType: "GRAVADA_
       fromPrice: active ? snapshot.fromPrice : null, minimumPrice: snapshot.minimumPrice },
     overridePrice: app.priceSource === "OVERRIDE" ? app.overridePrice : null,
     discountMode: app.discountMode, discountValue: app.discountValue, costComplete };
+}
+
+/** FIN calls under its commercial lock with freshly loaded rows/coverage and
+ * completeness from private reconciled sources. Administrative loading alone
+ * does not satisfy this final resolved-coverage guard. No calculation here.
+ */
+export function toResolvedServiceFinancialInput(input: unknown, coverage: unknown, binding: ServiceBindingContext,
+  budgetIvaType: "GRAVADA_10" | "GRAVADA_5" | "EXENTA" | null, costComplete: boolean) {
+  const terms = serviceApplicationTerms(input);
+  validateServiceCompanyBinding(terms, coverage, binding, true);
+  return toServiceFinancialInput(terms, budgetIvaType, costComplete);
 }
 
 /** Keep partial known balances; normalized contributions match FIN9f structurally.
@@ -119,6 +130,8 @@ export async function saveInventoryServiceConfiguration(tx: Prisma.TransactionCl
     const previous = await tx.inventoryServiceConfiguration.findFirst({ where: { id: value.id, organizationId: context.organizationId, inventoryItemId }, select: configurationSelect });
     if (!previous) throw new QuoteComparisonError(404, "SERVICE_CONFIGURATION_NOT_FOUND");
     if (previous.kind !== value.kind) throw new QuoteComparisonError(400, "SERVICE_CONFIGURATION_KIND_IMMUTABLE");
+    if (previous.revision !== value.expectedRevision) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_STALE");
+    if (previous.revision === 2147483647) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_REVISION_EXHAUSTED");
     const changed = await tx.inventoryServiceConfiguration.updateMany({ where: { id: value.id, organizationId: context.organizationId, inventoryItemId, revision: value.expectedRevision! }, data: { ...data, revision: { increment: 1 } } });
     if (changed.count !== 1) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_STALE");
   }
@@ -132,9 +145,13 @@ export async function saveInventoryServiceConfiguration(tx: Prisma.TransactionCl
 
 export async function archiveInventoryServiceConfiguration(tx: Prisma.TransactionClient, context: Pick<AdminContext, "organizationId" | "role" | "demo" | "user">, inventoryItemId: string, configurationId: string, expectedRevision: number) {
   if (context.demo || !roleCan(context.role, "inventory.write")) throw new QuoteComparisonError(403, "SERVICE_MUTATION_FORBIDDEN");
-  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new QuoteComparisonError(400, "SERVICE_CONFIGURATION_INVALID");
+  if (!serviceConfigurationRevisionSchema.safeParse(expectedRevision).success) throw new QuoteComparisonError(400, "SERVICE_CONFIGURATION_INVALID");
   const products = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "InventoryItem" WHERE "id" = ${inventoryItemId} AND "organizationId" = ${context.organizationId} FOR UPDATE`;
-  if (!products.length || !await tx.inventoryServiceConfiguration.findFirst({ where: { id: configurationId, organizationId: context.organizationId, inventoryItemId }, select: { id: true } })) throw new QuoteComparisonError(404, "SERVICE_CONFIGURATION_NOT_FOUND");
+  if (!products.length) throw new QuoteComparisonError(404, "SERVICE_CONFIGURATION_NOT_FOUND");
+  const previous = await tx.inventoryServiceConfiguration.findFirst({ where: { id: configurationId, organizationId: context.organizationId, inventoryItemId }, select: { id: true, revision: true } });
+  if (!previous) throw new QuoteComparisonError(404, "SERVICE_CONFIGURATION_NOT_FOUND");
+  if (previous.revision !== expectedRevision) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_STALE");
+  if (previous.revision === 2147483647) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_REVISION_EXHAUSTED");
   const changed = await tx.inventoryServiceConfiguration.updateMany({ where: { id: configurationId, organizationId: context.organizationId, inventoryItemId, revision: expectedRevision }, data: { active: false, revision: { increment: 1 } } });
   if (changed.count !== 1) throw new QuoteComparisonError(409, "SERVICE_CONFIGURATION_STALE");
   const row = await tx.inventoryServiceConfiguration.findFirstOrThrow({ where: { id: configurationId, organizationId: context.organizationId, inventoryItemId }, select: configurationSelect });
@@ -169,7 +186,7 @@ export async function loadScopedBudgetServices(tx: Prisma.TransactionClient, con
     const binding: ServiceBindingContext = { organizationId: context.organizationId, budgetId, configuration, executions, lines };
     // Allow administrative NEEDS_REVIEW loading; emission/mutation guards below
     // enforce active cardinality. All references remain checked on read.
-    const terms = Object.fromEntries(Object.entries(app).filter(([key]) => !["grossAmount", "discountAmount", "netAmount", "globalDiscountAmount", "totalAmount"].includes(key)));
+    const terms = serviceApplicationTerms(app);
     validateServiceCompanyBinding(terms, coverage.filter(row => row.applicationId === app.id), binding, false);
     return binding;
   });

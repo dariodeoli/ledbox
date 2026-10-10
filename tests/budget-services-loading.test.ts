@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Prisma } from "@prisma/client";
-import { loadScopedBudgetServices, resolveBudgetServiceCoverage, validateLockedServiceCostAllocation } from "../lib/server/budget-service-contract";
+import { loadScopedBudgetServices, resolveBudgetServiceCoverage, validateLockedServiceCostAllocation, toResolvedServiceFinancialInput, saveInventoryServiceConfiguration, archiveInventoryServiceConfiguration } from "../lib/server/budget-service-contract";
 
 const snapshot = { version: 1, front: "FINAL", mode: "FIXED_EVENT", unit: "PYG_PER_EXECUTION", normalPrice: 100, fromDays: 0, fromPrice: null, minimumPrice: 10 };
 const config = { id: "config", organizationId: "org", inventoryItemId: "product", kind: "TRANSPORT", publicName: "Traslado",
@@ -65,6 +65,36 @@ test("ordinary resolution does not refresh; explicit scoped refresh advances sou
   assert.equal(refreshed.app.sourceRevision, 2);
   assert.throws(() => resolveBudgetServiceCoverage(terms, { ...config, organizationId: "other" }, binding, app, coverage));
   assert.throws(() => resolveBudgetServiceCoverage({ ...terms, reviewState: "RESOLVED" }, config, binding, app, coverage));
+});
+
+test("final FIN bridge validates resolved coverage and explicit strict internal projection", () => {
+  const mapped = toResolvedServiceFinancialInput(materialized, coverage, binding, "GRAVADA_10", false);
+  assert.equal(mapped.costComplete, false);
+  assert.equal(mapped.taxType, "IVA10");
+  assert.equal(Object.hasOwn(mapped, "grossAmount"), false);
+  assert.equal(Object.hasOwn(mapped, "sourceRevision"), false);
+  assert.throws(() => toResolvedServiceFinancialInput(materialized, [], binding, "GRAVADA_10", false), /SERVICE_REVIEW_REQUIRED/);
+  assert.throws(() => toResolvedServiceFinancialInput({ ...materialized, costComplete: true }, coverage, binding, "GRAVADA_10", false));
+  assert.throws(() => toResolvedServiceFinancialInput({ ...materialized, reviewState: "NEEDS_REVIEW" }, coverage, binding, "GRAVADA_10", false));
+  assert.throws(() => toResolvedServiceFinancialInput({ ...materialized, tariffSnapshot: { ...snapshot, version: 99 } }, coverage, binding, "GRAVADA_10", false));
+});
+
+test("exhausted revision and out-of-Int archive input never reach update", async () => {
+  let updates = 0;
+  const tx = { $queryRaw: async () => [{ id: "product" }], inventoryServiceConfiguration: {
+    findFirst: async () => ({ ...config, revision: 2147483647 }),
+    updateMany: async () => { updates++; return { count: 1 }; },
+  } } as unknown as Prisma.TransactionClient;
+  const context = { organizationId: "org", role: "OWNER" as const, demo: false,
+    user: { id: "actor", name: "Actor", email: "actor@example.test", role: "OWNER" as const } };
+  const input = { version: 1, id: "config", expectedRevision: 2147483647, kind: config.kind,
+    publicName: config.publicName, mode: config.mode, unit: config.unit, minimumPrice: config.minimumPrice,
+    floorApplicability: config.floorApplicability, ivaType: config.ivaType, tariffsJson: config.tariffsJson };
+  await assert.rejects(() => saveInventoryServiceConfiguration(tx, context, "product", input), /SERVICE_CONFIGURATION_REVISION_EXHAUSTED/);
+  await assert.rejects(() => archiveInventoryServiceConfiguration(tx, context, "product", "config", 2147483647), /SERVICE_CONFIGURATION_REVISION_EXHAUSTED/);
+  await assert.rejects(() => archiveInventoryServiceConfiguration(tx, context, "product", "config", 2147483648), /SERVICE_CONFIGURATION_INVALID/);
+  await assert.rejects(() => archiveInventoryServiceConfiguration(tx, context, "product", "config", 1), /SERVICE_CONFIGURATION_STALE/);
+  assert.equal(updates, 0);
 });
 
 test("total coverage removal requires explicit exclusion and preserves historical references", () => {
