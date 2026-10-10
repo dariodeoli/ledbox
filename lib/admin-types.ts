@@ -2584,3 +2584,5 @@ export type AdminSignatureRequestRow = {
   /** Último correo de la solicitud (`MailLog`): estado, destinatario y motivo. */
   mail: { status: string; error: string | null; to: string; at: string } | null;
 };
+// Servicios AL S1: DTO único, strict y sin cambio de contratos históricos.
+export type { AdminInventoryServiceConfiguration, AdminBudgetServiceApplication, PublicBudgetServiceV1 } from "./budget-service-contract";

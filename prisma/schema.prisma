@@ -174,6 +174,12 @@ model Organization {
   purchaseInvoices  PurchaseInvoice[]
   fiscalPeriods     FiscalPeriod[]
   invoiceSequence   InvoiceSequence?
+  serviceConfigurations InventoryServiceConfiguration[]
+  serviceExecutions BudgetServiceExecution[]
+  serviceApplications BudgetServiceApplication[]
+  serviceCoverage BudgetServiceCoverage[]
+  serviceCostSources ServiceCostSource[]
+  serviceCostAllocations ServiceCostAllocation[]
 
   @@index([active, createdAt])
   @@index([planId])
@@ -807,6 +813,13 @@ model Budget {
   /// Solicitudes de firma del cliente (issue #79) sobre este presupuesto.
   signatureRequests    SignatureRequest[]
 
+  serviceExecutions    BudgetServiceExecution[]
+  serviceApplications  BudgetServiceApplication[]
+  serviceCoverage      BudgetServiceCoverage[]
+  serviceCostSources   ServiceCostSource[]
+  serviceCostAllocations ServiceCostAllocation[]
+
+  @@unique([organizationId, id], map: "Budget_org_id_key")
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
 }
@@ -850,7 +863,11 @@ model BudgetItem {
   inventoryId String?
   budget      Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   inventory   InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  serviceApplications BudgetServiceApplication[]
+  serviceCoverage BudgetServiceCoverage[]
+  serviceCostAllocations ServiceCostAllocation[]
 
+  @@unique([budgetId, id], map: "BudgetItem_budget_id_key")
   @@index([budgetId])
   @@index([inventoryId])
 }
@@ -1378,7 +1395,9 @@ model SupplierJob {
   organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   supplier       Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   event          Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  serviceCostSources ServiceCostSource[]
 
+  @@unique([organizationId, id], map: "SupplierJob_org_id_key")
   @@index([status, dueAt])
   @@index([eventId])
   @@index([organizationId, dueAt])
@@ -1695,7 +1714,9 @@ model InventoryItem {
   assignments        EventInventory[]
   budgetItems        BudgetItem[]
   units              InventoryUnit[]
+  serviceConfigurations InventoryServiceConfiguration[]
 
+  @@unique([organizationId, id], map: "InventoryItem_org_id_key")
   @@unique([organizationId, sku])
   @@index([status, category])
   @@index([organizationId, name])
@@ -2221,4 +2242,205 @@ model QuoteComparison {
   budgets          Budget[]
 
   @@index([organizationId, createdAt])
+}
+// Servicios AL S1 (#173): sin backfill ni reinterpretación de documentos.
+enum BudgetServiceKind {
+  TRANSPORT
+  INSTALLATION
+  GUARD
+  PROMOTER
+}
+enum BudgetServiceMode {
+  PERSON_DAY
+  FIXED_EVENT
+}
+enum BudgetServiceUnit {
+  PYG_PER_PERSON_DAY
+  PYG_PER_EXECUTION
+  PYG_PER_EVENT
+}
+enum BudgetServiceScope {
+  LINE
+  SHARED_EXECUTION
+}
+enum BudgetServiceInclusion {
+  NOT_INCLUDED
+  INCLUDED_FREE
+  INCLUDED_CHARGED
+}
+enum BudgetServiceReviewState {
+  RESOLVED
+  NEEDS_REVIEW
+}
+enum BudgetServicePriceSource {
+  TARIFF
+  OVERRIDE
+}
+enum BudgetServiceFloorApplicability {
+  CHARGED_ONLY
+}
+enum BudgetServiceIvaType {
+  GRAVADA_10
+  GRAVADA_5
+  EXENTA
+}
+enum ServiceCostOrigin {
+  SERVICE
+  LABOR
+  SUPPLIER
+  EQUIPMENT
+}
+enum ServiceExecutionState {
+  NOT_EXECUTED
+  COMMITTED
+  PARTIAL
+  EXECUTED
+  UNKNOWN
+}
+
+model InventoryServiceConfiguration {
+  id String @id
+  organizationId String
+  inventoryItemId String
+  kind BudgetServiceKind
+  publicName String
+  mode BudgetServiceMode
+  unit BudgetServiceUnit
+  tariffsJson Json
+  minimumPrice Int?
+  floorApplicability BudgetServiceFloorApplicability
+  ivaType BudgetServiceIvaType?
+  active Boolean
+  revision Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCfg_org_fkey")
+  inventory InventoryItem @relation(fields: [organizationId, inventoryItemId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCfg_item_fkey")
+  applications BudgetServiceApplication[]
+
+  @@unique([organizationId, inventoryItemId, kind], map: "SvcCfg_item_kind_key")
+  @@unique([organizationId, id, kind], map: "SvcCfg_org_id_kind_key")
+}
+
+model BudgetServiceExecution {
+  id String @id
+  organizationId String
+  budgetId String
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcExec_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcExec_budget_fkey")
+  applications BudgetServiceApplication[]
+
+  @@unique([organizationId, budgetId, id], map: "SvcExec_org_budget_id_key")
+}
+
+model BudgetServiceApplication {
+  id String @id
+  organizationId String
+  budgetId String
+  configurationId String
+  kind BudgetServiceKind
+  scope BudgetServiceScope
+  parentLineId String?
+  executionId String?
+  sortOrder Int
+  publicName String
+  inclusion BudgetServiceInclusion
+  reviewState BudgetServiceReviewState
+  mode BudgetServiceMode
+  unit BudgetServiceUnit
+  people Int?
+  serviceDays Int?
+  contextualServiceDays Int?
+  front String
+  tariffSnapshot Json
+  priceSource BudgetServicePriceSource
+  overridePrice Int?
+  floorApplicability BudgetServiceFloorApplicability
+  ivaType BudgetServiceIvaType?
+  discountMode BudgetDiscountMode?
+  discountValue Int?
+  grossAmount Int
+  discountAmount Int
+  netAmount Int
+  globalDiscountAmount Int
+  totalAmount Int
+  sourceRevision Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcApp_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcApp_budget_fkey")
+  configuration InventoryServiceConfiguration @relation(fields: [organizationId, configurationId, kind], references: [organizationId, id, kind], onDelete: Restrict, onUpdate: Restrict, map: "SvcApp_config_fkey")
+  execution BudgetServiceExecution? @relation(fields: [organizationId, budgetId, executionId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcApp_execution_fkey")
+  parentLine BudgetItem? @relation(fields: [budgetId, parentLineId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcApp_parent_fkey")
+  coverage BudgetServiceCoverage[]
+  costAllocations ServiceCostAllocation[]
+
+  @@unique([organizationId, budgetId, id], map: "SvcApp_org_budget_id_key")
+  @@unique([organizationId, budgetId, configurationId, executionId], map: "SvcApp_execution_key")
+  @@unique([organizationId, budgetId, configurationId, parentLineId], map: "SvcApp_parent_key")
+}
+
+model BudgetServiceCoverage {
+  id String @id
+  organizationId String
+  budgetId String
+  applicationId String
+  parentLineId String
+  active Boolean
+  createdAt DateTime @default(now())
+  removedAt DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCoverage_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCoverage_budget_fkey")
+  application BudgetServiceApplication @relation(fields: [organizationId, budgetId, applicationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCoverage_app_fkey")
+  parentLine BudgetItem @relation(fields: [budgetId, parentLineId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCoverage_parent_fkey")
+
+  @@unique([organizationId, budgetId, applicationId, parentLineId], map: "SvcCoverage_parent_key")
+}
+
+model ServiceCostSource {
+  id String @id
+  organizationId String
+  budgetId String
+  sourceKind ServiceCostOrigin
+  sourceKey String
+  supplierJobId String?
+  aggregationOwner ServiceCostOrigin
+  executionState ServiceExecutionState
+  incurredAmount Int?
+  pendingAmount Int?
+  incurredComplete Boolean
+  pendingComplete Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCost_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCost_budget_fkey")
+  supplierJob SupplierJob? @relation(fields: [organizationId, supplierJobId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCost_supplier_fkey")
+  allocations ServiceCostAllocation[]
+
+  @@unique([organizationId, budgetId, id], map: "SvcCost_org_budget_id_key")
+  @@unique([organizationId, budgetId, sourceKind, sourceKey], map: "SvcCost_origin_key")
+}
+
+model ServiceCostAllocation {
+  id String @id
+  organizationId String
+  budgetId String
+  sourceId String
+  applicationId String?
+  budgetItemId String?
+  incurredAmount Int?
+  pendingAmount Int?
+  incurredComplete Boolean
+  pendingComplete Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_budget_fkey")
+  source ServiceCostSource @relation(fields: [organizationId, budgetId, sourceId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_source_fkey")
+  application BudgetServiceApplication? @relation(fields: [organizationId, budgetId, applicationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_app_fkey")
+  budgetItem BudgetItem? @relation(fields: [budgetId, budgetItemId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_item_fkey")
+
+  @@unique([sourceId, applicationId], map: "SvcAlloc_application_key")
+  @@unique([sourceId, budgetItemId], map: "SvcAlloc_item_key")
 }
