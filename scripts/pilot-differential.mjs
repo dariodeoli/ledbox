@@ -75,7 +75,8 @@ export function validateServedClosure(refs, target) {
     requireThat(row?.path === host.surface && row.status === 200 && row.footerPresent === true
       && row.footerVersion === `v${target.version}` && digestPattern.test(row.bodySHA256 ?? ""), "Footer identity mismatch");
   }
-  requireThat(sameArtifact(served.releaseArtifact, checks.artifact), "Artifact closure mismatch");
+  requireThat(served.releaseArtifact?.sha === target.sha && served.releaseArtifact?.version === target.version
+    && sameArtifact(served.releaseArtifact, checks.artifact), "Artifact closure mismatch");
   requireThat(served.pilotStatus === "QA_NOT_RUN_DEFERRED_OWNER" && served.authenticatedOPSCalendarFlowStatus === "QA_NOT_RUN_DEFERRED_OWNER", "Closure must preserve deferred QA");
   return { ...target, tree: served.releaseTree, deployID: served.deploymentUUID, applicationUUID: hub.applicationUUID,
     artifact: served.releaseArtifact, scopes: ["ops161", "calendar56-119", "auto173"], ancillary: ["123"],

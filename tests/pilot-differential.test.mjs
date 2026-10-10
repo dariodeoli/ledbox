@@ -78,6 +78,8 @@ for (const [name, mutate, error] of [
   ["unresolved GET-only recovery", f => { f.resume.status = "WAIT"; }, /GET-only/],
   ["Hub rollback cannot bind served", f => { f.hub.deployments[0].rollback = true; }, /rollback/],
   ["wrong deploy ID despite finished Hub", f => { f.served.deploymentUUID = "other"; }, /Deployment ID/],
+  ["two agreeing stale artifact receipts still fail target SHA", f => { f.artifact.sha = "d".repeat(40); }, /Artifact closure/],
+  ["two agreeing old artifact versions still fail target76", f => { f.artifact.version = "2.1.75"; }, /Artifact closure/],
   ["failed actual stage cannot hide behind checks PASS", f => { f.outerTerminal.stages[0].exitCode = 1; }, /Actual code stage/],
   ["actual stage log changed after closure", f => { writeFileSync(f.outerTerminal.stages[0].log.path, "changed"); }, /hash mismatch/],
   ["old served75 hosts cannot bind target76", f => { f.smoke.results[0].version = "2.1.75"; }, /Served host/],
