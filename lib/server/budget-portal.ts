@@ -33,11 +33,15 @@ import { buildBudgetTimeline } from "./timeline";
  * endpoints del portal rechazan cualquier escritura sobre ella.
  */
 
+import { budgetItemCommercialTermsSchema, publicBudgetItemCommercialTerms } from "../budget-commercial-contract";
+
 const CODE_LENGTH = 20;
 
 export type PortalBudgetApprovalState = "PENDIENTE" | "APROBADO_DIGITAL" | "APROBADO_MANUAL" | "CAMBIOS_SOLICITADOS";
 
 export type PortalBudgetItem = {
+  commercialTerms?: ReturnType<typeof import("../budget-commercial-contract").publicBudgetItemCommercialTerms>;
+  sortOrder?: number | null;
   usesDays?: boolean;
   id: string;
   name: string;
@@ -59,6 +63,7 @@ export type PortalBudgetItem = {
 export type PortalBudgetInstallment = import("../budget-payment-plan").BudgetPaymentCondition;
 
 export type PortalBudgetPaymentPlan = {
+  advancePercentBps?: number | null;
   /** Anticipo a transferir con la aprobación (0 = no hay anticipo separado). */
   advanceAmount: number;
   installments: PortalBudgetInstallment[];
@@ -206,6 +211,7 @@ export type PortalBudget = {
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logoUrl?: string | null };
   event: { name: string; location: string | null; startsAt: string | null } | null;
   items: PortalBudgetItem[];
+  commercialTerms?: import("../budget-commercial-contract").BudgetCommercialTerms;
   subtotal: number;
   discount: number;
   total: number;
@@ -316,6 +322,9 @@ export function portalProofUpload(budget: {
 }
 
 type BudgetForPortal = {
+  discountMode?: "AMOUNT" | "PERCENT" | null;
+  discountValue?: number | null;
+  advancePercentBps?: number | null;
   publicToken?: string | null;
   attachments?: Array<{ id: string; organizationId: string; name: string; size: number; mime: string; clientVisible: boolean }>;
   referenceLinks?: Array<{ organizationId: string; label: string; url: string; clientVisible: boolean }>;
@@ -346,7 +355,7 @@ type BudgetForPortal = {
   organization: { name: string; slug: string; paymentDetails: unknown };
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logo?: { updatedAt: Date } | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
-  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
+  items: Array<{ priceMode?: "TARIFF" | "MANUAL" | null; tariffSnapshot?: unknown; discountMode?: "AMOUNT" | "PERCENT" | null; discountValue?: number | null; discountAmount?: number | null; id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
   payments: Array<{ id: string; amount: number; status?: string }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
@@ -599,6 +608,8 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
       ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
       : null,
     items: stableOrderBudgetItems(budget.items).map((item) => ({
+      sortOrder: item.sortOrder ?? null,
+      commercialTerms: publicBudgetItemCommercialTerms(budgetItemCommercialTermsSchema.parse({ priceMode: item.priceMode ?? null, tariffSnapshot: item.tariffSnapshot ?? null, discountMode: item.discountMode ?? null, discountValue: item.discountValue ?? null, discountAmount: item.discountAmount ?? null })),
       usesDays: Boolean(item.inventory) || item.days > 1,
       id: item.id,
       name: item.name,
@@ -616,9 +627,10 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     attachments: (budget.attachments ?? []).filter((file) => file.clientVisible && file.organizationId === budget.organizationId && file.mime === "application/pdf").map(({ id, name, size }) => ({ id, name, size })),
     referenceLinks: (budget.referenceLinks ?? []).filter((link) => link.clientVisible && link.organizationId === budget.organizationId && quoteReferenceUrl(link.url)).map((link) => ({ label: link.label, url: quoteReferenceUrl(link.url)! })),
     subtotal: budget.subtotal,
+    commercialTerms: { discountMode: budget.discountMode ?? null, discountValue: budget.discountValue ?? null, advancePercentBps: budget.advancePercentBps ?? null },
     discount: budget.discount,
     total: budget.total,
-    paymentPlan: paymentPlanOf(budget),
+    paymentPlan: { ...paymentPlanOf(budget), advancePercentBps: budget.advancePercentBps ?? null },
     collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED").reduce((sum, payment) => sum + payment.amount, 0),
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.

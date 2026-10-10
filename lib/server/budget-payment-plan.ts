@@ -2,9 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { budgetPlanLedgerError, hasDynamicBudgetPlan, resolveBudgetPaymentPlan } from "../budget-payment-plan";
 import { QuoteComparisonError } from "./quote-comparison";
 import { syncBudgetExpectedPayments } from "./expected-payments";
+import { materializeBudgetCommercial } from "./budget-commercial-terms";
 
 /** Called inside the same quote-row lock as every commercial edit. */
 export async function recalculateBudgetPaymentPlan(tx: Prisma.TransactionClient, budgetId: string) {
+  await materializeBudgetCommercial(tx, budgetId);
   const budget = await tx.budget.findUniqueOrThrow({ where: { id: budgetId }, select: { organizationId: true, total: true, advanceAmount: true, installmentsJson: true } });
   const result = resolveBudgetPaymentPlan(budget.installmentsJson, budget.total, budget.advanceAmount);
   // null was the historical no-plan representation.

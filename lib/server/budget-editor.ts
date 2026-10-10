@@ -10,6 +10,7 @@ import { jsonError } from "./http";
 import type { AdminContext } from "./tenancy";
 import { QuoteComparisonError, withQuoteCommercialEdit } from "./quote-comparison";
 import { recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "./budget-payment-plan";
+import { mergeBudgetItemTerms, mergeBudgetTerms, materializeBudgetCommercial } from "./budget-commercial-terms";
 
 /** Atomic editor: item replacement, commercial fields and dynamic plan under the
  * existing signature/approval lock. A failed plan rolls back the entire edit.
@@ -43,7 +44,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const total = subtotal - discount;
   const materialCost = Number(body.materialCost ?? current.materialCost), laborCost = Number(body.laborCost ?? current.laborCost);
   const costEstimate = active.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
-  if (![subtotal, discount, total, materialCost, laborCost, costEstimate].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
+   if (![subtotal, discount, materialCost, laborCost, costEstimate].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
   const dates: Record<string, Date | null> = {};
   for (const key of ["validUntil", "deliveryAt"] as const) {
     if (body[key] === undefined) continue;
@@ -81,16 +82,21 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
       const inventoryId = Object.hasOwn(source, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId);
       const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: excluded ? 0 : item.quantity * item.days * item.unitPrice };
       const orderedItemData = { ...itemData, sortOrder: items.indexOf(item) };
-      if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: orderedItemData });
-      else await tx.budgetItem.create({ data: { id: randomUUID(), budgetId, ...orderedItemData } });
+      const id = item.id ?? randomUUID();
+      if (item.id) await tx.budgetItem.update({ where: { id }, data: orderedItemData });
+      else await tx.budgetItem.create({ data: { id, budgetId, ...orderedItemData } });
+      await mergeBudgetItemTerms(tx, id, context.organizationId, source);
     }
+    await tx.budget.update({ where: { id: budgetId }, data });
+    await mergeBudgetTerms(tx, budgetId, body);
+    const effective = await materializeBudgetCommercial(tx, budgetId);
     if (body.installmentsJson !== undefined) {
-      const plan = resolveBudgetPaymentPlan(body.installmentsJson, total, current.advanceAmount);
+      const plan = resolveBudgetPaymentPlan(body.installmentsJson, effective.total, effective.advanceAmount);
       if (!plan.ok) throw new QuoteComparisonError(400, plan.error);
       await validateBudgetPlanAccounts(tx, context.organizationId, plan.rows);
       data.installmentsJson = plan.rows as unknown as Prisma.InputJsonValue;
     }
-    await tx.budget.update({ where: { id: budgetId }, data });
+    if (body.installmentsJson !== undefined) await tx.budget.update({ where: { id: budgetId }, data: { installmentsJson: data.installmentsJson } });
     await recalculateBudgetPaymentPlan(tx, budgetId);
     return tx.budget.findUniqueOrThrow({ where: { id: budgetId }, include: { items: true } });
   });

@@ -184,6 +184,10 @@ async function resolveInventoryLinks(rawItems: unknown[], organizationId: string
 }
 
 export async function POST(request: Request) {
+  try { return await createBudget(request); }
+  catch (error) { if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status); throw error; }
+}
+async function createBudget(request: Request) {
   const auth = await requireAdminContext("budgets.write");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
@@ -229,13 +233,16 @@ export async function POST(request: Request) {
   if (!valid.ok) return jsonError("La vigencia no es válida.", 400);
   const ivaType = ivaField(body.ivaType);
   if (body.ivaType !== undefined && ivaType === undefined) return jsonError("La condición de IVA no es válida.", 400);
-  const budget = await db.budget.create({
+  const { mergeBudgetItemTerms, mergeBudgetTerms } = await import("@/lib/server/budget-commercial-terms");
+  const title = body.title.trim();
+  const budget = await db.$transaction(async (tx) => {
+  const created = await tx.budget.create({
     data: {
       id: randomUUID(),
       organizationId,
       clientId: client.id,
       eventId: eventId || undefined,
-      title: body.title.trim(),
+      title,
       status: "DRAFT",
       subtotal,
       discount,
@@ -251,6 +258,11 @@ export async function POST(request: Request) {
       items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
     },
     include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
+  });
+  for (let index = 0; index < items.length; index++) await mergeBudgetItemTerms(tx, items[index].id, organizationId, rawItems[index] as Record<string, unknown>);
+  await mergeBudgetTerms(tx, created.id, body);
+  await recalculateBudgetPaymentPlan(tx, created.id);
+  return tx.budget.findUniqueOrThrow({ where: { id: created.id }, include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } } });
   });
   await recordAudit({
     context: auth.context,
@@ -450,7 +462,7 @@ async function patchBudget(request: Request) {
   if (storedSignature !== nextSignature) {
     changes.installments = { from: storedSignature, to: nextSignature };
   }
-  if (Object.keys(changes).length === 0) {
+  if (Object.keys(changes).length === 0 && !Object.hasOwn(body, "advancePercentBps")) {
     const current = await db.budget.findUnique({
       where: { id: budget.id },
       select: { id: true, advanceAmount: true, paymentTerms: true, installmentsJson: true, total: true },
@@ -459,11 +471,14 @@ async function patchBudget(request: Request) {
   }
 
   const updated = await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
-    const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { total: true } });
-    const checked = resolveBudgetPaymentPlan(installments, fresh.total, advance);
+    const { mergeBudgetTerms, materializeBudgetCommercial } = await import("@/lib/server/budget-commercial-terms");
+    await mergeBudgetTerms(tx, budget.id, body);
+    const effective = await materializeBudgetCommercial(tx, budget.id);
+    const checked = resolveBudgetPaymentPlan(body.installmentsJson ?? installments, effective.total, effective.advanceAmount);
     if (!checked.ok) throw new QuoteComparisonError(400, checked.error);
     await validateBudgetPlanAccounts(tx, organizationId, checked.rows);
-    await assertBudgetPlanLedger(tx, budget.id, fresh.total, advance, checked.rows);
+    await assertBudgetPlanLedger(tx, budget.id, effective.total, effective.advanceAmount, checked.rows);
+    delete data.advanceAmount;
     data.installmentsJson = checked.rows as unknown as Prisma.InputJsonValue;
     const saved = await tx.budget.update({
     where: { id: budget.id },
@@ -477,7 +492,7 @@ async function patchBudget(request: Request) {
     },
     });
     await recalculateBudgetPaymentPlan(tx, budget.id);
-    return saved;
+    return tx.budget.findUniqueOrThrow({ where: { id: budget.id } });
   });
   await recordAudit({
     context: auth.context,
@@ -485,7 +500,7 @@ async function patchBudget(request: Request) {
     entity: "Budget",
     entityId: budget.id,
     summary: `Definió el plan de pagos del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}»`,
-    detail: { changes },
+    detail: { changes: changes ?? {} },
   });
   // El plan cambió: se sincronizan los pagos esperados (issue #28). Un
   // presupuesto sin aprobar no genera nada; lo confirmado nunca se pisa.
@@ -550,7 +565,7 @@ async function patchBudgetItems(params: {
   const excludedIds = new Set(budget.items.filter((item) => item.excluded).map((item) => item.id));
   for (const item of parsed) if (item.id && excludedIds.has(item.id)) item.subtotal = 0;
   const subtotal = parsed.reduce((sum, item) => sum + item.subtotal, 0);
-  const discount = Math.min(budget.discount, subtotal);
+  const discount = budget.discount;
   const total = Math.max(0, subtotal - discount);
   if (!budgetMoneyValid(subtotal)) return jsonError("El subtotal supera el límite Int.", 400);
   const costEstimate = parsed.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
@@ -579,13 +594,18 @@ async function patchBudgetItems(params: {
         subtotal: item.subtotal,
         inventoryId,
       };
+      const id = item.id && existingIds.has(item.id) ? item.id : randomUUID();
       if (item.id && existingIds.has(item.id)) {
         await tx.budgetItem.update({ where: { id: item.id }, data });
       } else {
-        await tx.budgetItem.create({ data: { id: randomUUID(), budgetId: budget.id, ...data } });
+        await tx.budgetItem.create({ data: { id, budgetId: budget.id, ...data } });
       }
+      const { mergeBudgetItemTerms } = await import("@/lib/server/budget-commercial-terms");
+      await mergeBudgetItemTerms(tx, id, organizationId, raw ?? {});
     }
     await tx.budget.update({ where: { id: budget.id }, data: { subtotal, discount, total, costEstimate } });
+    const { mergeBudgetTerms } = await import("@/lib/server/budget-commercial-terms");
+    await mergeBudgetTerms(tx, budget.id, body);
     await recalculateBudgetPaymentPlan(tx, budget.id);
   });
 
@@ -616,7 +636,7 @@ async function patchBudgetItems(params: {
  * `PATCH kind: "commercial"` (issue #65): precio final y datos de la versión que
  * ve el cliente. El **precio final** es `total`: se define con el descuento
  * (no puede superar la suma de ítems; para un precio mayor primero se ajustan
- * los precios unitarios con `kind: "items"`). Suma vigencia, fecha de entrega,
+   * los precios unitarios con `kind: "items"`). Suma vigencia, fecha de entrega,
  * condición de IVA, garantía y observaciones. Los costos internos (materiales y
  * mano de obra) se pueden corregir siempre —son del dueño, no del cliente—; los
  * datos que el cliente ya vio quedan congelados una vez aprobado el presupuesto.
@@ -725,7 +745,7 @@ async function patchBudgetCommercial(params: {
     },
     patch,
   );
-  if (!changes) {
+  if (!changes && !["discountMode", "discountValue", "advancePercentBps"].some((key) => Object.hasOwn(body, key))) {
     const current = await db.budget.findUnique({
       where: { id: budget.id },
       select: {
@@ -746,6 +766,8 @@ async function patchBudgetCommercial(params: {
   }
 
   const updated = await withQuoteCommercialEdit(budget.id, organizationId, touchesBudgetClientFields(body), async (tx) => {
+    const { mergeBudgetTerms } = await import("@/lib/server/budget-commercial-terms");
+    await mergeBudgetTerms(tx, budget.id, body);
     const updated = await tx.budget.update({
     where: { id: budget.id },
     data,
@@ -764,7 +786,7 @@ async function patchBudgetCommercial(params: {
     },
     });
     await recalculateBudgetPaymentPlan(tx, budget.id);
-    return updated;
+    return tx.budget.findUniqueOrThrow({ where: { id: budget.id } });
   });
   await recordAudit({
     context,
@@ -772,7 +794,7 @@ async function patchBudgetCommercial(params: {
     entity: "Budget",
     entityId: budget.id,
     summary: `Definió el precio y las condiciones del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}»`,
-    detail: { fields: changes },
+    detail: { fields: changes ?? {} },
   });
   return Response.json({ budget: updated });
 }

@@ -121,16 +121,16 @@ async function resolveRequest(request: Request) {
       }
     }
     const appliedById = new Map(appliedItems.map((item) => [item.id, item]));
-    const nextSubtotal = budget.items.reduce((sum, item) => sum + (appliedById.get(item.id)?.subtotal ?? item.subtotal), 0);
+    let nextSubtotal = budget.items.reduce((sum, item) => sum + (appliedById.get(item.id)?.subtotal ?? item.subtotal), 0);
 
     // Descuento: la contra-oferta manda; si no, se recalcula el pedido contra
     // el subtotal que queda después de aplicar los ítems.
-    let nextDiscount = Math.min(budget.discount, nextSubtotal);
+    let nextDiscount = budget.discount;
     let appliedDiscount: number | null = null;
     const counterAmountRaw = counter.discountAmount;
     if (counterAmountRaw !== undefined) {
-      const counterAmount = Number(counterAmountRaw);
-      if (!Number.isInteger(counterAmount) || counterAmount <= 0) {
+      const counterAmount = counterAmountRaw;
+      if (typeof counterAmount !== "number" || !Number.isInteger(counterAmount) || counterAmount <= 0 || counterAmount > 2147483647) {
         return jsonError("La contra-oferta del descuento debe ser un monto entero mayor a cero.", 400);
       }
       if (counterAmount > nextSubtotal) return jsonError("La contra-oferta no puede superar el subtotal del presupuesto.", 400);
@@ -139,13 +139,13 @@ async function resolveRequest(request: Request) {
     } else if (payload.discount) {
       const amount = payload.discount.type === "percent"
         ? Math.round((nextSubtotal * payload.discount.value) / 100)
-        : Math.min(payload.discount.amount, nextSubtotal);
+        : payload.discount.amount;
       if (amount <= 0) return jsonError("El descuento pedido no alcanza un monto válido.", 400);
       nextDiscount = amount;
       appliedDiscount = amount;
     }
 
-    const nextTotal = Math.max(0, nextSubtotal - nextDiscount);
+    let nextTotal = Math.max(0, nextSubtotal - nextDiscount);
     const changesOffer = appliedItems.length > 0 || appliedDiscount !== null;
     const resolvesRevision = changeRequest.kind === "changes";
     const nextStatus = changesOffer && budget.status !== "APPROVED" ? "NEGOTIATING" : budget.status;
@@ -173,7 +173,12 @@ async function resolveRequest(request: Request) {
           ...(resolvesRevision ? { revisionRequestedAt: null } : {}),
         },
       });
+      const { mergeBudgetTerms } = await import("@/lib/server/budget-commercial-terms");
+      if (counterAmountRaw !== undefined) await mergeBudgetTerms(tx, budget.id, { discountMode: "AMOUNT", discountValue: counterAmountRaw });
+      else if (payload.discount) await mergeBudgetTerms(tx, budget.id, { discountMode: payload.discount.type === "percent" ? "PERCENT" : "AMOUNT", discountValue: payload.discount.type === "percent" ? Math.round(payload.discount.value * 100) : payload.discount.amount });
       await recalculateBudgetPaymentPlan(tx, budget.id);
+      const effective = await tx.budget.findUniqueOrThrow({ where: { id: budget.id } });
+      nextSubtotal = effective.subtotal; nextDiscount = effective.discount; nextTotal = effective.total;
       await tx.budgetChangeRequest.update({
         where: { id: changeRequest.id },
         data: { status: "accepted", resolvedAt: new Date(), resolvedByName: user.name, responseNote: note || null },

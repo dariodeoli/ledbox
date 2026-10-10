@@ -315,6 +315,11 @@ export type AdminEventPanelRow = Omit<AdminEventRow, "client"> & { client: Admin
 export type AdminEventChecklistRow = Pick<AdminEventRow, "id" | "name" | "tasks">;
 
 export type AdminBudgetItem = {
+  priceMode?: import("./budget-commercial-contract").BudgetItemCommercialTerms["priceMode"];
+  tariffSnapshot?: import("./budget-commercial-contract").BudgetTariffSnapshot | null;
+  discountMode?: "AMOUNT" | "PERCENT" | null;
+  discountValue?: number | null;
+  discountAmount?: number | null;
   notes?: string | null;
   excluded?: boolean;
   id: string;
@@ -388,6 +393,9 @@ export function overdueCount(
 }
 
 export type AdminBudgetRow = {
+  discountMode?: "AMOUNT" | "PERCENT" | null;
+  discountValue?: number | null;
+  advancePercentBps?: number | null;
   updatedAt?: string;
   comparisonId?: string | null;
   id: string;
@@ -1611,6 +1619,10 @@ export type AdminInventoryAvailability = {
 
 /** Artículo del inventario vinculado a un ítem del presupuesto (issue #18). */
 export type AdminInventoryLink = {
+  wholesalePrice?: number;
+  wholesaleFromDays?: number;
+  wholesaleFromPrice?: number;
+  minimumPrice?: number;
   imageUrl?: string | null;
   imageMime?: string | null;
   updatedAt?: string;

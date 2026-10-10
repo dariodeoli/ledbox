@@ -1,7 +1,8 @@
 import { budgetMoneyValid } from "./budget-payment-plan";
 import type { AdminInventoryLink } from "./admin-types";
+import { calculateBudgetCommercial, type CommercialLine } from "./budget-commercial-calculation";
 
-export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean };
+export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean; commercialTerms?: import("./budget-commercial-contract").BudgetItemCommercialTerms };
 export function emptyBudgetItem(): BudgetItemDraft {
   return { id: null, name: "", quantity: "1", days: "1", unitPrice: "", costPrice: "0", notes: "", inventory: null };
 }
@@ -17,5 +18,14 @@ export function budgetItemError(item: { name: string; quantity: number; days: nu
   return null;
 }
 export function budgetDraftSubtotal(items: BudgetItemDraft[]): number {
-  return items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0);
+  try { return calculateBudgetCommercial(items.map(budgetDraftCommercialLine), { discountMode: null, discountValue: null, advancePercentBps: null }, 0, 0).subtotal; }
+  catch { return NaN; }
+}
+export function budgetDraftCommercialLine(item: BudgetItemDraft, index: number): CommercialLine {
+  return { id: item.id ?? `draft-${index}`, sortOrder: index, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), excluded: item.excluded, ...(item.commercialTerms ?? { priceMode: null, tariffSnapshot: null, discountMode: null, discountValue: null, discountAmount: null }) };
+}
+export function budgetDraftCommercialPayload(item: BudgetItemDraft) {
+  if (!item.commercialTerms) return {};
+  const { discountAmount: _effective, ...input } = item.commercialTerms;
+  return input;
 }
