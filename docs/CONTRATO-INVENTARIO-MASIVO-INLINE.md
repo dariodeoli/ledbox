@@ -60,3 +60,28 @@ una asignación a evento, no a un taller. No se reinterpretan ni se copian a la
 unidad. Nuevos campos/semántica necesitan acuerdo de datos con PLATAFORMA y dueño.
 
 Ayudas hover/foco/tap se consumen del objeto compartido de PANEL; sin helper local.
+
+## Archivo organizacional y restauración — delta del dueño #161
+
+Dependencia aislada PLATAFORMA `5e5cc17`: `InventoryItem.archivedAt` nullable,
+migración aditiva `ADD COLUMN IF NOT EXISTS`, sin backfill. No es un estado
+operativo ni modifica disponibilidad.
+
+`POST /api/admin/inventory` con `{kind:"item-archive",id}` o
+`{kind:"item-restore",id}`, mismos `inventory.write`, empresa activa y auditoría.
+Archivar conserva la fecha de archivo si ya estaba archivado; restaurar deja
+`archivedAt=null`. Sólo se modifica ese campo y el timestamp técnico `updatedAt`;
+unidades, status, cantidad, precios, visibilidad, notas, reservas, presupuestos e
+historia permanecen intactos. No hay DELETE ni conversión a RETIRED. Los filtros
+de disponibilidad mantienen su cálculo existente incluso para un producto
+archivado. El listado completo prioriza productos activos antes de su límite
+actual de 300 registros.
+
+Activos en la lista principal; sección **ARCHIVADOS** al final, usando
+`AdminDisclosure` compartido cerrado por defecto. Desde allí se consulta la ficha
+o se restaura. La recarga vuelve a colapsar la sección y conserva el archivo real.
+La UI bloquea archivo/restauración mientras la ficha tiene cambios pendientes,
+sin descartar el formulario. VIEWER/FINANCE sólo consultan; no ven restauración.
+
+`AdminInventoryRow.archivedAt` es el único hunk compartido consumido por OPS;
+contratos de presupuestos, schema de servicios y cálculos FIN no se modifican.

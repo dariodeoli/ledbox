@@ -241,7 +241,7 @@ export async function GET(request: Request) {
   // efectiva. Con las unidades (issue #112) y el conteo de mantenimiento.
   const items = await db.inventoryItem.findMany({
     where: { organizationId },
-    orderBy: { name: "asc" },
+    orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { name: "asc" }],
     take: 300,
     omit: { imageData: true },
     include: {
@@ -311,6 +311,18 @@ export async function POST(request: Request) {
   const { organizationId } = auth.context;
   const body = (await readJson(request)) as Record<string, unknown>;
   const kind = typeof body.kind === "string" ? body.kind : "";
+
+  if (kind === "item-archive" || kind === "item-restore") {
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return jsonError("Falta el producto.", 400);
+    const existing = await db.inventoryItem.findFirst({ where: { id, organizationId }, select: { id: true, name: true, archivedAt: true } });
+    if (!existing) return jsonError("El producto no existe en esta empresa.", 404);
+    const archivedAt = kind === "item-archive" ? existing.archivedAt ?? new Date() : null;
+    const inventory = await db.inventoryItem.update({ where: { id: existing.id }, data: { archivedAt }, omit: { imageData: true } });
+    const changes = auditChanges(existing, inventory, ["archivedAt"]);
+    if (changes) await recordAudit({ context: auth.context, action: "update", entity: "InventoryItem", entityId: inventory.id, summary: `${kind === "item-archive" ? "Archivó" : "Restauró"} el producto «${existing.name}»`, detail: { changes } });
+    return Response.json({ inventory: { ...inventory, imageUrl: inventoryImageUrl(inventory), imageUploaded: Boolean(inventory.imageMime) } });
+  }
 
   if (kind === "bulk-items" || kind === "bulk-units") {
     const ids = readBulkSelection(body.ids);

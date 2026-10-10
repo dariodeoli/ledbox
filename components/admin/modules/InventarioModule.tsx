@@ -437,6 +437,7 @@ export function InventarioModule() {
   const [notice, setNotice] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [statusError, setStatusError] = useState("");
+  const [archiveBusyId, setArchiveBusyId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkUnitIds, setBulkUnitIds] = useState<string[]>([]);
@@ -510,7 +511,7 @@ export function InventarioModule() {
   const inventory = useMemo(() => resources.data ?? [], [resources.data]);
   const selected = useMemo(() => inventory.find((item) => item.id === selectedId) ?? null, [inventory, selectedId]);
 
-  const rows = useMemo(
+  const filteredRows = useMemo(
     () =>
       inventory
         .filter((item) => (kind === "ALL" ? true : item.kind === kind))
@@ -518,6 +519,23 @@ export function InventarioModule() {
         .filter((item) => matchesQuery(query, [item.name, item.category, item.sku, item.status])),
     [inventory, kind, status, query],
   );
+  const rows = filteredRows.filter(item => !item.archivedAt);
+  const archivedRows = filteredRows.filter(item => Boolean(item.archivedAt));
+
+  async function archiveItem(item: AdminInventoryItemRow, restore = false) {
+    if (archiveBusyId) return;
+    if (editItem?.id === item.id || (unitEditorOpen && selectedId === item.id)) {
+      setNoticeTone("warn"); setNotice("Guardá o cancelá los cambios pendientes de esta ficha antes de archivarla o restaurarla."); return;
+    }
+    setArchiveBusyId(item.id); setStatusError("");
+    const result = await adminSend("/api/admin/inventory", { kind: restore ? "item-restore" : "item-archive", id: item.id });
+    setArchiveBusyId("");
+    if (!result.ok) { setStatusError(result.error); return; }
+    setNoticeTone("ok"); setNotice(`Producto «${item.name}» ${restore ? "restaurado" : "archivado"}. Conserva estado operativo, unidades, precios y asignaciones.`);
+    setBulkItemIds(current => current.filter(id => id !== item.id));
+    if (!restore && selectedId === item.id) setSelectedId("");
+    resources.reload();
+  }
 
   const totals = useMemo(
     () =>
@@ -1382,7 +1400,7 @@ export function InventarioModule() {
             const conflictEvents = range?.conflicts ?? [];
             const menuItems: AdminMenuItem[] = [
               ...(writable
-                ? [{ label: "Editar ítem", icon: "edit" as const, onClick: () => openEditItem(item), title: `Editar ítem: ${item.name}` }]
+                ? [{ label: "Editar ítem", icon: "edit" as const, onClick: () => openEditItem(item), title: `Editar ítem: ${item.name}` }, { label: "Archivar producto", icon: "inventory" as const, onClick: () => void archiveItem(item), title: `Archivar producto ${item.name}`, disabled: Boolean(archiveBusyId) }]
                 : []),
               {
                 label: selectedId === item.id ? "Ocultar asignaciones" : "Asignaciones y disponibilidad",
@@ -1546,12 +1564,12 @@ export function InventarioModule() {
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       {writable ? (
-                        <AdminButton
+                        <><AdminButton icon="inventory" title={`Archivar producto ${item.name}`} aria-label={`Archivar producto ${item.name}`} disabled={Boolean(archiveBusyId)} onClick={() => void archiveItem(item)} /><AdminButton
                           icon="edit"
                           title={`Editar ítem: ${item.name}`}
                           aria-label={`Editar ítem: ${item.name}`}
                           onClick={() => openEditItem(item)}
-                        />
+                        /></>
                       ) : null}
                       <AdminButton
                         icon="info"
@@ -1896,6 +1914,13 @@ export function InventarioModule() {
         </AdminPanel>
       ) : null}
 
+      <AdminDisclosure title="ARCHIVADOS" hint={`${archivedRows.length} productos · conserva sus datos y estado operativo`}>
+        {archivedRows.length ? <AdminCardGrid label="Productos archivados" cards={archivedRows.map(item => ({
+          id: item.id, title: item.name, subtitle: item.category,
+          fields: [{ label: "Archivado", value: formatDateShort(item.archivedAt) }, { label: "Estado operativo", value: inventoryStatusLabel(item.status) }, { label: "Unidades", value: formatNumber(item.quantity) }, { label: "Cliente final", value: priceText(item.listPrice) }, { label: "Mayorista", value: priceText(item.wholesalePrice) }],
+          footer: <span className="admin-actions"><AdminButton icon="info" title={`Ver producto archivado ${item.name}`} aria-label={`Ver producto archivado ${item.name}`} onClick={() => selectInventory(item.id)}>Ver ficha</AdminButton>{writable ? <AdminButton icon="refresh" title={`Restaurar producto ${item.name}`} aria-label={`Restaurar producto ${item.name}`} busy={archiveBusyId === item.id} disabled={Boolean(archiveBusyId) && archiveBusyId !== item.id} onClick={() => void archiveItem(item, true)}>Restaurar</AdminButton> : null}</span>,
+        }))} /> : <AdminEmpty icon="inventory" title="Sin productos archivados" hint="Los productos activos se muestran arriba." />}
+      </AdminDisclosure>
     </div>
   );
 }
