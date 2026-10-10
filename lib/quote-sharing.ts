@@ -19,9 +19,18 @@ export function quotePortalAvailable(budget: { status: string; validUntil: Date 
   return todayDayKey(budget.validUntil) >= todayDayKey(now);
 }
 
-/** Default final-customer daily price, copied only on explicit selection. */
-export function quoteProductPrice(product: { listPrice?: number; listFromDays?: number; listFromPrice?: number }, days: number): number {
-  return product.listFromDays && days >= product.listFromDays && product.listFromPrice ? product.listFromPrice : product.listPrice ?? 0;
+/** An explicit sales tier stays fixed when duration changes. Zero disables a rule. */
+export function quoteProductPrice(product: {
+  listPrice?: number; listFromDays?: number; listFromPrice?: number;
+  wholesalePrice?: number; wholesaleFromDays?: number; wholesaleFromPrice?: number;
+  minimumPrice?: number;
+}, days: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): number {
+  const normal = tier === "WHOLESALE" ? product.wholesalePrice : product.listPrice;
+  const threshold = tier === "WHOLESALE" ? product.wholesaleFromDays : product.listFromDays;
+  const fromPrice = tier === "WHOLESALE" ? product.wholesaleFromPrice : product.listFromPrice;
+  const price = threshold && threshold > 0 && days >= threshold && fromPrice && fromPrice > 0 ? fromPrice : normal ?? 0;
+  // A floor does not manufacture an unconfigured sales price or another tier.
+  return price > 0 ? Math.max(price, product.minimumPrice ?? 0) : 0;
 }
 
 /** Same day boundary as the server portal, including after UTC midnight. */
