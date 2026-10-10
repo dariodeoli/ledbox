@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+ios/
+android/
+.env*
+!.env.example
+*.mobileprovision
+*.p12
+private-config.json
