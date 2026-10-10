@@ -16,8 +16,8 @@ no activa el watcher ni publica una versión.
 | `node scripts/orquestador.mjs --prepare` | Alias de `prepare`. También `ht --prepare`, `hd --prepare` y `node scripts/deploy.mjs --prepare`. |
 | `node scripts/orquestador.mjs reject` | Archiva un READY rechazado por Pilot FAIL exacto, sólo sin release/publicación; no construye ni publica. |
 | `npm run ht` / `npm run hd` / `npm run deploy:patch` | Produce `READY` si no hay candidato; en la siguiente ejecución exige gate independiente antes de publicar. |
-| `npm run auto-hd` | Igual ciclo, con umbral de 10 commits funcionales y cooldown de 20 minutos. |
-| `npm run watch-hd -- --interval 10` | Singleton; ejecuta `auto` cada 10 minutos por defecto. Acepta minutos finitos entre 1 y 1440; no cambia gates ni cooldown. |
+| `npm run auto-hd` | Umbral10 nuevos funcionales únicos #173 desde último SHA servido acreditado; cooldown600s. Sin baseline: AUTO_WAITING_SERVED_BASELINE. |
+| `npm run watch-hd` / `-- --interval 20` | Singleton; auto cada20min. Sólo20 autorizado. Requiere primer HD servido acreditado, Pilot final y sin pending al inicio; no activa gates. |
 | `node scripts/orquestador.mjs ht --dry-run` | Sólo inventario Git local. No mergea, construye, activa ni publica. |
 
 Los diagnósticos no necesitan habilitación. `pp` hace GET con `redirect:manual`,
@@ -41,14 +41,22 @@ el commit de metadata de una release aprobada, desde el integrador.
   automáticos. Ahead local ajeno a #173 bloquea el ciclo.
 - Unión de ahead local y ramas allowlist pendientes, primero por SHA y luego
   por `git patch-id --stable` de su diff funcional. Patches ya presentes en la
-  base remota tampoco cuentan. Tips ancestros de `HEAD` no se proponen para merge;
+   base de conteo tampoco cuentan. AUTO usa último servido acreditado, manual usa
+   remoto actual; la base CAS de publicación siempre es el remoto actual. Tips ancestros de `HEAD` no se proponen para merge;
   sus commits ahead siguen contando.
 - Merges, documentación, tests y cambios exclusivamente en package/lock no
   suman. Código de app/UI/API/Prisma/scripts/assets/config runtime sí suma;
   un commit con código UI y dependencias cuenta por su código, una sola vez.
-- Sin diff funcional neto contra la base remota no hay release. El umbral auto
-  es **10**; el cooldown entre intentos nuevos es **20 minutos**. Un candidato
+- Sin diff funcional neto contra la base de conteo no hay release. El umbral auto
+  es **10**; el cooldown entre intentos nuevos es **600 segundos**. Un candidato
   pendiente se retoma por su SHA, sin iniciar otra ronda ni volver a versionar.
+- AUTO cuenta también cambios admitidos ya pusheados pero aún no servidos;
+  importados históricos ajenos se excluyen, nuevo ahead/carril ajeno bloquea.
+  Sin recibo servedtrue/huella Hub finished/recurso/SHA exacto y ancestro local,
+  no se fabrica baseline (ni origin ni e0 con healthSHA null). HD manual puede
+  establecerlo; al cerrar SERVED guarda lastServedSHA exacto y autoPolicy.
+  Detalle del conteo/params y actualización de SOURCE flag acreditado por Secretaría
+  en `docs/DELTA-DEPLOY-UNIFORME-LEDBOX.md`; preflight GET fresco sigue obligatorio.
 - Conflictos abortan sólo el merge actual y conservan los merges anteriores.
   Fallos de checks conservan la historia para resolución manual; nunca reset hard,
   rebase/force, espejo de `main` o recuperación de históricos.

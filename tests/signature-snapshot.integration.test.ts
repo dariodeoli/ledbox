@@ -33,8 +33,8 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     async function call(path: string, method = "GET", body?: unknown, admin = false) {
       return fetch(base + path, { method, redirect: "manual", headers: { "Content-Type": "application/json", "X-Forwarded-For": `snapshot-${suffix}`, ...(admin ? { Cookie: `ledbox_session=${jwt}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     }
-    async function budget(title: string) {
-      const response = await call("/api/admin/budgets", "POST", { clientId: client.id, eventId: event.id, title, items: [{ name: "Second", quantity: 1, days: 1, unitPrice: 200, costPrice: 13 }, { name: "First", quantity: 1, days: 1, unitPrice: 100, costPrice: 17 }] }, true);
+    async function budget(title: string, total = 300) {
+      const response = await call("/api/admin/budgets", "POST", { clientId: client.id, eventId: event.id, title, items: [{ name: "Second", quantity: 1, days: 1, unitPrice: total * 2 / 3, costPrice: 13 }, { name: "First", quantity: 1, days: 1, unitPrice: total / 3, costPrice: 17 }] }, true);
       assert.equal(response.status, 201); return (await response.json()).budget;
     }
     async function issue(id: string, attachmentId?: string) {
@@ -59,7 +59,16 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     }
 
     // New request captures all public parts, explicitly ordered, before SENT.
-    const q = await budget("Immutable snapshot document"); const issued = await issue(q.id);
+    const account = await db.treasuryAccount.create({ data: { id: randomUUID(), organizationId: org, name: "Public installment account", type: "BANK", openingBalance: 12345 } });
+    const conditions = (percent = 30) => [
+      { label: "Reserva", type: "percent", value: percent, dueAt: "2099-01-05", moment: "Al confirmar", accountId: account.id },
+      { label: "Cuota", type: "fixed", value: 200000, dueAt: "2099-01-09", moment: "Antes del montaje", accountId: account.id },
+      { label: "Saldo", type: "remainder", dueAt: "2099-01-12", moment: "Después", accountId: account.id },
+    ];
+    const q = await budget("Immutable snapshot document", 900000);
+    const planPatch = await call("/api/admin/budgets", "PATCH", { budgetId: q.id, installmentsJson: conditions() }, true);
+    assert.equal(planPatch.status, 200, await planPatch.clone().text());
+    const issued = await issue(q.id);
     const creation = await db.signatureEvent.findFirstOrThrow({ where: { requestId: issued.id, eventType: "REQUEST_CREATED" } });
     const metadata = creation.metadataJson as Record<string, unknown>;
     assert.equal(metadata.documentVersion, 2); assert.equal(metadata.documentSnapshotHash, issued.documentHash);
@@ -68,6 +77,10 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     const sentView = (await sent.json()).signature;
     assert.deepEqual(sentView.budget.items.map((item: { name: string }) => item.name), ["Second", "First"]);
     assert.equal(sentView.budget.client.displayName, "Frozen fantasy original"); assert.equal(sentView.budget.client.legalName, "Frozen legal original");
+    assert.deepEqual(sentView.budget.plan.installments.map((row: { amount: number }) => row.amount), [270000, 200000, 430000]);
+    assert.deepEqual(sentView.budget.plan.installments.map((row: { moment: string }) => row.moment), ["Al confirmar", "Antes del montaje", "Después"]);
+    assert.ok(sentView.budget.plan.installments.every((row: { accountId: string }) => row.accountId === account.id));
+    assert.doesNotMatch(JSON.stringify(sentView.budget), /openingBalance|costPrice|costEstimate/);
     assert.equal((await sign(issued.code)).status, 200);
     const before = await db.signatureRequest.findUniqueOrThrow({ where: { id: issued.id } });
     const oldEvents = await db.signatureEvent.findMany({ where: { requestId: issued.id }, orderBy: { occurredAt: "asc" } });
@@ -75,6 +88,11 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     const original = await render(issued.code, "signed-original-before");
     assert.match(original.htmlText, /Frozen fantasy original/); assert.match(original.htmlText, /Frozen legal original/);
     assert.doesNotMatch(original.htmlText, /Not fiscal historical/);
+    for (const text of ["Al confirmar", "Antes del montaje", "Después", "270.000", "200.000", "430.000"]) assert.ok(original.htmlText.includes(text), text);
+    const { formatDate } = await import("../lib/admin-format");
+    for (const row of conditions()) assert.ok(original.htmlText.includes(formatDate(row.dueAt)), row.dueAt);
+    const signedPlanEdit = await call("/api/admin/budgets", "PATCH", { budgetId: q.id, installmentsJson: conditions(40) }, true);
+    assert.equal(signedPlanEdit.status, 409, "API preserves signed commercial conditions; direct historical edit below still cannot change snapshot");
     const changed = await call(`/api/admin/clients/${client.id}`, "PATCH", { name: "Changed contact", company: "Changed historical company", tradeName: "Changed fantasy", legalName: "Changed legal" }, true);
     assert.equal(changed.status, 200, await changed.clone().text());
     await db.event.update({ where: { id: event.id }, data: { name: "Changed event", location: "Changed location", startsAt: new Date("2031-01-10T15:00:00Z") } });
@@ -122,6 +140,13 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.deepEqual(staleView.budget.items.map((i: { name: string }) => i.name), ["Second", "First"], "SENT renders captured snapshot after live edit");
     assert.equal((await db.signatureRequest.findUniqueOrThrow({ where: { id: stale.id } })).signedDocumentHash, null);
 
+    const stalePlanQuote = await budget("New stale installment plan", 900000);
+    assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: stalePlanQuote.id, installmentsJson: conditions() }, true)).status, 200);
+    const stalePlan = await issue(stalePlanQuote.id);
+    assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: stalePlanQuote.id, installmentsJson: conditions(40) }, true)).status, 200);
+    assert.equal((await sign(stalePlan.code)).status, 409, "snapshot rendering must never mask LIVE plan edits");
+    assert.equal((await db.signatureRequest.findUniqueOrThrow({ where: { id: stalePlan.id } })).signedDocumentHash, null);
+
     // Public attachment bytes remain independently bound to their original hash.
     const attachmentQuote = await budget("Attachment original");
     const { PDFDocument } = await import("pdf-lib"); const pdf = await PDFDocument.create(); pdf.addPage(); const bytes = await pdf.save();
@@ -137,6 +162,6 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     const tampered = await db.signatureRequest.findUniqueOrThrow({ where: { id: issued.id }, include: requestInclude });
     const modified = structuredClone(tampered); (modified.events[0].metadataJson as Record<string, unknown>).documentSnapshotHash = "0".repeat(64);
     assert.throws(() => verifiedSignatureSnapshot(modified), /cadena/);
-    if (output) writeFileSync(join(output, "snapshot-result.json"), JSON.stringify({ status: "PASS", requestId: issued.id, documentHash: before.documentHash, signedDocumentHash: before.signedDocumentHash, payloadBefore: oldPayload, payloadAfter: fresh, normalizedPDFTextEqual: original.pdfText ? original.pdfText === after.pdfText : null, legacyIntactSigns: true, legacyChanged409: true, liveCommercialStale409: true, attachmentBytesVerified: true, chainValid: true }, null, 2));
+    if (output) writeFileSync(join(output, "snapshot-result.json"), JSON.stringify({ status: "PASS", requestId: issued.id, documentHash: before.documentHash, signedDocumentHash: before.signedDocumentHash, payloadBefore: oldPayload, payloadAfter: fresh, normalizedPDFTextEqual: original.pdfText ? original.pdfText === after.pdfText : null, realPlanPatch200Issue201Sign200: true, planAmounts: [270000, 200000, 430000], planMomentDatePDFParity: true, stalePlan409: true, legacyIntactSigns: true, legacyChanged409: true, liveCommercialStale409: true, attachmentBytesVerified: true, chainValid: true }, null, 2));
   } finally { await browser.close(); await db.$disconnect(); await (await import("../lib/server/db")).db.$disconnect(); }
 });

@@ -8,7 +8,9 @@ import {
   signedDocumentHash,
   signatureIdentifierFor,
   type SignatureBudgetDocument,
+  signatureDocument,
 } from "../lib/server/signature/document";
+import { budgetPaymentConditionPayload, BUDGET_INT_MAX } from "../lib/budget-payment-plan";
 import {
   canonicalJson,
   computeSignatureEventHash,
@@ -212,6 +214,39 @@ test("legacy v1 conserva receta y hash exactos sin campos nuevos null ni identid
   document.client.tradeName = "Nuevo fantasía"; document.client.legalName = "Nueva razón social";
   assert.equal(budgetDocumentHash(budgetDocumentPayload(document)), "b8785d8d9ddb2e7fbf7e7884fbcec966d8aa45f4ab647a9412cfe09330df3c4c");
   assert.doesNotMatch(JSON.stringify(budgetDocumentPayload(document)), /documentVersion|displayName|tradeName|legalName/);
+});
+
+test("v2 cuotas públicas hacen roundtrip JSON sin perder moment/type/value/accountId ni inventar undefined", () => {
+  const document = budgetDocument(); document.documentVersion = 2;
+  document.client = { ...document.client, displayName: "Ana", tradeName: null, legalName: null };
+  document.plan.installments = [
+    { label: "Reserva", amount: 270000, dueAt: "2099-01-05", moment: "Al confirmar", type: "percent", value: 30, accountId: "public-account" },
+    { label: "Cuota", amount: 200000, dueAt: "2099-01-09", moment: "Montaje", type: "fixed", value: 200000, accountId: "public-account" },
+    { label: "Saldo", amount: 430000, dueAt: "2099-01-12", moment: "Después", type: "remainder", value: 0, accountId: "public-account" },
+    budgetPaymentConditionPayload({ label: "Legacy compatible", amount: BUDGET_INT_MAX, dueAt: null, moment: null, accountId: null, type: undefined, value: undefined }),
+  ];
+  const payload = budgetDocumentPayload(document), hash = budgetDocumentHash(payload);
+  const captured = JSON.parse(JSON.stringify(payload));
+  assert.equal(budgetDocumentHash(budgetDocumentPayload(signatureDocument({ source: "snapshot", payload: captured }))), hash);
+  assert.deepEqual(captured.plan.installments, document.plan.installments);
+  assert.equal("type" in captured.plan.installments[3], false);
+  const privateField = structuredClone(captured); privateField.plan.installments[0].openingBalance = 100;
+  assert.throws(() => signatureDocument({ source: "snapshot", payload: privateField }), /snapshot/);
+  const overflow = structuredClone(captured); overflow.plan.installments[3].amount = BUDGET_INT_MAX + 1;
+  assert.throws(() => signatureDocument({ source: "snapshot", payload: overflow }), /snapshot/);
+  // v1 conserva incluso los campos extended/undefined que ya entraban en su receta accidental.
+  const legacy = budgetDocument(); legacy.plan.installments = [{ label: "Historical", amount: 100, dueAt: "2099-01-05", moment: "Old moment", type: undefined, value: undefined, accountId: null }];
+  assert.deepEqual((budgetDocumentPayload(legacy).plan as SignatureBudgetDocument["plan"]).installments, legacy.plan.installments);
+  assert.match(canonicalJson(budgetDocumentPayload(legacy)), /"type":null/);
+  assert.equal(budgetDocumentHash(budgetDocumentPayload(legacy)), "225c4c95229e9ce4d79969ebcfd23ee13ded36a0c31c05e902901f26c76b49ba");
+  const historicalV2 = budgetDocument(); historicalV2.documentVersion = 2;
+  historicalV2.client = { ...historicalV2.client, displayName: "Ana", tradeName: null, legalName: null };
+  historicalV2.plan.installments = [{ label: "Historical v2", amount: 100, dueAt: null }];
+  const oldPayload = budgetDocumentPayload(historicalV2);
+  assert.equal(budgetDocumentHash(oldPayload), "6b6f136c1e84878a4def20a262b9f4c181ae6b8138d85c01a8fe0f65703ae72b");
+  const restored = signatureDocument({ source: "snapshot", payload: oldPayload });
+  assert.deepEqual(budgetDocumentPayload(restored), oldPayload);
+  assert.equal(budgetDocumentHash(budgetDocumentPayload(restored)), "6b6f136c1e84878a4def20a262b9f4c181ae6b8138d85c01a8fe0f65703ae72b");
 });
 
 test("excluding a free line invalidates the commercial signature without repricing originals", () => {

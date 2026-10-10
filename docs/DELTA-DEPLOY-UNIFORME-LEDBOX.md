@@ -62,14 +62,39 @@ GitHub de dariodeoli/ledbox disponible por login del dueño. Nada de esto implic
 permiso de escribir configuración del Hub.
 
 Pendientes: receptor exacto/binding/HMAC privado y recepción acreditada (runbook
-abajo); flag `include_source_commit_in_build:true` requerido por gate LedBox,
-actualmente false según evidencia recibida. No se hace PATCH ni se infiere que
+abajo). Actualización explícita del dueño: Secretaría695019832 acredita para el
+UUID LedBox `include_source_commit_in_build:true` y auto-deploy true. El gate
+conserva su GET fresco y no reutiliza ese acuse como evidencia de un deploy.
+No se hace PATCH ni se infiere que
 flagfalse excluya cualquier otra vía de SHA. Se mantienen gates, pausa y auto
 deshabilitado; el token común no los habilita.
 
-Objetivo del estándar: vigía20min / umbral10 / cooldown600s. Autorización #173
-vigente: watcher10min / umbral10 / cooldown20min. Registrar objetivo no cambia
-valores; hace falta aclaración scoped antes de aplicar los tiempos nuevos.
+Nueva orden explícita del dueño: **autorizado** watcher20min / umbral10 nuevos
+funcionales únicos admitidos #173 / cooldown600s. Config actual1200000ms/10min;
+reemplaza la cadencia anterior. Mantiene hold global y exige habilitación scoped,
+Pilot final fresco y primer HD servido acreditado antes de iniciar el watcher.
+No se inicia watcher ni se escribe enable desde PLATAFORMA.
+
+El conteo AUTO nace de `state.lastServedSHA`, respaldado por un recibo
+`deployments[SHA].served:true`, releaseSHA exacto y prueba Hub finished/hash/recurso;
+sin lastServedSHA se acepta un recibo servido acreditado equivalente. La huella
+de su archivo y el modelo terminal se revalidan y el SHA debe ser ancestro local.
+No se fabrica baseline desde origin, e0 histórico o health sin SHA. Sin prueba,
+`AUTO_WAITING_SERVED_BASELINE` no hace checks, bump ni POST. HD manual/READY sigue
+su protocolo y, al cerrar SERVED, registra lastServedSHA exacto, servedAt y recibo.
+
+Inventory separa `countBaseSHA` (servido) de `remoteBaseSHA` (fetch actual/CAS):
+cuenta patch-id funcional único posterior al servido, incluso push manual ya
+remoto si aún no está servido; docs/deps/tests/merges/patches históricos y ajenos
+no aportan count. Historia importada remota ajena queda excluida, nuevo ahead o
+carril ajeno #173 sigue bloqueado. Pending conserva baseSHA remota para publicar
+sin reescribir historia. READY/retries exactos no se reconstruyen para contar.
+
+Al servir se persiste `autoPolicy`: issue173, threshold10, watchIntervalMs1200000,
+cooldownMs600000 y countBaseSHA=releaseSHA servido. Logs canónicos registran PID,
+baseline/params/bloqueo; watcher/cycle conservan locks exclusivos existentes,
+SIGTERM y pausas, sin vigía duplicado. El diagnóstico read-only muestra count
+AUTO null cuando falta baseline, aunque pueda mostrar inventory manual separado.
 
 ## Preparación del receptor GitHub existente en Hub
 

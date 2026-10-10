@@ -141,6 +141,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
                 <span>
                   {formatMoney(installment.amount)}
                   {installment.dueAt ? ` · ${formatDate(installment.dueAt)}` : ""}
+                  {document.documentVersion === 2 && installment.moment ? ` · ${installment.moment}` : ""}
                 </span>
               </li>
             ))}

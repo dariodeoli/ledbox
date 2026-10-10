@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /** JSON-only extension of the historical [{label, amount, dueAt}] contract. */
 export const BUDGET_INT_MAX = 2_147_483_647;
 export type BudgetPaymentCondition = {
@@ -9,6 +11,24 @@ export type BudgetPaymentCondition = {
   moment?: string | null;
   accountId?: string | null;
 };
+
+/** Contrato público resuelto, sin nueva aritmética ni datos internos de cuenta. */
+export const budgetPaymentConditionSnapshotSchema = z.object({
+  label: z.string(), amount: z.number().int().min(0).max(BUDGET_INT_MAX), dueAt: z.string().nullable(),
+  type: z.enum(["fixed", "percent", "remainder"]).optional(),
+  value: z.number().min(0).max(BUDGET_INT_MAX).optional(),
+  moment: z.string().nullable().optional(), accountId: z.string().nullable().optional(),
+}).strict() satisfies z.ZodType<BudgetPaymentCondition>;
+
+/** JSON explícito: omitir undefined antes de hashear evita diferencias al persistir. */
+export function budgetPaymentConditionPayload(row: BudgetPaymentCondition): BudgetPaymentCondition {
+  return { label: row.label, amount: row.amount, dueAt: row.dueAt,
+    ...(row.type !== undefined ? { type: row.type } : {}),
+    ...(row.value !== undefined ? { value: row.value } : {}),
+    ...(row.moment !== undefined ? { moment: row.moment } : {}),
+    ...(row.accountId !== undefined ? { accountId: row.accountId } : {}),
+  };
+}
 export type BudgetPlanResult = { ok: true; rows: BudgetPaymentCondition[]; assigned: number; remaining: number } | { ok: false; error: string; index?: number; field?: string };
 export function budgetDayValid(day: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(`${day}T12:00:00Z`)) && new Date(`${day}T12:00:00Z`).toISOString().slice(0, 10) === day;

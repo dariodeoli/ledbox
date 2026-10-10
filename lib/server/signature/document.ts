@@ -3,6 +3,7 @@ import { z } from "zod";
 import { budgetReference } from "@/lib/admin-format";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
+import { budgetPaymentConditionPayload, budgetPaymentConditionSnapshotSchema, type BudgetPaymentCondition } from "@/lib/budget-payment-plan";
 import { paymentPlanOf } from "../budget-portal";
 import { canonicalJson, sha256Hex, verifySignatureChain } from "./hash";
 
@@ -45,7 +46,7 @@ export type SignatureDocumentItem = {
   notes: string | null;
 };
 
-export type SignatureDocumentInstallment = { label: string; amount: number; dueAt: string | null };
+export type SignatureDocumentInstallment = BudgetPaymentCondition;
 
 /** Datos del presupuesto que forman el documento firmable (sin costos internos). */
 export type SignatureBudgetDocument = {
@@ -131,7 +132,7 @@ const snapshotSchema = z.object({
   warranty: nullableText, notes: nullableText, paymentTerms: nullableText,
   items: z.array(z.object({ name: z.string(), quantity: z.number().int(), days: z.number().int(), unitPrice: money, subtotal: money, notes: nullableText, excluded: z.literal(true).optional() }).strict()),
   subtotal: money, discount: money, total: money,
-  plan: z.object({ advanceAmount: money, installments: z.array(z.object({ label: z.string(), amount: money, dueAt: nullableText }).strict()), dueNow: z.object({ label: z.string(), amount: money }).strict().nullable(), pending: money }).strict(),
+  plan: z.object({ advanceAmount: money, installments: z.array(budgetPaymentConditionSnapshotSchema), dueNow: z.object({ label: z.string(), amount: money }).strict().nullable(), pending: money }).strict(),
 }).strict();
 
 /** Una sola fábrica pública; los dos sources devuelven el mismo contrato sin costos. */
@@ -156,7 +157,7 @@ export function signatureDocument(input:
     createdAt: budget.createdAt.toISOString(), validUntil: iso(budget.validUntil), deliveryAt: iso(budget.deliveryAt), ivaType: budget.ivaType, warranty: budget.warranty, notes: budget.notes, paymentTerms: budget.paymentTerms,
     items: (version === 2 ? stableOrderBudgetItems(budget.items) : budget.items).map(item => ({ name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, subtotal: item.subtotal, excluded: item.excluded, notes: item.notes })),
     subtotal: budget.subtotal, discount: budget.discount, total: budget.total,
-    plan: { advanceAmount: plan.advanceAmount, installments: plan.installments, dueNow: plan.dueNow, pending: plan.pending },
+    plan: { advanceAmount: plan.advanceAmount, installments: version === 2 ? plan.installments.map(budgetPaymentConditionPayload) : plan.installments, dueNow: plan.dueNow, pending: plan.pending },
   };
 }
 

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { git, inventory, LIVE, readJson, SLOTS } from "./automation-core.mjs";
+import { git, inventory, LIVE, readJson, SLOTS, servedBaseline } from "./automation-core.mjs";
 
 const roles = { "slot/panel": "Panel/UX", "slot/operacion": "Operación", "slot/finanzas": "Finanzas/fiscal/portal", "slot/plataforma": "Plataforma" };
 export function slotStatus(cwd) {
@@ -45,10 +45,13 @@ async function surface(url, fetcher) {
 }
 export async function diagnostics(cwd, config, mode, { fetcher = fetch, issueReader = issue173 } = {}) {
   if (mode === "al") return { status: "READ_ONLY", scope: "#173", slots: slotStatus(cwd), issue: issueReader(cwd), dispatch: "MANUAL_BRIEF_ONLY" };
-  const work = inventory(cwd);
-  const pending = { count: work.count, baseSHA: work.baseSHA, mergeBranches: work.branches.map(b => ({ branch: b.branch, sha: b.sha })), excluded: work.excluded };
+  const state = existsSync(config.stateFile) ? readJson(config.stateFile) : { deployments: {} };
+  const baseline = servedBaseline(cwd, config, state);
+  const work = inventory(cwd, baseline?.sha ?? `origin/${LIVE}`);
+  const pending = { count: work.count, baseSHA: work.baseSHA, remoteBaseSHA: work.remoteBaseSHA,
+    auto: { status: baseline ? "SERVED_BASELINE_ACCREDITED" : "AUTO_WAITING_SERVED_BASELINE", count: baseline ? work.count : null, countBaseSHA: baseline?.sha ?? null, threshold: 10, watchIntervalMs: 1200000, cooldownMs: 600000 },
+    mergeBranches: work.branches.map(b => ({ branch: b.branch, sha: b.sha })), excluded: work.excluded };
   if (mode !== "pp") return { status: "READ_ONLY", scope: "#173", ...pending, commits: work.functional.map(i => ({ sha: i.sha, type: /^(\w+)/.exec(i.subject)?.[1] ?? "other", subject: i.subject, patchId: i.patch })) };
-  const state = existsSync(config.stateFile) ? readJson(config.stateFile) : null;
   const urls = ["https://ledbox.online/api/health", "https://ledbox.online/", "https://app.ledbox.online/login", "https://eventos.ledbox.online/", "https://clientes.ledbox.online/", "https://demo.ledbox.online/"];
   return { status: "READ_ONLY", scope: "#173", ...pending, liveBranch: LIVE, head: git(cwd, "rev-parse", "HEAD"), localVersion: readJson(join(cwd, "package.json")).version, candidateSHA: state?.pending?.candidateSHA ?? null, releaseSHA: state?.pending?.releaseSHA ?? null, paused: existsSync(config.pauseFile), slots: slotStatus(cwd), issue: issueReader(cwd), ownerPending: ownerPending(cwd), surfaces: await Promise.all(urls.map(url => surface(url, fetcher))) };
 }

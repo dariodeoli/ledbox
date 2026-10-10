@@ -81,8 +81,9 @@ function commitInfo(cwd, sha) {
   commitCache.set(key, info); return info;
 }
 /** Unión ahead local + refs allowlist; SHA y patch-id funcional únicos. */
-export function inventory(cwd, base = `origin/${LIVE}`) {
+export function inventory(cwd, base = `origin/${LIVE}`, remoteBase = `origin/${LIVE}`) {
   const baseSHA = git(cwd, "rev-parse", base);
+  const remoteBaseSHA = git(cwd, "rev-parse", remoteBase);
   const ahead = git(cwd, "rev-list", `${baseSHA}..HEAD`).split("\n").filter(Boolean);
   const branches = [];
   const union = new Set(ahead);
@@ -99,9 +100,10 @@ export function inventory(cwd, base = `origin/${LIVE}`) {
   }
   const infos = new Map([...union].map(sha => [sha, commitInfo(cwd, sha)]));
   const forbidden = info => info.parents.length <= 1 && !refs173(info.subject);
-  const unsafeAhead = ahead.map(sha => infos.get(sha)).filter(forbidden);
+  // Historia ya importada/remota se filtra del count; nunca legitima nuevo ahead ajeno.
+  const unsafeAhead = git(cwd, "rev-list", `${remoteBaseSHA}..HEAD`).split("\n").filter(Boolean).map(sha => commitInfo(cwd, sha)).filter(forbidden);
   if (unsafeAhead.length) throw new Error(`Ahead local fuera de #173: ${unsafeAhead.map(i => i.sha).join(", ")}`);
-  const eligibleBranches = branches.filter(b => !b.commits.some(sha => forbidden(infos.get(sha))));
+  const eligibleBranches = branches.filter(b => !git(cwd, "rev-list", `HEAD..${b.sha}`).split("\n").filter(Boolean).some(sha => forbidden(commitInfo(cwd, sha))));
   const eligible = new Set([...ahead, ...eligibleBranches.flatMap(b => b.commits)]);
   // Patches ya presentes en la base no cuentan aunque sean cherry-picks nuevos.
   const known = new Set();
@@ -113,7 +115,26 @@ export function inventory(cwd, base = `origin/${LIVE}`) {
     const info = infos.get(sha);
     if (info.functional && refs173(info.subject) && info.patch && !known.has(info.patch)) { known.add(info.patch); functional.push(info); }
   }
-  return { baseSHA, count: functional.length, functional, branches: eligibleBranches.filter(b => b.commits.some(sha => infos.get(sha).functional && refs173(infos.get(sha).subject))), excluded: branches.filter(b => !eligibleBranches.includes(b)).map(b => b.branch) };
+  return { baseSHA, countBaseSHA: baseSHA, remoteBaseSHA, count: functional.length, functional, branches: eligibleBranches.filter(b => b.commits.some(sha => infos.get(sha).functional && refs173(infos.get(sha).subject))), excluded: branches.filter(b => !eligibleBranches.includes(b)).map(b => b.branch) };
+}
+
+/** Sólo recibos locales servidos con evidencia Hub exacta; nunca bootstrap por origin/health viejo. */
+export function servedBaseline(cwd, config, state) {
+  const candidates = state.lastServedSHA ? [state.lastServedSHA] : Object.entries(state.deployments ?? {})
+    .filter(([sha, record]) => shaValid(sha) && record.served === true && typeof record.servedAt === "string" && Number.isFinite(Date.parse(record.servedAt)))
+    .sort((a, b) => Date.parse(b[1].servedAt ?? "") - Date.parse(a[1].servedAt ?? "")).map(([sha]) => sha);
+  for (const sha of candidates) {
+    try {
+      const record = state.deployments?.[sha];
+      if (!shaValid(sha) || record?.served !== true || record.releaseSHA !== sha) continue;
+      const proof = checkedEvidence(record.hubEvidence);
+      if (proof.status !== "FINISHED" || proof.sha !== sha || proof.applicationUUID !== config.applicationUUID || !Array.isArray(proof.deployments) || !proof.deployments.length) continue;
+      if (!proof.deployments.every(row => row.commit === sha && row.application_uuid === config.applicationUUID && typeof row.deployment_uuid === "string" && row.deployment_uuid && row.status === "finished" && row.rollback === false && typeof row.finished_at === "string" && Number.isFinite(Date.parse(row.finished_at)))) continue;
+      git(cwd, "merge-base", "--is-ancestor", sha, "HEAD");
+      return { sha, receipt: record };
+    } catch { /* Evidencia ausente/alterada o historia divergente: no fabricar baseline. */ }
+  }
+  return null;
 }
 
 export function productChanged(cwd, baseSHA, head = "HEAD") {

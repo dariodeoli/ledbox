@@ -16,6 +16,17 @@ comprobando cadena de eventos, esquema público estricto y vínculos de hashes.
 Ediciones posteriores del cliente, evento, emisor, ítems o plan no cambian el
 documento enviado/firmado. La descarga de adjuntos comprueba su hash de bytes.
 
+Las cuotas usan el contrato público compartido de `lib/budget-payment-plan.ts`:
+label, amount resuelto, dueAt, moment, type, value y referencia pública accountId
+(ya expuesta por el portal del presupuesto). No se cargan saldos/movimientos ni
+datos internos de la cuenta. Se reutiliza paymentPlanOf/resolver existente, sin
+duplicar aritmética de porcentaje/fijo/saldo. La proyección v2 omite undefined
+antes de hashear/persistir: canonicalJson lo convertiría en null y JSON podría
+eliminarlo, provocando un mismatch. Esquema estricto y tipo compartidos admiten
+esas cuotas y conservan fechas/momentos en impresión; snapshot histórico se lee
+tal como fue sellado, sin añadir campos ni reordenar/recalcular. V1 mantiene sus
+extras/undefined históricos del plan exactamente, además de sus hashes/recibos.
+
 Firmar sigue leyendo la receta **LIVE** bajo el lock del presupuesto y compara
 su commercialHash con la captura, según la versión de la solicitud. Un cambio
 comercial posterior provoca 409, aunque el snapshot siga siendo visible.

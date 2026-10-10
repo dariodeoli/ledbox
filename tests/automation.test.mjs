@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { join } from "node:path";
 import { hostname, tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { acquireLock, artifactSeal, assertIntegrator, assertReleaseOnly, atomicJson, evidence, git, inventory, LIVE, readJson, requirePilotGate } from "../scripts/automation-core.mjs";
+import { acquireLock, artifactSeal, assertIntegrator, assertReleaseOnly, atomicJson, evidence, git, inventory, LIVE, readJson, requirePilotGate, servedBaseline } from "../scripts/automation-core.mjs";
 import { cycle, loadState } from "../scripts/automation-cycle.mjs";
 import { deploySettings, hubClient } from "../scripts/automation-hub.mjs";
 import { diagnostics } from "../scripts/automation-diagnostics.mjs";
@@ -40,6 +40,13 @@ const fakeRunner = async (cwd, executable, args, opts) => {
   if (args.join(" ") === "run build") build(cwd, opts.env.SOURCE_COMMIT);
 };
 const finishedDeployment = sha => ({ application_uuid: "qa-uuid", application_id: 42, deployment_uuid: "deployment-qa", commit: sha, status: "finished", finished_at: "2026-10-09T17:30:41.000000Z", rollback: false });
+function baselineReceipt(f, sha = git(f.cwd, "rev-parse", "HEAD"), pilotCandidate) {
+  const path = join(f.dir, `served-${sha}.json`);
+  atomicJson(path, { status: "FINISHED", sha, applicationUUID: "qa-uuid", deployments: [finishedDeployment(sha)] });
+  const state = loadState(f.config); state.lastServedSHA = sha;
+  state.deployments[sha] = { releaseSHA: sha, served: true, servedAt: new Date().toISOString(), hubEvidence: evidence(path), pilotCandidate };
+  atomicJson(f.config.stateFile, state); return sha;
+}
 function approve(f) {
   const pending = loadState(f.config).pending;
   const pilotFile = join(f.dir, "pilot.json"); atomicJson(pilotFile, { role: "lbx-pilot", status: "PASS", sha: pending.candidateSHA });
@@ -112,8 +119,9 @@ test("checkout/issue/pausa/umbral/cooldown y nodiff detienen publicación sin bo
     await assert.rejects(cycle(f.cwd, f.config), /PAUSADA/);
     assert.equal(readFileSync(f.config.pauseFile, "utf8"), "only Emple\n");
     atomicJson(f.config.enableFile, { enabled: true, scope: "#173" });
-    assert.equal((await cycle(f.cwd, f.config, { mode: "auto" })).status, "NO_AUTHORIZED_PRODUCT");
+    assert.equal((await cycle(f.cwd, f.config, { mode: "auto" })).status, "AUTO_WAITING_SERVED_BASELINE");
     atomicJson(f.config.stateFile, { schema: 1, deployments: {}, pending: null, lastAttemptAt: new Date().toISOString() });
+    baselineReceipt(f, git(f.cwd, "rev-parse", "HEAD^"));
     assert.equal((await cycle(f.cwd, f.config, { mode: "auto" })).status, "COOLDOWN");
     commit(f.cwd, "app/a.js", "base\n", "fix(qa): revert funcional (Refs #173)");
     assert.equal((await cycle(f.cwd, f.config, { mode: "prepare", runner: async () => assert.fail("nodiff no hace build/release") })).status, "NO_PRODUCT_DIFF_NO_RELEASE");
@@ -169,6 +177,10 @@ test("release retry no vuelve a versionar/POST y timeout smoke reanuda sólo GET
     const first = await cycle(f.cwd, f.config, { runner, hub }); assert.equal(first.status, "SMOKE_PENDING_GET_ONLY"); assert.equal(posts, 1);
     smokePass = true;
     const second = await cycle(f.cwd, f.config, { runner, hub }); assert.equal(second.status, "SERVED"); assert.equal(posts, 1); assert.equal(second.releaseSHA, release);
+    assert.equal(loadState(f.config).lastServedSHA, release);
+    assert.equal(servedBaseline(f.cwd, f.config, loadState(f.config)).sha, release);
+    const receiptOnly = loadState(f.config); delete receiptOnly.lastServedSHA;
+    assert.equal(servedBaseline(f.cwd, f.config, receiptOnly).sha, release, "fallback a recibo fechado acreditado, no origin");
     assert.equal((await cycle(f.cwd, f.config, { runner, hub })).status, "NO_AUTHORIZED_PRODUCT");
     assert.equal(git(f.cwd, "rev-parse", `origin/${LIVE}`), release); assert.ok(loadState(f.config).deployments[release].served);
   } finally { f.cleanup(); }
@@ -301,7 +313,7 @@ test("CLI --prepare guarda principal sin habilitación; watcher singleton entre 
     catch (error) { return String(error.stderr); }
   };
   try {
-    const config = { ...JSON.parse(readFileSync(new URL("../scripts/orquestador.config.json", import.meta.url))), ...f.config, logFile: join(f.dir, "log"), watchIntervalMs: 600000 };
+    const config = { ...JSON.parse(readFileSync(new URL("../scripts/orquestador.config.json", import.meta.url))), ...f.config, logFile: join(f.dir, "log"), watchIntervalMs: 1200000 };
     atomicJson(join(f.cwd, "scripts/orquestador.config.json"), config);
     git(f.cwd, "add", "scripts/orquestador.config.json"); git(f.cwd, "commit", "-m", "chore(qa): scoped config (Refs #173)");
     // Config del fixture es ancillary de QA: publicarla en remoto deja count0 para watcher.
@@ -315,7 +327,14 @@ test("CLI --prepare guarda principal sin habilitación; watcher singleton entre 
     assert.equal(existsSync(f.config.enableFile), false);
     atomicJson(join(f.cwd, "scripts/orquestador.config.json"), config);
     atomicJson(f.config.enableFile, { enabled: true, scope: "#173" });
-    first = spawn(process.execPath, [cli, "watch", "--interval", "1"], { cwd: f.cwd });
+    assert.match(cliRun(["watch"]), /AUTO_WAITING_SERVED_BASELINE/);
+    assert.equal(existsSync(f.config.watcherLock), false);
+    commit(f.cwd, "app/a.js", "first candidate for watcher fixture\n");
+    await cycle(f.cwd, f.config, { mode: "prepare", runner: fakeRunner });
+    const pilotCandidate = approve(f); baselineReceipt(f, pilotCandidate.candidateSHA, pilotCandidate);
+    const state = loadState(f.config); state.pending = null; atomicJson(f.config.stateFile, state);
+    git(f.cwd, "push", "origin", LIVE);
+    first = spawn(process.execPath, [cli, "watch", "--interval", "20"], { cwd: f.cwd });
     await new Promise((resolvePromise, reject) => {
       first.stdout.once("data", resolvePromise); first.once("error", reject);
       first.once("exit", code => reject(new Error(`watcher inicial terminó ${code}`)));
@@ -508,5 +527,48 @@ test("deployment terminal fallido nunca duplica POST ni declara servido, reanuda
     assert.equal(second.releaseSHA, first.releaseSHA); assert.equal(posts, 0); assert.equal(smokes, 0); assert.ok(gets >= 3);
     const state = loadState(f.config); assert.ok(state.pending); assert.equal(state.deployments[first.releaseSHA].hubStatus, "FAILED"); assert.equal(state.deployments[first.releaseSHA].served, false);
     assert.equal(readJson(state.deployments[first.releaseSHA].hubEvidence.path).deployments[0].commit, first.releaseSHA);
+  } finally { f.cleanup(); }
+});
+
+test("AUTO sin baseline acreditado bloquea incluso READY, sin checks/bump/POST ni estado fabricado", async () => {
+  const f = fixture();
+  try {
+    commit(f.cwd, "app/a.js", "first manual READY\n"); await cycle(f.cwd, f.config, { mode: "prepare", runner: fakeRunner }); approve(f);
+    const original = readFileSync(f.config.stateFile, "utf8"), head = git(f.cwd, "rev-parse", "HEAD");
+    const result = await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("no checks"), hub: { trigger: async () => assert.fail("no POST") } });
+    assert.equal(result.status, "AUTO_WAITING_SERVED_BASELINE"); assert.equal(result.countBaseSHA, null); assert.equal(result.cooldownMs, 600000); assert.equal(result.watchIntervalMs, 1200000);
+    assert.equal(readFileSync(f.config.stateFile, "utf8"), original); assert.equal(git(f.cwd, "rev-parse", "HEAD"), head);
+    for (const record of [{ served: true, releaseSHA: head }, { served: false, releaseSHA: head }]) {
+      const state = loadState(f.config); state.lastServedSHA = head; state.deployments[head] = record;
+      assert.equal(servedBaseline(f.cwd, f.config, state), null);
+    }
+  } finally { f.cleanup(); }
+});
+
+test("AUTO cuenta únicos desde served, incluidos pushes remotos no servidos; CAS sigue usando remoto actual", async () => {
+  const f = fixture();
+  try {
+    atomicJson(f.config.enableFile, { enabled: true, scope: "#173" });
+    const served = baselineReceipt(f);
+    commit(f.cwd, "app/history.js", "imported foreign history\n", "fix(import): ajeno histórico (Refs #170)"); git(f.cwd, "push", "origin", LIVE);
+    for (let i = 0; i < 9; i++) commit(f.cwd, "app/a.js", `functional unique ${i}\n`);
+    git(f.cwd, "push", "origin", LIVE);
+    const nine = await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("nine no checks") });
+    assert.equal(nine.count, 9); assert.equal(nine.countBaseSHA, served); assert.equal(nine.status, "NO_AUTHORIZED_PRODUCT");
+    commit(f.cwd, "docs/note.md", "docs don't count\n", "docs(qa): ancillary (Refs #173)");
+    commit(f.cwd, "app/b.js", "tenth unique\n"); git(f.cwd, "push", "origin", LIVE);
+    const remote = git(f.cwd, "rev-parse", `origin/${LIVE}`);
+    let state = loadState(f.config); state.lastAttemptAt = new Date(Date.now() - 599000).toISOString(); atomicJson(f.config.stateFile, state);
+    assert.equal((await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("cooldown") })).status, "COOLDOWN");
+    state.lastAttemptAt = new Date(Date.now() - 601000).toISOString(); atomicJson(f.config.stateFile, state);
+    const ready = await cycle(f.cwd, f.config, { mode: "auto", runner: fakeRunner }); assert.equal(ready.status, "READY");
+    const pending = loadState(f.config).pending;
+    assert.equal(pending.count, 10); assert.equal(pending.countBaseSHA, served); assert.equal(pending.baseSHA, remote); assert.equal(pending.remoteBaseSHA, remote);
+    assert.equal(existsSync(f.config.gateFile), false, "no autoPASS nuevo");
+    // Reintento exacto de pending sigue esperando Pilot; no recuenta/reconstruye.
+    assert.equal((await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("no rebuild READY") })).status, "READY_WAITING_PILOT");
+    failPilot(f); await assert.rejects(cycle(f.cwd, f.config, { mode: "auto" }), /Pilot FAIL/);
+    const corrupted = loadState(f.config); writeFileSync(corrupted.deployments[served].hubEvidence.path, "tampered");
+    assert.equal(servedBaseline(f.cwd, f.config, corrupted), null);
   } finally { f.cleanup(); }
 });

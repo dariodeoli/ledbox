@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { artifactSeal, assertIntegrator, assertPublicationEnabled, assertReleaseOnly, atomicJson, evidence, git, inventory, LIVE, nextVersion, productChanged, readJson, requirePilotGate, requirePilotRejection, requireManualPushAck, assertNoPilotRejection, acquireLock, sameArtifact } from "./automation-core.mjs";
+import { artifactSeal, assertIntegrator, assertPublicationEnabled, assertReleaseOnly, atomicJson, evidence, git, inventory, LIVE, nextVersion, productChanged, readJson, requirePilotGate, requirePilotRejection, requireManualPushAck, assertNoPilotRejection, acquireLock, sameArtifact, servedBaseline } from "./automation-core.mjs";
 import { hubClient, deploymentOutcome } from "./automation-hub.mjs";
 
 export function command(cwd, executable, args, { env = process.env, signal, logFile } = {}) {
@@ -195,7 +195,11 @@ export async function publishPrepared(cwd, config, state, { hub, runner = comman
       if (proof.status === "FAILED") return { status: "DEPLOYMENT_FAILED_GET_ONLY", releaseSHA, version, hubEvidence: deployment.hubEvidence };
       if (proof.status !== "FINISHED") throw new Error("Deployment pendiente: requiere finished/finished_at/no rollback y recurso/SHA exactos");
       await runner(cwd, "node", ["scripts/verify-release.mjs", version, releaseSHA], { signal, logFile: join(config.evidenceDir, releaseSHA, "smoke.log") });
-      deployment.served = true; state.lastServedAt = new Date().toISOString(); state.pending = null; save(config, state);
+      deployment.served = true; deployment.servedAt = new Date().toISOString();
+      deployment.pilotCandidate = { candidateSHA: pending.candidateSHA, artifact: pending.artifact, checks: pending.checks };
+      state.lastServedSHA = releaseSHA; state.lastServedAt = deployment.servedAt;
+      state.autoPolicy = { issue: 173, threshold: 10, watchIntervalMs: 1200000, cooldownMs: 600000, countBaseSHA: releaseSHA };
+      state.pending = null; save(config, state);
       return { status: "SERVED", releaseSHA, version };
     } catch (error) {
       if (signal?.aborted) throw error;
@@ -214,6 +218,10 @@ export async function cycle(cwd, config, { mode = "ht", runner = command, signal
     const state = loadState(config);
     if (mode === "reject") return rejectReady(cwd, config, state, signal);
     if (mode === "supersede-published-failed-ready") return await supersedePublishedFailedReady(cwd, config, state, { hub, signal });
+    if (state.pending) { assertNotRejected(state, state.pending.candidateSHA); assertNoPilotRejection(config, state.pending); }
+    const baseline = mode === "auto" ? servedBaseline(cwd, config, state) : null;
+    const policy = { threshold: 10, watchIntervalMs: 1200000, cooldownMs: 600000, countBaseSHA: baseline?.sha ?? null };
+    if (mode === "auto" && !baseline) return { status: "AUTO_WAITING_SERVED_BASELINE", pid: process.pid, ...policy };
     if (state.pending) {
       const pending = state.pending;
       assertNotRejected(state, pending.candidateSHA);
@@ -228,11 +236,12 @@ export async function cycle(cwd, config, { mode = "ht", runner = command, signal
       try { requirePilotGate(config, pending); } catch (error) { return { status: "READY_WAITING_PILOT", candidateSHA: pending.candidateSHA, reason: error.message }; }
       return await publishPrepared(cwd, config, state, { runner, signal, hub, sleep });
     }
-    if (mode === "auto" && Date.now() - Date.parse(state.lastAttemptAt ?? "1970-01-01") < 20 * 60000) return { status: "COOLDOWN" };
+    if (mode === "auto" && Date.now() - Date.parse(state.lastAttemptAt ?? "1970-01-01") < 600000) return { status: "COOLDOWN", ...policy };
     git(cwd, "fetch", "origin", "--prune");
-    const work = inventory(cwd);
+    const work = inventory(cwd, baseline?.sha ?? `origin/${LIVE}`);
+    git(cwd, "merge-base", "--is-ancestor", work.remoteBaseSHA, "HEAD");
     git(cwd, "merge-base", "--is-ancestor", work.baseSHA, "HEAD");
-    if (work.count < (mode === "auto" ? 10 : 1)) return { status: "NO_AUTHORIZED_PRODUCT", count: work.count, excluded: work.excluded };
+    if (work.count < (mode === "auto" ? 10 : 1)) return { status: "NO_AUTHORIZED_PRODUCT", count: work.count, excluded: work.excluded, countBaseSHA: work.countBaseSHA, remoteBaseSHA: work.remoteBaseSHA };
     state.lastAttemptAt = new Date().toISOString(); save(config, state);
     for (const branch of work.branches) {
       // Nada de reset hard: en conflicto abortar sólo merge actual y preservar anteriores.
@@ -243,7 +252,8 @@ export async function cycle(cwd, config, { mode = "ht", runner = command, signal
     const candidateSHA = git(cwd, "rev-parse", "HEAD");
     assertNotRejected(state, candidateSHA);
     const result = await checks(cwd, candidateSHA, config, signal, runner);
-    state.pending = { candidateSHA, baseSHA: work.baseSHA, count: work.count, subjects: work.functional.map(i => i.subject), ...result };
+    state.pending = { candidateSHA, baseSHA: work.remoteBaseSHA, countBaseSHA: work.countBaseSHA, remoteBaseSHA: work.remoteBaseSHA, count: work.count, subjects: work.functional.map(i => i.subject), ...result };
+    if (mode === "auto") state.autoPolicy = { issue: 173, ...policy };
     save(config, state);
     atomicJson(config.candidateFile, { schema: 1, issue: 173, status: "READY", approvedCandidateSHA: candidateSHA, checks: { ...result.checks, artifact: result.artifact } });
     // Siempre parar en candidato: Pilot independiente antes de metadata/push.
