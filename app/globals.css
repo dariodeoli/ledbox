@@ -2172,6 +2172,31 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-cal-alert-date { color: var(--a-muted-2); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .admin-cal-alert > .admin-icon { color: var(--a-muted); }
 .admin-cal-mobile { display: none; }
+.admin-events-calendar .admin-cal-months { display: grid; min-width: 0; }
+.admin-events-calendar .admin-cal-months[data-double="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-events-calendar .admin-cal-month-section { min-width: 0; }
+.admin-events-calendar .admin-cal-month-label { padding: 8px 12px; color: var(--a-text-strong); font-size: 12.5px; font-weight: 700; }
+.admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-month { gap: 4px; }
+.admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-cell { padding: 4px; }
+.admin-events-calendar .admin-cal-item { width: 100%; min-height: 44px; text-align: left; cursor: pointer; }
+.admin-events-calendar .admin-cal-item:focus-visible,
+.admin-events-calendar .admin-cal-day:focus-visible,
+.admin-events-calendar .admin-cal-more:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-events-calendar .admin-cal-item-title,
+.admin-events-calendar .admin-cal-item-sub { white-space: normal; overflow-wrap: anywhere; }
+.admin-events-calendar .admin-cal-day,
+.admin-events-calendar .admin-cal-more { min-height: 44px; }
+.admin-events-calendar .admin-cal-summary { display: grid; gap: 12px; min-width: 0; }
+.admin-events-calendar .admin-cal-summary:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-events-calendar .admin-cal-summary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-events-calendar .admin-cal-summary dt { color: var(--a-muted); font-size: 11px; }
+.admin-events-calendar .admin-cal-summary dd { color: var(--a-text-strong); font-size: 12.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .admin-events-calendar .admin-cal-months { display: none; }
+  .admin-events-calendar .admin-cal-nav { width: 100%; justify-content: space-between; gap: 4px; }
+  .admin-events-calendar .admin-cal-range { white-space: normal; overflow-wrap: anywhere; }
+  .admin-events-calendar .admin-cal-summary dl { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 720px) {
   .admin-cal-month { display: none; }
   .admin-cal-mobile { display: block; }
@@ -2562,6 +2587,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-panel-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 980px) {
+  .admin-events-calendar .admin-cal-months[data-double="true"] { grid-template-columns: minmax(0, 1fr); }
   .admin-shell { grid-template-columns: minmax(0, 1fr); transition: none; }
   .admin-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: min(84vw, 268px); height: 100vh; transform: translateX(-102%); transition: transform .22s ease; box-shadow: var(--a-shadow); }
   .admin-sidebar.is-open { transform: none; }

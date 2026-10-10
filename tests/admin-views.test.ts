@@ -48,21 +48,21 @@ test("promotoras suma lista y cuadrícula con las mismas acciones (issue #118)",
 });
 
 /**
- * Eventos (issue #119): el selector queda en Lista + Cuadrícula, el tablero sale
- * del módulo y el calendario sigue entrando por URL (`/calendario`), con el
- * filtro de estado en el mismo lugar en las dos vistas.
+ * Eventos (#56/#119): selector único Lista + Tarjetas + Calendario; el tablero
+ * permanece fuera y el calendario conserva su URL histórica.
  */
-test("eventos suma lista y cuadrícula con el calendario solo por URL (issue #119)", () => {
+test("eventos ofrece lista, tarjetas y calendario canónicos con entrada por URL", () => {
   const source = readFileSync(join(MODULES_DIR, "EventosModule.tsx"), "utf8");
   assert.match(source, /useAdminModuleView\("eventos", EVENTOS_VIEWS\)/, "falta la vista recordada de eventos");
-  assert.match(source, /const EVENTOS_VIEWS = \["list", "grid"\]/, "el selector tiene que ofrecer lista y cuadrícula");
+  assert.match(source, /const EVENTOS_VIEWS = \["list", "grid", "calendar"\]/, "el selector ofrece las tres vistas");
+  assert.match(source, /labels=\{\{ grid: "Tarjetas" \}\}/, "el rótulo local usa el selector canónico");
   // Fuera el tablero: ni render ni handler (el kit queda para otros módulos).
   assert.doesNotMatch(source, /useAdminBoardMove|<AdminBoard\b/, "el tablero salió de eventos");
   assert.doesNotMatch(source, /"board"/, "el tablero no puede seguir declarado en eventos");
-  // El calendario sigue funcionando por URL aunque no esté en el selector.
+  // La entrada por URL se conserva junto al selector.
   assert.match(source, /useSearchParams\(\)/, "el calendario tiene que leer ?vista= de la URL");
   assert.match(source, /calendarRequested/, "falta la detección de ?vista=calendario");
-  assert.match(source, /<CalendarioModule \/>/, "el calendario sigue renderizándose");
+  assert.match(source, /<CalendarioModule events=\{operations.data \?\? \[\]\}/, "el calendario reutiliza la ficha del recurso real");
   // Selector fijo: el filtro de estado ya no depende de la vista (no salta al alternar).
   assert.doesNotMatch(source, /view === "list"/, "el filtro de estado no puede quedar solo en lista");
   // Paridad de acciones entre la fila y la tarjeta (las mismas de siempre).

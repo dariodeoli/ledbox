@@ -98,9 +98,8 @@ const TASK_TYPE_OPTIONS = [
   { value: "COLLECTION", label: "Cobro" },
 ];
 
-/** Vistas de eventos (issue #119): lista densa y cuadrícula; el calendario
- *  sigue entrando por URL (`/calendario` → `?vista=calendario`, issue #56). */
-const EVENTOS_VIEWS = ["list", "grid"] as const;
+/** El selector y la URL comparten las vistas canónicas de Eventos. */
+const EVENTOS_VIEWS = ["list", "grid", "calendar"] as const;
 
 const EMPTY_EVENT_FORM = { ...EMPTY_EVENT_QUICK, clientId: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
@@ -218,11 +217,8 @@ export function EventosModule() {
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
-  // Vistas del selector (issue #119): lista y cuadrícula, recordadas por usuario.
+  // Vistas recordadas por usuario; la URL explícita prevalece al entrar.
   const [view, setView] = useAdminModuleView("eventos", EVENTOS_VIEWS);
-  // El calendario sigue entrando por URL (`/calendario` → `?vista=calendario`,
-  // issue #56): no está en el selector, pero la vista se mantiene y el primer
-  // toque en Lista/Cuadrícula vuelve al selector.
   const searchParams = useSearchParams();
   const calendarRequested = ["calendario", "calendar"].includes((searchParams.get("vista") ?? "").trim().toLowerCase());
   const [calendarOpen, setCalendarOpen] = useState(calendarRequested);
@@ -235,7 +231,7 @@ export function EventosModule() {
   const narrow = useAdminNarrowViewport();
   const cardView = narrow || activeView === "grid";
   function changeView(next: AdminModuleView) {
-    setCalendarOpen(false);
+    setCalendarOpen(next === "calendar");
     setView(next);
   }
   const [taskFilter, setTaskFilter] = useState("PENDING");
@@ -774,7 +770,7 @@ export function EventosModule() {
         {/* En ancho compacto lista y cuadrícula se ven igual (tarjetas): el
             conmutador no aporta y se retira de la barra (issue #139). */}
         {narrow ? null : (
-          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} label="Vista de eventos" />
+          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
         )}
         {writable ? (
           <AdminButton
@@ -846,11 +842,9 @@ export function EventosModule() {
       ) : null}
 
       {activeView === "calendar" ? (
-        /* Calendario como vista del módulo (issue #56): la ruta vieja
-           `/calendario` entra acá con `?vista=calendario`, aunque el selector
-           ya no lo ofrezca (issue #119). */
+        /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
-          <CalendarioModule />
+          <CalendarioModule events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
       <>
