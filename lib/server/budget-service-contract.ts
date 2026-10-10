@@ -165,6 +165,7 @@ export async function loadScopedBudgetServices(tx: Prisma.TransactionClient, con
     const configuration = configurations.find(row => row.id === app.configurationId);
     if (!configuration) throw new Error("SERVICE_COMPANY_BINDING_INVALID");
     persistedInventoryServiceConfigurationSchema.parse(configuration);
+    if (app.sourceRevision > configuration.revision) throw new Error("SERVICE_SOURCE_REVISION_INVALID");
     const binding: ServiceBindingContext = { organizationId: context.organizationId, budgetId, configuration, executions, lines };
     // Allow administrative NEEDS_REVIEW loading; emission/mutation guards below
     // enforce active cardinality. All references remain checked on read.
@@ -216,6 +217,7 @@ export function resolveBudgetServiceCoverage(input: unknown, configurationInput:
   const config = persistedInventoryServiceConfigurationSchema.parse(configurationInput);
   if (config.organizationId !== binding.organizationId || config.id !== terms.configurationId) throw new Error("SERVICE_COMPANY_BINDING_INVALID");
   const previous = previousInput === null ? null : persistedBudgetServiceApplicationSchema.parse(previousInput);
+  if (previous && previous.sourceRevision > config.revision) throw new Error("SERVICE_SOURCE_REVISION_INVALID");
   if ((terms.id === null) !== (previous === null) || (previous && terms.id !== previous.id)) throw new Error("SERVICE_IDENTITY_IMMUTABLE");
   const snapshot = previous && !terms.refreshSnapshot ? previous.tariffSnapshot : serviceSnapshotFromConfiguration(config, terms.front);
   const app = persistedBudgetServiceApplicationSchema.parse({ id: previous?.id ?? randomUUID(), organizationId: binding.organizationId, budgetId: binding.budgetId,

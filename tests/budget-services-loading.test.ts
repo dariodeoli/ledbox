@@ -52,6 +52,7 @@ test("readonly loading retains historical snapshot and returns persisted authori
 test("loader rejects unknown persisted versions, cross-budget rows and missing scoped budget", async () => {
   await assert.rejects(() => loadScopedBudgetServices(readTx({ app: { ...materialized, tariffSnapshot: { ...snapshot, version: 99 } } }).tx, { organizationId: "org" }, "budget"));
   await assert.rejects(() => loadScopedBudgetServices(readTx({ app: { ...materialized, budgetId: "other" } }).tx, { organizationId: "org" }, "budget"));
+  await assert.rejects(() => loadScopedBudgetServices(readTx({ app: { ...materialized, sourceRevision: 3 } }).tx, { organizationId: "org" }, "budget"), /SERVICE_SOURCE_REVISION_INVALID/);
   await assert.rejects(() => loadScopedBudgetServices(readTx({ found: false }).tx, { organizationId: "org" }, "budget"), /SERVICE_BUDGET_NOT_FOUND/);
 });
 

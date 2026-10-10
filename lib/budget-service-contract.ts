@@ -4,6 +4,7 @@ import { commercialMoneySchema as money, commercialBpsSchema, budgetDiscountMode
 const id = z.string().min(1).max(200);
 const days = z.number().int().min(1).max(9999);
 const threshold = z.number().int().min(0).max(9999).nullable();
+const revision = z.number().int().min(1).max(2147483647);
 export const serviceKindSchema = z.enum(["TRANSPORT", "INSTALLATION", "GUARD", "PROMOTER"]);
 export const serviceModeSchema = z.enum(["PERSON_DAY", "FIXED_EVENT"]);
 export const serviceUnitSchema = z.enum(["PYG_PER_PERSON_DAY", "PYG_PER_EXECUTION", "PYG_PER_EVENT"]);
@@ -23,12 +24,12 @@ const configurationShape = {
   kind: serviceKindSchema, publicName, mode: serviceModeSchema, unit: serviceUnitSchema,
   minimumPrice: money.nullable(), floorApplicability: floor, ivaType: serviceIvaTypeSchema.nullable(), tariffsJson: inventoryServiceTariffsSchema,
 };
-export const inventoryServiceConfigurationInputSchema = z.object({ version: z.literal(1), id: id.nullable(), expectedRevision: z.number().int().min(1).nullable(), ...configurationShape }).strict().superRefine((value, ctx) => {
+export const inventoryServiceConfigurationInputSchema = z.object({ version: z.literal(1), id: id.nullable(), expectedRevision: revision.nullable(), ...configurationShape }).strict().superRefine((value, ctx) => {
   if (!validMode(value)) ctx.addIssue({ code: "custom", message: "Clase, modalidad y unidad incompatibles." });
   if ((value.id === null) !== (value.expectedRevision === null)) ctx.addIssue({ code: "custom", message: "ID y revisión deben ser ambos nuevos o ambos explícitos." });
 });
-export const adminInventoryServiceConfigurationSchema = z.object({ id, inventoryItemId: id, ...configurationShape, active: z.boolean(), revision: z.number().int().min(1) }).strict().refine(validMode, "Clase, modalidad y unidad incompatibles.");
-export const persistedInventoryServiceConfigurationSchema = z.object({ id, organizationId: id, inventoryItemId: id, ...configurationShape, active: z.boolean(), revision: z.number().int().min(1) }).strict().refine(validMode, "Clase, modalidad y unidad incompatibles.");
+export const adminInventoryServiceConfigurationSchema = z.object({ id, inventoryItemId: id, ...configurationShape, active: z.boolean(), revision }).strict().refine(validMode, "Clase, modalidad y unidad incompatibles.");
+export const persistedInventoryServiceConfigurationSchema = z.object({ id, organizationId: id, inventoryItemId: id, ...configurationShape, active: z.boolean(), revision }).strict().refine(validMode, "Clase, modalidad y unidad incompatibles.");
 
 export const serviceTariffSnapshotV1Schema = z.object({ version: z.literal(1), front, mode: serviceModeSchema, unit: serviceUnitSchema,
   normalPrice: money.nullable(), fromDays: threshold, fromPrice: money.nullable(), minimumPrice: money.nullable() }).strict().refine(value => value.mode === "PERSON_DAY" ? value.unit === "PYG_PER_PERSON_DAY" : value.unit !== "PYG_PER_PERSON_DAY", "Unidad incompatible con modalidad.");
@@ -38,10 +39,10 @@ const inclusion = z.enum(["NOT_INCLUDED", "INCLUDED_FREE", "INCLUDED_CHARGED"]);
 const discountShape = { discountMode: budgetDiscountModeSchema.nullable(), discountValue: money.nullable() };
 const applicationShape = {
   id, organizationId: id, budgetId: id, configurationId: id, kind: serviceKindSchema,
-  scope: z.enum(["LINE", "SHARED_EXECUTION"]), parentLineId: id.nullable(), executionId: id.nullable(), sortOrder: z.number().int().nonnegative(),
+  scope: z.enum(["LINE", "SHARED_EXECUTION"]), parentLineId: id.nullable(), executionId: id.nullable(), sortOrder: z.number().int().nonnegative().max(2147483647),
   publicName, inclusion, reviewState: z.enum(["RESOLVED", "NEEDS_REVIEW"]), mode: serviceModeSchema, unit: serviceUnitSchema,
   ...parameters, front, tariffSnapshot: serviceTariffSnapshotV1Schema, priceSource: z.enum(["TARIFF", "OVERRIDE"]), overridePrice: money.nullable(),
-  floorApplicability: floor, ivaType: serviceIvaTypeSchema.nullable(), ...discountShape, sourceRevision: z.number().int().min(1),
+  floorApplicability: floor, ivaType: serviceIvaTypeSchema.nullable(), ...discountShape, sourceRevision: revision,
 };
 function validateApplication(value: z.infer<z.ZodObject<typeof applicationShape>>, ctx: z.RefinementCtx) {
   const issue = (message: string) => ctx.addIssue({ code: "custom", message });
@@ -90,6 +91,7 @@ export function serviceSnapshotFromConfiguration(input: unknown, selectedFront: 
 export function validateServiceSnapshotRetention(previousInput: unknown, nextInput: unknown, refreshSnapshot: boolean) {
   const previous = persistedBudgetServiceApplicationSchema.parse(previousInput), next = persistedBudgetServiceApplicationSchema.parse(nextInput);
   if (previous.id !== next.id || previous.organizationId !== next.organizationId || previous.budgetId !== next.budgetId || previous.configurationId !== next.configurationId || previous.kind !== next.kind) throw new Error("SERVICE_IDENTITY_IMMUTABLE");
+  if (next.sourceRevision < previous.sourceRevision) throw new Error("SERVICE_SOURCE_REVISION_INVALID");
   if (!refreshSnapshot && (JSON.stringify(previous.tariffSnapshot) !== JSON.stringify(next.tariffSnapshot) || previous.sourceRevision !== next.sourceRevision)) throw new Error("SERVICE_SNAPSHOT_REFRESH_REQUIRED");
 }
 const materializedShape = { grossAmount: money, discountAmount: money, netAmount: money, globalDiscountAmount: money, totalAmount: money };
@@ -118,11 +120,12 @@ export function validateServiceCompanyBinding(input: unknown, coverageInput: unk
   if (app.organizationId !== context.organizationId || app.budgetId !== context.budgetId || app.configurationId !== context.configuration.id || context.configuration.organizationId !== context.organizationId || app.kind !== context.configuration.kind) throw new Error("SERVICE_COMPANY_BINDING_INVALID");
   if (app.executionId && !context.executions.some(row => row.id === app.executionId && row.organizationId === context.organizationId && row.budgetId === context.budgetId)) throw new Error("SERVICE_EXECUTION_INVALID");
   if (app.parentLineId && !context.lines.some(row => row.id === app.parentLineId && row.organizationId === context.organizationId && row.budgetId === context.budgetId)) throw new Error("SERVICE_PARENT_INVALID");
-  const seen = new Set<string>();
+  const seen = new Set<string>(), coverageIds = new Set<string>();
   for (const row of coverage) {
-    if (row.organizationId !== context.organizationId || row.budgetId !== context.budgetId || row.applicationId !== app.id || seen.has(row.parentLineId) || !context.lines.some(line => line.id === row.parentLineId && line.organizationId === context.organizationId && line.budgetId === context.budgetId && (!requireResolved || !row.active || !line.excluded))) throw new Error("SERVICE_COVERAGE_INVALID");
+    if (row.organizationId !== context.organizationId || row.budgetId !== context.budgetId || row.applicationId !== app.id || seen.has(row.parentLineId) || coverageIds.has(row.id) || !context.lines.some(line => line.id === row.parentLineId && line.organizationId === context.organizationId && line.budgetId === context.budgetId && (!requireResolved || !row.active || !line.excluded))) throw new Error("SERVICE_COVERAGE_INVALID");
     if (row.active && app.scope === "LINE" && row.parentLineId !== app.parentLineId) throw new Error("SERVICE_COVERAGE_INVALID");
     seen.add(row.parentLineId);
+    coverageIds.add(row.id);
   }
   if (requireResolved && app.inclusion !== "NOT_INCLUDED" && (!coverage.some(row => row.active) || app.reviewState !== "RESOLVED")) throw new Error("SERVICE_REVIEW_REQUIRED");
   return { app, coverage };

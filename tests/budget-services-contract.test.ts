@@ -58,6 +58,8 @@ test("company/execution/coverage checks reject crossed tenants and stale parent"
   assert.throws(() => validateServiceCompanyBinding(application, [{ ...coverage[0], organizationId: "other" }], context));
   assert.throws(() => validateServiceCompanyBinding(application, coverage, { ...context, lines: [{ ...context.lines[0], excluded: true }] }));
   assert.throws(() => validateServiceCompanyBinding(application, [...coverage, { ...coverage[0], id: "duplicate" }], context));
+  assert.throws(() => validateServiceCompanyBinding(application, [...coverage, { ...coverage[0], parentLineId: "second" }],
+    { ...context, lines: [...context.lines, { ...context.lines[0], id: "second" }] }));
   assert.throws(() => validateServiceCompanyBinding({ ...application, reviewState: "NEEDS_REVIEW" }, coverage, context));
 });
 
