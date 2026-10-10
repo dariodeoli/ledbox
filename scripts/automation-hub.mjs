@@ -28,6 +28,11 @@ function rows(body) {
   throw new Error("Envelope Hub no reconocido; no publicar");
 }
 const repository = value => String(value ?? "").replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "").toLowerCase();
+function applicationId(value) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value === "string" && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value))) return value;
+  throw new Error("Hub sin ID de aplicación contractual verificable");
+}
 
 /** Sólo campos públicos de ApplicationDeploymentQueue; nunca logs/configuration_snapshot. */
 export function deploymentOutcome(matches, sha, applicationUUID) {
@@ -37,8 +42,9 @@ export function deploymentOutcome(matches, sha, applicationUUID) {
   return { applicationUUID, sha, status: failed ? "FAILED" : finished ? "FINISHED" : matches.length ? "PENDING" : "ABSENT", checkedAt: new Date().toISOString(), deployments: matches };
 }
 
-export function hubClient(config, fetcher = fetch) {
+export function hubClient(config, fetcher = fetch, { readOnly = false } = {}) {
   const request = async (path, method = "GET") => {
+     if (readOnly && method !== "GET") throw new Error("Diagnóstico Hub GET-only: POST prohibido");
     const settings = deploySettings(config.deployEnvFile, process.env, config.tokenFile);
     if (settings.trigger.pathname !== "/api/v1/deploy" || settings.trigger.searchParams.get("uuid") !== config.applicationUUID || settings.trigger.searchParams.get("force") === "true") throw new Error("Webhook no corresponde al UUID LedBox o fuerza rebuild");
     const url = method === "POST" ? settings.trigger : new URL(path, settings.origin);
@@ -71,11 +77,37 @@ export function hubClient(config, fetcher = fetch) {
     async deployments(sha) {
       if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error("Deployment requiere SHA completo40");
       const { app } = await resource();
-      if (!Number.isInteger(app.id) || app.id <= 0) throw new Error("Detalle Hub sin ID de recurso verificable");
-      const list = rows(await request(config.hubDeploymentsPath.replace("{uuid}", encodeURIComponent(config.applicationUUID))));
+      // Installed Coolify omits Application.id. This exact UUID-scoped endpoint
+      // resolves the application by UUID server-side, then queries application_id.
+      // Never substitute destination/server IDs or infer binding from SHA alone.
+      const path = config.hubDeploymentsPath.replace("{uuid}", encodeURIComponent(config.applicationUUID));
+      if (path !== `/api/v1/deployments/applications/${encodeURIComponent(app.uuid)}`) throw new Error("Listado Hub no tiene scope contractual UUID de aplicación");
+      let boundId = app.id === undefined ? null : applicationId(app.id);
+      const list = [];
+      let total;
+      for (let page = 0; page < 100; page++) {
+        const body = await request(page === 0 ? path : `${path}?skip=${list.length}&take=10`);
+        const batch = rows(body);
+        if (!Number.isSafeInteger(body?.count) || body.count < 0 || (total !== undefined && body.count !== total)) throw new Error("Listado Hub incompleto/ambiguo: count contractual requerido y estable");
+        total = body.count;
+        if (list.length + batch.length > total || (!batch.length && list.length < total)) throw new Error("Paginación Hub incompleta/ambigua");
+        for (const d of batch) {
+          if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("Deployment Hub inválido");
+          const id = applicationId(d.application_id);
+          if (boundId === null) boundId = id;
+          if (id !== boundId || (d.application_uuid !== undefined && d.application_uuid !== app.uuid)) throw new Error("Deployment no corresponde al recurso Hub validado");
+          if ((d.git_repository !== undefined && !["owncoding/ledbox", "dariodeoli/ledbox"].includes(repository(d.git_repository))) || (d.git_branch !== undefined && d.git_branch !== config.liveBranch)) throw new Error("Deployment repository/branch inconsistente");
+          if (typeof d.deployment_uuid !== "string" || !d.deployment_uuid || !/^[a-f0-9]{40}$/.test(d.commit) || list.some(previous => previous.deployment_uuid === d.deployment_uuid)) throw new Error("Deployment Hub sin identidad/SHA40 único; ausencia incierta");
+          list.push(d);
+        }
+        if (list.length === total) break;
+        if (page === 99) throw new Error("Listado Hub excedido: ausencia incierta");
+      }
+      if (boundId === null) throw new Error("Hub sin ID de recurso verificable: listado vacío y detalle sin ID");
       // No usar prefijos de SHA ni inferir un deploy por versión/hora.
       return list.filter(d => d.commit === sha).map(d => {
-        if (String(d.application_id) !== String(app.id) || (d.application_uuid && d.application_uuid !== app.uuid)) throw new Error("Deployment no corresponde al recurso Hub validado");
+        // UUID derives only from the validated endpoint binding above, never an
+        // unscoped row or a conflicting resource identity.
         return { application_uuid: app.uuid, application_id: d.application_id, deployment_uuid: d.deployment_uuid,
           commit: d.commit, status: d.status, finished_at: d.finished_at ?? null, rollback: d.rollback ?? null };
       });

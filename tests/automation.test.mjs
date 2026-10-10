@@ -234,6 +234,58 @@ test("Hub token recargado, alias cotejado, SOURCE_COMMIT requerido y ningún POS
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("installed Hub missing detail ID binds only UUID-scoped string application_id; paginated failed SHA stays GET-only", async () => {
+  const dir = temp(), file = join(dir, "deploy.env"), tokenFile = join(dir, "token");
+  const uuid = "shgn0g8bfuitauifyf69noeq", target = "f".repeat(40);
+  const config = { tokenFile, deployEnvFile: file, hubApplicationsPath: "/api/v1/applications", hubDeploymentsPath: "/api/v1/deployments/applications/{uuid}", applicationUUID: uuid, liveBranch: LIVE, canonicalRepository: "dariodeoli/ledbox", canonicalRepositoryId: 1312274819 };
+  // Sanitized installed GET shape: detail lacks id; deployments count/envelope,
+  // string application_id and no row application_uuid. No destination/server fallback.
+  const app = { uuid, git_repository: "dariodeoli/ledbox", git_branch: LIVE, settings: { is_auto_deploy_enabled: true, include_source_commit_in_build: true } };
+  const deployment = { application_id: "19", deployment_uuid: "4tchgti25wsyb5gm4edrq90y", commit: "bc0619eca31177cd2c1f291d72c38b49fd82a417", status: "finished", finished_at: "2026-10-10T02:19:31.000000Z", rollback: false };
+  let list = Array.from({ length: 11 }, (_, i) => ({ ...deployment, deployment_uuid: `fixture-${i}`, commit: i === 10 ? target : String(i + 1).padStart(40, "0"), status: i === 10 ? "failed" : "finished" }));
+  let envelope = "deployments", invalidCount = false, failure = false, calls = [];
+  try {
+    writeFileSync(file, `LEDBOX_DEPLOY_WEBHOOK_URL=https://hub.example.invalid/api/v1/deploy?uuid=${uuid}\n`);
+    writeFileSync(tokenFile, "test-token", { mode: 0o600 });
+    const client = hubClient(config, async (address, options) => {
+      assert.equal(options.method, "GET"); calls.push(address);
+      if (failure) throw new Error("GET timeout");
+      const url = new URL(address);
+      if (url.pathname === `/api/v1/applications/${uuid}`) return Response.json(app);
+      assert.equal(url.pathname, `/api/v1/deployments/applications/${uuid}`);
+      const skip = Number(url.searchParams.get("skip") ?? 0);
+      return Response.json({ ...(invalidCount ? {} : { count: list.length }), [envelope]: list.slice(skip, skip + 10) });
+    }, { readOnly: true });
+    assert.equal((await client.preflight()).uuid, uuid);
+    const matches = await client.deployments(target);
+    assert.equal(matches.length, 1); assert.equal(matches[0].status, "failed");
+    assert.equal(matches[0].application_id, "19"); assert.equal(matches[0].application_uuid, uuid);
+    assert.ok(calls.some(url => url.endsWith("?skip=10&take=10")), "must not call absence after only ten rows");
+    await assert.rejects(client.trigger(), /GET-only/); assert.ok(calls.every(url => !url.includes("/api/v1/deploy?")));
+    assert.deepEqual(await client.deployments("e".repeat(40)), [], "absence only after complete bound list");
+    envelope = "data"; assert.equal((await client.deployments(target)).length, 1);
+    app.id = "19"; assert.equal((await client.deployments(target)).length, 1, "documented scalar string ID accepted");
+    app.id = 20; await assert.rejects(client.deployments(target), /recurso Hub/); delete app.id;
+    for (const change of [{ application_id: "20" }, { application_uuid: "foreign" }, { git_repository: "foreign/repo" }, { git_branch: "main" }, { application_id: { id: "19" } }, { application_id: null }, { commit: target.slice(0, 7) }]) {
+      const saved = list[0]; list[0] = { ...saved, ...change };
+      await assert.rejects(client.deployments(target), /Hub|inconsistente/); list[0] = saved;
+    }
+    const saved = list; list = [{ application: { id: "19", uuid }, commit: target, deployment_uuid: "nested" }];
+    await assert.rejects(client.deployments(target), /ID de aplicación/, "undocumented nested ID is not a substitute");
+    list = []; await assert.rejects(client.deployments(target), /sin ID de recurso/, "empty history without detail ID is uncertainty, not POST permission"); list = saved;
+    invalidCount = true; await assert.rejects(client.deployments(target), /incompleto\/ambiguo/); invalidCount = false;
+    const duplicate = list[10]; list[10] = { ...duplicate, deployment_uuid: list[0].deployment_uuid };
+    await assert.rejects(client.deployments(target), /único/); list[10] = duplicate;
+    failure = true; await assert.rejects(client.deployments(target), /timeout/); failure = false;
+    await assert.rejects(client.deployments(target.slice(0, 7)), /SHA completo40/);
+    const correctPath = config.hubDeploymentsPath; config.hubDeploymentsPath = "/api/v1/deployments";
+    await assert.rejects(client.deployments(target), /scope contractual/); config.hubDeploymentsPath = correctPath;
+    app.git_repository = "foreign/repo"; await assert.rejects(client.deployments(target), /repository/); app.git_repository = "dariodeoli/ledbox";
+    app.git_branch = "main"; await assert.rejects(client.deployments(target), /branch/); app.git_branch = LIVE;
+    app.uuid = "foreign"; await assert.rejects(client.deployments(target), /UUID/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("scope exacto y evidencia independiente: no autoaprobar Pilot ni publicar artefacto alterado", async () => {
   const f = fixture();
   try {
