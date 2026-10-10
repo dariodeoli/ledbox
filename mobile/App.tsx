@@ -22,9 +22,10 @@ function Shell() {
   const [restoring, setRestoring] = useState(true);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     let current = true;
-    client.onExpired = () => { if (current) { setSession(null); setScreen("companies"); setEventId(null); setBootstrapError(null); } };
+    client.onExpired = message => { if (current) { setSession(null); setScreen("companies"); setEventId(null); setBootstrapError(null); setNotice(message ?? null); } };
     setRestoring(true); setBootstrapError(null);
     client.restore().then(result => { if (current) { setSession(result); setScreen(result?.activeCompanyId ? "calendar" : "companies"); } })
       .catch(reason => { if (current) setBootstrapError(reason instanceof MobileError && reason.code === "UNAUTHENTICATED" ? null : reason instanceof Error ? reason.message : "No se pudo recuperar la sesión."); })
@@ -32,7 +33,7 @@ function Shell() {
     return () => { current = false; client.onExpired = null; };
   }, [client, attempt]);
   function acceptSession(next: Session) {
-    setEventId(null); setSession(next); setScreen(next.activeCompanyId ? "calendar" : "companies");
+    setNotice(null); setEventId(null); setSession(next); setScreen(next.activeCompanyId ? "calendar" : "companies");
   }
   const company = session?.companies.find(item => item.id === session.activeCompanyId);
   return <SafeAreaView style={[styles.safe, { backgroundColor: color.bg }]}>
@@ -42,6 +43,7 @@ function Shell() {
         {mobileContract.status === "PENDING_PF" ? <Body>Integración móvil pendiente del contrato y endpoints PF. No hay conexión acreditada al backend.</Body> : null}
         {restoring ? <ActivityIndicator accessibilityLabel="Recuperando sesión" color={color.accent} /> : null}
         <ErrorNotice message={bootstrapError} />
+        {notice ? <Body>{notice}</Body> : null}
         {bootstrapError ? <Button label="Reintentar sesión" onPress={() => setAttempt(value => value + 1)} /> : null}
         {bootstrapError ? <Button label="Cerrar sesión en el servidor" secondary onPress={() => { void client.logout().catch(reason => setBootstrapError(reason instanceof Error ? reason.message : "No se pudo cerrar sesión.")); }} /> : null}
         {!restoring && !bootstrapError && !session ? <Login client={client} onSession={acceptSession} /> : null}

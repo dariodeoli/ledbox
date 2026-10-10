@@ -17,7 +17,7 @@ export class MobileClient {
   private token: string | null = null;
   private generation = 0;
   private pending = new Set<AbortController>();
-  onExpired: (() => void) | null = null;
+  onExpired: ((notice?: string) => void) | null = null;
   constructor(private origin: string, private contract: Contract, private secrets: SecretStore, private fetcher: Fetcher = fetch, private allowLocal = false, private privacyUrl = "") {}
 
   private invalidate() {
@@ -25,10 +25,10 @@ export class MobileClient {
     for (const controller of this.pending) controller.abort();
     this.pending.clear();
   }
-  private async clearSession() {
+  private async clearSession(notice?: string) {
     this.token = null;
     this.invalidate();
-    try { await this.secrets.clear(); } finally { this.onExpired?.(); }
+    try { await this.secrets.clear(); } finally { this.onExpired?.(notice); }
   }
   private url(endpoint: Endpoint, query?: Record<string, string>) {
     const route = this.contract.routes[endpoint];
@@ -61,7 +61,7 @@ export class MobileClient {
           const failure = await response.json().catch(() => null) as { code?: string } | null;
           if (failure?.code === "reauthentication_required") throw new MobileError("UNAUTHENTICATED", "Contraseña actual incorrecta. Tu cuenta no fue eliminada.", 401);
         }
-        if (authenticated) await this.clearSession();
+        if (authenticated) await this.clearSession("La sesión venció. Volvé a ingresar.");
         throw new MobileError("UNAUTHENTICATED", authenticated ? "La sesión venció. Volvé a ingresar." : "Correo o contraseña incorrectos.", 401);
       }
       if (response.status === 403) throw new MobileError("FORBIDDEN", "Tu rol no tiene acceso a esta función.", 403);
@@ -150,12 +150,12 @@ export class MobileClient {
   async logout() {
     const result = await this.request<{ loggedOut: boolean }>("logout", "POST");
     if (result.loggedOut !== true) throw new MobileError("INVALID_RESPONSE", "El servidor no confirmó la revocación.");
-    await this.clearSession();
+    await this.clearSession("Sesión revocada en el servidor.");
   }
   async deleteAccount(password: string) {
     const result = await this.request<{ deleted: boolean; retained: string[] }>("deleteAccount", "DELETE", { password, confirmation: "DELETE_ACCOUNT" });
     if (result.deleted !== true || !Array.isArray(result.retained)) throw new MobileError("INVALID_RESPONSE", "El servidor no confirmó la eliminación.");
-    await this.clearSession();
+    await this.clearSession("Tu cuenta fue eliminada. Se conservan registros empresariales, financieros, documentos firmados e historial de auditoría.");
     return { status: "DELETED", message: "Tu cuenta fue eliminada. Se conservan los registros empresariales, financieros, documentos firmados e historial de auditoría." } satisfies DeletionResult;
   }
 }
