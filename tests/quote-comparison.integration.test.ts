@@ -11,7 +11,7 @@ test("comparison HTTP/DB: exclusive approvals across comparison, standalone, man
   const suffix = randomUUID(); const org = `cmp-${suffix}`; const other = `cmp-other-${suffix}`;
   let cookie = "";
   async function call(path: string, method = "GET", body?: unknown, auth = true) {
-    return fetch(base + path, { method, headers: { ...(auth ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return fetch(base + path, { method, headers: { "X-Forwarded-For": `qa-comparison-${suffix}`, ...(auth ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
   }
   async function signature(id: string) {
     const response = await call("/api/admin/signatures", "POST", { budgetId: id, recipientName: "QA signer", method: "TYPED", otpRequired: false });

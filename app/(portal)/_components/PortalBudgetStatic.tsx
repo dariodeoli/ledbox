@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import type { AdminTimelineEntry } from "@/lib/admin-types";
 import { countdownTone, formatCountdown, formatDate, formatDateTime, timelineKindLabel } from "@/lib/admin-format";
@@ -35,9 +36,9 @@ export function PortalDemoBanner() {
   );
 }
 
-/** Nombre visible del cliente: razón social si existe, nombre de la persona si no. */
+/** Identidad comercial y fiscal explícitas, sin reinterpretar company. */
 function clientLabelOf(budget: PortalBudget): string {
-  return budget.client.company?.trim() || budget.client.name;
+  return clientDisplayName(budget.client);
 }
 
 /** Encabezado del documento: referencia, título y quién lo preparó. */
@@ -48,6 +49,7 @@ export function PortalHeadTitle({ budget }: { budget: PortalBudget }) {
       <h1 className="portal-budget-title">{budget.title}</h1>
       <p className="portal-budget-meta">
         {clientLabelOf(budget)} · preparado por {budget.organization}
+        {clientLegalName(budget.client) ? ` · Razón social: ${clientLegalName(budget.client)}` : ""}
       </p>
     </div>
   );

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { budgetReference } from "@/lib/admin-format";
 import { emailValid, normalizeEmail, normalizePhone, phoneValid } from "@/lib/field-rules";
 import { signaturePortalUrl } from "@/lib/public-config";
 import { db } from "../db";
@@ -8,10 +7,9 @@ import { recordAudit } from "../audit";
 import { sendMail } from "../mail";
 import { buildSignatureRequestMail } from "../mail/signature";
 import type { AdminContext } from "../tenancy";
-import { paymentPlanOf } from "../budget-portal";
 import type { AdminSignatureRequestRow } from "@/lib/admin-types";
 import { appendSignatureEvent, lockSignatureRequest } from "./events";
-import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, type SignatureBudgetDocument } from "./document";
+import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureBudgetSelect, SNAPSHOT_DOCUMENT_VERSION } from "./document";
 import { generateSignatureCode } from "./codes";
 import { maskEmail, verifySignatureChain } from "./hash";
 import {
@@ -310,28 +308,7 @@ export async function createSignatureRequest(
   const budgetId = String(input.budgetId ?? "").trim();
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId: context.organizationId },
-    select: {
-      id: true,
-      title: true,
-      createdAt: true,
-      validUntil: true,
-      deliveryAt: true,
-      ivaType: true,
-      warranty: true,
-      notes: true,
-      paymentTerms: true,
-      advanceAmount: true,
-      installmentsJson: true,
-      subtotal: true,
-      discount: true,
-      total: true,
-      client: { select: { name: true, company: true } },
-      event: { select: { name: true, location: true, startsAt: true, endsAt: true } },
-      items: {
-        orderBy: { name: "asc" },
-        select: { name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true, notes: true },
-      },
-    },
+    select: signatureBudgetSelect,
   });
   if (!budget) throw new SignatureActionError(404, "No encontramos ese presupuesto.");
 
@@ -371,47 +348,19 @@ export async function createSignatureRequest(
     attachment = { id: found.id, name: found.name, data: new Uint8Array(found.data) };
   }
 
-  const plan = paymentPlanOf(budget);
-  const budgetDocument: SignatureBudgetDocument = {
-    budgetId: budget.id,
-    reference: budgetReference(budget.id),
-    title,
-    organizationName: context.organization.name,
-    client: { name: budget.client.name, company: budget.client.company },
-    event: budget.event
-      ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
-      : null,
-    createdAt: budget.createdAt.toISOString(),
-    validUntil: iso(budget.validUntil),
-    deliveryAt: iso(budget.deliveryAt),
-    ivaType: budget.ivaType,
-    warranty: budget.warranty,
-    notes: budget.notes,
-    paymentTerms: budget.paymentTerms,
-    items: budget.items.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      days: item.days,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
-      excluded: item.excluded,
-      notes: item.notes,
-    })),
-    subtotal: budget.subtotal,
-    discount: budget.discount,
-    total: budget.total,
-    plan: {
-      advanceAmount: plan.advanceAmount,
-      installments: plan.installments,
-      dueNow: plan.dueNow,
-      pending: plan.pending,
-    },
-  };
-  const documentHash = attachment ? attachmentDocumentHash(attachment.data) : budgetDocumentHash(budgetDocumentPayload(budgetDocument));
-
   const code = generateSignatureCode();
   const requestId = randomUUID();
   await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budget.id} FOR UPDATE`;
+    const currentBudget = await tx.budget.findFirst({ where: { id: budget.id, organizationId: context.organizationId }, select: signatureBudgetSelect });
+    if (!currentBudget) throw new SignatureActionError(404, "No encontramos ese presupuesto.");
+    const organization = await tx.organization.findUniqueOrThrow({ where: { id: context.organizationId }, select: { name: true } });
+    const budgetDocument = signatureDocument({ source: "live", version: SNAPSHOT_DOCUMENT_VERSION, budget: currentBudget, title, organizationName: organization.name });
+    const documentSnapshot = budgetDocumentPayload(budgetDocument);
+    // Verifica contrato público antes de guardarlo; no costos ni campos privados.
+    signatureDocument({ source: "snapshot", payload: documentSnapshot });
+    const commercialHash = budgetDocumentHash(documentSnapshot);
+    const documentHash = attachment ? attachmentDocumentHash(attachment.data) : commercialHash;
     await tx.signatureRequest.create({
       data: {
         id: requestId,
@@ -464,7 +413,10 @@ export async function createSignatureRequest(
         metadata: {
           documento: attachment ? attachment.name : `Presupuesto «${budget.title}»`,
           documentoHash: documentHash,
-          commercialHash: budgetDocumentHash(budgetDocumentPayload(budgetDocument)),
+          commercialHash,
+          documentVersion: SNAPSHOT_DOCUMENT_VERSION,
+          documentSnapshot,
+          documentSnapshotHash: commercialHash,
           metodo: method,
           destinatario: recipientName,
           vence: expiresAt.toISOString(),

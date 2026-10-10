@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { loadSignatureImage, loadSignaturePortal } from "@/lib/server/signature/portal";
+import { loadSignatureImage, loadSignaturePortal, SignatureActionError } from "@/lib/server/signature/portal";
 import { PortalPrintBar } from "../../../_components/PortalPrintBar";
 import { PortalCardTitle } from "../../../_components/PortalCardTitle";
-import { SignatureDocumentSheet } from "../../../_components/SignatureDocumentSheet";
+import { SignatureDocumentSheet, SignatureDocumentUnavailable } from "../../../_components/SignatureDocumentSheet";
 import { SignatureSealBlock } from "../../../_components/SignatureSealBlock";
 
 export const runtime = "nodejs";
@@ -19,7 +19,12 @@ export const metadata: Metadata = { title: "Documento firmado", robots: { index:
  */
 export default async function FirmaDocumentoPage({ params }: { params: Promise<{ codigo: string }> }) {
   const { codigo } = await params;
-  const request = await loadSignaturePortal(codigo);
+  let request;
+  try { request = await loadSignaturePortal(codigo); }
+  catch (error) {
+    if (error instanceof SignatureActionError && error.status === 409) return <SignatureDocumentUnavailable message={error.message} />;
+    throw error;
+  }
   if (!request) notFound();
   const image = await loadSignatureImage(codigo);
 

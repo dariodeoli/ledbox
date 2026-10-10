@@ -86,6 +86,26 @@ test("Client/Event servidor: migración conserva historia, scope, permisos y sna
     const events = (await (await call("/api/admin/events?fields=selector")).json()).events;
     assert.equal(events.find((e: { id: string }) => e.id === event.id).client.tradeName, "Fantasía nueva");
     assert.equal(events.some((e: { id: string }) => e.id === foreignEvent.id), false);
+    // Contrato REAL que consume el panel OPS, no el selector de /events.
+    const legacyPanelClient = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "Nombre histórico para fallback QA", company: "Empresa histórica NO fiscal", phone: "+595 981123456" } });
+    const legacyPanelEvent = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: legacyPanelClient.id, name: "Evento cliente legado QA" } });
+    assert.equal((await call("/api/admin/event-ops?fields=panel", "GET", undefined, false)).status, 401);
+    const panelResponse = await call("/api/admin/event-ops?fields=panel");
+    assert.equal(panelResponse.status, 200);
+    const panelEvents = (await panelResponse.json()).events;
+    const panelClient = panelEvents.find((e: { id: string }) => e.id === event.id).client;
+    assert.equal(panelClient.tradeName, "Fantasía nueva");
+    assert.equal(panelClient.legalName, "Razón social manual");
+    assert.equal(panelClient.name, "SCALE STRATEGY GROUP EAS", "name histórico no se proyecta ni pisa");
+    assert.equal(panelClient.company, "Histórico no fiscal");
+    assert.deepEqual(Object.keys(panelClient).sort(), ["id", "name", "company", "phone", "tradeName", "legalName"].sort(), "cliente mínimo no expone snapshot/contactos/facturación");
+    const legacyPanel = panelEvents.find((e: { id: string }) => e.id === legacyPanelEvent.id).client;
+    assert.equal(legacyPanel.tradeName, null);
+    assert.equal(legacyPanel.legalName, null, "company no se infiere como razón social");
+    assert.equal(legacyPanel.name, legacyPanelClient.name, "el API entrega nombre histórico para fallback de clientDisplayName");
+    assert.equal(legacyPanel.company, legacyPanelClient.company);
+    assert.equal(panelEvents.some((e: { id: string }) => e.id === foreignEvent.id), false, "scope: evento otra empresa ausente");
+    assert.equal(panelEvents.some((e: { client: { id: string } }) => e.client.id === foreign.id), false, "scope: cliente otra empresa ausente");
     assert.equal((await call(`/api/admin/clients/${client.id}`, "PATCH", { city: "Ciudad manual" })).status, 200);
     assert.equal((await db.client.findUniqueOrThrow({ where: { id: client.id } })).department, null);
     const viewer = await db.adminUser.create({ data: { id: `viewer-${suffix}`, name: "Viewer QA", email: `viewer-${suffix}@example.invalid`, role: "VIEWER", passwordHash: "not-a-login", autoLockEnabled: false } });
@@ -94,6 +114,9 @@ test("Client/Event servidor: migración conserva historia, scope, permisos y sna
     cookie = `ledbox_session=${(await createSession(viewer, org)).jwt}`;
     for (const [path, method, body] of [["/api/admin/clients", "POST", { tradeName: "Sin permiso" }], [`/api/admin/clients/${client.id}`, "PATCH", { tradeName: "Sin permiso" }], ["/api/admin/events", "POST", { clientId: client.id, name: "Sin permiso" }], ["/api/admin/events", "PATCH", { id: event.id, name: "Sin permiso" }], ["/api/admin/clients/ruc", "POST", { numero: "1234567-0", confirmLookup: true }]] as const) assert.equal((await call(path, method, body)).status, 403);
     assert.equal((await call(`/api/admin/clients/${client.id}`)).status, 200);
+    const viewerPanel = await call("/api/admin/event-ops?fields=panel");
+    assert.equal(viewerPanel.status, 200, "VIEWER mantiene lectura del panel");
+    assert.equal((await viewerPanel.json()).events.find((e: { id: string }) => e.id === event.id).client.tradeName, "Fantasía nueva");
     const logs = await db.auditLog.findMany({ where: { organizationId: org } });
     assert.ok(logs.some(log => log.entity === "Client" && JSON.stringify(log.detail).includes("tradeName")));
     assert.ok(logs.some(log => log.entity === "Event" && JSON.stringify(log.detail).includes("department")));

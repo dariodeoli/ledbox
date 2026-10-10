@@ -1,4 +1,5 @@
 import { selectionSubtotal } from "@/lib/quote-selection";
+import { recalculateBudgetPaymentPlan } from "@/lib/server/budget-payment-plan";
 import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { db } from "@/lib/server/db";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
@@ -7,6 +8,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
+import { clientDisplayName } from "@/lib/client-identity";
 export const dynamic = "force-dynamic";
 
 const MAX_NOTE = 600;
@@ -62,7 +64,7 @@ async function resolveRequest(request: Request) {
           discount: true,
           total: true,
           revisionRequestedAt: true,
-          client: { select: { name: true, company: true } },
+          client: { select: { name: true, company: true, tradeName: true, legalName: true } },
           items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } },
         },
       },
@@ -72,7 +74,7 @@ async function resolveRequest(request: Request) {
   if (changeRequest.status !== "pending") return jsonError("Esta solicitud ya fue resuelta.", 409);
 
   const budget = changeRequest.budget;
-  const clientLabel = budget.client.company?.trim() || budget.client.name;
+  const clientLabel = clientDisplayName(budget.client);
   const kindLabel = KIND_LABEL[changeRequest.kind] ?? "la solicitud del portal";
 
   if (decision === "reject") {
@@ -171,6 +173,7 @@ async function resolveRequest(request: Request) {
           ...(resolvesRevision ? { revisionRequestedAt: null } : {}),
         },
       });
+      await recalculateBudgetPaymentPlan(tx, budget.id);
       await tx.budgetChangeRequest.update({
         where: { id: changeRequest.id },
         data: { status: "accepted", resolvedAt: new Date(), resolvedByName: user.name, responseNote: note || null },

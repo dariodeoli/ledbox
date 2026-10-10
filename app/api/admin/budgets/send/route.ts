@@ -1,4 +1,5 @@
 import { emailValid, normalizeEmail } from "@/lib/field-rules";
+import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -6,6 +7,7 @@ import { buildBudgetMail, sendMail } from "@/lib/server/mail";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
+import { clientDisplayName } from "@/lib/client-identity";
 export const dynamic = "force-dynamic";
 
 /** Mensaje corto opcional del diálogo de envío (no es una carta). */
@@ -46,9 +48,9 @@ export async function POST(request: Request) {
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
     include: {
-      client: { select: { name: true, company: true } },
+      client: { select: { name: true, company: true, tradeName: true, legalName: true } },
       event: { select: { name: true } },
-      items: { orderBy: { name: "asc" }, select: { name: true, quantity: true, days: true, subtotal: true } },
+      items: { orderBy: { name: "asc" }, select: { sortOrder: true, name: true, quantity: true, days: true, subtotal: true } },
       organization: { select: { name: true, paymentDetails: true } },
     },
   });
@@ -60,12 +62,12 @@ export async function POST(request: Request) {
   const content = buildBudgetMail({
     organizationName: budget.organization.name,
     paymentDetails: budget.organization.paymentDetails,
-    budget,
+    budget: { ...budget, items: stableOrderBudgetItems(budget.items) },
     message,
   });
   if (!content) return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
 
-  const clientLabel = budget.client.company?.trim() || budget.client.name;
+  const clientLabel = clientDisplayName(budget.client);
   const result = await sendMail({
     to,
     subject: content.subject,

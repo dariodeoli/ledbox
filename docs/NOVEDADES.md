@@ -242,3 +242,18 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Proveedores, Leads e Inventario como tarjetas en móvil
 - los avisos del topbar se portalan y quedan legibles en móvil
 
+
+## v2.1.74 — 2026-10-10
+
+- fix(firma): imprimir fechas de cuotas como días de calendario (Refs #173)
+- fix(firma): sellar cuotas públicas completas con roundtrip JSON canónico (Refs #173)
+- fix(automation): contar AUTO desde SHA servido y aplicar cadencia autorizada (Refs #173)
+- fix(deploy): adoptar token común y verificar deployment terminal por SHA (Refs #173)
+- fix(panel): confirmar borrado de adjuntos con diálogo compartido (Refs #173)
+- fix(panel): asegurar contraste y reflow de formularios al 200% (Refs #173)
+- fix(automation): superseder READY publicado manualmente con FAIL y ACK exactos (Refs #173)
+- fix(firma): congelar documento público versionado y preservar guard LIVE legacy (Refs #173)
+- fix(panel): compactar impresión y evitar cierre huérfano (Refs #173)
+- fix(presupuestos): persistir orden A15 y rechazar costos inválidos A04 (Refs #173)
+- fix(automation): rechazar READY sólo con Pilot FAIL exacto sin publicación (Refs #173)
+- fix(schema): persistir orden explícito nullable de ítems sin backfill (Refs #173)

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { loadSignaturePortal, signatureClientEvidence } from "@/lib/server/signature/portal";
+import { loadSignaturePortal, signatureClientEvidence, SignatureActionError } from "@/lib/server/signature/portal";
+import { SignatureDocumentUnavailable } from "../../_components/SignatureDocumentSheet";
 import { SignaturePortalView } from "../../_components/SignaturePortalView";
 
 export const runtime = "nodejs";
@@ -20,10 +21,14 @@ export const metadata: Metadata = { title: "Firma de documentos", robots: { inde
  */
 export default async function FirmaPage({ params }: { params: Promise<{ codigo: string }> }) {
   const { codigo } = await params;
-  const request = await loadSignaturePortal(codigo, {
+  let request;
+  try { request = await loadSignaturePortal(codigo, {
     sealView: true,
     evidence: signatureClientEvidence(await headers()),
-  });
+  }); } catch (error) {
+    if (error instanceof SignatureActionError && error.status === 409) return <SignatureDocumentUnavailable message={error.message} />;
+    throw error;
+  }
   if (!request) notFound();
   return <SignaturePortalView request={request} />;
 }

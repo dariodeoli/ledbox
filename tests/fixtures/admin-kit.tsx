@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AttachmentInput, BancoField, CityField, Combobox, EmailField, MoneyField, PercentField, PhoneField, SearchField } from "../../components/admin/AdminFields";
-import { AdminButton, AdminDialog, AdminNote } from "../../components/admin/AdminUI";
+import { AdminButton, AdminDialog, AdminKpi, AdminNote } from "../../components/admin/AdminUI";
 
 function Kit() {
   const [phone, setPhone] = useState("+54 91123456789");
@@ -35,6 +35,12 @@ function Kit() {
   </form>;
   return <main className="admin-module-page">
     <h1>Kit de formularios · Refs #173</h1>
+    <div className="admin-kpis" id="high-total-kpis">
+      <AdminKpi label="Vigentes" value="3" note="Presupuestos vigentes" />
+      <AdminKpi label="Aprobados" value="1" />
+      <AdminKpi label="Pendientes" value="2" />
+      <AdminKpi label="Monto en juego" icon="finance" value="Gs 2.148.384.798" note="Σ de los vigentes" />
+    </div>
     <AdminButton type="button" onClick={() => setOpen(true)} id="open-dialog">Probar en diálogo</AdminButton>
     {open ? <AdminDialog title="Kit en diálogo" onClose={() => setOpen(false)}>{fields}</AdminDialog> : fields}
     <output id="state" hidden>{JSON.stringify({ phone, email, amount, percent, city, department, bank, entity, created, attachment })}</output>

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import puppeteer from "puppeteer-core";
 
 const base = process.env.QUOTE_TEST_BASE_URL;
 const chrome = process.env.QUOTE_CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const evidence = process.env.QUOTE_EVIDENCE_DIR ?? "/private/var/folders/jt/v4h3s4hs3wxf82mqzn6qtgg80000gn/T/opencode/ledbox-quote-qa";
 const enabled = Boolean(base && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base) && /^postgresql:\/\/[^@]*@(localhost|127\.0\.0\.1):\d+\/ledbox_quote_qa(?:\?|$)/.test(process.env.DATABASE_URL ?? "") && existsSync(chrome));
 
 test("quote list/board/mobile: menu geometry, keyboard, column alignment and status parity", { skip: !enabled, timeout: 120000 }, async () => {
@@ -14,6 +15,7 @@ test("quote list/board/mobile: menu geometry, keyboard, column alignment and sta
   const suffix = randomUUID();
   const org = `ui-${suffix}`;
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
+  mkdirSync(evidence, { recursive: true });
   try {
     await db.organization.create({ data: { id: org, name: "Quote UI QA", slug: org } });
     const user = await db.adminUser.create({ data: { id: `ui-user-${suffix}`, name: "QA user", email: `${suffix}@example.invalid`, role: "OWNER", passwordHash: "not-a-login", autoLockEnabled: false } });
@@ -43,10 +45,10 @@ test("quote list/board/mobile: menu geometry, keyboard, column alignment and sta
       await page.waitForFunction((selector) => { const node = document.querySelector(selector)!; const r = node.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return hit === node || (hit !== null && node.contains(hit)); }, {}, selector);
       await trigger!.click();
       console.log(await trigger!.evaluate((node) => { const r = node.getBoundingClientRect(); return { expanded: node.getAttribute("aria-expanded"), rect: {x:r.x,y:r.y,w:r.width,h:r.height}, hit: document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML.slice(0,300) }; }));
-      await page.screenshot({ path: "/tmp/ledbox-quote-qa/trigger.png" });
+      await page.screenshot({ path: `${evidence}/trigger.png` });
       await page.waitForSelector('.admin-menu-pop', { timeout: 5000 });
       console.log(await page.evaluate(() => { const pop = document.querySelector(".admin-menu-pop")!; const r = pop.getBoundingClientRect(); return { parent: pop.parentElement?.tagName, rect: { x:r.x, y:r.y, w:r.width, h:r.height }, viewport: {w:innerWidth,h:innerHeight}, style: getComputedStyle(pop).position }; }));
-      await page.screenshot({ path: "/tmp/ledbox-quote-qa/menu.png" });
+      await page.screenshot({ path: `${evidence}/menu.png` });
       await page.waitForFunction(() => {
         const pop = document.querySelector('.admin-menu-pop')!; const r = pop.getBoundingClientRect();
         return pop.parentElement === document.body && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
@@ -94,21 +96,31 @@ test("quote list/board/mobile: menu geometry, keyboard, column alignment and sta
       return (await page.$(`[id="${id}"]`))!;
     };
     await clickText("Nuevo presupuesto");
+    if (process.env.QUOTE_CSS_FRAGMENT) await page.addStyleTag({ content: readFileSync(process.env.QUOTE_CSS_FRAGMENT, "utf8") });
     const clientField = await field("Cliente"); await clientField.type("QA client");
     await page.waitForSelector('.admin-combobox-option:not(.admin-combobox-option--create)');
     await clientField.press("Enter");
     await page.waitForSelector('button[aria-label="Quitar la selección de Cliente"]');
     await (await field("Título")).type("QA form persistence");
+    assert.equal(await page.$('button[aria-label="Vincular QA selectable product"]'), null, "suggestions start collapsed");
+    await clickText("Agregar ítem");
     await page.waitForSelector('button[aria-label="Vincular QA selectable product"]');
     await page.click('button[aria-label="Vincular QA selectable product"]');
-    assert.equal(await (await field("Producto / servicio")).evaluate((node) => (node as HTMLInputElement).value), product.name);
+    assert.equal(await (await field("Ítem 1")).evaluate((node) => (node as HTMLInputElement).value), product.name);
     await clickText("Agregar ítem");
-    await (await field("Producto / servicio 2")).type("Free text service");
+    await clickText("Agregar servicio libre");
+    await (await field("Ítem 2")).type("Free text service");
     const lastPriceId = await page.evaluate(() => [...document.querySelectorAll('label')].filter((node) => node.textContent?.trim() === "Precio unitario").at(-1)?.htmlFor);
     assert.ok(lastPriceId);
     await page.type('[id="' + lastPriceId + '"]', "50000");
-    await clickText("Crear presupuesto");
-    await page.waitForFunction(() => document.body.textContent?.includes("creado con"), { timeout: 10000 }).catch(async (error) => { console.log(await page.evaluate(() => ({ invalid: [...document.querySelectorAll("input:invalid")].map((node) => ({ id: node.id, value: (node as HTMLInputElement).value, message: (node as HTMLInputElement).validationMessage })), errors: [...document.querySelectorAll('[role="alert"]')].map((node) => node.textContent) }))); throw error; });
+    for (const width of [1470, 390, 360]) {
+      await page.setViewport({ width, height: 844 });
+      await page.screenshot({ path: `${evidence}/create-${width}.png`, fullPage: true });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+    await page.setViewport({ width: 1470, height: 844 });
+    await clickText("Guardar borrador");
+    await page.waitForFunction(() => document.body.textContent?.includes("creado como borrador"), { timeout: 10000 });
     const saved = await db.budget.findFirstOrThrow({ where: { organizationId: org, title: "QA form persistence" }, include: { items: true } });
     assert.equal(saved.items.length, 2);
     assert.equal(saved.items.find((item) => item.inventoryId === product.id)?.unitPrice, 250000);
@@ -126,7 +138,7 @@ test("quote list/board/mobile: menu geometry, keyboard, column alignment and sta
     await page.waitForSelector(`button[aria-label="Editar presupuesto: ${discounted.title}"]`);
     await page.click(`button[aria-label="Editar presupuesto: ${discounted.title}"]`);
     await page.waitForSelector(".admin-dialog");
-    const unitId = await page.evaluate(() => [...document.querySelectorAll<HTMLLabelElement>(".admin-dialog label")].find((node) => node.textContent?.trim() === "Precio unitario (Gs)")?.htmlFor);
+    const unitId = await page.evaluate(() => [...document.querySelectorAll<HTMLLabelElement>(".admin-dialog label")].find((node) => node.textContent?.trim() === "Precio unitario")?.htmlFor);
     assert.ok(unitId);
     const unit = (await page.$('[id="' + unitId + '"]'))!;
     await unit.click({ count: 3 }); await unit.press("Backspace"); await unit.type("1000");

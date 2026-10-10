@@ -7,6 +7,7 @@ import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inv
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
+import { clientDisplayName } from "@/lib/client-identity";
 export const dynamic = "force-dynamic";
 
 const select = {
@@ -21,7 +22,7 @@ const select = {
   approvalNote: true,
   revisionRequestedAt: true,
   revisionNote: true,
-  client: { select: { name: true, company: true } },
+  client: { select: { name: true, company: true, tradeName: true, legalName: true } },
 } as const;
 
 const MAX_NOTE = 1000;
@@ -57,10 +58,10 @@ export async function POST(request: Request) {
 
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
-    select: { id: true, title: true, status: true, approvedAt: true, client: { select: { name: true, company: true } } },
+    select: { id: true, title: true, status: true, approvedAt: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
-  const clientLabel = budget.client.company?.trim() || budget.client.name;
+  const clientLabel = clientDisplayName(budget.client);
   let reservations: BudgetReservation | null = null;
 
   if (decision === "approve") {

@@ -77,16 +77,18 @@ test("Eventos deja lo mínimo a la vista y crea clientes desde el selector", () 
  */
 test("el alta de presupuesto pliega el costo interno y el API rechaza sin ítems (issue #132)", () => {
   const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
-  const formSection = module.match(/title="Nuevo presupuesto"[\s\S]*?<\/AdminFormPanel>/)?.[0] ?? "";
+  const formSection = module.match(/<form className="admin-form-panel"[\s\S]*?<\/form>/)?.[0] ?? "";
   assert.ok(formSection, "el alta de presupuesto existe");
-  const priceIndex = formSection.indexOf('label="Precio unitario"');
-  const disclosureIndex = formSection.indexOf('title="Más datos"');
-  const costIndex = formSection.indexOf('label="Costo unitario"');
+  assert.match(formSection, /<BudgetItemsEditor/, "creación consume el editor compartido");
+  const editor = repoFile("components/admin/modules/BudgetItemsEditor.tsx");
+  const priceIndex = editor.indexOf('label="Precio unitario"');
+  const disclosureIndex = editor.indexOf('title="Detalles"');
+  const costIndex = editor.indexOf('label="Costo unitario (interno)"');
   assert.ok(priceIndex > 0, "el precio unitario queda a la vista");
   assert.ok(disclosureIndex > priceIndex && costIndex > disclosureIndex, "el costo interno va plegado después del precio");
   assert.match(
-    formSection,
-    /<AdminDisclosure title="Más datos" hint="costo interno">[\s\S]*?label="Costo unitario"[\s\S]*?<\/AdminDisclosure>/,
+    editor,
+    /<AdminDisclosure title="Detalles"[\s\S]*?label="Costo unitario \(interno\)"[\s\S]*?<\/AdminDisclosure>/,
     "el costo unitario vive dentro de «Más datos»",
   );
 

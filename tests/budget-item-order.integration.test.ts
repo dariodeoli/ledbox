@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
+import { test } from "node:test";
+import { PrismaClient } from "@prisma/client";
+import puppeteer from "puppeteer-core";
+
+const base = process.env.QUOTE_TEST_BASE_URL;
+const chrome = process.env.QUOTE_CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const evidence = process.env.QUOTE_EVIDENCE_DIR ?? "/private/var/folders/jt/v4h3s4hs3wxf82mqzn6qtgg80000gn/T/opencode/ledbox-item-order";
+const enabled = Boolean(base && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base) && /^postgresql:\/\/[^@]*@(localhost|127\.0\.0\.1):\d+\/ledbox_quote_qa(?:\?|$)/.test(process.env.DATABASE_URL ?? "") && existsSync(chrome));
+
+test("A15 real PG HTTP: persistent editor/legacy order, remove/duplicate, portal/print parity and approved documents", { skip: !enabled, timeout: 120000 }, async () => {
+  const db = new PrismaClient(), suffix = randomUUID(), org = `item-order-${suffix}`;
+  const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
+  mkdirSync(evidence, { recursive: true });
+  try {
+    const { createSession } = await import("../lib/server/auth");
+    await db.organization.create({ data: { id: org, name: "QA order issuer", slug: org } });
+    const user = await db.adminUser.create({ data: { id: randomUUID(), name: "QA owner", email: `${suffix}@example.invalid`, role: "OWNER", passwordHash: "not-a-login", autoLockEnabled: false } });
+    await db.adminMembership.create({ data: { id: randomUUID(), organizationId: org, adminUserId: user.id, role: "OWNER" } });
+    const client = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "QA client" } });
+    const jwt = (await createSession(user, org)).jwt;
+    const headers = { "Content-Type": "application/json", Cookie: `ledbox_session=${jwt}`, "X-Forwarded-For": `qa-order-${suffix}` };
+    const call = (path: string, method: string, body?: unknown) => fetch(base + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const create = async (items: unknown[]) => {
+      const response = await call("/api/admin/budgets", "POST", { clientId: client.id, title: "A15 order", items });
+      assert.equal(response.status, 201); return (await response.json()).budget;
+    };
+    const first = { name: "First", quantity: 1, days: 1, unitPrice: 100, costPrice: 10 }, second = { ...first, name: "Second", unitPrice: 200 };
+    const q = await create([second, first]);
+    const names = (items: Array<{ name: string }>) => items.map((item) => item.name);
+    assert.deepEqual(names(q.items), ["Second", "First"]);
+    assert.deepEqual(q.items.map((item: { sortOrder: number }) => item.sortOrder), [0, 1]);
+    const read = async () => { const response = await call("/api/admin/budgets", "GET"); assert.equal(response.status, 200); return (await response.json()).budgets.find((row: { id: string }) => row.id === q.id); };
+    assert.deepEqual(names((await read()).items), ["Second", "First"]);
+    const edit = async (kind: string, items: unknown[]) => call("/api/admin/budgets", "PATCH", { budgetId: q.id, kind, items });
+    const reversed = [...q.items].reverse();
+    assert.equal((await edit("editor", reversed)).status, 200);
+    assert.deepEqual(names((await read()).items), ["First", "Second"], "reopen GET must preserve editor payload order");
+    assert.equal((await edit("editor", [q.items[0], q.items[0]])).status, 400);
+    assert.deepEqual(names((await read()).items), ["First", "Second"]);
+    assert.equal((await edit("items", q.items)).status, 200);
+    assert.deepEqual(names((await read()).items), ["Second", "First"], "legacy full items PATCH is ordered too");
+    assert.equal((await edit("items", [q.items[0], q.items[0]])).status, 400);
+    assert.equal((await edit("editor", [q.items[1]])).status, 200);
+    const removed = await read(); assert.deepEqual(names(removed.items), ["First"]); assert.equal(removed.total, 100);
+    assert.equal((await edit("editor", [second, removed.items[0]])).status, 200);
+    const ordered = await read(); assert.deepEqual(names(ordered.items), ["Second", "First"]); assert.equal(ordered.total, 300);
+    assert.equal(ordered.costEstimate, 20);
+    const clone = await create(ordered.items); assert.deepEqual(names(clone.items), ["Second", "First"]);
+    const tokenResponse = await call("/api/admin/budgets/token", "POST", { budgetId: q.id, action: "ensure" });
+    assert.equal(tokenResponse.status, 200);
+    const tokenRow = await db.budget.findUniqueOrThrow({ where: { id: q.id } });
+    const portal = await fetch(`${base}/api/portal/budget/${tokenRow.publicToken}`, { headers });
+    assert.equal(portal.status, 200); assert.deepEqual(names((await portal.json()).budget.items), ["Second", "First"]);
+    const page = await browser.newPage();
+    await page.setCookie({ name: "ledbox_session", value: jwt, url: base!, httpOnly: true });
+    await page.goto(`${base}/imprimir/presupuesto/${q.id}`, { waitUntil: "networkidle0" });
+    await page.waitForSelector(".lbprint-table tbody tr");
+    const printRows = await page.$$eval(".lbprint-table tbody tr", (rows) => rows.map((row) => row.textContent ?? ""));
+    assert.match(printRows[0], /Second/); assert.match(printRows[1], /First/);
+    await page.pdf({ path: `${evidence}/ordered-a4.pdf`, format: "A4", printBackground: true });
+    const approval = await call("/api/admin/budgets/approval", "POST", { budgetId: q.id, decision: "approve" });
+    assert.equal(approval.status, 200);
+    const frozen = await db.budget.findUniqueOrThrow({ where: { id: q.id }, include: { items: true } });
+    assert.equal((await edit("editor", [...ordered.items].reverse())).status, 409);
+    assert.equal((await edit("items", [...ordered.items].reverse())).status, 409);
+    assert.deepEqual(await db.budget.findUniqueOrThrow({ where: { id: q.id }, include: { items: true } }), frozen);
+    console.log("A15 HTTP/PG persistent ordering: POST/clone/editor/legacy/remove/duplicate400/reopen/portal/A4 match; approved edits409 unchanged");
+  } finally { await browser.close(); await db.$disconnect(); await (await import("../lib/server/db")).db.$disconnect(); }
+});

@@ -122,7 +122,7 @@ test("el portal y el imprimible no nombran campos internos de costo", () => {
 test("la vista pública arma los ítems solo con precio de venta", () => {
   const source = repoFile("lib/server/budget-portal.ts");
   // El mapeo de ítems de `portalBudgetView` no puede incluir el costo unitario.
-  const itemMapping = source.match(/items: budget\.items\.map\(\(item\) => \(\{[\s\S]*?\}\)\),/)?.[0] ?? "";
+  const itemMapping = source.match(/items: stableOrderBudgetItems\(budget\.items\)\.map\(\(item\) => \(\{[\s\S]*?\}\)\),/)?.[0] ?? "";
   assert.ok(itemMapping, "el mapeo de ítems de la vista pública existe");
   assert.doesNotMatch(itemMapping, /costPrice|costEstimate/);
   // La imagen del producto vinculado sí viaja (issue #107), sola y validada.
