@@ -1065,6 +1065,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field-heading label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .admin-field-heading a, .admin-back-link { color: var(--a-accent); font-size: 11px; text-decoration: none; }
 .admin-field-heading a:hover, .admin-back-link:hover { text-decoration: underline; }
+.admin-field-heading:has(.admin-field-help) { justify-content: flex-start; gap: 4px; }
+.admin-field-heading:has(.admin-field-help) > a { margin-left: auto; }
+.admin-field-help { display: inline-flex; flex-shrink: 0; }
+.admin-field-help > button { display: inline-grid; place-items: center; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--a-muted-2); box-shadow: none; }
+.admin-field-help > button:hover { color: var(--a-accent); }
+.admin-field-help > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-field-help-text { display: block; white-space: normal; overflow-wrap: anywhere; font: 400 13px/1.5 var(--font-body, system-ui); letter-spacing: normal; text-transform: none; }
 .admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: 36px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s; }
 .admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 .admin-field input::placeholder, .admin-field textarea::placeholder { color: var(--a-muted); opacity: 1; }
@@ -1077,6 +1084,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-money { position: relative; min-width: 0; }
 .admin-money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--a-muted); font-size: 12px; font-weight: 600; }
 .admin-money input { padding-left: 34px; }
+.admin-money--compact { width: 100%; max-width: 14rem; }
+@media (max-width: 760px) { .admin-money--compact { max-width: none; } }
 .admin-field--wide { grid-column: 1 / -1; }
 .admin-field-error { color: var(--a-danger); font-size: 11px; }
 /* ── Combobox (issue #88) ──
@@ -1504,13 +1513,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    van juntos. */
 .admin-form-group--item { grid-template-columns: minmax(10rem, 1.5fr) minmax(8.5rem, 1.1fr) minmax(7.5rem, .9fr) 6.5rem minmax(9rem, 1fr); }
 .admin-form-group--item-edit { grid-template-columns: minmax(10rem, 1.5fr) minmax(8.5rem, 1.1fr) minmax(7.5rem, .9fr) minmax(8rem, .9fr) minmax(9rem, 1fr); }
-.admin-form-group--costs { grid-template-columns: minmax(9rem, 1.2fr) minmax(9rem, 1.2fr); }
+.admin-form-group--costs { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 14rem)); }
 .admin-form-group--photo { grid-template-columns: minmax(13rem, 1.6fr) minmax(11rem, 1fr) minmax(12rem, 1.2fr); }
 .admin-photo-preview { display: inline-flex; align-items: center; gap: 8px; }
 /* Precios por frente (issue #110): normal, umbral «desde X días» corto y el
    precio desde esos días; el mínimo va en su fila. */
-.admin-form-group--prices { grid-template-columns: minmax(9rem, 1.2fr) 6.5rem minmax(9rem, 1.2fr); }
-.admin-form-group--min { grid-template-columns: minmax(9rem, 1.2fr); }
+.admin-form-group--prices { grid-template-columns: minmax(11rem, 14rem) 6.5rem minmax(11rem, 14rem); }
+.admin-form-group--min { grid-template-columns: minmax(11rem, 14rem); }
 @media (max-width: 760px) {
   .admin-form-group--item,
   .admin-form-group--item-edit,
@@ -1518,6 +1527,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-form-group--photo,
   .admin-form-group--prices,
   .admin-form-group--min { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+}
+@media (max-width: 640px) {
+  .admin-form-group--costs,
+  .admin-form-group--prices,
+  .admin-form-group--min { grid-template-columns: minmax(0, 1fr); }
 }
 .admin-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-form-actions { display: flex; flex-wrap: wrap; max-width: 100%; gap: 8px; margin-left: auto; }
@@ -1773,6 +1787,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
 .admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 58.5rem; }
+/* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
+.admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
