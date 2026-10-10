@@ -581,7 +581,7 @@ async function patchBudgetItems(params: {
     if (fresh.updatedAt.getTime() !== budget.updatedAt.getTime()) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá los ítems antes de guardar.");
     await tx.budgetItem.deleteMany({ where: { budgetId: budget.id, id: { notIn: [...keepIds] } } });
     for (const item of parsed) {
-      const raw = rawItems.find((row) => row && typeof row === "object" && (row as Record<string, unknown>).id === item.id) as Record<string, unknown> | undefined;
+      const raw = rawItems[parsed.indexOf(item)] as Record<string, unknown> | undefined;
       const inventoryId = raw && Object.hasOwn(raw, "inventoryId") ? item.inventoryId : item.inventoryId ?? (item.id ? linksById.get(item.id) ?? null : null);
       const data = {
         ...(raw && Object.hasOwn(raw, "notes") ? { notes: item.notes } : {}),

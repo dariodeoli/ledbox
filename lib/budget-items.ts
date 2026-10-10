@@ -2,7 +2,7 @@ import { budgetMoneyValid } from "./budget-payment-plan";
 import type { AdminInventoryLink } from "./admin-types";
 import { calculateBudgetCommercial, type CommercialLine } from "./budget-commercial-calculation";
 
-export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean; commercialTerms?: import("./budget-commercial-contract").BudgetItemCommercialTerms };
+export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean; discountInput?: string; commercialTerms?: import("./budget-commercial-contract").BudgetItemCommercialTerms };
 export function emptyBudgetItem(): BudgetItemDraft {
   return { id: null, name: "", quantity: "1", days: "1", unitPrice: "", costPrice: "0", notes: "", inventory: null };
 }

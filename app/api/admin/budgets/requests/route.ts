@@ -63,6 +63,7 @@ async function resolveRequest(request: Request) {
           approvedAt: true,
           discount: true,
           total: true,
+          updatedAt: true,
           revisionRequestedAt: true,
           client: { select: { name: true, company: true, tradeName: true, legalName: true } },
           items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } },
@@ -151,9 +152,9 @@ async function resolveRequest(request: Request) {
     const nextStatus = changesOffer && budget.status !== "APPROVED" ? "NEGOTIATING" : budget.status;
 
     await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
-      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { subtotal: true, discount: true, items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } } } });
+      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { updatedAt: true, subtotal: true, discount: true, items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } } } });
       const stable = (rows: typeof fresh.items) => JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id)));
-      if (fresh.subtotal !== budget.subtotal || fresh.discount !== budget.discount || stable(fresh.items) !== stable(budget.items)) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá la solicitud antes de resolverla.");
+      if (fresh.updatedAt.getTime() !== budget.updatedAt.getTime() || fresh.subtotal !== budget.subtotal || fresh.discount !== budget.discount || stable(fresh.items) !== stable(budget.items)) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá la solicitud antes de resolverla.");
       const freshRequest = await tx.budgetChangeRequest.findUniqueOrThrow({ where: { id: changeRequest.id }, select: { status: true, payload: true } });
       if (freshRequest.status !== "pending" || JSON.stringify(freshRequest.payload) !== JSON.stringify(changeRequest.payload)) throw new QuoteComparisonError(409, "La selección cambió. Actualizá la solicitud antes de resolverla.");
       const claimed = await tx.budgetChangeRequest.updateMany({ where: { id: changeRequest.id, status: "pending" }, data: { status: "accepted" } });
