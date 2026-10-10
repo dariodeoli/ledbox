@@ -28,6 +28,7 @@ import { AdminImageBox } from "@/components/admin/AdminImageBox";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { budgetUsesDays } from "@/lib/budget-items";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
+import { formatPercent } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,7 +141,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
               <tbody>
                 {stableOrderBudgetItems(budget.items).map((item) => (
                   <tr key={item.id} data-excluded={item.excluded ? "true" : undefined}>
-                    <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.discountMode ? <small className="budget-print-quantity">Descuento de línea: − {formatMoney(item.discountAmount ?? 0)}{item.discountMode === "PERCENT" ? ` (${formatNumber((item.discountValue ?? 0) / 100)} %)` : ""}</small> : null}{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
+                    <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.discountMode ? <small className="budget-print-quantity">Descuento de línea: − {formatMoney(item.discountAmount ?? 0)}{item.discountMode === "PERCENT" ? ` (${formatPercent((item.discountValue ?? 0) / 100)} %)` : ""}</small> : null}{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
                     <td className="lbprint-num">{formatMoney(item.unitPrice)}</td>
                     <td className="lbprint-num">{formatMoney(item.subtotal)}</td>
                   </tr>
@@ -158,7 +159,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
             </div>
             {budget.discount > 0 ? (
               <div className="lbprint-total-row">
-                <span>Descuento global{budget.discountMode === "PERCENT" ? ` (${formatNumber((budget.discountValue ?? 0) / 100)} %)` : ""}</span>
+                <span>Descuento global{budget.discountMode === "PERCENT" ? ` (${formatPercent((budget.discountValue ?? 0) / 100)} %)` : ""}</span>
                 <span className="lbprint-num">− {formatMoney(budget.discount)}</span>
               </div>
             ) : null}
