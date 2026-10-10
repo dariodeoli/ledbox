@@ -8,7 +8,7 @@ import puppeteer from "puppeteer-core";
 const base = process.env.QUOTE_TEST_BASE_URL;
 const evidence = process.env.QUOTE_EVIDENCE_DIR;
 if (!base || !/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base) || !evidence || !/^postgresql:\/\/[^@]*@(localhost|127\.0\.0\.1):\d+\/ledbox_quote_qa(?:\?|$)/.test(process.env.DATABASE_URL ?? "")) throw new Error("Isolated local QA only");
-async function main() {
+async function main(base: string, evidence: string) {
 const db = new PrismaClient();
 const browser = await puppeteer.launch({ executablePath: process.env.QUOTE_CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
 const suffix = randomUUID(), org = `fin-al-oracle-${suffix}`;
@@ -65,4 +65,4 @@ try {
   await (await import("../lib/server/db")).db.$disconnect();
 }
 }
-void main().catch((error) => { console.error(error); process.exitCode = 1; });
+void main(base, evidence).catch((error) => { console.error(error); process.exitCode = 1; });
