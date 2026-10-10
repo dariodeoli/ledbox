@@ -52,7 +52,7 @@ export type BudgetCommercialSnapshot = {
 
 /** ¿El body toca algo que el cliente ya vio? (precio o condiciones) */
 export function touchesBudgetClientFields(body: Record<string, unknown>): boolean {
-  return BUDGET_CLIENT_FIELDS.some((field) => body[field] !== undefined);
+  return [...BUDGET_CLIENT_FIELDS, "discountMode", "discountValue", "advancePercentBps", "advanceAmount"].some((field) => body[field] !== undefined);
 }
 
 /** Estado propuesto: lo que viene en el patch pisa el valor actual. */

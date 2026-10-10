@@ -3,6 +3,7 @@ import { clientDisplayName } from "@/lib/client-identity";
 import { budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "@/components/admin/AdminAvatar";
 import { resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { calculateBudgetCommercial } from "@/lib/budget-commercial-calculation";
 
 import { PortalQuoteResources } from "./PortalQuoteResources";
 
@@ -533,27 +534,32 @@ export function PortalBudgetView({
   /** Solo el cliente que todavía decide ajusta cantidades: aprobado o en revisión se lee. */
   const itemsChanged = !approved && draftChanges.length > 0;
 
-  const proposedSubtotal = useMemo(
-    () =>
-      budget.items.reduce((sum, item) => {
+  const commercialPreview = useMemo(() => {
+    try {
+      const lines = budget.items.map((item) => {
         const current = draft[item.id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
-        return sum + (current.excluded ? 0 : item.unitPrice * current.quantity * current.days);
-      }, 0),
-    [budget.items, draft],
-  );
-  const proposedTotal = Math.max(0, proposedSubtotal - budget.discount);
+        const terms = item.commercialTerms ?? { priceMode: null, tariffSnapshot: null, minimumPrice: null, discountMode: null, discountValue: null, discountAmount: null };
+        return { ...terms, id: item.id, sortOrder: item.sortOrder ?? null, unitPrice: item.unitPrice, ...current };
+      });
+      return { result: calculateBudgetCommercial(lines, budget.commercialTerms ?? { discountMode: null, discountValue: null, advancePercentBps: null }, budget.discount, persistedPaymentPlan.advanceAmount), error: null };
+    } catch (error) { return { result: null, error: error instanceof Error ? error.message : "La selección requiere un ajuste comercial." }; }
+  }, [budget, draft, persistedPaymentPlan.advanceAmount]);
+  const proposedSubtotal = commercialPreview.result?.subtotal ?? NaN;
+  const proposedTotal = commercialPreview.result?.total ?? NaN;
+  const proposedDiscount = commercialPreview.result?.discount ?? NaN;
+  const proposedAdvance = commercialPreview.result?.advanceAmount ?? persistedPaymentPlan.advanceAmount;
   /** Total que se firma con el botón: el propuesto si hubo ajustes, el vigente si no. */
   const actionTotal = itemsChanged ? proposedTotal : budget.total;
   const summaryTotal = itemsChanged ? proposedTotal : budget.total;
   // Projection only: the same evaluator used by commercial writes, without
   // persisting a proposal or changing recorded payments/accepted conditions.
   const provisionalPlan = useMemo(() => itemsChanged
-    ? resolveBudgetPaymentPlan(persistedPaymentPlan.installments, proposedTotal, persistedPaymentPlan.advanceAmount)
-    : null, [itemsChanged, persistedPaymentPlan.installments, persistedPaymentPlan.advanceAmount, proposedTotal]);
+    ? resolveBudgetPaymentPlan(persistedPaymentPlan.installments, proposedTotal, proposedAdvance)
+    : null, [itemsChanged, persistedPaymentPlan.installments, proposedAdvance, proposedTotal]);
   const paymentPlan = provisionalPlan?.ok
-    ? { ...persistedPaymentPlan, installments: provisionalPlan.rows, pending: provisionalPlan.remaining }
+    ? { ...persistedPaymentPlan, advanceAmount: proposedAdvance, installments: provisionalPlan.rows, pending: provisionalPlan.remaining }
     : persistedPaymentPlan;
-  const provisionalPlanError = provisionalPlan && !provisionalPlan.ok ? provisionalPlan.error : null;
+  const provisionalPlanError = itemsChanged && commercialPreview.error ? commercialPreview.error : provisionalPlan && !provisionalPlan.ok ? provisionalPlan.error : null;
 
   // Rebaja pedida: monto resultante y total que quedaría si el equipo la acepta.
   // Rebaja (issues #76 y #77): el valor vive limpio (dígitos en monto, coma en
@@ -703,6 +709,7 @@ export function PortalBudgetView({
    */
   async function runAction(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (itemsChanged && provisionalPlanError) { setActionError(provisionalPlanError); return; }
     if (name.trim().length < 3) {
       setActionError("Ingresá el nombre y apellido de quien autoriza o pide el cambio.");
       return;
@@ -1070,7 +1077,7 @@ export function PortalBudgetView({
             </tbody>
           </table>
         </div>
-      ) : paymentPlan.installments.length > 0 ? (
+      ) : paymentPlan.installments.length > 0 || paymentPlan.advanceAmount > 0 ? (
         <div className="portal-table-wrap">
           <table className="portal-table portal-table--plan">
             <caption className="portal-table-caption">{itemsChanged ? "Cuotas provisionales · pendientes de revisión" : "Cuotas del plan"}</caption>
@@ -1487,8 +1494,8 @@ export function PortalBudgetView({
                               </span>
                             </span>
                           </td>
-                          <td className="portal-num" data-label="Precio unitario">{formatMoney(item.unitPrice)}</td>
-                          <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(current.excluded ? 0 : item.unitPrice * current.quantity * current.days)}</td>
+                           <td className="portal-num" data-label="Precio unitario">{formatMoney(itemsChanged ? commercialPreview.result?.items.find((row) => row.id === item.id)?.unitPrice ?? NaN : item.unitPrice)}</td>
+                           <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(itemsChanged ? commercialPreview.result?.items.find((row) => row.id === item.id)?.subtotal ?? NaN : item.subtotal)}{item.commercialTerms?.discountMode ? <small className="portal-item-note">Descuento de línea: {formatMoney(itemsChanged ? commercialPreview.result?.items.find((row) => row.id === item.id)?.discountAmount ?? NaN : item.commercialTerms.discountAmount ?? 0)}</small> : null}</td>
                           {canEdit ? (
                             <td className="portal-item-action-cell">
                               <button
@@ -1518,8 +1525,8 @@ export function PortalBudgetView({
               </div>
               {budget.discount > 0 ? (
                 <div className="portal-total-row">
-                  <span>Descuento vigente</span>
-                  <span className="portal-num">− {formatMoney(budget.discount)}</span>
+                  <span>Descuento global {itemsChanged ? "provisional" : "vigente"}</span>
+                  <span className="portal-num">− {formatMoney(itemsChanged ? proposedDiscount : budget.discount)}</span>
                 </div>
               ) : null}
             <div className="portal-total-row portal-total-row--strong">
@@ -1960,8 +1967,8 @@ export function PortalBudgetView({
                     </div>
                     {budget.discount > 0 ? (
                       <div className="portal-total-row">
-                        <span>Descuento</span>
-                        <span className="portal-num">− {formatMoney(budget.discount)}</span>
+                        <span>Descuento global</span>
+                        <span className="portal-num">− {formatMoney(itemsChanged ? proposedDiscount : budget.discount)}</span>
                       </div>
                     ) : null}
                   </div>

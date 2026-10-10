@@ -35,7 +35,7 @@ import { quoteProductPrice } from "@/lib/quote-sharing";
 import { BudgetPricingDialog } from "./BudgetPricingDialog";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
-import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
+import { budgetDraftCommercialPayload, budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { clientDisplayName } from "@/lib/client-identity";
 import { ClientQuickCreateDialog, EventQuickCreateDialog } from "./BudgetQuickCreate";
@@ -1109,7 +1109,7 @@ export function PresupuestosModule() {
       clientId: form.clientId,
       eventId: form.eventId || undefined,
       title: form.title,
-      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes })),
+      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes, ...budgetDraftCommercialPayload(item) })),
     });
     setBusy(false);
     if (!result.ok) {

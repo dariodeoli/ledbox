@@ -23,7 +23,9 @@ import {
 import { BudgetReferenceLinks } from "./BudgetReferenceLinks";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload } from "./BudgetPaymentPlanEditor";
-import { budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
+import { budgetDraftCommercialLine, budgetDraftCommercialPayload, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
+import { calculateBudgetCommercial } from "@/lib/budget-commercial-calculation";
+import { formatPercent, parsePercent } from "@/lib/field-rules";
 import { resolveBudgetPaymentPlan, BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { clientDisplayName } from "@/lib/client-identity";
 import { AdminAvatar } from "../AdminAvatar";
@@ -90,6 +92,7 @@ function toItemDraft(item: AdminBudgetRow["items"][number]): ItemDraft {
     unitPrice: String(item.unitPrice),
     costPrice: String(item.costPrice),
     notes: item.notes ?? "",
+    commercialTerms: { priceMode: item.priceMode ?? null, tariffSnapshot: item.tariffSnapshot ?? null, discountMode: item.discountMode ?? null, discountValue: item.discountValue ?? null, discountAmount: item.discountAmount ?? null },
   };
 }
 
@@ -142,6 +145,15 @@ export function BudgetPricingDialog({
   const [error, setError] = useState("");
   const [section, setSection] = useState("items");
   const [conditions, setConditions] = useState(() => conditionDrafts(budget.installmentsJson ?? []));
+  const [globalMode, setGlobalMode] = useState<"LEGACY" | "AMOUNT" | "PERCENT">(budget.discountMode ?? "LEGACY");
+  const [globalValue, setGlobalValue] = useState(String(budget.discountValue ?? budget.discount));
+  const [advanceMode, setAdvanceMode] = useState(budget.advancePercentBps == null ? "FIXED" : "PERCENT");
+  const [advanceValue, setAdvanceValue] = useState(budget.advancePercentBps == null ? String(budget.advanceAmount) : formatPercent(budget.advancePercentBps / 100));
+  const commercialEditing = globalMode !== "LEGACY" || advanceMode === "PERCENT" || draft.items.some((item) => item.commercialTerms?.priceMode || item.commercialTerms?.discountMode);
+  const effective = useMemo(() => {
+    try { return { result: calculateBudgetCommercial(draft.items.map(budgetDraftCommercialLine), { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : Number(globalValue), advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null }, Number(globalValue), advanceMode === "FIXED" ? Number(advanceValue) : budget.advanceAmount), error: null }; }
+    catch (error) { return { result: null, error: error instanceof Error ? error.message : "Términos inválidos." }; }
+  }, [draft.items, globalMode, globalValue, advanceMode, advanceValue, budget.advanceAmount]);
   const approved = Boolean(budget.approvedAt);
   const closed = budget.status === "LOST" || budget.status === "CANCELLED";
 
@@ -156,21 +168,22 @@ export function BudgetPricingDialog({
       }),
     [draft.items],
   );
-  const itemsSubtotal = priced.reduce((sum, item) => sum + item.subtotal, 0);
+   const itemsSubtotal = commercialEditing ? effective.result?.subtotal ?? NaN : priced.reduce((sum, item) => sum + item.subtotal, 0);
   const cost = internalCostOf({
     materialCost: number(draft.materialCost),
     laborCost: number(draft.laborCost),
     items: priced.filter((item) => !item.excluded).map((item) => ({ quantity: item.quantity, days: item.days, costPrice: item.costPrice })),
   });
-  const price = number(draft.price);
+  const price = commercialEditing ? effective.result?.total ?? NaN : number(draft.price);
   const margin = marginOf(price, cost.total);
   const intent = discountForPrice(itemsSubtotal, price);
-  const needsRepricing = !intent.ok && price > 0;
+  const needsRepricing = !commercialEditing && !intent.ok && price > 0;
   const activePriced = priced.filter((item) => !item.excluded);
   const repriced = needsRepricing ? distributePrice(activePriced, price) : null;
   const marginPercentValue = draft.marginPercent ? Number(draft.marginPercent.replace(",", ".")) : null;
   const suggested = marginPercentValue !== null && Number.isFinite(marginPercentValue) ? priceForMargin(cost.total, marginPercentValue) : null;
-  const planResult = resolveBudgetPaymentPlan(conditionPayload(conditions), price, budget.advanceAmount);
+  const effectiveAdvance = commercialEditing ? effective.result?.advanceAmount ?? NaN : Number(advanceValue);
+  const planResult = resolveBudgetPaymentPlan(conditionPayload(conditions), price, effectiveAdvance);
   const itemsError = priced.map(budgetItemError).find(Boolean);
 
   /** Ajusta los precios unitarios para llegar al precio final escrito (misma suma). */
@@ -180,12 +193,15 @@ export function BudgetPricingDialog({
       return;
     }
     setError("");
+    if (commercialEditing && effective.error) { setError(effective.error); return; }
+    if (commercialEditing) { if (suggested > itemsSubtotal) { setError("Para aumentar el precio negociado, ajustá explícitamente los precios manuales de las líneas."); return; } setGlobalMode("AMOUNT"); setGlobalValue(String(itemsSubtotal - suggested)); return; }
     setDraft((current) => ({ ...current, price: String(suggested), priceAdjustment: suggested - itemsSubtotal }));
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (commercialEditing && effective.error) { setError(effective.error); return; }
     if (priced.length === 0 || priced.some((item) => !item.name.trim())) {
       setError("El presupuesto necesita al menos un ítem con nombre.");
       return;
@@ -203,6 +219,7 @@ export function BudgetPricingDialog({
         costPrice: item.costPrice,
         inventoryId: item.inventoryId,
         notes: item.notes,
+        ...budgetDraftCommercialPayload(draft.items[priced.indexOf(item)]),
       }));
       // Integer unit prices can miss the target by a few guaraníes. Round the
       // repriced subtotal upward and use an explicit discount to close exactly.
@@ -233,14 +250,14 @@ export function BudgetPricingDialog({
 
       // 2) Precio final y condiciones: el precio se aplica como descuento cuando
       //    entra en los ítems; si hubo reparto de precios, no hay descuento.
-      const discount = payloadSubtotal - price;
+      const discount = commercialEditing ? effective.result!.discount : payloadSubtotal - price;
       const result = await adminSend(
         "/api/admin/budgets",
         {
           kind: approved ? "commercial" : "editor",
           budgetId: budget.id,
           expectedUpdatedAt: budget.updatedAt,
-          ...(!approved ? { items: itemsPayload, title, clientId, eventId: eventId || null, discount, installmentsJson: conditionPayload(conditions) } : {}),
+          ...(!approved ? { items: itemsPayload, title, clientId, eventId: eventId || null, ...(commercialEditing ? { discountMode: globalMode === "LEGACY" ? null : globalMode, discountValue: globalMode === "LEGACY" ? null : Number(globalValue), discount: globalMode === "LEGACY" ? Number(globalValue) : undefined } : { discount }), advancePercentBps: advanceMode === "PERCENT" ? Math.round((parsePercent(advanceValue) ?? NaN) * 100) : null, ...(advanceMode === "FIXED" ? { advanceAmount: Number(advanceValue) } : {}), installmentsJson: conditionPayload(conditions) } : {}),
           materialCost: number(draft.materialCost),
           laborCost: number(draft.laborCost),
           ...(!approved ? { validUntil: draft.validUntil || null, deliveryAt: draft.deliveryAt || null, ivaType: draft.ivaType || null, warranty: draft.warranty, notes: draft.notes } : {}),
@@ -339,7 +356,10 @@ export function BudgetPricingDialog({
         <p className="admin-dialog-text">Cantidades, días y precios. Los costos unitarios son internos.</p>
         <BudgetItemsEditor items={draft.items} disabled={approved || closed || busy} onChange={(items) => setDraft((current) => ({ ...current, items, price: String(Math.max(0, items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0) + current.priceAdjustment)) }))} />
 
-        <MoneyField label="Precio final (Gs)" hint="Total final, incluido el descuento vigente" limit={BUDGET_INT_MAX} value={draft.price} disabled={approved || closed || busy} onChange={(value) => setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal })} />
+        <SelectField label="Alcance del descuento global" value={globalMode} disabled={approved || closed || busy} options={[{ value: "LEGACY", label: "Monto global histórico" }, { value: "AMOUNT", label: "Monto global explícito sobre líneas netas" }, { value: "PERCENT", label: "Porcentaje global sobre líneas netas" }]} onChange={(value) => { setGlobalMode(value as typeof globalMode); setGlobalValue("0"); }} />
+        {globalMode === "PERCENT" ? <PercentField label="Descuento global (%)" value={formatPercent(Number(globalValue) / 100)} disabled={approved || closed || busy} onChange={(value) => setGlobalValue(String(Math.round((parsePercent(value) ?? 0) * 100)))} /> : globalMode === "AMOUNT" ? <MoneyField label="Descuento global (Gs)" value={globalValue} limit={BUDGET_INT_MAX} disabled={approved || closed || busy} onChange={setGlobalValue} /> : null}
+        <MoneyField label="Precio final (Gs)" hint="Total final después de descuentos de línea y global" limit={BUDGET_INT_MAX} value={commercialEditing ? String(price) : draft.price} disabled={approved || closed || busy} onChange={(value) => { if (commercialEditing) { setGlobalMode("AMOUNT"); setGlobalValue(String(itemsSubtotal - number(value))); } else setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal }); }} />
+        {commercialEditing && effective.error ? <AdminNote tone="error">{effective.error}</AdminNote> : null}
         <AdminDisclosure title="Costos internos y margen" hint="no los ve el cliente">
         <div className="admin-plan-grid">
           <MoneyField
@@ -428,8 +448,10 @@ export function BudgetPricingDialog({
         <section className="quote-document-section quote-document-section--payments" aria-labelledby="quote-editor-payments">
           <h3 id="quote-editor-payments" className="quote-document-subtitle">Plan y condiciones de pago</h3>
           <p className="quote-document-copy">{budget.paymentTerms || "Sin condiciones de pago registradas."}</p>
-          <p>Anticipo: <strong>{formatMoney(budget.advanceAmount)}</strong></p>
-          <BudgetPaymentPlanEditor total={price} advance={budget.advanceAmount} rows={conditions} onChange={setConditions} disabled={approved || closed || busy} />
+          <SelectField label="Modalidad de seña" value={advanceMode} disabled={approved || closed || busy} options={[{ value: "FIXED", label: "Seña fija explícita" }, { value: "PERCENT", label: "Seña automática sobre total final" }]} onChange={(value) => { setAdvanceMode(value); setAdvanceValue(value === "FIXED" ? String(effectiveAdvance) : "30"); }} />
+          {advanceMode === "PERCENT" ? <PercentField label="Seña sobre total final (%)" value={advanceValue} disabled={approved || closed || busy} onChange={setAdvanceValue} /> : <MoneyField label="Seña fija (Gs)" value={advanceValue} limit={BUDGET_INT_MAX} disabled={approved || closed || busy} onChange={setAdvanceValue} />}
+          <p>Seña efectiva: <strong>{formatMoney(effectiveAdvance)}</strong></p>
+          <BudgetPaymentPlanEditor total={price} advance={effectiveAdvance} rows={conditions} onChange={setConditions} disabled={approved || closed || busy} />
         </section>
         {organization ? <section className="quote-document-section quote-document-section--issuer" aria-labelledby="quote-editor-issuer">
           <h3 id="quote-editor-issuer" className="quote-document-subtitle">Emitido por</h3>

@@ -142,7 +142,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                   <tr key={item.id} data-excluded={item.excluded ? "true" : undefined}>
                     <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
                     <td className="lbprint-num">{formatMoney(item.unitPrice)}</td>
-                    <td className="lbprint-num">{formatMoney(item.subtotal)}</td>
+                    <td className="lbprint-num">{formatMoney(item.subtotal)}{item.discountMode ? <small className="budget-print-quantity">Descuento de línea: − {formatMoney(item.discountAmount ?? 0)}{item.discountMode === "PERCENT" ? ` (${formatNumber((item.discountValue ?? 0) / 100)} %)` : ""}</small> : null}</td>
                   </tr>
                 ))}
               </tbody>
@@ -153,12 +153,12 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
         <PrintSection title="Totales">
           <div className="lbprint-totals">
             <div className="lbprint-total-row">
-              <span>Subtotal</span>
+              <span>Subtotal neto de líneas</span>
               <span className="lbprint-num">{formatMoney(budget.subtotal)}</span>
             </div>
             {budget.discount > 0 ? (
               <div className="lbprint-total-row">
-                <span>Descuento</span>
+                <span>Descuento global{budget.discountMode === "PERCENT" ? ` (${formatNumber((budget.discountValue ?? 0) / 100)} %)` : ""}</span>
                 <span className="lbprint-num">− {formatMoney(budget.discount)}</span>
               </div>
             ) : null}
@@ -242,7 +242,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                 <p className="lbprint-note">La empresa todavía no cargó sus datos bancarios en el panel.</p>
               )}
             </div> : null}
-            {plan.installments.length > 0 ? (
+            {plan.installments.length > 0 || plan.advanceAmount > 0 ? (
               <table className="lbprint-table lbprint-table--plan">
                 <thead>
                   <tr>
