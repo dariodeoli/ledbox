@@ -28,7 +28,7 @@ La navegación institucional neutraliza el posicionamiento global de `nav`; cré
 | Demo | raíz → demo y 404 | AppFooter app, layout raíz |
 | Portal | raíz → portal, presupuesto tokenizado, firma y auditoría, comparación, 404 tokenizado | AppFooter portal, layout raíz; PortalLayout no añade otro |
 | Imprimibles | presupuesto, evento, factura y reporte | AppFooter app fuera del documento, visible al imprimir. PrintFooter interno conserva nota/referencia, no es otro pie global |
-| Firma inmutable | SignatureDocumentSheet y flujo firmado | Pie global sólo fuera del artículo; se conserva oculto en impresión de hoja firmada. No cambia snapshot, payload, HTML serializado, bytes PDF ni hash; no re-sello |
+| Firma inmutable | SignatureDocumentSheet y flujo firmado | Pie global sólo fuera del artículo; se conserva oculto en impresión de hoja firmada. Fuentes de documento y serialización sin cambios; no re-sello. La evidencia local del guard CSS no certifica los bytes de un PDF firmado histórico |
 | Errores raíz | `app/error.tsx`, `app/global-error.tsx`, not-found | Root footer en error/404; global-error sustituye root con ProductFooter único |
 
 Las rutas heredadas que redirigen no tienen DOM propio. Los endpoints API/robots/sitemap y archivos estáticos no son páginas HTML con footer. Los estados de carga existentes de los módulos/panel conservan el pie raíz; no se añade suspense raíz que convierta el 404 tokenizado en HTTP 200.
@@ -40,3 +40,5 @@ Inventario completo de archivos de página y rutas en la evidencia externa `evid
 Checks: typecheck, rules, build y browser de aplicación real sobre Postgres **local aislado 55561**, runtime **3061**, proxy GET/HEAD **3062** que conserva el Host real de cada superficie. Fixtures completamente sintéticos; sesión privada fuera de evidencia. Host routing, SEO, iconos, navegación, cantidad de pies/copyright/versión, límites 360/390/1440, tema claro/oscuro, crédito sin superposición, 404, portal, panel y presupuesto imprimible.
 
 QA independiente de Pilot #156 se agenda **después del cierre servido de #173**. Esta entrega no certifica publicación ni modifica HD, triggers, watchers o comandos de despliegue. Artefacto 3047 y PG55473 de #173 intactos. No push, merge a viva ni despliegue.
+
+EV02 permanece pendiente de insumos de identidad legal validados por el dueño: no se inventan razón social, RUC ni domicilio y no se declara completo ese documento. OPS #157 conserva carrito/store/CartDrawer/ProductOrderPanel/imports y estado de carrito de LandingPage; aquí sólo se retira su pie por página. FIN #143 conserva contratos y vistas de cobro. Menú #159 y fallback compartido de avatar #143 son commits independientes, fuera de esta rama.
