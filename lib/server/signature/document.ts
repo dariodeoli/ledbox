@@ -3,6 +3,7 @@ import { z } from "zod";
 import { budgetReference } from "@/lib/admin-format";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
+import { budgetCommercialTermsSchema, budgetItemCommercialTermsSchema, budgetDiscountModeSchema, budgetPriceModeSchema, budgetTariffSnapshotSchema, commercialBpsSchema, commercialMoneySchema, publicBudgetItemCommercialTerms, type BudgetCommercialTerms } from "@/lib/budget-commercial-contract";
 import { budgetPaymentConditionPayload, budgetPaymentConditionSnapshotSchema, type BudgetPaymentCondition } from "@/lib/budget-payment-plan";
 import { paymentPlanOf } from "../budget-portal";
 import { canonicalJson, sha256Hex, verifySignatureChain } from "./hash";
@@ -21,8 +22,8 @@ import { canonicalJson, sha256Hex, verifySignatureChain } from "./hash";
 
 /** Versión del formato de huella; si cambia la forma, sube y no se compara contra la anterior. */
 export const SIGNATURE_DOCUMENT_VERSION = 1;
-export const SNAPSHOT_DOCUMENT_VERSION = 2;
-export type SignatureDocumentVersion = 1 | 2;
+export const SNAPSHOT_DOCUMENT_VERSION = 3;
+export type SignatureDocumentVersion = 1 | 2 | 3;
 
 /** V2 recibe el orden original del query; v1 conserva explícitamente name asc. */
 export const signatureBudgetSelect = {
@@ -34,7 +35,17 @@ export const signatureBudgetSelect = {
   items: { select: { name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true, notes: true, sortOrder: true } },
 } as const;
 export const signatureLegacyBudgetSelect = { ...signatureBudgetSelect, items: { ...signatureBudgetSelect.items, orderBy: { name: "asc" } } } as const;
-type SignatureBudgetSource = Prisma.BudgetGetPayload<{ select: typeof signatureBudgetSelect }>;
+/** V1/V2 selects above remain exact. New terms are queried only for V3. */
+export const signatureCommercialBudgetSelect = {
+  ...signatureBudgetSelect,
+  discountMode: true, discountValue: true, advancePercentBps: true,
+  items: { select: { ...signatureBudgetSelect.items.select, priceMode: true, tariffSnapshot: true, discountMode: true, discountValue: true, discountAmount: true } },
+} as const;
+type SignatureBudgetSource = Prisma.BudgetGetPayload<{ select: typeof signatureBudgetSelect }> | Prisma.BudgetGetPayload<{ select: typeof signatureCommercialBudgetSelect }>;
+function livePublicItemTerms(item: SignatureBudgetSource["items"][number]) {
+  if (!("priceMode" in item)) throw new Error("Faltan los términos comerciales LIVE de la línea.");
+  return publicBudgetItemCommercialTerms(budgetItemCommercialTermsSchema.parse({ priceMode: item.priceMode, tariffSnapshot: item.tariffSnapshot, discountMode: item.discountMode, discountValue: item.discountValue, discountAmount: item.discountAmount }));
+}
 
 export type SignatureDocumentItem = {
   name: string;
@@ -44,6 +55,8 @@ export type SignatureDocumentItem = {
   unitPrice: number;
   subtotal: number;
   notes: string | null;
+  /** V3 only; public effective-front terms, never internal pricing. */
+  commercialTerms?: ReturnType<typeof publicBudgetItemCommercialTerms>;
 };
 
 export type SignatureDocumentInstallment = BudgetPaymentCondition;
@@ -69,6 +82,7 @@ export type SignatureBudgetDocument = {
   subtotal: number;
   discount: number;
   total: number;
+  commercialTerms?: BudgetCommercialTerms;
   plan: {
     advanceAmount: number;
     installments: SignatureDocumentInstallment[];
@@ -106,18 +120,20 @@ export function budgetDocumentPayload(budget: SignatureBudgetDocument): Record<s
       unitPrice: item.unitPrice,
       subtotal: item.subtotal,
       notes: item.notes,
+      ...(version === 3 ? { commercialTerms: item.commercialTerms } : {}),
     })),
     subtotal: budget.subtotal,
     discount: budget.discount,
     total: budget.total,
     plan: budget.plan,
+    ...(version === 3 ? { commercialTerms: budget.commercialTerms } : {}),
   };
 }
 
 /** Huella del documento canónico (sin adjunto). */
 export function budgetDocumentHash(payload: Record<string, unknown>): string {
   const version = payload.version ?? SIGNATURE_DOCUMENT_VERSION;
-  if (version !== 1 && version !== 2) throw new Error("Versión de documento no soportada");
+  if (version !== 1 && version !== 2 && version !== 3) throw new Error("Versión de documento no soportada");
   return sha256Hex(canonicalJson({ kind: "budget-document", version, payload }));
 }
 
@@ -134,6 +150,23 @@ const snapshotSchema = z.object({
   subtotal: money, discount: money, total: money,
   plan: z.object({ advanceAmount: money, installments: z.array(budgetPaymentConditionSnapshotSchema), dueNow: z.object({ label: z.string(), amount: money }).strict().nullable(), pending: money }).strict(),
 }).strict();
+const publicItemTermsSchema = z.object({
+  priceMode: budgetPriceModeSchema.nullable(),
+  tariffSnapshot: budgetTariffSnapshotSchema.nullable(),
+  minimumPrice: commercialMoneySchema.nullable(),
+  discountMode: budgetDiscountModeSchema.nullable(),
+  discountValue: commercialMoneySchema.nullable(),
+  discountAmount: commercialMoneySchema.nullable(),
+}).strict().superRefine((value, context) => {
+  if ((value.priceMode === "TARIFF") !== (value.tariffSnapshot !== null) || (value.tariffSnapshot && value.minimumPrice !== value.tariffSnapshot.minimumPrice)) context.addIssue({ code: "custom", message: "Tarifa pública inconsistente." });
+  if (value.priceMode === null && value.minimumPrice !== null) context.addIssue({ code: "custom", message: "No se inventa piso para términos históricos." });
+  if ((value.discountMode === null) !== (value.discountValue === null) || (value.discountMode === null) !== (value.discountAmount === null) || (value.discountMode === "PERCENT" && !commercialBpsSchema.safeParse(value.discountValue).success)) context.addIssue({ code: "custom", message: "Descuento público inconsistente." });
+});
+const snapshotV3Schema = snapshotSchema.extend({
+  version: z.literal(3),
+  commercialTerms: budgetCommercialTermsSchema,
+  items: z.array(snapshotSchema.shape.items.element.extend({ commercialTerms: publicItemTermsSchema })),
+}).strict();
 
 /** Una sola fábrica pública; los dos sources devuelven el mismo contrato sin costos. */
 export function signatureDocument(input:
@@ -141,7 +174,7 @@ export function signatureDocument(input:
   | { source: "snapshot"; payload: unknown },
 ): SignatureBudgetDocument {
   if (input.source === "snapshot") {
-    const parsed = snapshotSchema.safeParse(input.payload);
+    const parsed = z.union([snapshotSchema, snapshotV3Schema]).safeParse(input.payload);
     if (!parsed.success) throw new Error("El snapshot del documento no es válido.");
     const { format: _format, version, ...document } = parsed.data;
     return { ...document, documentVersion: version };
@@ -149,15 +182,21 @@ export function signatureDocument(input:
   const { budget, version } = input;
   const iso = (date: Date | null) => date?.toISOString() ?? null;
   const plan = paymentPlanOf(budget);
+  const commercialTerms = version === 3
+    ? budgetCommercialTermsSchema.parse("discountMode" in budget ? { discountMode: budget.discountMode, discountValue: budget.discountValue, advancePercentBps: budget.advancePercentBps } : undefined)
+    : undefined;
   return {
-    ...(version === 2 ? { documentVersion: version } : {}),
+    ...(version >= 2 ? { documentVersion: version } : {}),
     budgetId: budget.id, reference: budgetReference(budget.id), title: input.title, organizationName: input.organizationName,
-    client: { name: budget.client.name, company: budget.client.company, ...(version === 2 ? { displayName: clientDisplayName(budget.client), tradeName: budget.client.tradeName, legalName: clientLegalName(budget.client) } : {}) },
+    client: { name: budget.client.name, company: budget.client.company, ...(version >= 2 ? { displayName: clientDisplayName(budget.client), tradeName: budget.client.tradeName, legalName: clientLegalName(budget.client) } : {}) },
     event: budget.event ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) } : null,
     createdAt: budget.createdAt.toISOString(), validUntil: iso(budget.validUntil), deliveryAt: iso(budget.deliveryAt), ivaType: budget.ivaType, warranty: budget.warranty, notes: budget.notes, paymentTerms: budget.paymentTerms,
-    items: (version === 2 ? stableOrderBudgetItems(budget.items) : budget.items).map(item => ({ name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, subtotal: item.subtotal, excluded: item.excluded, notes: item.notes })),
+    items: (version >= 2 ? stableOrderBudgetItems(budget.items) : budget.items).map(item => ({ name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, subtotal: item.subtotal, excluded: item.excluded, notes: item.notes,
+      ...(version === 3 ? { commercialTerms: livePublicItemTerms(item) } : {}),
+    })),
     subtotal: budget.subtotal, discount: budget.discount, total: budget.total,
-    plan: { advanceAmount: plan.advanceAmount, installments: version === 2 ? plan.installments.map(budgetPaymentConditionPayload) : plan.installments, dueNow: plan.dueNow, pending: plan.pending },
+    plan: { advanceAmount: plan.advanceAmount, installments: version >= 2 ? plan.installments.map(budgetPaymentConditionPayload) : plan.installments, dueNow: plan.dueNow, pending: plan.pending },
+    ...(version === 3 ? { commercialTerms } : {}),
   };
 }
 
@@ -174,8 +213,8 @@ export function signatureCreationMetadata(row: DocumentRequest): Record<string, 
 export function signatureRequestDocumentVersion(row: DocumentRequest): SignatureDocumentVersion {
   const metadata = signatureCreationMetadata(row);
   if (metadata?.documentVersion === undefined && metadata?.documentSnapshot === undefined) return 1;
-  if (metadata?.documentVersion !== 2) throw new Error("La versión del documento no está disponible.");
-  return 2;
+  if (metadata?.documentVersion !== 2 && metadata?.documentVersion !== 3) throw new Error("La versión del documento no está disponible.");
+  return metadata.documentVersion;
 }
 /** V2 prueba cadena, snapshot, huella pública y vínculo con la solicitud/adjunto. */
 export function verifiedSignatureSnapshot(row: DocumentRequest): SignatureBudgetDocument | null {
@@ -184,6 +223,7 @@ export function verifiedSignatureSnapshot(row: DocumentRequest): SignatureBudget
   const metadata = signatureCreationMetadata(row)!;
   if (row.events[0]?.eventType !== "REQUEST_CREATED") throw new Error("La cadena del documento no es válida.");
   const document = signatureDocument({ source: "snapshot", payload: metadata.documentSnapshot });
+  if (document.documentVersion !== metadata.documentVersion) throw new Error("La versión del snapshot no coincide con la solicitud.");
   const hash = budgetDocumentHash(budgetDocumentPayload(document));
   if (document.budgetId !== row.budgetId || metadata.documentSnapshotHash !== hash || metadata.commercialHash !== hash || metadata.documentoHash !== row.documentHash || (!row.attachmentId && row.documentHash !== hash)) throw new Error("El snapshot no coincide con la huella del documento.");
   return document;
