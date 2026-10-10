@@ -22,7 +22,9 @@ test("la barra de sub-tabs no agrega aire superior ni lateral", () => {
 });
 
 test("el gap a la sección acompaña el ritmo del módulo", () => {
-  assert.match(css, /\.admin-module-page \{ display: grid; gap: 10px; \}/, "cambió el ritmo de los módulos");
+  const module = css.match(/\.admin-module-page\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(module, /display:\s*grid\s*;/, "el módulo conserva su grilla");
+  assert.match(module, /gap:\s*10px\s*;/, "cambió el ritmo de los módulos");
   const bar = css.match(/\.admin-subtabs-bar\s*\{([^}]*)\}/)?.[1] ?? "";
   assert.match(bar, /padding: 0 0 10px/, "el gap de la barra no acompaña el del módulo");
 });

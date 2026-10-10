@@ -1,5 +1,6 @@
 import { withQuoteApproval, withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
+import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { budgetItemError } from "@/lib/budget-items";
 import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { assertBudgetPlanLedger, recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
@@ -28,14 +29,6 @@ const MAX_TERMS = 600;
 /** Campos del cliente (issue #65). */
 const MAX_WARRANTY = 400;
 const MAX_NOTES = 2000;
-
-/** Monto entero ≥ 0 (PYG) del body; `null` si no vino. */
-function moneyField(value: unknown): number | null {
-  if (value === undefined || value === null || value === "") return null;
-  const amount = Number(value);
-  if (typeof value === "boolean" || !budgetMoneyValid(amount)) return null;
-  return amount;
-}
 
 /** Día `YYYY-MM-DD` del body a fecha real (mediodía de Asunción); `null` si no vino. */
 function dayField(value: unknown): { ok: true; value: Date | null } | { ok: false } {
@@ -117,13 +110,13 @@ export async function GET() {
             discount: true,
             total: true,
             client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-            items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true } },
+            items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true } },
           },
         },
       },
     }),
   ]);
-  return Response.json({ budgets, budgetRequests });
+  return Response.json({ budgets: budgets.map((budget) => ({ ...budget, items: stableOrderBudgetItems(budget.items) })), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
 type ParsedBudgetItem = {
@@ -191,8 +184,11 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
-  const discount = body.discount ?? 0;
+  const discount = body.discount === undefined ? 0 : body.discount;
   if (typeof discount !== "number" || !budgetMoneyValid(discount)) return jsonError("El descuento debe ser un entero no negativo en guaraníes dentro del límite Int.", 400);
+  const materialCost = body.materialCost === undefined ? 0 : body.materialCost;
+  const laborCost = body.laborCost === undefined ? 0 : body.laborCost;
+  if (typeof materialCost !== "number" || !budgetMoneyValid(materialCost) || typeof laborCost !== "number" || !budgetMoneyValid(laborCost)) return jsonError("Los costos deben ser enteros no negativos en guaraníes dentro del límite Int.", 400);
   if (typeof body.clientId !== "string" || typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 160) {
     return jsonError("Elegí el cliente y escribí el título del presupuesto.", 400);
   }
@@ -220,10 +216,9 @@ export async function POST(request: Request) {
   const total = subtotal - discount;
   if (!budgetMoneyValid(subtotal) || discount > subtotal) return jsonError("Subtotal o descuento inválido: revisá el límite Int.", 400);
   const costEstimate = items.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
+  if (!budgetMoneyValid(costEstimate)) return jsonError("El costo agregado de los ítems supera el límite Int.", 400);
   // Costos internos y campos del cliente (issue #65): el presupuesto nace en
   // Borrador con lo que cargó el dueño; el precio final se define antes de enviar.
-  const materialCost = moneyField(body.materialCost) ?? 0;
-  const laborCost = moneyField(body.laborCost) ?? 0;
   const delivery = dayField(body.deliveryAt);
   if (!delivery.ok) return jsonError("La fecha de entrega no es válida.", 400);
   const valid = dayField(body.validUntil);
@@ -249,7 +244,7 @@ export async function POST(request: Request) {
       ivaType: ivaType ?? undefined,
       warranty: textField(body.warranty, MAX_WARRANTY),
       notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
-      items: { create: items },
+      items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
     },
     include: { client: true, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
   });
@@ -269,7 +264,7 @@ export async function POST(request: Request) {
       },
     },
   });
-  return Response.json({ budget }, { status: 201 });
+  return Response.json({ budget: { ...budget, items: stableOrderBudgetItems(budget.items) } }, { status: 201 });
 }
 
 /**
@@ -554,6 +549,7 @@ async function patchBudgetItems(params: {
   const total = Math.max(0, subtotal - discount);
   if (!budgetMoneyValid(subtotal)) return jsonError("El subtotal supera el límite Int.", 400);
   const costEstimate = parsed.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
+  if (!budgetMoneyValid(costEstimate)) return jsonError("El costo agregado de los ítems supera el límite Int.", 400);
   const keepIds = new Set(parsed.flatMap((item) => (item.id ? [item.id] : [])));
   // El vínculo con el inventario se conserva si el payload no lo manda (el
   // diálogo de precios no edita ese vínculo): sin esto, guardar ítems
@@ -569,6 +565,7 @@ async function patchBudgetItems(params: {
       const inventoryId = raw && Object.hasOwn(raw, "inventoryId") ? item.inventoryId : item.inventoryId ?? (item.id ? linksById.get(item.id) ?? null : null);
       const data = {
         ...(raw && Object.hasOwn(raw, "notes") ? { notes: item.notes } : {}),
+        sortOrder: parsed.indexOf(item),
         name: item.name,
         quantity: item.quantity,
         days: item.days,
@@ -607,7 +604,7 @@ async function patchBudgetItems(params: {
     where: { id: budget.id },
     include: { items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
   });
-  return Response.json({ budget: updated });
+  return Response.json({ budget: updated ? { ...updated, items: stableOrderBudgetItems(updated.items) } : updated });
 }
 
 /**
@@ -658,14 +655,14 @@ async function patchBudgetCommercial(params: {
   const data: Prisma.BudgetUpdateInput = {};
 
   if (body.materialCost !== undefined) {
-    const materialCost = moneyField(body.materialCost);
-    if (materialCost === null) return jsonError("El costo de materiales debe ser un entero en guaraníes.", 400);
+    const materialCost = body.materialCost;
+    if (typeof materialCost !== "number" || !budgetMoneyValid(materialCost)) return jsonError("El costo de materiales debe ser un entero en guaraníes dentro del límite Int.", 400);
     patch.materialCost = materialCost;
     data.materialCost = materialCost;
   }
   if (body.laborCost !== undefined) {
-    const laborCost = moneyField(body.laborCost);
-    if (laborCost === null) return jsonError("El costo de mano de obra debe ser un entero en guaraníes.", 400);
+    const laborCost = body.laborCost;
+    if (typeof laborCost !== "number" || !budgetMoneyValid(laborCost)) return jsonError("El costo de mano de obra debe ser un entero en guaraníes dentro del límite Int.", 400);
     patch.laborCost = laborCost;
     data.laborCost = laborCost;
   }

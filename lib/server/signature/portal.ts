@@ -4,15 +4,13 @@ import { guardQuoteApproval, QuoteComparisonError } from "../quote-comparison";
 import { createHmac } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
-import { budgetReference } from "@/lib/admin-format";
 import { normalizeSignatureCode } from "@/lib/public-config";
 import { isDemoOrganizationSlug } from "../demo-data";
-import { paymentPlanOf } from "../budget-portal";
 import { recordAudit, portalAuditContext } from "../audit";
 import { rateLimit } from "../rate-limit";
 import { appendSignatureEvent, type SignatureActorInput } from "./events";
 import { hashIp, hashUserAgent, maskEmail, maskPhone, verifySignatureChain } from "./hash";
-import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, type SignatureBudgetDocument } from "./document";
+import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureBudgetSelect, signatureLegacyBudgetSelect, signatureRequestDocumentVersion, signatureCreationMetadata, verifiedSignatureSnapshot, type SignatureBudgetDocument, type SignatureDocumentVersion } from "./document";
 import { signatureProviderById } from "./provider";
 import { parseSignatureSubmission } from "./submission";
 import type { AdminTone } from "@/lib/admin-format";
@@ -223,30 +221,7 @@ export function portalTimeline(rows: Array<{
 export const requestInclude = {
   organization: { select: { name: true, slug: true } },
   attachment: { select: { id: true, name: true, mime: true, size: true } },
-  budget: {
-    select: {
-      id: true,
-      title: true,
-      createdAt: true,
-      validUntil: true,
-      deliveryAt: true,
-      ivaType: true,
-      warranty: true,
-      notes: true,
-      paymentTerms: true,
-      advanceAmount: true,
-      installmentsJson: true,
-      subtotal: true,
-      discount: true,
-      total: true,
-      client: { select: { name: true, company: true } },
-      event: { select: { name: true, location: true, startsAt: true, endsAt: true } },
-      items: {
-        orderBy: { name: "asc" },
-        select: { name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true, notes: true },
-      },
-    },
-  },
+  budget: { select: signatureLegacyBudgetSelect },
   events: {
     orderBy: { occurredAt: "asc" },
     take: MAX_TIMELINE_EVENTS,
@@ -277,50 +252,28 @@ export const requestInclude = {
     },
   },
 } as const;
+const snapshotRequestInclude = { ...requestInclude, budget: { select: signatureBudgetSelect } } as const;
 
 type SignatureRequestRow = Prisma.SignatureRequestGetPayload<{ include: typeof requestInclude }>;
 
-/** Documento canónico (sin costos internos) que se firma cuando no hay adjunto. */
+/** Explícitamente LIVE para el guard comercial; nunca reemplazarlo por snapshot. */
+export function signatureLiveBudgetDocument(row: SignatureRequestRow, version: SignatureDocumentVersion = signatureRequestDocumentVersion(row)): SignatureBudgetDocument {
+  return signatureDocument({ source: "live", version, budget: row.budget, title: row.title, organizationName: row.organization.name });
+}
+function documentUnavailable(): never {
+  throw new SignatureActionError(409, "El documento original no está disponible o no coincide con su huella. Pedinos una solicitud nueva.");
+}
+/** Render inmutable V2; legacy sólo si la receta exacta todavía verifica su hash. */
 export function signatureBudgetDocument(row: SignatureRequestRow): SignatureBudgetDocument {
-  const budget = row.budget;
-  return {
-    budgetId: budget.id,
-    reference: budgetReference(budget.id),
-    title: row.title,
-    organizationName: row.organization.name,
-    client: { name: budget.client.name, company: budget.client.company },
-    event: budget.event
-      ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
-      : null,
-    createdAt: budget.createdAt.toISOString(),
-    validUntil: iso(budget.validUntil),
-    deliveryAt: iso(budget.deliveryAt),
-    ivaType: budget.ivaType,
-    warranty: budget.warranty,
-    notes: budget.notes,
-    paymentTerms: budget.paymentTerms,
-    items: budget.items.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      days: item.days,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
-      excluded: item.excluded,
-      notes: item.notes,
-    })),
-    subtotal: budget.subtotal,
-    discount: budget.discount,
-    total: budget.total,
-    plan: (() => {
-      const plan = paymentPlanOf(budget);
-      return {
-        advanceAmount: plan.advanceAmount,
-        installments: plan.installments,
-        dueNow: plan.dueNow,
-        pending: plan.pending,
-      };
-    })(),
-  };
+  try {
+    const snapshot = verifiedSignatureSnapshot(row);
+    if (snapshot) return snapshot;
+    const live = signatureLiveBudgetDocument(row, 1);
+    const hash = budgetDocumentHash(budgetDocumentPayload(live));
+    const captured = signatureCreationMetadata(row)?.commercialHash;
+    if ((!row.attachmentId && hash !== row.documentHash) || (typeof captured === "string" && captured !== hash)) documentUnavailable();
+    return live;
+  } catch { return documentUnavailable(); }
 }
 
 function portalView(row: SignatureRequestRow): PortalSignatureRequest {
@@ -329,10 +282,13 @@ function portalView(row: SignatureRequestRow): PortalSignatureRequest {
   const canSign = !demo && signatureCanSign(status) && !signatureIsExpired(status, row.expiresAt, new Date());
   const canReject = !demo && canSign && signatureCanReject(status);
   const events = row.events;
+  let document: SignatureBudgetDocument | null;
+  try { document = row.attachment ? verifiedSignatureSnapshot(row) : signatureBudgetDocument(row); }
+  catch { return documentUnavailable(); }
   return {
     code: row.publicCode,
-    title: row.title,
-    organizationName: row.organization.name,
+    title: document?.title ?? row.title,
+    organizationName: document?.organizationName ?? row.organization.name,
     senderName: row.senderName,
     recipient: {
       name: row.recipientName,
@@ -364,9 +320,9 @@ function portalView(row: SignatureRequestRow): PortalSignatureRequest {
     signedDocumentHash: row.signedDocumentHash,
     chain: verifySignatureChain(events),
     document: row.attachment
-      ? { kind: "attachment", name: row.attachment.name, mime: row.attachment.mime, size: row.attachment.size }
+      ? { kind: "attachment", name: typeof signatureCreationMetadata(row)?.documento === "string" ? signatureCreationMetadata(row)!.documento as string : row.attachment.name, mime: row.attachment.mime, size: row.attachment.size }
       : { kind: "budget", name: row.title, mime: null, size: null },
-    budget: row.attachment ? null : signatureBudgetDocument(row),
+    budget: row.attachment ? null : document,
     timeline: portalTimeline(events),
     evidence: row.evidence.map((item) => ({
       type: item.type,
@@ -388,8 +344,15 @@ function evidenceLabel(type: string): string {
   return signatureEvidenceLabel(type);
 }
 
+async function loadDocumentRow(client: Pick<Prisma.TransactionClient, "signatureRequest">, where: Prisma.SignatureRequestWhereUniqueInput): Promise<SignatureRequestRow | null> {
+  const row = await client.signatureRequest.findUnique({ where, include: requestInclude });
+  if (!row) return null;
+  let version: SignatureDocumentVersion;
+  try { version = signatureRequestDocumentVersion(row); } catch { return documentUnavailable(); }
+  return version === 1 ? row : client.signatureRequest.findUnique({ where, include: snapshotRequestInclude });
+}
 async function loadRow(code: string): Promise<SignatureRequestRow | null> {
-  return db.signatureRequest.findUnique({ where: { publicCode: code }, include: requestInclude });
+  return loadDocumentRow(db, { publicCode: code });
 }
 
 /**
@@ -460,8 +423,13 @@ export async function loadSignaturePortal(
 ): Promise<PortalSignatureRequest | null> {
   const normalized = normalizeSignatureCode(code);
   if (!normalized) return null;
+  if (options.evidence) {
+    await limitedOrThrow(`signature-read:${options.evidence.ipHash ?? "sin-ip"}`, 120);
+    await limitedOrThrow(`signature-read-code:${normalized}`, 120);
+  }
   let row = await loadRow(normalized);
   if (!row) return null;
+  portalView(row); // No sellar VIEWED sobre un documento que no se puede verificar.
   const demo = isDemoOrganizationSlug(row.organization.slug);
   if (!demo && signatureIsExpired(row.status as SignatureStatusValue, row.expiresAt, new Date())) {
     await expireSignatureRequest(row.id);
@@ -581,11 +549,12 @@ export async function signSignatureRequest(input: SignatureActionInput): Promise
       {
         // Reload the commercial document only AFTER acquiring the quote lock.
         // The creation event binds attachment signatures to quote terms too.
-        const current = await tx.signatureRequest.findUniqueOrThrow({ where: { id: row.id }, include: requestInclude });
-        const creation = await tx.signatureEvent.findFirst({ where: { requestId: row.id, eventType: "REQUEST_CREATED" }, orderBy: { occurredAt: "asc" }, select: { metadataJson: true } });
-        const metadata = creation?.metadataJson as Record<string, unknown> | null;
+        const current = await loadDocumentRow(tx, { id: row.id });
+        if (!current) throw new SignatureActionError(404, "Solicitud no encontrada.");
+        try { verifiedSignatureSnapshot(current); } catch { documentUnavailable(); }
+        const metadata = signatureCreationMetadata(current);
         const capturedCommercialHash = typeof metadata?.commercialHash === "string" ? metadata.commercialHash : current.attachmentId ? null : current.documentHash;
-        const commercialHash = budgetDocumentHash(budgetDocumentPayload(signatureBudgetDocument(current)));
+        const commercialHash = budgetDocumentHash(budgetDocumentPayload(signatureLiveBudgetDocument(current)));
         const attachment = current.attachmentId ? await tx.budgetAttachment.findFirst({ where: { id: current.attachmentId, budgetId: row.budgetId, organizationId: row.organizationId }, select: { data: true } }) : null;
         const currentDocumentHash = current.attachmentId ? attachment ? attachmentDocumentHash(attachment.data) : null : commercialHash;
         if (!capturedCommercialHash || capturedCommercialHash !== commercialHash || currentDocumentHash !== fresh.documentHash) {
@@ -982,15 +951,16 @@ export async function loadSignatureAttachment(
   await limitedOrThrow(`signature-doc:${evidence.ipHash ?? "sin-ip"}`, 120);
   const normalized = normalizeSignatureCode(code);
   if (!normalized) return null;
-  const row = await db.signatureRequest.findUnique({
-    where: { publicCode: normalized },
-    select: { attachment: { select: { name: true, mime: true, size: true, data: true } } },
-  });
+  const row = await loadRow(normalized);
   if (!row?.attachment) return null;
+  try { verifiedSignatureSnapshot(row); } catch { documentUnavailable(); }
+  const attachment = await db.budgetAttachment.findUnique({ where: { id: row.attachment.id }, select: { name: true, mime: true, size: true, data: true } });
+  if (!attachment || attachmentDocumentHash(attachment.data) !== row.documentHash) documentUnavailable();
+  const capturedName = signatureCreationMetadata(row)?.documento;
   return {
-    name: row.attachment.name,
-    mime: row.attachment.mime,
-    size: row.attachment.size,
-    data: new Uint8Array(row.attachment.data),
+    name: typeof capturedName === "string" ? capturedName : attachment.name,
+    mime: attachment.mime,
+    size: attachment.size,
+    data: new Uint8Array(attachment.data),
   };
 }

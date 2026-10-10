@@ -809,6 +809,8 @@ model Budget {
 model BudgetItem {
   id          String         @id
   budgetId    String
+  /// Orden explícito de edición (#173 A15); NULL conserva el orden recibido del query histórico.
+  sortOrder   Int?
   name        String
   quantity    Int            @default(1)
   days        Int            @default(1)

@@ -1,4 +1,5 @@
 import { emailValid, normalizeEmail } from "@/lib/field-rules";
+import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     include: {
       client: { select: { name: true, company: true, tradeName: true, legalName: true } },
       event: { select: { name: true } },
-      items: { orderBy: { name: "asc" }, select: { name: true, quantity: true, days: true, subtotal: true } },
+      items: { orderBy: { name: "asc" }, select: { sortOrder: true, name: true, quantity: true, days: true, subtotal: true } },
       organization: { select: { name: true, paymentDetails: true } },
     },
   });
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
   const content = buildBudgetMail({
     organizationName: budget.organization.name,
     paymentDetails: budget.organization.paymentDetails,
-    budget,
+    budget: { ...budget, items: stableOrderBudgetItems(budget.items) },
     message,
   });
   if (!content) return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);

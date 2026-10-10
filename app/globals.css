@@ -28,8 +28,9 @@
   --c-bad-text: 180 35 48;
 }
 .admin-shared-phone, .admin-shared-autocomplete { min-width: 0; width: 100%; }
-.admin-shared-phone button[role="combobox"] { font-size: 12px; background: var(--a-bg-2); color: var(--a-text); border-color: var(--a-line-control); }
+.admin-shared-phone button[role="combobox"] { font-size: 12px; background: var(--a-bg-2); color: var(--a-text); border-color: var(--a-line-control); max-width: 100%; height: auto; min-height: 44px; }
 .admin-shared-phone input[type="tel"] { min-width: min(100%, 8.5rem); width: 0; flex: 1 1 0; }
+.admin-shared-phone { flex-wrap: wrap; }
 .admin-shared-autocomplete input { width: 100%; }
 .admin-field [role="listbox"] { color: var(--a-text-strong); }
 @media (max-width: 720px) {
@@ -1064,8 +1065,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field-heading label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .admin-field-heading a, .admin-back-link { color: var(--a-accent); font-size: 11px; text-decoration: none; }
 .admin-field-heading a:hover, .admin-back-link:hover { text-decoration: underline; }
-.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-height: 36px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s; }
+.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: 36px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s; }
 .admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-field input::placeholder, .admin-field textarea::placeholder { color: var(--a-muted); opacity: 1; }
 .admin-field input[aria-invalid="true"] { border-color: var(--a-danger); }
 .admin-field select[aria-invalid="true"], .admin-field textarea[aria-invalid="true"] { border-color: var(--a-danger); }
 /* MoneyInput de owncoding-ui (issue #99): el componente trae su estructura
@@ -1356,7 +1358,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-panel .admin-note { margin: 8px 12px 0; }
 
 /* ── Módulos y paneles ── */
-.admin-module-page { display: grid; gap: 10px; }
+.admin-module-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .admin-module-context { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 7px 12px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-accent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-accent-soft) 58%, var(--a-panel)); }
 .admin-module-context-copy { display: grid; gap: 2px; min-width: 0; }
 .admin-module-context-trail { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
@@ -1449,20 +1451,20 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-countdown-field { display: grid; gap: 4px; }
 
 /* ── Formularios de alta ── */
-.admin-form-panel { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-form-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
 .admin-form-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .admin-form-title { color: var(--a-text-strong); font: 700 12.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
-.admin-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 8px; }
+.admin-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); min-width: 0; gap: 8px; }
 /* ── Sección plegable del formulario (issues #88 y #106) ──
    Deja lo secundario detrás de un toque sin perder nada: el contenido sigue
    montado (solo se oculta con `hidden`) y el botón avisa qué hay adentro. */
 .admin-disclosure { display: grid; gap: 8px; grid-column: 1 / -1; min-width: 0; }
-.admin-disclosure-toggle { display: inline-flex; align-items: center; justify-self: start; gap: 8px; min-height: 34px; padding: 8px 12px; border: 1px dashed var(--a-line-control); border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; transition: border-color .15s, color .15s; }
+.admin-disclosure-toggle { display: inline-flex; flex-wrap: wrap; align-items: center; justify-self: start; max-width: 100%; gap: 8px; min-height: 34px; padding: 8px 12px; border: 1px dashed var(--a-line-control); border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; transition: border-color .15s, color .15s; }
 .admin-disclosure-toggle:hover { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-disclosure-toggle .admin-icon { transition: transform .15s; }
 .admin-disclosure-toggle[aria-expanded="true"] .admin-icon { transform: rotate(180deg); }
-.admin-disclosure-toggle small { color: var(--a-muted); font: 400 11px var(--font-body); letter-spacing: 0; text-transform: none; }
-.admin-disclosure-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 8px; }
+.admin-disclosure-toggle small { min-width: 0; overflow-wrap: anywhere; color: var(--a-muted); font: 400 11px var(--font-body); letter-spacing: 0; text-transform: none; }
+.admin-disclosure-body { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 8px; }
 .admin-disclosure-body[hidden] { display: none; }
 /* Campo con su acción al lado (issue #106): el botón queda a la altura del
    control. En pantallas chicas el botón baja debajo para que el selector
@@ -1492,7 +1494,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 }
 /* Grupos del formulario del cliente (issue #36): título de sección y sus
    campos en la misma grilla del panel; el formulario largo queda navegable. */
-.admin-form-group { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 8px; }
+.admin-form-group { display: grid; min-width: 0; grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 8px; }
 .admin-form-group-title { grid-column: 1 / -1; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .admin-form-group--wide { grid-template-columns: minmax(0, 1fr); }
 .admin-form-group--image { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
@@ -1518,7 +1520,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-form-group--min { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
 }
 .admin-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.admin-form-actions { display: flex; gap: 8px; margin-left: auto; }
+.admin-form-actions { display: flex; flex-wrap: wrap; max-width: 100%; gap: 8px; margin-left: auto; }
+.admin-form-panel .admin-btn { min-width: 0; max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
 /* Formulario en línea (pagos, gastos, filas de carga): controles anclados
    abajo, como las barras, para que el label no los corra (issue #102). */
 .admin-inline-form { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 12px; border-bottom: 1px solid var(--a-line); background: var(--a-accent-soft); }
@@ -1621,6 +1624,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 /* Preferencia segmentada 2–5 opciones (auto-bloqueo, issue #21). */
 .admin-segmented { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-segmented-item { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .admin-segmented-item { padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .04em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
 .admin-segmented-item:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-segmented-item[aria-pressed="true"] { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent-strong); }
@@ -2748,15 +2752,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-root:has(.lbprint) { min-height: 0; background: #fff; }
   /* Compacto a propósito: un presupuesto o un reporte chico deben entrar en una
      sola hoja; el contenido que sobra fluye a la siguiente sin dejar páginas vacías. */
-  .lbprint { min-height: 0; padding: 0; background: #fff; font-size: 11px; }
+  .lbprint { min-height: 0; padding: 0; background: #fff; font-size: 11px; line-height: 1.25; }
   .lbprint-toolbar { display: none !important; }
   .lbprint-sheet { width: auto; margin: 0; padding: 0; border-radius: 0; box-shadow: none; }
   .lbprint-head { padding-bottom: 8px; border-bottom-width: 1.5px; break-after: avoid; }
   .lbprint-doc-title { font-size: 16px; }
   .lbprint-value { font-size: 11.5px; }
-  .lbprint-section { margin-top: 9px; break-inside: avoid; }
-  .lbprint-section-title { margin-bottom: 4px; padding-bottom: 2px; }
-  .lbprint-grid { gap: 4px 18px; }
+  .lbprint-section { margin-top: 6px; break-inside: avoid; }
+  .lbprint-section-title { margin-bottom: 4px; padding-bottom: 2px; line-height: 1.2; }
+  .lbprint-grid { gap: 3px 18px; }
   .lbprint-table th { padding: 3px 5px; }
   .lbprint-table td { padding: 3px 5px; font-size: 10.5px; }
   .lbprint-kpis, .lbprint-totals { margin-top: 9px; }
@@ -2768,8 +2772,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .lbprint-portal-qr svg { width: 24mm; height: 24mm; }
   .lbprint-portal-code { font-size: 12px; }
   .lbprint-empty { padding: 6px 8px; font-size: 10.5px; }
-  .lbprint-sign { margin-top: 16px; }
-  .lbprint-foot { margin-top: 12px; padding-top: 6px; break-inside: avoid; }
+  .lbprint-sign { margin-top: 12px; }
+  /* Neutraliza también el padding lateral/inferior del footer público;
+     conserva el cierre junto a su sección anterior (Refs #173). */
+  .lbprint-foot { margin-top: 10px; padding: 6px 0 0; overflow: visible; break-inside: avoid; break-before: avoid; }
   .lbprint-kpis, .lbprint-totals, .lbprint-sign { break-inside: avoid; }
   .lbprint-table thead { display: table-header-group; }
 }

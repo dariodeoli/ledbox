@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { ConfirmDialog as AdminConfirm } from "owncoding-ui";
 import {
   AdminButton,
   AdminDialog,
@@ -132,6 +133,9 @@ export function BudgetPricingDialog({
   const [attachments, setAttachments] = useState<AdminBudgetAttachmentRow[]>(budget.attachments ?? []);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentToDelete, setAttachmentToDelete] = useState<AdminBudgetAttachmentRow | null>(null);
+  const [attachmentDeleteError, setAttachmentDeleteError] = useState("");
+  const attachmentDeleteInFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [section, setSection] = useState("items");
@@ -284,22 +288,29 @@ export function BudgetPricingDialog({
   }
 
   async function removeAttachment(attachment: AdminBudgetAttachmentRow) {
+    if (attachmentBusy || attachmentDeleteInFlight.current) return;
+    attachmentDeleteInFlight.current = true;
     setAttachmentBusy(true);
+    setAttachmentDeleteError("");
     setError("");
     try {
       const result = await adminSend(`/api/admin/budgets/attachments/${attachment.id}`, {}, "DELETE");
       if (!result.ok) {
-        setError(result.error);
+        setAttachmentDeleteError(result.error);
         return;
       }
       setAttachments((current) => current.filter((row) => row.id !== attachment.id));
+      setAttachmentToDelete(null);
+    } catch {
+      setAttachmentDeleteError("No se pudo borrar el adjunto. Reintentá.");
     } finally {
+      attachmentDeleteInFlight.current = false;
       setAttachmentBusy(false);
     }
   }
 
   return (
-    <AdminDialog title={`Precio y condiciones · ${budget.title}`} size="wide" icon="finance" onClose={onClose}>
+    <AdminDialog title={`Precio y condiciones · ${budget.title}`} size="wide" icon="finance" onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}>
       <p className="admin-dialog-text">
         Presupuesto Nº {budgetReference(budget.id)} de {clientDisplayName(budget.client)}. El cliente ve el
         precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.
@@ -472,7 +483,7 @@ export function BudgetPricingDialog({
                   title={`Borrar «${attachment.name}»`}
                   aria-label={`Borrar «${attachment.name}»`}
                   disabled={attachmentBusy}
-                  onClick={() => void removeAttachment(attachment)}
+                  onClick={() => { setAttachmentDeleteError(""); setAttachmentToDelete(attachment); }}
                 />
               </li>
             ))}
@@ -482,6 +493,20 @@ export function BudgetPricingDialog({
         )}
       </div>
       <BudgetReferenceLinks budgetId={budget.id} initial={budget.referenceLinks ?? []} />
+      <AdminConfirm
+        open={attachmentToDelete !== null}
+        title="Borrar adjunto"
+        description={<>
+          <span>¿Borrar «{attachmentToDelete?.name}» del presupuesto? Esta acción no se puede deshacer.</span>
+          {attachmentDeleteError ? <span className="admin-field-error" role="alert"> {attachmentDeleteError}</span> : null}
+        </>}
+        variant="danger"
+        confirmLabel="Borrar adjunto"
+        cancelLabel="Cancelar"
+        busy={attachmentBusy}
+        onCancel={() => { if (!attachmentDeleteInFlight.current) { setAttachmentToDelete(null); setAttachmentDeleteError(""); } }}
+        onConfirm={() => { if (attachmentToDelete) void removeAttachment(attachmentToDelete); }}
+      />
       {newClient !== null ? <ClientQuickCreateDialog initialName={newClient} onClose={() => setNewClient(null)} onCreated={(client) => { setClientId(client.id); setNewClient(null); clients.reload(); }} /> : null}
       {newEvent !== null ? <EventQuickCreateDialog initialName={newEvent} clientId={clientId} clients={clients.data ?? []} clientsLoading={clients.loading} onClose={() => setNewEvent(null)} onCreated={(event, id) => { setEventId(event.id); setClientId(clientId || id); setNewEvent(null); events.reload(); }} /> : null}
     </AdminDialog>

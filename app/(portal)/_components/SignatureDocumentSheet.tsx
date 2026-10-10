@@ -1,6 +1,10 @@
 import { formatDate, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
 import type { SignatureBudgetDocument } from "@/lib/server/signature/document";
 
+export function SignatureDocumentUnavailable({ message }: { message: string }) {
+  return <section className="portal-card" role="alert"><h1 className="portal-budget-title">Documento original no disponible</h1><p>{message}</p></section>;
+}
+
 /**
  * Documento firmable del portal (issue #79): la representación imprimible del
  * presupuesto tal como la ve el cliente —título, partes, ítems con precio de
@@ -9,6 +13,7 @@ import type { SignatureBudgetDocument } from "@/lib/server/signature/document";
  */
 export function SignatureDocumentSheet({ document, compact = false }: { document: SignatureBudgetDocument; compact?: boolean }) {
   const plan = document.plan;
+  const clientLabel = document.documentVersion === 2 ? document.client.displayName : document.client.company?.trim() || document.client.name;
   const hasPlan = plan.advanceAmount > 0 || plan.installments.length > 0;
   return (
     <article className="portal-signature-sheet" aria-label={`Documento ${document.title}`}>
@@ -17,7 +22,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
           <p className="portal-kicker">Documento Nº {document.reference}</p>
           <h2 className="portal-signature-sheet-title">{document.title}</h2>
           <p className="portal-budget-meta">
-            {document.organizationName} · {document.client.company?.trim() || document.client.name}
+            {document.organizationName} · {clientLabel}
           </p>
         </div>
       </header>
@@ -25,8 +30,9 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
       <dl className="portal-facts">
         <div>
           <dt>Cliente</dt>
-          <dd>{document.client.company?.trim() || document.client.name}</dd>
+          <dd>{clientLabel}</dd>
         </div>
+        {document.documentVersion === 2 && document.client.legalName ? <div><dt>Razón social</dt><dd>{document.client.legalName}</dd></div> : null}
         <div>
           <dt>Evento</dt>
           <dd>{document.event?.name ?? "Sin evento asociado"}</dd>

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { budgetItemError } from "../budget-items";
+import { stableOrderBudgetItems } from "../budget-item-order";
 import { budgetDayValid, budgetMoneyValid, resolveBudgetPaymentPlan } from "../budget-payment-plan";
 import { INVOICE_TAX_TYPES } from "../fiscal";
 import { auditChanges, recordAudit } from "./audit";
@@ -79,8 +80,9 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
       const source = raw[items.indexOf(item)] as Record<string, unknown>;
       const inventoryId = Object.hasOwn(source, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId);
       const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: excluded ? 0 : item.quantity * item.days * item.unitPrice };
-      if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: itemData });
-      else await tx.budgetItem.create({ data: { id: randomUUID(), budgetId, ...itemData } });
+      const orderedItemData = { ...itemData, sortOrder: items.indexOf(item) };
+      if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: orderedItemData });
+      else await tx.budgetItem.create({ data: { id: randomUUID(), budgetId, ...orderedItemData } });
     }
     if (body.installmentsJson !== undefined) {
       const plan = resolveBudgetPaymentPlan(body.installmentsJson, total, current.advanceAmount);
@@ -93,5 +95,5 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
     return tx.budget.findUniqueOrThrow({ where: { id: budgetId }, include: { items: true } });
   });
   await recordAudit({ context, action: "update", entity: "Budget", entityId: budgetId, summary: `Editó el presupuesto «${result.title}»`, detail: { changes: auditChanges(current, result, ["title", "subtotal", "discount", "total", "installmentsJson", "validUntil", "deliveryAt", "warranty", "notes"]) ?? {}, fields: { items: result.items.length } } });
-  return Response.json({ budget: result });
+  return Response.json({ budget: { ...result, items: stableOrderBudgetItems(result.items) } });
 }

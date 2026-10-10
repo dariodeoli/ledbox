@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { notFound, redirect } from "next/navigation";
 import {
   budgetApprovalMethodLabel,
@@ -136,7 +137,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                 </tr>
               </thead>
               <tbody>
-                {budget.items.map((item) => (
+                {stableOrderBudgetItems(budget.items).map((item) => (
                   <tr key={item.id} data-excluded={item.excluded ? "true" : undefined}>
                     <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
                     <td className="lbprint-num">{formatMoney(item.unitPrice)}</td>

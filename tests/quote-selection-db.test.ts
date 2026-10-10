@@ -12,7 +12,7 @@ test("validated selections persist and serialize with approval/signature in Post
   const { withQuoteApproval, withQuoteCommercialEdit } = await import("../lib/server/quote-comparison");
   const { resolveItemProposal, portalInclude, portalBudgetView, generatePublicToken } = await import("../lib/server/budget-portal");
   const { POST: propose } = await import("../app/api/portal/budget/[token]/propose/route");
-  const { signatureBudgetDocument, requestInclude, signSignatureRequest } = await import("../lib/server/signature/portal");
+  const { signatureLiveBudgetDocument, requestInclude, signSignatureRequest } = await import("../lib/server/signature/portal");
   const { budgetDocumentHash, budgetDocumentPayload } = await import("../lib/server/signature/document");
   const { generateSignatureCode } = await import("../lib/server/signature/codes");
   const org = randomUUID(), client = randomUUID(), quote = randomUUID(), paid = randomUUID(), gift = randomUUID(), product = randomUUID();
@@ -94,7 +94,7 @@ test("validated selections persist and serialize with approval/signature in Post
       const code = generateSignatureCode();
       const signature = await db.signatureRequest.create({ data: { id: randomUUID(), organizationId: org, budgetId: quote, publicCode: code, title: "Fixture signature", senderName: "QA", recipientName: "Fixture client", method: "TYPED", expiresAt: new Date(Date.now() + 86400000), documentHash: "placeholder", documentHashCapturedAt: new Date() } });
       const row = await db.signatureRequest.findUniqueOrThrow({ where: { id: signature.id }, include: requestInclude });
-      const hash = budgetDocumentHash(budgetDocumentPayload(signatureBudgetDocument(row)));
+      const hash = budgetDocumentHash(budgetDocumentPayload(signatureLiveBudgetDocument(row, 1)));
       await db.signatureRequest.update({ where: { id: signature.id }, data: { documentHash: hash } });
       await withQuoteCommercialEdit(quote, org, true, (tx) => tx.budgetItem.update({ where: { id: gift }, data: { excluded: true } }));
       await assert.rejects(signSignatureRequest({ code, body: { consent: true, signature: { name: "Fixture client" } }, evidence: { ipHash: null, userAgentHash: null } }), /presupuesto cambió/);

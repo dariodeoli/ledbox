@@ -31,7 +31,7 @@ test("FIN #173 real PostgreSQL: duplicate IDs, atomic plan rollback and sync/col
     const createBody = { clientId: client.id, title: "A04 strict discount", items: [{ name: "Service", quantity: 1, days: 1, unitPrice: 100 }] };
     const initialCount = await db.budget.count({ where: { organizationId: org } });
     const initialItems = await db.budgetItem.count({ where: { budget: { organizationId: org } } });
-    const invalidDiscounts = [-1, "1", "-1", "", 0.5, 2147483648, true, false, [], {}];
+    const invalidDiscounts = [-1, "1", "-1", "", 0.5, 2147483648, null, true, false, [], {}];
     for (const discount of invalidDiscounts) {
       const response = await fetch(base + "/api/admin/budgets", { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ ...createBody, discount }) });
       assert.equal(response.status, 400, `A04 POST discount ${JSON.stringify(discount)} must reject`);
@@ -44,7 +44,7 @@ test("FIN #173 real PostgreSQL: duplicate IDs, atomic plan rollback and sync/col
       }
     }
     // JSON numeric overflow parses to Infinity; never serialize NaN as null,
-    // because null/omitted have the explicitly documented ??0 default.
+    // since null is not a numeric value and is independently rejected.
     const infinite = await fetch(base + "/api/admin/budgets", { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(createBody).replace(/}$/, ',"discount":1e309}') });
     assert.equal(infinite.status, 400);
     assert.equal(await db.budget.count({ where: { organizationId: org } }), initialCount);

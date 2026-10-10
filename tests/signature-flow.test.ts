@@ -206,6 +206,14 @@ test("la huella del documento cambia si cambia el documento", () => {
   assert.doesNotMatch(JSON.stringify(payload), /cost/i);
 });
 
+test("legacy v1 conserva receta y hash exactos sin campos nuevos null ni identidad inferida", () => {
+  const document = budgetDocument();
+  assert.equal(budgetDocumentHash(budgetDocumentPayload(document)), "b8785d8d9ddb2e7fbf7e7884fbcec966d8aa45f4ab647a9412cfe09330df3c4c");
+  document.client.tradeName = "Nuevo fantasía"; document.client.legalName = "Nueva razón social";
+  assert.equal(budgetDocumentHash(budgetDocumentPayload(document)), "b8785d8d9ddb2e7fbf7e7884fbcec966d8aa45f4ab647a9412cfe09330df3c4c");
+  assert.doesNotMatch(JSON.stringify(budgetDocumentPayload(document)), /documentVersion|displayName|tradeName|legalName/);
+});
+
 test("excluding a free line invalidates the commercial signature without repricing originals", () => {
   const document = budgetDocument();
   document.items.push({ name: "Brindis", quantity: 1, days: 1, unitPrice: 0, subtotal: 0, notes: null });

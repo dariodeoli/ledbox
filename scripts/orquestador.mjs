@@ -11,7 +11,7 @@ import { diagnostics } from "./automation-diagnostics.mjs";
 export function configuration(cwd = process.cwd()) {
   const config = JSON.parse(readFileSync(join(cwd, "scripts/orquestador.config.json"), "utf8"));
   if (config.issue !== 173 || config.umbral !== 10 || config.cooldownMin !== 20 || JSON.stringify(config.allowedBranches) !== JSON.stringify(SLOTS) || config.liveBranch !== LIVE) throw new Error("Autorización/config scoped #173 inválida");
-  for (const field of ["integratorCheckout", "pauseFile", "enableFile", "gateFile", "candidateFile", "stateFile", "cycleLock", "watcherLock", "logFile", "evidenceDir", "deployEnvFile"]) {
+  for (const field of ["integratorCheckout", "pauseFile", "enableFile", "gateFile", "rejectedGate", "manualPushAckFile", "candidateFile", "stateFile", "cycleLock", "watcherLock", "logFile", "evidenceDir", "deployEnvFile", "tokenFile"]) {
     if (typeof config[field] !== "string") throw new Error(`Falta configuración ${field}`);
     config[field] = config[field].replace(/^~(?=\/)/, homedir());
   }
@@ -38,7 +38,7 @@ export async function main(argv = process.argv.slice(2)) {
     log(await diagnostics(cwd, config, argv.includes("--dry-run") ? "pd" : command));
     return;
   }
-  if (!["prepare", "ht", "hd", "auto", "watch"].includes(command)) throw new Error("Comandos: pp/pd/al (lectura), prepare, ht/hd, auto, watch");
+  if (!["prepare", "reject", "supersede-published-failed-ready", "ht", "hd", "auto", "watch"].includes(command)) throw new Error("Comandos: pp/pd/al (lectura), prepare/reject, supersede-published-failed-ready, ht/hd, auto, watch");
   const controller = new AbortController();
   const stop = () => controller.abort();
   process.once("SIGINT", stop); process.once("SIGTERM", stop);

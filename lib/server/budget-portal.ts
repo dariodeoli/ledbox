@@ -1,4 +1,5 @@
 import { resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
+import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
 import { randomBytes } from "node:crypto";
 import { db } from "./db";
@@ -342,7 +343,7 @@ type BudgetForPortal = {
   organization: { name: string; slug: string; paymentDetails: unknown };
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
-  items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
+  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
   payments: Array<{ id: string; amount: number }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
@@ -536,7 +537,7 @@ function requestView(budget: BudgetForPortal, request: BudgetForPortal["changeRe
     resolvedByName: request.resolvedByName,
     createdAt: request.createdAt.toISOString(),
     resolvedAt: iso(request.resolvedAt),
-    items: kind === "items" ? requestItemsView(budget.items, request.payload) : [],
+    items: kind === "items" ? requestItemsView(stableOrderBudgetItems(budget.items), request.payload) : [],
     discount: kind === "discount" ? requestDiscountView(budget, request.payload) : null,
   };
 }
@@ -594,7 +595,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     event: budget.event
       ? { name: budget.event.name, location: budget.event.location, startsAt: iso(budget.event.startsAt) }
       : null,
-    items: budget.items.map((item) => ({
+    items: stableOrderBudgetItems(budget.items).map((item) => ({
       usesDays: Boolean(item.inventory) || item.days > 1,
       id: item.id,
       name: item.name,

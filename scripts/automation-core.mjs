@@ -162,13 +162,36 @@ export function artifactSeal(cwd, sha, version) {
 export function evidence(path) { return { path: resolve(path), sha256: hash(readFileSync(path)) }; }
 export function sameArtifact(a, b) { return ["sha", "version", "manifestSha256"].every(key => a?.[key] === b?.[key]) && shaValid(a?.sha) && /^[a-f0-9]{64}$/.test(a?.manifestSha256 ?? ""); }
 function checkedEvidence(ref) {
-  if (!ref || typeof ref.path !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256 ?? "") || hash(readFileSync(ref.path)) !== ref.sha256) throw new Error("Evidencia ausente/alterada");
-  return readJson(ref.path);
+  if (!ref || typeof ref.path !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256 ?? "")) throw new Error("Evidencia ausente/alterada");
+  const bytes = readFileSync(ref.path);
+  if (hash(bytes) !== ref.sha256) throw new Error("Evidencia ausente/alterada");
+  return JSON.parse(bytes.toString("utf8"));
+}
+export function requirePilotRejection(config, pending) {
+  const bytes = readFileSync(config.rejectedGate);
+  const gate = JSON.parse(bytes.toString("utf8")), sha = pending.candidateSHA;
+  if (!shaValid(sha) || gate.schema !== 1 || gate.issue !== ISSUE || gate.rejectedCandidateSHA !== sha || gate.pilot?.role !== "lbx-pilot" || gate.pilot.status !== "FAIL" || gate.pilot.sha !== sha) throw new Error("Rechazo requiere Pilot FAIL exacto del candidato #173");
+  const pilot = checkedEvidence(gate.pilot.evidence);
+  if (pilot.role !== "lbx-pilot" || pilot.status !== "FAIL" || pilot.sha !== sha) throw new Error("Evidencia Pilot FAIL inválida");
+  if (pending.checks?.evidence?.path && realpathSync(gate.pilot.evidence.path) === realpathSync(pending.checks.evidence.path)) throw new Error("Evidencia Pilot FAIL no independiente");
+  return { gate, pilot, gateEvidence: { path: resolve(config.rejectedGate), sha256: hash(bytes) } };
+}
+export function requireManualPushAck(config, pending) {
+  const bytes = readFileSync(config.manualPushAckFile), ack = JSON.parse(bytes.toString("utf8"));
+  if (ack.schema !== 1 || ack.issue !== ISSUE || ack.sha !== pending.candidateSHA || ack.attribution !== "owner:GitHub Desktop" || ack.allowForwardFixes !== true) throw new Error("ACK operativo no autoriza forward fixes del candidato SHA exacto #173");
+  return { ack, ackEvidence: { path: resolve(config.manualPushAckFile), sha256: hash(bytes) } };
+}
+export function assertNoPilotRejection(config, pending) {
+  if (config.rejectedGate && existsSync(config.rejectedGate) && readJson(config.rejectedGate).rejectedCandidateSHA === pending.candidateSHA) {
+    requirePilotRejection(config, pending);
+    throw new Error("Pilot FAIL: candidato rechazado, requiere reject y nuevo prepare");
+  }
 }
 export function requirePilotGate(config, pending) {
   const gate = readJson(config.gateFile);
   const sha = pending.candidateSHA;
   if (!shaValid(sha)) throw new Error("Candidato requiere SHA completo");
+  assertNoPilotRejection(config, pending);
   if (gate.schema !== 1 || gate.issue !== ISSUE || gate.approvedCandidateSHA !== sha || gate.pilot?.role !== "lbx-pilot" || gate.pilot.status !== "PASS" || gate.pilot.sha !== sha || gate.checks?.status !== "PASS" || gate.checks.sha !== sha) throw new Error("Gate Pilot/checks no aprueba candidato SHA exacto #173");
   const pilot = checkedEvidence(gate.pilot.evidence), checks = checkedEvidence(gate.checks.evidence);
   if (pilot.role !== "lbx-pilot" || pilot.status !== "PASS" || pilot.sha !== sha || realpathSync(gate.pilot.evidence.path) === realpathSync(gate.checks.evidence.path)) throw new Error("Evidencia Pilot independiente inválida");

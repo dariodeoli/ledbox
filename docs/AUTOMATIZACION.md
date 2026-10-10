@@ -14,6 +14,7 @@ no activa el watcher ni publica una versión.
 | `npm run al` | Roles, ramas actuales, worktrees y cambios sin commit de los cuatro slots; consulta sólo issue #173. No despacha trabajo. |
 | `node scripts/orquestador.mjs prepare` | Integración autorizada + checks + candidato `READY`; nunca versiona, pushea ni dispara Hub. |
 | `node scripts/orquestador.mjs --prepare` | Alias de `prepare`. También `ht --prepare`, `hd --prepare` y `node scripts/deploy.mjs --prepare`. |
+| `node scripts/orquestador.mjs reject` | Archiva un READY rechazado por Pilot FAIL exacto, sólo sin release/publicación; no construye ni publica. |
 | `npm run ht` / `npm run hd` / `npm run deploy:patch` | Produce `READY` si no hay candidato; en la siguiente ejecución exige gate independiente antes de publicar. |
 | `npm run auto-hd` | Igual ciclo, con umbral de 10 commits funcionales y cooldown de 20 minutos. |
 | `npm run watch-hd -- --interval 10` | Singleton; ejecuta `auto` cada 10 minutos por defecto. Acepta minutos finitos entre 1 y 1440; no cambia gates ni cooldown. |
@@ -25,7 +26,7 @@ usan `gh issue view 173`; si no está disponible lo informan, sin buscar backlog
 Las referencias Git usadas son locales; actualizar con `git fetch origin --prune`
 cuando corresponda. Los ciclos hacen su propio fetch antes de integrar/publicar.
 
-Todos los ciclos, incluido `prepare`, exigen checkout principal limpio del
+Todos los ciclos, incluidos `prepare` y `reject`, exigen checkout principal limpio del
 integrador (`~/Documents/GitHub/ledbox`), rama
 `codex/ledbox-gestion-multiempresa` y ausencia de merge en curso. Un carril no
 puede preparar ni publicar. No existen flags `--no-trigger`/`--prepared` para
@@ -64,7 +65,8 @@ La barrera `~/.herdr/worktrees/ledbox/orquestador/.operacion-pausada` se conserv
 Archivo: `~/.config/ledbox/auto-hd-enabled.json`. **Sólo el integrador lo escribe
 tras los gates y autorización operativa**. No habilita otros watchers ni la cola
 global. `prepare` puede generar un candidato local con la barrera y sin ese
-archivo; `ht/hd/auto/watch/deploy` lo exigen. Se relee antes de cada push/POST;
+archivo; `reject` tampoco lo exige y conserva la pausa. `ht/hd/auto/watch/deploy`
+lo exigen. Se relee antes de cada push/POST;
 eliminarlo o poner `enabled:false` bloquea la próxima acción de publicación.
 
 Locks separados de ciclo y watcher: creación atómica `fs.open(...,"wx")`, PID,
@@ -85,9 +87,10 @@ real (`SOURCE_COMMIT`, `GITHUB_SHA`, `LEDBOX_BUILD_SHA`):
 5. `node --test tests/automation.test.mjs`
 6. `npm run build`
 
-La suite `.mjs` se ejecuta explícitamente: **no está en el glob de test:rules**.
-El label de evidencia es `test:automation`; no requiere un script nuevo en
-`package.json`. El integrador puede añadir su invocación a CI dentro de su scope.
+La suite `.mjs` se ejecuta explícitamente y su label de evidencia es
+`test:automation`. Desde la base integrada `b582d0e`, el integrador también la
+añadió a `test:rules` mediante `npm run test:automation`; no está en el glob
+`.test.ts`. El ciclo conserva su invocación directa y evidencia propia.
 
 Se verifica HEAD limpio después de cada check y el standalone real: versión,
 SHA inyectado en `server.js` y manifest SHA-256 de todos sus archivos. Symlinks
@@ -123,9 +126,92 @@ firma criptográfica de identidad. No rellenarlos con evidencia simulada.
 
 Si cambió código (incluida validación FIN o estos scripts), el candidato final
 necesita checks y **QA retarget de Pilot al nuevo SHA**. No reutilizar el PASS de
-un candidato anterior. Para sustituir un READY anterior, el integrador archiva
-su estado/evidencia bajo lock libre y sin publicación pendiente, y prepara el
-HEAD final limpio; no editar un pending para hacer coincidir un PASS viejo.
+un candidato anterior. Para sustituir un READY que falló, usar el contrato
+`reject` de abajo y luego `prepare` sobre el HEAD final limpio; no editar un
+pending para hacer coincidir un PASS viejo.
+
+### Rechazo canónico de READY por FAIL de Pilot
+
+El integrador referencia evidencia real de Pilot en
+`~/.config/ledbox/qa-rejected.json` (config `rejectedGate`):
+
+```json
+{
+  "schema": 1,
+  "issue": 173,
+  "rejectedCandidateSHA": "<SHA completo del pending>",
+  "pilot": {
+    "role": "lbx-pilot", "status": "FAIL", "sha": "<mismo SHA>",
+    "evidence": {"path": "<informe JSON Pilot>", "sha256": "<SHA-256 del archivo>"}
+  }
+}
+```
+
+Informe JSON mínimo: `{"role":"lbx-pilot","status":"FAIL","sha":"<mismo SHA>"}`;
+puede incluir `findings`/rutas de pruebas. No puede ser el informe de checks ni
+evidencia inventada. El comando valida SHA/issue/role/FAIL/hash, relee gate y
+evidencia antes de invalidar, y usa el mismo lock exclusivo de ciclo.
+
+`node scripts/orquestador.mjs reject` sólo acepta pending sin releaseSHA,
+versión de release, push, intención/aceptación de trigger ni servido. También
+bloquea registros deployments del candidato, metadata release commiteada antes
+de persistir y candidatos que el fetch muestra publicados en la rama viva.
+No hace push, POST, build, aprobación ni cambio de Git; sí un fetch de lectura
+para verificar que el candidato no fue publicado.
+
+Archiva pending completo, gate/FAIL/evidencia y HEAD en
+`auto-hd-artifacts/<SHA>/rejection.json`; registra el SHA en
+`state.rejectedCandidates`, marca `qa-candidate.json` REJECTED y deja pending
+vacío. Evidencias previas y gates no se borran. Mientras ese FAIL existe, no
+se acepta PASS del mismo SHA ni se recupera un fix como commit de release.
+
+Después se integra el fix autorizado y se ejecuta `prepare` (también se admite
+`reject` desde un HEAD descendiente que ya contiene ese fix). El mismo SHA
+rechazado no se reconstruye ni se reaprueba; el HEAD nuevo debe pasar scope,
+checks y Pilot independiente. No se usa `assertReleaseOnly` para legitimar
+código después de FAIL. Rechazo no autoriza migrar la base que Pilot está
+usando: para A15 b582, conservar PG55473/DB45 durante QA y probar la migración
+sortOrder sólo en PostgreSQL aislado hasta orden de consumo del integrador.
+
+Si la rama viva recibió externamente el candidato, `reject` también bloquea
+aunque el pending local siga READY y no se vea deployment/health de ese SHA.
+No hay override para borrar ese historial publicado: conservar estado y
+coordinar con el dueño antes de otra acción operativa. La entrega de este
+comando no ejecuta rechazo sobre el pending real ni autoriza tocar la rama viva.
+
+### Supersesión explícita de READY fallido publicado manualmente
+
+Tras atribución del dueño a GitHub Desktop y autorización de fixes hacia adelante,
+el integrador puede ejecutar `node scripts/orquestador.mjs supersede-published-failed-ready`.
+No es un override de `reject`: exige el FAIL independiente anterior y un ACK local
+en `~/.config/ledbox/manual-push-ack.json` (`manualPushAckFile`):
+
+```json
+{
+  "schema": 1,
+  "issue": 173,
+  "sha": "<SHA completo exacto del pending READY fallido>",
+  "attribution": "owner:GitHub Desktop",
+  "allowForwardFixes": true
+}
+```
+
+El HEAD debe estar limpio, ser descendiente y contener un nuevo diff funcional
+autorizado #173. Dos fetch comprueban que la rama viva remota sigue exactamente en
+el SHA del ACK. Un GET autenticado Hub debe confirmar que no hay deployment para
+ese SHA; errores o resultados inciertos bloquean. No se permite release/push/trigger
+registrado en el ciclo, metadata de release commiteada ni replay de un SHA rechazado.
+FAIL, bytes de evidencia y ACK se releen tras el GET para detectar cambios concurrentes.
+El ACK no tiene TTL: su vigencia está acotada por el SHA remoto/pending exacto,
+descendencia, diff funcional y relectura de su hash.
+
+Se archiva pending completo, FAIL y ACK con sus hashes en
+`auto-hd-artifacts/<SHA>/supersession.json`, se registra el SHA rechazado, se vacía
+pending y se marca el candidato `SUPERSEDED_PUBLISHED_FAILED_READY`. No se borra
+historial Git/remoto/deployments ni se hace rollback, reset, push, POST, build o PASS.
+Un `prepare` separado emite un READY nuevo tras checks; necesita Pilot independiente
+del SHA nuevo y mantiene la barrera SOURCE_COMMIT para cualquier publicación.
+La entrega del comando no lo ejecuta sobre el estado operativo real.
 
 ## Release y Hub
 
@@ -162,7 +248,11 @@ o dependencias posteriores al PASS. Repite checks/build en el SHA de release y
 sella ese artefacto. Revalida gate, sello, destino Hub y base remota antes de push.
 Un remoto distinto de la base aprobada/release bloquea sin force ni rebase.
 
-`deploy.env` se relee por request (el archivo prevalece sobre env heredado).
+`deploy.env` se relee por request para el trigger privado LedBox. El token se
+relee del archivo común0600 `~/.config/herdr-deploy/coolify-token`; `tokenFile`
+o `LEDBOX_HUB_TOKEN_FILE` configura la ruta. No se usa el bearer antiguo de env
+como fallback a archivo ausente. Contrato y receptor GitHub preparado en
+`docs/DELTA-DEPLOY-UNIFORME-LEDBOX.md`.
 No registra tokens ni bodies Hub. Requiere HTTPS, webhook `/api/v1/deploy` con
 UUID exacto y sin `force=true`. Tras push, consulta
 `/api/v1/deployments/applications/<uuid>` (envelope `count/deployments`) buscando
@@ -175,10 +265,14 @@ servido. No hay test trigger, E2E mutante de producción ni espejo de main.
 
 ## Smoke y recuperación
 
-`node scripts/verify-release.mjs <versión> <SHA completo>` hace GET health y
-superficies de los cinco hosts, sin seguir redirects. Exige health/version/SHA
+`node scripts/verify-release.mjs <versión> <SHA completo>` hace GET autenticado
+del recurso y sus deployments, más health y superficies de los cinco hosts, sin
+seguir redirects. Exige recurso/application_id/deployment_uuid/commit40 exactos,
+status finished, finished_at válido y rollback false; además health/version/SHA
 exactos, base disponible y páginas HTTP200; un redirect no es éxito. Sólo ese
 PASS marca `served` y cierra el pending. Timeout deja el mismo SHA pendiente.
+Failed/cancelled/rollback devuelve `DEPLOYMENT_FAILED_GET_ONLY`, mantiene pending
+y evidencia saneada `hub-deployment.json`, sin retry POST automático.
 
 Estado: `~/.config/ledbox/auto-hd-scoped.json`, registros `deployments[SHA]` con
 `pushed`, `triggerIntent`, `triggerAccepted`, `served`, checks y sello. Logs,
@@ -187,6 +281,8 @@ locks, gate y evidencia están en `~/.config/ledbox/`; rutas en
 
 - READY sin gate: ejecutar QA independiente, completar gate; no reconstruir
   mientras Pilot esté verificando ese candidato.
+- READY con Pilot FAIL: completar qa-rejected.json, ejecutar reject y preparar
+  un nuevo SHA autorizado; no archivar/editar state manualmente.
 - Build de release fallido: corregir el entorno y retomar el mismo release SHA;
   si cambia código, detener y coordinar candidato/Pilot nuevo.
 - Crash tras commit metadata: se recupera sólo un hijo con diff de release permitido.
