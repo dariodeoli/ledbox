@@ -350,7 +350,12 @@ export async function POST(request: Request) {
       const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
       if (audit) await recordAudit({ context: auth.context, action: "update", entity: isUnits ? "InventoryUnit" : "InventoryItem", entityId: row.id, summary: "Edición masiva de inventario sobre selección explícita", detail: { changes: audit } });
     }
-    return Response.json({ updatedIds: ids, updated: ids.length });
+    const warnings = isUnits ? [] : result.flatMap(row => {
+      const merged = { ...row, ...data } as typeof row & { listPrice: number; listFromPrice: number; wholesalePrice: number; wholesaleFromPrice: number; minimumPrice: number };
+      const warning = inventoryPriceWarning(merged);
+      return warning ? [`${(row as { name: string }).name}: ${warning}`] : [];
+    });
+    return Response.json({ updatedIds: ids, updated: ids.length, warnings });
   }
 
   if (kind === "status") {

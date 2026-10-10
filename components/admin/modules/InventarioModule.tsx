@@ -1681,7 +1681,7 @@ export function InventarioModule() {
                         <AdminSelect
                           className="admin-filter admin-filter--cell"
                           value={unit.status}
-                          disabled={unitBusyId === unit.id}
+                          disabled={unitEditorOpen || unitBusyId === unit.id}
                           onChange={(value) => void changeUnitStatus(unit, value)}
                           label={`Cambiar estado de la unidad ${unit.code}`}
                           title={`Cambiar estado de la unidad ${unit.code}`}

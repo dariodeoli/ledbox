@@ -36,10 +36,10 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear }: {
     }
     if (!Object.keys(changes).length) { setError("Elegí al menos un campo para cambiar o vaciar."); return; }
     setBusy(true);
-    const result = await adminSend<{ updated: number }>("/api/admin/inventory", { kind: target === "items" ? "bulk-items" : "bulk-units", ids: selection.map(row => row.id), changes });
+    const result = await adminSend<{ updated: number; warnings?: string[] }>("/api/admin/inventory", { kind: target === "items" ? "bulk-items" : "bulk-units", ids: selection.map(row => row.id), changes });
     setBusy(false);
     if (!result.ok) { setError(result.error); return; }
-    setNotice(`${result.data.updated} registros guardados. Solo se modificó la selección indicada.`);
+    setNotice(`${result.data.updated} registros guardados. Solo se modificó la selección indicada. ${(result.data.warnings ?? []).join(" ")}`.trim());
     setDrafts({}); onSaved();
   }
   return <AdminPanel title={`Edición masiva · ${target === "items" ? "productos" : "unidades"}`} icon="edit">
