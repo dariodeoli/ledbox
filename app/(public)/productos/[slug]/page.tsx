@@ -3,7 +3,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductOrderPanel } from "@/components/catalog/ProductOrderPanel";
-import { PublicFooter } from "@/components/public/PublicFooter";
 import { PublicNav } from "@/components/public/PublicNav";
 import { PublicWhatsappFloat } from "@/components/public/PublicWhatsappFloat";
 import { StructuredData } from "@/components/public/StructuredData";
@@ -146,7 +145,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </section>
       </main>
 
-      <PublicFooter />
       <PublicWhatsappFloat message={whatsappMessage} />
       <StructuredData graph={pageGraph(productNode(product), breadcrumbNode(crumbs))} />
     </>

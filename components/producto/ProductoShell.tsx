@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
 import { PRODUCT_BOOT_SCRIPT, PRODUCT_ROOT_ID } from "@/lib/site-theme";
@@ -39,7 +38,6 @@ export function ProductoShell({ children }: { children: ReactNode }) {
 
       <main>{children}</main>
 
-      <AppFooter variant="product" />
     </div>
   );
 }

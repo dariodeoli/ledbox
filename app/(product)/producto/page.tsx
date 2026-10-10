@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
 import { PRODUCT_BOOT_SCRIPT, PRODUCT_ROOT_ID } from "@/lib/site-theme";
+import { eventosSupportUrl } from "@/lib/legal";
 
 const title = "EventOS · Gestión para empresas de eventos";
 const description =
@@ -20,9 +19,9 @@ export const metadata: Metadata = {
     url: publicConfig.productUrl,
     siteName: "EventOS",
     type: "website",
-    images: [{ url: "/assets/producto/panel-finanzas.jpg", width: 1280, height: 800, alt: "Panel de EventOS con finanzas y tesorería" }],
+    images: [{ url: "/assets/producto/panel-finanzas.jpg", width: 1280, height: 800, alt: "Vista ilustrativa de EventOS: finanzas y tesorería" }],
   },
-  twitter: { card: "summary_large_image", title, description },
+  twitter: { card: "summary_large_image", title, description, images: ["/assets/producto/panel-finanzas.jpg"] },
 };
 
 const modules = [
@@ -54,12 +53,12 @@ const faqs = [
  * qué se deja de hacer o qué se ve antes.
  */
 const benefits = [
-  ["Tiempo", "Un dato, un solo camino", "El presupuesto aprobado se convierte en evento, reserva de equipos y cobro sin volver a cargar nada: menos retipeo y menos planillas paralelas."],
+  ["Tiempo", "Un dato, un solo camino", "Vinculá el presupuesto aprobado con el evento y consultá sus equipos y cobros en la misma operación: menos retipeo y menos planillas paralelas."],
   ["Faltantes", "Disponibilidad por fecha", "Cada equipo se reserva para su evento y la salida y la devolución se registran con daños y faltantes: lo que falta se ve antes del montaje, no en el camión."],
   ["Margen", "Costos y precios en la misma ficha", "Costos, descuentos y plan de pagos viven en el presupuesto, con trazabilidad de cada cambio: el margen se controla mientras se cotiza."],
 ] as const;
 
-/** Para quién es (issue #133, 2ª pasada): los tres perfiles que ya lo usan. */
+/** Perfiles para los que está diseñado el flujo de EventOS. */
 const audiences = [
   ["Productoras de eventos", "Presupuesto, cronograma y checklist por evento, con el cliente aprobando online y el equipo sabiendo qué hace cada día."],
   ["Alquiladores de equipos", "Inventario por fecha, asignaciones por evento, sustitutos y devolución con faltantes: la disponibilidad manda."],
@@ -82,7 +81,8 @@ const jsonLd = {
       operatingSystem: "Web",
       description,
       url: publicConfig.productUrl,
-      offers: { "@type": "Offer", price: "0", priceCurrency: "PYG", description: "Demo pública y planes a medida" },
+      publisher: { "@type": "Organization", name: "LedBox Paraguay", url: publicConfig.siteUrl },
+      featureList: modules.map(([name]) => name),
     },
     {
       "@type": "FAQPage",
@@ -105,10 +105,10 @@ export default function ProductoPage() {
       <div className="led-grid-bg" aria-hidden="true" />
 
       <header className="producto-top">
-        <span className="producto-brand">
+        <a href={publicConfig.productUrl} className="producto-brand" aria-label="EventOS, volver al inicio">
           <BrandMark className="producto-brand-mark" size={26} />
           EventOS<span className="producto-brand-dot">.</span>
-        </span>
+        </a>
         <nav className="producto-nav" aria-label="Secciones">
           <a href="#modulos">Módulos</a>
           <a href="#como-funciona">Cómo funciona</a>
@@ -149,14 +149,24 @@ export default function ProductoPage() {
             <li>Operá</li>
             <li>Cobrá</li>
           </ul>
-          <Image
-            className="producto-hero-shot"
-            src="/assets/producto/panel-finanzas.jpg"
-            alt="Panel de EventOS: finanzas, por confirmar y tesorería por cuentas"
-            width={1280}
-            height={800}
-            priority
-          />
+          <figure className="producto-showcase" aria-labelledby="showcase-caption">
+            <div className="producto-showcase-head"><BrandMark size={28} /><span>Una operación conectada</span><span className="producto-example-tag">Ejemplo ilustrativo</span></div>
+            <div className="producto-showcase-grid">
+              <div className="producto-proposal">
+                <p className="producto-kicker">Del pedido a la propuesta</p>
+                <h2>Lanzamiento de marca</h2>
+                <p>Pantallas LED · sonido · montaje</p>
+                <div className="producto-proposal-lines"><span>Equipos y cantidades</span><span>Condiciones y plan de pagos</span><span>Link de aprobación del cliente</span></div>
+                <strong>La propuesta, sin perder el contexto.</strong>
+              </div>
+              <div className="producto-operation">
+                <article><span className="producto-example-step">01 · Cliente</span><h3>Una decisión clara</h3><p>Revisar la propuesta y aprobar desde el celular.</p></article>
+                <article><span className="producto-example-step">02 · Equipo</span><h3>Preparar el evento</h3><p>Asignaciones, tareas y responsables en el mismo lugar.</p></article>
+                <article><span className="producto-example-step">03 · Finanzas</span><h3>Confirmar el cobro</h3><p>Comprobante recibido y verificación antes de registrar el ingreso.</p></article>
+              </div>
+            </div>
+            <figcaption id="showcase-caption">Muestra comercial ilustrativa con un evento ficticio. Representa capacidades disponibles; no es una captura del panel ni información de clientes.</figcaption>
+          </figure>
         </section>
 
         <section id="resultados" className="producto-section">
@@ -207,10 +217,7 @@ export default function ProductoPage() {
               </li>
             ))}
           </ol>
-          <div className="producto-shots">
-            <Image src="/assets/producto/panel-presupuestos.jpg" alt="Presupuestos con estados, portal y acciones" width={1280} height={800} />
-            <Image src="/assets/producto/panel-calendario.jpg" alt="Calendario operativo con eventos, cobros y vencimientos" width={1280} height={800} />
-          </div>
+          <p className="producto-note">Explorá los módulos en la demo de solo lectura: datos ficticios, sin modificar una operación real.</p>
         </section>
 
         <section id="preguntas" className="producto-section producto-faq">
@@ -224,20 +231,18 @@ export default function ProductoPage() {
         </section>
 
         <section className="producto-section producto-final">
-          <h2>Probalo con datos reales de ejemplo</h2>
+          <h2>Conocé el flujo antes de decidir</h2>
           <p>Sin instalar nada y sin crear cuenta: entrá a la demo y recorré el panel completo.</p>
           <div className="producto-cta">
             <a className="producto-button" href={publicConfig.demoUrl} target="_blank" rel="noreferrer">
               Abrir la demo →
             </a>
-            <Link className="producto-button producto-button--ghost" href="/">
-              Sitio de LedBox
-            </Link>
+            <a className="producto-button producto-button--ghost" href={eventosSupportUrl()} target="_blank" rel="noopener noreferrer">Conversar sobre mi operación</a>
+            <Link className="producto-button producto-button--ghost" href={publicConfig.siteUrl}>Sitio de LedBox</Link>
           </div>
         </section>
       </main>
 
-      <AppFooter variant="product" />
     </div>
   );
 }

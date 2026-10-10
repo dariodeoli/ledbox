@@ -8,7 +8,6 @@ import { type Product } from "@/lib/catalog";
 import { type Brand } from "@/lib/brand-logos";
 import { InstagramIcon } from "@/components/public/InstagramIcon";
 import { PublicFaq } from "@/components/public/PublicFaq";
-import { PublicFooter } from "@/components/public/PublicFooter";
 import { PublicNav } from "@/components/public/PublicNav";
 import { PublicWhatsappFloat } from "@/components/public/PublicWhatsappFloat";
 import { StructuredData } from "@/components/public/StructuredData";
@@ -91,7 +90,6 @@ export function LandingPage({ brands }: { brands: Brand[] }) {
       <section id="contacto" aria-labelledby="contact-title"><div className="c-left"><div><div className="sec-kicker">Hablemos</div><h2 id="contact-title" className="c-title rise">Tu evento.<br /><span className="led">En grande.</span></h2><p className="c-desc">Contanos qué estás preparando y armamos una propuesta a la medida de tu evento.</p></div><div className="c-meta"><a href={whatsapp("Hola LedBox! Quiero consultar disponibilidad.")} target="_blank" rel="noopener noreferrer"><b>WhatsApp:</b> +595 982 029 217 →</a><a href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer"><b>Instagram:</b> @ledboxpy</a><span><b>Santiago J. Rodas</b> · Gerente</span><span>Asunción · Alquileres en todo Paraguay 🇵🇾</span></div></div><div className="c-right rise"><p className="chips-title">Consultas rápidas — un toque y te ayudamos</p><div className="chips"><button className="chip" type="button" onClick={openLead}>▣ Pantalla LED →</button><button className="chip" type="button" onClick={openLead}>◫ Tótem / Kiosko Touch →</button><button className="chip" type="button" onClick={openLead}>⌂ Stand para evento →</button><button className="chip" type="button" onClick={openLead}>🎥 Cobertura digital →</button></div><button className="btn-led" type="button" onClick={openLead}>Solicitar cotización →</button><p className="f-note contact-note">Te pedimos solo los datos necesarios para responderte y preparar tu cotización.</p></div></section>
     </main>
 
-    <PublicFooter />
     <CartDrawer items={cart} onChange={setCart} onQuote={openLead} />
     <PublicWhatsappFloat />
     {!stickyClosed && <div id="sticky-cta" className={stickyVisible ? "show" : ""} role="complementary" aria-label="Consultar disponibilidad" aria-hidden={!stickyVisible} inert={!stickyVisible}><span className="txt">¿Evento a la vista? <strong>Consultá disponibilidad hoy</strong></span><button className="go-btn" type="button" onClick={openLead}>WhatsApp →</button><button className="x" type="button" onClick={() => setStickyClosed(true)} aria-label="Cerrar aviso">✕</button></div>}

@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { AppFooter } from "@/components/app-footer";
 import { BrandMark } from "@/components/brand-mark";
 import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
 import {
@@ -957,9 +956,6 @@ export function AdminShell({
 
           <main id="admin-main-content" className="admin-main-body">{session.loading && !session.user ? <AdminLoadingRows rows={6} label="Cargando panel" /> : children}</main>
 
-          <footer className="admin-main-foot">
-            <AppFooter variant="app" className="app-footer--panel" />
-          </footer>
         </div>
 
         {/* Barra inferior de mobile (≤720 px): cuatro módulos + «Más», que abre

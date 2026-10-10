@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { InstagramIcon } from "./InstagramIcon";
-import { APP_VERSION_LABEL } from "@/lib/version";
+import { AppFooter } from "@/components/app-footer";
 
 /**
  * Pie del sitio público (issue #38): misma pieza en la landing y en las fichas
@@ -10,7 +10,7 @@ import { APP_VERSION_LABEL } from "@/lib/version";
  */
 export function PublicFooter() {
   return (
-    <footer>
+    <AppFooter variant="company" className="app-footer--public">
       <div className="ft-top">
         <Link href="/" className="logo-link" aria-label="LedBox, volver al inicio">
           <Image className="logo-img" src="/assets/icon-192.png" alt="LedBox" width={192} height={192} />
@@ -31,20 +31,10 @@ export function PublicFooter() {
       </a>
       <div className="ft-div" />
       <div className="ft-bottom">
-        <span>© 2026 LedBox Paraguay · Todos los derechos reservados</span>
         <span>Tecnología visual que impulsa tu marca</span>
         <span>Asunción, Paraguay · ledbox.online</span>
       </div>
-      <div className="ft-credit">
-        <span>© 2026 LedBox · EventOS {APP_VERSION_LABEL}</span>
-        <span>
-          Desarrollado por{" "}
-          <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">
-            Owncoding
-          </a>
-        </span>
-      </div>
       <div className="ft-bg" aria-hidden="true" />
-    </footer>
+    </AppFooter>
   );
 }

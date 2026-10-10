@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PublicFooter } from "@/components/public/PublicFooter";
 import { PublicNav } from "@/components/public/PublicNav";
 import { whatsappUrl } from "@/lib/public-config";
 
@@ -178,7 +177,6 @@ export default function PrivacidadPage() {
         </article>
       </main>
 
-      <PublicFooter />
     </>
   );
 }

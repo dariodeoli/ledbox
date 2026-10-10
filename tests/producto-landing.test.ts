@@ -94,6 +94,7 @@ test("responsive y pie con versión real", () => {
   assert.match(css, /\.producto-section \{ padding: clamp\(30px, 4\.5vw, 48px\) 0; scroll-margin-top: 76px; \}/, "cambió el ritmo de las secciones o el ancla");
   assert.match(css, /@media \(max-width: 860px\) \{/, "falta el corte de la barra");
   assert.match(css, /@media \(max-width: 480px\) \{/, "falta el ajuste de mobile chico");
-  assert.match(page, /<AppFooter variant="product" \/>/, "la landing perdió el pie compartido");
+  assert.match(readFileSync(join(root, "app", "layout.tsx"), "utf8"), /<AppFooter variant="product" \/>/, "el layout raíz publica el pie compartido");
+  assert.doesNotMatch(page, /<AppFooter/, "la landing no duplica el pie del layout raíz");
   assert.match(footer, /APP_VERSION_LABEL/, "el pie dejó de mostrar la versión real");
 });

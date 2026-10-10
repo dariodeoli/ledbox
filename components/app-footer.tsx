@@ -1,79 +1,29 @@
-import Link from "next/link";
+import type { ReactNode } from "react";
+import { ProductFooter } from "owncoding-ui";
 import { publicConfig } from "@/lib/public-config";
 import { eventosSupportUrl } from "@/lib/legal";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
-/**
- * Pie de página único (issue #37): la misma fuente para todas las superficies.
- *
- * - `app` (panel, demo, portal): © 2026 EventOS · … · vX.Y.Z · Desarrollado por Owncoding.
- * - `product` (landing de EventOS, legales, estado y 404): lo mismo más los
- *   enlaces legales/estado/soporte y la empresa responsable (issue #168).
- * - `company` (sitio y landing de LedBox): © 2026 LedBox · EventOS vX.Y.Z · …
- * - `portal` (presupuesto del cliente): una sola línea con la empresa (LedBox),
- *   el sitio y el crédito del producto — antes eran dos footers pegados.
- *
- * La versión sale de `lib/version.ts` (fuente única: `package.json`).
+/** Composición institucional compartida, emitida una vez por el layout raíz.
+ * ProductFooter aporta copyright, derechos, versión y crédito sin un fork.
+ * Los documentos firmados quedan fuera de esta composición.
  */
-export function AppFooter({ variant = "app", className }: { variant?: "app" | "product" | "company" | "portal"; className?: string }) {
-  const classes = ["app-footer", `app-footer--${variant}`, className].filter(Boolean).join(" ");
-  if (variant === "portal") {
-    return (
-      <footer className={classes}>
-        <span className="app-footer-text">
-          LedBox Paraguay · Tecnología visual para eventos ·{" "}
-          <a href={publicConfig.siteUrl} rel="noreferrer">
-            ledbox.online
-          </a>
-        </span>
-        <span className="app-footer-credit">
-          © 2026 EventOS · {APP_VERSION_LABEL} · Desarrollado por{" "}
-          <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">
-            Owncoding
-          </a>
-        </span>
-      </footer>
-    );
-  }
-  if (variant === "product") {
-    return (
-      <footer className={classes}>
-        <span className="app-footer-text">
-          © 2026 EventOS · {APP_VERSION_LABEL} · Todos los derechos reservados
-        </span>
-        <nav className="app-footer-links" aria-label="Legal, estado y soporte">
-          <Link href="/privacidad">Privacidad</Link>
-          <Link href="/terminos">Términos</Link>
-          <Link href="/status">Estado</Link>
-          <a href={eventosSupportUrl()} target="_blank" rel="noopener noreferrer">Soporte</a>
-        </nav>
-        <span className="app-footer-credit">
-          Operado por <a href={publicConfig.siteUrl} rel="noreferrer">LedBox Paraguay</a> · Desarrollado por{" "}
-          <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">
-            Owncoding
-          </a>
-        </span>
-      </footer>
-    );
-  }
-  return (
-    <footer className={classes}>
-      <span className="app-footer-text">
-        {variant === "company" ? (
-          <>
-            © 2026 LedBox · EventOS {APP_VERSION_LABEL} · Todos los derechos reservados ·{" "}
-            <a href={`${publicConfig.siteUrl}/privacidad`}>Privacidad</a>
-          </>
-        ) : (
-          <>© 2026 EventOS · Todos los derechos reservados · {APP_VERSION_LABEL}</>
-        )}
-      </span>
-      <span className="app-footer-credit">
-        Desarrollado por{" "}
-        <a href="https://owncoding.dev" target="_blank" rel="noopener noreferrer">
-          Owncoding
-        </a>
-      </span>
-    </footer>
-  );
+export function AppFooter({ variant = "app", className, children }: { variant?: "app" | "product" | "company" | "portal"; className?: string; children?: ReactNode }) {
+  return <ProductFooter
+    className={["app-footer", `app-footer--${variant}`, className].filter(Boolean).join(" ")}
+    nombre={variant === "company" ? "LedBox Paraguay · EventOS" : "EventOS"}
+    version={APP_VERSION_LABEL}
+    anio={new Date().getUTCFullYear()}
+    modelo="distribuido"
+    credito="Desarrollado en Paraguay por OwnCoding"
+    creditoUrl="https://owncoding.dev"
+    leading={children ? <div className="app-footer-public-content">{children}</div> : undefined}
+    enlaces={variant === "product" ? [
+      { href: `${publicConfig.productUrl}/privacidad`, etiqueta: "Privacidad", externo: false },
+      { href: `${publicConfig.productUrl}/terminos`, etiqueta: "Términos", externo: false },
+      { href: `${publicConfig.productUrl}/status`, etiqueta: "Estado", externo: false },
+      { href: eventosSupportUrl(), etiqueta: "Soporte", externo: true },
+      { href: publicConfig.siteUrl, etiqueta: "Operado por LedBox Paraguay", externo: true },
+    ] : variant === "portal" ? [{ href: publicConfig.siteUrl, etiqueta: "LedBox Paraguay", externo: true }] : []}
+  />;
 }
