@@ -13,6 +13,7 @@ import {
   formatCalendarMonth,
   formatCalendarWeekday,
   formatDayWhen,
+  formatDateTime,
   formatMoney,
   formatNumber,
   formatTime,
@@ -41,7 +42,8 @@ import { useAdminResource } from "@/lib/admin-api";
  * La vista es una grilla mensual en desktop y una lista por día en mobile; la
  * vista semanal usa la misma lista con los siete días completos (sin truncar).
  * Todos los marcadores vienen normalizados por `GET /api/admin/calendar`, que
- * deriva cada uno de un timestamp real: acá no se inventan estados ni fechas.
+ * deriva cada uno de timestamps reales. `date` es ubicación visible en rango;
+ * los límites de duración se muestran desde at/endAt, nunca desde esa ubicación.
  */
 
 type CalendarView = "month" | "week";
@@ -186,7 +188,7 @@ function CalendarItemLink({ item, variant }: { item: AdminCalendarItem; variant:
   const tag = itemTagLabel(item);
   const range =
     item.kind === "event" && item.endAt
-      ? ` · ${formatCalendarDayShort(item.date)} → ${formatCalendarDayShort(item.endDate)}`
+      ? ` · ${formatDateTime(item.at)} → ${formatDateTime(item.endAt)}`
       : "";
   return (
     <Link className="admin-cal-item" href={item.href} data-tone={item.tone} title={`${itemTitleText(item)}${range}`}>
