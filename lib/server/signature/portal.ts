@@ -10,7 +10,7 @@ import { recordAudit, portalAuditContext } from "../audit";
 import { rateLimit } from "../rate-limit";
 import { appendSignatureEvent, type SignatureActorInput } from "./events";
 import { hashIp, hashUserAgent, maskEmail, maskPhone, verifySignatureChain } from "./hash";
-import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureBudgetSelect, signatureLegacyBudgetSelect, signatureRequestDocumentVersion, signatureCreationMetadata, verifiedSignatureSnapshot, type SignatureBudgetDocument, type SignatureDocumentVersion } from "./document";
+import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureBudgetSelect, signatureCommercialBudgetSelect, signatureLegacyBudgetSelect, signatureRequestDocumentVersion, signatureCreationMetadata, verifiedSignatureSnapshot, type SignatureBudgetDocument, type SignatureDocumentVersion } from "./document";
 import { signatureProviderById } from "./provider";
 import { parseSignatureSubmission } from "./submission";
 import type { AdminTone } from "@/lib/admin-format";
@@ -253,8 +253,9 @@ export const requestInclude = {
   },
 } as const;
 const snapshotRequestInclude = { ...requestInclude, budget: { select: signatureBudgetSelect } } as const;
+const commercialRequestInclude = { ...requestInclude, budget: { select: signatureCommercialBudgetSelect } } as const;
 
-type SignatureRequestRow = Prisma.SignatureRequestGetPayload<{ include: typeof requestInclude }>;
+type SignatureRequestRow = Prisma.SignatureRequestGetPayload<{ include: typeof requestInclude }> | Prisma.SignatureRequestGetPayload<{ include: typeof commercialRequestInclude }>;
 
 /** Explícitamente LIVE para el guard comercial; nunca reemplazarlo por snapshot. */
 export function signatureLiveBudgetDocument(row: SignatureRequestRow, version: SignatureDocumentVersion = signatureRequestDocumentVersion(row)): SignatureBudgetDocument {
@@ -349,7 +350,7 @@ async function loadDocumentRow(client: Pick<Prisma.TransactionClient, "signature
   if (!row) return null;
   let version: SignatureDocumentVersion;
   try { version = signatureRequestDocumentVersion(row); } catch { return documentUnavailable(); }
-  return version === 1 ? row : client.signatureRequest.findUnique({ where, include: snapshotRequestInclude });
+  return version === 1 ? row : client.signatureRequest.findUnique({ where, include: version === 3 ? commercialRequestInclude : snapshotRequestInclude });
 }
 async function loadRow(code: string): Promise<SignatureRequestRow | null> {
   return loadDocumentRow(db, { publicCode: code });

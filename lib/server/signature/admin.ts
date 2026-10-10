@@ -9,7 +9,7 @@ import { buildSignatureRequestMail } from "../mail/signature";
 import type { AdminContext } from "../tenancy";
 import type { AdminSignatureRequestRow } from "@/lib/admin-types";
 import { appendSignatureEvent, lockSignatureRequest } from "./events";
-import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureBudgetSelect, SNAPSHOT_DOCUMENT_VERSION } from "./document";
+import { attachmentDocumentHash, budgetDocumentHash, budgetDocumentPayload, signatureDocument, signatureCommercialBudgetSelect, SNAPSHOT_DOCUMENT_VERSION } from "./document";
 import { generateSignatureCode } from "./codes";
 import { maskEmail, verifySignatureChain } from "./hash";
 import {
@@ -308,7 +308,7 @@ export async function createSignatureRequest(
   const budgetId = String(input.budgetId ?? "").trim();
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId: context.organizationId },
-    select: signatureBudgetSelect,
+    select: signatureCommercialBudgetSelect,
   });
   if (!budget) throw new SignatureActionError(404, "No encontramos ese presupuesto.");
 
@@ -352,7 +352,7 @@ export async function createSignatureRequest(
   const requestId = randomUUID();
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budget.id} FOR UPDATE`;
-    const currentBudget = await tx.budget.findFirst({ where: { id: budget.id, organizationId: context.organizationId }, select: signatureBudgetSelect });
+    const currentBudget = await tx.budget.findFirst({ where: { id: budget.id, organizationId: context.organizationId }, select: signatureCommercialBudgetSelect });
     if (!currentBudget) throw new SignatureActionError(404, "No encontramos ese presupuesto.");
     const organization = await tx.organization.findUniqueOrThrow({ where: { id: context.organizationId }, select: { name: true } });
     const budgetDocument = signatureDocument({ source: "live", version: SNAPSHOT_DOCUMENT_VERSION, budget: currentBudget, title, organizationName: organization.name });

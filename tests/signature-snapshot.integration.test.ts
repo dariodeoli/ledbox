@@ -72,7 +72,7 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     const issued = await issue(q.id);
     const creation = await db.signatureEvent.findFirstOrThrow({ where: { requestId: issued.id, eventType: "REQUEST_CREATED" } });
     const metadata = creation.metadataJson as Record<string, unknown>;
-    assert.equal(metadata.documentVersion, 2); assert.equal(metadata.documentSnapshotHash, issued.documentHash);
+    assert.equal(metadata.documentVersion, 3); assert.equal(metadata.documentSnapshotHash, issued.documentHash);
     assert.doesNotMatch(JSON.stringify(metadata.documentSnapshot), /"(?:costPrice|costEstimate|materialCost|laborCost|margin|inventoryId)"/);
     const sent = await call(`/api/portal/firma/${issued.code}`); assert.equal(sent.status, 200);
     const sentView = (await sent.json()).signature;
@@ -137,17 +137,23 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.deepEqual((await (await call(`/api/portal/firma/${drawn.code}`)).json()).signature.budget, drawnPayload);
 
     // Rebuild a real legacy v1 fixture with its exact name-asc recipe, no snapshot/backfill.
-    async function legacy() {
+    async function legacy(version: 1 | 2 = 1) {
       const quote = await budget("Legacy intact recipe"); const id = randomUUID(), code = generateSignatureCode();
       await db.signatureRequest.create({ data: { id, organizationId: org, budgetId: quote.id, publicCode: code, title: quote.title, senderName: "Legacy issuer", recipientName: "Snapshot signer", method: "TYPED", status: "SENT", expiresAt: new Date(Date.now() + 86400000), documentHash: "placeholder", documentHashCapturedAt: new Date() } });
       const row = await db.signatureRequest.findUniqueOrThrow({ where: { id }, include: requestInclude });
-      const payload = budgetDocumentPayload(signatureLiveBudgetDocument(row, 1));
-      assert.equal(payload.version, 1); assert.deepEqual((payload.items as Array<{ name: string }>).map(i => i.name), ["First", "Second"]);
+      const payload = budgetDocumentPayload(signatureLiveBudgetDocument(row, version));
+      assert.equal(payload.version, version); assert.deepEqual((payload.items as Array<{ name: string }>).map(i => i.name), version === 1 ? ["First", "Second"] : ["Second", "First"]);
       const hash = budgetDocumentHash(payload); await db.signatureRequest.update({ where: { id }, data: { documentHash: hash } });
-      await appendSignatureEvent({ requestId: id, organizationId: org, eventType: "REQUEST_CREATED", status: "SENT", metadata: { documentoHash: hash, commercialHash: hash } });
+      await appendSignatureEvent({ requestId: id, organizationId: org, eventType: "REQUEST_CREATED", status: "SENT", metadata: { documentoHash: hash, commercialHash: hash, ...(version === 2 ? { documentVersion: 2, documentSnapshot: payload, documentSnapshotHash: hash } : {}) } });
       for (const type of ["SIGNATURE", "TIMESTAMP", "SEAL"] as const) await db.signatureEvidence.create({ data: { id: randomUUID(), organizationId: org, requestId: id, type, status: "PENDING" } });
-      return { id, code, hash };
+      return { id, code, hash, budgetId: quote.id };
     }
+    const v2 = await legacy(2);
+    const v2View = (await (await call(`/api/portal/firma/${v2.code}`)).json()).signature.budget;
+    await db.budget.update({ where: { id: v2.budgetId }, data: { advancePercentBps: 1234 } });
+    assert.equal((await sign(v2.code)).status, 200, "V2 LIVE hash recipe excludes new fields exactly");
+    await db.budgetItem.updateMany({ where: { budgetId: v2.budgetId }, data: { name: "Changed v2 historical" } });
+    assert.deepEqual((await (await call(`/api/portal/firma/${v2.code}`)).json()).signature.budget, v2View, "sealed v2 snapshot stays historical");
     const old = await legacy(); assert.equal((await call(`/api/portal/firma/${old.code}`)).status, 200);
     assert.equal((await sign(old.code)).status, 200, "legacy verified unchanged still signs");
     const oldSigned = await db.signatureRequest.findUniqueOrThrow({ where: { id: old.id } });
@@ -174,6 +180,21 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: stalePlanQuote.id, installmentsJson: conditions(40) }, true)).status, 200);
     assert.equal((await sign(stalePlan.code)).status, 409, "snapshot rendering must never mask LIVE plan edits");
     assert.equal((await db.signatureRequest.findUniqueOrThrow({ where: { id: stalePlan.id } })).signedDocumentHash, null);
+
+    // New V3 terms alone invalidate LIVE signing even if monetary totals stay equal.
+    const termsQuote = await budget("V3 commercial binding", 900000);
+    await db.budget.update({ where: { id: termsQuote.id }, data: { discountMode: "PERCENT", discountValue: 0, advancePercentBps: 0 } });
+    await db.budgetItem.updateMany({ where: { budgetId: termsQuote.id }, data: { priceMode: "TARIFF", tariffSnapshot: { version: 1, front: "FINAL", normalPrice: 600000, fromDays: 3, fromPrice: 500000, minimumPrice: 1000 }, discountMode: "PERCENT", discountValue: 0, discountAmount: 0 } });
+    const termsRequest = await issue(termsQuote.id);
+    const termsView = (await (await call(`/api/portal/firma/${termsRequest.code}`)).json()).signature;
+    assert.equal(termsView.budget.documentVersion, 3);
+    assert.equal(termsView.budget.items[0].commercialTerms.tariffSnapshot.fromPrice, 500000);
+    const termsHTML = await render(termsRequest.code, "v3-commercial-before");
+    assert.match(termsHTML.htmlText, /Tarifa final/); assert.match(termsHTML.htmlText, /Piso unitario neto/);
+    await db.budget.update({ where: { id: termsQuote.id }, data: { advancePercentBps: 1 } });
+    assert.equal((await sign(termsRequest.code)).status, 409, "V3 binds mode even before calculation handlers are integrated");
+    assert.deepEqual((await (await call(`/api/portal/firma/${termsRequest.code}`)).json()).signature.budget, termsView.budget);
+    assert.equal((await db.signatureRequest.findUniqueOrThrow({ where: { id: termsRequest.id } })).signedDocumentHash, null);
 
     // Public attachment bytes remain independently bound to their original hash.
     const attachmentQuote = await budget("Attachment original");
