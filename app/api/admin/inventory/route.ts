@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
 import type { InventoryKind, InventoryStatus, Prisma } from "@prisma/client";
 import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -310,6 +311,47 @@ export async function POST(request: Request) {
   const { organizationId } = auth.context;
   const body = (await readJson(request)) as Record<string, unknown>;
   const kind = typeof body.kind === "string" ? body.kind : "";
+
+  if (kind === "bulk-items" || kind === "bulk-units") {
+    const ids = readBulkSelection(body.ids);
+    const isUnits = kind === "bulk-units";
+    const changes = readBulkChanges(isUnits ? "units" : "items", body.changes);
+    if (!ids || !changes) return jsonError("Elegí de 1 a 100 registros únicos y cambios explícitos válidos. No se aplicó ningún cambio.", 400);
+    let data: Record<string, unknown>;
+    if (isUnits) {
+      const status = changes.status === undefined ? undefined : readInventoryUnitStatus(changes.status);
+      if (changes.status !== undefined && !status) return jsonError("Estado de unidad inválido. No se aplicó ningún cambio.", 400);
+      if (typeof changes.notes === "string" && changes.notes.length > MAX_UNIT_NOTES) return jsonError("Las notas de la unidad no pueden superar 400 caracteres.", 400);
+      data = { ...changes, ...(status ? { status } : {}) };
+      if (typeof data.notes === "string") data.notes = data.notes.trim() || null;
+    } else {
+      const item = readInventoryItemUpdate(changes);
+      const prices = readInventoryPriceValues(changes);
+      if (!item.ok) return jsonError(item.error, 400);
+      if (!prices.ok) return jsonError(prices.error, 400);
+      data = { ...item.data, ...Object.fromEntries(Object.entries(prices.values).filter(([, value]) => value !== null)) };
+    }
+    // Selección completa scopeada y guardado atómico: cero cambios ante un ID ajeno/inexistente.
+    const result = await db.$transaction(async tx => {
+      const before = isUnits
+        ? await tx.inventoryUnit.findMany({ where: { id: { in: ids }, organizationId } })
+        : await tx.inventoryItem.findMany({ where: { id: { in: ids }, organizationId }, omit: { imageData: true } });
+      if (before.length !== ids.length) return null;
+      if (isUnits) {
+        await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryUnitUpdateManyMutationInput });
+        if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
+      } else {
+        await tx.inventoryItem.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryItemUpdateManyMutationInput });
+      }
+      return before;
+    });
+    if (!result) return jsonError("La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.", 404);
+    for (const row of result) {
+      const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
+      if (audit) await recordAudit({ context: auth.context, action: "update", entity: isUnits ? "InventoryUnit" : "InventoryItem", entityId: row.id, summary: "Edición masiva de inventario sobre selección explícita", detail: { changes: audit } });
+    }
+    return Response.json({ updatedIds: ids, updated: ids.length });
+  }
 
   if (kind === "status") {
     const id = typeof body.id === "string" ? body.id : "";
