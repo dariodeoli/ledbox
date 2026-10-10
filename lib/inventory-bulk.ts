@@ -1,3 +1,26 @@
+/** Explicaciones de contrato consumidas por la ayuda canónica de PANEL. */
+export const INVENTORY_FIELD_HELP: Record<string, string> = {
+  name: "Nombre visible que identifica el producto; no cambia los códigos de sus unidades.",
+  category: "Agrupa productos y permite buscar sustitutos de la misma categoría.",
+  inventoryKind: "Clasifica el producto como reutilizable, consumible o descartable.",
+  status: "Estado operativo del producto; mantenimiento y retirado bloquean disponibilidad. No es archivo organizacional.",
+  visibleOnWeb: "Marca la visibilidad para el catálogo público; no modifica precios ni disponibilidad.",
+  notes: "Notas internas opcionales. En unidades no hay fechas, taller ni presupuesto de reparación estructurados.",
+  imageUrl: "Imagen manual del producto. Vaciar la URL conserva la foto subida como alternativa, si existe.",
+  dailyCost: "Costo interno por día de uso; no es una tarifa al cliente ni un importe de reparación.",
+  replacementCost: "Costo interno de reposición, conservado como dato secundario; no es precio de venta.",
+  listPrice: "Tarifa normal de cliente final. La duración no cambia el segmento del cliente.",
+  listFromDays: "Umbral de días de la tarifa final; 0 desactiva la regla. No convierte el pedido en mayorista.",
+  listFromPrice: "Tarifa de cliente final desde su umbral de días. Independiente de mayorista.",
+  wholesalePrice: "Tarifa normal del segmento mayorista; no se elige automáticamente por duración.",
+  wholesaleFromDays: "Umbral de días de la tarifa mayorista; 0 desactiva su regla.",
+  wholesaleFromPrice: "Tarifa mayorista desde su umbral de días; no cambia la tarifa de cliente final.",
+  minimumPrice: "Piso de venta existente del producto; no sustituye sus tarifas normales.",
+  purchaseCost: "Costo de adquisición de esta unidad; no es un presupuesto de reparación ni precio de venta.",
+  unitStatus: "Disponible, mantenimiento o retirada. Las retiradas no cuentan como unidades activas; mantenimiento reduce las libres.",
+  code: "Identificador único de la unidad dentro de la empresa. En alta puede generarse automáticamente.",
+};
+
 /** Campos comunes editables del contrato actual; identidad/cantidad derivada no son masivas. */
 export const ITEM_BULK_FIELDS = [
   { key: "category", label: "Categoría", type: "text", clear: false },

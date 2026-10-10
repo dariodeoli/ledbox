@@ -66,6 +66,7 @@ import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AdminIcon } from "../AdminIcons";
 import { AdminImageBox } from "../AdminImageBox";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
+import { INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 
 const KIND_OPTIONS = [
   { value: "ALL", label: "Todos los tipos" },
@@ -293,12 +294,14 @@ function PriceFrontFields({
       <span className="admin-form-group-title">{title}</span>
       <MoneyField
         label="Precio normal"
+        help={`${title}: tarifa normal de este segmento; la duración no cambia el segmento del cliente.`}
         value={normalValue}
         onChange={onNormal}
         hint="En guaraníes; vacío o 0 = sin cargar."
       />
       <NumberField
         label="Desde (días)"
+        help="Umbral de duración para este frente de precios; 0 desactiva su regla."
         maxLength={4}
         value={daysValue}
         onChange={onDays}
@@ -306,6 +309,7 @@ function PriceFrontFields({
       />
       <MoneyField
         label="Precio desde esos días"
+        help={`${title}: tarifa desde su propio umbral de días, independiente del otro segmento.`}
         value={fromValue}
         onChange={onFrom}
         hint="Vacío o 0 = sin precio por duración."
@@ -344,6 +348,7 @@ function PhotoFields({
       <span className="admin-form-group-title">Foto</span>
       <TextField
         label="Imagen (URL)"
+        help={INVENTORY_FIELD_HELP.imageUrl}
         maxLength={FIELD_LIMITS.image}
         value={urlValue}
         onChange={onUrlChange}
@@ -354,6 +359,7 @@ function PhotoFields({
       />
       <AttachmentInput
         label="Subir foto"
+        help="Foto del producto: se valida el contenido y se comprime antes de guardar."
         accept="image/jpeg,image/png,image/webp"
         maxBytes={10 * 1024 * 1024}
         hint="JPG, PNG o WebP; se comprime en el navegador (hasta 2 MB)."
@@ -1002,6 +1008,7 @@ export function InventarioModule() {
         <div className="admin-field--filter">
           <DateField
             label="Disponible desde"
+            help="Inicio del rango para consultar unidades libres; no crea reservas."
             max={to || undefined}
             value={from}
             onChange={setFrom}
@@ -1011,6 +1018,7 @@ export function InventarioModule() {
         <div className="admin-field--filter">
           <DateField
             label="Hasta"
+            help="Fin del rango de disponibilidad; no cambia las fechas de las asignaciones existentes."
             min={from || undefined}
             value={to}
             onChange={setTo}
@@ -1071,6 +1079,7 @@ export function InventarioModule() {
             <span className="admin-form-group-title">Ítem</span>
             <TextField
               label="Artículo"
+              help={INVENTORY_FIELD_HELP.name}
               required
               maxLength={120}
               value={form.name}
@@ -1079,6 +1088,7 @@ export function InventarioModule() {
             />
             <Combobox
               label="Categoría"
+              help={INVENTORY_FIELD_HELP.category}
               value={form.category}
               onChange={(value) => setForm({ ...form, category: value })}
               options={categoryChoices}
@@ -1094,6 +1104,7 @@ export function InventarioModule() {
             />
             <SelectField
               label="Tipo"
+              help={INVENTORY_FIELD_HELP.inventoryKind}
               value={form.inventoryKind}
               onChange={(value) => setForm({ ...form, inventoryKind: value })}
               options={[
@@ -1104,6 +1115,7 @@ export function InventarioModule() {
             />
             <NumberField
               label="Cantidad"
+              help="Crea esta cantidad de unidades físicas con códigos automáticos; después se gestiona por unidad."
               required
               maxLength={6}
               value={form.quantity}
@@ -1116,6 +1128,7 @@ export function InventarioModule() {
           <AdminDisclosure title="Más datos" hint="SKU">
             <TextField
               label="SKU"
+              help="Código opcional del producto, distinto del código único de cada unidad física."
               maxLength={FIELD_LIMITS.sku}
               value={form.sku}
               onChange={(value) => setForm({ ...form, sku: value })}
@@ -1143,6 +1156,7 @@ export function InventarioModule() {
             />
             <SwitchField
               label="Visible en la web"
+              help={INVENTORY_FIELD_HELP.visibleOnWeb}
               checked={form.visibleOnWeb}
               onChange={(checked) => setForm({ ...form, visibleOnWeb: checked })}
               hint="Para el catálogo público."
@@ -1174,6 +1188,7 @@ export function InventarioModule() {
               <span className="admin-form-group-title">Precio mínimo</span>
               <MoneyField
                 label="Piso de venta"
+                help={INVENTORY_FIELD_HELP.minimumPrice}
                 value={form.minimumPrice}
                 onChange={(value) => setForm({ ...form, minimumPrice: value })}
                 hint="Piso de venta del ítem."
@@ -1202,12 +1217,14 @@ export function InventarioModule() {
               required
               maxLength={120}
               value={editForm.name}
+              help={INVENTORY_FIELD_HELP.name}
               onChange={(value) => setEditForm({ ...editForm, name: value })}
               placeholder="Ej.: Pantalla LED P3.9 500×500"
             />
             <Combobox
               label="Categoría"
               value={editForm.category}
+              help={INVENTORY_FIELD_HELP.category}
               onChange={(value) => setEditForm({ ...editForm, category: value })}
               options={categoryChoices}
               placeholder="Ej.: Pantallas"
@@ -1223,6 +1240,7 @@ export function InventarioModule() {
             <SelectField
               label="Tipo"
               value={editForm.inventoryKind}
+              help={INVENTORY_FIELD_HELP.inventoryKind}
               onChange={(value) => setEditForm({ ...editForm, inventoryKind: value })}
               options={[
                 { value: "REUSABLE", label: "Reutilizable" },
@@ -1233,12 +1251,14 @@ export function InventarioModule() {
             <SelectField
               label="Estado"
               value={editForm.status}
+              help={INVENTORY_FIELD_HELP.status}
               onChange={(value) => setEditForm({ ...editForm, status: value })}
               options={STATUS_PICK_OPTIONS}
             />
             <SwitchField
               label="Visible en la web"
               checked={editForm.visibleOnWeb}
+              help={INVENTORY_FIELD_HELP.visibleOnWeb}
               onChange={(checked) => setEditForm({ ...editForm, visibleOnWeb: checked })}
               hint="Para el catálogo público."
             />
@@ -1287,10 +1307,11 @@ export function InventarioModule() {
           <div className="admin-form-group admin-form-group--costs">
             <span className="admin-form-group-title">Costos internos</span>
             <AdminDisclosure title="Reposición" hint="Dato interno secundario">
-              <MoneyField label="Reposición" value={editForm.replacementCost} onChange={(value) => setEditForm({ ...editForm, replacementCost: value })} hint="Lo que cuesta reponer la unidad; no es un precio de venta." />
+              <MoneyField label="Reposición" help={INVENTORY_FIELD_HELP.replacementCost} value={editForm.replacementCost} onChange={(value) => setEditForm({ ...editForm, replacementCost: value })} hint="Lo que cuesta reponer la unidad; no es un precio de venta." />
             </AdminDisclosure>
             <MoneyField
               label="Costo diario"
+              help={INVENTORY_FIELD_HELP.dailyCost}
               value={editForm.dailyCost}
               onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
               hint="Costo interno por día de uso."
@@ -1301,6 +1322,7 @@ export function InventarioModule() {
             <span className="admin-form-group-title">Notas</span>
             <TextAreaField
               label="Notas internas"
+              help={INVENTORY_FIELD_HELP.notes}
               maxLength={FIELD_LIMITS.notes}
               rows={3}
               wide
@@ -1333,6 +1355,7 @@ export function InventarioModule() {
             <MoneyField
               label="Piso de venta"
               value={editForm.minimumPrice}
+              help={INVENTORY_FIELD_HELP.minimumPrice}
               onChange={(value) => setEditForm({ ...editForm, minimumPrice: value })}
               hint="Piso de venta del ítem."
             />
@@ -1646,10 +1669,10 @@ export function InventarioModule() {
             </AdminDisclosure>
             {writable && unitEditorOpen ? (
               <form className="admin-form" aria-label={unitDialog ? `Editar unidad ${unitDialog.code}` : "Agregar unidad"} onSubmit={event => void submitUnitDialog(event)}>
-                <TextField label="Código de unidad" required={Boolean(unitDialog)} maxLength={FIELD_LIMITS.unitCode} value={unitForm.code} onChange={value => setUnitForm({ ...unitForm, code: normalizeInventoryUnitCode(value) })} hint={unitDialog ? "Único por empresa." : "Vacío: genera un código único al guardar."} disabled={unitDialogBusy} />
-                <SelectField label="Estado de unidad" value={unitForm.status} onChange={value => setUnitForm({ ...unitForm, status: value })} options={UNIT_STATUS_PICK_OPTIONS} disabled={unitDialogBusy} />
-                <MoneyField label="Costo que tuvo" value={unitForm.purchaseCost} onChange={value => setUnitForm({ ...unitForm, purchaseCost: value })} hint="Costo interno de adquisición de esta unidad; no es un presupuesto de reparación." disabled={unitDialogBusy} />
-                <TextAreaField label="Notas de unidad" maxLength={400} rows={3} wide value={unitForm.notes} onChange={value => setUnitForm({ ...unitForm, notes: value })} hint="Detalle libre existente; no hay fechas ni taller de reparación estructurados." disabled={unitDialogBusy} />
+                <TextField label="Código de unidad" help={INVENTORY_FIELD_HELP.code} required={Boolean(unitDialog)} maxLength={FIELD_LIMITS.unitCode} value={unitForm.code} onChange={value => setUnitForm({ ...unitForm, code: normalizeInventoryUnitCode(value) })} hint={unitDialog ? "Único por empresa." : "Vacío: genera un código único al guardar."} disabled={unitDialogBusy} />
+                <SelectField label="Estado de unidad" help={INVENTORY_FIELD_HELP.unitStatus} value={unitForm.status} onChange={value => setUnitForm({ ...unitForm, status: value })} options={UNIT_STATUS_PICK_OPTIONS} disabled={unitDialogBusy} />
+                <MoneyField label="Costo que tuvo" help={INVENTORY_FIELD_HELP.purchaseCost} value={unitForm.purchaseCost} onChange={value => setUnitForm({ ...unitForm, purchaseCost: value })} hint="Costo interno de adquisición de esta unidad; no es un presupuesto de reparación." disabled={unitDialogBusy} />
+                <TextAreaField label="Notas de unidad" help={INVENTORY_FIELD_HELP.notes} maxLength={400} rows={3} wide value={unitForm.notes} onChange={value => setUnitForm({ ...unitForm, notes: value })} hint="Detalle libre existente; no hay fechas ni taller de reparación estructurados." disabled={unitDialogBusy} />
                 {unitDialogError ? <AdminNote tone="error">{unitDialogError}</AdminNote> : null}
                 <div className="admin-form-actions"><AdminButton type="button" onClick={() => { setUnitEditorOpen(false); setUnitDialog(null); }} disabled={unitDialogBusy}>Cancelar unidad</AdminButton><AdminButton variant="primary" icon="check" type="submit" busy={unitDialogBusy}>Guardar unidad</AdminButton></div>
               </form>
