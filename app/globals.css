@@ -1772,7 +1772,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem 5.5rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 64rem; }
+.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 58.5rem; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
