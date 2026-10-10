@@ -21,6 +21,11 @@ test("#156: cada pie renderiza una sola identidad, versión y crédito completo"
     assert.ok(text.includes(`© ${new Date().getUTCFullYear()}`));
     assert.ok(text.includes("Desarrollado en Paraguay por OwnCoding"));
     assert.ok(text.includes("Todos los derechos reservados"));
+    if (variant === "portal") assert.ok(html.includes('href="https://ledbox.online/privacidad"'));
+    if (variant === "app") {
+      assert.ok(html.includes('href="https://eventos.ledbox.online/privacidad"'));
+      assert.ok(html.includes('href="https://eventos.ledbox.online/terminos"'));
+    }
   }
   const publicHtml = renderToStaticMarkup(createElement(PublicFooter));
   assert.equal((publicHtml.match(/<footer\b/g) ?? []).length, 1);

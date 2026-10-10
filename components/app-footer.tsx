@@ -24,6 +24,13 @@ export function AppFooter({ variant = "app", className, children }: { variant?: 
       { href: `${publicConfig.productUrl}/status`, etiqueta: "Estado", externo: false },
       { href: eventosSupportUrl(), etiqueta: "Soporte", externo: true },
       { href: publicConfig.siteUrl, etiqueta: "Operado por LedBox Paraguay", externo: true },
-    ] : variant === "portal" ? [{ href: publicConfig.siteUrl, etiqueta: "LedBox Paraguay", externo: true }] : []}
+    ] : variant === "portal" ? [
+      { href: `${publicConfig.siteUrl}/privacidad`, etiqueta: "Privacidad", externo: true },
+      { href: publicConfig.siteUrl, etiqueta: "LedBox Paraguay", externo: true },
+    ] : variant === "app" ? [
+      { href: `${publicConfig.productUrl}/privacidad`, etiqueta: "Privacidad", externo: false },
+      { href: `${publicConfig.productUrl}/terminos`, etiqueta: "Términos", externo: false },
+      { href: `${publicConfig.productUrl}/status`, etiqueta: "Estado", externo: false },
+    ] : []}
   />;
 }
