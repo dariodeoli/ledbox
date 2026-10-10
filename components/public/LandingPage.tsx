@@ -1,7 +1,9 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { CartDrawer, type CartItem } from "@/components/cart/CartDrawer";
+import { CartDrawer } from "@/components/cart/CartDrawer";
+import { usePublicCart } from "@/components/cart/PublicCartProvider";
+import { addCartProduct } from "@/lib/public-cart";
 import { LeadCaptureDialog } from "@/components/leads/LeadCaptureDialog";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { type Product } from "@/lib/catalog";
@@ -32,7 +34,7 @@ const steps = [["01", "Contanos tu idea", "Fecha, lugar, objetivo y todo lo que 
 const reasons = [["◈", "Equipos propios", "Disponibilidad y control sobre cada equipo que alquilás."], ["⌁", "Soporte incluido", "Instalación, operación y asistencia técnica en el evento."], ["✦", "Experiencia real", "Más de 10 años creando experiencias para marcas."], ["↗", "Todo Paraguay", "Llegamos donde tu evento necesita impacto visual."]];
 
 export function LandingPage({ brands }: { brands: Brand[] }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const { cart, setCart } = usePublicCart();
   const [leadOpen, setLeadOpen] = useState(false);
   const [stickyClosed, setStickyClosed] = useState(false);
   const [stickyVisible, setStickyVisible] = useState(false);
@@ -49,7 +51,7 @@ export function LandingPage({ brands }: { brands: Brand[] }) {
     document.body.classList.toggle("has-sticky", stickyVisible && !stickyClosed);
     return () => document.body.classList.remove("has-sticky");
   }, [stickyClosed, stickyVisible]);
-  const addProduct = (product: Product) => { setCart(current => { const existing = current.find(item => item.product.id === product.id); return existing ? current.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { product, quantity: 1, duration: 1 }]; }); setLeadOpen(true); };
+  const addProduct = (product: Product) => { setCart(current => addCartProduct(current, product)); setLeadOpen(true); };
   const openLead = () => setLeadOpen(true);
   // Datos estructurados de la landing (issue #38): el catálogo enlaza cada
   // producto con su URL propia y el FAQPage acompaña la sección visible.
