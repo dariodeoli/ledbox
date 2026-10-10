@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import puppeteer from "puppeteer-core";
+import { completeGlyphCoverage, withinLabelInterval } from "./signature-print-glyph-oracle";
 
 const base = process.env.SIGPDF_BASE_URL;
 const browserBase = process.env.SIGPDF_BROWSER_BASE_URL ?? base;
@@ -22,9 +23,10 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
   const db = new PrismaClient();
   const report: { probes: Array<{ id: string; pass: boolean; detail: unknown }>; errors: string[]; status?: string; failure?: string; browserPID?: number } = { probes: [], errors: [] };
   const probe = (id: string, pass: boolean, detail: unknown) => report.probes.push({ id, pass, detail });
-  const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
-  report.browserPID = browser.process()?.pid;
   mkdirSync(output!, { recursive: true });
+  const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true, userDataDir: join(output!, "chrome-profile") });
+  report.browserPID = browser.process()?.pid;
+  writeFileSync(join(output!, "browser-custody.json"), JSON.stringify({ browserPID: report.browserPID, workerPID: process.pid, profile: join(output!, "chrome-profile") }), { mode: 0o600 });
   try {
     const { createSession } = await import("../lib/server/auth");
     let fixture: Fixture;
@@ -113,6 +115,9 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
           // Every occurrence and every line/glyph of Producto must stay in band0.
           // Each page carrying a row must repeat all five headers above that row.
           const names = native.pages.flatMap(p => p.boxes.filter(box => box.key === `name:${index}`).map(box => ({ ...box, page: p.page })));
+          const occurrences = new Map<string, typeof names>();
+          for (const name of names) { const key = `${name.page}:${name.occurrence}`; occurrences.set(key, [...(occurrences.get(key) ?? []), name]); }
+          const nameCoverage = [...occurrences.values()].map(lines => completeGlyphCoverage(lines, dom.names[index]));
           if (names.some(name => name.line > 0)) wrappedNameObserved = true;
           const nameBands = names.map(name => {
             const nativePage = native.pages.find(p => p.page === name.page)!;
@@ -120,11 +125,12 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
               .filter(box => box.key === `header:${column}` && box.bottom <= name.top + .1)
               .sort((a, b) => a.top - b.top).at(-1));
             const repeatedHeader = headings.every(Boolean) && headings.every((header, column) => column === 0 || header!.left > headings[column - 1]!.right - .1);
+            const headersComplete = headings.every((header, column) => header && completeGlyphCoverage(nativePage.boxes.filter(box => box.key === header.key && box.occurrence === header.occurrence), dom.headers[column].text, true).complete);
             const left = headings[0]?.left, right = headings[1]?.left;
-            const inBand = repeatedHeader && left !== undefined && right !== undefined && name.glyphs.length > 0
+            const inBand = repeatedHeader && headersComplete && left !== undefined && right !== undefined && name.glyphs.length > 0
               && name.left >= left - .1 && name.right <= right + .1
               && name.glyphs.every(glyph => glyph.left >= left - .1 && glyph.right <= right + .1);
-            return { name, headings, band: { left, right }, repeatedHeader, inBand };
+            return { name, headings, band: { left, right }, repeatedHeader, headersComplete, inBand };
           });
           const anchor = names.filter(name => name.line === 0).sort((a, b) => a.page - b.page || a.top - b.top)[0];
           const nativePage = native.pages.find(p => p.page === anchor?.page);
@@ -134,25 +140,30 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
             const values = nativePage?.boxes.filter(box => box.key === `cell:${index}:${column + 1}` && anchor && Math.abs(box.top - anchor.top) < 4) ?? [];
             const previous = column > 0 ? headings.filter(box => box.key === `header:${column}`).at(-1) : null;
             return { header, values, inBand: Boolean(header && values.length > 0 && values.every(value =>
-              value.glyphs.length > 0 && Math.abs(header.right - value.right) <= 1 && (!previous || value.left >= previous.right - .1)
+              completeGlyphCoverage([value], dom.rows[index][column + 1].text).complete && Math.abs(header.right - value.right) <= 1 && (!previous || value.left >= previous.right - .1)
               && value.glyphs.every(glyph => glyph.right <= header.right + 1 && (!previous || glyph.left >= previous.right - .1)))) };
           });
-          if (names.length === 0 || !nameBands.every(line => line.inBand) || !cells.every(cell => cell.inBand)) nativeAligned = false;
-          nativeColumns.push({ row: index, nameBands, cells });
+          if (names.length === 0 || !nameCoverage.every(value => value.complete) || !nameBands.every(line => line.inBand) || !cells.every(cell => cell.inBand)) nativeAligned = false;
+          nativeColumns.push({ row: index, nameBands, nameCoverage, cells });
         }
         probe(`${prefix}.SIG-PDF-01.native`, nativeAligned, nativeColumns);
         if (signature.profile === "extended") probe(`${prefix}.SIG-PDF-01.wrapped-name-exercised`, wrappedNameObserved, { wrappedNameObserved });
         const sealPage = native.pages.find(p => p.boxes.some(box => box.key === "seal"));
         const sealBox = sealPage?.boxes.find(box => box.key === "seal");
         const afterSeal = native.pages.flatMap(p => p.boxes.filter(box => sealPage && sealBox && (p.page > sealPage.page || p.page === sealPage.page && box.top > sealBox.bottom)).map(box => ({ ...box, page: p.page })));
-        const groups = dom.facts.map((fact, index) => ({ fact, label: afterSeal.find(box => box.key === `label:${index}`), values: afterSeal.filter(box => box.key === `value:${index}`) }));
+        const labels = dom.facts.map((_, index) => afterSeal.find(box => box.key === `label:${index}`));
+        const groups = dom.facts.map((fact, index) => {
+          const label = labels[index], next = labels[index + 1];
+          const values = withinLabelInterval(afterSeal.filter(box => box.key === `value:${index}`), label, next);
+          return { fact, label, values, coverage: completeGlyphCoverage(values, fact.value) };
+        });
         const collisions = groups.flatMap(group => group.values.flatMap(value => groups.flatMap(next => {
           if (!next.label || value.page !== next.label.page) return [];
           const horizontal = Math.min(value.right, next.label.right) - Math.max(value.left, next.label.left);
           const vertical = Math.min(value.bottom, next.label.bottom) - Math.max(value.top, next.label.top);
           return horizontal > .1 && vertical > .1 ? [{ value: value.key, label: next.label.key, horizontal, vertical, page: value.page }] : [];
         })));
-        const grouped = groups.every(group => group.label && group.values.length > 0 && group.values.every(value => value.page === group.label!.page && value.top >= group.label!.bottom - .1));
+        const grouped = groups.every(group => group.label && completeGlyphCoverage([group.label], group.fact.label, true).complete && group.coverage.complete && group.values.length > 0 && group.values.every(value => value.page === group.label!.page && value.top >= group.label!.bottom - .1));
         probe(`${prefix}.SIG-PDF-02.native`, Boolean(sealPage) && grouped && collisions.length === 0, { pageCount: native.pageCount, groups, collisions });
         probe(`${prefix}.content-complete`, native.pages.every(p => p.text.length > 0) && dom.names.every(name => native.pages.some(p => p.boxes.some(box => box.key === `name:${dom.names.indexOf(name)}`))) && dom.text!.includes("410.405") === (signature.profile === "equivalent"), { pages: native.pageCount, rowCount: dom.rows.length, fileBytes: readFileSync(pdf).length });
       }

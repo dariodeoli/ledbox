@@ -6,22 +6,24 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import puppeteer from "puppeteer-core";
+import { completeGlyphCoverage } from "./signature-print-glyph-oracle";
 
 const base = process.env.SIGPDF_BASE_URL;
 const output = process.env.SIGPDF_BOUNDARY_EVIDENCE_DIR;
 const enabled = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base ?? "") && Boolean(output)
   && /^postgresql:\/\/[^@]*@(localhost|127\.0\.0\.1):\d+\/ledbox_quote_qa(?:\?|$)/.test(process.env.DATABASE_URL ?? "");
 type Box = { key: string; text: string; line: number; occurrence: number; left: number; right: number; top: number; bottom: number;
-  glyphs: { left: number; right: number; top: number; bottom: number }[] };
+  glyphs: { text: string; offset: number; left: number; right: number; top: number; bottom: number }[] };
 type Page = { page: number; height: number; boxes: Box[] };
 
 // Independent delta: repeated quantity=days and repeated prices/subtotals in three
 // rows; neutral test-only pagination spacer, not a renderer/CSS/canonical mutation.
 test("SIGPDF delta: repeated values stay associated across a measured seal page jump", { skip: !enabled, timeout: 120000 }, async () => {
   const db = new PrismaClient();
-  const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true });
-  const report: Record<string, unknown> = { status: "NOT_COMPLETED", browserPID: browser.process()?.pid, fixtureKind: "three-repeated-values-seal-page-boundary", immutabilityScope: "v3 TYPED only" };
   mkdirSync(output!, { recursive: true });
+  const browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true, userDataDir: join(output!, "chrome-profile") });
+  const report: Record<string, unknown> = { status: "NOT_COMPLETED", browserPID: browser.process()?.pid, fixtureKind: "three-repeated-values-seal-page-boundary", immutabilityScope: "v3 TYPED only" };
+  writeFileSync(join(output!, "browser-custody.json"), JSON.stringify({ browserPID: browser.process()?.pid, workerPID: process.pid, profile: join(output!, "chrome-profile") }), { mode: 0o600 });
   try {
     if (process.env.SIGPDF_BOUNDARY_CASE_FILE) {
       const spec = JSON.parse(readFileSync(process.env.SIGPDF_BOUNDARY_CASE_FILE, "utf8"));
@@ -95,14 +97,17 @@ test("SIGPDF delta: repeated values stay associated across a measured seal page 
       assert.ok(allLines.length > 1 && allLines.every(line => line.page === allLines[0].page), "All name lines/glyphs are accounted for on an intact row page");
       const rowPage = boundary.pages.find(p => p.page === allLines[0].page)!;
       const lines = allLines;
+      assert.ok(completeGlyphCoverage(lines, dom.names[row]).complete, "No character may disappear from the multiline native name");
       assert.ok(lines.length > 1, "Every delta name must wrap in native PDF");
       const top = Math.min(...lines.map(line => line.top));
       const headers = Array.from({ length: 5 }, (_, column) => rowPage.boxes.filter(box => box.key === `header:${column}` && box.bottom <= top + .1).sort((a, b) => a.top - b.top).at(-1)!);
       assert.ok(headers.every(Boolean), "Every row page repeats all five headers");
+      assert.ok(headers.every((header, column) => completeGlyphCoverage(rowPage.boxes.filter(box => box.key === header.key && box.occurrence === header.occurrence), dom.headers[column], true).complete), "Every repeated header has complete glyph coverage");
       assert.ok(lines.every(line => line.glyphs.length && line.glyphs.every(glyph => glyph.left >= headers[0].left - .1 && glyph.right <= headers[1].left + .1)));
       const numbers = Array.from({ length: 4 }, (_, column) => rowPage.boxes.filter(box => box.key === `number:${column + 1}` && Math.abs(box.top - top) < 4
         && Math.abs(box.right - headers[column + 1].right) <= 1 && box.left >= (column === 0 ? headers[1].left : headers[column].right) - .1));
       assert.ok(numbers.every(values => values.length === 1), "Repeated tokens must resolve once per actual row/column band");
+      assert.ok(numbers.every((values, column) => completeGlyphCoverage(values, dom.rows[row][column + 1]).complete), "Every associated repeated number has complete glyph coverage");
       assert.ok(numbers.every((values, column) => values[0].glyphs.length && values[0].glyphs.every(glyph => glyph.right <= headers[column + 1].right + 1)));
       rowProof.push({ row, page: rowPage.page, lines, headers, numbers });
     }
@@ -110,9 +115,11 @@ test("SIGPDF delta: repeated values stay associated across a measured seal page 
     const labels = dom.facts.map((_, index) => sealPage.boxes.find(box => box.key === `label:${index}` && box.top > seal.bottom)!);
     const pairProof = labels.map((label, index) => {
       assert.ok(label, "Every seal label is present after the native page jump");
+      assert.ok(completeGlyphCoverage([label], dom.facts[index].label, true).complete, "Every seal label has complete glyph coverage");
       const nextTop = labels[index + 1]?.top ?? sealPage.height - 14 * 72 / 25.4;
       const values = sealPage.boxes.filter(box => box.key === `value:${index}` && box.top >= label.bottom - .1 && box.bottom <= nextTop + .1);
       assert.ok(values.length && values.every(value => value.glyphs.length), "Repeated fact values associate with their own label interval");
+      assert.ok(completeGlyphCoverage(values, dom.facts[index].value).complete, "No glyph/line omitted from the associated seal value");
       for (const value of values) for (const other of labels) {
         const overlapX = Math.min(value.right, other.right) - Math.max(value.left, other.left);
         const overlapY = Math.min(value.bottom, other.bottom) - Math.max(value.top, other.top);
