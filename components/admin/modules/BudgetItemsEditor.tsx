@@ -33,7 +33,7 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
         <div className="budget-item-row" data-excluded={item.excluded || undefined}>
           <AdminImageBox imageUrl={item.inventory?.imageUrl} size={40} />
           <TextField label={`Ítem ${index + 1}`} required value={item.name} maxLength={160} disabled={disabled || item.excluded} onChange={(name) => update(index, { name })} />
-          <MoneyField label="Precio unitario" required limit={BUDGET_INT_MAX} value={String(effective?.unitPrice ?? item.unitPrice)} disabled={disabled || item.excluded || terms.priceMode === "TARIFF"} onChange={(unitPrice) => update(index, { unitPrice })} />
+          <MoneyField label="Precio unitario" required limit={BUDGET_INT_MAX} value={terms.priceMode === "TARIFF" ? String(effective?.unitPrice ?? item.unitPrice) : item.unitPrice} disabled={disabled || item.excluded || terms.priceMode === "TARIFF"} onChange={(unitPrice) => update(index, { unitPrice })} />
           <NumberField label="Cantidad" required maxLength={4} value={item.quantity} disabled={disabled || item.excluded} onChange={(quantity) => update(index, { quantity })} />
           {usesDays ? <NumberField label="Días" required maxLength={4} value={item.days} disabled={disabled || item.excluded} onChange={(days) => update(index, { days })} /> : <span className="admin-muted">Servicio / pago único</span>}
           <strong className="admin-nowrap" aria-label={`Total del ítem ${index + 1}`}>{formatMoney(effective?.subtotal ?? NaN)}</strong>
