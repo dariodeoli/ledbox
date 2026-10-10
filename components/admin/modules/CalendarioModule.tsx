@@ -348,10 +348,10 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
           <div className="admin-cal-summary" ref={summaryRef} tabIndex={-1} aria-label={`Resumen: ${selectedItem.title}`} role="region" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeSummary(); } }}>
             <AdminBadge tone={selectedItem.tone}>{calendarKindLabel(selectedItem.kind)}</AdminBadge>
             {itemTagLabel(selectedItem) ? <AdminBadge tone={statusTone(selectedItem.tag)}>{itemTagLabel(selectedItem)}</AdminBadge> : null}
-            <p>{selectedItem.subtitle ?? "Sin información adicional"}</p>
+            {selectedEvent ? null : <p>{selectedItem.subtitle ?? "Sin información adicional"}</p>}
             <dl>
-              <div><dt>Fecha del movimiento</dt><dd>{formatDateTime(selectedItem.at)}</dd></div>
-              {selectedItem.endAt ? <div><dt>Fin de la duración</dt><dd>{formatDateTime(selectedItem.endAt)}</dd></div> : null}
+              {!selectedEvent || selectedItem.kind !== "event" ? <div><dt>Fecha del movimiento</dt><dd>{formatDateTime(selectedItem.at)}</dd></div> : null}
+              {!selectedEvent && selectedItem.endAt ? <div><dt>Fin de la duración</dt><dd>{formatDateTime(selectedItem.endAt)}</dd></div> : null}
               {selectedEvent ? <>
                 <div><dt>Inicio del evento</dt><dd>{selectedEvent.startsAt ? formatDateTime(selectedEvent.startsAt) : "Sin fecha informada"}</dd></div>
                 <div><dt>Fin del evento</dt><dd>{selectedEvent.endsAt ? formatDateTime(selectedEvent.endsAt) : "Sin fecha informada"}</dd></div>

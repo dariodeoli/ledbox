@@ -83,14 +83,18 @@ test("Eventos: calendario real, cuatro períodos, duración exclusiva, resumen y
         assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Ver resumen: Duración contenedora QA");
         const layout = await page.evaluate(() => ({ pageWidth: document.documentElement.scrollWidth, viewport: innerWidth }));
         assert.ok(layout.pageWidth <= layout.viewport, JSON.stringify(layout));
-        if (evidence) { mkdirSync(evidence, { recursive: true }); await page.screenshot({ path: join(evidence, `${theme}-${width}-${view}.png`), fullPage: true }); }
+        if (evidence) { mkdirSync(evidence, { recursive: true }); await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${theme}-${width}-${view}.png`) }); }
         report.cases.push({ theme, width, view, days: days.length, layout, source: `/api/admin/calendar; real PG event ${container.id}`, summary: "real event-ops panel fields; keyboard focus/Escape return" });
       }
-      await page.click('[aria-label="Vista de eventos"] button[aria-label="Lista"]');
+      await page.$eval('[aria-label="Vista de eventos"]', node => node.scrollIntoView({ block: "center" }));
+      await page.$eval('[aria-label="Vista de eventos"] button[aria-label="Lista"]', node => node.focus());
+      await page.keyboard.press("Enter");
       await page.waitForSelector('.admin-events-calendar', { hidden: true });
       await page.click('[aria-label="Vista de eventos"] button[aria-label="Tarjetas"]');
       assert.equal(await page.$eval('[aria-label="Vista de eventos"] button[aria-label="Tarjetas"]', n => n.getAttribute('aria-pressed')), "true");
       await page.click('[aria-label="Vista de eventos"] button[aria-label="Calendario"]');
+      await page.waitForFunction(() => localStorage.getItem("ledbox-admin-view:eventos") === "calendar");
+      await page.waitForSelector('.admin-events-calendar');
       await page.goto(`${base}/eventos`, { waitUntil: "networkidle0" });
       await page.waitForSelector('.admin-events-calendar');
       assert.equal(await page.evaluate(() => localStorage.getItem("ledbox-admin-view:eventos")), "calendar");
