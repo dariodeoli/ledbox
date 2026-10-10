@@ -6,7 +6,6 @@ const draft = (): ServiceConfigurationDraft => ({ serviceClass: "TECHNICAL_GUARD
 function configuration(input = draft()): ServiceConfiguration {
   const result = readServiceConfigurationDraft(input);
   assert.equal(result.ok, true);
-  if (!result.ok) throw new Error(result.error);
   return result.value;
 }
 const privateCost = { incurred: 10000, remainingCommitment: 20000, known: false, obligationId: "private-obligation" };
