@@ -1,4 +1,4 @@
-import { formatDate, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
+import { formatDate, formatDayKey, formatMoney, formatNumber, invoiceTaxTypeLabel } from "@/lib/admin-format";
 import type { SignatureBudgetDocument } from "@/lib/server/signature/document";
 
 export function SignatureDocumentUnavailable({ message }: { message: string }) {
@@ -140,7 +140,7 @@ export function SignatureDocumentSheet({ document, compact = false }: { document
                 <strong>{installment.label}</strong>
                 <span>
                   {formatMoney(installment.amount)}
-                  {installment.dueAt ? ` · ${formatDate(installment.dueAt)}` : ""}
+                  {installment.dueAt ? ` · ${formatDayKey(installment.dueAt)}` : ""}
                   {document.documentVersion === 2 && installment.moment ? ` · ${installment.moment}` : ""}
                 </span>
               </li>

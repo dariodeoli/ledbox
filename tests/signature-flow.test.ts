@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import React, { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SignatureDocumentSheet } from "../app/(portal)/_components/SignatureDocumentSheet";
+Object.assign(globalThis, { React });
 import { formatSignatureCode, normalizeSignatureCode, signaturePortalUrl } from "../lib/public-config";
 import { generateSignatureCode } from "../lib/server/signature/codes";
 import {
@@ -195,6 +199,26 @@ function budgetDocument(): SignatureBudgetDocument {
     plan: { advanceAmount: 0, installments: [], dueNow: { label: "Pago único", amount: 1_800_000 }, pending: 0 },
   };
 }
+
+test("cuotas day-key imprimen calendario independiente UTC/noon y no mutan payload/hash legacy o v2", () => {
+  const days = ["2099-01-05", "2099-01-12", "2099-12-31", "2100-01-01", "2096-02-29"];
+  const expected = ["05 ene 2099", "12 ene 2099", "31 dic 2099", "01 ene 2100", "29 feb 2096"];
+  const oracle = new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
+  assert.deepEqual(days.map(day => oracle.format(new Date(`${day}T12:00:00Z`)).replace(/\./g, "")), expected);
+  for (const version of [1, 2] as const) {
+    const document = budgetDocument();
+    if (version === 2) { document.documentVersion = 2; document.client = { ...document.client, displayName: "Ana", tradeName: null, legalName: null }; }
+    document.plan.installments = days.map((dueAt, index) => ({ label: `Calendar ${index}`, amount: 100, dueAt }));
+    document.plan.installments.push({ label: "Sin fecha acordada", amount: 100, dueAt: null, moment: "A coordinar" });
+    const payload = structuredClone(budgetDocumentPayload(document)), hash = budgetDocumentHash(payload);
+    const html = renderToStaticMarkup(createElement(SignatureDocumentSheet, { document }));
+    for (const day of expected) assert.ok(html.replace(/\./g, "").includes(day), `${version}: ${day}`);
+    assert.doesNotMatch(html.replace(/\./g, ""), /04 ene 2099|11 ene 2099|30 dic 2099|28 feb 2096/);
+    assert.match(html, /Sin fecha acordada/);
+    if (version === 2) assert.match(html, /A coordinar/);
+    assert.deepEqual(budgetDocumentPayload(document), payload); assert.equal(budgetDocumentHash(payload), hash);
+  }
+});
 
 test("la huella del documento cambia si cambia el documento", () => {
   const base = budgetDocumentHash(budgetDocumentPayload(budgetDocument()));

@@ -37,12 +37,13 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
       const response = await call("/api/admin/budgets", "POST", { clientId: client.id, eventId: event.id, title, items: [{ name: "Second", quantity: 1, days: 1, unitPrice: total * 2 / 3, costPrice: 13 }, { name: "First", quantity: 1, days: 1, unitPrice: total / 3, costPrice: 17 }] }, true);
       assert.equal(response.status, 201); return (await response.json()).budget;
     }
-    async function issue(id: string, attachmentId?: string) {
-      const response = await call("/api/admin/signatures", "POST", { budgetId: id, attachmentId, recipientName: "Snapshot signer", method: "TYPED", otpRequired: false }, true);
+    async function issue(id: string, attachmentId?: string, method = "TYPED") {
+      const response = await call("/api/admin/signatures", "POST", { budgetId: id, attachmentId, recipientName: "Snapshot signer", method, otpRequired: false }, true);
       assert.equal(response.status, 201, await response.clone().text()); return (await response.json()).request;
     }
     const sign = (code: string) => call(`/api/portal/firma/${code}/sign`, "POST", { consent: true, signature: { name: "Snapshot signer" } });
     const page = await browser.newPage();
+    await page.emulateTimezone("America/Asuncion");
     async function render(code: string, name: string) {
       const response = await page.goto(`${base}/firma/${code}/documento`, { waitUntil: "networkidle0" });
       assert.equal(response?.status(), 200);
@@ -89,8 +90,31 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.match(original.htmlText, /Frozen fantasy original/); assert.match(original.htmlText, /Frozen legal original/);
     assert.doesNotMatch(original.htmlText, /Not fiscal historical/);
     for (const text of ["Al confirmar", "Antes del montaje", "Después", "270.000", "200.000", "430.000"]) assert.ok(original.htmlText.includes(text), text);
-    const { formatDate } = await import("../lib/admin-format");
-    for (const row of conditions()) assert.ok(original.htmlText.includes(formatDate(row.dueAt)), row.dueAt);
+    const calendarOracle = (day: string) => new Intl.DateTimeFormat("es-PY", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
+    for (const row of conditions()) {
+      assert.ok(original.htmlText.includes(calendarOracle(row.dueAt)), row.dueAt);
+      if (original.pdfText) assert.ok(original.pdfText.includes(calendarOracle(row.dueAt).replace(/\s+/g, "")), row.dueAt);
+    }
+    assert.ok(original.pdfText?.replace(/\./g, "").includes("05ene2099") ?? original.htmlText.replace(/\./g, "").includes("05 ene 2099"));
+    assert.ok(original.pdfText?.replace(/\./g, "").includes("12ene2099") ?? original.htmlText.replace(/\./g, "").includes("12 ene 2099"));
+
+    const drawnQuote = await budget("Drawn calendar boundary document", 900000);
+    const boundaryDays = ["2099-01-05", "2099-01-12", "2099-12-31", "2100-01-01", "2096-02-29"];
+    const boundaryPlan: Array<{ label: string; type: "fixed"; value: number; dueAt: string | null; moment: string }> = boundaryDays.map((dueAt, index) => ({ label: `Boundary ${index + 1}`, type: "fixed", value: 150000, dueAt, moment: `Calendar moment ${index + 1}` }));
+    boundaryPlan.push({ label: "No date honest", type: "fixed", value: 150000, dueAt: null, moment: "A coordinar" });
+    assert.equal((await call("/api/admin/budgets", "PATCH", { budgetId: drawnQuote.id, installmentsJson: boundaryPlan }, true)).status, 200);
+    const drawn = await issue(drawnQuote.id, undefined, "DRAWN");
+    const dataUrl = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 320; canvas.height = 120; const ctx = canvas.getContext("2d")!; ctx.strokeStyle = "#111"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(20, 70); ctx.bezierCurveTo(50, 10, 100, 115, 280, 40); ctx.stroke(); return canvas.toDataURL("image/png"); });
+    assert.equal((await call(`/api/portal/firma/${drawn.code}/sign`, "POST", { consent: true, signature: { dataUrl } })).status, 200);
+    const drawnBefore = await db.signatureRequest.findUniqueOrThrow({ where: { id: drawn.id } });
+    const drawnPayload = (await (await call(`/api/portal/firma/${drawn.code}`)).json()).signature.budget;
+    const drawnPDF = await render(drawn.code, "drawn-calendar-before");
+    for (const day of boundaryDays) {
+      assert.ok(drawnPDF.htmlText.includes(calendarOracle(day)), day);
+      if (drawnPDF.pdfText) assert.ok(drawnPDF.pdfText.includes(calendarOracle(day).replace(/\s+/g, "")), day);
+    }
+    assert.ok(drawnPDF.htmlText.includes("A coordinar"));
+    assert.equal(drawnPayload.plan.installments[5].dueAt, null);
     const signedPlanEdit = await call("/api/admin/budgets", "PATCH", { budgetId: q.id, installmentsJson: conditions(40) }, true);
     assert.equal(signedPlanEdit.status, 409, "API preserves signed commercial conditions; direct historical edit below still cannot change snapshot");
     const changed = await call(`/api/admin/clients/${client.id}`, "PATCH", { name: "Changed contact", company: "Changed historical company", tradeName: "Changed fantasy", legalName: "Changed legal" }, true);
@@ -107,6 +131,10 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     assert.deepEqual(await db.signatureEvent.findMany({ where: { requestId: issued.id }, orderBy: { occurredAt: "asc" } }), oldEvents);
     assert.deepEqual(await db.signatureEvent.findUniqueOrThrow({ where: { id: creation.id } }), creation);
     assert.equal(verifySignatureChain(oldEvents).valid, true);
+    const drawnAfter = await render(drawn.code, "drawn-calendar-after");
+    assert.deepEqual(drawnAfter, drawnPDF);
+    assert.deepEqual(await db.signatureRequest.findUniqueOrThrow({ where: { id: drawn.id } }), drawnBefore);
+    assert.deepEqual((await (await call(`/api/portal/firma/${drawn.code}`)).json()).signature.budget, drawnPayload);
 
     // Rebuild a real legacy v1 fixture with its exact name-asc recipe, no snapshot/backfill.
     async function legacy() {
@@ -162,6 +190,7 @@ test("I04 PG HTTP: snapshot signed payload/PDF immutable, versioned legacy hones
     const tampered = await db.signatureRequest.findUniqueOrThrow({ where: { id: issued.id }, include: requestInclude });
     const modified = structuredClone(tampered); (modified.events[0].metadataJson as Record<string, unknown>).documentSnapshotHash = "0".repeat(64);
     assert.throws(() => verifiedSignatureSnapshot(modified), /cadena/);
+    if (output) writeFileSync(join(output, "calendar-oracle.json"), JSON.stringify({ status: "PASS", oracle: "Intl es-PY UTC at noon, independent of production formatter", timezone: "America/Asuncion", typed: { issueStatus: 201, signStatus: 200, expectedDates: conditions().map(row => calendarOracle(row.dueAt)), normalizedPDFText: original.pdfText, immutableText: original.pdfText === after.pdfText }, drawn: { issueStatus: 201, signStatus: 200, expectedDates: boundaryDays.map(calendarOracle), nullDueAt: drawnPayload.plan.installments[5].dueAt, normalizedPDFText: drawnPDF.pdfText, immutableText: drawnPDF.pdfText === drawnAfter.pdfText } }, null, 2));
     if (output) writeFileSync(join(output, "snapshot-result.json"), JSON.stringify({ status: "PASS", requestId: issued.id, documentHash: before.documentHash, signedDocumentHash: before.signedDocumentHash, payloadBefore: oldPayload, payloadAfter: fresh, normalizedPDFTextEqual: original.pdfText ? original.pdfText === after.pdfText : null, realPlanPatch200Issue201Sign200: true, planAmounts: [270000, 200000, 430000], planMomentDatePDFParity: true, stalePlan409: true, legacyIntactSigns: true, legacyChanged409: true, liveCommercialStale409: true, attachmentBytesVerified: true, chainValid: true }, null, 2));
   } finally { await browser.close(); await db.$disconnect(); await (await import("../lib/server/db")).db.$disconnect(); }
 });
