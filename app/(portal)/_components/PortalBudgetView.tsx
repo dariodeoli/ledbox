@@ -1441,7 +1441,7 @@ export function PortalBudgetView({
               </PortalCardTitle>
               {canEdit && budget.items.length > 0 ? (
                 <p className="portal-card-lead">
-                  Cambiá cantidades y días: el precio unitario queda fijo y el total se actualiza en vivo. Si dejás todo
+                  Cambiá cantidades y días: la tarifa respeta el frente y los tramos pactados; los precios manuales permanecen fijos. El total se actualiza en vivo. Si dejás todo
                   igual, autorizás lo que te enviamos.
                 </p>
               ) : null}
@@ -1534,11 +1534,11 @@ export function PortalBudgetView({
               <span className="portal-num">{formatMoney(summaryTotal)}</span>
             </div>
             <p className="portal-total-formula">
-              Precio unitario × cantidad × días = subtotal · subtotal − descuento = total
+              Precio unitario × cantidad × días = bruto · bruto − descuento de línea = neto · suma de netos − descuento global = total
             </p>
             </div>
             <p className="portal-help">
-              Montos en guaraníes (PYG), sin decimales. {canEdit && itemsChanged ? "Los ajustes se revisan con tu autorización: el equipo aplica el precio unitario vigente." : ""}
+              Montos en guaraníes (PYG), sin decimales. {canEdit && itemsChanged ? "Los ajustes son provisionales: el equipo revisa los términos pactados antes de aplicarlos." : ""}
             </p>
             {canEdit && itemsChanged ? (
               <div className="portal-form-actions">

@@ -85,7 +85,8 @@ test("AL real HTTP/PG/browser: tariff days, discounts once, advance, persistence
     await page.goto(`${base}/imprimir/presupuesto/${q.id}`, { waitUntil: "networkidle0" });
     await page.waitForSelector(".budget-print-sheet");
     const print = await page.$eval(".budget-print-sheet", (node) => node.textContent ?? "");
-    for (const value of ["Descuento de línea", "Descuento global", "432.005", "21600", "410.405", "123.122"]) assert.ok(print.replace(/21\.600/g, "21600").includes(value), `print ${value}`);
+    for (const value of ["Descuento de línea", "48.001", "Descuento global", "432.005", "21600", "410.405", "123.122"]) assert.ok(print.replace(/21\.600/g, "21600").includes(value), `print ${value}`);
+    assert.equal(await page.$eval(".budget-print-item", (node) => { const note = [...node.querySelectorAll("small")].find((small) => small.textContent?.includes("Descuento de línea")); return Boolean(note && note.getBoundingClientRect().right <= node.getBoundingClientRect().right + 1); }), true, "line discount stays inside its print identity column");
     await page.pdf({ path: `${evidence}/commercial-a4.pdf`, format: "A4", printBackground: true });
     await page.screenshot({ path: `${evidence}/commercial-print.png`, fullPage: true });
     const clickText = async (text: string) => {

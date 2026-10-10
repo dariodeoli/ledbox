@@ -140,9 +140,9 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
               <tbody>
                 {stableOrderBudgetItems(budget.items).map((item) => (
                   <tr key={item.id} data-excluded={item.excluded ? "true" : undefined}>
-                    <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
+                    <td><div className="budget-print-item"><AdminImageBox imageUrl={item.inventory ? inventoryImageUrl(item.inventory) : null} size={32} /><div>{item.excluded ? <><s>{item.name}</s><small> · Retirado / no incluido</small></> : item.name}<small className="budget-print-quantity">Cantidad {formatNumber(item.quantity)}{budgetUsesDays(item) ? ` · ${formatNumber(item.days)} días` : ""}</small>{item.discountMode ? <small className="budget-print-quantity">Descuento de línea: − {formatMoney(item.discountAmount ?? 0)}{item.discountMode === "PERCENT" ? ` (${formatNumber((item.discountValue ?? 0) / 100)} %)` : ""}</small> : null}{item.notes ? <small className="budget-print-quantity">{item.notes}</small> : null}</div></div></td>
                     <td className="lbprint-num">{formatMoney(item.unitPrice)}</td>
-                    <td className="lbprint-num">{formatMoney(item.subtotal)}{item.discountMode ? <small className="budget-print-quantity">Descuento de línea: − {formatMoney(item.discountAmount ?? 0)}{item.discountMode === "PERCENT" ? ` (${formatNumber((item.discountValue ?? 0) / 100)} %)` : ""}</small> : null}</td>
+                    <td className="lbprint-num">{formatMoney(item.subtotal)}</td>
                   </tr>
                 ))}
               </tbody>
