@@ -744,6 +744,9 @@ model Budget {
   status               CommercialStatus      @default(DRAFT)
   subtotal             Int                   @default(0)
   discount             Int                   @default(0)
+  /// NULL conserva descuento fijo histórico; PERCENT almacena basis points.
+  discountMode         BudgetDiscountMode?
+  discountValue        Int?
   total                Int                   @default(0)
   costEstimate         Int                   @default(0)
   // Costos internos (issue #65): materiales y mano de obra se guardan aparte
@@ -762,6 +765,8 @@ model Budget {
   // Plan de pagos (issue #14): anticipo y cuotas visibles en el portal.
   // `installmentsJson` guarda `[{ label, amount, dueAt }]` (dueAt `YYYY-MM-DD`).
   advanceAmount        Int                   @default(0)
+  /// NULL = seña fija histórica; entero 0..10000 = porcentaje automático exacto.
+  advancePercentBps    Int?
   paymentTerms         String?
   installmentsJson     Json?
   // Portal del cliente (issue #12): token público del presupuesto y evidencia
@@ -806,6 +811,16 @@ model Budget {
   @@index([organizationId, createdAt])
 }
 
+enum BudgetPriceMode {
+  TARIFF
+  MANUAL
+}
+
+enum BudgetDiscountMode {
+  AMOUNT
+  PERCENT
+}
+
 model BudgetItem {
   id          String         @id
   budgetId    String
@@ -815,6 +830,15 @@ model BudgetItem {
   quantity    Int            @default(1)
   days        Int            @default(1)
   unitPrice   Int
+  /// NULL conserva precio histórico; nunca reinterpreta desde inventario live.
+  priceMode   BudgetPriceMode?
+  /// Snapshot V1 del frente efectivo, retenido en MANUAL con piso vinculante.
+  tariffSnapshot Json?
+  discountMode BudgetDiscountMode?
+  /// AMOUNT = PYG; PERCENT = basis points (1 = 0,01%).
+  discountValue Int?
+  /// Importe efectivo materializado por el servidor, nunca input del portal.
+  discountAmount Int?
   costPrice   Int            @default(0)
   /// Línea conservada, excluida de los totales validados y las reservas.
   excluded    Boolean        @default(false)
