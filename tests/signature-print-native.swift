@@ -21,11 +21,25 @@ for index in 0..<pdf.pageCount {
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
         for (occurrence, match) in matches.enumerated() {
             guard let selection = page.selection(for: match.range) else { continue }
+            var glyphs: [[String: Any]] = []
+            text.enumerateSubstrings(in: Range(match.range, in: text)!, options: .byComposedCharacterSequences) { substring, stringRange, _, _ in
+                let range = NSRange(stringRange, in: text)
+                guard let character = substring, !character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      let glyph = page.selection(for: range) else { return }
+                let r = glyph.bounds(for: page)
+                glyphs.append(["text": character, "offset": range.location - match.range.location,
+                               "left": r.minX, "top": bounds.height - r.maxY, "right": r.maxX, "bottom": bounds.height - r.minY])
+            }
             for (lineIndex, line) in selection.selectionsByLine().enumerated() {
                 let r = line.bounds(for: page)
                 boxes.append(["key": needle["key"]!, "text": line.string ?? "", "occurrence": occurrence, "line": lineIndex,
                               "left": r.minX, "top": bounds.height - r.maxY, "right": r.maxX, "bottom": bounds.height - r.minY,
-                              "width": r.width, "height": r.height])
+                              "width": r.width, "height": r.height,
+                              "glyphs": glyphs.filter { glyph in
+                                  let top = glyph["top"] as! CGFloat
+                                  let bottom = glyph["bottom"] as! CGFloat
+                                  return bottom > bounds.height - r.maxY && top < bounds.height - r.minY
+                              }])
             }
         }
     }

@@ -13,9 +13,10 @@ const output = process.env.SIGPDF_EVIDENCE_DIR;
 const fixtureFile = process.env.SIGPDF_FIXTURE_FILE;
 const local = (value?: string) => Boolean(value && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(value));
 const enabled = local(base) && local(browserBase) && Boolean(output) && /^postgresql:\/\/[^@]*@(localhost|127\.0\.0\.1):\d+\/ledbox_quote_qa(?:\?|$)/.test(process.env.DATABASE_URL ?? "");
-type Box = { key: string; text: string; occurrence: number; line: number; left: number; top: number; right: number; bottom: number; width: number; height: number };
+type Glyph = { text: string; offset: number; left: number; top: number; right: number; bottom: number };
+type Box = { key: string; text: string; occurrence: number; line: number; left: number; top: number; right: number; bottom: number; width: number; height: number; glyphs: Glyph[] };
 type NativePage = { page: number; text: string; boxes: Box[] };
-type Fixture = { organizationId: string; ownerId: string; signatures: Array<{ profile: string; requestId: string; code: string; budgetId: string }> };
+type Fixture = { oracleRevision: 2; organizationId: string; ownerId: string; signatures: Array<{ profile: string; requestId: string; code: string; budgetId: string }> };
 
 test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blanco en firmado real", { skip: !enabled, timeout: 240000 }, async () => {
   const db = new PrismaClient();
@@ -27,7 +28,10 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
   try {
     const { createSession } = await import("../lib/server/auth");
     let fixture: Fixture;
-    if (fixtureFile && existsSync(fixtureFile)) fixture = JSON.parse(readFileSync(fixtureFile, "utf8"));
+    if (fixtureFile && existsSync(fixtureFile)) {
+      fixture = JSON.parse(readFileSync(fixtureFile, "utf8"));
+      assert.equal(fixture.oracleRevision, 2, "Use a separately owned revision2 fixture path; preserve prior fixture bytes");
+    }
     else {
       const organizationId = `sigpdf-${randomUUID()}`;
       await db.organization.create({ data: { id: organizationId, slug: organizationId, name: "PANEL local issuer" } });
@@ -37,9 +41,9 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
       const product = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId, name: "AL rental", category: "QA", minimumPrice: 50000, listPrice: 100001, listFromDays: 3, listFromPrice: 80001 } });
       const jwt = (await createSession(owner, organizationId)).jwt;
       const call = (path: string, body: unknown, admin = true) => fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": `sigpdf-${organizationId}`, ...(admin ? { Cookie: `ledbox_session=${jwt}` } : {}) }, body: JSON.stringify(body) });
-      fixture = { organizationId, ownerId: owner.id, signatures: [] };
+      fixture = { oracleRevision: 2, organizationId, ownerId: owner.id, signatures: [] };
       for (const profile of ["equivalent", "extended"]) {
-        const items = Array.from({ length: profile === "equivalent" ? 1 : 18 }, (_, index) => ({ name: profile === "equivalent" ? "AL rental" : `PANEL equipo ${index + 1}`, inventoryId: product.id, quantity: 2 + index, days: 3 + index % 3, unitPrice: 80001 + index * 137, costPrice: 0, priceMode: "MANUAL", discountMode: "PERCENT", discountValue: 1000, notes: profile === "equivalent" ? null : "Detalle propio para comprobar filas multilínea y paginación legible sin recortar información." }));
+        const items = Array.from({ length: profile === "equivalent" ? 1 : 18 }, (_, index) => ({ name: profile === "equivalent" ? "AL rental" : `PANEL equipo ${index + 1} para instalación audiovisual con nombre extenso verificable en todas sus líneas`, inventoryId: product.id, quantity: 2 + index, days: 3 + index % 3, unitPrice: 80001 + index * 137, costPrice: 0, priceMode: "MANUAL", discountMode: "PERCENT", discountValue: 1000, notes: profile === "equivalent" ? null : "Detalle propio para comprobar filas multilínea y paginación legible sin recortar información." }));
         const created = await call("/api/admin/budgets", { clientId: client.id, title: profile === "equivalent" ? "AL negotiated" : "PANEL documento extendido", items, discountMode: "PERCENT", discountValue: 500, advancePercentBps: 3000 });
         assert.equal(created.status, 201, await created.clone().text());
         const budget = (await created.json()).budget;
@@ -104,20 +108,40 @@ test("SIGPDF: columnas nativas, constancia sin colisiones y contraste sobre blan
         const native: { pageCount: number; pages: NativePage[] } = JSON.parse(readFileSync(join(nativeDir, "geometry.json"), "utf8"));
         const nativeColumns: unknown[] = [];
         let nativeAligned = true;
+        let wrappedNameObserved = false;
         for (let index = 0; index < dom.rows.length; index++) {
-          const nativePage = native.pages.find(p => p.boxes.some(box => box.key === `name:${index}` && box.line === 0));
-          const name = nativePage?.boxes.find(box => box.key === `name:${index}` && box.line === 0);
-          const headings = nativePage?.boxes.filter(box => box.key.startsWith("header:") && name && box.bottom < name.top + 1) ?? [];
+          // Every occurrence and every line/glyph of Producto must stay in band0.
+          // Each page carrying a row must repeat all five headers above that row.
+          const names = native.pages.flatMap(p => p.boxes.filter(box => box.key === `name:${index}`).map(box => ({ ...box, page: p.page })));
+          if (names.some(name => name.line > 0)) wrappedNameObserved = true;
+          const nameBands = names.map(name => {
+            const nativePage = native.pages.find(p => p.page === name.page)!;
+            const headings = Array.from({ length: 5 }, (_, column) => nativePage.boxes
+              .filter(box => box.key === `header:${column}` && box.bottom <= name.top + .1)
+              .sort((a, b) => a.top - b.top).at(-1));
+            const repeatedHeader = headings.every(Boolean) && headings.every((header, column) => column === 0 || header!.left > headings[column - 1]!.right - .1);
+            const left = headings[0]?.left, right = headings[1]?.left;
+            const inBand = repeatedHeader && left !== undefined && right !== undefined && name.glyphs.length > 0
+              && name.left >= left - .1 && name.right <= right + .1
+              && name.glyphs.every(glyph => glyph.left >= left - .1 && glyph.right <= right + .1);
+            return { name, headings, band: { left, right }, repeatedHeader, inBand };
+          });
+          const anchor = names.filter(name => name.line === 0).sort((a, b) => a.page - b.page || a.top - b.top)[0];
+          const nativePage = native.pages.find(p => p.page === anchor?.page);
+          const headings = nativePage?.boxes.filter(box => box.key.startsWith("header:") && anchor && box.bottom <= anchor.top + .1) ?? [];
           const cells = Array.from({ length: 4 }, (_, column) => {
             const header = headings.filter(box => box.key === `header:${column + 1}`).at(-1);
-            const value = nativePage?.boxes.find(box => box.key === `cell:${index}:${column + 1}` && name && Math.abs(box.top - name.top) < 4);
+            const values = nativePage?.boxes.filter(box => box.key === `cell:${index}:${column + 1}` && anchor && Math.abs(box.top - anchor.top) < 4) ?? [];
             const previous = column > 0 ? headings.filter(box => box.key === `header:${column}`).at(-1) : null;
-            return { header, value, inBand: Boolean(header && value && Math.abs(header.right - value.right) <= 1 && (!previous || value.left >= previous.right - .1)) };
+            return { header, values, inBand: Boolean(header && values.length > 0 && values.every(value =>
+              value.glyphs.length > 0 && Math.abs(header.right - value.right) <= 1 && (!previous || value.left >= previous.right - .1)
+              && value.glyphs.every(glyph => glyph.right <= header.right + 1 && (!previous || glyph.left >= previous.right - .1)))) };
           });
-          if (!name || !cells.every(cell => cell.inBand)) nativeAligned = false;
-          nativeColumns.push({ row: index, page: nativePage?.page, name, cells });
+          if (names.length === 0 || !nameBands.every(line => line.inBand) || !cells.every(cell => cell.inBand)) nativeAligned = false;
+          nativeColumns.push({ row: index, nameBands, cells });
         }
         probe(`${prefix}.SIG-PDF-01.native`, nativeAligned, nativeColumns);
+        if (signature.profile === "extended") probe(`${prefix}.SIG-PDF-01.wrapped-name-exercised`, wrappedNameObserved, { wrappedNameObserved });
         const sealPage = native.pages.find(p => p.boxes.some(box => box.key === "seal"));
         const sealBox = sealPage?.boxes.find(box => box.key === "seal");
         const afterSeal = native.pages.flatMap(p => p.boxes.filter(box => sealPage && sealBox && (p.page > sealPage.page || p.page === sealPage.page && box.top > sealBox.bottom)).map(box => ({ ...box, page: p.page })));
