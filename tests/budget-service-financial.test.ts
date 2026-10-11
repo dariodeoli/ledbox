@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calculateBudgetServiceFinancial, produceServiceEconomicEvidence, evaluateServiceEconomicPolicy, type ServiceEconomicPolicyV1, type ServiceEconomicFactResolver, type ServiceEconomicEvidenceInput, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
+import { calculateBudgetServiceFinancial, produceServiceEconomicEvidence, evaluateServiceEconomicPolicy, normalizePfServiceEconomicPolicy, type PfEconomicPolicySupport, type ServiceEconomicNormalizerContext, type ServiceEconomicPolicyV1, type ServiceEconomicFactResolver, type ServiceEconomicEvidenceInput, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
 import { BUDGET_INT_MAX } from "../lib/budget-payment-plan";
 import type { CommercialLine } from "../lib/budget-commercial-calculation";
 
@@ -445,4 +445,107 @@ test("legacy partition mismatches, duplicate slices and domain coverage gaps can
   assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("LEGACY_DUPLICATE_SLICE:laborCost"));
   fixture.policy.componentObligationClosure[0].domains.find(row => row.domain === "SUPPLIER")!.allocationIds = [];
   assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("CLOSURE_UNIVERSE_INCOMPLETE:service"));
+});
+
+// New PF->FIN shape boundary fixtures. No semantic provider or DB proof is minted.
+function pfNormalizerFixture() {
+  const snapshot = economicEvidence();
+  const references = (["ESTIMATE_ORIGIN", "RECOGNIZED_OBLIGATION", "BUDGET_ATTRIBUTION", "DOMAIN_OPERATIONAL_CLOSURE", "NOT_APPLICABLE_FOR_EXECUTION"] as const)
+    .map(fact => ({ entity: "Budget" as const, recordId: "budget", rowDigest: "b".repeat(64), fact }));
+  const support: PfEconomicPolicySupport = { policyVersion: 1, censusVersion: 2,
+    legacyDispositionByField: (["materialCost", "laborCost", "costEstimate"] as const).map(field => ({ field,
+      fieldValue: snapshot.budget[field], state: "ESTIMATE_ONLY" as const, origin: "PERSISTED_ESTIMATE_DECLARATION" as const, factReferences: references })),
+    overlaps: [], componentObligationClosure: [{ applicationId: "service", budgetItemId: null,
+      domains: (["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"] as const).map(domain => domain === "SUPPLIER"
+        ? { domain, state: "RECOGNIZED" as const, sourceIds: ["source"], allocationIds: ["allocation"], factReferences: references }
+        : { domain, state: "VERIFIED_NOT_APPLICABLE" as const, factReferences: references }) }],
+  };
+  const current: ServiceEconomicNormalizerContext = { organizationId: "org", budgetId: "budget", budgetUpdatedAt: snapshot.scope.budgetUpdatedAt,
+    censusVersion: 2, censusDigest: "a".repeat(64), currentRecordMap: new Map([["Budget:budget", { rowDigest: "b".repeat(64), organizationId: "org", budgetId: "budget", eventId: "event" }]]) };
+  return { snapshot, support, current, references };
+}
+
+test("PF array/state shape maps to strict FIN object/disposition without creating proof handles", () => {
+  const fixture = pfNormalizerFixture();
+  const result = normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current);
+  assert.ok(result.policy);
+  assert.equal(result.policy.legacyDispositionByField.laborCost.fieldValue, 30000);
+  assert.equal(result.policy.legacyDispositionByField.laborCost.disposition, "ESTIMATE_ONLY");
+  assert.equal(result.policy.legacyDispositionByField.laborCost.originProofId, null);
+  assert.equal(result.policy.componentObligationClosure[0].domains[3].status, "RECOGNIZED");
+  assert.equal(result.authorityStatus, "STRUCTURAL_ONLY");
+  assert.equal(result.evaluation.legacyCostsReconciled, false);
+  assert.deepEqual(result.evaluation.zeroCostConfirmedIds, []);
+  assert.ok(result.normalizationReasons.includes("AUTHENTIC_SEMANTIC_FACT_PROVIDER_MISSING"));
+  assert.deepEqual(result.evaluation.contributions, produceServiceEconomicEvidence(fixture.snapshot).contributions);
+});
+
+test("missing internal map or historical null support stays structural and preserves known/null balances", () => {
+  const fixture = pfNormalizerFixture();
+  fixture.current.currentRecordMap = undefined;
+  fixture.snapshot.sources[0].pendingAmount = fixture.snapshot.allocations[0].pendingAmount = null;
+  fixture.snapshot.sources[0].pendingComplete = fixture.snapshot.allocations[0].pendingComplete = false;
+  const result = normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current);
+  assert.ok(result.normalizationReasons.includes("CURRENT_INTERNAL_RECORD_MAP_MISSING"));
+  assert.equal(result.evaluation.contributions[0].pending, null);
+  assert.equal(result.evaluation.residuals[0].pending, null);
+  assert.equal(result.evaluation.costComplete, false);
+  const historical = normalizePfServiceEconomicPolicy(fixture.snapshot, null, fixture.current);
+  assert.deepEqual(historical.normalizationReasons, ["PF_POLICY_SUPPORT_MISSING"]);
+});
+
+test("raw body facts, unexpected versions and non-bijective field shapes cannot cross normalization", () => {
+  const fixture = pfNormalizerFixture();
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, { ...fixture.support, resolveInternalFact: true, legacyCostsReconciled: true }, fixture.current));
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, { ...fixture.support, censusVersion: 3 }, fixture.current));
+  const auditOnly = { ...fixture.support, legacyDispositionByField: [{ field: "materialCost", fieldValue: 0, state: "ESTIMATE_ONLY", origin: "PERSISTED_ESTIMATE_DECLARATION",
+    factReferences: [{ entity: "AuditLog", recordId: "audit", rowDigest: "b".repeat(64), fact: "ESTIMATE_ORIGIN" }] }, ...fixture.support.legacyDispositionByField.slice(1)] };
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, auditOnly, fixture.current));
+  fixture.support.legacyDispositionByField[1] = fixture.support.legacyDispositionByField[0];
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_LEGACY_FIELDS_NOT_BIJECTIVE/);
+});
+
+test("typed closure, source IDs and fresh reference scope must match actual internal snapshot", () => {
+  const fixture = pfNormalizerFixture();
+  fixture.support.componentObligationClosure[0].applicationId = null;
+  fixture.support.componentObligationClosure[0].budgetItemId = "service";
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_TYPED_COMPONENT_INVALID/);
+  fixture.support.componentObligationClosure[0].applicationId = "service"; fixture.support.componentObligationClosure[0].budgetItemId = null;
+  const supplier = fixture.support.componentObligationClosure[0].domains.find(row => row.state === "RECOGNIZED")!;
+  if (supplier.state !== "RECOGNIZED") assert.fail();
+  supplier.sourceIds = ["other-source"];
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_DOMAIN_SOURCE_IDS_MISMATCH/);
+  supplier.sourceIds = ["source"];
+  fixture.current.currentRecordMap = new Map([["Budget:budget", { rowDigest: "b".repeat(64), organizationId: "other-company", budgetId: "budget", eventId: "event" }]]);
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_REFERENCE_SCOPE_OR_DIGEST_STALE/);
+});
+
+test("declared cross-field slices map incurred/pending only with exact unique overlap pairs", () => {
+  const fixture = pfNormalizerFixture(); fixture.snapshot.budget.materialCost = 30000;
+  for (const field of ["materialCost", "laborCost"] as const) {
+    fixture.support.legacyDispositionByField[field === "materialCost" ? 0 : 1] = { field, fieldValue: 30000, state: "REPRESENTED_BY_RECOGNIZED_SOURCES",
+      slices: [{ id: `slice:${field}`, sourceId: "source", allocationId: "allocation", domain: "SUPPLIER", incurredAmount: 10000, pendingAmount: 20000, factReferences: fixture.references }] };
+  }
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_OVERLAP_DECLARATION_INCOMPLETE/);
+  fixture.support.overlaps = [{ leftField: "materialCost", leftSliceId: "slice:materialCost", rightField: "laborCost", rightSliceId: "slice:laborCost" }];
+  const result = normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current);
+  assert.ok(result.policy);
+  const slice = result.policy.legacyDispositionByField.laborCost.slices[0];
+  assert.equal(slice.incurred, 10000); assert.equal(slice.pending, 20000); assert.equal(slice.proofId, null);
+  assert.equal(result.evaluation.contributions.length, 1);
+  assert.equal(result.authorityStatus, "STRUCTURAL_ONLY");
+  fixture.support.overlaps.push(fixture.support.overlaps[0]);
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_OVERLAP_AMBIGUOUS_OR_NONBIJECTIVE/);
+});
+
+test("stale budget/component revisions and missing domain coverage are rejected before claims can elevate", () => {
+  const fixture = pfNormalizerFixture();
+  fixture.current.budgetUpdatedAt = "2026-10-11T00:00:00.000Z";
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_SCOPE_CENSUS_STALE/);
+  fixture.current.budgetUpdatedAt = fixture.snapshot.scope.budgetUpdatedAt;
+  fixture.snapshot.components[0].expectedSourceRevision = 3;
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /EVIDENCE_COMPONENT_VERSION_INVALID/);
+  fixture.snapshot.components[0].expectedSourceRevision = 2;
+  fixture.support.componentObligationClosure[0].domains[0] = fixture.support.componentObligationClosure[0].domains[1];
+  assert.throws(() => normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current), /NORMALIZER_DOMAIN_CENSUS_INCOMPLETE/);
 });

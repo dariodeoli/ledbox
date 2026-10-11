@@ -341,10 +341,10 @@ export function produceServiceEconomicEvidence(input: ServiceEconomicEvidenceInp
 
 const economicDomains = ["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"] as const;
 const legacyFields = ["materialCost", "laborCost", "costEstimate"] as const;
-const policyId = z.string().trim().min(1).max(200);
+const policyId = z.string().min(1).max(200);
 const policyMoney = z.number().int().min(0).max(BUDGET_INT_MAX);
 const economicSliceSchema = z.object({ sourceId: policyId, allocationId: policyId,
-  incurred: policyMoney, pending: policyMoney, domain: z.enum(economicDomains), overlapGroup: policyId.nullable(), proofId: policyId }).strict();
+  incurred: policyMoney, pending: policyMoney, domain: z.enum(economicDomains), overlapGroup: policyId.nullable(), proofId: policyId.nullable() }).strict();
 const legacyDispositionSchema = z.object({ fieldValue: policyMoney,
   disposition: z.enum(["ESTIMATE_ONLY", "REPRESENTED_BY_RECOGNIZED_SOURCES", "UNRESOLVED"]),
   originProofId: policyId.nullable(), slices: z.array(economicSliceSchema) }).strict();
@@ -487,4 +487,190 @@ export function evaluateServiceEconomicPolicy(input: ServiceEconomicEvidenceInpu
   return { ...evidence, policyVersion: 1 as const, policyReasons: [] as string[], legacyCostsReconciled: true,
     zeroCostConfirmedIds, costComplete: true, costCompleteById: Object.fromEntries(input.components.map(row => [row.id, true])),
     missingAuthority: [] as string[] };
+}
+
+// Exact private wire projection of PFaaa1. It is parsed here rather than imported
+// from an unchecked PF runtime or cast to FIN's different normalized shape.
+const pfFactReferenceSchema = z.object({ entity: z.enum(["Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage",
+  "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"]),
+  recordId: policyId, rowDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  fact: z.enum(["ESTIMATE_ORIGIN", "RECOGNIZED_OBLIGATION", "BUDGET_ATTRIBUTION", "DOMAIN_OPERATIONAL_CLOSURE", "NOT_APPLICABLE_FOR_EXECUTION"]),
+}).strict();
+const pfReferences = z.array(pfFactReferenceSchema).min(1);
+const pfDispositionSchema = z.discriminatedUnion("state", [
+  z.object({ field: z.enum(legacyFields), fieldValue: policyMoney, state: z.literal("UNRESOLVED"), reason: z.string().trim().min(1).max(500) }).strict(),
+  z.object({ field: z.enum(legacyFields), fieldValue: policyMoney, state: z.literal("ESTIMATE_ONLY"),
+    origin: z.enum(["CANONICAL_BUDGET_ITEM_ESTIMATE", "PERSISTED_ESTIMATE_DECLARATION"]), factReferences: pfReferences }).strict(),
+  z.object({ field: z.enum(legacyFields), fieldValue: policyMoney, state: z.literal("REPRESENTED_BY_RECOGNIZED_SOURCES"),
+    slices: z.array(z.object({ id: policyId, sourceId: policyId, allocationId: policyId, domain: z.enum(economicDomains),
+      incurredAmount: policyMoney, pendingAmount: policyMoney, factReferences: pfReferences }).strict()).min(1) }).strict(),
+]);
+const pfDomainSchema = z.discriminatedUnion("state", [
+  z.object({ domain: z.enum(economicDomains), state: z.literal("UNRESOLVED"), reason: z.string().trim().min(1).max(500) }).strict(),
+  z.object({ domain: z.enum(economicDomains), state: z.literal("RECOGNIZED"), sourceIds: z.array(policyId).min(1),
+    allocationIds: z.array(policyId).min(1), factReferences: pfReferences }).strict(),
+  z.object({ domain: z.enum(economicDomains), state: z.literal("VERIFIED_NOT_APPLICABLE"), factReferences: pfReferences }).strict(),
+]);
+const pfSupportSchema = z.object({ policyVersion: z.literal(1), censusVersion: z.literal(2),
+  legacyDispositionByField: z.array(pfDispositionSchema).length(3),
+  overlaps: z.array(z.object({ leftField: z.enum(legacyFields), leftSliceId: policyId, rightField: z.enum(legacyFields), rightSliceId: policyId }).strict()),
+  componentObligationClosure: z.array(z.object({ applicationId: policyId.nullable(), budgetItemId: policyId.nullable(), domains: z.array(pfDomainSchema).length(5) }).strict()),
+}).strict();
+const internalBalanceShape = { incurredAmount: policyMoney.nullable(), pendingAmount: policyMoney.nullable(), incurredComplete: z.boolean(), pendingComplete: z.boolean() };
+const internalScopeShape = { organizationId: policyId, budgetId: policyId };
+const internalRevision = z.number().int().min(1).max(BUDGET_INT_MAX).nullable();
+const economicSnapshotSchema = z.object({
+  scope: z.object({ ...internalScopeShape, budgetUpdatedAt: z.string().datetime(), contractVersion: z.literal(1) }).strict(),
+  budget: z.object({ id: policyId, organizationId: policyId, eventId: policyId.nullable(), updatedAt: z.string().datetime(), materialCost: policyMoney, laborCost: policyMoney, costEstimate: policyMoney }).strict(),
+  supplierJobs: z.array(z.object({ id: policyId, organizationId: policyId, eventId: policyId.nullable() }).strict()),
+  components: z.array(z.object({ id: policyId, ...internalScopeShape, kind: z.enum(["SERVICE", "EQUIPMENT"]), snapshotVersion: z.literal(1).nullable(), sourceRevision: internalRevision, expectedSourceRevision: internalRevision }).strict()),
+  sources: z.array(z.object({ id: policyId, ...internalScopeShape, sourceKind: z.enum(["SERVICE", "LABOR", "SUPPLIER", "EQUIPMENT"]), sourceKey: policyId, supplierJobId: policyId.nullable(), ...internalBalanceShape }).strict()),
+  allocations: z.array(z.object({ id: policyId, ...internalScopeShape, sourceId: policyId, applicationId: policyId.nullable(), budgetItemId: policyId.nullable(), ...internalBalanceShape }).strict()),
+}).strict();
+export type PfEconomicPolicySupport = z.infer<typeof pfSupportSchema>;
+type EconomicFact = NonNullable<ReturnType<ServiceEconomicFactResolver>>;
+export type ServiceEconomicNormalizerContext = {
+  organizationId: string; budgetId: string; budgetUpdatedAt: string; censusVersion: 2; censusDigest: string;
+  currentRecordMap?: ReadonlyMap<string, { rowDigest: string; organizationId: string; budgetId: string | null; eventId: string | null }>;
+  /** Independent authentic semantic resolver. References are lookup candidates,
+   * not instructions to manufacture this fact or to echo expectedStatement. */
+  factProvider?: (request: { kind: EconomicFact["kind"]; expectedStatement: unknown; references: z.infer<typeof pfFactReferenceSchema>[]; origin?: string }) => EconomicFact | null;
+};
+
+export function normalizePfServiceEconomicPolicy(snapshotInput: unknown, supportInput: unknown, current: ServiceEconomicNormalizerContext) {
+  const snapshot = economicSnapshotSchema.parse(snapshotInput);
+  const evidence = produceServiceEconomicEvidence(snapshot);
+  if (current.censusVersion !== 2 || !/^[a-f0-9]{64}$/.test(current.censusDigest)
+    || current.organizationId !== snapshot.scope.organizationId || current.budgetId !== snapshot.scope.budgetId
+    || current.budgetUpdatedAt !== snapshot.scope.budgetUpdatedAt) fail("NORMALIZER_SCOPE_CENSUS_STALE");
+  if (supportInput == null) {
+    const context = { censusDigest: current.censusDigest };
+    return { snapshot, policy: null, context, evaluation: evaluateServiceEconomicPolicy(snapshot, null, context),
+      authorityStatus: "STRUCTURAL_ONLY" as const, normalizationReasons: ["PF_POLICY_SUPPORT_MISSING"] };
+  }
+  const support = pfSupportSchema.parse(supportInput);
+  const reasons = new Set<string>();
+  const facts = new Map<string, EconomicFact>();
+  const internalRecordDigests = new Map<string, string>();
+  if (!current.currentRecordMap) reasons.add("CURRENT_INTERNAL_RECORD_MAP_MISSING");
+  if (!current.factProvider) reasons.add("AUTHENTIC_SEMANTIC_FACT_PROVIDER_MISSING");
+  const proof = (references: z.infer<typeof pfFactReferenceSchema>[], kind: EconomicFact["kind"], expectedStatement: unknown, origin?: string) => {
+    const seen = new Set<string>();
+    let referencesCurrent = true;
+    for (const ref of references) {
+      const key = `${ref.entity}:${ref.recordId}`, identity = canonicalJson([key, ref.fact]);
+      if (seen.has(identity)) fail("NORMALIZER_REFERENCE_DUPLICATE");
+      seen.add(identity);
+      const record = current.currentRecordMap?.get(key);
+      if (!record) { reasons.add(`INTERNAL_REFERENCE_UNAVAILABLE:${key}`); referencesCurrent = false; continue; }
+      if (record.organizationId !== current.organizationId || (record.budgetId !== null && record.budgetId !== current.budgetId)
+        || (record.eventId !== null && record.eventId !== snapshot.budget.eventId) || record.rowDigest !== ref.rowDigest) fail("NORMALIZER_REFERENCE_SCOPE_OR_DIGEST_STALE");
+      if ((ref.entity === "Budget" && ref.recordId !== current.budgetId) || (ref.entity === "Event" && ref.recordId !== snapshot.budget.eventId)
+        || (ref.entity === "ServiceCostSource" && !snapshot.sources.some(row => row.id === ref.recordId))
+        || (ref.entity === "ServiceCostAllocation" && !snapshot.allocations.some(row => row.id === ref.recordId))
+        || (ref.entity === "BudgetItem" && !snapshot.components.some(row => row.kind === "EQUIPMENT" && row.id === ref.recordId))
+        || (ref.entity === "BudgetServiceApplication" && !snapshot.components.some(row => row.kind === "SERVICE" && row.id === ref.recordId))) fail("NORMALIZER_REFERENCE_SCOPE_OR_DIGEST_STALE");
+      internalRecordDigests.set(key, record.rowDigest);
+    }
+    const labels = new Set(references.map(ref => ref.fact));
+    const notApplicable = expectedStatement !== null && typeof expectedStatement === "object" && "status" in expectedStatement && expectedStatement.status === "VERIFIED_NOT_APPLICABLE";
+    const required: z.infer<typeof pfFactReferenceSchema>["fact"][] = kind === "ESTIMATE_ORIGIN" ? ["ESTIMATE_ORIGIN"]
+      : kind === "RECOGNIZED_SLICE" ? ["RECOGNIZED_OBLIGATION", "BUDGET_ATTRIBUTION"]
+        : ["DOMAIN_OPERATIONAL_CLOSURE", "BUDGET_ATTRIBUTION", ...(notApplicable ? ["NOT_APPLICABLE_FOR_EXECUTION" as const] : [])];
+    if (required.some(label => !labels.has(label))) { reasons.add(`SEMANTIC_REFERENCE_KINDS_MISSING:${kind}`); return null; }
+    // No id is synthesized from refs, digest, audit or candidate statement.
+    if (!referencesCurrent || !current.factProvider) return null;
+    const fact = current.factProvider({ kind, expectedStatement, references, origin });
+    if (!fact) { reasons.add(`SEMANTIC_FACT_NOT_PERSISTED:${kind}`); return null; }
+    if (!fact.id?.trim() || (facts.has(fact.id) && canonicalJson(facts.get(fact.id)) !== canonicalJson(fact))) fail("NORMALIZER_FACT_HANDLE_COLLISION");
+    facts.set(fact.id, fact);
+    return fact.id;
+  };
+  const byField = new Map(support.legacyDispositionByField.map(row => [row.field, row]));
+  if (byField.size !== 3) fail("NORMALIZER_LEGACY_FIELDS_NOT_BIJECTIVE");
+  // Typed slice index avoids conflating equal slice IDs from different fields.
+  const sliceIndex = new Map<string, { field: typeof legacyFields[number]; slice: z.infer<typeof economicSliceSchema>; pfId: string }>();
+  const emptyDisposition = (field: typeof legacyFields[number]) => ({ fieldValue: snapshot.budget[field], disposition: "UNRESOLVED" as const, originProofId: null, slices: [] });
+  const normalized: ServiceEconomicPolicyV1["legacyDispositionByField"] = { materialCost: emptyDisposition("materialCost"), laborCost: emptyDisposition("laborCost"), costEstimate: emptyDisposition("costEstimate") };
+  for (const field of legacyFields) {
+    const row = byField.get(field)!;
+    if (row.fieldValue !== snapshot.budget[field]) fail("NORMALIZER_LEGACY_VALUE_STALE");
+    normalized[field] = { fieldValue: row.fieldValue, disposition: row.state, originProofId: null, slices: [] };
+    if (row.state === "UNRESOLVED") { reasons.add(`LEGACY_UNRESOLVED:${field}`); continue; }
+    if (row.state === "ESTIMATE_ONLY") {
+      if (row.origin === "CANONICAL_BUDGET_ITEM_ESTIMATE" && field !== "costEstimate") fail("NORMALIZER_ESTIMATE_ORIGIN_FIELD_INVALID");
+      normalized[field].originProofId = proof(row.factReferences, "ESTIMATE_ORIGIN", { field, fieldValue: row.fieldValue, disposition: row.state }, row.origin);
+    } else {
+      const allocationIds = new Set<string>();
+      for (const pfSlice of row.slices) {
+        const key = canonicalJson([field, pfSlice.id]);
+        if (sliceIndex.has(key) || allocationIds.has(pfSlice.allocationId)) fail("NORMALIZER_SLICE_NOT_BIJECTIVE");
+        allocationIds.add(pfSlice.allocationId);
+        const allocation = snapshot.allocations.find(value => value.id === pfSlice.allocationId);
+        if (!allocation || allocation.sourceId !== pfSlice.sourceId) fail("NORMALIZER_SLICE_REFERENCE_INVALID");
+        const slice: z.infer<typeof economicSliceSchema> = { sourceId: pfSlice.sourceId, allocationId: pfSlice.allocationId, incurred: pfSlice.incurredAmount,
+          pending: pfSlice.pendingAmount, domain: pfSlice.domain, overlapGroup: null, proofId: null };
+        normalized[field].slices.push(slice);
+        sliceIndex.set(key, { field, slice, pfId: pfSlice.id });
+      }
+    }
+  }
+  const declaredPairs = new Set<string>();
+  for (const overlap of support.overlaps) {
+    const leftKey = canonicalJson([overlap.leftField, overlap.leftSliceId]), rightKey = canonicalJson([overlap.rightField, overlap.rightSliceId]);
+    const left = sliceIndex.get(leftKey), right = sliceIndex.get(rightKey);
+    const pair = canonicalJson([leftKey, rightKey].sort());
+    if (!left || !right || left.field === right.field || declaredPairs.has(pair)
+      || left.slice.sourceId !== right.slice.sourceId || left.slice.allocationId !== right.slice.allocationId
+      || left.slice.incurred !== right.slice.incurred || left.slice.pending !== right.slice.pending || left.slice.domain !== right.slice.domain) fail("NORMALIZER_OVERLAP_AMBIGUOUS_OR_NONBIJECTIVE");
+    declaredPairs.add(pair);
+  }
+  const entries = [...sliceIndex.entries()];
+  for (const [key, row] of entries) {
+    const peers = entries.filter(([, other]) => other.slice.allocationId === row.slice.allocationId);
+    if (peers.length > 1) {
+      if (peers.some(([otherKey]) => otherKey !== key && !declaredPairs.has(canonicalJson([key, otherKey].sort())))) fail("NORMALIZER_OVERLAP_DECLARATION_INCOMPLETE");
+      row.slice.overlapGroup = canonicalJson(peers.map(([peerKey]) => peerKey).sort());
+    }
+    const pfRow = byField.get(row.field)!;
+    if (pfRow.state !== "REPRESENTED_BY_RECOGNIZED_SOURCES") fail("NORMALIZER_SLICE_REFERENCE_INVALID");
+    const pfSlice = pfRow.slices.find(value => value.id === row.pfId)!;
+    row.slice.proofId = proof(pfSlice.factReferences, "RECOGNIZED_SLICE", { field: row.field, fieldValue: pfRow.fieldValue,
+      sourceId: row.slice.sourceId, allocationId: row.slice.allocationId, incurred: row.slice.incurred, pending: row.slice.pending,
+      domain: row.slice.domain, overlapGroup: row.slice.overlapGroup });
+  }
+  const componentIds = new Set<string>();
+  const closures: ServiceEconomicPolicyV1["componentObligationClosure"] = support.componentObligationClosure.map(row => {
+    if ((row.applicationId === null) === (row.budgetItemId === null)) fail("NORMALIZER_COMPONENT_XOR_INVALID");
+    const componentId = (row.applicationId ?? row.budgetItemId)!;
+    const component = snapshot.components.find(value => value.id === componentId);
+    if (!component || component.kind !== (row.applicationId === null ? "EQUIPMENT" : "SERVICE") || componentIds.has(componentId)) fail("NORMALIZER_TYPED_COMPONENT_INVALID");
+    componentIds.add(componentId);
+    if (new Set(row.domains.map(value => value.domain)).size !== 5) fail("NORMALIZER_DOMAIN_CENSUS_INCOMPLETE");
+    const coveredAllocations = new Set<string>();
+    const domains = row.domains.map(domain => {
+      const allocationIds = domain.state === "RECOGNIZED" ? domain.allocationIds : [];
+      const own = snapshot.allocations.filter(value => allocationIds.includes(value.id) && (value.applicationId ?? value.budgetItemId) === componentId);
+      const derivedSources = [...new Set(own.map(value => value.sourceId))].sort();
+      if (domain.state === "RECOGNIZED" && (new Set(allocationIds).size !== allocationIds.length || own.length !== allocationIds.length
+        || new Set(domain.sourceIds).size !== domain.sourceIds.length || canonicalJson([...domain.sourceIds].sort()) !== canonicalJson(derivedSources))) fail("NORMALIZER_DOMAIN_SOURCE_IDS_MISMATCH");
+      for (const id of allocationIds) { if (coveredAllocations.has(id)) fail("NORMALIZER_DOMAIN_ALLOCATION_DUPLICATE"); coveredAllocations.add(id); }
+      const statement = { componentId, domain: domain.domain, status: domain.state, allocationIds: [...allocationIds].sort(), sourceIds: derivedSources,
+        componentVersion: evidence.authority.componentVersions.find(value => value.id === componentId) };
+      const proofId = domain.state === "UNRESOLVED" ? null : proof(domain.factReferences, "DOMAIN_CLOSURE", statement);
+      if (domain.state === "UNRESOLVED") reasons.add(`DOMAIN_UNRESOLVED:${componentId}:${domain.domain}`);
+      return { domain: domain.domain, status: domain.state, allocationIds, proofId };
+    });
+    if (snapshot.allocations.some(value => (value.applicationId ?? value.budgetItemId) === componentId && !coveredAllocations.has(value.id))) fail("NORMALIZER_DOMAIN_ALLOCATION_COVERAGE_MISSING");
+    return { componentId, domains };
+  });
+  if (componentIds.size !== snapshot.components.length) fail("NORMALIZER_COMPONENT_CENSUS_INCOMPLETE");
+  const policy = economicPolicySchema.parse({ policyVersion: 1, censusVersion: 2,
+    scope: { organizationId: current.organizationId, budgetId: current.budgetId, budgetUpdatedAt: current.budgetUpdatedAt, censusDigest: current.censusDigest },
+    legacyDispositionByField: normalized, componentObligationClosure: closures });
+  const context = { censusDigest: current.censusDigest, internalRecordDigests: current.currentRecordMap ? internalRecordDigests : undefined,
+    resolveInternalFact: current.factProvider ? (id: string) => facts.get(id) ?? null : undefined };
+  const evaluation = evaluateServiceEconomicPolicy(snapshot, policy, context);
+  return { snapshot, policy, context, evaluation, authorityStatus: evaluation.legacyCostsReconciled ? "SEMANTIC_FACTS_RESOLVED" as const : "STRUCTURAL_ONLY" as const,
+    normalizationReasons: [...reasons] };
 }
