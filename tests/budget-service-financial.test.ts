@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calculateBudgetServiceFinancial, produceServiceEconomicEvidence, type ServiceEconomicEvidenceInput, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
+import { calculateBudgetServiceFinancial, produceServiceEconomicEvidence, evaluateServiceEconomicPolicy, type ServiceEconomicPolicyV1, type ServiceEconomicFactResolver, type ServiceEconomicEvidenceInput, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
 import { BUDGET_INT_MAX } from "../lib/budget-payment-plan";
 import type { CommercialLine } from "../lib/budget-commercial-calculation";
 
@@ -312,4 +312,137 @@ test("unknown source cannot authorize a known allocation and incomplete flags ca
   assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_UNKNOWN_SOURCE_ALLOCATION/);
   input.sources[0].pendingComplete = true;
   assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_BALANCE_COMPLETENESS_INVALID/);
+});
+
+// Policy fixtures model independently validated internal facts ONLY for unit
+// contracts. They do not certify persisted data, DB closure, or production cost.
+function economicPolicyFixture(input = economicEvidence()) {
+  const censusDigest = "a".repeat(64);
+  const facts = new Map<string, NonNullable<ReturnType<ServiceEconomicFactResolver>>>();
+  const internalRecordDigests = new Map<string, string>();
+  const record = (id: string, kind: NonNullable<ReturnType<ServiceEconomicFactResolver>>["kind"], statement: unknown) => {
+    const recordId = `semantic-source:${id}`, rowDigest = "b".repeat(64);
+    internalRecordDigests.set(`Budget:${recordId}`, rowDigest);
+    facts.set(id, { id, kind, statement, organizationId: input.scope.organizationId, budgetId: input.scope.budgetId,
+      budgetUpdatedAt: input.scope.budgetUpdatedAt, censusDigest, actorId: "finance-actor", actionId: `internal-action:${id}`,
+      censusVersion: 2, originRecords: [{ entity: "Budget", recordId, rowDigest }] });
+    return id;
+  };
+  const fields = ["materialCost", "laborCost", "costEstimate"] as const;
+  const policy: ServiceEconomicPolicyV1 = {
+    policyVersion: 1, censusVersion: 2, scope: { organizationId: input.scope.organizationId, budgetId: input.scope.budgetId, budgetUpdatedAt: input.scope.budgetUpdatedAt, censusDigest },
+    legacyDispositionByField: {
+      materialCost: { fieldValue: input.budget.materialCost, disposition: "ESTIMATE_ONLY", originProofId: null, slices: [] },
+      laborCost: { fieldValue: input.budget.laborCost, disposition: "ESTIMATE_ONLY", originProofId: null, slices: [] },
+      costEstimate: { fieldValue: input.budget.costEstimate, disposition: "ESTIMATE_ONLY", originProofId: null, slices: [] },
+    },
+    componentObligationClosure: input.components.map(component => ({ componentId: component.id,
+      domains: (["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"] as const).map(domain => {
+        const allocationIds = domain === "SUPPLIER" ? input.allocations.filter(row => (row.applicationId ?? row.budgetItemId) === component.id).map(row => row.id) : [];
+        const status = allocationIds.length ? "RECOGNIZED" as const : "VERIFIED_NOT_APPLICABLE" as const;
+        return { domain, status, allocationIds, proofId: record(`closure:${component.id}:${domain}`, "DOMAIN_CLOSURE", {
+          componentId: component.id, domain, status, allocationIds: [...allocationIds].sort(),
+          sourceIds: [...new Set(allocationIds.map(id => input.allocations.find(row => row.id === id)!.sourceId))].sort(),
+          componentVersion: { id: component.id, sourceRevision: component.sourceRevision, snapshotVersion: component.snapshotVersion },
+        }) };
+      }) })),
+  };
+  for (const field of fields) policy.legacyDispositionByField[field].originProofId = record(`origin:${field}`, "ESTIMATE_ORIGIN",
+    { field, fieldValue: input.budget[field], disposition: "ESTIMATE_ONLY" });
+  return { input, policy, facts, record, context: { censusDigest, internalRecordDigests, resolveInternalFact: (id: string) => facts.get(id) ?? null } };
+}
+
+test("policy contract can reconcile independently supported estimates and all five closed domains", () => {
+  const fixture = economicPolicyFixture();
+  const result = evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context);
+  assert.equal(result.legacyCostsReconciled, true);
+  assert.equal(result.costCompleteById.service, true);
+  assert.deepEqual(result.zeroCostConfirmedIds, []);
+  assert.equal(result.contributions[0].pending, 20000);
+  assert.deepEqual(result.policyReasons, []);
+});
+
+test("policy absence or PF integrity-only observation reports missing semantic support without zero inference", () => {
+  const fixture = economicPolicyFixture();
+  for (const policy of [undefined, { integrityValidated: true, rationale: "reviewed", legacyCostsReconciled: true, censusDigest: fixture.context.censusDigest }]) {
+    const result = evaluateServiceEconomicPolicy(fixture.input, policy, fixture.context);
+    assert.equal(result.legacyCostsReconciled, false);
+    assert.deepEqual(result.zeroCostConfirmedIds, []);
+    assert.ok(result.policyReasons.includes("LEGACY_DISPOSITION_BY_FIELD_MISSING_OR_INVALID"));
+    assert.equal(result.contributions[0].incurred, 10000);
+  }
+});
+
+test("policy cannot accept raw support, audit-only provenance, stale scope or forged origin statement", () => {
+  const fixture = economicPolicyFixture();
+  assert.equal(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, { censusDigest: fixture.context.censusDigest }).legacyCostsReconciled, false);
+  fixture.facts.get("origin:laborCost")!.originRecords = [];
+  assert.equal(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).legacyCostsReconciled, false);
+  fixture.facts.get("origin:laborCost")!.originRecords = [{ entity: "AuditLog", recordId: "audit", rowDigest: "b".repeat(64) }];
+  assert.equal(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).legacyCostsReconciled, false);
+  fixture.facts.get("origin:laborCost")!.originRecords = [{ entity: "Budget", recordId: "semantic-source:origin:laborCost", rowDigest: "b".repeat(64) }];
+  fixture.context.internalRecordDigests.delete("Budget:semantic-source:origin:laborCost");
+  assert.equal(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).legacyCostsReconciled, false);
+  fixture.context.internalRecordDigests.set("Budget:semantic-source:origin:laborCost", "b".repeat(64));
+  fixture.facts.get("origin:laborCost")!.statement = { field: "laborCost", fieldValue: 0, disposition: "ESTIMATE_ONLY" };
+  assert.equal(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).legacyCostsReconciled, false);
+  fixture.policy.scope.budgetUpdatedAt = "2026-10-11T00:00:00.000Z";
+  assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("POLICY_SCOPE_CENSUS_STALE"));
+});
+
+test("zero with no allocations requires independently supported absence closure for every domain", () => {
+  const input = economicEvidence(); input.sources = []; input.allocations = []; input.budget.laborCost = 0;
+  const fixture = economicPolicyFixture(input);
+  assert.deepEqual(evaluateServiceEconomicPolicy(input, fixture.policy, fixture.context).zeroCostConfirmedIds, ["service"]);
+  fixture.facts.delete("closure:service:LABOR");
+  assert.deepEqual(evaluateServiceEconomicPolicy(input, fixture.policy, fixture.context).zeroCostConfirmedIds, []);
+  fixture.policy.componentObligationClosure[0].domains.pop();
+  assert.ok(evaluateServiceEconomicPolicy(input, fixture.policy, fixture.context).policyReasons.includes("CLOSURE_UNIVERSE_INCOMPLETE:service"));
+});
+
+test("explicit source zero and exact assignments still fail without supported universe; residual or unknown remains partial", () => {
+  const fixture = economicPolicyFixture();
+  fixture.input.allocations[0].incurredAmount = 5000;
+  const residual = evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context);
+  assert.equal(residual.legacyCostsReconciled, false);
+  assert.equal(residual.residuals[0].incurred, 5000);
+  fixture.input.sources[0].pendingAmount = fixture.input.allocations[0].pendingAmount = null;
+  fixture.input.sources[0].pendingComplete = fixture.input.allocations[0].pendingComplete = false;
+  const unknown = evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context);
+  assert.equal(unknown.contributions[0].pending, null);
+  assert.ok(unknown.policyReasons.includes("RECOGNIZED_SOURCE_PARTIAL_UNKNOWN_OR_RESIDUAL"));
+  const zero = economicEvidence(); zero.budget.laborCost = 0;
+  zero.sources[0].incurredAmount = zero.sources[0].pendingAmount = 0;
+  zero.allocations[0].incurredAmount = zero.allocations[0].pendingAmount = 0;
+  const supported = economicPolicyFixture(zero);
+  supported.policy.componentObligationClosure[0].domains = [];
+  assert.deepEqual(evaluateServiceEconomicPolicy(zero, supported.policy, supported.context).zeroCostConfirmedIds, []);
+});
+
+test("recognized partitions reconcile exact declared cross-field representations only, never add legacy twice", () => {
+  const fixture = economicPolicyFixture(); fixture.input.budget.materialCost = 30000;
+  const fields = ["materialCost", "laborCost"] as const;
+  for (const field of fields) {
+    const slice = { sourceId: "source", allocationId: "allocation", incurred: 10000, pending: 20000,
+      domain: "SUPPLIER" as const, overlapGroup: "same-obligation-representation", proofId: `slice:${field}` };
+    fixture.policy.legacyDispositionByField[field] = { fieldValue: 30000, disposition: "REPRESENTED_BY_RECOGNIZED_SOURCES", originProofId: null, slices: [slice] };
+    fixture.record(slice.proofId, "RECOGNIZED_SLICE", { field, fieldValue: 30000, sourceId: slice.sourceId, allocationId: slice.allocationId,
+      incurred: slice.incurred, pending: slice.pending, domain: slice.domain, overlapGroup: slice.overlapGroup });
+  }
+  const result = evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context);
+  assert.equal(result.legacyCostsReconciled, true);
+  assert.equal(result.contributions.length, 1);
+  fixture.policy.legacyDispositionByField.laborCost.slices[0].overlapGroup = null;
+  assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("LEGACY_OVERLAP_UNDECLARED_OR_PARTIAL"));
+});
+
+test("legacy partition mismatches, duplicate slices and domain coverage gaps cannot certify reconciliation", () => {
+  const fixture = economicPolicyFixture();
+  fixture.policy.legacyDispositionByField.laborCost = { fieldValue: 30000, disposition: "REPRESENTED_BY_RECOGNIZED_SOURCES", originProofId: null,
+    slices: [{ sourceId: "source", allocationId: "allocation", incurred: 10000, pending: 10000, domain: "SUPPLIER", overlapGroup: null, proofId: "unproven" }] };
+  assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("LEGACY_PARTITION_AMOUNT_MISMATCH:laborCost"));
+  fixture.policy.legacyDispositionByField.laborCost.slices.push(fixture.policy.legacyDispositionByField.laborCost.slices[0]);
+  assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("LEGACY_DUPLICATE_SLICE:laborCost"));
+  fixture.policy.componentObligationClosure[0].domains.find(row => row.domain === "SUPPLIER")!.allocationIds = [];
+  assert.ok(evaluateServiceEconomicPolicy(fixture.input, fixture.policy, fixture.context).policyReasons.includes("CLOSURE_UNIVERSE_INCOMPLETE:service"));
 });

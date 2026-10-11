@@ -2,6 +2,8 @@ import { BudgetCalculationError, calculateBudgetCommercial, type CommercialLine 
 import type { BudgetCommercialTerms } from "./budget-commercial-contract";
 import { BUDGET_INT_MAX } from "./budget-payment-plan";
 import { grossToNet, isInvoiceTaxType, type InvoiceTaxTypeValue } from "./fiscal";
+import { z } from "zod";
+import { canonicalJson } from "./server/signature/hash";
 
 /** Private calculation input, NOT a persistence or public DTO. PF maps validated
  * same-company applications/coverage under the existing commercial lock later.
@@ -335,4 +337,154 @@ export function produceServiceEconomicEvidence(input: ServiceEconomicEvidenceInp
     costCompleteById: Object.fromEntries([...components].map(id => [id, false])),
     missingAuthority: ["PERSISTED_LEGACY_COST_RECONCILIATION", "SCOPED_VERSIONED_COMPONENT_ZERO_COST_ATTESTATION"] as const,
   };
+}
+
+const economicDomains = ["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"] as const;
+const legacyFields = ["materialCost", "laborCost", "costEstimate"] as const;
+const policyId = z.string().trim().min(1).max(200);
+const policyMoney = z.number().int().min(0).max(BUDGET_INT_MAX);
+const economicSliceSchema = z.object({ sourceId: policyId, allocationId: policyId,
+  incurred: policyMoney, pending: policyMoney, domain: z.enum(economicDomains), overlapGroup: policyId.nullable(), proofId: policyId }).strict();
+const legacyDispositionSchema = z.object({ fieldValue: policyMoney,
+  disposition: z.enum(["ESTIMATE_ONLY", "REPRESENTED_BY_RECOGNIZED_SOURCES", "UNRESOLVED"]),
+  originProofId: policyId.nullable(), slices: z.array(economicSliceSchema) }).strict();
+const economicPolicySchema = z.object({ policyVersion: z.literal(1), censusVersion: z.literal(2),
+  scope: z.object({ organizationId: policyId, budgetId: policyId, budgetUpdatedAt: z.string().datetime(), censusDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  legacyDispositionByField: z.object({ materialCost: legacyDispositionSchema, laborCost: legacyDispositionSchema, costEstimate: legacyDispositionSchema }).strict(),
+  componentObligationClosure: z.array(z.object({ componentId: policyId,
+    domains: z.array(z.object({ domain: z.enum(economicDomains), status: z.enum(["RECOGNIZED", "VERIFIED_NOT_APPLICABLE", "UNRESOLVED"]),
+      allocationIds: z.array(policyId), proofId: policyId.nullable() }).strict()) }).strict()),
+}).strict();
+export type ServiceEconomicPolicyV1 = z.infer<typeof economicPolicySchema>;
+
+/** This is a server resolver contract, not a persisted boolean or audit wrapper.
+ * A checked loader must independently validate semantic source records (origin,
+ * recognized slices, or closed obligation universe including absence proofs),
+ * actor/action and complete-census freshness before returning a fact. Merely
+ * matching PF observation/rationale/audit/digest MUST return null. JSON request
+ * data cannot supply this function. No such production resolver is wired here.
+ */
+export type ServiceEconomicFactResolver = (proofId: string) => {
+  id: string; organizationId: string; budgetId: string; budgetUpdatedAt: string; censusDigest: string;
+  censusVersion: 2;
+  actorId: string; actionId: string; kind: "ESTIMATE_ORIGIN" | "RECOGNIZED_SLICE" | "DOMAIN_CLOSURE";
+  originRecords: { entity: string; recordId: string; rowDigest: string }[];
+  statement: unknown;
+} | null;
+
+/** FIN_ECONOMIC_ATTESTATION_POLICY_V1. Private, synchronous policy evaluation;
+ * never opens a transaction, authenticates a HTTP claim, or invokes an allocator.
+ * Internal resolver freshness/semantic provenance is a prerequisite, not a flag
+ * that this predicate derives from the observation it is evaluating.
+ */
+export function evaluateServiceEconomicPolicy(input: ServiceEconomicEvidenceInput, policyInput: unknown, context: {
+  censusDigest: string;
+  resolveInternalFact?: ServiceEconomicFactResolver;
+  /** Independently loaded current tenant census, keyed entity:recordId. */
+  internalRecordDigests?: ReadonlyMap<string, string>;
+}) {
+  const evidence = produceServiceEconomicEvidence(input);
+  const reasons = new Set<string>();
+  const parsed = economicPolicySchema.safeParse(policyInput);
+  const denied = () => ({ ...evidence, policyVersion: 1 as const, policyReasons: [...reasons] });
+  if (!parsed.success) {
+    reasons.add(policyInput == null ? "POLICY_SUPPORT_MISSING" : "POLICY_SUPPORT_INVALID");
+    reasons.add("LEGACY_DISPOSITION_BY_FIELD_MISSING_OR_INVALID");
+    reasons.add("FIVE_DOMAIN_OBLIGATION_CLOSURE_MISSING_OR_INVALID");
+    return denied();
+  }
+  const policy = parsed.data;
+  if (!/^[a-f0-9]{64}$/.test(context.censusDigest) || policy.scope.censusDigest !== context.censusDigest
+    || policy.scope.organizationId !== input.scope.organizationId || policy.scope.budgetId !== input.scope.budgetId
+    || policy.scope.budgetUpdatedAt !== input.scope.budgetUpdatedAt) reasons.add("POLICY_SCOPE_CENSUS_STALE");
+  if (!context.resolveInternalFact) reasons.add("INTERNAL_SEMANTIC_FACT_RESOLVER_MISSING");
+  if (!context.internalRecordDigests) reasons.add("INTERNAL_RECORD_CENSUS_MISSING");
+  const proofEntities = new Set(["Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation",
+    "Event", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"]);
+  const supported = (id: string | null, kind: "ESTIMATE_ORIGIN" | "RECOGNIZED_SLICE" | "DOMAIN_CLOSURE", statement: unknown) => {
+    const fact = id === null ? null : context.resolveInternalFact?.(id);
+    if (!fact || fact.id !== id || fact.kind !== kind || typeof fact.actorId !== "string" || !fact.actorId.trim()
+      || typeof fact.actionId !== "string" || !fact.actionId.trim()
+      || fact.censusVersion !== 2 || !Array.isArray(fact.originRecords) || !fact.originRecords.length
+      || fact.originRecords.some(row => !row || !proofEntities.has(row.entity) || typeof row.recordId !== "string" || !row.recordId.trim()
+        || typeof row.rowDigest !== "string" || !/^[a-f0-9]{64}$/.test(row.rowDigest)
+        || context.internalRecordDigests?.get(`${row.entity}:${row.recordId}`) !== row.rowDigest)
+      || new Set(fact.originRecords.map(row => `${row.entity}:${row.recordId}`)).size !== fact.originRecords.length
+      || fact.organizationId !== input.scope.organizationId || fact.budgetId !== input.scope.budgetId
+      || fact.budgetUpdatedAt !== input.scope.budgetUpdatedAt || fact.censusDigest !== context.censusDigest
+      || canonicalJson(fact.statement) !== canonicalJson(statement)) { reasons.add(`UNSUPPORTED_INTERNAL_FACT:${id ?? "missing"}`); return false; }
+    return true;
+  };
+  const sources = new Map(input.sources.map(row => [row.id, row]));
+  const allocations = new Map(input.allocations.map(row => [row.id, row]));
+  const sliceRepresentations = new Map<string, { field: string; incurred: number; pending: number; domain: string; overlapGroup: string | null }>();
+  for (const field of legacyFields) {
+    const disposition = policy.legacyDispositionByField[field];
+    if (disposition.fieldValue !== input.budget[field]) reasons.add(`LEGACY_VALUE_STALE:${field}`);
+    if (disposition.disposition === "UNRESOLVED") reasons.add(`LEGACY_UNRESOLVED:${field}`);
+    if (disposition.disposition === "ESTIMATE_ONLY") {
+      if (disposition.slices.length) reasons.add(`LEGACY_ESTIMATE_HAS_SLICES:${field}`);
+      supported(disposition.originProofId, "ESTIMATE_ORIGIN", { field, fieldValue: disposition.fieldValue, disposition: "ESTIMATE_ONLY" });
+      continue;
+    }
+    if (disposition.disposition !== "REPRESENTED_BY_RECOGNIZED_SOURCES") continue;
+    // An empty partition, including fieldValue0, cannot prove representation.
+    if (disposition.originProofId !== null || !disposition.slices.length) reasons.add(`LEGACY_PARTITION_MISSING:${field}`);
+    let total = BigInt(0);
+    const seen = new Set<string>();
+    for (const slice of disposition.slices) {
+      const source = sources.get(slice.sourceId), allocation = allocations.get(slice.allocationId);
+      total += BigInt(slice.incurred) + BigInt(slice.pending);
+      if (seen.has(slice.allocationId)) reasons.add(`LEGACY_DUPLICATE_SLICE:${field}`);
+      seen.add(slice.allocationId);
+      if (!source || !allocation || allocation.sourceId !== source.id || !source.incurredComplete || !source.pendingComplete
+        || !allocation.incurredComplete || !allocation.pendingComplete || source.incurredAmount === null || source.pendingAmount === null
+        || allocation.incurredAmount === null || allocation.pendingAmount === null
+        || slice.incurred > allocation.incurredAmount || slice.pending > allocation.pendingAmount) reasons.add(`LEGACY_SLICE_UNRECOGNIZED:${field}`);
+      supported(slice.proofId, "RECOGNIZED_SLICE", { field, fieldValue: disposition.fieldValue, sourceId: slice.sourceId,
+        allocationId: slice.allocationId, incurred: slice.incurred, pending: slice.pending, domain: slice.domain, overlapGroup: slice.overlapGroup });
+      const prior = sliceRepresentations.get(slice.allocationId);
+      // V1 admits exact declared cross-field representations. Partial ambiguous
+      // overlap requires a finer persisted partition and remains unresolved.
+      if (prior && (prior.field === field || prior.overlapGroup === null || prior.overlapGroup !== slice.overlapGroup
+        || prior.incurred !== slice.incurred || prior.pending !== slice.pending || prior.domain !== slice.domain)) reasons.add("LEGACY_OVERLAP_UNDECLARED_OR_PARTIAL");
+      sliceRepresentations.set(slice.allocationId, { field, incurred: slice.incurred, pending: slice.pending, domain: slice.domain, overlapGroup: slice.overlapGroup });
+    }
+    if (total !== BigInt(disposition.fieldValue)) reasons.add(`LEGACY_PARTITION_AMOUNT_MISMATCH:${field}`);
+  }
+  const componentIds = new Set(input.components.map(row => row.id));
+  const closedComponents = new Set<string>();
+  const closuresSeen = new Set<string>();
+  for (const closure of policy.componentObligationClosure) {
+    if (!componentIds.has(closure.componentId) || closuresSeen.has(closure.componentId)) reasons.add("CLOSURE_COMPONENT_INVALID_OR_DUPLICATE");
+    closuresSeen.add(closure.componentId);
+    const ownIds = input.allocations.filter(row => (row.applicationId ?? row.budgetItemId) === closure.componentId).map(row => row.id);
+    const covered = new Set<string>(), seenDomains = new Set<string>();
+    const reasonsBefore = reasons.size;
+    for (const domain of closure.domains) {
+      if (seenDomains.has(domain.domain)) reasons.add(`CLOSURE_DOMAIN_DUPLICATE:${closure.componentId}`);
+      seenDomains.add(domain.domain);
+      if (domain.status === "UNRESOLVED" || (domain.status === "VERIFIED_NOT_APPLICABLE" && domain.allocationIds.length)
+        || (domain.status === "RECOGNIZED" && !domain.allocationIds.length)
+        || new Set(domain.allocationIds).size !== domain.allocationIds.length
+        || domain.allocationIds.some(id => !ownIds.includes(id) || covered.has(id)
+          || (sliceRepresentations.has(id) && sliceRepresentations.get(id)!.domain !== domain.domain))) reasons.add(`CLOSURE_DOMAIN_UNRESOLVED:${closure.componentId}:${domain.domain}`);
+      for (const id of domain.allocationIds) covered.add(id);
+      supported(domain.proofId, "DOMAIN_CLOSURE", { componentId: closure.componentId, domain: domain.domain,
+        status: domain.status, allocationIds: [...domain.allocationIds].sort(),
+        sourceIds: [...new Set(domain.allocationIds.map(id => allocations.get(id)?.sourceId))].sort(),
+        componentVersion: evidence.authority.componentVersions.find(row => row.id === closure.componentId) });
+    }
+    if (economicDomains.some(domain => !seenDomains.has(domain)) || ownIds.some(id => !covered.has(id))) reasons.add(`CLOSURE_UNIVERSE_INCOMPLETE:${closure.componentId}`);
+    if (reasons.size === reasonsBefore) closedComponents.add(closure.componentId);
+  }
+  if (!componentIds.size || [...componentIds].some(id => !closuresSeen.has(id))) reasons.add("CLOSURE_COMPONENTS_MISSING");
+  if (evidence.incompleteSourceIds.length) reasons.add("RECOGNIZED_SOURCE_PARTIAL_UNKNOWN_OR_RESIDUAL");
+  if (reasons.size) return denied();
+  const zeroCostConfirmedIds = input.components.filter(component => closedComponents.has(component.id)
+    && input.allocations.filter(row => (row.applicationId ?? row.budgetItemId) === component.id)
+      .every(row => row.incurredComplete && row.pendingComplete && row.incurredAmount === 0 && row.pendingAmount === 0)).map(row => row.id);
+  return { ...evidence, policyVersion: 1 as const, policyReasons: [] as string[], legacyCostsReconciled: true,
+    zeroCostConfirmedIds, costComplete: true, costCompleteById: Object.fromEntries(input.components.map(row => [row.id, true])),
+    missingAuthority: [] as string[] };
 }
