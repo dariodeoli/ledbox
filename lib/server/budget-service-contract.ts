@@ -10,6 +10,7 @@ import { adminInventoryServiceConfigurationSchema, persistedInventoryServiceConf
    persistedServiceEconomicEvidenceSchema, serviceEconomicSnapshotSchema, serviceEconomicObservationInputSchema,
    type ServiceEconomicSnapshot, type ServiceBindingContext } from "../budget-service-contract";
 import { canonicalJson } from "./signature/hash";
+import { z } from "zod";
 
 /** Hash the complete fresh census, not just IDs or claimed completeness flags.
  * Equipment has no revision: full persisted rows/coverage are bound instead. */
@@ -19,6 +20,7 @@ export function serviceEconomicCensusDigest(census: unknown) {
 
 type EconomicAudit = { id: string; organizationId: string; actorId: string; action: string; entity: string; entityId: string; createdAt: string; detail: unknown };
 type EconomicUniverse = Record<string, Record<string, unknown>[]>;
+const economicUniverseEntities = ["Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"] as const;
 function evidenceFailure(code: string): never { throw new Error(code); }
 const economicMemberKey = (row: { applicationId: string | null; budgetItemId: string | null; sourceId: string | null; allocationId: string | null }) =>
   canonicalJson([row.applicationId, row.budgetItemId, row.sourceId, row.allocationId]);
@@ -32,7 +34,7 @@ function validateEconomicPolicySupport(row: ReturnType<typeof persistedServiceEc
   const support = row.policySupport;
   if (support === null) return ["POLICY_SUPPORT_ABSENT", "PERSISTED_ORIGIN_FACTS_ABSENT", "PERSISTED_DOMAIN_CLOSURE_FACTS_ABSENT"];
   const distinct = (values: string[]) => { if (new Set(values).size !== values.length) evidenceFailure("EVIDENCE_POLICY_DUPLICATE"); };
-  const requiredEntities = ["Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"];
+  const requiredEntities = economicUniverseEntities;
   if (!universe || requiredEntities.some(entity => !Array.isArray(universe[entity]))) evidenceFailure("EVIDENCE_POLICY_UNIVERSE_INCOMPLETE");
   distinct(support.legacyDispositionByField.map(value => value.field));
   const fields = ["materialCost", "laborCost", "costEstimate"] as const;
@@ -228,7 +230,7 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
   const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Budget" WHERE "organizationId"=${context.organizationId} AND "id"=${budgetId} FOR UPDATE`;
   if (locked.length !== 1) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
   type Row = Record<string, unknown>;
-  type Census = { budget: Row; applications: Row[]; items: Row[]; coverage: Row[]; sources: Row[]; allocations: Row[]; supplierJobs: Row[]; universe: EconomicUniverse };
+  type Census = { budget: Row; applications: Row[]; items: Row[]; coverage: Row[]; sources: Row[]; allocations: Row[]; supplierJobs: Row[]; universe: EconomicUniverse; joinedBindings: unknown };
   const [census] = await tx.$queryRaw<Census[]>`
     SELECT to_jsonb(b) AS budget,
       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "BudgetServiceApplication" a WHERE a."organizationId"=b."organizationId" AND a."budgetId"=b."id"),'[]'::jsonb) AS applications,
@@ -253,7 +255,18 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
         'EventInventory',COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i."id") FROM "EventInventory" i JOIN "Event" e ON e."id"=i."eventId" WHERE e."organizationId"=b."organizationId"),'[]'::jsonb),
         'InventoryItem',COALESCE((SELECT jsonb_agg((to_jsonb(i)-'imageData') ORDER BY i."id") FROM "InventoryItem" i WHERE i."organizationId"=b."organizationId"),'[]'::jsonb),
         'InventoryUnit',COALESCE((SELECT jsonb_agg(to_jsonb(u) ORDER BY u."id") FROM "InventoryUnit" u WHERE u."organizationId"=b."organizationId"),'[]'::jsonb)
-      ) AS universe
+      ) AS universe,
+      jsonb_build_object(
+        'BudgetItem',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i."id",'organizationId',x."organizationId",'budgetId',x."id",'eventId',x."eventId") ORDER BY i."id")
+          FROM "BudgetItem" i JOIN "Budget" x ON x."id"=i."budgetId" LEFT JOIN "InventoryItem" inv ON inv."id"=i."inventoryId"
+          WHERE x."organizationId"=b."organizationId" AND (i."inventoryId" IS NULL OR inv."organizationId"=b."organizationId")),'[]'::jsonb),
+        'EventTask',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',t."id",'organizationId',e."organizationId",'budgetId',NULL,'eventId',e."id") ORDER BY t."id")
+          FROM "EventTask" t JOIN "Event" e ON e."id"=t."eventId" LEFT JOIN "Promoter" p ON p."id"=t."promoterId"
+          WHERE e."organizationId"=b."organizationId" AND (t."promoterId" IS NULL OR p."organizationId"=b."organizationId")),'[]'::jsonb),
+        'EventInventory',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i."id",'organizationId',e."organizationId",'budgetId',NULL,'eventId',e."id") ORDER BY i."id")
+          FROM "EventInventory" i JOIN "Event" e ON e."id"=i."eventId" JOIN "InventoryItem" inv ON inv."id"=i."inventoryId"
+          WHERE e."organizationId"=b."organizationId" AND inv."organizationId"=b."organizationId"),'[]'::jsonb)
+      ) AS "joinedBindings"
     FROM "Budget" b WHERE b."organizationId"=${context.organizationId} AND b."id"=${budgetId}`;
   if (!census) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
   const select = (row: Row, fields: readonly string[]) => Object.fromEntries(fields.map(field => [field, row[field]]));
@@ -274,7 +287,125 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
   // Company-wide scope is deliberate while event-level expenses/commitments
   // lack explicit Budget attribution. It invalidates conservatively, assigns
   // nothing, and cannot certify a supported economic closure from membership.
-  return { snapshot, censusDigest: serviceEconomicCensusDigest({ censusVersion: 2, ...census }), universe: census.universe };
+  return { snapshot, censusDigest: serviceEconomicCensusDigest({ censusVersion: 2, ...census }), universe: census.universe, joinedBindings: census.joinedBindings };
+}
+
+export type ServiceEconomicCurrentRecord = { rowDigest: string; organizationId: string; budgetId: string | null; eventId: string | null };
+type EconomicRecordLinkage = ServiceEconomicCurrentRecord & { reason: "BUDGET_ATTRIBUTION_MISSING" | "OTHER_BUDGET" | "OTHER_EVENT"; linkedBudgetIds: readonly string[] };
+const economicRecordId = z.string().min(1).max(200).refine(value => value.trim().length > 0);
+const economicRowIdentity = z.object({ id: economicRecordId }).passthrough();
+const economicJoinBinding = z.object({ id: economicRecordId, organizationId: economicRecordId, budgetId: economicRecordId.nullable(), eventId: economicRecordId.nullable() }).strict();
+
+/** Only called with this module's DB capture; never an HTTP/body map adapter.
+ * Raw row digests exclude join metadata, matching FIN's canonical row references. */
+function indexCapturedEconomicRecords(capture: Awaited<ReturnType<typeof captureLockedServiceEconomicCensus>>) {
+  const { snapshot } = capture;
+  const organizationId = snapshot.scope.organizationId, budgetId = snapshot.scope.budgetId, eventId = snapshot.budget.eventId;
+  const rows = z.record(z.array(economicRowIdentity)).parse(capture.universe);
+  if (Object.keys(rows).length !== economicUniverseEntities.length || economicUniverseEntities.some(entity => !rows[entity])) evidenceFailure("EVIDENCE_INDEX_UNIVERSE_INCOMPLETE");
+  const joins = z.object({ BudgetItem: z.array(economicJoinBinding), EventTask: z.array(economicJoinBinding), EventInventory: z.array(economicJoinBinding) }).strict().parse(capture.joinedBindings);
+  const byEntity = new Map<string, Map<string, Record<string, unknown>>>();
+  for (const entity of economicUniverseEntities) {
+    const index = new Map<string, Record<string, unknown>>();
+    for (const row of rows[entity]) {
+      if (index.has(row.id)) evidenceFailure("EVIDENCE_INDEX_DUPLICATE_RECORD");
+      index.set(row.id, row);
+    }
+    byEntity.set(entity, index);
+  }
+  const joined = new Map<string, z.infer<typeof economicJoinBinding>>();
+  for (const entity of ["BudgetItem", "EventTask", "EventInventory"] as const) {
+    for (const binding of joins[entity]) {
+      const key = `${entity}:${binding.id}`;
+      if (joined.has(key)) evidenceFailure("EVIDENCE_INDEX_DUPLICATE_JOIN");
+      if (!byEntity.get(entity)?.has(binding.id)) evidenceFailure("EVIDENCE_INDEX_JOIN_ORPHAN");
+      joined.set(key, binding);
+    }
+  }
+  const identity = (value: unknown) => economicRecordId.parse(value);
+  const optionalId = (value: unknown) => economicRecordId.nullable().parse(value);
+  const raw = (entity: string, id: string) => {
+    const row = byEntity.get(entity)?.get(id);
+    if (!row) evidenceFailure("EVIDENCE_INDEX_LINK_MISSING");
+    return row;
+  };
+  const eventScope = (id: string | null) => {
+    if (id !== null && identity(raw("Event", id).organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+    return id;
+  };
+  const budgetScope = (id: string) => {
+    const budget = raw("Budget", id);
+    if (identity(budget.organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+    return { budgetId: id, eventId: eventScope(optionalId(budget.eventId)) };
+  };
+  const scoped = new Map<string, ServiceEconomicCurrentRecord>();
+  const unavailable = new Map<string, EconomicRecordLinkage>();
+  for (const entity of economicUniverseEntities) for (const row of rows[entity]) {
+    const key = `${entity}:${row.id}`;
+    let boundBudget: string | null = null, boundEvent: string | null = null;
+    if (["BudgetItem", "EventTask", "EventInventory"].includes(entity)) {
+      const binding = joined.get(key);
+      if (!binding || binding.organizationId !== organizationId) evidenceFailure("EVIDENCE_INDEX_JOIN_SCOPE_INVALID");
+      if (entity === "BudgetItem") {
+        if (binding.budgetId !== identity(row.budgetId)) evidenceFailure("EVIDENCE_INDEX_JOIN_SCOPE_INVALID");
+        const parent = budgetScope(identity(binding.budgetId));
+        if (binding.eventId !== parent.eventId) evidenceFailure("EVIDENCE_INDEX_JOIN_SCOPE_INVALID");
+        boundBudget = parent.budgetId; boundEvent = parent.eventId;
+        if (row.inventoryId !== null && identity(raw("InventoryItem", identity(row.inventoryId)).organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+      } else {
+        if (binding.budgetId !== null || binding.eventId !== identity(row.eventId)) evidenceFailure("EVIDENCE_INDEX_JOIN_SCOPE_INVALID");
+        boundEvent = eventScope(binding.eventId);
+        const linkedEntity = entity === "EventTask" ? "Promoter" : "InventoryItem";
+        const linkedId = entity === "EventTask" ? optionalId(row.promoterId) : identity(row.inventoryId);
+        if (linkedId !== null && identity(raw(linkedEntity, linkedId).organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+      }
+    } else {
+      if (identity(row.organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+      if (entity === "Budget") { const parent = budgetScope(row.id); boundBudget = parent.budgetId; boundEvent = parent.eventId; }
+      else if (["BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation"].includes(entity)) {
+        const parent = budgetScope(identity(row.budgetId)); boundBudget = parent.budgetId; boundEvent = parent.eventId;
+      } else if (entity === "Event") boundEvent = eventScope(row.id);
+      else if (["SupplierJob", "Expense"].includes(entity)) boundEvent = eventScope(optionalId(row.eventId));
+      else if (entity === "TreasuryMovement") {
+        const origin = z.string().parse(row.origin), sourceId = optionalId(row.sourceId);
+        if (sourceId !== null && ["supplier_job", "expense"].includes(origin)) {
+          const source = raw(origin === "supplier_job" ? "SupplierJob" : "Expense", sourceId);
+          if (identity(source.organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+          boundEvent = eventScope(optionalId(source.eventId));
+        }
+      } else if (entity === "InventoryUnit" && identity(raw("InventoryItem", identity(row.inventoryId)).organizationId) !== organizationId) evidenceFailure("EVIDENCE_INDEX_CROSS_ORGANIZATION");
+    }
+    const record = { rowDigest: serviceEconomicCensusDigest(row), organizationId, budgetId: boundBudget, eventId: boundEvent };
+    if (boundBudget === budgetId && (boundEvent === null || boundEvent === eventId)) scoped.set(key, record);
+    else {
+      // Preserve explicit links without promoting event membership or related
+      // source references into a Budget attribution of this entity's full row.
+      const linkedBudgetIds = entity === "SupplierJob" ? [...new Set(rows.ServiceCostSource.filter(source => source.supplierJobId === row.id).map(source => identity(source.budgetId)))].sort() : [];
+      unavailable.set(key, { ...record, linkedBudgetIds,
+        reason: boundBudget !== null ? "OTHER_BUDGET" : boundEvent !== null && boundEvent !== eventId ? "OTHER_EVENT" : "BUDGET_ATTRIBUTION_MISSING" });
+    }
+  }
+  return { currentRecordMap: scoped, unavailableRecords: unavailable };
+}
+
+/** Authenticated internal export, structurally matching FIN8a466 current context.
+ * Reuses exactly one existing Budget lock/MVCC capture. No FIN runtime import,
+ * no reconciliation/evaluator, no provider stub echoing candidates as facts. */
+export async function loadLockedServiceEconomicNormalizerContext(tx: Prisma.TransactionClient, context: AdminContext, budgetId: string) {
+  if (!context.user?.id || context.organization?.id !== context.organizationId || context.demo
+    || !["OWNER", "ADMIN", "FINANCE"].includes(context.role) || !roleCan(context.role, "finance.write")) evidenceFailure("EVIDENCE_NORMALIZER_CONTEXT_FORBIDDEN");
+  economicRecordId.parse(budgetId);
+  const capture = await captureLockedServiceEconomicCensus(tx, context, budgetId);
+  const indexed = indexCapturedEconomicRecords(capture);
+  const currentRecordMap: ReadonlyMap<string, ServiceEconomicCurrentRecord> = indexed.currentRecordMap;
+  const unavailableRecords: ReadonlyMap<string, EconomicRecordLinkage> = indexed.unavailableRecords;
+  return { snapshot: capture.snapshot,
+    current: { organizationId: capture.snapshot.scope.organizationId, budgetId: capture.snapshot.scope.budgetId,
+      budgetUpdatedAt: capture.snapshot.scope.budgetUpdatedAt, censusVersion: 2 as const, censusDigest: capture.censusDigest,
+      currentRecordMap },
+    unavailableRecords,
+    semanticFactProvider: null,
+    semanticFactProviderReason: "PERSISTED_ORIGIN_DOMAIN_CLOSURE_AND_BUDGET_ATTRIBUTION_FACTS_ABSENT" as const };
 }
 
 export async function loadLockedServiceEconomicEvidence(tx: Prisma.TransactionClient, context: Pick<AdminContext, "organizationId">,
