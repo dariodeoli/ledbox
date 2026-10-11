@@ -661,7 +661,10 @@ export function normalizePfServiceEconomicPolicy(snapshotInput: unknown, support
       if (domain.state === "UNRESOLVED") reasons.add(`DOMAIN_UNRESOLVED:${componentId}:${domain.domain}`);
       return { domain: domain.domain, status: domain.state, allocationIds, proofId };
     });
-    if (snapshot.allocations.some(value => (value.applicationId ?? value.budgetItemId) === componentId && !coveredAllocations.has(value.id))) fail("NORMALIZER_DOMAIN_ALLOCATION_COVERAGE_MISSING");
+    if (snapshot.allocations.some(value => (value.applicationId ?? value.budgetItemId) === componentId && !coveredAllocations.has(value.id))) {
+      if (row.domains.some(domain => domain.state === "UNRESOLVED")) reasons.add(`DOMAIN_ALLOCATION_COVERAGE_UNRESOLVED:${componentId}`);
+      else fail("NORMALIZER_DOMAIN_ALLOCATION_COVERAGE_MISSING");
+    }
     return { componentId, domains };
   });
   if (componentIds.size !== snapshot.components.length) fail("NORMALIZER_COMPONENT_CENSUS_INCOMPLETE");

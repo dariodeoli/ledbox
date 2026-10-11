@@ -492,6 +492,15 @@ test("missing internal map or historical null support stays structural and prese
   assert.equal(result.evaluation.costComplete, false);
   const historical = normalizePfServiceEconomicPolicy(fixture.snapshot, null, fixture.current);
   assert.deepEqual(historical.normalizationReasons, ["PF_POLICY_SUPPORT_MISSING"]);
+  fixture.support.legacyDispositionByField = fixture.support.legacyDispositionByField.map(row => ({ field: row.field, fieldValue: row.fieldValue,
+    state: "UNRESOLVED" as const, reason: "origin is not persisted" }));
+  fixture.support.componentObligationClosure[0].domains = fixture.support.componentObligationClosure[0].domains.map(row => ({ domain: row.domain,
+    state: "UNRESOLVED" as const, reason: "operational closure is not persisted" }));
+  const unresolved = normalizePfServiceEconomicPolicy(fixture.snapshot, fixture.support, fixture.current);
+  assert.equal(unresolved.authorityStatus, "STRUCTURAL_ONLY");
+  assert.ok(unresolved.normalizationReasons.includes("DOMAIN_ALLOCATION_COVERAGE_UNRESOLVED:service"));
+  assert.equal(unresolved.evaluation.contributions[0].incurred, 10000);
+  assert.equal(unresolved.evaluation.contributions[0].pending, null);
 });
 
 test("raw body facts, unexpected versions and non-bijective field shapes cannot cross normalization", () => {
