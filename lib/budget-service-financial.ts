@@ -55,7 +55,7 @@ export type RecognizedCostContribution = {
   allocations: { componentId: string; incurred: number | null; pending: number | null }[];
 };
 
-const fail = (message: string): never => { throw new BudgetCalculationError(message); };
+function fail(message: string): never { throw new BudgetCalculationError(message); }
 function amount(value: number) {
   if (!Number.isInteger(value) || value < 0 || value > BUDGET_INT_MAX) fail("Importe de servicio inválido o fuera del límite Int.");
   return value;
