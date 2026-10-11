@@ -2474,6 +2474,7 @@ model ServiceEconomicEvidence {
   recordedAt DateTime
   rationale String
   legacyOverlaps Json
+  policySupport Json?
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_org_fkey")
   budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_budget_fkey")
   audit AuditLog @relation(fields: [organizationId, auditId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_audit_fkey")

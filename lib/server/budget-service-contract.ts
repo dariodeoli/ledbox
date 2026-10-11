@@ -18,15 +18,132 @@ export function serviceEconomicCensusDigest(census: unknown) {
 }
 
 type EconomicAudit = { id: string; organizationId: string; actorId: string; action: string; entity: string; entityId: string; createdAt: string; detail: unknown };
+type EconomicUniverse = Record<string, Record<string, unknown>[]>;
 function evidenceFailure(code: string): never { throw new Error(code); }
 const economicMemberKey = (row: { applicationId: string | null; budgetItemId: string | null; sourceId: string | null; allocationId: string | null }) =>
   canonicalJson([row.applicationId, row.budgetItemId, row.sourceId, row.allocationId]);
+
+/** Validate FIN V1 support representation against real fresh references. This
+ * does not implement FIN's positive economic predicate. Current source models
+ * have no persisted estimate-origin/domain-closure facts: never promote a field,
+ * task completion, generic audit, amount equality or row absence to such proof. */
+function validateEconomicPolicySupport(row: ReturnType<typeof persistedServiceEconomicEvidenceSchema.parse>, fresh: ServiceEconomicSnapshot, universe?: EconomicUniverse) {
+  const reasons: string[] = [];
+  const support = row.policySupport;
+  if (support === null) return ["POLICY_SUPPORT_ABSENT", "PERSISTED_ORIGIN_FACTS_ABSENT", "PERSISTED_DOMAIN_CLOSURE_FACTS_ABSENT"];
+  const distinct = (values: string[]) => { if (new Set(values).size !== values.length) evidenceFailure("EVIDENCE_POLICY_DUPLICATE"); };
+  const requiredEntities = ["Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"];
+  if (!universe || requiredEntities.some(entity => !Array.isArray(universe[entity]))) evidenceFailure("EVIDENCE_POLICY_UNIVERSE_INCOMPLETE");
+  distinct(support.legacyDispositionByField.map(value => value.field));
+  const fields = ["materialCost", "laborCost", "costEstimate"] as const;
+  if (fields.some(field => !support.legacyDispositionByField.some(value => value.field === field))) evidenceFailure("EVIDENCE_POLICY_FIELDS_INCOMPLETE");
+  const sourceMap = new Map(fresh.sources.map(value => [value.id, value]));
+  const allocationMap = new Map(fresh.allocations.map(value => [value.id, value]));
+  for (const source of fresh.sources) {
+    const allocations = fresh.allocations.filter(value => value.sourceId === source.id);
+    if (!source.incurredComplete || !source.pendingComplete || source.incurredAmount === null || source.pendingAmount === null
+      || allocations.some(value => !value.incurredComplete || !value.pendingComplete || value.incurredAmount === null || value.pendingAmount === null)) reasons.push(`SOURCE_${source.id}_PARTIAL_OR_UNKNOWN`);
+    for (const field of ["incurredAmount", "pendingAmount"] as const) {
+      const knownAssigned = allocations.filter(value => value[field] !== null).reduce((sum, value) => sum + BigInt(value[field]!), BigInt(0));
+      if (source[field] !== null && knownAssigned !== BigInt(source[field]!)) reasons.push(`SOURCE_${source.id}_UNASSIGNED_RESIDUAL`);
+    }
+  }
+  type Fact = { entity: string; recordId: string; rowDigest: string; fact: string };
+  const facts = (references: Fact[]) => {
+    distinct(references.map(value => canonicalJson([value.entity, value.recordId, value.fact])));
+    for (const reference of references) {
+      const actual = universe[reference.entity]?.find(value => value.id === reference.recordId);
+      if (!actual || serviceEconomicCensusDigest(actual) !== reference.rowDigest) evidenceFailure("EVIDENCE_POLICY_FACT_STALE");
+      if ((reference.entity === "Budget" && actual.id !== row.budgetId)
+        || (["BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation"].includes(reference.entity) && actual.budgetId !== row.budgetId)
+        || (reference.entity === "Event" && actual.id !== fresh.budget.eventId)
+        || (["SupplierJob", "Expense", "EventTask", "EventInventory"].includes(reference.entity) && actual.eventId !== null && actual.eventId !== fresh.budget.eventId)) evidenceFailure("EVIDENCE_POLICY_FACT_SCOPE_INVALID");
+      // Joining the row to this tenant proves scope, not its requested economic
+      // meaning. These facts aren't persisted in the current entity schemas.
+      if (reference.fact === "ESTIMATE_ORIGIN" || reference.fact === "DOMAIN_OPERATIONAL_CLOSURE" || reference.fact === "NOT_APPLICABLE_FOR_EXECUTION") {
+        reasons.push(`PERSISTED_${reference.fact}_FACT_ABSENT`);
+      }
+      if (reference.fact === "BUDGET_ATTRIBUTION" && actual.budgetId !== row.budgetId) reasons.push("EXPLICIT_BUDGET_ATTRIBUTION_ABSENT");
+      if (reference.fact === "RECOGNIZED_OBLIGATION" && !["ServiceCostSource", "ServiceCostAllocation"].includes(reference.entity)) reasons.push("EXPLICIT_OBLIGATION_RECOGNITION_ABSENT");
+    }
+  };
+  type Slice = Extract<(typeof support.legacyDispositionByField)[number], { state: "REPRESENTED_BY_RECOGNIZED_SOURCES" }>["slices"][number];
+  const slices = new Map<string, { field: string; slice: Slice }>();
+  for (const disposition of support.legacyDispositionByField) {
+    if (disposition.fieldValue !== fresh.budget[disposition.field]) evidenceFailure("EVIDENCE_POLICY_FIELD_VALUE_STALE");
+    if (disposition.state === "UNRESOLVED") { reasons.push(`LEGACY_${disposition.field}_UNRESOLVED`); continue; }
+    if (disposition.state === "ESTIMATE_ONLY") {
+      if ((disposition.field === "costEstimate") !== (disposition.origin === "CANONICAL_BUDGET_ITEM_ESTIMATE")) evidenceFailure("EVIDENCE_POLICY_ORIGIN_INVALID");
+      facts(disposition.factReferences);
+      if (!disposition.factReferences.some(value => value.fact === "ESTIMATE_ORIGIN")) reasons.push(`LEGACY_${disposition.field}_ORIGIN_ABSENT`);
+      continue;
+    }
+    distinct(disposition.slices.map(value => value.id));
+    distinct(disposition.slices.map(value => canonicalJson([value.sourceId, value.allocationId, value.domain, value.incurredAmount, value.pendingAmount])));
+    let total = BigInt(0);
+    const partitions = new Map<string, { incurred: bigint; pending: bigint }>();
+    for (const slice of disposition.slices) {
+      const source = sourceMap.get(slice.sourceId), allocation = allocationMap.get(slice.allocationId);
+      if (!source || !allocation || allocation.sourceId !== source.id) evidenceFailure("EVIDENCE_POLICY_SLICE_SCOPE_INVALID");
+      if (!source.incurredComplete || !source.pendingComplete || source.incurredAmount === null || source.pendingAmount === null
+        || !allocation.incurredComplete || !allocation.pendingComplete || allocation.incurredAmount === null || allocation.pendingAmount === null) evidenceFailure("EVIDENCE_POLICY_SLICE_UNKNOWN");
+      const sums = partitions.get(allocation.id) ?? { incurred: BigInt(0), pending: BigInt(0) };
+      sums.incurred += BigInt(slice.incurredAmount); sums.pending += BigInt(slice.pendingAmount);
+      if (sums.incurred > BigInt(allocation.incurredAmount) || sums.pending > BigInt(allocation.pendingAmount)) evidenceFailure("EVIDENCE_POLICY_SLICE_OVERALLOCATED");
+      partitions.set(allocation.id, sums);
+      total += BigInt(slice.incurredAmount) + BigInt(slice.pendingAmount);
+      facts(slice.factReferences);
+      // sourceKind alone cannot establish the slice's economic domain.
+      reasons.push("PERSISTED_SLICE_DOMAIN_FACT_ABSENT");
+      slices.set(canonicalJson([disposition.field, slice.id]), { field: disposition.field, slice });
+    }
+    if (total !== BigInt(disposition.fieldValue)) evidenceFailure("EVIDENCE_POLICY_PARTITION_INCOMPLETE");
+  }
+  const overlapPairs = new Set<string>();
+  const pairKey = (a: string, b: string) => canonicalJson([a, b].sort());
+  for (const overlap of support.overlaps) {
+    const leftKey = canonicalJson([overlap.leftField, overlap.leftSliceId]), rightKey = canonicalJson([overlap.rightField, overlap.rightSliceId]);
+    const left = slices.get(leftKey), right = slices.get(rightKey);
+    if (!left || !right || left.field === right.field || canonicalJson([left.slice.sourceId, left.slice.allocationId, left.slice.domain, left.slice.incurredAmount, left.slice.pendingAmount])
+      !== canonicalJson([right.slice.sourceId, right.slice.allocationId, right.slice.domain, right.slice.incurredAmount, right.slice.pendingAmount])) evidenceFailure("EVIDENCE_POLICY_OVERLAP_INVALID");
+    const key = pairKey(leftKey, rightKey);
+    if (overlapPairs.has(key)) evidenceFailure("EVIDENCE_POLICY_DUPLICATE");
+    overlapPairs.add(key);
+  }
+  const entries = [...slices.entries()];
+  for (let a = 0; a < entries.length; a++) for (let b = a + 1; b < entries.length; b++) {
+    const [leftKey, left] = entries[a], [rightKey, right] = entries[b];
+    if (left.field !== right.field && left.slice.allocationId === right.slice.allocationId && !overlapPairs.has(pairKey(leftKey, rightKey))) evidenceFailure("EVIDENCE_POLICY_OVERLAP_UNDECLARED");
+  }
+  const closures = support.componentObligationClosure;
+  const key = (value: { applicationId: string | null; budgetItemId: string | null }) => canonicalJson([value.applicationId, value.budgetItemId]);
+  distinct(closures.map(key));
+  const expected = fresh.components.map(value => key({ applicationId: value.kind === "SERVICE" ? value.id : null, budgetItemId: value.kind === "EQUIPMENT" ? value.id : null })).sort();
+  if (canonicalJson(closures.map(key).sort()) !== canonicalJson(expected)) evidenceFailure("EVIDENCE_POLICY_COMPONENT_CENSUS_INCOMPLETE");
+  for (const closure of closures) {
+    distinct(closure.domains.map(value => value.domain));
+    for (const domain of closure.domains) {
+      if (domain.state === "UNRESOLVED") { reasons.push(`COMPONENT_${closure.applicationId ?? closure.budgetItemId}_${domain.domain}_UNRESOLVED`); continue; }
+      facts(domain.factReferences);
+      if (!domain.factReferences.some(value => value.fact === "DOMAIN_OPERATIONAL_CLOSURE")) reasons.push(`DOMAIN_${domain.domain}_OPERATIONAL_CLOSURE_ABSENT`);
+      if (domain.state === "VERIFIED_NOT_APPLICABLE" && !domain.factReferences.some(value => value.fact === "NOT_APPLICABLE_FOR_EXECUTION")) reasons.push(`DOMAIN_${domain.domain}_NOT_APPLICABLE_FACT_ABSENT`);
+      if (domain.state === "RECOGNIZED") {
+        distinct(domain.sourceIds); distinct(domain.allocationIds);
+        if (domain.sourceIds.some(id => !sourceMap.has(id)) || domain.allocationIds.some(id => {
+          const allocation = allocationMap.get(id);
+          return !allocation || !domain.sourceIds.includes(allocation.sourceId) || allocation.applicationId !== closure.applicationId || allocation.budgetItemId !== closure.budgetItemId;
+        })) evidenceFailure("EVIDENCE_POLICY_DOMAIN_ASSIGNMENT_INVALID");
+      }
+    }
+  }
+  return [...new Set([...reasons, "PERSISTED_DOMAIN_CLOSURE_FACTS_ABSENT", "FIN_POSITIVE_PREDICATE_NOT_WIRED"])];
+}
 
 /** Structural/provenance validation only, NOT FIN economic approval. Caller must
  * provide a fresh complete census under the same Budget lock, never request data.
  * No legacy sum is emitted; overlaps identify excluded legacy representations. */
 export function validatePersistedServiceEconomicEvidence(input: unknown, current: {
-  snapshot: ServiceEconomicSnapshot; censusDigest: string; expectedRevision: number; audit: EconomicAudit | null;
+  snapshot: ServiceEconomicSnapshot; censusDigest: string; expectedRevision: number; audit: EconomicAudit | null; universe?: EconomicUniverse;
 }) {
   const row = persistedServiceEconomicEvidenceSchema.parse(input);
   const fresh = serviceEconomicSnapshotSchema.parse(current.snapshot);
@@ -98,9 +215,10 @@ export function validatePersistedServiceEconomicEvidence(input: unknown, current
     const allocations = fresh.allocations.filter(value => value.applicationId === row.applicationId && value.budgetItemId === row.budgetItemId);
     if (allocations.some(value => value.incurredAmount !== 0 || value.pendingAmount !== 0 || !value.incurredComplete || !value.pendingComplete)) evidenceFailure("EVIDENCE_ZERO_CONFLICT");
   }
-  return { observation: row, integrityValidated: true as const,
+  const supportReasons = validateEconomicPolicySupport(row, fresh, current.universe);
+  return { observation: row, integrityValidated: true as const, supportReasons,
     legacyCostsReconciled: false as const, costComplete: false as const, zeroCostConfirmedIds: [] as string[],
-    missingAuthority: "FIN_ECONOMIC_ATTESTATION_POLICY_V1" as const };
+    missingAuthority: row.policySupport === null ? "PERSISTED_ECONOMIC_POLICY_SUPPORT_V1" as const : "PERSISTED_ECONOMIC_ORIGIN_AND_DOMAIN_CLOSURE_FACTS" as const };
 }
 
 /** Internal readonly candidate read under the commercial Budget lock. Explicit
@@ -110,7 +228,7 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
   const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Budget" WHERE "organizationId"=${context.organizationId} AND "id"=${budgetId} FOR UPDATE`;
   if (locked.length !== 1) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
   type Row = Record<string, unknown>;
-  type Census = { budget: Row; applications: Row[]; items: Row[]; coverage: Row[]; sources: Row[]; allocations: Row[]; supplierJobs: Row[] };
+  type Census = { budget: Row; applications: Row[]; items: Row[]; coverage: Row[]; sources: Row[]; allocations: Row[]; supplierJobs: Row[]; universe: EconomicUniverse };
   const [census] = await tx.$queryRaw<Census[]>`
     SELECT to_jsonb(b) AS budget,
       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "BudgetServiceApplication" a WHERE a."organizationId"=b."organizationId" AND a."budgetId"=b."id"),'[]'::jsonb) AS applications,
@@ -118,7 +236,24 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
       COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c."id") FROM "BudgetServiceCoverage" c WHERE c."organizationId"=b."organizationId" AND c."budgetId"=b."id"),'[]'::jsonb) AS coverage,
       COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s."id") FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId" AND s."budgetId"=b."id"),'[]'::jsonb) AS sources,
       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "ServiceCostAllocation" a WHERE a."organizationId"=b."organizationId" AND a."budgetId"=b."id"),'[]'::jsonb) AS allocations,
-      COALESCE((SELECT jsonb_agg(to_jsonb(j) ORDER BY j."id") FROM "SupplierJob" j WHERE j."organizationId"=b."organizationId" AND ((b."eventId" IS NOT NULL AND j."eventId"=b."eventId") OR j."id" IN (SELECT s."supplierJobId" FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId" AND s."budgetId"=b."id"))),'[]'::jsonb) AS "supplierJobs"
+      COALESCE((SELECT jsonb_agg(to_jsonb(j) ORDER BY j."id") FROM "SupplierJob" j WHERE j."organizationId"=b."organizationId" AND ((b."eventId" IS NOT NULL AND j."eventId"=b."eventId") OR j."id" IN (SELECT s."supplierJobId" FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId" AND s."budgetId"=b."id"))),'[]'::jsonb) AS "supplierJobs",
+      jsonb_build_object(
+        'Event',COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e."id") FROM "Event" e WHERE e."organizationId"=b."organizationId"),'[]'::jsonb),
+        'Budget',COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x."id") FROM "Budget" x WHERE x."organizationId"=b."organizationId"),'[]'::jsonb),
+        'BudgetItem',COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i."id") FROM "BudgetItem" i JOIN "Budget" x ON x."id"=i."budgetId" WHERE x."organizationId"=b."organizationId"),'[]'::jsonb),
+        'BudgetServiceApplication',COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "BudgetServiceApplication" a WHERE a."organizationId"=b."organizationId"),'[]'::jsonb),
+        'BudgetServiceCoverage',COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c."id") FROM "BudgetServiceCoverage" c WHERE c."organizationId"=b."organizationId"),'[]'::jsonb),
+        'ServiceCostSource',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s."id") FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId"),'[]'::jsonb),
+        'ServiceCostAllocation',COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "ServiceCostAllocation" a WHERE a."organizationId"=b."organizationId"),'[]'::jsonb),
+        'SupplierJob',COALESCE((SELECT jsonb_agg(to_jsonb(j) ORDER BY j."id") FROM "SupplierJob" j WHERE j."organizationId"=b."organizationId"),'[]'::jsonb),
+        'Expense',COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e."id") FROM "Expense" e WHERE e."organizationId"=b."organizationId"),'[]'::jsonb),
+        'TreasuryMovement',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t."id") FROM "TreasuryMovement" t WHERE t."organizationId"=b."organizationId"),'[]'::jsonb),
+        'EventTask',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t."id") FROM "EventTask" t JOIN "Event" e ON e."id"=t."eventId" WHERE e."organizationId"=b."organizationId"),'[]'::jsonb),
+        'Promoter',COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p."id") FROM "Promoter" p WHERE p."organizationId"=b."organizationId"),'[]'::jsonb),
+        'EventInventory',COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i."id") FROM "EventInventory" i JOIN "Event" e ON e."id"=i."eventId" WHERE e."organizationId"=b."organizationId"),'[]'::jsonb),
+        'InventoryItem',COALESCE((SELECT jsonb_agg((to_jsonb(i)-'imageData') ORDER BY i."id") FROM "InventoryItem" i WHERE i."organizationId"=b."organizationId"),'[]'::jsonb),
+        'InventoryUnit',COALESCE((SELECT jsonb_agg(to_jsonb(u) ORDER BY u."id") FROM "InventoryUnit" u WHERE u."organizationId"=b."organizationId"),'[]'::jsonb)
+      ) AS universe
     FROM "Budget" b WHERE b."organizationId"=${context.organizationId} AND b."id"=${budgetId}`;
   if (!census) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
   const select = (row: Row, fields: readonly string[]) => Object.fromEntries(fields.map(field => [field, row[field]]));
@@ -136,7 +271,10 @@ export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionC
     sources: census.sources.map(row => select(row, ["id", "organizationId", "budgetId", "sourceKind", "sourceKey", "supplierJobId", "incurredAmount", "pendingAmount", "incurredComplete", "pendingComplete"])),
     allocations: census.allocations.map(row => select(row, ["id", "organizationId", "budgetId", "sourceId", "applicationId", "budgetItemId", "incurredAmount", "pendingAmount", "incurredComplete", "pendingComplete"])),
   });
-  return { snapshot, censusDigest: serviceEconomicCensusDigest(census) };
+  // Company-wide scope is deliberate while event-level expenses/commitments
+  // lack explicit Budget attribution. It invalidates conservatively, assigns
+  // nothing, and cannot certify a supported economic closure from membership.
+  return { snapshot, censusDigest: serviceEconomicCensusDigest({ censusVersion: 2, ...census }), universe: census.universe };
 }
 
 export async function loadLockedServiceEconomicEvidence(tx: Prisma.TransactionClient, context: Pick<AdminContext, "organizationId">,
@@ -153,7 +291,7 @@ export async function loadLockedServiceEconomicEvidence(tx: Prisma.TransactionCl
   if (latest?.revision !== record.revision || latest.revision !== expectedRevision) evidenceFailure("EVIDENCE_REVISION_STALE");
   const members = await tx.$queryRaw<Row[]>`SELECT "applicationId","budgetItemId","sourceId","allocationId" FROM "ServiceEconomicEvidenceMember" WHERE "organizationId"=${context.organizationId} AND "budgetId"=${budgetId} AND "evidenceId"=${evidenceId} ORDER BY "id"`;
   const [auditRow] = await tx.$queryRaw<(Omit<EconomicAudit, "createdAt"> & { createdAt: Date })[]>`SELECT "id","organizationId","actorId","action","entity","entityId","createdAt","detail" FROM "AuditLog" WHERE "organizationId"=${context.organizationId} AND "id"=${String(record.auditId)}`;
-  const observation = { ...select(record, ["id", "organizationId", "budgetId", "contractVersion", "revision", "kind", "applicationId", "budgetItemId", "censusDigest", "snapshot"]),
+  const observation = { ...select(record, ["id", "organizationId", "budgetId", "contractVersion", "revision", "kind", "applicationId", "budgetItemId", "censusDigest", "snapshot", "policySupport"]),
     budgetUpdatedAt: new Date(String(record.budgetUpdatedAt)).toISOString(), members,
     provenance: { ...select(record, ["auditId", "actorId", "rationale", "legacyOverlaps"]), recordedAt: new Date(String(record.recordedAt)).toISOString() } };
   return validatePersistedServiceEconomicEvidence(observation, { ...current, expectedRevision,
@@ -183,7 +321,7 @@ export async function appendLockedServiceEconomicObservation(tx: Prisma.Transact
   ];
   const observation = { id, organizationId: context.organizationId, budgetId, contractVersion: 1, revision: oldRevision + 1,
     kind: terms.kind, applicationId: terms.applicationId, budgetItemId: terms.budgetItemId,
-    budgetUpdatedAt: terms.budgetUpdatedAt, censusDigest: current.censusDigest, snapshot: current.snapshot,
+    budgetUpdatedAt: terms.budgetUpdatedAt, censusDigest: current.censusDigest, snapshot: current.snapshot, policySupport: terms.policySupport,
     provenance: { auditId, actorId: context.user.id, recordedAt: recordedAt.toISOString(), rationale: terms.rationale, legacyOverlaps: terms.legacyOverlaps } };
   const detail = { observationDigest: serviceEconomicCensusDigest(observation), censusDigest: current.censusDigest };
   const result = validatePersistedServiceEconomicEvidence({ ...observation, members }, { ...current, expectedRevision: observation.revision,
@@ -191,8 +329,8 @@ export async function appendLockedServiceEconomicObservation(tx: Prisma.Transact
   await tx.auditLog.create({ data: { id: auditId, organizationId: context.organizationId, actorId: context.user.id, actorName: context.user.name,
     actorEmail: context.user.email, action: "SERVICE_ECONOMIC_EVIDENCE_RECORDED", entity: "ServiceEconomicEvidence", entityId: id,
     summary: "Observación económica privada; aprobación FIN pendiente", detail, createdAt: recordedAt } });
-  await tx.$executeRaw`INSERT INTO "ServiceEconomicEvidence" ("id","organizationId","budgetId","contractVersion","revision","kind","applicationId","budgetItemId","budgetUpdatedAt","censusDigest","snapshot","auditId","actorId","recordedAt","rationale","legacyOverlaps")
-    VALUES (${id},${context.organizationId},${budgetId},1,${observation.revision},${terms.kind},${terms.applicationId},${terms.budgetItemId},${new Date(terms.budgetUpdatedAt)},${current.censusDigest},${JSON.stringify(current.snapshot)}::jsonb,${auditId},${context.user.id},${recordedAt},${terms.rationale},${JSON.stringify(terms.legacyOverlaps)}::jsonb)`;
+  await tx.$executeRaw`INSERT INTO "ServiceEconomicEvidence" ("id","organizationId","budgetId","contractVersion","revision","kind","applicationId","budgetItemId","budgetUpdatedAt","censusDigest","snapshot","auditId","actorId","recordedAt","rationale","legacyOverlaps","policySupport")
+    VALUES (${id},${context.organizationId},${budgetId},1,${observation.revision},${terms.kind},${terms.applicationId},${terms.budgetItemId},${new Date(terms.budgetUpdatedAt)},${current.censusDigest},${JSON.stringify(current.snapshot)}::jsonb,${auditId},${context.user.id},${recordedAt},${terms.rationale},${JSON.stringify(terms.legacyOverlaps)}::jsonb,${terms.policySupport === null ? null : JSON.stringify(terms.policySupport)}::jsonb)`;
   for (const member of members) await tx.$executeRaw`INSERT INTO "ServiceEconomicEvidenceMember" ("id","organizationId","budgetId","evidenceId","applicationId","budgetItemId","sourceId","allocationId")
     VALUES (${randomUUID()},${context.organizationId},${budgetId},${id},${member.applicationId},${member.budgetItemId},${member.sourceId},${member.allocationId})`;
   return result;

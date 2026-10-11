@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { serviceEconomicSnapshotSchema } from "../lib/budget-service-contract";
+import { serviceEconomicSnapshotSchema, serviceEconomicPolicySupportSchema } from "../lib/budget-service-contract";
 import { serviceEconomicCensusDigest, validatePersistedServiceEconomicEvidence, loadLockedServiceEconomicEvidence, appendLockedServiceEconomicObservation } from "../lib/server/budget-service-contract";
 import type { Prisma } from "@prisma/client";
 import type { AdminContext } from "../lib/server/tenancy";
@@ -21,7 +21,7 @@ const members: { applicationId: string | null; budgetItemId: string | null; sour
 function fixture(kind: "COMPONENT_ZERO" | "LEGACY_RECONCILIATION" = "COMPONENT_ZERO") {
   const record = { id: "evidence", organizationId: "org", budgetId: "budget", contractVersion: 1, revision: 1, kind,
     applicationId: kind === "COMPONENT_ZERO" ? "service" : null, budgetItemId: null,
-    budgetUpdatedAt: at, censusDigest, snapshot: structuredClone(snapshot), members: structuredClone(members),
+    budgetUpdatedAt: at, censusDigest, snapshot: structuredClone(snapshot), members: structuredClone(members), policySupport: null,
     provenance: { auditId: "audit", actorId: "actor", recordedAt: at, rationale: "Internal observation with identified custodian", legacyOverlaps: [] as { field: "materialCost" | "laborCost" | "costEstimate"; sourceId: string }[] } };
   const audit = { id: "audit", organizationId: "org", actorId: "actor", action: "SERVICE_ECONOMIC_EVIDENCE_RECORDED",
     entity: "ServiceEconomicEvidence", entityId: "evidence", createdAt: at, detail: {} as unknown };
@@ -39,7 +39,7 @@ test("persisted/audited zero observations do not manufacture FIN economic author
   assert.equal(result.costComplete, false);
   assert.equal(result.legacyCostsReconciled, false);
   assert.deepEqual(result.zeroCostConfirmedIds, []);
-  assert.equal(result.missingAuthority, "FIN_ECONOMIC_ATTESTATION_POLICY_V1");
+  assert.equal(result.missingAuthority, "PERSISTED_ECONOMIC_POLICY_SUPPORT_V1");
 });
 
 test("zero without provenance, wrong actor, unrelated audit or altered statement fails closed", () => {
@@ -178,9 +178,146 @@ test("persisting stale/exhausted evidence revision never writes audit/evidence/m
       $executeRaw: async () => { assert.fail("revision rejection wrote evidence"); },
       auditLog: { create: async () => { assert.fail("revision rejection wrote audit"); } } } as unknown as Prisma.TransactionClient;
     await assert.rejects(appendLockedServiceEconomicObservation(tx, { role: "FINANCE", demo: false, organizationId: "org" } as AdminContext, "budget", {
-      kind: "COMPONENT_ZERO", applicationId: "service", budgetItemId: null, budgetUpdatedAt: at, censusDigest: serviceEconomicCensusDigest(census),
+      kind: "COMPONENT_ZERO", applicationId: "service", budgetItemId: null, budgetUpdatedAt: at, censusDigest: serviceEconomicCensusDigest({ censusVersion: 2, ...census }),
       expectedEvidenceRevision: previous === 2 ? 1 : previous, rationale: "Internal observation", legacyOverlaps: [],
+      policySupport: null,
     }), previous === 2 ? /EVIDENCE_REVISION_STALE/ : /EVIDENCE_REVISION_EXHAUSTED/);
     assert.equal(reads, 3);
+  }
+});
+
+const domains = ["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"] as const;
+function unresolvedPolicy() {
+  return serviceEconomicPolicySupportSchema.parse({ policyVersion: 1, censusVersion: 2,
+    legacyDispositionByField: ["materialCost", "laborCost", "costEstimate"].map(field => ({ field, fieldValue: 0, state: "UNRESOLVED", reason: "No persisted origin/disposition facts" })),
+    overlaps: [], componentObligationClosure: members.map(member => ({ applicationId: member.applicationId, budgetItemId: member.budgetItemId,
+      domains: domains.map(domain => ({ domain, state: "UNRESOLVED", reason: "No operational closure facts" })) })),
+  });
+}
+function policyFixture() {
+  const f = fixture("LEGACY_RECONCILIATION");
+  const record = { ...f.record, policySupport: unresolvedPolicy() };
+  const universe: Record<string, Record<string, unknown>[]> = Object.fromEntries([
+    "Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit",
+  ].map(entity => [entity, []]));
+  const current = { ...f.current, universe };
+  const bind = () => { current.snapshot = structuredClone(record.snapshot);
+    const { members: _members, ...observation } = record;
+    current.audit.detail = { observationDigest: serviceEconomicCensusDigest(observation), censusDigest: record.censusDigest }; };
+  bind(); return { record, current, bind };
+}
+
+test("FIN policy V1 typed unresolved fields/domains preserve false with specific reasons", () => {
+  const f = policyFixture();
+  const result = validatePersistedServiceEconomicEvidence(f.record, f.current);
+  assert.equal(result.legacyCostsReconciled, false); assert.equal(result.costComplete, false);
+  assert.deepEqual(result.zeroCostConfirmedIds, []);
+  assert.ok(result.supportReasons.includes("LEGACY_materialCost_UNRESOLVED"));
+  assert.ok(result.supportReasons.includes("COMPONENT_service_EXPENSE_TREASURY_UNRESOLVED"));
+  assert.equal(result.missingAuthority, "PERSISTED_ECONOMIC_ORIGIN_AND_DOMAIN_CLOSURE_FACTS");
+});
+
+test("exact three fields and five distinct domains required, not merely array cardinality", () => {
+  const f = policyFixture();
+  f.record.policySupport.legacyDispositionByField[2] = { ...f.record.policySupport.legacyDispositionByField[0] }; f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_DUPLICATE/);
+  const other = policyFixture();
+  other.record.policySupport.componentObligationClosure[0].domains[4] = { ...other.record.policySupport.componentObligationClosure[0].domains[0] }; other.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(other.record, other.current), /EVIDENCE_POLICY_DUPLICATE/);
+  assert.throws(() => serviceEconomicPolicySupportSchema.parse({ ...unresolvedPolicy(), legacyDispositionByField: [] }));
+});
+
+test("audit/rationale, empty references and empty partitions never authorize estimate or zero", () => {
+  const p = unresolvedPolicy();
+  assert.throws(() => serviceEconomicPolicySupportSchema.parse({ ...p, legacyDispositionByField: [
+    { field: "materialCost", fieldValue: 0, state: "ESTIMATE_ONLY", origin: "PERSISTED_ESTIMATE_DECLARATION", factReferences: [] }, ...p.legacyDispositionByField.slice(1),
+  ] }));
+  assert.throws(() => serviceEconomicPolicySupportSchema.parse({ ...p, legacyDispositionByField: [
+    { field: "materialCost", fieldValue: 0, state: "REPRESENTED_BY_RECOGNIZED_SOURCES", slices: [] }, ...p.legacyDispositionByField.slice(1),
+  ] }));
+  assert.throws(() => serviceEconomicPolicySupportSchema.parse({ ...p, componentObligationClosure: [
+    { applicationId: "service", budgetItemId: null, domains: domains.map(domain => ({ domain, state: "VERIFIED_NOT_APPLICABLE", factReferences: [{ entity: "AuditLog", recordId: "audit", rowDigest: censusDigest, fact: "DOMAIN_OPERATIONAL_CLOSURE" }] })) },
+    p.componentObligationClosure[1],
+  ] }));
+});
+
+test("actual task completion and row digest are not persisted operational closure facts", () => {
+  const f = policyFixture();
+  const task = { id: "task", eventId: "event", completedAt: at };
+  f.current.universe.EventTask = [task];
+  f.record.policySupport.componentObligationClosure[0].domains[1] = { domain: "LABOR", state: "VERIFIED_NOT_APPLICABLE",
+    factReferences: [{ entity: "EventTask", recordId: "task", rowDigest: serviceEconomicCensusDigest(task), fact: "DOMAIN_OPERATIONAL_CLOSURE" }] };
+  f.bind();
+  const result = validatePersistedServiceEconomicEvidence(f.record, f.current);
+  assert.ok(result.supportReasons.includes("PERSISTED_DOMAIN_OPERATIONAL_CLOSURE_FACT_ABSENT"));
+  assert.ok(result.supportReasons.includes("DOMAIN_LABOR_NOT_APPLICABLE_FACT_ABSENT"));
+  assert.deepEqual(result.zeroCostConfirmedIds, []);
+  f.current.universe.EventTask = [{ ...task, completedAt: null }];
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_FACT_STALE/);
+});
+
+test("cross-tenant/missing fact and incomplete universe reject even with matching audit", () => {
+  const f = policyFixture();
+  f.record.policySupport.legacyDispositionByField[0] = { field: "materialCost", fieldValue: 0, state: "ESTIMATE_ONLY", origin: "PERSISTED_ESTIMATE_DECLARATION",
+    factReferences: [{ entity: "Budget", recordId: "other-tenant-budget", rowDigest: censusDigest, fact: "ESTIMATE_ORIGIN" }] };
+  f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_FACT_STALE/);
+  delete f.current.universe.Expense;
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_UNIVERSE_INCOMPLETE/);
+});
+
+function representedPolicyFixture() {
+  const f = policyFixture();
+  const source = { id: "source", organizationId: "org", budgetId: "budget", sourceKind: "LABOR" as const, sourceKey: "obligation", supplierJobId: null,
+    incurredAmount: 100, pendingAmount: 0, incurredComplete: true, pendingComplete: true };
+  const allocation = { id: "allocation", organizationId: "org", budgetId: "budget", sourceId: "source", applicationId: "service", budgetItemId: null,
+    incurredAmount: 100, pendingAmount: 0, incurredComplete: true, pendingComplete: true };
+  f.record.snapshot.sources = [source]; f.record.snapshot.allocations = [allocation];
+  f.current.universe.ServiceCostSource = [source]; f.current.universe.ServiceCostAllocation = [allocation];
+  f.record.members.push({ applicationId: null, budgetItemId: null, sourceId: "source", allocationId: null }, { applicationId: null, budgetItemId: null, sourceId: null, allocationId: "allocation" });
+  const slice = { id: "slice", sourceId: "source", allocationId: "allocation", domain: "LABOR" as const, incurredAmount: 100, pendingAmount: 0,
+    factReferences: [{ entity: "ServiceCostSource" as const, recordId: "source", rowDigest: serviceEconomicCensusDigest(source), fact: "RECOGNIZED_OBLIGATION" as const }] };
+  f.record.snapshot.budget.laborCost = 100;
+  f.record.policySupport.legacyDispositionByField[1] = { field: "laborCost", fieldValue: 100, state: "REPRESENTED_BY_RECOGNIZED_SOURCES", slices: [slice] };
+  f.bind(); return { ...f, slice };
+}
+
+test("legacy slices require full scoped partition and recognized complete balances", () => {
+  const f = representedPolicyFixture();
+  const disposition = f.record.policySupport.legacyDispositionByField[1];
+  assert.equal(disposition.state, "REPRESENTED_BY_RECOGNIZED_SOURCES");
+  if (disposition.state !== "REPRESENTED_BY_RECOGNIZED_SOURCES") assert.fail();
+  disposition.slices[0].incurredAmount = 101; f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_SLICE_OVERALLOCATED/);
+  disposition.slices[0].incurredAmount = 99; f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_PARTITION_INCOMPLETE/);
+  disposition.slices[0].incurredAmount = 100;
+  f.record.snapshot.sources[0].pendingAmount = null; f.record.snapshot.sources[0].pendingComplete = false; f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_OVERALLOCATED/); // known allocation cannot use unknown source.
+});
+
+test("cross-field repeated representation needs explicit overlap and is never summed anew", () => {
+  const f = representedPolicyFixture();
+  f.record.snapshot.budget.costEstimate = 100;
+  f.record.policySupport.legacyDispositionByField[2] = { field: "costEstimate", fieldValue: 100, state: "REPRESENTED_BY_RECOGNIZED_SOURCES", slices: [{ ...f.slice, id: "estimate-slice" }] };
+  f.bind();
+  assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, f.current), /EVIDENCE_POLICY_OVERLAP_UNDECLARED/);
+  f.record.policySupport.overlaps = [{ leftField: "laborCost", leftSliceId: "slice", rightField: "costEstimate", rightSliceId: "estimate-slice" }]; f.bind();
+  const result = validatePersistedServiceEconomicEvidence(f.record, f.current);
+  assert.equal(result.legacyCostsReconciled, false); // explicit overlap isn't semantic domain closure.
+  assert.equal("contributions" in result, false);
+  assert.equal(result.observation.snapshot.sources.length, 1);
+});
+
+test("changes in every external universe and cross-budget attribution invalidate census V2", () => {
+  const universe = policyFixture().current.universe;
+  const before = serviceEconomicCensusDigest({ censusVersion: 2, snapshot, universe });
+  for (const entity of ["Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit", "Budget", "ServiceCostAllocation"]) {
+    const changed = structuredClone(universe);
+    changed[entity] = [{ id: "new-row", organizationId: "org", budgetId: "other-budget" }];
+    const digest = serviceEconomicCensusDigest({ censusVersion: 2, snapshot, universe: changed });
+    assert.notEqual(digest, before);
+    const f = fixture();
+    assert.throws(() => validatePersistedServiceEconomicEvidence(f.record, { ...f.current, censusDigest: digest }), /EVIDENCE_SCOPE_CENSUS_STALE/);
   }
 });

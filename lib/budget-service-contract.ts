@@ -20,6 +20,41 @@ export const serviceEconomicSnapshotSchema = z.object({
 }).strict();
 export type ServiceEconomicSnapshot = z.infer<typeof serviceEconomicSnapshotSchema>;
 
+export const serviceEconomicDomainSchema = z.enum(["SERVICE", "LABOR", "EQUIPMENT_MATERIAL", "SUPPLIER", "EXPENSE_TREASURY"]);
+const economicFactReference = z.object({
+  /** Reference to an actual internal fact, not a rationale/claim or proof of its
+   * own conclusion. The loader resolves facts separately from their audit trail. */
+  entity: z.enum(["Event", "Budget", "BudgetItem", "BudgetServiceApplication", "BudgetServiceCoverage", "ServiceCostSource", "ServiceCostAllocation", "SupplierJob", "Expense", "TreasuryMovement", "EventTask", "Promoter", "EventInventory", "InventoryItem", "InventoryUnit"]),
+  recordId: id, rowDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  fact: z.enum(["ESTIMATE_ORIGIN", "RECOGNIZED_OBLIGATION", "BUDGET_ATTRIBUTION", "DOMAIN_OPERATIONAL_CLOSURE", "NOT_APPLICABLE_FOR_EXECUTION"]),
+}).strict();
+const legacySlice = z.object({ id, sourceId: id, allocationId: id, domain: serviceEconomicDomainSchema,
+  incurredAmount: money, pendingAmount: money, factReferences: z.array(economicFactReference).min(1),
+}).strict();
+const legacyDisposition = z.discriminatedUnion("state", [
+  z.object({ field: z.enum(["materialCost", "laborCost", "costEstimate"]), fieldValue: money, state: z.literal("UNRESOLVED"), reason: z.string().trim().min(1).max(500) }).strict(),
+  z.object({ field: z.enum(["materialCost", "laborCost", "costEstimate"]), fieldValue: money, state: z.literal("ESTIMATE_ONLY"),
+    origin: z.enum(["CANONICAL_BUDGET_ITEM_ESTIMATE", "PERSISTED_ESTIMATE_DECLARATION"]), factReferences: z.array(economicFactReference).min(1) }).strict(),
+  z.object({ field: z.enum(["materialCost", "laborCost", "costEstimate"]), fieldValue: money, state: z.literal("REPRESENTED_BY_RECOGNIZED_SOURCES"), slices: z.array(legacySlice).min(1) }).strict(),
+]);
+const domainClosure = z.discriminatedUnion("state", [
+  z.object({ domain: serviceEconomicDomainSchema, state: z.literal("UNRESOLVED"), reason: z.string().trim().min(1).max(500) }).strict(),
+  z.object({ domain: serviceEconomicDomainSchema, state: z.literal("RECOGNIZED"),
+    sourceIds: z.array(id).min(1), allocationIds: z.array(id).min(1), factReferences: z.array(economicFactReference).min(1) }).strict(),
+  z.object({ domain: serviceEconomicDomainSchema, state: z.literal("VERIFIED_NOT_APPLICABLE"), factReferences: z.array(economicFactReference).min(1) }).strict(),
+]);
+/** FIN policy V1 support representation. A claimed state is never proof: row
+ * references, origin facts, attribution and closure must be independently resolved. */
+export const serviceEconomicPolicySupportSchema = z.object({
+  policyVersion: z.literal(1), censusVersion: z.literal(2),
+  legacyDispositionByField: z.array(legacyDisposition).length(3),
+  overlaps: z.array(z.object({ leftField: z.enum(["materialCost", "laborCost", "costEstimate"]), leftSliceId: id,
+    rightField: z.enum(["materialCost", "laborCost", "costEstimate"]), rightSliceId: id }).strict()),
+  componentObligationClosure: z.array(z.object({ applicationId: id.nullable(), budgetItemId: id.nullable(),
+    domains: z.array(domainClosure).length(5),
+  }).strict().refine(row => (row.applicationId === null) !== (row.budgetItemId === null), "EVIDENCE_COMPONENT_XOR")),
+}).strict();
+
 const evidenceMember = z.object({
   applicationId: id.nullable(), budgetItemId: id.nullable(), sourceId: id.nullable(), allocationId: id.nullable(),
 }).strict().refine(row => [row.applicationId, row.budgetItemId, row.sourceId, row.allocationId].filter(value => value !== null).length === 1, "EVIDENCE_MEMBER_XOR");
@@ -37,9 +72,12 @@ export const persistedServiceEconomicEvidenceSchema = z.object({
     legacyOverlaps: z.array(z.object({ field: z.enum(["materialCost", "laborCost", "costEstimate"]), sourceId: id }).strict()),
   }).strict(),
   members: z.array(evidenceMember),
+  /** null is historical/missing support, never a synthesized policy approval. */
+  policySupport: serviceEconomicPolicySupportSchema.nullable(),
 }).strict();
 export const serviceEconomicObservationInputSchema = persistedServiceEconomicEvidenceSchema.pick({ kind: true, applicationId: true, budgetItemId: true, budgetUpdatedAt: true, censusDigest: true }).extend({
   expectedEvidenceRevision: z.number().int().min(0).max(2147483647),
+  policySupport: serviceEconomicPolicySupportSchema.nullable(),
   rationale: z.string().trim().min(1).max(2000),
   legacyOverlaps: persistedServiceEconomicEvidenceSchema.shape.provenance.shape.legacyOverlaps,
 }).strict();
