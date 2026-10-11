@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calculateBudgetServiceFinancial, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
+import { calculateBudgetServiceFinancial, produceServiceEconomicEvidence, type ServiceEconomicEvidenceInput, type ServiceFinancialInput, type RecognizedCostContribution } from "../lib/budget-service-financial";
 import { BUDGET_INT_MAX } from "../lib/budget-payment-plan";
 import type { CommercialLine } from "../lib/budget-commercial-calculation";
 
@@ -184,4 +184,132 @@ test("explicit homogeneous IVA is required even for free components; fiscal tota
     const result = calculateBudgetServiceFinancial({ ...fixture([service({ taxType })]), taxType });
     assert.equal(result.items.reduce((sum, item) => sum + item.taxable + item.taxAmount, 0), result.commercial.total);
   }
+});
+
+// New evidence-boundary cases; the original twelve calculation cases are retained.
+const economicEvidence = (): ServiceEconomicEvidenceInput => ({
+  scope: { organizationId: "org", budgetId: "budget", budgetUpdatedAt: "2026-10-10T00:00:00.000Z", contractVersion: 1 },
+  budget: { id: "budget", organizationId: "org", eventId: "event", updatedAt: "2026-10-10T00:00:00.000Z", materialCost: 0, laborCost: 30000, costEstimate: 0 },
+  supplierJobs: [{ id: "job", organizationId: "org", eventId: "event" }],
+  components: [{ id: "service", organizationId: "org", budgetId: "budget", kind: "SERVICE", snapshotVersion: 1, sourceRevision: 2, expectedSourceRevision: 2 }],
+  sources: [{ id: "source", organizationId: "org", budgetId: "budget", sourceKind: "SUPPLIER", sourceKey: "job-obligation", supplierJobId: "job",
+    incurredAmount: 10000, pendingAmount: 20000, incurredComplete: true, pendingComplete: true }],
+  allocations: [{ id: "allocation", organizationId: "org", budgetId: "budget", sourceId: "source", applicationId: "service", budgetItemId: null,
+    incurredAmount: 10000, pendingAmount: 20000, incurredComplete: true, pendingComplete: true }],
+});
+
+test("economic evidence cannot certify legacy reconciliation despite exact recognized balances", () => {
+  const input = economicEvidence(), before = structuredClone(input);
+  const result = produceServiceEconomicEvidence(input);
+  assert.equal(result.legacyCostsReconciled, false);
+  assert.equal(result.costComplete, false);
+  assert.equal(result.costCompleteById.service, false);
+  assert.deepEqual(result.zeroCostConfirmedIds, []);
+  assert.equal(result.contributions.length, 1);
+  assert.equal(result.legacyEstimates.laborCost, 30000, "estimate is retained separately, not a second contribution");
+  assert.deepEqual(result.provenance[0].allocationIds, ["allocation"]);
+  assert.deepEqual(input, before);
+});
+
+test("default-zero legacy fields, empty costs and explicit zero balances cannot certify a scoped zero", () => {
+  for (const empty of [true, false]) {
+    const input = economicEvidence();
+    input.budget.laborCost = 0;
+    if (empty) { input.sources = []; input.allocations = []; }
+    else {
+      input.sources[0].incurredAmount = input.sources[0].pendingAmount = 0;
+      input.allocations[0].incurredAmount = input.allocations[0].pendingAmount = 0;
+    }
+    const result = produceServiceEconomicEvidence(input);
+    assert.equal(result.costCompleteById.service, false);
+    assert.deepEqual(result.zeroCostConfirmedIds, []);
+    assert.ok(result.missingAuthority.includes("SCOPED_VERSIONED_COMPONENT_ZERO_COST_ATTESTATION"));
+  }
+});
+
+test("persisted remaining commitment is not replaced by original job total or legacy amount", () => {
+  const input = economicEvidence();
+  input.sources[0].incurredAmount = input.allocations[0].incurredAmount = 25000;
+  input.sources[0].pendingAmount = input.allocations[0].pendingAmount = 5000;
+  const result = produceServiceEconomicEvidence(input);
+  assert.deepEqual(result.contributions[0], { sourceId: "source", scopeId: "budget", incurred: 25000, pending: 5000,
+    allocations: [{ componentId: "service", incurred: 25000, pending: 5000 }] });
+  input.sources[0].pendingAmount = input.allocations[0].pendingAmount = null;
+  input.sources[0].pendingComplete = input.allocations[0].pendingComplete = false;
+  const unknown = produceServiceEconomicEvidence(input);
+  assert.equal(unknown.contributions[0].pending, null);
+  assert.equal(unknown.residuals[0].pending, null);
+  assert.deepEqual(unknown.incompleteSourceIds, ["source"]);
+});
+
+test("evidence rejects stale locked-budget version and cross-tenant/budget component or record", () => {
+  const mutations: ((input: ServiceEconomicEvidenceInput) => void)[] = [
+    input => { input.budget.updatedAt = "2026-10-11T00:00:00.000Z"; },
+    input => { input.budget.organizationId = "foreign"; },
+    input => { input.components[0].budgetId = "foreign"; },
+    input => { input.sources[0].organizationId = "foreign"; },
+    input => { input.allocations[0].budgetId = "foreign"; },
+    input => { input.components[0].expectedSourceRevision = 3; },
+  ];
+  for (const mutate of mutations) { const input = economicEvidence(); mutate(input); assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_.*(MISMATCH|VERSION_INVALID)/); }
+});
+
+test("supplier commitment cannot reappear under a second source identity or obligation key", () => {
+  for (const sourceKey of ["job-obligation", "alternate-key"]) {
+    const input = economicEvidence();
+    input.sources.push({ ...input.sources[0], id: "second-source", sourceKey });
+    assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_DUPLICATE_OBLIGATION/);
+  }
+});
+
+test("supplier reference requires real same-company job and matching event, never a name-only claim", () => {
+  const mutations: ((input: ServiceEconomicEvidenceInput) => void)[] = [
+    input => { input.supplierJobs = []; },
+    input => { input.supplierJobs[0].organizationId = "foreign"; },
+    input => { input.supplierJobs[0].eventId = "foreign-event"; },
+    input => { input.budget.eventId = null; },
+  ];
+  for (const mutate of mutations) { const input = economicEvidence(); mutate(input); assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_SUPPLIER_SCOPE_INVALID/); }
+});
+
+test("extra authority claims cannot elevate computed completeness or confirm a zero", () => {
+  const result = produceServiceEconomicEvidence({ ...economicEvidence(),
+    legacyCostsReconciled: true, zeroCostConfirmedIds: ["service"], costComplete: true,
+  } as ServiceEconomicEvidenceInput);
+  assert.equal(result.legacyCostsReconciled, false);
+  assert.deepEqual(result.zeroCostConfirmedIds, []);
+  assert.equal(result.costCompleteById.service, false);
+});
+
+test("typed equipment destination cannot masquerade as service allocation evidence", () => {
+  const input = economicEvidence();
+  input.components = [{ id: "equipment", organizationId: "org", budgetId: "budget", kind: "EQUIPMENT", snapshotVersion: null, sourceRevision: null, expectedSourceRevision: null }];
+  input.allocations[0].applicationId = "equipment";
+  assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_ALLOCATION_SCOPE_INVALID/);
+  input.allocations[0].applicationId = null; input.allocations[0].budgetItemId = "equipment";
+  assert.equal(produceServiceEconomicEvidence(input).costCompleteById.equipment, false);
+  input.components[0].sourceRevision = 1;
+  assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_COMPONENT_VERSION_INVALID/);
+});
+
+test("source residue and unassigned obligations survive evidence production privately", () => {
+  const input = economicEvidence();
+  input.allocations[0].incurredAmount = 5000;
+  const result = produceServiceEconomicEvidence(input);
+  assert.deepEqual(result.residuals[0], { sourceId: "source", incurred: 5000, pending: 0 });
+  input.allocations = [];
+  const unassigned = produceServiceEconomicEvidence(input);
+  assert.deepEqual(unassigned.contributions, []);
+  assert.deepEqual(unassigned.residuals[0], { sourceId: "source", incurred: 10000, pending: 20000 });
+  assert.equal(unassigned.provenance[0].sourceId, "source");
+  assert.equal(unassigned.costCompleteById.service, false);
+});
+
+test("unknown source cannot authorize a known allocation and incomplete flags cannot claim known null", () => {
+  const input = economicEvidence();
+  input.sources[0].pendingAmount = null; input.sources[0].pendingComplete = false;
+  input.allocations[0].pendingAmount = 0;
+  assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_UNKNOWN_SOURCE_ALLOCATION/);
+  input.sources[0].pendingComplete = true;
+  assert.throws(() => produceServiceEconomicEvidence(input), /EVIDENCE_BALANCE_COMPLETENESS_INVALID/);
 });

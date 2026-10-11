@@ -194,3 +194,145 @@ export function calculateBudgetServiceFinancial(input: {
     margin, marginPercent: margin === null || commercial.total === 0 ? null : margin * 100 / commercial.total,
   };
 }
+
+/** Private server projections of persisted PF cost rows; not HTTP authority.
+ * No PF runtime import: the dependency must be checked before a loader is wired.
+ * Budget.updatedAt binds the locked read; component revisions bind retained
+ * service snapshots. Equipment descriptors are scoped through their Budget FK.
+ */
+export type ServiceEconomicEvidenceInput = {
+  scope: { organizationId: string; budgetId: string; budgetUpdatedAt: string; contractVersion: 1 };
+  budget: { id: string; organizationId: string; eventId: string | null; updatedAt: string; materialCost: number; laborCost: number; costEstimate: number };
+  supplierJobs: { id: string; organizationId: string; eventId: string | null }[];
+  components: { id: string; organizationId: string; budgetId: string; kind: "SERVICE" | "EQUIPMENT";
+    snapshotVersion: 1 | null; sourceRevision: number | null; expectedSourceRevision: number | null }[];
+  sources: {
+    id: string; organizationId: string; budgetId: string;
+    sourceKind: "SERVICE" | "LABOR" | "SUPPLIER" | "EQUIPMENT";
+    sourceKey: string; supplierJobId: string | null;
+    incurredAmount: number | null; pendingAmount: number | null;
+    incurredComplete: boolean; pendingComplete: boolean;
+  }[];
+  allocations: {
+    id: string; organizationId: string; budgetId: string; sourceId: string;
+    applicationId: string | null; budgetItemId: string | null;
+    incurredAmount: number | null; pendingAmount: number | null;
+    incurredComplete: boolean; pendingComplete: boolean;
+  }[];
+};
+
+/** Produce recognized balances once per obligation/scope, never estimate them
+ * from SupplierJob.total/advance/paidAt or Budget laborCost/costPrice. pending
+ * means the persisted remaining recognized commitment, NOT original total.
+ *
+ * Missing authority is intentional: Budget's default-zero estimates and PF
+ * source/allocation flags do not persist a reconciled legacy census or a scoped,
+ * versioned zero-cost attestation. Until those records exist, this producer cannot
+ * assert legacyCostsReconciled or confirm a zero, even with exact/full balances.
+ * Caller retains unallocated known amounts privately; do not add them to FIN
+ * assigned knownCost or add legacy/SupplierJob totals a second time.
+ */
+export function produceServiceEconomicEvidence(input: ServiceEconomicEvidenceInput) {
+  const { scope, budget } = input;
+  const identity = (value: string) => { if (typeof value !== "string" || !value.trim()) fail("EVIDENCE_IDENTITY_INVALID"); };
+  identity(scope.organizationId); identity(scope.budgetId);
+  const validRevision = (value: number) => Number.isInteger(value) && value >= 1 && value <= BUDGET_INT_MAX;
+  if (scope.contractVersion !== 1 || budget.id !== scope.budgetId || budget.organizationId !== scope.organizationId
+    || !Number.isFinite(Date.parse(scope.budgetUpdatedAt)) || budget.updatedAt !== scope.budgetUpdatedAt) fail("EVIDENCE_SCOPE_VERSION_MISMATCH");
+  for (const value of [budget.materialCost, budget.laborCost, budget.costEstimate]) amount(value);
+  const scoped = (row: { organizationId: string; budgetId: string }) => {
+    if (row.organizationId !== scope.organizationId || row.budgetId !== scope.budgetId) fail("EVIDENCE_SCOPE_VERSION_MISMATCH");
+  };
+  const components = new Set<string>();
+  const componentKinds = new Map<string, "SERVICE" | "EQUIPMENT">();
+  for (const component of input.components) {
+    identity(component.id); scoped(component);
+    // BudgetItem has no service revision/version. Do not synthesize revision1.
+    const versionValid = component.kind === "EQUIPMENT"
+      ? component.snapshotVersion === null && component.sourceRevision === null && component.expectedSourceRevision === null
+      : component.kind === "SERVICE" && component.snapshotVersion === 1 && component.sourceRevision !== null
+        && validRevision(component.sourceRevision) && component.sourceRevision === component.expectedSourceRevision;
+    if (components.has(component.id) || !versionValid) fail("EVIDENCE_COMPONENT_VERSION_INVALID");
+    components.add(component.id);
+    componentKinds.set(component.id, component.kind);
+  }
+  const sources = new Map<string, ServiceEconomicEvidenceInput["sources"][number]>();
+  const obligations = new Set<string>(), supplierJobs = new Set<string>();
+  const persistedJobs = new Map<string, ServiceEconomicEvidenceInput["supplierJobs"][number]>();
+  for (const job of input.supplierJobs) {
+    identity(job.id);
+    if (job.organizationId !== scope.organizationId || persistedJobs.has(job.id)) fail("EVIDENCE_SUPPLIER_SCOPE_INVALID");
+    persistedJobs.set(job.id, job);
+  }
+  const balances = (row: { incurredAmount: number | null; pendingAmount: number | null; incurredComplete: boolean; pendingComplete: boolean }) => {
+    if (typeof row.incurredComplete !== "boolean" || typeof row.pendingComplete !== "boolean"
+      || (row.incurredComplete && row.incurredAmount === null) || (row.pendingComplete && row.pendingAmount === null)) fail("EVIDENCE_BALANCE_COMPLETENESS_INVALID");
+    for (const value of [row.incurredAmount, row.pendingAmount]) if (value !== null) amount(value);
+    if (row.incurredAmount !== null && row.pendingAmount !== null) intAmount(BigInt(row.incurredAmount) + BigInt(row.pendingAmount));
+  };
+  for (const source of input.sources) {
+    identity(source.id); identity(source.sourceKey); scoped(source); balances(source);
+    if (!["SERVICE", "LABOR", "SUPPLIER", "EQUIPMENT"].includes(source.sourceKind)
+      || (source.sourceKind === "SUPPLIER") !== (source.supplierJobId !== null)) fail("EVIDENCE_SOURCE_INVALID");
+    if (source.supplierJobId !== null) {
+      identity(source.supplierJobId);
+      const job = persistedJobs.get(source.supplierJobId);
+      // Event membership alone does not assign cost to a budget: the scoped
+      // persisted source AND typed allocations are still required. Missing or
+      // conflicting event membership cannot be silently inferred by this helper.
+      if (!job || budget.eventId === null || job.eventId !== budget.eventId) fail("EVIDENCE_SUPPLIER_SCOPE_INVALID");
+    }
+    const obligation = JSON.stringify([source.sourceKind, source.sourceKey, scope.budgetId]);
+    if (sources.has(source.id) || obligations.has(obligation)
+      || (source.supplierJobId !== null && supplierJobs.has(source.supplierJobId))) fail("EVIDENCE_DUPLICATE_OBLIGATION");
+    sources.set(source.id, source); obligations.add(obligation);
+    if (source.supplierJobId !== null) supplierJobs.add(source.supplierJobId);
+  }
+  const allocationIds = new Set<string>(), destinations = new Set<string>();
+  for (const allocation of input.allocations) {
+    identity(allocation.id); scoped(allocation); balances(allocation);
+    const destination = allocation.applicationId ?? allocation.budgetItemId;
+    if ((allocation.applicationId === null) === (allocation.budgetItemId === null)
+      || destination === null || !components.has(destination) || !sources.has(allocation.sourceId)) fail("EVIDENCE_ALLOCATION_SCOPE_INVALID");
+    if (componentKinds.get(destination!) !== (allocation.applicationId === null ? "EQUIPMENT" : "SERVICE")) fail("EVIDENCE_ALLOCATION_SCOPE_INVALID");
+    const key = JSON.stringify([allocation.sourceId, destination]);
+    if (allocationIds.has(allocation.id) || destinations.has(key)) fail("EVIDENCE_DUPLICATE_ALLOCATION");
+    allocationIds.add(allocation.id); destinations.add(key);
+  }
+  const contributions: RecognizedCostContribution[] = [];
+  const provenance: { sourceId: string; sourceKind: string; sourceKey: string; supplierJobId: string | null; allocationIds: string[]; incurredComplete: boolean; pendingComplete: boolean }[] = [];
+  const residuals: { sourceId: string; incurred: number | null; pending: number | null }[] = [];
+  const incompleteSourceIds: string[] = [];
+  for (const source of sources.values()) {
+    const rows = input.allocations.filter(row => row.sourceId === source.id);
+    const remainder = (field: "incurredAmount" | "pendingAmount") => {
+      const known = rows.filter(row => row[field] !== null);
+      // Unknown source cannot authorize even an explicit known zero allocation.
+      if (source[field] === null && known.length) fail("EVIDENCE_UNKNOWN_SOURCE_ALLOCATION");
+      const sum = known.reduce((total, row) => total + BigInt(row[field]!), BigInt(0));
+      if (source[field] !== null && sum > BigInt(source[field]!)) fail("EVIDENCE_OVERALLOCATED");
+      return source[field] === null ? null : intAmount(BigInt(source[field]!) - sum);
+    };
+    const incurred = remainder("incurredAmount"), pending = remainder("pendingAmount");
+    residuals.push({ sourceId: source.id, incurred, pending });
+    if (!source.incurredComplete || !source.pendingComplete || incurred !== 0 || pending !== 0 || rows.length === 0
+      || rows.some(row => !row.incurredComplete || !row.pendingComplete || row.incurredAmount === null || row.pendingAmount === null)) incompleteSourceIds.push(source.id);
+    provenance.push({ sourceId: source.id, sourceKind: source.sourceKind, sourceKey: source.sourceKey, supplierJobId: source.supplierJobId,
+      allocationIds: rows.map(row => row.id), incurredComplete: source.incurredComplete, pendingComplete: source.pendingComplete });
+    if (rows.length) contributions.push({ sourceId: source.id, scopeId: scope.budgetId,
+      incurred: source.incurredAmount, pending: source.pendingAmount,
+      allocations: rows.map(row => ({ componentId: (row.applicationId ?? row.budgetItemId)!, incurred: row.incurredAmount, pending: row.pendingAmount })) });
+  }
+  return {
+    authority: { organizationId: scope.organizationId, budgetId: scope.budgetId,
+      budgetUpdatedAt: scope.budgetUpdatedAt, contractVersion: scope.contractVersion,
+      componentVersions: input.components.map(row => ({ id: row.id, sourceRevision: row.sourceRevision, snapshotVersion: row.snapshotVersion })) },
+    contributions, provenance, residuals, incompleteSourceIds,
+    legacyEstimates: { materialCost: budget.materialCost, laborCost: budget.laborCost, costEstimate: budget.costEstimate },
+    legacyCostsReconciled: false as const,
+    costComplete: false as const,
+    zeroCostConfirmedIds: [] as string[],
+    costCompleteById: Object.fromEntries([...components].map(id => [id, false])),
+    missingAuthority: ["PERSISTED_LEGACY_COST_RECONCILIATION", "SCOPED_VERSIONED_COMPONENT_ZERO_COST_ATTESTATION"] as const,
+  };
+}
