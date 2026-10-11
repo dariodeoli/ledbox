@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, AdminRole } from "@prisma/client";
 import { roleCan } from "./permissions";
 import { QuoteComparisonError } from "./quote-comparison";
@@ -7,7 +7,196 @@ import { adminInventoryServiceConfigurationSchema, persistedInventoryServiceConf
   inventoryServiceConfigurationInputSchema, adminBudgetServiceApplicationSchema, serviceConfigurationRevisionSchema,
   persistedBudgetServiceApplicationSchema, budgetServiceMutationInputSchema, serviceSnapshotFromConfiguration,
   validateServiceSnapshotRetention, validateServiceCompanyBinding, validateServiceCostBindings, serviceCoverageArraySchema, serviceCostAllocationInputSchema, serviceApplicationTerms,
-  type ServiceBindingContext } from "../budget-service-contract";
+   persistedServiceEconomicEvidenceSchema, serviceEconomicSnapshotSchema, serviceEconomicObservationInputSchema,
+   type ServiceEconomicSnapshot, type ServiceBindingContext } from "../budget-service-contract";
+import { canonicalJson } from "./signature/hash";
+
+/** Hash the complete fresh census, not just IDs or claimed completeness flags.
+ * Equipment has no revision: full persisted rows/coverage are bound instead. */
+export function serviceEconomicCensusDigest(census: unknown) {
+  return createHash("sha256").update(canonicalJson(census)).digest("hex");
+}
+
+type EconomicAudit = { id: string; organizationId: string; actorId: string; action: string; entity: string; entityId: string; createdAt: string; detail: unknown };
+function evidenceFailure(code: string): never { throw new Error(code); }
+const economicMemberKey = (row: { applicationId: string | null; budgetItemId: string | null; sourceId: string | null; allocationId: string | null }) =>
+  canonicalJson([row.applicationId, row.budgetItemId, row.sourceId, row.allocationId]);
+
+/** Structural/provenance validation only, NOT FIN economic approval. Caller must
+ * provide a fresh complete census under the same Budget lock, never request data.
+ * No legacy sum is emitted; overlaps identify excluded legacy representations. */
+export function validatePersistedServiceEconomicEvidence(input: unknown, current: {
+  snapshot: ServiceEconomicSnapshot; censusDigest: string; expectedRevision: number; audit: EconomicAudit | null;
+}) {
+  const row = persistedServiceEconomicEvidenceSchema.parse(input);
+  const fresh = serviceEconomicSnapshotSchema.parse(current.snapshot);
+  const scope = fresh.scope;
+  if (row.organizationId !== scope.organizationId || row.budgetId !== scope.budgetId
+    || fresh.budget.organizationId !== scope.organizationId || fresh.budget.id !== scope.budgetId
+    || fresh.budget.updatedAt !== scope.budgetUpdatedAt || row.budgetUpdatedAt !== scope.budgetUpdatedAt
+    || row.revision !== serviceConfigurationRevisionSchema.parse(current.expectedRevision)
+    || row.censusDigest !== current.censusDigest || canonicalJson(row.snapshot) !== canonicalJson(fresh)) evidenceFailure("EVIDENCE_SCOPE_CENSUS_STALE");
+  const audit = current.audit;
+  const { members: _members, ...observation } = row;
+  if (!audit || audit.id !== row.provenance.auditId || audit.organizationId !== row.organizationId
+    || audit.actorId !== row.provenance.actorId || audit.createdAt !== row.provenance.recordedAt
+    || audit.action !== "SERVICE_ECONOMIC_EVIDENCE_RECORDED" || audit.entity !== "ServiceEconomicEvidence" || audit.entityId !== row.id
+    || canonicalJson(audit.detail) !== canonicalJson({ observationDigest: serviceEconomicCensusDigest(observation), censusDigest: row.censusDigest })) evidenceFailure("EVIDENCE_PROVENANCE_INVALID");
+  const scoped = (value: { organizationId: string; budgetId: string }) => {
+    if (value.organizationId !== scope.organizationId || value.budgetId !== scope.budgetId) evidenceFailure("EVIDENCE_SCOPE_CENSUS_STALE");
+  };
+  const componentMap = new Map(fresh.components.map(component => [component.id, component]));
+  const sourceMap = new Map(fresh.sources.map(source => [source.id, source]));
+  const unique = (ids: string[]) => { if (new Set(ids).size !== ids.length) evidenceFailure("EVIDENCE_DUPLICATE_CENSUS"); };
+  unique(fresh.components.map(value => value.id)); unique(fresh.sources.map(value => value.id)); unique(fresh.allocations.map(value => value.id));
+  unique(fresh.supplierJobs.map(value => value.id));
+  unique(fresh.sources.map(value => canonicalJson([value.sourceKind, value.sourceKey])));
+  unique(fresh.sources.flatMap(value => value.supplierJobId === null ? [] : [value.supplierJobId]));
+  for (const component of fresh.components) {
+    scoped(component);
+    if (component.kind === "EQUIPMENT" ? component.sourceRevision !== null || component.expectedSourceRevision !== null || component.snapshotVersion !== null
+      : component.snapshotVersion !== 1 || component.sourceRevision === null || component.sourceRevision !== component.expectedSourceRevision) evidenceFailure("EVIDENCE_COMPONENT_VERSION_INVALID");
+  }
+  const validateBalance = (value: { incurredAmount: number | null; pendingAmount: number | null; incurredComplete: boolean; pendingComplete: boolean }) => {
+    if ((value.incurredComplete && value.incurredAmount === null) || (value.pendingComplete && value.pendingAmount === null)
+      || (value.incurredAmount !== null && value.pendingAmount !== null && BigInt(value.incurredAmount) + BigInt(value.pendingAmount) > BigInt(2147483647))) evidenceFailure("EVIDENCE_BALANCE_INVALID");
+  };
+  for (const job of fresh.supplierJobs) if (job.organizationId !== scope.organizationId) evidenceFailure("EVIDENCE_SUPPLIER_SCOPE_INVALID");
+  for (const source of fresh.sources) {
+    scoped(source); validateBalance(source);
+    if ((source.sourceKind === "SUPPLIER") !== (source.supplierJobId !== null)) evidenceFailure("EVIDENCE_SUPPLIER_SCOPE_INVALID");
+    if (source.supplierJobId !== null && (fresh.budget.eventId === null || !fresh.supplierJobs.some(job => job.id === source.supplierJobId && job.eventId === fresh.budget.eventId))) evidenceFailure("EVIDENCE_SUPPLIER_SCOPE_INVALID");
+  }
+  unique(fresh.allocations.map(value => canonicalJson([value.sourceId, value.applicationId, value.budgetItemId])));
+  for (const allocation of fresh.allocations) {
+    scoped(allocation); validateBalance(allocation);
+    const component = componentMap.get(allocation.applicationId ?? allocation.budgetItemId ?? "");
+    if ((allocation.applicationId === null) === (allocation.budgetItemId === null) || !sourceMap.has(allocation.sourceId)
+      || !component || component.kind !== (allocation.applicationId === null ? "EQUIPMENT" : "SERVICE")) evidenceFailure("EVIDENCE_ALLOCATION_SCOPE_INVALID");
+  }
+  for (const source of fresh.sources) for (const field of ["incurredAmount", "pendingAmount"] as const) {
+    const values = fresh.allocations.filter(value => value.sourceId === source.id && value[field] !== null);
+    if (source[field] === null ? values.length > 0 : values.reduce((sum, value) => sum + BigInt(value[field]!), BigInt(0)) > BigInt(source[field]!)) evidenceFailure("EVIDENCE_OVERALLOCATED");
+  }
+  const empty = { applicationId: null, budgetItemId: null, sourceId: null, allocationId: null };
+  const expected = [
+    ...fresh.components.map(value => economicMemberKey({ ...empty, ...(value.kind === "SERVICE" ? { applicationId: value.id } : { budgetItemId: value.id }) })),
+    ...fresh.sources.map(value => economicMemberKey({ ...empty, sourceId: value.id })),
+    ...fresh.allocations.map(value => economicMemberKey({ ...empty, allocationId: value.id })),
+  ].sort();
+  const actual = row.members.map(economicMemberKey).sort(); unique(actual);
+  if (canonicalJson(expected) !== canonicalJson(actual)) evidenceFailure("EVIDENCE_CENSUS_INCOMPLETE");
+  unique(row.provenance.legacyOverlaps.map(value => canonicalJson([value.field, value.sourceId])));
+  if (row.provenance.legacyOverlaps.some(value => !sourceMap.has(value.sourceId))) evidenceFailure("EVIDENCE_LEGACY_DOUBLE_COUNT");
+  if (row.kind === "LEGACY_RECONCILIATION") {
+    if (row.applicationId !== null || row.budgetItemId !== null) evidenceFailure("EVIDENCE_TARGET_INVALID");
+  } else {
+    const component = componentMap.get(row.applicationId ?? row.budgetItemId ?? "");
+    if ((row.applicationId === null) === (row.budgetItemId === null) || !component || component.kind !== (row.applicationId === null ? "EQUIPMENT" : "SERVICE")
+      || row.provenance.legacyOverlaps.length > 0) evidenceFailure("EVIDENCE_TARGET_INVALID");
+    // A zero observation cannot erase a known/unknown recognized allocation.
+    const allocations = fresh.allocations.filter(value => value.applicationId === row.applicationId && value.budgetItemId === row.budgetItemId);
+    if (allocations.some(value => value.incurredAmount !== 0 || value.pendingAmount !== 0 || !value.incurredComplete || !value.pendingComplete)) evidenceFailure("EVIDENCE_ZERO_CONFLICT");
+  }
+  return { observation: row, integrityValidated: true as const,
+    legacyCostsReconciled: false as const, costComplete: false as const, zeroCostConfirmedIds: [] as string[],
+    missingAuthority: "FIN_ECONOMIC_ATTESTATION_POLICY_V1" as const };
+}
+
+/** Internal readonly candidate read under the commercial Budget lock. Explicit
+ * scoped SQL avoids an unchecked/generated-client dependency on new tables.
+ * No economic flags are exposed through loadScopedBudgetServices/public DTOs. */
+export async function captureLockedServiceEconomicCensus(tx: Prisma.TransactionClient, context: Pick<AdminContext, "organizationId">, budgetId: string) {
+  const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Budget" WHERE "organizationId"=${context.organizationId} AND "id"=${budgetId} FOR UPDATE`;
+  if (locked.length !== 1) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
+  type Row = Record<string, unknown>;
+  type Census = { budget: Row; applications: Row[]; items: Row[]; coverage: Row[]; sources: Row[]; allocations: Row[]; supplierJobs: Row[] };
+  const [census] = await tx.$queryRaw<Census[]>`
+    SELECT to_jsonb(b) AS budget,
+      COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "BudgetServiceApplication" a WHERE a."organizationId"=b."organizationId" AND a."budgetId"=b."id"),'[]'::jsonb) AS applications,
+      COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i."id") FROM "BudgetItem" i WHERE i."budgetId"=b."id"),'[]'::jsonb) AS items,
+      COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c."id") FROM "BudgetServiceCoverage" c WHERE c."organizationId"=b."organizationId" AND c."budgetId"=b."id"),'[]'::jsonb) AS coverage,
+      COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s."id") FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId" AND s."budgetId"=b."id"),'[]'::jsonb) AS sources,
+      COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a."id") FROM "ServiceCostAllocation" a WHERE a."organizationId"=b."organizationId" AND a."budgetId"=b."id"),'[]'::jsonb) AS allocations,
+      COALESCE((SELECT jsonb_agg(to_jsonb(j) ORDER BY j."id") FROM "SupplierJob" j WHERE j."organizationId"=b."organizationId" AND ((b."eventId" IS NOT NULL AND j."eventId"=b."eventId") OR j."id" IN (SELECT s."supplierJobId" FROM "ServiceCostSource" s WHERE s."organizationId"=b."organizationId" AND s."budgetId"=b."id"))),'[]'::jsonb) AS "supplierJobs"
+    FROM "Budget" b WHERE b."organizationId"=${context.organizationId} AND b."id"=${budgetId}`;
+  if (!census) evidenceFailure("EVIDENCE_BUDGET_NOT_FOUND");
+  const select = (row: Row, fields: readonly string[]) => Object.fromEntries(fields.map(field => [field, row[field]]));
+  // Prisma timestamp(3) is UTC but to_jsonb(timestamp) omits the zone. Do not
+  // reinterpret Budget.updatedAt in the machine's local timezone.
+  const rawUpdatedAt = String(census.budget.updatedAt);
+  const updatedAt = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(rawUpdatedAt) ? rawUpdatedAt : `${rawUpdatedAt}Z`).toISOString();
+  const snapshot = serviceEconomicSnapshotSchema.parse({
+    scope: { organizationId: context.organizationId, budgetId, budgetUpdatedAt: updatedAt, contractVersion: 1 },
+    budget: { ...select(census.budget, ["id", "organizationId", "eventId", "materialCost", "laborCost", "costEstimate"]), updatedAt },
+    supplierJobs: census.supplierJobs.map(row => select(row, ["id", "organizationId", "eventId"])),
+    components: [...census.applications.map(row => ({ ...select(row, ["id", "organizationId", "budgetId", "sourceRevision"]), kind: "SERVICE",
+      snapshotVersion: (row.tariffSnapshot as Row | null)?.version, expectedSourceRevision: row.sourceRevision })),
+      ...census.items.map(row => ({ id: row.id, organizationId: context.organizationId, budgetId, kind: "EQUIPMENT", snapshotVersion: null, sourceRevision: null, expectedSourceRevision: null }))],
+    sources: census.sources.map(row => select(row, ["id", "organizationId", "budgetId", "sourceKind", "sourceKey", "supplierJobId", "incurredAmount", "pendingAmount", "incurredComplete", "pendingComplete"])),
+    allocations: census.allocations.map(row => select(row, ["id", "organizationId", "budgetId", "sourceId", "applicationId", "budgetItemId", "incurredAmount", "pendingAmount", "incurredComplete", "pendingComplete"])),
+  });
+  return { snapshot, censusDigest: serviceEconomicCensusDigest(census) };
+}
+
+export async function loadLockedServiceEconomicEvidence(tx: Prisma.TransactionClient, context: Pick<AdminContext, "organizationId">,
+  budgetId: string, evidenceId: string, expectedRevision: number) {
+  serviceConfigurationRevisionSchema.parse(expectedRevision);
+  const current = await captureLockedServiceEconomicCensus(tx, context, budgetId);
+  type Row = Record<string, unknown>;
+  const select = (row: Row, fields: readonly string[]) => Object.fromEntries(fields.map(field => [field, row[field]]));
+  const [record] = await tx.$queryRaw<Row[]>`SELECT * FROM "ServiceEconomicEvidence" WHERE "organizationId"=${context.organizationId} AND "budgetId"=${budgetId} AND "id"=${evidenceId}`;
+  if (!record) evidenceFailure("EVIDENCE_NOT_FOUND");
+  const [latest] = await tx.$queryRaw<{ revision: number | null }[]>`SELECT MAX("revision") AS revision FROM "ServiceEconomicEvidence"
+    WHERE "organizationId"=${context.organizationId} AND "budgetId"=${budgetId} AND "kind"=${String(record.kind)}
+    AND "applicationId" IS NOT DISTINCT FROM ${record.applicationId as string | null} AND "budgetItemId" IS NOT DISTINCT FROM ${record.budgetItemId as string | null}`;
+  if (latest?.revision !== record.revision || latest.revision !== expectedRevision) evidenceFailure("EVIDENCE_REVISION_STALE");
+  const members = await tx.$queryRaw<Row[]>`SELECT "applicationId","budgetItemId","sourceId","allocationId" FROM "ServiceEconomicEvidenceMember" WHERE "organizationId"=${context.organizationId} AND "budgetId"=${budgetId} AND "evidenceId"=${evidenceId} ORDER BY "id"`;
+  const [auditRow] = await tx.$queryRaw<(Omit<EconomicAudit, "createdAt"> & { createdAt: Date })[]>`SELECT "id","organizationId","actorId","action","entity","entityId","createdAt","detail" FROM "AuditLog" WHERE "organizationId"=${context.organizationId} AND "id"=${String(record.auditId)}`;
+  const observation = { ...select(record, ["id", "organizationId", "budgetId", "contractVersion", "revision", "kind", "applicationId", "budgetItemId", "censusDigest", "snapshot"]),
+    budgetUpdatedAt: new Date(String(record.budgetUpdatedAt)).toISOString(), members,
+    provenance: { ...select(record, ["auditId", "actorId", "rationale", "legacyOverlaps"]), recordedAt: new Date(String(record.recordedAt)).toISOString() } };
+  return validatePersistedServiceEconomicEvidence(observation, { ...current, expectedRevision,
+    audit: auditRow ? { ...auditRow, createdAt: auditRow.createdAt.toISOString() } : null });
+}
+
+/** Append an internal observation, NOT a FIN approval. Caller owns the transaction;
+ * audit, snapshot and all FK census members commit together or roll back together.
+ * No endpoint accepts this input. Budget lock serializes the target revision CAS. */
+export async function appendLockedServiceEconomicObservation(tx: Prisma.TransactionClient, context: AdminContext, budgetId: string, input: unknown) {
+  if (context.demo || !["OWNER", "ADMIN", "FINANCE"].includes(context.role) || !roleCan(context.role, "budgets.write")) evidenceFailure("EVIDENCE_WRITE_FORBIDDEN");
+  const terms = serviceEconomicObservationInputSchema.parse(input);
+  const current = await captureLockedServiceEconomicCensus(tx, context, budgetId);
+  if (terms.budgetUpdatedAt !== current.snapshot.scope.budgetUpdatedAt || terms.censusDigest !== current.censusDigest) evidenceFailure("EVIDENCE_SCOPE_CENSUS_STALE");
+  const [previous] = await tx.$queryRaw<{ revision: number | null }[]>`SELECT MAX("revision") AS revision FROM "ServiceEconomicEvidence"
+    WHERE "organizationId"=${context.organizationId} AND "budgetId"=${budgetId} AND "kind"=${terms.kind}
+    AND "applicationId" IS NOT DISTINCT FROM ${terms.applicationId} AND "budgetItemId" IS NOT DISTINCT FROM ${terms.budgetItemId}`;
+  const oldRevision = previous?.revision ?? 0;
+  if (oldRevision !== terms.expectedEvidenceRevision) evidenceFailure("EVIDENCE_REVISION_STALE");
+  if (oldRevision === 2147483647) evidenceFailure("EVIDENCE_REVISION_EXHAUSTED");
+  const id = randomUUID(), auditId = randomUUID(), recordedAt = new Date();
+  const empty = { applicationId: null, budgetItemId: null, sourceId: null, allocationId: null };
+  const members = [
+    ...current.snapshot.components.map(value => ({ ...empty, ...(value.kind === "SERVICE" ? { applicationId: value.id } : { budgetItemId: value.id }) })),
+    ...current.snapshot.sources.map(value => ({ ...empty, sourceId: value.id })),
+    ...current.snapshot.allocations.map(value => ({ ...empty, allocationId: value.id })),
+  ];
+  const observation = { id, organizationId: context.organizationId, budgetId, contractVersion: 1, revision: oldRevision + 1,
+    kind: terms.kind, applicationId: terms.applicationId, budgetItemId: terms.budgetItemId,
+    budgetUpdatedAt: terms.budgetUpdatedAt, censusDigest: current.censusDigest, snapshot: current.snapshot,
+    provenance: { auditId, actorId: context.user.id, recordedAt: recordedAt.toISOString(), rationale: terms.rationale, legacyOverlaps: terms.legacyOverlaps } };
+  const detail = { observationDigest: serviceEconomicCensusDigest(observation), censusDigest: current.censusDigest };
+  const result = validatePersistedServiceEconomicEvidence({ ...observation, members }, { ...current, expectedRevision: observation.revision,
+    audit: { id: auditId, organizationId: context.organizationId, actorId: context.user.id, action: "SERVICE_ECONOMIC_EVIDENCE_RECORDED", entity: "ServiceEconomicEvidence", entityId: id, createdAt: recordedAt.toISOString(), detail } });
+  await tx.auditLog.create({ data: { id: auditId, organizationId: context.organizationId, actorId: context.user.id, actorName: context.user.name,
+    actorEmail: context.user.email, action: "SERVICE_ECONOMIC_EVIDENCE_RECORDED", entity: "ServiceEconomicEvidence", entityId: id,
+    summary: "Observación económica privada; aprobación FIN pendiente", detail, createdAt: recordedAt } });
+  await tx.$executeRaw`INSERT INTO "ServiceEconomicEvidence" ("id","organizationId","budgetId","contractVersion","revision","kind","applicationId","budgetItemId","budgetUpdatedAt","censusDigest","snapshot","auditId","actorId","recordedAt","rationale","legacyOverlaps")
+    VALUES (${id},${context.organizationId},${budgetId},1,${observation.revision},${terms.kind},${terms.applicationId},${terms.budgetItemId},${new Date(terms.budgetUpdatedAt)},${current.censusDigest},${JSON.stringify(current.snapshot)}::jsonb,${auditId},${context.user.id},${recordedAt},${terms.rationale},${JSON.stringify(terms.legacyOverlaps)}::jsonb)`;
+  for (const member of members) await tx.$executeRaw`INSERT INTO "ServiceEconomicEvidenceMember" ("id","organizationId","budgetId","evidenceId","applicationId","budgetItemId","sourceId","allocationId")
+    VALUES (${randomUUID()},${context.organizationId},${budgetId},${id},${member.applicationId},${member.budgetItemId},${member.sourceId},${member.allocationId})`;
+  return result;
+}
 
 /** Pure validation adapter. DB loaders/CAS/transaction wiring are a later stage. */
 export function validateBudgetServiceMutation(input: unknown, coverage: unknown, context: ServiceBindingContext & { role: AdminRole; demo: boolean }) {

@@ -180,6 +180,7 @@ model Organization {
   serviceCoverage BudgetServiceCoverage[]
   serviceCostSources ServiceCostSource[]
   serviceCostAllocations ServiceCostAllocation[]
+  serviceEconomicEvidence ServiceEconomicEvidence[]
 
   @@index([active, createdAt])
   @@index([planId])
@@ -819,6 +820,7 @@ model Budget {
   serviceCostSources   ServiceCostSource[]
   serviceCostAllocations ServiceCostAllocation[]
 
+  serviceEconomicEvidence ServiceEconomicEvidence[]
   @@unique([organizationId, id], map: "Budget_org_id_key")
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -867,6 +869,8 @@ model BudgetItem {
   serviceCoverage BudgetServiceCoverage[]
   serviceCostAllocations ServiceCostAllocation[]
 
+  economicEvidenceTargets ServiceEconomicEvidence[]
+  economicEvidenceMembers ServiceEconomicEvidenceMember[]
   @@unique([budgetId, id], map: "BudgetItem_budget_id_key")
   @@index([budgetId])
   @@index([inventoryId])
@@ -1831,9 +1835,11 @@ model AuditLog {
   detail         Json?
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceEconomicEvidence ServiceEconomicEvidence[]
 
   @@index([organizationId, createdAt])
   @@index([entity, entityId])
+  @@unique([organizationId, id], map: "AuditLog_org_id_key")
   @@index([organizationId, actorId])
 }
 
@@ -2376,6 +2382,8 @@ model BudgetServiceApplication {
   coverage BudgetServiceCoverage[]
   costAllocations ServiceCostAllocation[]
 
+  economicEvidenceTargets ServiceEconomicEvidence[]
+  economicEvidenceMembers ServiceEconomicEvidenceMember[]
   @@unique([organizationId, budgetId, id], map: "SvcApp_org_budget_id_key")
   @@unique([organizationId, budgetId, configurationId, executionId], map: "SvcApp_execution_key")
   @@unique([organizationId, budgetId, configurationId, parentLineId], map: "SvcApp_parent_key")
@@ -2418,6 +2426,7 @@ model ServiceCostSource {
   supplierJob SupplierJob? @relation(fields: [organizationId, supplierJobId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcCost_supplier_fkey")
   allocations ServiceCostAllocation[]
 
+  economicEvidenceMembers ServiceEconomicEvidenceMember[]
   @@unique([organizationId, budgetId, id], map: "SvcCost_org_budget_id_key")
   @@unique([organizationId, budgetId, sourceKind, sourceKey], map: "SvcCost_origin_key")
 }
@@ -2441,6 +2450,60 @@ model ServiceCostAllocation {
   application BudgetServiceApplication? @relation(fields: [organizationId, budgetId, applicationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_app_fkey")
   budgetItem BudgetItem? @relation(fields: [budgetId, budgetItemId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcAlloc_item_fkey")
 
+  economicEvidenceMembers ServiceEconomicEvidenceMember[]
+  @@unique([organizationId, budgetId, id], map: "SvcAlloc_org_budget_id_key")
   @@unique([sourceId, applicationId], map: "SvcAlloc_application_key")
   @@unique([sourceId, budgetItemId], map: "SvcAlloc_item_key")
+}
+
+/// Private observations only: no defaults, backfill or economic approval flag.
+model ServiceEconomicEvidence {
+  id String @id
+  organizationId String
+  budgetId String
+  contractVersion Int
+  revision Int
+  kind String
+  applicationId String?
+  budgetItemId String?
+  budgetUpdatedAt DateTime
+  censusDigest String
+  snapshot Json
+  auditId String
+  actorId String
+  recordedAt DateTime
+  rationale String
+  legacyOverlaps Json
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_org_fkey")
+  budget Budget @relation(fields: [organizationId, budgetId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_budget_fkey")
+  audit AuditLog @relation(fields: [organizationId, auditId], references: [organizationId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_audit_fkey")
+  application BudgetServiceApplication? @relation(fields: [organizationId, budgetId, applicationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_app_fkey")
+  budgetItem BudgetItem? @relation(fields: [budgetId, budgetItemId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidence_item_fkey")
+  members ServiceEconomicEvidenceMember[]
+  @@unique([organizationId, budgetId, id], map: "SvcEvidence_scope_id_key")
+  @@unique([organizationId, auditId], map: "SvcEvidence_audit_key")
+  @@unique([organizationId, budgetId, kind, applicationId, revision], map: "SvcEvidence_app_revision_key")
+  @@unique([organizationId, budgetId, kind, budgetItemId, revision], map: "SvcEvidence_item_revision_key")
+  @@index([organizationId, budgetId], map: "SvcEvidence_scope_idx")
+}
+
+/// Full census membership: exactly one typed FK per row (SQL CHECK).
+model ServiceEconomicEvidenceMember {
+  id String @id
+  organizationId String
+  budgetId String
+  evidenceId String
+  applicationId String?
+  budgetItemId String?
+  sourceId String?
+  allocationId String?
+  evidence ServiceEconomicEvidence @relation(fields: [organizationId, budgetId, evidenceId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidenceMember_evidence_fkey")
+  application BudgetServiceApplication? @relation(fields: [organizationId, budgetId, applicationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidenceMember_app_fkey")
+  budgetItem BudgetItem? @relation(fields: [budgetId, budgetItemId], references: [budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidenceMember_item_fkey")
+  source ServiceCostSource? @relation(fields: [organizationId, budgetId, sourceId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidenceMember_source_fkey")
+  allocation ServiceCostAllocation? @relation(fields: [organizationId, budgetId, allocationId], references: [organizationId, budgetId, id], onDelete: Restrict, onUpdate: Restrict, map: "SvcEvidenceMember_alloc_fkey")
+  @@unique([evidenceId, applicationId], map: "SvcEvidence_member_app_key")
+  @@unique([evidenceId, budgetItemId], map: "SvcEvidence_member_item_key")
+  @@unique([evidenceId, sourceId], map: "SvcEvidence_member_source_key")
+  @@unique([evidenceId, allocationId], map: "SvcEvidence_member_alloc_key")
 }

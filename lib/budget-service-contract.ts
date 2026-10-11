@@ -6,6 +6,43 @@ const days = z.number().int().min(1).max(9999);
 const threshold = z.number().int().min(0).max(9999).nullable();
 const revision = z.number().int().min(1).max(2147483647);
 export const serviceConfigurationRevisionSchema = revision;
+
+/** Internal FIN4e60 projection only; never an HTTP/public document contract. */
+const economicScope = { organizationId: id, budgetId: id };
+const economicBalance = { incurredAmount: money.nullable(), pendingAmount: money.nullable(), incurredComplete: z.boolean(), pendingComplete: z.boolean() };
+export const serviceEconomicSnapshotSchema = z.object({
+  scope: z.object({ ...economicScope, budgetUpdatedAt: z.string().datetime(), contractVersion: z.literal(1) }).strict(),
+  budget: z.object({ id, organizationId: id, eventId: id.nullable(), updatedAt: z.string().datetime(), materialCost: money, laborCost: money, costEstimate: money }).strict(),
+  supplierJobs: z.array(z.object({ id, organizationId: id, eventId: id.nullable() }).strict()),
+  components: z.array(z.object({ id, ...economicScope, kind: z.enum(["SERVICE", "EQUIPMENT"]), snapshotVersion: z.literal(1).nullable(), sourceRevision: revision.nullable(), expectedSourceRevision: revision.nullable() }).strict()),
+  sources: z.array(z.object({ id, ...economicScope, sourceKind: z.enum(["SERVICE", "LABOR", "SUPPLIER", "EQUIPMENT"]), sourceKey: id, supplierJobId: id.nullable(), ...economicBalance }).strict()),
+  allocations: z.array(z.object({ id, ...economicScope, sourceId: id, applicationId: id.nullable(), budgetItemId: id.nullable(), ...economicBalance }).strict()),
+}).strict();
+export type ServiceEconomicSnapshot = z.infer<typeof serviceEconomicSnapshotSchema>;
+
+const evidenceMember = z.object({
+  applicationId: id.nullable(), budgetItemId: id.nullable(), sourceId: id.nullable(), allocationId: id.nullable(),
+}).strict().refine(row => [row.applicationId, row.budgetItemId, row.sourceId, row.allocationId].filter(value => value !== null).length === 1, "EVIDENCE_MEMBER_XOR");
+/** Observations, not an economic approval or a public zero-cost claim. FIN owns
+ * the missing decision policy; neither persisted row nor audit is costComplete. */
+export const persistedServiceEconomicEvidenceSchema = z.object({
+  id, ...economicScope, contractVersion: z.literal(1), revision,
+  kind: z.enum(["LEGACY_RECONCILIATION", "COMPONENT_ZERO"]),
+  applicationId: id.nullable(), budgetItemId: id.nullable(),
+  budgetUpdatedAt: z.string().datetime(), censusDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  snapshot: serviceEconomicSnapshotSchema,
+  provenance: z.object({ auditId: id, actorId: id, recordedAt: z.string().datetime(), rationale: z.string().trim().min(1).max(2000),
+    /** Legacy amounts are accounted by references to recognized obligations;
+     * they are never added again as another contribution. Zero has no overlaps. */
+    legacyOverlaps: z.array(z.object({ field: z.enum(["materialCost", "laborCost", "costEstimate"]), sourceId: id }).strict()),
+  }).strict(),
+  members: z.array(evidenceMember),
+}).strict();
+export const serviceEconomicObservationInputSchema = persistedServiceEconomicEvidenceSchema.pick({ kind: true, applicationId: true, budgetItemId: true, budgetUpdatedAt: true, censusDigest: true }).extend({
+  expectedEvidenceRevision: z.number().int().min(0).max(2147483647),
+  rationale: z.string().trim().min(1).max(2000),
+  legacyOverlaps: persistedServiceEconomicEvidenceSchema.shape.provenance.shape.legacyOverlaps,
+}).strict();
 export const serviceKindSchema = z.enum(["TRANSPORT", "INSTALLATION", "GUARD", "PROMOTER"]);
 export const serviceModeSchema = z.enum(["PERSON_DAY", "FIXED_EVENT"]);
 export const serviceUnitSchema = z.enum(["PYG_PER_PERSON_DAY", "PYG_PER_EXECUTION", "PYG_PER_EVENT"]);
