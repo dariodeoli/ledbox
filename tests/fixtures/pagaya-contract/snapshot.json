@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "sourceURL": "https://pagaya.online/integrations/pagaya-server.mjs",
+  "guideURL": "https://pagaya.online/integrations/pagaya-server-guide.md",
+  "sourceSHA256": "b4fb131e3676898312bcb20f94280f3b2aced8e8bde5c4d1d8eb07abf1dbeb45",
+  "sourceBytes": 5800,
+  "kind": "PUBLIC_UTF8_SOURCE_SNAPSHOT_OFFLINE_TEST_ONLY",
+  "integrationProof": false,
+  "deliveryProof": false,
+  "providerProof": false
+}

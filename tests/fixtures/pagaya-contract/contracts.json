@@ -1,0 +1,15 @@
+{
+  "kind": "SYNTHETIC_TEST_ONLY_NOT_APPROVED_PRICING_OR_LIVE_DATA",
+  "subscriptionId": "00000000-0000-4000-8000-000000000001",
+  "checkoutId": "00000000-0000-4000-8000-000000000002",
+  "checkoutInput": {
+    "priceVersionId": "00000000-0000-4000-8000-000000000003",
+    "externalReference": "fixture-enrollment-only",
+    "customer": { "name": "Test Only", "email": "test@example.invalid", "phone": "+595000000000" }
+  },
+  "commandKey": "fixture-command-immutable-0001",
+  "pendingRenewal": {
+    "subscription": { "status": "active", "cancelAtPeriodEnd": false, "pendingRenewalMutation": { "status": "submitted" } },
+    "mutation": { "status": "submitted", "awaitingWebhook": true }
+  }
+}
