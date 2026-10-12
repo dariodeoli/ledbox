@@ -7,6 +7,8 @@ import { PublicFooter } from "../components/public/PublicFooter";
 import { APP_VERSION_LABEL } from "../lib/version";
 import { siteProfileForHost } from "../lib/public-config";
 import { readFileSync } from "node:fs";
+import { EVENTOS_LEGAL, eventosSupportUrl } from "../lib/legal";
+import { publicConfig } from "../lib/public-config";
 
 // tsx usa JSX clásico en este runner; Next compila las mismas piezas con JSX automático.
 Object.assign(globalThis, { React });
@@ -21,6 +23,11 @@ test("#156: cada pie renderiza una sola identidad, versión y crédito completo"
     assert.ok(text.includes(`© ${new Date().getUTCFullYear()}`));
     assert.ok(text.includes("Desarrollado en Paraguay por OwnCoding"));
     assert.ok(text.includes("Todos los derechos reservados"));
+    assert.ok(text.includes(EVENTOS_LEGAL.product));
+    assert.ok(text.includes(`Operado por ${EVENTOS_LEGAL.operator}`));
+    for (const href of [`${publicConfig.productUrl}/privacidad`, `${publicConfig.productUrl}/terminos`, `${publicConfig.productUrl}/status`, eventosSupportUrl(), publicConfig.siteUrl]) {
+      assert.ok(html.includes(`href="${href.replace(/&/g, "&amp;")}"`), `${variant} debe conservar ${href}`);
+    }
     if (variant === "portal") assert.ok(html.includes('href="https://ledbox.online/privacidad"'));
     if (variant === "app") {
       assert.ok(html.includes('href="https://eventos.ledbox.online/privacidad"'));

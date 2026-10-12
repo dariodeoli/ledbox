@@ -28,6 +28,16 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 
 ## Ramas, entrega y deploy
 
+- Orden del dueño (12-10-2026): footer institucional canónico `AppFooter` →
+  `ProductFooter`, reutilizado por layout raíz/public wrapper/global error;
+  nombre/enlaces comunes desde datos legales y URLs configuradas. Documentos
+  firmados/snapshots conservan su contrato; no duplicar footer institucional allí.
+- Cada NUEVO deploy de PRODUCTO requiere próximo patch correlativo `2.1.x`,
+  package/lock/NOVEDADES/tag coherentes, únicamente por integrador. Footer y health
+  leen la misma versión compilada desde package vía lib/version; sin hardcodes,
+  versiones futuras, rebump pendiente ni release vacío de helpers/consolidación Git.
+  QA_POSTDEPLOY_DEFERRED_BY_OWNER y SHA_POSTDEPLOY_DEFERRED_BY_OWNER no son PASS.
+
 - Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify publica ledbox.online, app.ledbox.online, eventos.ledbox.online, clientes.ledbox.online y demo.ledbox.online). Solo el implementador/integrador mergea y pushea ahí; ningún otro agente pushea directo a esa rama ni a `main`.
 - Cada workstream trabaja en su propio worktree y rama: los slots en su rama persistente (`slot/panel`, `slot/operacion`, `slot/finanzas`), el resto en `feat/<slug>` según el brief. Commits convencionales por unidad de trabajo y sin atribución de IA.
 - Antes de empezar: `git fetch origin --prune` y partir de `origin/codex/ledbox-gestion-multiempresa` (o de la rama base indicada en el brief; `main` no se usa como base).
