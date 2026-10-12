@@ -35,6 +35,24 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 - No hay deploy manual: al integrar a la rama viva, Coolify reconstruye.
 - No tocar el worktree ni la rama de otro agente.
 
+### Evidencia durable y cierre de producto — orden vigente del 12-10-2026
+
+- El orquestador es el único writer de GitHub: mantiene los issues existentes con
+  fuente recuperable, commits, dependencias, FIRST causal, comandos, logs,
+  terminal y RELEASE reales. Los carriles entregan esa evidencia por handoff.
+- Registrar diferencias entre alcance previsto y ejecución real, incluidos
+  replays por selección de tests; la intención del runner no sustituye al log.
+  Conservar FIRST y evidencia histórica sin sobrescribirlos ni fabricar PASS.
+- Los issues de producto permanecen OPEN hasta acreditar su alcance publicado
+  y deploy FINISHED. Preparación, checks locales, despacho o merge no equivalen
+  a publicación. QA/capturas y SHA postdeploy diferidos por el dueño mantienen
+  su estado honesto y no se convierten en gates adicionales de publicación.
+- El integrador original admite el alcance y publica: helpers/tests solos se
+  consolidan en Git sin release vacío; un ingreso runtime real admitido lleva
+  un único patch correlativo `2.1.x` coherente con la regla de versión vigente.
+- Una dependencia ausente limita únicamente la función afectada; no acredita
+  hechos económicos ni impone una espera global de UI/PDF/producto.
+
 ## URLs del panel (regla del 21-09-2026)
 
 - En producción el panel (app **EventOS**) vive en `app.ledbox.online` y las rutas **no llevan** `/admin`: `/login`, `/dashboard`, `/eventos`, `/finanzas`, etc. `admin.ledbox.online` redirige 308 al host nuevo y `eventos.ledbox.online` sirve la landing de ventas del producto.
