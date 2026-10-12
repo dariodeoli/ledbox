@@ -299,3 +299,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Usuarios: el PATCH serializa cambios de membresías mediante el lock de la empresa y comprueba el último OWNER efectivo con membresía y cuenta activas antes de una baja o democión; conserva permisos, selfguard, auditoría y revocación de sesiones.
 - Recovery Pilot offline valida referencias, hashes, identidad y binding explícitos; distingue NOT_RUN de FAIL y no inventa trazas, autores o costos. La validación offline no acredita reparación del inventario productivo ni procedencia económica.
 - Los textos explicativos fiscales conservan las razones sociales y los datos guardados sin normalizar su puntuación. QA visual y verificación SHA postdeploy permanecen diferidas; los tests mocked de OWNER no son prueba nativa PostgreSQL.
+
+## v2.1.81 — 2026-10-12
+
+- Carrito público: Tab y Shift+Tab mantienen el foco dentro del pedido abierto; al cerrar por botón, Escape o fondo se recupera el control de apertura si sigue conectado.
+- Finanzas: la división de un cobro pendiente previsualiza y valida los montos redondeados por parte como el API, respetando de dos a doce partes y el saldo exacto.
+- Usuarios: crear, editar e invitar deshabilitan el envío con datos inválidos y muestran el motivo; los campos permanecen editables y se conservan los permisos y el bloqueo de envíos simultáneos.
+- QA visual y SHA postdeploy continúan diferidos por orden del dueño; las pruebas unitarias no acreditan aceptación visual global.
