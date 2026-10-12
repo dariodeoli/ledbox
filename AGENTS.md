@@ -37,6 +37,12 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
   leen la misma versión compilada desde package vía lib/version; sin hardcodes,
   versiones futuras, rebump pendiente ni release vacío de helpers/consolidación Git.
   QA_POSTDEPLOY_DEFERRED_BY_OWNER y SHA_POSTDEPLOY_DEFERRED_BY_OWNER no son PASS.
+- Pendientes concretos se conservan en GitHub con owner/source/branch/paths,
+  criterios, checks reales o NOT_RUN, dependencias y siguiente acción; marcar
+  SINCOMMIT si no hay fuente durable, sin forzar commits ni incluir secretos.
+  Orquestador es único escritor GitHub. Cierre de producto exige publicación y
+  deploy FINISHED acreditados (versión/URL/hora/SHA remoto/UUID), no sólo READY,
+  PASS o merge/push. Helpers/docs Git no crean deploy ni release vacío.
 
 - Rama viva y de deploy: `codex/ledbox-gestion-multiempresa` (Coolify publica ledbox.online, app.ledbox.online, eventos.ledbox.online, clientes.ledbox.online y demo.ledbox.online). Solo el implementador/integrador mergea y pushea ahí; ningún otro agente pushea directo a esa rama ni a `main`.
 - Cada workstream trabaja en su propio worktree y rama: los slots en su rama persistente (`slot/panel`, `slot/operacion`, `slot/finanzas`), el resto en `feat/<slug>` según el brief. Commits convencionales por unidad de trabajo y sin atribución de IA.
