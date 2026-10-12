@@ -3369,6 +3369,34 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .portal-timeline-step, .portal-request, .portal-proof { border-color: #dbe3e7 !important; background: #f7fafb !important; }
   .portal-signature-sheet, .portal-signature-preview, .portal-signature-seal, .portal-signature-evidence li, .portal-signature-otp { border-color: #ccd6da !important; background: #fff !important; color: #0b0f12 !important; }
   .portal-signature-seal-image img { border-color: #ccd6da !important; }
+  /* #164: tabla semántica en papel, independiente de las tarjetas responsive.
+     El thead nativo se repite en cada página que contiene filas. */
+  .portal-signature-print { display: block; }
+  .portal-signature-print > * + * { margin-top: 16px; }
+  .portal-signature-print .portal-signature-sheet { display: block; }
+  .portal-signature-print .portal-signature-sheet > * + * { margin-top: 12px; }
+  .portal-signature-print .portal-table--items { display: table; width: 100%; min-width: 0; table-layout: auto; }
+  .portal-signature-print .portal-table--items thead { display: table-header-group; position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal; }
+  .portal-signature-print .portal-table--items tbody { display: table-row-group; }
+  .portal-signature-print .portal-table--items tr { display: table-row; padding: 0; border: 0; border-radius: 0; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+  .portal-signature-print .portal-table--items th,
+  .portal-signature-print .portal-table--items td { display: table-cell; width: auto; padding: 6px; vertical-align: top; line-height: 1.45; }
+  .portal-signature-print .portal-table--items th { font-size: 9px; letter-spacing: .04em; }
+  .portal-signature-print .portal-table--items td { border-bottom: 1px solid #dbe3e7; font-size: 12px; }
+  .portal-signature-print .portal-table--items .portal-num { text-align: right; white-space: nowrap; }
+  .portal-signature-print .portal-table--items td::before,
+  .portal-signature-print .portal-table--items td[data-label]::before { content: none; display: none; }
+  /* Flujo bloque: cada par label/valor se mantiene íntegro al fragmentar,
+     sin alturas fijas ni corte forzado de página. */
+  .portal-signature-print .portal-signature-seal { display: block; break-inside: avoid; page-break-inside: avoid; }
+  .portal-signature-print .portal-signature-seal > * + * { margin-top: 12px; }
+  .portal-signature-print .portal-signature-seal .portal-facts { display: block; }
+  .portal-signature-print .portal-signature-seal .portal-facts > div { break-inside: avoid; page-break-inside: avoid; }
+  .portal-signature-print .portal-signature-seal .portal-facts > div + div { margin-top: 10px; }
+  .portal-signature-print .portal-signature-seal dt,
+  .portal-signature-print .portal-signature-seal dd { display: block; line-height: 1.5; }
+  .portal-signature-print .portal-total-row,
+  .portal-signature-print .portal-total-row > * { color: #0b0f12 !important; }
   .portal-card, .portal-banner, .portal-timeline-step { break-inside: avoid; }
 }
 
