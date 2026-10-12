@@ -306,3 +306,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Finanzas: la división de un cobro pendiente previsualiza y valida los montos redondeados por parte como el API, respetando de dos a doce partes y el saldo exacto.
 - Usuarios: crear, editar e invitar deshabilitan el envío con datos inválidos y muestran el motivo; los campos permanecen editables y se conservan los permisos y el bloqueo de envíos simultáneos.
 - QA visual y SHA postdeploy continúan diferidos por orden del dueño; las pruebas unitarias no acreditan aceptación visual global.
+
+## v2.1.82 — 2026-10-12
+
+- Correos transaccionales: el renderer compartido usa pares de texto y fondo legibles en modo claro y oscuro, incluidos notas, estados, enlaces, pie y botón; conserva el contenido, URLs y texto plano de los consumidores existentes.
+- Correos en teléfono: contenido y enlaces largos pueden envolver, las tablas se ajustan al ancho y el botón mantiene un área táctil mínima de 44 px. El pie HTML toma la versión real compilada.
+- Inventario: disponibilidad y unidades comprometidas usan singular/plural según sus conteos reales; los datos ausentes se muestran como no disponibles en lugar de inventar cero.
+- Los checks de contraste y estructura son offline; render visual Gmail/Outlook, QA y SHA postdeploy permanecen diferidos. No se envían correos reales como parte de esta verificación.
