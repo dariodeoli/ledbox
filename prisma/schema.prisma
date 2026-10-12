@@ -271,9 +271,100 @@ model AdminMembership {
   updatedAt      DateTime     @updatedAt
   user           AdminUser    @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pagayaEnrollments PagaYaEnrollment[]
 
   @@unique([adminUserId, organizationId])
   @@index([organizationId, active])
+}
+
+/// Consumer-local #182 persistence. No provider migration048 or Plan42 changes.
+model PagaYaEnrollment {
+  id                     String @id
+  organizationId         String
+  adminUserId            String
+  appId                  String
+  mode                   String
+  externalReference      String
+  approvedPriceVersionId String
+  customer               Json
+  customerProvenance     Json
+  checkoutId             String?
+  subscriptionId         String?
+  subscriptionSnapshot   Json?
+  snapshotObservedAt     DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  membership             AdminMembership @relation(fields: [adminUserId, organizationId], references: [adminUserId, organizationId], onDelete: Restrict)
+  commands               PagaYaCommand[]
+  inbox                   PagaYaInboxEvent[]
+  periods                 PagaYaAccessPeriod[]
+
+  @@unique([id, appId, mode])
+  @@unique([organizationId, adminUserId, appId, mode])
+  @@unique([appId, mode, externalReference])
+  @@unique([appId, mode, checkoutId])
+  @@unique([appId, mode, subscriptionId])
+}
+
+model PagaYaCommand {
+  id           String @id
+  enrollmentId String
+  appId        String
+  mode         String
+  intentId     String
+  kind         String
+  commandKey   String
+  resourceId   String?
+  requestBody  String
+  bodySHA256   String
+  state        String @default("PREPARED")
+  version      Int @default(0)
+  responseBody Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  enrollment   PagaYaEnrollment @relation(fields: [enrollmentId, appId, mode], references: [id, appId, mode], onDelete: Restrict)
+
+  @@unique([enrollmentId, kind, intentId])
+  @@unique([appId, mode, commandKey])
+  @@index([enrollmentId, state])
+}
+
+/// One envelope id = one durable work item, irrespective of delivery retries.
+model PagaYaInboxEvent {
+  id           String @id
+  enrollmentId String
+  appId        String
+  mode         String
+  eventType    String
+  rawBody      Bytes
+  rawSHA256    String
+  payloadSHA256 String
+  normalized   Json
+  state        String @default("PENDING")
+  version      Int @default(0)
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  enrollment   PagaYaEnrollment @relation(fields: [enrollmentId, appId, mode], references: [id, appId, mode], onDelete: Restrict)
+
+  @@index([state, createdAt])
+}
+
+/// Confirmed paid intervals, not invoice counters, quotas, credits or tickets.
+model PagaYaAccessPeriod {
+  id           String @id
+  enrollmentId String
+  appId        String
+  mode         String
+  checkoutId   String
+  subscriptionId String
+  startsAt     DateTime
+  endsAt       DateTime
+  createdAt    DateTime @default(now())
+  enrollment   PagaYaEnrollment @relation(fields: [enrollmentId, appId, mode], references: [id, appId, mode], onDelete: Restrict)
+
+  @@unique([enrollmentId, startsAt, endsAt])
+  @@index([enrollmentId, endsAt])
 }
 
 /// Invitación por correo al equipo de una empresa (issue #31).
