@@ -115,3 +115,48 @@ pg_ctl -D "$PGDATA" stop  # al terminar
 - No eliminar funcionalidad existente sin reemplazo verificado por el contrato real.
 - No hacer `push --force` ni reescribir historia de ramas compartidas.
 - Estado raro de git (refs rotas, merge ajeno): parar y avisar.
+
+## Reglas vigentes del dueño — 12-10-2026
+
+Estas órdenes posteriores prevalecen sobre antecedentes incompatibles de este
+checkout histórico. Fuente durable de orquestación: `orquestador/AGENTS.md` y
+`PLAYBOOK-ORQUESTACION.md`; conservar unidades, fuentes y gates cerrados.
+
+- **Footer único y versión real:** reutilizar el canónico
+  `components/app-footer.tsx` (`AppFooter`, `ProductFooter` y
+  `APP_VERSION_LABEL` de `lib/version.ts`/`package.json`) en superficies públicas,
+  acceso, panel y portal donde la estructura lo permita. No crear un segundo
+  footer ni hardcodear versiones. Cotejar variantes de nombre/enlaces con la
+  superficie real; footer, health y metadata deben corresponder a la misma
+  versión y artefacto compilados. Un recordatorio o fixture no acredita QA real.
+- **Cada nuevo deploy de producto:** un único patch correlativo `2.1.x`, sin
+  reset a `1.0`, coherente en package/lock/NOVEDADES/tag. No anticipar versión,
+  rebump de una release pendiente ni deploy/release vacío por helpers/docs/Git.
+  Solo el Integrador publica en `codex/ledbox-gestion-multiempresa`.
+- **GitHub durable:** todo pendiente concreto conserva issue OPEN recuperable
+  con alcance/criterio, owner, source/branch/paths, comandos/cwd/source, exit y
+  stderr o NOT_RUN, dependencias y siguiente acción. El Orquestador es el único
+  escritor de GitHub; los carriles entregan evidencia, no duplican mutaciones.
+  WIP sin fuente durable se declara **SINCOMMIT**, sin commit forzado ni secretos.
+  Si falla una escritura, preservar payload y error/comando/HTTP reales, sin
+  afirmar actualización. Cierre de producto solo después de push y deploy
+  FINISHED con versión, URL, hora, SHA remoto y UUID acreditados; READY/PASS/merge
+  o push aislado no bastan. Helpers/docs/Git no publican producto.
+- **Estados honestos de QA:** conservar
+  `QA/SHA_POSTDEPLOY_DEFERRED_BY_OWNER` cuando lo ordena el dueño, sin PASS ni100
+  fabricados y sin nuevo bloqueo de publicación por QA diferida. PRE source,
+  tree, argv y runtime exactos y barreras de contenido/gates propios se
+  mantienen. QA original incluye footer único/versión real del mismo artefacto
+  en superficies pertinentes, solo con ejecución e inputs autorizados.
+- **Continuidad y ventanas:** no replay de gates aceptados, host/health/footer
+  probes, capturas ni nuevos jobs por recordatorios o inventario de issues.
+  Heavy exige DIRECT usable JIT del único issuer
+  `ses_ede13132fffeogzgUkyt86i744`, identidad/binding/freshness actuales y presupuesto
+  antes de START; no heredar grants, inferir CPU libre ni crear FIFO/reserva/cola.
+  Auto usa únicamente admisiones acreditadas; su timer no concede DIRECT.
+- **OPS retirado:** `w6J`/`carril-ops` está retirado por autorización. Nunca
+  recrearlo, montarlo, despertarlo ni despachar su sesión histórica; conservar
+  el source durable `d838` y bindings de sucesores existentes.
+- **Pilot #177:** tooling offline de procedencia separado de QA autenticada.
+  Tests de helpers no certifican runtime/finanzas/global QA ni cierran producto.
+  Entrega Git-only de paths propios calificados, sin version bump ni deploy.
