@@ -33,6 +33,38 @@ function fixture() {
 function commit(cwd, path, body, subject = "fix(qa): cambio autorizado (Refs #173)") {
   mkdirSync(join(cwd, path, ".."), { recursive: true }); writeFileSync(join(cwd, path), body); git(cwd, "add", path); git(cwd, "commit", "-m", subject); return git(cwd, "rev-parse", "HEAD");
 }
+test("release metadata: patch, lock and changelog must advance together", async (t) => {
+  const scenarios = [
+    { name: "package-only release", lock: false, notes: false, error: /omite actualizar package-lock/ },
+    { name: "lock omitted despite changelog", lock: false, notes: true, error: /omite actualizar package-lock/ },
+    { name: "changelog omitted", lock: true, notes: false, error: /omite actualizar NOVEDADES/ },
+    { name: "wrong changelog version", lock: true, notes: true, noteVersion: "2.1.79", error: /NOVEDADES sin entrada/ },
+    { name: "root lock version stale", lock: true, notes: true, rootVersion: "2.1.77", error: /Lock version incoherente/ },
+    { name: "history removed", lock: true, notes: true, replaceHistory: true, error: /altera el historial/ },
+    { name: "major/minor reset rejected", lock: true, notes: true, version: "1.0.1", error: /siguiente patch/ },
+    { name: "coherent next 2.1 patch", lock: true, notes: true },
+  ];
+  for (const scenario of scenarios) await t.test(scenario.name, () => {
+    const f = fixture();
+    try {
+      writeFileSync(join(f.cwd, "package.json"), JSON.stringify({ name: "qa", version: "2.1.77", private: true }));
+      writeFileSync(join(f.cwd, "package-lock.json"), JSON.stringify({ name: "qa", version: "2.1.77", packages: { "": { name: "qa", version: "2.1.77" } } }));
+      git(f.cwd, "add", "package.json", "package-lock.json"); git(f.cwd, "commit", "-m", "fixture: current 2.1 patch");
+      const candidate = git(f.cwd, "rev-parse", "HEAD"), version = scenario.version ?? "2.1.78";
+      const pkg = readJson(join(f.cwd, "package.json")); pkg.version = version;
+      writeFileSync(join(f.cwd, "package.json"), JSON.stringify(pkg));
+      if (scenario.lock) {
+        const lock = readJson(join(f.cwd, "package-lock.json")); lock.version = version; lock.packages[""].version = scenario.rootVersion ?? version;
+        writeFileSync(join(f.cwd, "package-lock.json"), JSON.stringify(lock));
+      }
+      if (scenario.notes) writeFileSync(join(f.cwd, "docs/NOVEDADES.md"), `${scenario.replaceHistory ? "" : "# QA\n"}\n## v${scenario.noteVersion ?? version} — 2026-10-12\n\n- Cambio real del producto.\n`);
+      git(f.cwd, "add", "package.json", "package-lock.json", "docs/NOVEDADES.md"); git(f.cwd, "commit", "-m", "fixture: release metadata");
+      const release = git(f.cwd, "rev-parse", "HEAD");
+      if (scenario.error) assert.throws(() => assertReleaseOnly(f.cwd, candidate, release), scenario.error);
+      else assert.equal(assertReleaseOnly(f.cwd, candidate, release), "2.1.78");
+    } finally { f.cleanup(); }
+  });
+});
 function build(cwd, sha) {
   const root = join(cwd, ".next/standalone"); mkdirSync(root, { recursive: true });
   writeFileSync(join(root, "server.js"), JSON.stringify({ LEDBOX_BUILD_SHA: sha }));

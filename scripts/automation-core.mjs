@@ -151,6 +151,7 @@ export function assertReleaseOnly(cwd, candidateSHA, releaseSHA) {
   if (after.version !== version) throw new Error("Versión de release no corresponde al siguiente patch");
   after.version = before.version;
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error("package.json contiene cambios ajenos a versión");
+  if (git(cwd, "ls-tree", candidateSHA, "--", "package-lock.json") && !names.includes("package-lock.json")) throw new Error("Release omite actualizar package-lock.json");
   if (names.includes("package-lock.json")) {
     const a = JSON.parse(git(cwd, "show", `${candidateSHA}:package-lock.json`));
     const b = JSON.parse(git(cwd, "show", `${releaseSHA}:package-lock.json`));
@@ -158,6 +159,13 @@ export function assertReleaseOnly(cwd, candidateSHA, releaseSHA) {
     b.version = a.version; b.packages[""].version = a.packages[""].version;
     if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error("Lock cambió dependencias después de Pilot");
   }
+  if (!names.includes("docs/NOVEDADES.md")) throw new Error("Release omite actualizar NOVEDADES");
+  const notes = git(cwd, "show", `${releaseSHA}:docs/NOVEDADES.md`);
+  const previousNotes = git(cwd, "ls-tree", candidateSHA, "--", "docs/NOVEDADES.md") ? git(cwd, "show", `${candidateSHA}:docs/NOVEDADES.md`) : "";
+  if (!notes.startsWith(previousNotes)) throw new Error("Release altera el historial de NOVEDADES");
+  const addedNotes = notes.slice(previousNotes.length);
+  const heading = new RegExp(`^## v${version.replaceAll(".", "\\.")} — \\d{4}-\\d{2}-\\d{2}$`, "m");
+  if (!heading.test(addedNotes) || !/^[-*] \S/m.test(addedNotes)) throw new Error("NOVEDADES sin entrada del patch real y cambios publicados");
   return version;
 }
 export function nextVersion(version) {
