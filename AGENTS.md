@@ -8,6 +8,30 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 - **Reglas generales de la app (obligatorias)**: `docs/REGLAS-GENERALES.md` — buscar antes de crear, un objeto por tipo, formatos normalizados, estados honestos, endpoints públicos con token, versionado y publicación. Ningún cambio nuevo puede contradecirlas.
 - Stack, estructura y puesta en marcha: `README.md`.
 
+## Órdenes vigentes del dueño — footer, versión y continuidad S1
+
+- Footer institucional canónico: reutilizar `components/app-footer.tsx` (`AppFooter`/
+  `ProductFooter`) donde la estructura permita en públicas, acceso, panel y portal.
+  Diseño/datos/enlaces coherentes; ownership UI de PANEL, sin footer/CSS paralelo.
+- Versión visible y metadata compilada salen de `package.json`/`lib/version.ts`;
+  health usa el mismo package. Nada de hardcodes ni versión futura. La publicación
+  actual es 2.1.77: no bump local por un recordatorio ni rebump de release pendiente.
+- Cada NUEVO deploy de producto mantiene patch correlativo **2.1.x** y coherencia
+  package/lock/NOVEDADES/tag/footer/health/metadata. Sólo el integrador de
+  `codex/ledbox-gestion-multiempresa` publica. Helpers/Git-only no crean deploy vacío.
+- QA/capturas/aceptación y SHA postdeploy están diferidos por el dueño; no bloquean
+  publicación ni acreditan PASS/100. Conservar gates aceptados por inputs exactos;
+  cambios causales requieren sólo checks afectados actuales, no replay por reminder.
+- S1 #163/#173 conserva owner/worktree/evento originales. Heavy exige DIRECT JIT
+  actual del issuer `ses_ede13132fffeogzgUkyt86i744`, bindings y frescura antes START.
+  Prisma generation local requiere permiso específico: sin DATABASE_URL, sin PG,
+  install implícito ni migraciones DB. Generar tipos no crea hechos económicos.
+- `w6J`/`carril-ops` y su sesión histórica están RETIRED: no recrear, despertar ni
+  despachar. Primario d838 publicado/durable; consumer dc8 pertenece a OPS, nueve
+  casos NOT_RUN/PF-dependency pendiente y sin worktree vinculado; no es ownership ORQ.
+
+Estas órdenes posteriores prevalecen sobre la topología/cadencias históricas de abajo.
+
 ## Topología: orquestador + implementador + 3 slots (23-09-2026)
 
 Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa: `~/.herdr/worktrees/ledbox/orquestador/` (`PLAYBOOK.md`, `SLOTS.md`, `BRIEF.md`, `COMANDOS.md`).
