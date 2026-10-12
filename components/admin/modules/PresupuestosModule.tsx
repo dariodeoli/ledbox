@@ -4,7 +4,9 @@ import { budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "../AdminAvatar";
 import { clientLogoUrl } from "@/lib/admin-types";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminMailPreview } from "../AdminMailPreview";
+import type { MailPreview } from "@/lib/mail-preview";
 import {
   budgetApprovalLabel,
   budgetApprovalMethodLabel,
@@ -785,6 +787,8 @@ export function PresupuestosModule() {
   const [sendTo, setSendTo] = useState("");
   const [sendMessage, setSendMessage] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
+  const [sendPreview, setSendPreview] = useState<MailPreview | null>(null);
+  const mailInFlight = useRef(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [sendError, setSendError] = useState("");
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del presupuesto. */
@@ -1228,6 +1232,7 @@ export function PresupuestosModule() {
 
   /** Abre el diálogo de envío por correo con el destinatario del cliente ya cargado. */
   function openSend(budget: AdminBudgetRow) {
+    setSendPreview(null);
     setSendTo(normalizeEmail(budget.client.email ?? ""));
     setSendMessage("");
     setSendError("");
@@ -1236,7 +1241,8 @@ export function PresupuestosModule() {
 
   /** Genera el link del portal desde el diálogo de envío (sin link no hay correo). */
   async function generateLinkForSend() {
-    if (!sendBudget) return;
+    if (!sendBudget || linkBusy || mailInFlight.current) return;
+    setSendPreview(null);
     setLinkBusy(true);
     setSendError("");
     const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets/token", {
@@ -1254,33 +1260,44 @@ export function PresupuestosModule() {
     budgetsResource.reload();
   }
 
-  /** Envía el presupuesto y muestra el resultado real del proveedor. */
+  /** First click previews only; a separate click confirms the exact payload. */
   async function sendBudgetMail() {
-    if (!sendBudget) return;
+    if (!sendBudget || linkBusy || mailInFlight.current) return;
     const to = normalizeEmail(sendTo);
     if (!emailValid(to)) {
       setSendError(FIELD_MESSAGES.email);
       return;
     }
+    mailInFlight.current = true;
     setSendBusy(true);
     setSendError("");
-    const result = await adminSend<{ status: string; error: string | null; to: string }>("/api/admin/budgets/send", {
-      budgetId: sendBudget.id,
-      to,
-      message: sendMessage.trim() || undefined,
-    });
-    setSendBusy(false);
-    if (!result.ok) {
-      setSendError(result.error);
-      return;
+    try {
+      const result = await adminSend<MailPreview | { status: string; error: string | null; to: string }>("/api/admin/budgets/send", {
+        budgetId: sendBudget.id,
+        to,
+        message: sendMessage.trim() || undefined,
+        ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken } : { preview: true }),
+      });
+      if (!result.ok) {
+        setSendPreview(null);
+        setSendError(result.error);
+        return;
+      }
+      if (result.data.status === "preview" && "confirmationToken" in result.data) {
+        setSendPreview(result.data);
+        return;
+      }
+      if (result.data.status === "sent") {
+        setNotice(`Enviamos el presupuesto «${sendBudget.title}» a ${result.data.to}.`);
+        setSendBudget(null);
+        budgetsResource.reload();
+        return;
+      }
+      setSendError(("error" in result.data ? result.data.error : null) ?? "El proveedor rechazó el envío.");
+    } finally {
+      mailInFlight.current = false;
+      setSendBusy(false);
     }
-    if (result.data.status === "sent") {
-      setNotice(`Enviamos el presupuesto «${sendBudget.title}» a ${result.data.to}.`);
-      setSendBudget(null);
-      budgetsResource.reload();
-      return;
-    }
-    setSendError(result.data.error ?? "El proveedor rechazó el envío.");
   }
 
   async function submitApproval() {
@@ -1835,7 +1852,7 @@ export function PresupuestosModule() {
       ) : null}
 
       {sendBudget ? (
-        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} icon="mail" onClose={() => setSendBudget(null)}>
+        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} size="wide" icon="mail" onClose={() => { if (!sendBusy && !linkBusy) setSendBudget(null); }}>
           <p className="admin-dialog-text">
             El correo sale con la identidad de LedBox: link del portal con el código, resumen de ítems, total y validez,
             la hoja imprimible y los datos de pago cuando el presupuesto está aprobado.
@@ -1885,9 +1902,10 @@ export function PresupuestosModule() {
             value={sendTo}
             onChange={(value) => {
               setSendTo(value);
+              setSendPreview(null);
               setSendError("");
             }}
-            disabled={sendBusy}
+            disabled={sendBusy || linkBusy}
             error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
             hint="Podés cambiarlo: el correo se envía solo a esta dirección."
           />
@@ -1897,13 +1915,16 @@ export function PresupuestosModule() {
             value={sendMessage}
             onChange={(value) => {
               setSendMessage(value);
+              setSendPreview(null);
               setSendError("");
             }}
             maxLength={600}
+            disabled={sendBusy || linkBusy}
             rows={3}
             placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
           />
 
+          {sendPreview ? <AdminMailPreview preview={sendPreview} /> : null}
           {sendError ? <AdminNote tone="error">{sendError}</AdminNote> : null}
           <div className="admin-dialog-foot">
             {!sendBudget.publicToken ? (
@@ -1912,7 +1933,7 @@ export function PresupuestosModule() {
               </AdminButton>
             ) : null}
             <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" onClick={() => setSendBudget(null)} disabled={sendBusy}>
+            <AdminButton icon="close" onClick={() => setSendBudget(null)} disabled={sendBusy || linkBusy}>
               Cancelar
             </AdminButton>
             <AdminButton
@@ -1922,7 +1943,7 @@ export function PresupuestosModule() {
               disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
               onClick={() => void sendBudgetMail()}
             >
-              Enviar presupuesto
+              {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
             </AdminButton>
           </div>
         </AdminDialog>
