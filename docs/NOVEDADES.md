@@ -277,3 +277,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Preparación interna de inventario: estados y transiciones privados de servicios, con validaciones y ocho tests propios verificados.
 - Esta ronda no habilita configuración ni cargos de servicios en el panel; la persistencia, DTO y cálculo financiero continúan en sus entregas separadas.
 - QA de aceptación y verificación SHA posterior al deploy diferidas por orden del dueño; no equivalen a PASS ni cierre funcional.
+
+## v2.1.78 — 2026-10-12
+
+- Footer institucional unificado: identidad y operador canónicos de EventOS, privacidad, términos, estado y soporte coherentes en públicas, acceso, panel y portal, conservando la privacidad de LedBox donde corresponde.
+- Guard de release reforzado: el siguiente patch debe actualizar package, lock y NOVEDADES juntos; se rechaza metadata incompleta, reset de versión y alteración del historial.
+- Los documentos firmados conservan sus snapshots. Las correcciones PDF nativas y la nueva composición financiera se califican en sus scopes independientes; este release no las presenta como verificadas.
+- QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño; versión y estado del deploy se acreditan por separado.
