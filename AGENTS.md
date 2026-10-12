@@ -47,6 +47,22 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 
 ## Diseño del panel (rediseño general 21-09-2026)
 
+### Footer y versión — orden vigente del dueño (11-10-2026)
+
+- Reutilizar el footer canónico `AppFooter` / `ProductFooter` en públicas, acceso,
+  panel y portal donde la estructura lo permita; versión real compilada desde
+  `lib/version.ts` y `package.json`, sin hardcodes ni una segunda implementación.
+- Preservar datos legales de la empresa y snapshots/documentos firmados, incluida
+  su versión histórica. No modificar evidencia firmada para unificar el footer.
+- Cada nuevo deploy de producto lleva el siguiente patch correlativo `2.1.x`,
+  coherente en package/lock/NOVEDADES/tag, footer, health y metadata compilada.
+  Sólo el integrador prepara/publica esa versión; no anticiparla ni repetir bumps
+  pendientes o releases vacíos por integración de helpers.
+- Retener gates aceptados con inputs pertinentes intactos. QA y SHA postdeploy
+  diferidos por el dueño no bloquean publicación; no fabricar PASS ni 100.
+- El workspace OPS `w6J` / `carril-ops` está retirado: no recrear, despertar ni
+  despachar su sesión histórica.
+
 - **Guía del rediseño completo (22-09-2026): `docs/DISENO-PANEL.md`** — tokens, shell, componentes y el orden de la navegación. Toda pantalla nueva o tocada la respeta.
 - **Orden por pantalla (22-09-2026): `docs/DISENO-PANTALLAS.md`** — qué bloque va primero en cada módulo y cuál es la acción principal. **Adopción de la librería compartida: `docs/ADOPCION-OWNCODING-UI.md`**.
 
