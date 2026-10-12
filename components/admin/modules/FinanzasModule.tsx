@@ -37,6 +37,7 @@ import {
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
+import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
 import {
   accountsForPaymentMethod,
   COLLECTED_PAYMENT_METHODS,
@@ -844,8 +845,7 @@ function ExpectedSplitDialog({
 
   const label = row.budget.client.company || row.budget.client.name;
   const concept = expectedPaymentConcept(row);
-  const total = parts.reduce((sum, part) => sum + (Number(part.amount) || 0), 0);
-  const valid = parts.length >= 2 && parts.every((part) => Number(part.amount) > 0) && total === remaining;
+  const { total, valid } = validateFinanceSplitAmounts(parts.map((part) => part.amount), remaining);
 
   return (
     <div
