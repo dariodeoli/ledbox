@@ -1,19 +1,19 @@
 {
-  "at": "2026-10-12T20:59:18.732140+00:00",
+  "at": "2026-10-12T21:23:41.542440+00:00",
   "repository": "https://github.com/dariodeoli/ledbox.git",
   "refs": [
     {
       "localRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "sourceSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "sourceSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "EXACT_OBJECT"
     },
     {
       "localRef": "refs/heads/feat/129-finance-split-admission",
       "sourceSHA": "db72492c5f412d74291010b4ca302e3d31567cf7",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -27,42 +27,42 @@
       "localRef": "refs/heads/feat/157-cart-focus-admission",
       "sourceSHA": "f2f9d77dbb4a42ccd392d7881ad092ecfc7b381f",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/161-current-labels-admission",
       "sourceSHA": "043f567195b032252674a9433fa9d468a6c76a04",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/167-canonical-invoice-admission",
       "sourceSHA": "0d4cd02d17f8b13d49a191d5181ebcf8b42b54ba",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/170-effective-owner-admission",
       "sourceSHA": "8f5324099033ee35ef3a5ce82bae3ca80ebbb069",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/170-user-validity-admission",
       "sourceSHA": "388ef2decceb8a17bbd6aa2931f75f9ea3fe37d1",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/177-inventory-recovery-admission",
       "sourceSHA": "29b4a740df5bc9bc7bdb30c6dcddcb4e8cbfedbc",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -90,21 +90,21 @@
       "localRef": "refs/heads/feat/183-mail-callers-admission",
       "sourceSHA": "378b80b4abc44509d48133549521b15364055448",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/183-mail-pilot-admission",
       "sourceSHA": "7c5236f62eeccabdabd2e40e64a058d9f2307dac",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
       "localRef": "refs/heads/feat/183-mail-renderer-admission",
       "sourceSHA": "447b8c12ba768513613d18e8fbd0d4fea2b9b562",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -118,7 +118,7 @@
       "localRef": "refs/heads/feat/fin-a7-runtime-admission",
       "sourceSHA": "679d3a77d3b4c90cedc634c3267260bf469575a6",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -132,7 +132,7 @@
       "localRef": "refs/heads/feat/footer-621-product-admission",
       "sourceSHA": "fa2fb8e8e38ae7486e6b7fdfb20af25776988027",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -153,8 +153,15 @@
       "localRef": "refs/heads/feat/integ-public-menu-157-post82",
       "sourceSHA": "490d352095ba43a81548fa413a69c07a55898e42",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/integ-tariff-floor-143-post84",
+      "sourceSHA": "f261e292bc56b071ae1d68d12970858f209323d8",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/integ-tariff-carrier-f261e292bc56",
+      "remoteSHA": "f261e292bc56b071ae1d68d12970858f209323d8",
+      "recovery": "EXACT_OBJECT"
     },
     {
       "localRef": "refs/heads/feat/mobile-api-platform",
@@ -195,7 +202,7 @@
       "localRef": "refs/heads/feat/release-metadata-owner-policy",
       "sourceSHA": "983ec4dfaec3e776a22bdc87ab2c206e7eb51010",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -244,7 +251,7 @@
       "localRef": "refs/heads/slot/finanzas",
       "sourceSHA": "10b57ebdfe347c762915b868aecd60eacb452025",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -258,7 +265,7 @@
       "localRef": "refs/heads/slot/panel",
       "sourceSHA": "db331e76381a9e4b66f533cb2d3dc40c5d4d11de",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -272,7 +279,7 @@
       "localRef": "refs/heads/slot/plataforma",
       "sourceSHA": "be0cf8c51b25771a3a8a27014b02fa6d73935be0",
       "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
-      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "0132fa4a5f024754cdc84d6f8969292c332372c2",
       "recovery": "REACHABLE_ANCESTOR"
     },
     {
@@ -337,9 +344,16 @@
       "remoteRef": "refs/tags/v2.1.84",
       "remoteSHA": "93ad403125348f5b6b2a01d2e819b391c7790050",
       "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.85",
+      "sourceSHA": "7c663786b49fbece39bf865eb031f09821f37fa3",
+      "remoteRef": "refs/tags/v2.1.85",
+      "remoteSHA": "7c663786b49fbece39bf865eb031f09821f37fa3",
+      "recovery": "EXACT_OBJECT"
     }
   ],
-  "count": 48,
+  "count": 50,
   "originalUniqueCommitsRecovered": 38,
   "recoveryBranches": [
     {
