@@ -77,7 +77,6 @@ import {
   TextField,
 } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
-import styles from "./FacturacionInvoice.module.css";
 
 /**
  * Facturación (issue #41): registro fiscal interno.
@@ -1463,7 +1462,7 @@ export function FacturacionModule() {
 
       {invoiceForm ? (
         <AdminDialog title="Nueva factura" size="wide" icon="receipt" onClose={() => setInvoiceForm(null)}>
-          <form className={`admin-form-grid ${styles.invoiceForm}`} onSubmit={submitInvoice} aria-busy={busy || undefined}>
+          <form className="admin-form-grid admin-invoice-form" onSubmit={submitInvoice} aria-busy={busy || undefined}>
             <SegmentedField
               label="Origen"
               wide
