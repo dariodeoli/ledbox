@@ -44,6 +44,14 @@ Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa
 - **OPS retirado**: `w6J` / `carril-ops` fue eliminado por Herdr, sin force, tras integrar y pushear `d8388c0…`. Referencias históricas no autorizan recrear, montar ni despertar ese carril. La fuente `dc8d10c…` es un consumidor OPS separado sin worktree: dos rutas de fixture/test, nueve casos NOT_RUN y dependencia PF pendiente; no pertenece al orquestador.
 - La rama operativa sigue siendo `codex/ledbox-gestion-multiempresa`; `main` histórico no es la base. Continuar owners/unidades originales sin AL/jobs/grantrequests/colas duplicados.
 
+### GitHub durable y cierre postpublicación (12-10-2026)
+
+- El orquestador es la única voz y el único writer de issues/comentarios GitHub. El integrador entrega evidencia causal al issue existente mediante el orquestador; no duplica mutaciones ni abre otra unidad.
+- Todo pendiente concreto queda recuperable en un issue OPEN: alcance y aceptación, owner, source/branch/paths, comandos con cwd/source/exit/stderr o NOT_RUN, dependencias y siguiente acción. Declarar **SINCOMMIT** cuando el WIP no tiene fuente Git durable; preservar WIP ajeno y no forzar commits ni incluir secretos.
+- Un scope de producto se cierra sólo tras publicación, remoto exacto, deploy FINISHED y versión/URL/hora/UUID acreditados. READY, checks PASS, merge o push solos no cierran producto. QA/SHA postdeploy diferidos no son gates de publicación ni equivalen a aceptación 100.
+- Si falla una escritura GitHub, conservar payload y comando/HTTP/error/owner exactos; no afirmar que el issue fue actualizado. Helpers, docs y limpieza Git no justifican release de producto vacío, rebump ni redeploy.
+- Referencias vigentes: #163/#173 FIN, #164 PDF, #174 S1, #175 hechos económicos, #176 native/mobile, #177 Pilot, #178 consumidor OPS separado, #179 repairs y #181 vigía. #180 footer se cerró tras HD78 real; no replay ni redeploy de `2.1.78`.
+
 ## URLs del panel (regla del 21-09-2026)
 
 - En producción el panel (app **EventOS**) vive en `app.ledbox.online` y las rutas **no llevan** `/admin`: `/login`, `/dashboard`, `/eventos`, `/finanzas`, etc. `admin.ledbox.online` redirige 308 al host nuevo y `eventos.ledbox.online` sirve la landing de ventas del producto.
