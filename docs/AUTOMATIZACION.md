@@ -1,5 +1,51 @@
 # Automatización scoped #173
 
+## Vigía finita y custodia vigente — 12-10-2026, issue #181
+
+La orden finita actual mantiene el único vigía de coordinación existente con
+**1200 s**, AUTO10 admitidos/cooldown600 conservados y expiración efectiva
+`2026-10-12T06:31:44.353386Z`. El timer no concede DIRECT ni publica. No crear
+otro watcher, AL, job duplicado, request, cola, reserva, sucesor o ronda ACK.
+
+La configuración operativa vive en `~/.config/ledbox/vigia-effective.json`;
+el runner existente está en
+`~/.herdr/worktrees/ledbox/evidencia/ronda-al/vigia-unico-300s.mjs` (el nombre
+histórico no define la cadencia). `sessions` contiene sólo owners activos.
+OPS retirado se conserva en `retiredSessions`, nunca como cwd/target activo:
+no despertar, recrear ni montar `carril-ops`/`w6J`.
+
+Una reparación de configuración no prueba adopción runtime. Al releer un runner
+que carga config una sola vez: verificar PID/cwd/argv/lock, ausencia de ciclo y
+sleep natural; terminar sólo el singleton propio de forma graceful, acreditar
+terminal y lock liberado, recargar el mismo runner sin solapamiento y preservar
+la fecha del próximo ciclo. Acreditar PID/cwd/argv/config/hash, cadencia, expiry y
+sleep efectivos; no fabricar un tick de prueba, probe o publicación. El siguiente
+tablero/error se acredita por el ciclo natural, separado del FIRST runtime.
+
+El lineage consume recibos exactos de publicación. HD78 `2.1.78`, source
+`81bea9b650fc46d7a476ccfc7750fba9fe87421b`, deploy
+`m7twhjekhxjgroc4dt65ojfg` FINISHED y health versión HTTP200 ya están acreditados.
+No convertir HEAD en otro HD77 pendiente, inferir SHA servido desde versión,
+repetir sus checks, rebump ni redeploy. La base AUTO servida histórica sólo se
+actualiza con su autoridad específica.
+
+### GitHub durable y cierre
+
+El orquestador es único writer GitHub. Cada pendiente concreto permanece OPEN
+en su issue existente con alcance/aceptación, owner/source/branch/paths,
+comando/cwd/source/exit/stderr o NOT_RUN, dependencias y siguiente acción.
+WIP sin fuente Git durable se declara **SINCOMMIT**, sin forzar commits ni tocar
+trabajo ajeno. El integrador entrega recibos causales al orquestador para esa
+misma unidad. Si falla un write, conservar payload y HTTP/comando/error/owner;
+no afirmar actualización.
+
+Producto CLOSE exige publicación/remoto/deploy FINISHED y versión/URL/hora/SHA/
+UUID acreditados, no sólo READY/PASS/merge/push. QA/SHA postdeploy diferidos no
+bloquean publicación y no equivalen a aceptación100. Helpers/docs/config/Git no
+producen releases vacíos. #180 footer ya está CLOSED; #163/#173 FIN, #164 PDF,
+#174 S1, #175 facts, #176 native/mobile, #177 Pilot, #178 consumidor OPS separado,
+#179 repairs y #181 vigía conservan sus owners y alcance residual.
+
 ## Autoridad vigente — 10-10-2026, HD manual y AUTO por unidades cerradas
 
 La orden actual del dueño reemplaza cadencia20min por **300s**, diez commits
