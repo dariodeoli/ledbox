@@ -1874,6 +1874,38 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-fiscal-total-row { grid-template-columns: minmax(6rem, 1fr) minmax(6rem, auto) minmax(5rem, auto); }
 }
 
+/* #167: responsive invoice form only; shared dialogs stay canonical. */
+.admin-invoice-form .admin-fiscal-line,
+.admin-invoice-form .admin-fiscal-line-sum,
+.admin-invoice-form .admin-fiscal-totals {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .admin-invoice-form .admin-fiscal-line,
+  .admin-invoice-form .admin-fiscal-total-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-invoice-form .admin-fiscal-line > *,
+  .admin-invoice-form .admin-fiscal-total-row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-invoice-form .admin-fiscal-line-sum .admin-cell-sub {
+    overflow-wrap: anywhere;
+  }
+
+  .admin-invoice-form .admin-fiscal-total-row > :first-child {
+    text-align: left;
+  }
+
+  .admin-invoice-form .admin-fiscal-line > button {
+    justify-self: end;
+  }
+}
+
 /* ── Plantillas de mensajes (issue #35) ──
    Subtabs por categoría con contador, chips de variables y vista previa del
    mensaje (mismo texto que abre WhatsApp). */
