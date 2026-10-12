@@ -292,3 +292,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tooling offline de procedencia Pilot y política GitHub de pendientes/cierre incorporados junto al cambio real de producto; no habilitan capturas, probes ni aceptación de producción.
 - La evidencia del consumidor conserva la desviación del selector que reejecutó dos subtests previamente aceptados. No se presenta como cumplimiento íntegro del alcance ni certificación PostgreSQL, económica o PDF nativa.
 - QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño. El footer y health compilan la versión real de este release.
+
+## v2.1.80 — 2026-10-12
+
+- Nueva factura en móvil: controles y totales se apilan a una columna, con ancho contraíble y desglose que puede envolver, sin recortar importes. El estilo permanece scoped al formulario en el stylesheet canónico.
+- Usuarios: el PATCH serializa cambios de membresías mediante el lock de la empresa y comprueba el último OWNER efectivo con membresía y cuenta activas antes de una baja o democión; conserva permisos, selfguard, auditoría y revocación de sesiones.
+- Recovery Pilot offline valida referencias, hashes, identidad y binding explícitos; distingue NOT_RUN de FAIL y no inventa trazas, autores o costos. La validación offline no acredita reparación del inventario productivo ni procedencia económica.
+- Los textos explicativos fiscales conservan las razones sociales y los datos guardados sin normalizar su puntuación. QA visual y verificación SHA postdeploy permanecen diferidas; los tests mocked de OWNER no son prueba nativa PostgreSQL.
