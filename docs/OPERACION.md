@@ -19,6 +19,34 @@ EventOS requiere **Node >=24.15.0 y <25** (kit `owncoding-ui` v0.67.1, Refs #173
 
 ## 1. Respaldo (`scripts/backup.mjs`)
 
+### Release de producto y continuidad de owners
+
+Cada nuevo deploy de producto continúa el patch `2.1.x` vigente. El único integrador
+compone fuentes admitidas con `--no-ff`, verifica codegates causales y prepara
+`package.json`, `package-lock.json` (raíz y paquete raíz), `docs/NOVEDADES.md` y tag
+del mismo patch. `assertReleaseOnly` rechaza metadata parcial, saltos de patch o
+alteración del historial. Un retry conserva su versión/SHA; helpers/tests y limpieza
+Git no disparan un bump o redeploy vacío.
+
+El flujo normal es push de la rama operativa → webhook → Coolify. La ausencia de
+un token para disparo manual no demuestra un fallo de ese flujo. Acreditar por
+separado push remoto, deploy terminado y aceptación. Los checks efectivos conservan
+comando/cwd/fuente/exit/stderr y dueño; NOT_RUN no es FAIL. La política vigente difiere
+QA/capturas/aceptación global y SHA postdeploy sin inventar PASS ni baseline servido.
+
+`AppFooter` en `components/app-footer.tsx` compone el `ProductFooter` compartido.
+Usarlo en públicas/acceso/panel/portal donde permita la estructura, con variantes
+coherentes de identidad y enlaces. Footer/health/metadata leen el mismo package
+compilado mediante `lib/version.ts`; no usar una versión futura ni otro footer.
+Los snapshots firmados no se reescriben para seguir la versión de la app.
+
+El worktree OPS `w6J` / `carril-ops` está retirado tras integración durable de d838.
+Observadores filtran referencias históricas: no wake/remount ni reemplazo automático.
+El consumidor separado dc8d (fixture/test, nueve NOT_RUN, dependencia PF) conserva su
+owner OPS sin worktree. PANEL/PF/FIN continúan sus unidades originales; datos económicos
+ausentes limitan su consumidor, no congelan los scopes PDF/UI independientes. Heavy
+requiere DIRECT JIT actual del emisor original; generar cliente no concede PG privado.
+
 Corre con Node (sin dependencias nuevas) y usa `pg_dump` del sistema:
 
 ```bash
