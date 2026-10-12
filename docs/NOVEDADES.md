@@ -325,3 +325,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Presupuestos: Enviar por correo muestra primero el remitente, destinatario, asunto y contenido real en HTML y texto plano; el envío requiere una confirmación separada de esa vista previa.
 - La confirmación vence a los diez minutos y valida empresa, usuario, presupuesto y contenido actualizado. Cambiar destinatario, mensaje o link exige una nueva vista previa; previsualizar no envía, registra correo ni modifica el presupuesto.
 - La primera adopción cubre correo de presupuestos; documento para firma, WhatsApp y resultado del presupuesto conservan sus alcances pendientes. QA interactiva, clientes de correo y SHA postdeploy permanecen diferidos por orden del dueño.
+
+## v2.1.85 — 2026-10-12
+
+- Presupuestos: al seleccionar un producto, la tarifa sugerida respeta el precio mínimo configurado en inventario. Una regla de precio por duración con días o precio en cero queda deshabilitada; un producto sin tarifa configurada conserva cero.
+- La selección explícita copia la tarifa al presupuesto; la edición manual mantiene su comportamiento. Este alcance no incorpora el contrato comercial AL ni modifica documentos firmados. QA y SHA postdeploy permanecen diferidos por orden del dueño.
