@@ -313,3 +313,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Correos en teléfono: contenido y enlaces largos pueden envolver, las tablas se ajustan al ancho y el botón mantiene un área táctil mínima de 44 px. El pie HTML toma la versión real compilada.
 - Inventario: disponibilidad y unidades comprometidas usan singular/plural según sus conteos reales; los datos ausentes se muestran como no disponibles en lugar de inventar cero.
 - Los checks de contraste y estructura son offline; render visual Gmail/Outlook, QA y SHA postdeploy permanecen diferidos. No se envían correos reales como parte de esta verificación.
+
+## v2.1.83 — 2026-10-12
+
+- Sitio público: el menú móvil recupera el acceso a Productos, Servicios, Marcas, Proceso y Contacto; el diálogo bloquea el scroll de fondo, restaura el control de apertura y se cierra al pasar a escritorio.
+- Presupuestos: Pedir cambios exige una nota válida antes de enviar; el botón y el envío comparten la validación del límite de 1000 caracteres del API. Registrar aprobación conserva la nota opcional.
+- QA visual móvil, flujos de navegador y SHA postdeploy permanecen diferidos por orden del dueño; las pruebas offline no acreditan aceptación visual global.
