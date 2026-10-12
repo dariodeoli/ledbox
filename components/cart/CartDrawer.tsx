@@ -4,21 +4,22 @@ import { formatGs, type BillingUnit } from "@/lib/catalog";
 import { whatsappUrl } from "@/lib/public-config";
 
 import type { CartItem } from "@/lib/public-cart";
+import { mountCartDialogFocus } from "./cart-dialog-focus";
 
 export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; onChange: (items: CartItem[]) => void; onQuote: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const grouped = useMemo(() => items.reduce<Record<string, number>>((acc, item) => { const key = item.product.unit; acc[key] = (acc[key] || 0) + item.product.price * item.quantity * (item.product.unit === "event" ? 1 : item.duration); return acc; }, {}), [items]);
   const total = Object.values(grouped).reduce((sum, value) => sum + value, 0);
 
   useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    if (!open || !panelRef.current) return;
+    const releaseFocus = mountCartDialogFocus(panelRef.current, triggerRef.current);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setOpen(false); } };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); releaseFocus(); };
   }, [open]);
 
   const update = (id: string, patch: Partial<CartItem>) => onChange(items.map(item => item.product.id === id ? { ...item, ...patch } : item));
@@ -31,8 +32,8 @@ export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; on
       Pedido <span aria-live="polite">{count}</span>
     </button>
     <div className={`cart-backdrop${open ? " open" : ""}`} aria-hidden="true" onClick={() => setOpen(false)} />
-    <aside id="cart-panel" className={`cart-panel${open ? " open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="cart-title" aria-hidden={!open} inert={!open}>
-      <div className="cart-head"><strong id="cart-title">Tu pedido</strong><button ref={closeRef} className="cart-close" type="button" aria-label="Cerrar pedido" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>×</button></div>
+    <aside ref={panelRef} tabIndex={-1} id="cart-panel" className={`cart-panel${open ? " open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="cart-title" aria-hidden={!open} inert={!open}>
+      <div className="cart-head"><strong id="cart-title">Tu pedido</strong><button className="cart-close" type="button" aria-label="Cerrar pedido" onClick={() => setOpen(false)}>×</button></div>
       <p className="cart-helper">Ajustá cantidades y días. Después enviamos la consulta por WhatsApp.</p>
       <div className="cart-items">
         {!items.length && <p className="f-note">Agregá productos para preparar tu cotización.</p>}
