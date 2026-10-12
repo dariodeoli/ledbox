@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-12T21:23:41.542440+00:00",
+  "at": "2026-10-12T21:27:05.874307+00:00",
   "repository": "https://github.com/dariodeoli/ledbox.git",
   "refs": [
     {
@@ -147,6 +147,13 @@
       "sourceSHA": "323c7f81a77e1030fc0c46156884caaf7ecb2c97",
       "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-integ-mail-preview-172-post83-323c7f81a77e",
       "remoteSHA": "323c7f81a77e1030fc0c46156884caaf7ecb2c97",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/integ-mobile-api-176-post85",
+      "sourceSHA": "4032ade49465c5aae8c914be3e136511614ea081",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/mobile-api-carrier-4032ade49465",
+      "remoteSHA": "4032ade49465c5aae8c914be3e136511614ea081",
       "recovery": "EXACT_OBJECT"
     },
     {
@@ -353,7 +360,7 @@
       "recovery": "EXACT_OBJECT"
     }
   ],
-  "count": 50,
+  "count": 51,
   "originalUniqueCommitsRecovered": 38,
   "recoveryBranches": [
     {
