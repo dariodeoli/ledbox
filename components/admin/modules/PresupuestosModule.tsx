@@ -37,6 +37,7 @@ import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
 import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { BUDGET_APPROVAL_NOTE_MAX, budgetApprovalNoteError } from "@/lib/budget-approval-validation";
 import { clientDisplayName } from "@/lib/client-identity";
 import { ClientQuickCreateDialog, EventQuickCreateDialog } from "./BudgetQuickCreate";
 import { canWriteClients, canWriteFinance, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
@@ -1285,8 +1286,9 @@ export function PresupuestosModule() {
 
   async function submitApproval() {
     if (!approval) return;
-    if (approval.decision === "request_revision" && !note.trim()) {
-      setDialogError("Indicá qué cambios se piden.");
+    const noteError = budgetApprovalNoteError(approval.decision, note);
+    if (noteError) {
+      setDialogError(noteError);
       return;
     }
     setDialogBusy(true);
@@ -1944,7 +1946,7 @@ export function PresupuestosModule() {
             wide
             value={note}
             onChange={setNote}
-            maxLength={1000}
+            maxLength={BUDGET_APPROVAL_NOTE_MAX}
             rows={4}
             required={approval.decision === "request_revision"}
             placeholder={approval.decision === "approve" ? "Ej.: aprobado por teléfono, coordina con Santiago" : "Ej.: sumar un día más y cambiar el lugar"}
@@ -1954,7 +1956,7 @@ export function PresupuestosModule() {
             <AdminButton icon="close" onClick={() => setApproval(null)} disabled={dialogBusy}>
               Cancelar
             </AdminButton>
-            <AdminButton variant="primary" icon="check" busy={dialogBusy} onClick={() => void submitApproval()}>
+            <AdminButton variant="primary" icon="check" busy={dialogBusy} disabled={Boolean(budgetApprovalNoteError(approval.decision, note))} onClick={() => void submitApproval()}>
               {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
             </AdminButton>
           </div>
