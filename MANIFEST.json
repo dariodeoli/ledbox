@@ -1,0 +1,612 @@
+{
+  "at": "2026-10-12T20:59:18.732140+00:00",
+  "repository": "https://github.com/dariodeoli/ledbox.git",
+  "refs": [
+    {
+      "localRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "sourceSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/129-finance-split-admission",
+      "sourceSHA": "db72492c5f412d74291010b4ca302e3d31567cf7",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/143-al-presupuesto-dias-descuentos",
+      "sourceSHA": "ab6ea186994dce0848db25d0c0d87d849635c719",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-143-al-presupuesto-dias-descuentos-ab6ea186994d",
+      "remoteSHA": "ab6ea186994dce0848db25d0c0d87d849635c719",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/157-cart-focus-admission",
+      "sourceSHA": "f2f9d77dbb4a42ccd392d7881ad092ecfc7b381f",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/161-current-labels-admission",
+      "sourceSHA": "043f567195b032252674a9433fa9d468a6c76a04",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/167-canonical-invoice-admission",
+      "sourceSHA": "0d4cd02d17f8b13d49a191d5181ebcf8b42b54ba",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/170-effective-owner-admission",
+      "sourceSHA": "8f5324099033ee35ef3a5ce82bae3ca80ebbb069",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/170-user-validity-admission",
+      "sourceSHA": "388ef2decceb8a17bbd6aa2931f75f9ea3fe37d1",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/177-inventory-recovery-admission",
+      "sourceSHA": "29b4a740df5bc9bc7bdb30c6dcddcb4e8cbfedbc",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/177-offline-admission",
+      "sourceSHA": "40c6e6bd5401e4d8b27ff3278ab7b8b5cd9699d5",
+      "remoteRef": "refs/heads/feat/177-offline-admission",
+      "remoteSHA": "40c6e6bd5401e4d8b27ff3278ab7b8b5cd9699d5",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/177-offline-carrier",
+      "sourceSHA": "2865d5c2f7da070d1d189332ec185ad81ef32cb0",
+      "remoteRef": "refs/heads/feat/177-offline-carrier",
+      "remoteSHA": "2865d5c2f7da070d1d189332ec185ad81ef32cb0",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/181-vigia-custody-policy",
+      "sourceSHA": "9d3dffe1c3174a53d9ce1f0829201f08383824b0",
+      "remoteRef": "refs/heads/feat/181-vigia-custody-policy",
+      "remoteSHA": "9d3dffe1c3174a53d9ce1f0829201f08383824b0",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/183-mail-callers-admission",
+      "sourceSHA": "378b80b4abc44509d48133549521b15364055448",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/183-mail-pilot-admission",
+      "sourceSHA": "7c5236f62eeccabdabd2e40e64a058d9f2307dac",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/183-mail-renderer-admission",
+      "sourceSHA": "447b8c12ba768513613d18e8fbd0d4fea2b9b562",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/calendar-overlap-56-119",
+      "sourceSHA": "4a5a81d6d4f4de24838383a3159b4ca3f937a010",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-calendar-overlap-56-119-4a5a81d6d4f4",
+      "remoteSHA": "4a5a81d6d4f4de24838383a3159b4ca3f937a010",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/fin-a7-runtime-admission",
+      "sourceSHA": "679d3a77d3b4c90cedc634c3267260bf469575a6",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/fin-services-product-continuation",
+      "sourceSHA": "5a1ec7ed9cf006da1f94db6cdb49faccf14f0f9f",
+      "remoteRef": "refs/heads/feat/fin-services-product-continuation",
+      "remoteSHA": "5a1ec7ed9cf006da1f94db6cdb49faccf14f0f9f",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/footer-621-product-admission",
+      "sourceSHA": "fa2fb8e8e38ae7486e6b7fdfb20af25776988027",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/integ-budget-approval-163-post82",
+      "sourceSHA": "97e87b7be85564375e940bf596333cdd899332a0",
+      "remoteRef": "refs/heads/feat/integ-budget-approval-163-post82",
+      "remoteSHA": "97e87b7be85564375e940bf596333cdd899332a0",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/integ-mail-preview-172-post83",
+      "sourceSHA": "323c7f81a77e1030fc0c46156884caaf7ecb2c97",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-integ-mail-preview-172-post83-323c7f81a77e",
+      "remoteSHA": "323c7f81a77e1030fc0c46156884caaf7ecb2c97",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/integ-public-menu-157-post82",
+      "sourceSHA": "490d352095ba43a81548fa413a69c07a55898e42",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/mobile-api-platform",
+      "sourceSHA": "d2f98468904c775b47e9efe2df5e3e9ea680c1dc",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-mobile-api-platform-d2f98468904c",
+      "remoteSHA": "d2f98468904c775b47e9efe2df5e3e9ea680c1dc",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/mobile-client-native",
+      "sourceSHA": "2a5a36a460f97d70623ff09ce16db630e92af013",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-mobile-client-native-2a5a36a460f9",
+      "remoteSHA": "2a5a36a460f97d70623ff09ce16db630e92af013",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/ops-servicios-consumer-contract",
+      "sourceSHA": "dc8d10c9c4f9b27433cb279ce6155b3d1716fa38",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-ops-servicios-consumer-contract-dc8d10c9c4f9",
+      "remoteSHA": "dc8d10c9c4f9b27433cb279ce6155b3d1716fa38",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/panel-sigpdf-footer-corrector",
+      "sourceSHA": "f5bc70c88054dbdb0dd83e5fa9f14744b699b1b3",
+      "remoteRef": "refs/heads/feat/panel-sigpdf-footer-corrector",
+      "remoteSHA": "f5bc70c88054dbdb0dd83e5fa9f14744b699b1b3",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/pilot-161-post80-05bea",
+      "sourceSHA": "1e136fc1be79479159ab06f0eeee6ff2f1b819a4",
+      "remoteRef": "refs/heads/feat/pilot-161-post80-05bea",
+      "remoteSHA": "1e136fc1be79479159ab06f0eeee6ff2f1b819a4",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/release-metadata-owner-policy",
+      "sourceSHA": "983ec4dfaec3e776a22bdc87ab2c206e7eb51010",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/services-al-contract-base",
+      "sourceSHA": "d92cbf103a1b1d92bc677ce111b3eac87f673f46",
+      "remoteRef": "refs/heads/feat/services-contract-s1",
+      "remoteSHA": "7ee48638c80d42d4b63103cdb99f9f8172c2dcb1",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/feat/services-contract-s1",
+      "sourceSHA": "7ee48638c80d42d4b63103cdb99f9f8172c2dcb1",
+      "remoteRef": "refs/heads/feat/services-contract-s1",
+      "remoteSHA": "7ee48638c80d42d4b63103cdb99f9f8172c2dcb1",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/signature-layout-validation-0ce",
+      "sourceSHA": "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-layout-validation-0ce-0ce29ba0bd1d",
+      "remoteSHA": "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/signature-oracle-day-key-portability",
+      "sourceSHA": "b1cd11c2de6f95d35cf60de776f70bc083353e2d",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-oracle-day-key-portability-b1cd11c2de6f",
+      "remoteSHA": "b1cd11c2de6f95d35cf60de776f70bc083353e2d",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/feat/signature-print-corrector",
+      "sourceSHA": "7591cbbb2ed501b11892443da9830544348ca880",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-print-corrector-7591cbbb2ed5",
+      "remoteSHA": "7591cbbb2ed501b11892443da9830544348ca880",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/main",
+      "sourceSHA": "357ed201d4450e3f9c9b2631e2d67fa0d978603f",
+      "remoteRef": "HEAD",
+      "remoteSHA": "357ed201d4450e3f9c9b2631e2d67fa0d978603f",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/slot/finanzas",
+      "sourceSHA": "10b57ebdfe347c762915b868aecd60eacb452025",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/slot/operacion",
+      "sourceSHA": "b29da02ede76766df15b34cc68c1a1dfdb9760ba",
+      "remoteRef": "refs/heads/slot/operacion",
+      "remoteSHA": "b29da02ede76766df15b34cc68c1a1dfdb9760ba",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/slot/panel",
+      "sourceSHA": "db331e76381a9e4b66f533cb2d3dc40c5d4d11de",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/heads/slot/pilot",
+      "sourceSHA": "b3f16902dc2793bfb40fb0cae1165e7cf7d1aaac",
+      "remoteRef": "refs/heads/recovery/complete-custody-20261012/slot-pilot-b3f16902dc27",
+      "remoteSHA": "b3f16902dc2793bfb40fb0cae1165e7cf7d1aaac",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/heads/slot/plataforma",
+      "sourceSHA": "be0cf8c51b25771a3a8a27014b02fa6d73935be0",
+      "remoteRef": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "remoteSHA": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "recovery": "REACHABLE_ANCESTOR"
+    },
+    {
+      "localRef": "refs/tags/v2.1.76",
+      "sourceSHA": "d6434f353e1e119d2e07084ef98ceab3f8095604",
+      "remoteRef": "refs/tags/v2.1.76",
+      "remoteSHA": "d6434f353e1e119d2e07084ef98ceab3f8095604",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.77",
+      "sourceSHA": "3499e8cf8768829c642eae58245f208a53634f33",
+      "remoteRef": "refs/tags/v2.1.77",
+      "remoteSHA": "3499e8cf8768829c642eae58245f208a53634f33",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.78",
+      "sourceSHA": "9ff9c12165790b1ec6839887f4c9309bd394c4e6",
+      "remoteRef": "refs/tags/v2.1.78",
+      "remoteSHA": "9ff9c12165790b1ec6839887f4c9309bd394c4e6",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.79",
+      "sourceSHA": "d5e842ecd6b0a09043a2d6323b7745bac7be1e06",
+      "remoteRef": "refs/tags/v2.1.79",
+      "remoteSHA": "d5e842ecd6b0a09043a2d6323b7745bac7be1e06",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.80",
+      "sourceSHA": "f66bab2e82784e986be268e25527a7f0b5873fab",
+      "remoteRef": "refs/tags/v2.1.80",
+      "remoteSHA": "f66bab2e82784e986be268e25527a7f0b5873fab",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.81",
+      "sourceSHA": "ac4762af25a3da449b401dfdc2d6858a10d24b74",
+      "remoteRef": "refs/tags/v2.1.81",
+      "remoteSHA": "ac4762af25a3da449b401dfdc2d6858a10d24b74",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.82",
+      "sourceSHA": "9d23bb3d2d75e40937c04103c150223547772e16",
+      "remoteRef": "refs/tags/v2.1.82",
+      "remoteSHA": "9d23bb3d2d75e40937c04103c150223547772e16",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.83",
+      "sourceSHA": "862e6081f61364643e36e522c3f0913353ca298e",
+      "remoteRef": "refs/tags/v2.1.83",
+      "remoteSHA": "862e6081f61364643e36e522c3f0913353ca298e",
+      "recovery": "EXACT_OBJECT"
+    },
+    {
+      "localRef": "refs/tags/v2.1.84",
+      "sourceSHA": "93ad403125348f5b6b2a01d2e819b391c7790050",
+      "remoteRef": "refs/tags/v2.1.84",
+      "remoteSHA": "93ad403125348f5b6b2a01d2e819b391c7790050",
+      "recovery": "EXACT_OBJECT"
+    }
+  ],
+  "count": 48,
+  "originalUniqueCommitsRecovered": 38,
+  "recoveryBranches": [
+    {
+      "ref": "refs/heads/codex/ledbox-gestion-multiempresa",
+      "sha": "b4acb9acd685c946085f0c30cf34c5b145de0135",
+      "remoteSHA": "f025d00b915937a33c5a3d9ffed0d1db3b3eef1e",
+      "match": false,
+      "uncoveredCommits": [
+        "b4acb9acd685c946085f0c30cf34c5b145de0135",
+        "f4443372660581e233047f343d2f50b40cd3160b",
+        "323c7f81a77e1030fc0c46156884caaf7ecb2c97"
+      ],
+      "count": 3,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/codex-ledbox-gestion-multiempresa-b4acb9acd685"
+    },
+    {
+      "ref": "refs/heads/feat/143-al-presupuesto-dias-descuentos",
+      "sha": "ab6ea186994dce0848db25d0c0d87d849635c719",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "ab6ea186994dce0848db25d0c0d87d849635c719",
+        "8a466f7ac699a30e2852f123f522a085215baa5d",
+        "7de42ed16a0c2a9a31f6c0c7a8450ec5096e4a41",
+        "1cd461880d556861a81fb05b43b528411dfebea3",
+        "4e60bef764b1e9ebdcb7c9d600930dec8059a6c3",
+        "9f659c3d51a74e6190adc694583b46ef61cc6cd9",
+        "620daae5445b6ba41ac3a96fe1d8f82805ef8f1f",
+        "8b5cb49f798f9889f484299c811b86bb909a0d59",
+        "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+        "2696cbbb10d9a25c1d21760b4b4edea0ec20df0f",
+        "0cee769bfefa8c4535f8135167b55c7deb45d010",
+        "fe65f4e1d626108e601ad8fe947e47a2821c1b44",
+        "37d81df14fb449d8de6c20b444ef1e60ffdcf52b",
+        "8402901e463df6dab38fdc99ed0a237579b7c966",
+        "dc4bbfc6cb34431d31fad09dfc1b938a6f2d2e67",
+        "4c5faf2c9d5d40d460c6c53f8ba7308512511fe9",
+        "8a06eba7abf85cfad50cf5add4190d972c164135",
+        "a1824e7993a321e6c545aba63b803c509978b00e",
+        "ab16f4f2e33ee974b3cc908d96a5b717f75f6694"
+      ],
+      "count": 19,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-143-al-presupuesto-dias-descuentos-ab6ea186994d"
+    },
+    {
+      "ref": "refs/heads/feat/calendar-overlap-56-119",
+      "sha": "4a5a81d6d4f4de24838383a3159b4ca3f937a010",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "4a5a81d6d4f4de24838383a3159b4ca3f937a010",
+        "c7e12e6eb653409a1dd6095d0affb9db1ff113e5",
+        "b3d8af5fabd61befb13a9fc88bf8a5d5f20d1b39",
+        "5e5cc17f869f78d90c1046100923e1241b0a7bf9"
+      ],
+      "count": 4,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-calendar-overlap-56-119-4a5a81d6d4f4"
+    },
+    {
+      "ref": "refs/heads/feat/integ-mail-preview-172-post83",
+      "sha": "323c7f81a77e1030fc0c46156884caaf7ecb2c97",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "323c7f81a77e1030fc0c46156884caaf7ecb2c97"
+      ],
+      "count": 1,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-integ-mail-preview-172-post83-323c7f81a77e"
+    },
+    {
+      "ref": "refs/heads/feat/mobile-api-platform",
+      "sha": "d2f98468904c775b47e9efe2df5e3e9ea680c1dc",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "d2f98468904c775b47e9efe2df5e3e9ea680c1dc"
+      ],
+      "count": 1,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-mobile-api-platform-d2f98468904c"
+    },
+    {
+      "ref": "refs/heads/feat/mobile-client-native",
+      "sha": "2a5a36a460f97d70623ff09ce16db630e92af013",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "2a5a36a460f97d70623ff09ce16db630e92af013",
+        "a34743eeec3e829781ef8529f9b4b79231c34004",
+        "6948c9ab9b19777369f8a1901f734744058e8b1e",
+        "fa6d69089a62e8e860202160df462dc0b654240a",
+        "29224918985285566eb5929e2e59a0f240ca2d45",
+        "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+        "2696cbbb10d9a25c1d21760b4b4edea0ec20df0f",
+        "0cee769bfefa8c4535f8135167b55c7deb45d010",
+        "fe65f4e1d626108e601ad8fe947e47a2821c1b44",
+        "37d81df14fb449d8de6c20b444ef1e60ffdcf52b",
+        "8402901e463df6dab38fdc99ed0a237579b7c966",
+        "dc4bbfc6cb34431d31fad09dfc1b938a6f2d2e67",
+        "4c5faf2c9d5d40d460c6c53f8ba7308512511fe9",
+        "8a06eba7abf85cfad50cf5add4190d972c164135",
+        "a1824e7993a321e6c545aba63b803c509978b00e",
+        "ab16f4f2e33ee974b3cc908d96a5b717f75f6694"
+      ],
+      "count": 16,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-mobile-client-native-2a5a36a460f9"
+    },
+    {
+      "ref": "refs/heads/feat/ops-servicios-consumer-contract",
+      "sha": "dc8d10c9c4f9b27433cb279ce6155b3d1716fa38",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "dc8d10c9c4f9b27433cb279ce6155b3d1716fa38"
+      ],
+      "count": 1,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-ops-servicios-consumer-contract-dc8d10c9c4f9"
+    },
+    {
+      "ref": "refs/heads/feat/signature-layout-validation-0ce",
+      "sha": "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+        "2696cbbb10d9a25c1d21760b4b4edea0ec20df0f",
+        "0cee769bfefa8c4535f8135167b55c7deb45d010",
+        "fe65f4e1d626108e601ad8fe947e47a2821c1b44",
+        "37d81df14fb449d8de6c20b444ef1e60ffdcf52b",
+        "8402901e463df6dab38fdc99ed0a237579b7c966",
+        "dc4bbfc6cb34431d31fad09dfc1b938a6f2d2e67",
+        "4c5faf2c9d5d40d460c6c53f8ba7308512511fe9",
+        "8a06eba7abf85cfad50cf5add4190d972c164135",
+        "a1824e7993a321e6c545aba63b803c509978b00e",
+        "ab16f4f2e33ee974b3cc908d96a5b717f75f6694"
+      ],
+      "count": 11,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-layout-validation-0ce-0ce29ba0bd1d"
+    },
+    {
+      "ref": "refs/heads/feat/signature-oracle-day-key-portability",
+      "sha": "b1cd11c2de6f95d35cf60de776f70bc083353e2d",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "b1cd11c2de6f95d35cf60de776f70bc083353e2d",
+        "8402901e463df6dab38fdc99ed0a237579b7c966",
+        "dc4bbfc6cb34431d31fad09dfc1b938a6f2d2e67",
+        "4c5faf2c9d5d40d460c6c53f8ba7308512511fe9",
+        "8a06eba7abf85cfad50cf5add4190d972c164135",
+        "a1824e7993a321e6c545aba63b803c509978b00e",
+        "ab16f4f2e33ee974b3cc908d96a5b717f75f6694"
+      ],
+      "count": 7,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-oracle-day-key-portability-b1cd11c2de6f"
+    },
+    {
+      "ref": "refs/heads/feat/signature-print-corrector",
+      "sha": "7591cbbb2ed501b11892443da9830544348ca880",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "7591cbbb2ed501b11892443da9830544348ca880",
+        "18dfec5606cb6544a679615fe76d6a1874c4d3ce",
+        "6948c9ab9b19777369f8a1901f734744058e8b1e",
+        "fa6d69089a62e8e860202160df462dc0b654240a",
+        "29224918985285566eb5929e2e59a0f240ca2d45",
+        "0ce29ba0bd1d4464aa863bd617b9c26637e4bc27",
+        "2696cbbb10d9a25c1d21760b4b4edea0ec20df0f",
+        "0cee769bfefa8c4535f8135167b55c7deb45d010",
+        "fe65f4e1d626108e601ad8fe947e47a2821c1b44",
+        "37d81df14fb449d8de6c20b444ef1e60ffdcf52b",
+        "8402901e463df6dab38fdc99ed0a237579b7c966",
+        "dc4bbfc6cb34431d31fad09dfc1b938a6f2d2e67",
+        "4c5faf2c9d5d40d460c6c53f8ba7308512511fe9",
+        "8a06eba7abf85cfad50cf5add4190d972c164135",
+        "a1824e7993a321e6c545aba63b803c509978b00e",
+        "ab16f4f2e33ee974b3cc908d96a5b717f75f6694"
+      ],
+      "count": 16,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/feat-signature-print-corrector-7591cbbb2ed5"
+    },
+    {
+      "ref": "refs/heads/slot/pilot",
+      "sha": "b3f16902dc2793bfb40fb0cae1165e7cf7d1aaac",
+      "remoteSHA": null,
+      "match": false,
+      "uncoveredCommits": [
+        "b3f16902dc2793bfb40fb0cae1165e7cf7d1aaac",
+        "09e34bb25ecf71caed2a22645e7d34031f3d15a1"
+      ],
+      "count": 2,
+      "exit": 0,
+      "recoveryRef": "refs/heads/recovery/complete-custody-20261012/slot-pilot-b3f16902dc27"
+    }
+  ],
+  "allSourcesRemotelyRecoverable": true,
+  "allWorktreesClean": true,
+  "ignoredRebuildablesOnly": true,
+  "worktrees": [
+    {
+      "path": "/Users/fredd/Documents/GitHub/ledbox",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": [
+        ".next/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ]
+    },
+    {
+      "path": "/Users/fredd/.herdr/worktrees/ledbox/carril-fin",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": [
+        ".next/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ]
+    },
+    {
+      "path": "/Users/fredd/.herdr/worktrees/ledbox/carril-panel",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": [
+        ".next/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ]
+    },
+    {
+      "path": "/Users/fredd/.herdr/worktrees/ledbox/carril-pilot",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": [
+        ".next/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ]
+    },
+    {
+      "path": "/Users/fredd/.herdr/worktrees/ledbox/carril-pilot-161-post80",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": []
+    },
+    {
+      "path": "/Users/fredd/.herdr/worktrees/ledbox/carril-plataforma",
+      "trackedUntrackedClean": true,
+      "ignoredRebuildablesOnly": true,
+      "ignoredPaths": [
+        ".next/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ]
+    }
+  ],
+  "productionQualification": false,
+  "runtimeEvidence": "HD84 publication result is tracked separately; recovery refs are source custody only",
+  "localDeletionPerformed": false
+}
