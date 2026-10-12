@@ -76,8 +76,17 @@ test("FIN editor canonical pricing executes after lock with legacy rows, without
         const state = fixture(); consumer.initialize(state);
         const item = { ...state.current.items[0], unitPrice: mode === "overflow" ? 2147483647 : 20, costPrice: 0 };
         if (mode === "advance") state.current.advanceAmount = 121;
-        await assert.rejects(consumer.saveBudgetEditor(context, "budget", { items: [item, state.current.items[1]], ...(mode === "discount" ? { discount: 121 } : {}) }), { status: 400 });
-        assert.deepEqual(state.calls, ["lock", "signature"]); assert.deepEqual(state.written, []);
+        const body = { items: [item, state.current.items[1]], ...(mode === "discount" ? { discount: 121 } : {}) };
+        if (mode === "overflow") {
+          // Existing per-item overflow validation returns HTTP 400 before lock.
+          const response = await consumer.saveBudgetEditor(context, "budget", body);
+          assert.equal(response.status, 400);
+          assert.deepEqual(state.calls, []);
+        } else {
+          await assert.rejects(consumer.saveBudgetEditor(context, "budget", body), { status: 400 });
+          assert.deepEqual(state.calls, ["lock", "signature"]);
+        }
+        assert.deepEqual(state.written, []);
       }
     });
     await t.test("stale revision, signed budget and foreign tenant cannot reach pricing writes", async () => {
