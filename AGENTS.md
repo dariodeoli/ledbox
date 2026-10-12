@@ -32,6 +32,23 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 
 Estas órdenes posteriores prevalecen sobre la topología/cadencias históricas de abajo.
 
+## Inventario GitHub y cierre postpublicación — orden del 12/10/2026
+
+- Todo pendiente concreto permanece en un issue OPEN recuperable: alcance,
+  criterio, owner, fuente/rama/rutas, checks (comando/cwd/source/exit/stderr o
+  NOT_RUN), dependencias y siguiente acción. Si hay WIP sin fuente durable,
+  indicar SIN COMMIT; preservar WIP ajeno y no publicar secretos.
+- El orquestador es el único escritor de GitHub. El carril entrega evidencia
+  para actualizar los issues existentes, sin mutaciones duplicadas ni nuevos AL.
+- Cerrar producto sólo con publicación y deploy FINISHED acreditados: versión,
+  URL, hora, SHA remoto y UUID. READY/PASS/merge/push no bastan. QA y SHA postdeploy
+  diferidas no bloquean publicación ni acreditan aceptación100.
+- Si falla un write, conservar payload/comando/HTTP/error y owner; no afirmar
+  actualización. Helpers/docs sólo Git no justifican una release vacía.
+- HD78 se recibió publicado como 2.1.78; no actualizar el package de este carril
+  por ese recibo ni reutilizar sus checks/clientes para S1 o PDF. Las fuentes y
+  gates propios siguen ligados a sus inputs exactos y al DIRECT actual requerido.
+
 ## Topología: orquestador + implementador + 3 slots (23-09-2026)
 
 Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa: `~/.herdr/worktrees/ledbox/orquestador/` (`PLAYBOOK.md`, `SLOTS.md`, `BRIEF.md`, `COMANDOS.md`).
