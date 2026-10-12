@@ -14,6 +14,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import {
   FIELD_LIMITS,
@@ -1394,8 +1395,9 @@ export function InventarioModule() {
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá los filtros." />
         ) : view === "grid" || narrow ? (
           <AdminCardGrid label="Inventario" cards={rows.map((item): AdminCardData => {
-            const { availableNow, overcommittedNow, range } = item.availability;
-            const available = rangeActive ? (range?.available ?? 0) : availableNow;
+            const { availableNow, committedNow, overcommittedNow, range } = item.availability;
+            const available = rangeActive ? range?.available : availableNow;
+            const committed = rangeActive ? range?.committed : committedNow;
             const overcommitted = rangeActive ? (range?.overcommitted ?? false) : overcommittedNow;
             const conflictEvents = range?.conflicts ?? [];
             const menuItems: AdminMenuItem[] = [
@@ -1409,7 +1411,7 @@ export function InventarioModule() {
                 title: `Ver asignaciones y disponibilidad: ${item.name}`,
               },
             ];
-            const availableTitle = `${formatNumber(available)} libres de ${formatNumber(item.quantity)} · comprometidas ${
+            const availableTitle = `${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
               rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
             }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`;
             return {
@@ -1429,7 +1431,7 @@ export function InventarioModule() {
               ],
               fields: [
                 { label: "Cantidad", value: formatNumber(item.quantity), title: `${formatNumber(item.quantity)} unidades` },
-                { label: rangeActive ? "Libres en rango" : "Libres ahora", value: formatNumber(available), title: availableTitle },
+                { label: rangeActive ? "Libres en rango" : "Libres ahora", value: available == null ? "—" : formatNumber(available), title: availableTitle },
                 { label: "Costo diario", value: formatMoney(item.dailyCost), title: formatMoney(item.dailyCost) },
                 {
                   label: "Cliente final",
@@ -1486,8 +1488,8 @@ export function InventarioModule() {
           >
             {rows.map((item) => {
               const { availableNow, committedNow, overcommittedNow, range } = item.availability;
-              const available = rangeActive ? (range?.available ?? 0) : availableNow;
-              const committed = rangeActive ? (range?.committed ?? 0) : committedNow;
+              const available = rangeActive ? range?.available : availableNow;
+              const committed = rangeActive ? range?.committed : committedNow;
               const overcommitted = rangeActive ? (range?.overcommitted ?? false) : overcommittedNow;
               const conflictEvents = range?.conflicts ?? [];
               return (
@@ -1511,12 +1513,12 @@ export function InventarioModule() {
                   </AdminCell>
                   <AdminCell
                     end
-                    title={`${formatNumber(available)} libres de ${formatNumber(item.quantity)} · ${formatNumber(committed)} comprometidas ${
+                    title={`${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
                       rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
                     }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`}
                   >
                     <span className="admin-nowrap" data-tone={available === 0 ? "warn" : undefined}>
-                      {formatNumber(available)}
+                      {available == null ? "—" : formatNumber(available)}
                     </span>
                     {overcommitted ? (
                       <AdminBadge
@@ -1591,8 +1593,8 @@ export function InventarioModule() {
           title={`Disponibilidad · ${selected.name}`} icon="inventory"
           meta={
             rangeActive
-              ? `${formatNumber(selectedRange?.available ?? 0)} de ${formatNumber(selected.quantity)} libres entre ${dayRangeLabel(from, to)}`
-              : `${formatNumber(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} libres ahora`
+              ? `${inventoryAvailabilityLabel(selectedRange?.available)} de ${formatNumber(selected.quantity)} entre ${dayRangeLabel(from, to)}`
+              : `${inventoryAvailabilityLabel(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} ahora`
           }
           action={
             <span className="admin-panel-actions">
@@ -1764,13 +1766,13 @@ export function InventarioModule() {
               <>
                 <AdminNote tone={rangeAvailability && rangeAvailability.available === 0 ? "error" : undefined}>
                   {rangeAvailability
-                    ? `${formatNumber(rangeAvailability.available)} de ${formatNumber(rangeAvailability.total)} unidades libres entre ${dayRangeLabel(from, to)}.`
+                    ? `${inventoryAvailabilityLabel(rangeAvailability.available, "free", true)} de ${formatNumber(rangeAvailability.total)} entre ${dayRangeLabel(from, to)}.`
                     : "Sin datos de disponibilidad para el rango."}
                   {rangeAvailability?.blocked
                     ? ` «${rangeAvailability.name}» está ${rangeAvailability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
                     : ""}
                   {rangeAvailability && rangeAvailability.conflicts.length > 0
-                    ? ` Comprometidas: ${rangeAvailability.conflicts
+                    ? ` ${inventoryAvailabilityLabel(rangeAvailability.committed, "committed", true)}: ${rangeAvailability.conflicts
                         .map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`)
                         .join(", ")}.`
                     : " Sin rangos comprometidos en el rango."}
@@ -1821,7 +1823,7 @@ export function InventarioModule() {
                         <AdminCell title={substitute.category}>{substitute.category}</AdminCell>
                         <AdminCell
                           end
-                          title={`${formatNumber(substitute.available)} libres de ${formatNumber(substitute.total)} en el rango (${formatNumber(substitute.committed)} comprometidas)`}
+                          title={`${inventoryAvailabilityLabel(substitute.available)} de ${formatNumber(substitute.total)} en el rango (${inventoryAvailabilityLabel(substitute.committed, "committed")})`}
                         >
                           <span className="admin-nowrap">{formatNumber(substitute.available)}</span>
                         </AdminCell>
