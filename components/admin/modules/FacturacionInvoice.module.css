@@ -1,0 +1,31 @@
+/* #167: overrides exclusive to the invoice form; shared dialogs stay canonical. */
+.invoiceForm :global(.admin-fiscal-line),
+.invoiceForm :global(.admin-fiscal-line-sum),
+.invoiceForm :global(.admin-fiscal-totals) {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .invoiceForm :global(.admin-fiscal-line),
+  .invoiceForm :global(.admin-fiscal-total-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .invoiceForm :global(.admin-fiscal-line) > *,
+  .invoiceForm :global(.admin-fiscal-total-row) > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .invoiceForm :global(.admin-fiscal-line-sum) :global(.admin-cell-sub) {
+    overflow-wrap: anywhere;
+  }
+
+  .invoiceForm :global(.admin-fiscal-total-row) > :first-child {
+    text-align: left;
+  }
+
+  .invoiceForm :global(.admin-fiscal-line) > button {
+    justify-self: end;
+  }
+}

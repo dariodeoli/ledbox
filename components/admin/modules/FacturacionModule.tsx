@@ -77,6 +77,7 @@ import {
   TextField,
 } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
+import styles from "./FacturacionInvoice.module.css";
 
 /**
  * Facturación (issue #41): registro fiscal interno.
@@ -495,7 +496,7 @@ export function FacturacionModule() {
       setProfileError(result.error);
       return;
     }
-    setNotice({ tone: "ok", text: "Datos fiscales guardados: son el encabezado del comprobante imprimible." });
+    setNotice({ tone: "ok", text: "Datos fiscales guardados: son el encabezado del comprobante imprimible" });
     fiscal.reload();
   }
 
@@ -1422,7 +1423,7 @@ export function FacturacionModule() {
               maxLength={120}
               disabled={!canProfile}
               placeholder="LedBox"
-              hint="El nombre comercial que ven tus clientes; la razón social es la legal."
+              hint="El nombre comercial que ven tus clientes; la razón social es la legal"
             />
             {/* Timbrado (issue #114): fuera del formulario mientras no haya un
                 timbrado autorizado por la DNIT. Sigue en el perfil y el payload
@@ -1455,14 +1456,14 @@ export function FacturacionModule() {
           </form>
           <p className="admin-note">
             El comprobante imprimible de este registro interno aclara que <strong>no es una factura electrónica</strong> ni
-            reemplaza al comprobante de SIFEN/DNIT. Ver el detalle de lo que falta en <span className="admin-code">docs/FISCAL-SIFEN.md</span>.
+            reemplaza al comprobante de SIFEN/DNIT; ver el detalle de lo que falta en <span className="admin-code">docs/FISCAL-SIFEN.md</span>
           </p>
         </AdminPanel>
       ) : null}
 
       {invoiceForm ? (
         <AdminDialog title="Nueva factura" size="wide" icon="receipt" onClose={() => setInvoiceForm(null)}>
-          <form className="admin-form-grid" onSubmit={submitInvoice} aria-busy={busy || undefined}>
+          <form className={`admin-form-grid ${styles.invoiceForm}`} onSubmit={submitInvoice} aria-busy={busy || undefined}>
             <SegmentedField
               label="Origen"
               wide
