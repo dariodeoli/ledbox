@@ -319,3 +319,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Sitio público: el menú móvil recupera el acceso a Productos, Servicios, Marcas, Proceso y Contacto; el diálogo bloquea el scroll de fondo, restaura el control de apertura y se cierra al pasar a escritorio.
 - Presupuestos: Pedir cambios exige una nota válida antes de enviar; el botón y el envío comparten la validación del límite de 1000 caracteres del API. Registrar aprobación conserva la nota opcional.
 - QA visual móvil, flujos de navegador y SHA postdeploy permanecen diferidos por orden del dueño; las pruebas offline no acreditan aceptación visual global.
+
+## v2.1.84 — 2026-10-12
+
+- Presupuestos: Enviar por correo muestra primero el remitente, destinatario, asunto y contenido real en HTML y texto plano; el envío requiere una confirmación separada de esa vista previa.
+- La confirmación vence a los diez minutos y valida empresa, usuario, presupuesto y contenido actualizado. Cambiar destinatario, mensaje o link exige una nueva vista previa; previsualizar no envía, registra correo ni modifica el presupuesto.
+- La primera adopción cubre correo de presupuestos; documento para firma, WhatsApp y resultado del presupuesto conservan sus alcances pendientes. QA interactiva, clientes de correo y SHA postdeploy permanecen diferidos por orden del dueño.
