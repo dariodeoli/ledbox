@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { budgetItemError } from "../budget-items";
+import { BudgetCalculationError, calculateBudgetCommercial } from "../budget-commercial-calculation";
 import { stableOrderBudgetItems } from "../budget-item-order";
 import { budgetDayValid, budgetMoneyValid, resolveBudgetPaymentPlan } from "../budget-payment-plan";
 import { INVOICE_TAX_TYPES } from "../fiscal";
@@ -38,12 +39,11 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   // Excluded originals cannot disappear through the compact editor.
   if (current.items.some((item) => item.excluded && !ids.includes(item.id))) return jsonError("Conservá las líneas retiradas de la selección del cliente.", 409);
   const active = items.filter((item) => !item.id || !existing.get(item.id)?.excluded);
-  const subtotal = active.reduce((sum, item) => sum + item.quantity * item.days * item.unitPrice, 0);
   const discount = Number(body.discount ?? current.discount);
-  const total = subtotal - discount;
   const materialCost = Number(body.materialCost ?? current.materialCost), laborCost = Number(body.laborCost ?? current.laborCost);
   const costEstimate = active.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
-  if (![subtotal, discount, total, materialCost, laborCost, costEstimate].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
+  if (![discount, materialCost, laborCost, costEstimate].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
+  const lineIds = items.map((item) => item.id ?? randomUUID());
   const dates: Record<string, Date | null> = {};
   for (const key of ["validUntil", "deliveryAt"] as const) {
     if (body[key] === undefined) continue;
@@ -55,7 +55,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const title = typeof body.title === "string" ? body.title.trim() : current.title;
   if (!title || title.length > 160) return jsonError("Escribí un título de hasta 160 caracteres.", 400);
   const data = {
-    title, subtotal, discount, total, materialCost, laborCost, costEstimate, ...dates,
+    title, materialCost, laborCost, costEstimate, ...dates,
     ...(body.ivaType !== undefined ? { ivaType: body.ivaType || null } : {}),
     ...(typeof body.warranty === "string" ? { warranty: body.warranty.trim().slice(0, 400) || null } : {}),
     ...(typeof body.notes === "string" ? { notes: body.notes.trim().slice(0, 2000) || null } : {}),
@@ -63,6 +63,22 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const result = await withQuoteCommercialEdit(budgetId, context.organizationId, true, async (tx) => {
     const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budgetId } });
     if (fresh.updatedAt.getTime() !== current.updatedAt.getTime()) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá antes de guardar.");
+    // Live legacy rows persist manual prices and a fixed global discount/advance.
+    // Do not invent tariffs, service execution IDs or recognized costs from them.
+    // Calculate once after the existing quote/signature lock and revision check.
+    const commercial = (() => {
+      try {
+        return calculateBudgetCommercial(items.map((item, index) => ({
+          id: lineIds[index], sortOrder: index, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice,
+          excluded: Boolean(item.id && existing.get(item.id)?.excluded),
+          priceMode: null, tariffSnapshot: null, discountMode: null, discountValue: null, discountAmount: null,
+        })), { discountMode: null, discountValue: null, advancePercentBps: null }, discount, fresh.advanceAmount);
+      } catch (error) {
+        if (error instanceof BudgetCalculationError) throw new QuoteComparisonError(400, error.message);
+        throw error;
+      }
+    })();
+    Object.assign(data, { subtotal: commercial.subtotal, discount: commercial.discount, total: commercial.total });
     if (typeof body.clientId === "string") {
       if (!await tx.client.findFirst({ where: { id: body.clientId, organizationId: context.organizationId } })) throw new QuoteComparisonError(400, "El cliente no existe en esta empresa.");
       data.client = { connect: { id: body.clientId } };
@@ -76,16 +92,16 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
     if (await tx.inventoryItem.count({ where: { id: { in: inventoryIds }, organizationId: context.organizationId } }) !== inventoryIds.length) throw new QuoteComparisonError(400, "El producto no existe en esta empresa.");
     await tx.budgetItem.deleteMany({ where: { budgetId, id: { notIn: ids } } });
     for (const item of items) {
-      const excluded = Boolean(item.id && existing.get(item.id)?.excluded);
       const source = raw[items.indexOf(item)] as Record<string, unknown>;
       const inventoryId = Object.hasOwn(source, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId);
-      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: item.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: excluded ? 0 : item.quantity * item.days * item.unitPrice };
+      const calculated = commercial.items[items.indexOf(item)];
+      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: calculated.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: calculated.subtotal };
       const orderedItemData = { ...itemData, sortOrder: items.indexOf(item) };
       if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: orderedItemData });
-      else await tx.budgetItem.create({ data: { id: randomUUID(), budgetId, ...orderedItemData } });
+      else await tx.budgetItem.create({ data: { id: calculated.id, budgetId, ...orderedItemData } });
     }
     if (body.installmentsJson !== undefined) {
-      const plan = resolveBudgetPaymentPlan(body.installmentsJson, total, current.advanceAmount);
+      const plan = resolveBudgetPaymentPlan(body.installmentsJson, commercial.total, fresh.advanceAmount);
       if (!plan.ok) throw new QuoteComparisonError(400, plan.error);
       await validateBudgetPlanAccounts(tx, context.organizationId, plan.rows);
       data.installmentsJson = plan.rows as unknown as Prisma.InputJsonValue;
