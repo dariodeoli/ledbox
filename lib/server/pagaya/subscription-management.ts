@@ -24,8 +24,12 @@ export async function setOwnedRenewal(context: PagaYaBillingContext, enrollmentI
   intentId: string, cancelAtPeriodEnd: boolean) {
   requirePagaYaCapability(context.client, "subscriptionWrite");
   await ownedSubscription(context, enrollmentId, subscriptionId);
-  const command = await context.repository.reserveCommand(context.owner, enrollmentId,
+  const reserved = await context.repository.reserveCommand(context.owner, enrollmentId,
     { intentId, kind: "RENEWAL", body: { cancelAtPeriodEnd } });
+  const command = await context.repository.getOwnedCommand(context.owner, enrollmentId, reserved.id);
+  if (command.commandKey !== reserved.commandKey || command.requestBody !== reserved.requestBody || command.bodySHA256 !== reserved.bodySHA256) {
+    throw new PagaYaError("idempotency_conflict", { status: 409 });
+  }
   const requestBody = pagayaCommandBody({ cancelAtPeriodEnd });
   if (command.resourceId !== subscriptionId || command.requestBody !== requestBody || command.bodySHA256 !== pagayaDigest(requestBody)) {
     throw new PagaYaError("idempotency_conflict", { status: 409 });

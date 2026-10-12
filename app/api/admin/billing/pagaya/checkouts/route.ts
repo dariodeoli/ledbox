@@ -8,8 +8,9 @@ export async function POST(request: Request) {
   try {
     const auth = await requirePagaYaContext();
     if (!auth.ok) return auth.response;
-    const body = await pagayaBody(request, ["enrollmentId"]);
-    return pagayaJson(await createCatalogCheckout(auth.context, pagayaText(body.enrollmentId)));
+    const body = await pagayaBody(request, ["enrollmentId", "intentId"]);
+    const result = await createCatalogCheckout(auth.context, pagayaText(body.enrollmentId), pagayaText(body.intentId));
+    return pagayaJson(result, result.state === "UNKNOWN" || result.state === "SUBMITTING" ? 202 : 200);
   } catch (error) { return pagayaFailure(error); }
 }
 
