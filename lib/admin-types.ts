@@ -1549,6 +1549,8 @@ export function supplierJobBalance(job: { total: number; advance: number; status
 }
 
 export type AdminInventoryRow = {
+  /** Archivo organizacional independiente del estado operativo (#161). */
+  archivedAt: string | null;
   id: string;
   name: string;
   category: string;

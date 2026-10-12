@@ -1,5 +1,75 @@
 # Automatización scoped #173
 
+## Vigía finita y custodia vigente — 12-10-2026, issue #181
+
+La orden finita actual mantiene el único vigía de coordinación existente con
+**1200 s**, AUTO10 admitidos/cooldown600 conservados y expiración efectiva
+`2026-10-12T06:31:44.353386Z`. El timer no concede DIRECT ni publica. No crear
+otro watcher, AL, job duplicado, request, cola, reserva, sucesor o ronda ACK.
+
+La configuración operativa vive en `~/.config/ledbox/vigia-effective.json`;
+el runner existente está en
+`~/.herdr/worktrees/ledbox/evidencia/ronda-al/vigia-unico-300s.mjs` (el nombre
+histórico no define la cadencia). `sessions` contiene sólo owners activos.
+OPS retirado se conserva en `retiredSessions`, nunca como cwd/target activo:
+no despertar, recrear ni montar `carril-ops`/`w6J`.
+
+Una reparación de configuración no prueba adopción runtime. Al releer un runner
+que carga config una sola vez: verificar PID/cwd/argv/lock, ausencia de ciclo y
+sleep natural; terminar sólo el singleton propio de forma graceful, acreditar
+terminal y lock liberado, recargar el mismo runner sin solapamiento y preservar
+la fecha del próximo ciclo. Acreditar PID/cwd/argv/config/hash, cadencia, expiry y
+sleep efectivos; no fabricar un tick de prueba, probe o publicación. El siguiente
+tablero/error se acredita por el ciclo natural, separado del FIRST runtime.
+
+El lineage consume recibos exactos de publicación. HD78 `2.1.78`, source
+`81bea9b650fc46d7a476ccfc7750fba9fe87421b`, deploy
+`m7twhjekhxjgroc4dt65ojfg` FINISHED y health versión HTTP200 ya están acreditados.
+No convertir HEAD en otro HD77 pendiente, inferir SHA servido desde versión,
+repetir sus checks, rebump ni redeploy. La base AUTO servida histórica sólo se
+actualiza con su autoridad específica.
+
+### GitHub durable y cierre
+
+El orquestador es único writer GitHub. Cada pendiente concreto permanece OPEN
+en su issue existente con alcance/aceptación, owner/source/branch/paths,
+comando/cwd/source/exit/stderr o NOT_RUN, dependencias y siguiente acción.
+WIP sin fuente Git durable se declara **SINCOMMIT**, sin forzar commits ni tocar
+trabajo ajeno. El integrador entrega recibos causales al orquestador para esa
+misma unidad. Si falla un write, conservar payload y HTTP/comando/error/owner;
+no afirmar actualización.
+
+Producto CLOSE exige publicación/remoto/deploy FINISHED y versión/URL/hora/SHA/
+UUID acreditados, no sólo READY/PASS/merge/push. QA/SHA postdeploy diferidos no
+bloquean publicación y no equivalen a aceptación100. Helpers/docs/config/Git no
+producen releases vacíos. #180 footer ya está CLOSED; #163/#173 FIN, #164 PDF,
+#174 S1, #175 facts, #176 native/mobile, #177 Pilot, #178 consumidor OPS separado,
+#179 repairs y #181 vigía conservan sus owners y alcance residual.
+
+## Autoridad vigente — 10-10-2026, HD manual y AUTO por unidades cerradas
+
+La orden actual del dueño reemplaza cadencia20min por **300s**, diez commits
+funcionales únicos admitidos y cooldown600s desde éxito SERVED. HD manual no
+espera diez. El singleton existente conserva locks separados; no segundo watcher.
+`auto-hd-admission.json` enumera unidades CLOSED con SHA/gate hash y commits
+aislados explícitos: dedup por patch-id funcional, nunca wholebranch/WIP. Holds
+son por contenido; unidad bloqueada se excluye con motivo. El flag scoped173
+no constituye autorización implícita para importar cualquier otro issue.
+
+Antes de cada check pesado el ciclo exige grant Secretaría en `auto-hd-window.json`:
+sourceSHA/tree, ownerSession, cwd, runtime/hash, argv de comandos, budget, START_BY
+y leaseID exactos. Request persistente se emite sólo al cambiar source/argv;
+START/terminal/release reales por SHA; falta/expiración/revocación falla cerrado.
+Cada SHA release nuevo requiere binding propio; no lease heredada.
+
+`qa-deferred-current.json` puede registrar QA_NOT_RUN_DEFERRED_OWNER por SHA,
+owner/scope/recovery y ausencia de contenido conocido sin resolver EN el corte;
+permite publicar tras code gates y artefacto exactos sin Pilot visual global.
+No equivale a PASS/issueclose ni permite omitir fallos públicos/permisos/datos/
+migraciones: contenido afectado debe resolverse o quedar fuera con recorte concreto.
+La receta anterior de Pilot sigue para candidatos sin esa autoridad explícita.
+Los baseline/recibos173 y HD75 cerrados se conservan; no se fabrican desde health.
+
 Este ciclo reemplaza la automatización general de LedBox por la autorización
 limitada a **#173**. Implementación en `scripts/automation-*.mjs`; los entrypoints
 `orquestador.mjs` y `deploy.mjs` comparten el mismo ciclo. La entrega del código
@@ -17,7 +87,7 @@ no activa el watcher ni publica una versión.
 | `node scripts/orquestador.mjs reject` | Archiva un READY rechazado por Pilot FAIL exacto, sólo sin release/publicación; no construye ni publica. |
 | `npm run ht` / `npm run hd` / `npm run deploy:patch` | Produce `READY` si no hay candidato; en la siguiente ejecución exige gate independiente antes de publicar. |
 | `npm run auto-hd` | Umbral10 nuevos funcionales únicos #173 desde último SHA servido acreditado; cooldown600s. Sin baseline: AUTO_WAITING_SERVED_BASELINE. |
-| `npm run watch-hd` / `-- --interval 20` | Singleton; auto cada20min. Sólo20 autorizado. Requiere primer HD servido acreditado, Pilot final y sin pending al inicio; no activa gates. |
+| `npm run watch-hd` / `-- --interval 5` | Singleton; auto cada300s, diez únicos admitidos y cooldown600s desde éxito. Requiere baseline servido acreditado; no concede grants. |
 | `node scripts/orquestador.mjs ht --dry-run` | Sólo inventario Git local. No mergea, construye, activa ni publica. |
 
 Los diagnósticos no necesitan habilitación. `pp` hace GET con `redirect:manual`,
@@ -92,13 +162,14 @@ real (`SOURCE_COMMIT`, `GITHUB_SHA`, `LEDBOX_BUILD_SHA`):
 2. `npx prisma generate`
 3. `npm run typecheck`
 4. `npm run test:rules`
-5. `node --test tests/automation.test.mjs`
+5. Automation tests incluidos una sola vez por `test:rules` → `npm run test:automation`; invocación directa sólo si ese script no los incluye.
 6. `npm run build`
 
-La suite `.mjs` se ejecuta explícitamente y su label de evidencia es
-`test:automation`. Desde la base integrada `b582d0e`, el integrador también la
-añadió a `test:rules` mediante `npm run test:automation`; no está en el glob
-`.test.ts`. El ciclo conserva su invocación directa y evidencia propia.
+La suite `.mjs` tiene label `test:automation`, con evidencia de ejecución embebida
+en `test:rules` cuando el package exacto fija `&& npm run test:automation`.
+El ciclo valida ese contrato del script y no repite la misma suite. Si no está
+incluida, conserva invocación directa. Prisma validate usa URL sintética local
+sin conexión; build mantiene DATABASE_URL vacío y claves OwnData ausentes.
 
 Se verifica HEAD limpio después de cada check y el standalone real: versión,
 SHA inyectado en `server.js` y manifest SHA-256 de todos sus archivos. Symlinks

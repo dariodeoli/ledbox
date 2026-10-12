@@ -25,7 +25,11 @@ export const dynamic = "force-dynamic";
  * se usa el mes en curso. Devuelve marcadores normalizados (`items`) y alertas
  * de vencimiento (`alerts`), siempre filtrados por la empresa activa.
  *
- * No se inventan estados ni fechas derivadas: cada ítem corresponde a un
+ * Duraciones reales se seleccionan por solapamiento [startsAt,endsAt).
+ * `date` ubica el evento en su inicio o primer día visible si empezó antes;
+ * `at/endAt/endDate` conservan sus límites reales completos, sin recortarlos.
+ * Fechas incompletas/invertidas no se convierten en duraciones abiertas.
+ * No se inventan estados ni timestamps: cada ítem corresponde a un
  * timestamp real (`Event.setupAt/startsAt/endsAt/strikeAt`,
  * `EventTask.dueAt`, `ClientPayment.paidAt` de los cobros cobrados y
  * `ClientPayment.dueAt` de los cobros a plazo pendientes —issue #16—,
@@ -73,17 +77,18 @@ function eventItem(
   kind: Extract<AdminCalendarItemKind, "setup" | "event" | "event_end" | "strike">,
   event: CalendarEvent,
   at: Date,
+  visibleDay?: string,
 ): AdminCalendarItem {
-  const multiDay = Boolean(
-    kind === "event" && event.startsAt && event.endsAt && dayKeyOf(event.startsAt) !== dayKeyOf(event.endsAt),
+  const duration = Boolean(
+    kind === "event" && event.startsAt && event.endsAt && event.endsAt > event.startsAt,
   );
   return {
     id: `${kind}:${event.id}`,
     kind,
-    date: dayKeyOf(at),
+    date: visibleDay ?? dayKeyOf(at),
     at: at.toISOString(),
-    endAt: multiDay && event.endsAt ? event.endsAt.toISOString() : null,
-    endDate: multiDay && event.endsAt ? dayKeyOf(event.endsAt) : null,
+    endAt: duration && event.endsAt ? event.endsAt.toISOString() : null,
+    endDate: duration && event.endsAt ? dayKeyOf(event.endsAt) : null,
     title: event.name,
     subtitle: joinParts([event.client.company || event.client.name, placeLabel(event.location, event.city)]),
     href: "/eventos",
@@ -105,7 +110,7 @@ export async function GET(request: Request) {
   if (!isValidDayKey(fromKey) || !isValidDayKey(toKey)) return jsonError("Parametrizá el rango con días válidos (YYYY-MM-DD).", 400);
   if (toKey < fromKey) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
   const rangeDays = (dayStart(nextDayKey(toKey)).getTime() - dayStart(fromKey).getTime()) / DAY_MS;
-  if (rangeDays > MAX_RANGE_DAYS) return jsonError("El rango no puede superar un año.", 400);
+  if (rangeDays > MAX_RANGE_DAYS) return jsonError("El rango no puede superar 400 días.", 400);
 
   const from = dayStart(fromKey);
   const to = dayStart(nextDayKey(toKey)); // límite exclusivo
@@ -117,6 +122,7 @@ export async function GET(request: Request) {
         organizationId,
         status: { not: "CANCELLED" },
         OR: [
+          { startsAt: { lt: to }, endsAt: { gt: from } },
           { setupAt: { gte: from, lt: to } },
           { startsAt: { gte: from, lt: to } },
           { endsAt: { gte: from, lt: to } },
@@ -192,7 +198,9 @@ export async function GET(request: Request) {
   for (const event of events) {
     if (event.setupAt && event.setupAt >= from && event.setupAt < to) items.push(eventItem("setup", event, event.setupAt));
     const startsAt = event.startsAt ?? event.endsAt;
-    if (startsAt && startsAt >= from && startsAt < to) items.push(eventItem("event", event, startsAt));
+    const duration = Boolean(event.startsAt && event.endsAt && event.endsAt > event.startsAt);
+    const overlaps = duration ? Boolean(event.startsAt! < to && event.endsAt! > from) : Boolean(startsAt && startsAt >= from && startsAt < to);
+    if (startsAt && overlaps) items.push(eventItem("event", event, startsAt, startsAt < from ? fromKey : undefined));
     if (
       event.endsAt &&
       event.startsAt &&

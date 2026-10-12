@@ -8,6 +8,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
+import { guardUserOwnerChange, UserOwnerGuardError } from "@/lib/server/user-owner-guard";
 import { emailError, FIELD_MESSAGES, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
@@ -172,17 +173,32 @@ export async function PATCH(request: Request) {
     if (membershipData.role && membershipData.role !== membership.role) return jsonError("You cannot change your own role.", 400);
   }
 
-  const updated = await db.$transaction(async (tx) => {
-    const next = await tx.adminMembership.update({ where: { id: membership.id }, data: membershipData });
-    // Si la cuenta pertenece a una sola empresa, el rol global acompaña al de la membresía.
-    if (membershipData.role && membership.user._count.memberships === 1) {
-      await tx.adminUser.update({ where: { id: membership.adminUserId }, data: { role: membershipData.role } });
-    }
-    if (Object.keys(accountData).length > 0) {
-      await tx.adminUser.update({ where: { id: membership.adminUserId }, data: accountData });
-    }
-    return next;
-  });
+  let updated: { role: AdminRole; active: boolean };
+  let currentAccountActive = membership.user.active;
+  let previousRole = membership.role;
+  let previousActive = membership.active;
+  try {
+    updated = await db.$transaction(async (tx) => {
+      const current = await guardUserOwnerChange(tx, {
+        organizationId, adminUserId: membership.adminUserId, actorId: actor.id, actorRole, patch: membershipData,
+      });
+      currentAccountActive = current.user.active;
+      previousRole = current.role;
+      previousActive = current.active;
+      const next = await tx.adminMembership.update({ where: { id: current.id }, data: membershipData });
+      // Si la cuenta pertenece a una sola empresa, el rol global acompaña al de la membresía.
+      if (membershipData.role && current.user._count.memberships === 1) {
+        await tx.adminUser.update({ where: { id: membership.adminUserId }, data: { role: membershipData.role } });
+      }
+      if (Object.keys(accountData).length > 0) {
+        await tx.adminUser.update({ where: { id: membership.adminUserId }, data: accountData });
+      }
+      return next;
+    });
+  } catch (error) {
+    if (error instanceof UserOwnerGuardError) return jsonError(error.message, error.status);
+    throw error;
+  }
 
   // El correo es la identidad de acceso: al cambiarlo se cierran las sesiones
   // abiertas de esa cuenta (si el cambio es del propio actor, también la suya).
@@ -200,10 +216,10 @@ export async function PATCH(request: Request) {
     name: accountData.name ?? membership.user.name,
     email: accountData.email ?? membership.user.email,
     role: updated.role,
-    active: membership.user.active && updated.active,
+    active: currentAccountActive && updated.active,
   };
   const changes = auditChanges(
-    { name: membership.user.name, email: membership.user.email, role: membership.role, active: membership.active },
+    { name: membership.user.name, email: membership.user.email, role: previousRole, active: previousActive },
     { name: next.name, email: next.email, role: updated.role, active: updated.active },
     ["name", "email", "role", "active"],
   );

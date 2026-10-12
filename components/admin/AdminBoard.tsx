@@ -134,6 +134,7 @@ export function AdminViewSwitch({
   onChange,
   label,
   views = DEFAULT_MODULE_VIEWS,
+  labels,
 }: {
   view: AdminModuleView;
   onChange: (view: AdminModuleView) => void;
@@ -141,11 +142,13 @@ export function AdminViewSwitch({
   label: string;
   /** Vistas ofrecidas, en orden; por defecto lista y tablero. */
   views?: readonly AdminModuleView[];
+  /** Rótulos de esta pantalla; no cambian los nombres canónicos por defecto. */
+  labels?: Partial<Record<AdminModuleView, string>>;
 }) {
   return (
     <div className="admin-viewswitch" role="group" aria-label={label}>
       {views.map((option) => {
-        const optionLabel = MODULE_VIEW_OPTIONS[option].label;
+        const optionLabel = labels?.[option] ?? MODULE_VIEW_OPTIONS[option].label;
         return (
           <button
             key={option}

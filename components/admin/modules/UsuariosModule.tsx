@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDateTime, formatNumber, invitationStatusLabel, invitationStatusTone, mailStatusLabel, statusTone } from "@/lib/admin-format";
 import type { AdminTeamInvitation } from "@/lib/admin-types";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
 import { adminAvatarUrl, type AdminUserRow } from "@/lib/admin-types";
-import { emailError, FIELD_MESSAGES, normalizePersonName, personNameValid } from "@/lib/field-rules";
+import { invitationFormValidity, userFormValidity } from "./usuarios-form-validity";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -50,6 +50,22 @@ const EMPTY_EDIT = { name: "", email: "" };
 
 const EMPTY_INVITE = { email: "", role: "VIEWER" };
 
+/** AdminFormPanel exposes busy but no validity prop. Keep its shared layout;
+ * synchronize only this instance's native submit button before paint. The
+ * submit handlers independently guard validity, permission and busy state.
+ */
+function useUserFormSubmitValidity(error: string | null, busy: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const button = ref.current?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (button) {
+      button.disabled = busy || error !== null;
+      button.title = error ?? "";
+    }
+  });
+  return ref;
+}
+
 /**
  * Equipo / Usuarios (issue #22): además de crear, cambiar el rol y
  * activar/desactivar, un OWNER/ADMIN edita el **nombre** y el **correo** de un
@@ -82,6 +98,10 @@ export function UsuariosModule() {
   const [editError, setEditError] = useState("");
 
   const writable = canManageUsers(role);
+  const createValidity = userFormValidity(form, "create");
+  const editValidity = userFormValidity(editForm, "edit");
+  const createFormRef = useUserFormSubmitValidity(createValidity.error, busy);
+  const editFormRef = useUserFormSubmitValidity(editValidity.error, editBusy || (editing !== null && !canEditUser(editing)));
   const compact = useAdminNarrowViewport();
   const list = useMemo(() => users.data ?? [], [users.data]);
   const rows = useMemo(
@@ -109,11 +129,16 @@ export function UsuariosModule() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!writable || busy) return;
+    if (createValidity.error) {
+      setFormError(createValidity.error);
+      return;
+    }
     setBusy(true);
     setFormError("");
     setFormLimit("");
     setNotice("");
-    const result = await adminSend("/api/admin/users", form);
+    const result = await adminSend("/api/admin/users", { ...form, name: createValidity.name, email: createValidity.email });
     setBusy(false);
     if (!result.ok) {
       // Tope del plan (issue #42): el servidor explica el límite y acá se suma
@@ -136,16 +161,10 @@ export function UsuariosModule() {
 
   async function submitEdit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing) return;
-    const name = normalizePersonName(editForm.name);
-    const email = editForm.email.trim().toLowerCase();
-    if (!personNameValid(name)) {
-      setEditError(FIELD_MESSAGES.name);
-      return;
-    }
-    const invalidEmail = emailError(email);
-    if (invalidEmail) {
-      setEditError(invalidEmail);
+    if (!editing || !canEditUser(editing) || editBusy) return;
+    const { name, email, error } = editValidity;
+    if (error) {
+      setEditError(error);
       return;
     }
     setEditBusy(true);
@@ -304,28 +323,29 @@ export function UsuariosModule() {
       {writable ? <InvitationsPanel /> : null}
 
       {writable && showForm ? (
+        <div ref={createFormRef}>
         <AdminFormPanel
           title="Nuevo usuario"
           submitLabel="Crear usuario"
           onSubmit={submit}
           onCancel={() => setShowForm(false)}
           busy={busy}
-          status={formError}
-          statusNote={formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
+          status={createValidity.error ?? formError}
+          statusNote={!createValidity.error && formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
         >
           <TextField
             label="Nombre"
             required
             maxLength={120}
             value={form.name}
-            onChange={(value) => setForm({ ...form, name: value })}
+            onChange={(value) => { setForm({ ...form, name: value }); setFormError(""); }}
             placeholder="Ej.: Ana Martínez"
           />
           <EmailField
             label="Correo"
             required
             value={form.email}
-            onChange={(value) => setForm({ ...form, email: value })}
+            onChange={(value) => { setForm({ ...form, email: value }); setFormError(""); }}
             placeholder="ana@ledbox.online"
           />
           <PasswordField
@@ -334,7 +354,7 @@ export function UsuariosModule() {
             required
             minLength={12}
             value={form.password}
-            onChange={(value) => setForm({ ...form, password: value })}
+            onChange={(value) => { setForm({ ...form, password: value }); setFormError(""); }}
             autoComplete="new-password"
           />
           <SelectField
@@ -344,16 +364,18 @@ export function UsuariosModule() {
             options={ROLE_SELECT_OPTIONS}
           />
         </AdminFormPanel>
+        </div>
       ) : null}
 
       {editing ? (
+        <div ref={editFormRef}>
         <AdminFormPanel
           title={`Editar usuario · ${editing.name}`}
           submitLabel="Guardar cambios"
           onSubmit={submitEdit}
           onCancel={() => setEditing(null)}
           busy={editBusy}
-          status={editError}
+          status={editValidity.error ?? editError}
         >
           <TextField
             label="Nombre"
@@ -376,6 +398,7 @@ export function UsuariosModule() {
             hint="Si cambia, se cierran sus sesiones abiertas y entra con el correo nuevo."
           />
         </AdminFormPanel>
+        </div>
       ) : null}
 
       <AdminDataState
@@ -510,6 +533,7 @@ function InviteDialog({
   const closeRef = useRef<HTMLButtonElement>(null);
   const [invite, setInvite] = useState(EMPTY_INVITE);
   const [localError, setLocalError] = useState("");
+  const inviteValidity = invitationFormValidity(invite.email);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -522,13 +546,13 @@ function InviteDialog({
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = emailError(invite.email);
-    if (invalid) {
-      setLocalError(invalid);
+    if (busy) return;
+    if (inviteValidity.error) {
+      setLocalError(inviteValidity.error);
       return;
     }
     setLocalError("");
-    onSubmit({ email: invite.email.trim().toLowerCase(), role: invite.role });
+    onSubmit({ email: inviteValidity.email, role: invite.role });
   }
 
   return (
@@ -575,8 +599,8 @@ function InviteDialog({
             options={ROLE_SELECT_OPTIONS}
             hint="El propietario no se invita por correo."
           />
-          {localError ? (
-            <AdminNote tone="error">{localError}</AdminNote>
+          {inviteValidity.error || localError ? (
+            <AdminNote tone="error">{inviteValidity.error ?? localError}</AdminNote>
           ) : error ? (
             limitError ? (
               <AdminPlanLimitNote message={error} />
@@ -589,7 +613,7 @@ function InviteDialog({
             <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
               Cancelar
             </AdminButton>
-            <AdminButton type="submit" variant="primary" icon="mail" busy={busy}>
+            <AdminButton type="submit" variant="primary" icon="mail" busy={busy} disabled={inviteValidity.error !== null}>
               Enviar invitación
             </AdminButton>
           </div>
@@ -687,13 +711,16 @@ function InvitationsPanel() {
   const expiredCount = list.length - pendingCount;
 
   async function submitInvite(invite: { email: string; role: string }) {
+    if (inviteBusy) return;
+    const validity = invitationFormValidity(invite.email);
+    if (validity.error) { setInviteError(validity.error); return; }
     setInviteBusy(true);
     setInviteError("");
     setInviteLimit(false);
     setNotice(null);
     const result = await adminSend<{ invitation: AdminTeamInvitation; mail: { status: string; error: string | null } }>(
       "/api/admin/invitations",
-      invite,
+      { ...invite, email: validity.email },
     );
     setInviteBusy(false);
     if (!result.ok) {

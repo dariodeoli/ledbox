@@ -6,12 +6,15 @@ import { join } from "node:path";
 import { hostname, tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { acquireLock, artifactSeal, assertIntegrator, assertReleaseOnly, atomicJson, evidence, git, inventory, LIVE, readJson, requirePilotGate, servedBaseline } from "../scripts/automation-core.mjs";
-import { cycle, loadState } from "../scripts/automation-cycle.mjs";
+import { cycle as actualCycle, loadState } from "../scripts/automation-cycle.mjs";
+import { admittedInventory, requireHeavyWindow, requireCandidateGate } from "../scripts/automation-admission.mjs";
 import { deploySettings, hubClient } from "../scripts/automation-hub.mjs";
 import { diagnostics } from "../scripts/automation-diagnostics.mjs";
 import { verifyRelease } from "../scripts/verify-release.mjs";
 
 const temp = () => { const root = join(tmpdir(), "opencode"); mkdirSync(root, { recursive: true }); return mkdtempSync(join(root, "ledbox-auto-test-")); };
+// Existing cycle scenarios simulate all commands; real execution remains fail-closed.
+const cycle = (cwd, config, options) => actualCycle(cwd, { ...config, authorizeWindow: () => ({ leaseID: "SIMULATED_TEST_WINDOW", budgetSeconds: 900 }) }, options);
 function fixture() {
   const dir = temp(), cwd = join(dir, "repo"), remote = join(dir, "remote.git"); mkdirSync(cwd);
   execFileSync("git", ["init", "--bare", remote], { stdio: "ignore" });
@@ -30,6 +33,38 @@ function fixture() {
 function commit(cwd, path, body, subject = "fix(qa): cambio autorizado (Refs #173)") {
   mkdirSync(join(cwd, path, ".."), { recursive: true }); writeFileSync(join(cwd, path), body); git(cwd, "add", path); git(cwd, "commit", "-m", subject); return git(cwd, "rev-parse", "HEAD");
 }
+test("release metadata: patch, lock and changelog must advance together", async (t) => {
+  const scenarios = [
+    { name: "package-only release", lock: false, notes: false, error: /omite actualizar package-lock/ },
+    { name: "lock omitted despite changelog", lock: false, notes: true, error: /omite actualizar package-lock/ },
+    { name: "changelog omitted", lock: true, notes: false, error: /omite actualizar NOVEDADES/ },
+    { name: "wrong changelog version", lock: true, notes: true, noteVersion: "2.1.79", error: /NOVEDADES sin entrada/ },
+    { name: "root lock version stale", lock: true, notes: true, rootVersion: "2.1.77", error: /Lock version incoherente/ },
+    { name: "history removed", lock: true, notes: true, replaceHistory: true, error: /altera el historial/ },
+    { name: "major/minor reset rejected", lock: true, notes: true, version: "1.0.1", error: /siguiente patch/ },
+    { name: "coherent next 2.1 patch", lock: true, notes: true },
+  ];
+  for (const scenario of scenarios) await t.test(scenario.name, () => {
+    const f = fixture();
+    try {
+      writeFileSync(join(f.cwd, "package.json"), JSON.stringify({ name: "qa", version: "2.1.77", private: true }));
+      writeFileSync(join(f.cwd, "package-lock.json"), JSON.stringify({ name: "qa", version: "2.1.77", packages: { "": { name: "qa", version: "2.1.77" } } }));
+      git(f.cwd, "add", "package.json", "package-lock.json"); git(f.cwd, "commit", "-m", "fixture: current 2.1 patch");
+      const candidate = git(f.cwd, "rev-parse", "HEAD"), version = scenario.version ?? "2.1.78";
+      const pkg = readJson(join(f.cwd, "package.json")); pkg.version = version;
+      writeFileSync(join(f.cwd, "package.json"), JSON.stringify(pkg));
+      if (scenario.lock) {
+        const lock = readJson(join(f.cwd, "package-lock.json")); lock.version = version; lock.packages[""].version = scenario.rootVersion ?? version;
+        writeFileSync(join(f.cwd, "package-lock.json"), JSON.stringify(lock));
+      }
+      if (scenario.notes) writeFileSync(join(f.cwd, "docs/NOVEDADES.md"), `${scenario.replaceHistory ? "" : "# QA\n"}\n## v${scenario.noteVersion ?? version} — 2026-10-12\n\n- Cambio real del producto.\n`);
+      git(f.cwd, "add", "package.json", "package-lock.json", "docs/NOVEDADES.md"); git(f.cwd, "commit", "-m", "fixture: release metadata");
+      const release = git(f.cwd, "rev-parse", "HEAD");
+      if (scenario.error) assert.throws(() => assertReleaseOnly(f.cwd, candidate, release), scenario.error);
+      else assert.equal(assertReleaseOnly(f.cwd, candidate, release), "2.1.78");
+    } finally { f.cleanup(); }
+  });
+});
 function build(cwd, sha) {
   const root = join(cwd, ".next/standalone"); mkdirSync(root, { recursive: true });
   writeFileSync(join(root, "server.js"), JSON.stringify({ LEDBOX_BUILD_SHA: sha }));
@@ -39,12 +74,98 @@ const fakeRunner = async (cwd, executable, args, opts) => {
   assert.equal(opts.env.DATABASE_URL, ""); assert.equal(opts.env.SOURCE_COMMIT, git(cwd, "rev-parse", "HEAD"));
   if (args.join(" ") === "run build") build(cwd, opts.env.SOURCE_COMMIT);
 };
+
+test("real cycle refuses heavy commands without a Secretaría grant", async () => {
+  const f = fixture(); let calls = 0;
+  try {
+    commit(f.cwd, "app/a.js", "changed\n");
+    await assert.rejects(actualCycle(f.cwd, f.config, { mode: "prepare", runner: async () => { calls++; } }), /WAIT_SECRETARIA_WINDOW/);
+    assert.equal(calls, 0);
+    assert.equal(loadState(f.config).pending, null);
+    assert.equal(existsSync(f.config.cycleLock), false);
+  } finally { f.cleanup(); }
+});
+
+test("window binds source/tree/runtime/commands, rejects expiry and revoked grants", () => {
+  const f = fixture();
+  try {
+    const sha = git(f.cwd, "rev-parse", "HEAD"), commands = [["npm", "run", "build"]];
+    const config = { ...f.config, ownerSession: "test-owner", windowFile: join(f.dir, "window.json") };
+    const expected = { sha, cwd: f.cwd, commands }, now = Date.now();
+    const grant = { grant: true, issuer: "Secretaria", ownerSession: "test-owner", sourceSHA: sha, sourceTree: git(f.cwd, "rev-parse", "HEAD^{tree}"), cwd: f.cwd, runtime: process.execPath, runtimeSHA256: evidence(process.execPath).sha256, commands, leaseID: "fixture-lease", budgetSeconds: 30, START_BY: new Date(now + 5000).toISOString() };
+    atomicJson(config.windowFile, grant); assert.equal(requireHeavyWindow(config, expected, now).leaseID, grant.leaseID);
+    assert.throws(() => requireHeavyWindow(config, { ...expected, sha: "0".repeat(40) }, now), /mismatch/);
+    assert.throws(() => requireHeavyWindow(config, expected, now + 6000), /expired/);
+    config.windowStart = { at: now, sha, leaseID: grant.leaseID };
+    assert.equal(requireHeavyWindow(config, expected, now + 6000).leaseID, grant.leaseID, "START_BY does not terminate an already started lease");
+    assert.throws(() => requireHeavyWindow(config, expected, now + 30001), /expired/);
+    atomicJson(config.windowFile, { ...grant, revoked: true }); assert.throws(() => requireHeavyWindow(config, expected, now), /mismatch/);
+  } finally { f.cleanup(); }
+});
+
+test("closed-unit admission excludes held WIP and deduplicates functional patches", () => {
+  const f = fixture();
+  try {
+    const base = git(f.cwd, "rev-parse", "HEAD");
+    git(f.cwd, "switch", "-c", "donor");
+    const selected = commit(f.cwd, "app/b.js", "closed delta\n", "feat(ops): closed (Refs #161)");
+    const wip = commit(f.cwd, "app/secret.js", "not admitted\n", "feat(qa): unrelated WIP");
+    const gate = join(f.dir, "gate.json"); atomicJson(gate, { status: "PASS", sha: selected });
+    git(f.cwd, "switch", LIVE);
+    const admissionFile = join(f.dir, "admission.json");
+    atomicJson(admissionFile, { schema: 1, scope: "#173", authority: "OWNER_HD_AUTO_20261010", units: [{ id: "closed", status: "CLOSED", sourceSHA: selected, commits: [selected, selected], gate: evidence(gate) }, { id: "held", status: "CLOSED", sourceSHA: wip, commits: [wip], hold: "known PDF FAIL" }] });
+    const config = { ...f.config, admissionFile };
+    const result = admittedInventory(f.cwd, config, base);
+    assert.equal(result.count, 1); assert.deepEqual(result.commits, [selected]); assert.deepEqual(result.branches, []);
+    assert.equal(result.excluded[0].unit, "held");
+    git(f.cwd, "cherry-pick", selected); assert.equal(admittedInventory(f.cwd, config, base).count, 1);
+    git(f.cwd, "cherry-pick", wip); assert.throws(() => admittedInventory(f.cwd, config, base), /not admitted/);
+  } finally { f.cleanup(); }
+});
+
+test("source-bound deferred QA permits exact code gates but never unresolved content", async () => {
+  const f = fixture();
+  try {
+    commit(f.cwd, "app/a.js", "new\n"); await cycle(f.cwd, f.config, { mode: "prepare", runner: fakeRunner });
+    const pending = loadState(f.config).pending;
+    const config = { ...f.config, qaPolicyFile: join(f.dir, "deferred.json") };
+    const policy = { status: "QA_NOT_RUN_DEFERRED_OWNER", authority: "OWNER_QA_DEFERRED_20261010", sha: pending.candidateSHA, owner: "fixture", scope: "broad visual", recover: "owner instruction", unresolvedContent: [] };
+    atomicJson(config.qaPolicyFile, policy);
+    assert.equal(requireCandidateGate(config, pending, requirePilotGate).status, policy.status);
+    atomicJson(config.qaPolicyFile, { ...policy, unresolvedContent: ["known public PDF failure"] }); assert.throws(() => requireCandidateGate(config, pending, requirePilotGate), /content holds/);
+    atomicJson(config.qaPolicyFile, { ...policy, sha: "0".repeat(40) });
+    let pilotCalls = 0;
+    assert.throws(() => requireCandidateGate(config, pending, (candidateConfig, candidate) => {
+      pilotCalls++;
+      assert.equal(candidateConfig, config);
+      assert.equal(candidate.candidateSHA, pending.candidateSHA);
+      throw new Error("EXACT_CANDIDATE_PILOT_REQUIRED");
+    }), /EXACT_CANDIDATE_PILOT_REQUIRED/);
+    assert.equal(pilotCalls, 1, "a deferred policy for another SHA must require this candidate's Pilot gate");
+    assert.throws(() => requireCandidateGate(config, pending, requirePilotGate), { code: "ENOENT" });
+  } finally { f.cleanup(); }
+});
+
+test("code check plan runs embedded automation once and records its provenance", async () => {
+  const f = fixture(), calls = [];
+  try {
+    const pkg = readJson(join(f.cwd, "package.json"));
+    pkg.scripts = { "test:rules": "node --import tsx --test tests/*.test.ts && npm run test:automation", "test:automation": "node --test tests/automation.test.mjs" };
+    commit(f.cwd, "package.json", JSON.stringify(pkg), "chore(qa): embedded script fixture (Refs #173)");
+    commit(f.cwd, "app/a.js", "new functional delta\n");
+    await cycle(f.cwd, f.config, { mode: "prepare", runner: async (...args) => { calls.push([args[1], ...args[2]]); await fakeRunner(...args); } });
+    assert.equal(calls.filter(argv => argv.join(" ") === "npm run test:rules").length, 1);
+    assert.equal(calls.filter(argv => argv.join(" ") === "node --test tests/automation.test.mjs").length, 0);
+    const report = readJson(loadState(f.config).pending.checks.evidence.path);
+    assert.deepEqual(report.embeddedCommands["test:automation"], { via: "test:rules", script: "node --test tests/automation.test.mjs" });
+  } finally { f.cleanup(); }
+});
 const finishedDeployment = sha => ({ application_uuid: "qa-uuid", application_id: 42, deployment_uuid: "deployment-qa", commit: sha, status: "finished", finished_at: "2026-10-09T17:30:41.000000Z", rollback: false });
 function baselineReceipt(f, sha = git(f.cwd, "rev-parse", "HEAD"), pilotCandidate) {
   const path = join(f.dir, `served-${sha}.json`);
   atomicJson(path, { status: "FINISHED", sha, applicationUUID: "qa-uuid", deployments: [finishedDeployment(sha)] });
   const state = loadState(f.config); state.lastServedSHA = sha;
-  state.deployments[sha] = { releaseSHA: sha, served: true, servedAt: new Date().toISOString(), hubEvidence: evidence(path), pilotCandidate };
+  state.deployments[sha] = { releaseSHA: sha, served: true, servedAt: new Date(Date.now() - 720000).toISOString(), hubEvidence: evidence(path), pilotCandidate };
   atomicJson(f.config.stateFile, state); return sha;
 }
 function approve(f) {
@@ -120,7 +241,7 @@ test("checkout/issue/pausa/umbral/cooldown y nodiff detienen publicación sin bo
     assert.equal(readFileSync(f.config.pauseFile, "utf8"), "only Emple\n");
     atomicJson(f.config.enableFile, { enabled: true, scope: "#173" });
     assert.equal((await cycle(f.cwd, f.config, { mode: "auto" })).status, "AUTO_WAITING_SERVED_BASELINE");
-    atomicJson(f.config.stateFile, { schema: 1, deployments: {}, pending: null, lastAttemptAt: new Date().toISOString() });
+    atomicJson(f.config.stateFile, { schema: 1, deployments: {}, pending: null, lastServedAt: new Date().toISOString() });
     baselineReceipt(f, git(f.cwd, "rev-parse", "HEAD^"));
     assert.equal((await cycle(f.cwd, f.config, { mode: "auto" })).status, "COOLDOWN");
     commit(f.cwd, "app/a.js", "base\n", "fix(qa): revert funcional (Refs #173)");
@@ -365,7 +486,7 @@ test("CLI --prepare guarda principal sin habilitación; watcher singleton entre 
     catch (error) { return String(error.stderr); }
   };
   try {
-    const config = { ...JSON.parse(readFileSync(new URL("../scripts/orquestador.config.json", import.meta.url))), ...f.config, logFile: join(f.dir, "log"), watchIntervalMs: 1200000 };
+    const config = { ...JSON.parse(readFileSync(new URL("../scripts/orquestador.config.json", import.meta.url))), ...f.config, admissionFile: join(f.dir, "admission.json"), windowFile: join(f.dir, "window.json"), windowRequestFile: join(f.dir, "request.json"), manualOperationFile: join(f.dir, "manual.json"), qaPolicyFile: join(f.dir, "deferred.json"), logFile: join(f.dir, "log"), watchIntervalMs: 300000 };
     atomicJson(join(f.cwd, "scripts/orquestador.config.json"), config);
     git(f.cwd, "add", "scripts/orquestador.config.json"); git(f.cwd, "commit", "-m", "chore(qa): scoped config (Refs #173)");
     // Config del fixture es ancillary de QA: publicarla en remoto deja count0 para watcher.
@@ -386,7 +507,7 @@ test("CLI --prepare guarda principal sin habilitación; watcher singleton entre 
     const pilotCandidate = approve(f); baselineReceipt(f, pilotCandidate.candidateSHA, pilotCandidate);
     const state = loadState(f.config); state.pending = null; atomicJson(f.config.stateFile, state);
     git(f.cwd, "push", "origin", LIVE);
-    first = spawn(process.execPath, [cli, "watch", "--interval", "20"], { cwd: f.cwd });
+    first = spawn(process.execPath, [cli, "watch", "--interval", "5"], { cwd: f.cwd });
     await new Promise((resolvePromise, reject) => {
       first.stdout.once("data", resolvePromise); first.once("error", reject);
       first.once("exit", code => reject(new Error(`watcher inicial terminó ${code}`)));
@@ -588,7 +709,7 @@ test("AUTO sin baseline acreditado bloquea incluso READY, sin checks/bump/POST n
     commit(f.cwd, "app/a.js", "first manual READY\n"); await cycle(f.cwd, f.config, { mode: "prepare", runner: fakeRunner }); approve(f);
     const original = readFileSync(f.config.stateFile, "utf8"), head = git(f.cwd, "rev-parse", "HEAD");
     const result = await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("no checks"), hub: { trigger: async () => assert.fail("no POST") } });
-    assert.equal(result.status, "AUTO_WAITING_SERVED_BASELINE"); assert.equal(result.countBaseSHA, null); assert.equal(result.cooldownMs, 600000); assert.equal(result.watchIntervalMs, 1200000);
+    assert.equal(result.status, "AUTO_WAITING_SERVED_BASELINE"); assert.equal(result.countBaseSHA, null); assert.equal(result.cooldownMs, 600000); assert.equal(result.watchIntervalMs, 300000);
     assert.equal(readFileSync(f.config.stateFile, "utf8"), original); assert.equal(git(f.cwd, "rev-parse", "HEAD"), head);
     for (const record of [{ served: true, releaseSHA: head }, { served: false, releaseSHA: head }]) {
       const state = loadState(f.config); state.lastServedSHA = head; state.deployments[head] = record;
@@ -610,9 +731,9 @@ test("AUTO cuenta únicos desde served, incluidos pushes remotos no servidos; CA
     commit(f.cwd, "docs/note.md", "docs don't count\n", "docs(qa): ancillary (Refs #173)");
     commit(f.cwd, "app/b.js", "tenth unique\n"); git(f.cwd, "push", "origin", LIVE);
     const remote = git(f.cwd, "rev-parse", `origin/${LIVE}`);
-    let state = loadState(f.config); state.lastAttemptAt = new Date(Date.now() - 599000).toISOString(); atomicJson(f.config.stateFile, state);
+    let state = loadState(f.config); state.lastServedAt = new Date(Date.now() - 599000).toISOString(); atomicJson(f.config.stateFile, state);
     assert.equal((await cycle(f.cwd, f.config, { mode: "auto", runner: async () => assert.fail("cooldown") })).status, "COOLDOWN");
-    state.lastAttemptAt = new Date(Date.now() - 601000).toISOString(); atomicJson(f.config.stateFile, state);
+    state.lastServedAt = new Date(Date.now() - 601000).toISOString(); state.lastAttemptAt = new Date().toISOString(); atomicJson(f.config.stateFile, state);
     const ready = await cycle(f.cwd, f.config, { mode: "auto", runner: fakeRunner }); assert.equal(ready.status, "READY");
     const pending = loadState(f.config).pending;
     assert.equal(pending.count, 10); assert.equal(pending.countBaseSHA, served); assert.equal(pending.baseSHA, remote); assert.equal(pending.remoteBaseSHA, remote);

@@ -33,7 +33,7 @@ test("eventos: tarjetas en ancho compacto con el nombre primero", () => {
     assert.ok(module.includes(`label: "${label}"`), `falta «${label}» en la tarjeta del evento`);
   }
   // El conmutador no se dibuja en ancho compacto (lista y cuadrícula serían iguales).
-  assert.match(module, /narrow \? null : \(\n\s*<AdminViewSwitch/);
+  assert.match(module, /<div className="admin-cal-view-switch">\s*<AdminViewSwitch/, "el calendario se alcanza también desde el selector móvil");
 });
 
 test("clientes: tarjetas en ancho compacto con contacto, deuda, última actividad y estado", () => {

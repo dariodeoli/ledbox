@@ -257,3 +257,65 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - fix(presupuestos): persistir orden A15 y rechazar costos inválidos A04 (Refs #173)
 - fix(automation): rechazar READY sólo con Pilot FAIL exacto sin publicación (Refs #173)
 - fix(schema): persistir orden explícito nullable de ítems sin backfill (Refs #173)
+
+## v2.1.75 — 2026-10-10
+
+- Carrito público compartido y persistente (#157).
+- Guía de cobro real y logo autorizado del cliente (#143, #129).
+- Foco y fondo del menú móvil (#159).
+- Landing comercial y pie institucional único (#156).
+- Validación del contrato de identidad Hub para esta publicación.
+
+## v2.1.76 — 2026-10-10
+
+- Mejoras de operación: edición masiva/en línea, columnas compactas y archivo con fecha opcional.
+- Calendario de eventos: integración de API y vista de calendario con cambios aislados.
+- Automatización: admisión explícita y deduplicada, ventanas exactas y QA diferida ligada al candidato.
+
+## v2.1.77 — 2026-10-10
+
+- Preparación interna de inventario: estados y transiciones privados de servicios, con validaciones y ocho tests propios verificados.
+- Esta ronda no habilita configuración ni cargos de servicios en el panel; la persistencia, DTO y cálculo financiero continúan en sus entregas separadas.
+- QA de aceptación y verificación SHA posterior al deploy diferidas por orden del dueño; no equivalen a PASS ni cierre funcional.
+
+## v2.1.78 — 2026-10-12
+
+- Footer institucional unificado: identidad y operador canónicos de EventOS, privacidad, términos, estado y soporte coherentes en públicas, acceso, panel y portal, conservando la privacidad de LedBox donde corresponde.
+- Guard de release reforzado: el siguiente patch debe actualizar package, lock y NOVEDADES juntos; se rechaza metadata incompleta, reset de versión y alteración del historial.
+- Los documentos firmados conservan sus snapshots. Las correcciones PDF nativas y la nueva composición financiera se califican en sus scopes independientes; este release no las presenta como verificadas.
+- QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño; versión y estado del deploy se acreditan por separado.
+
+## v2.1.79 — 2026-10-12
+
+- El editor de presupuestos utiliza el cálculo comercial canónico después del lock comercial y la comprobación de revisión: totales enteros, descuento fijo, anticipo y líneas excluidas comparten una única aritmética, sin inventar tarifas ni hechos económicos ausentes.
+- La validación conserva el rechazo HTTP 400 de overflow antes de cualquier escritura y las protecciones existentes de firma, empresa y edición concurrente.
+- Tooling offline de procedencia Pilot y política GitHub de pendientes/cierre incorporados junto al cambio real de producto; no habilitan capturas, probes ni aceptación de producción.
+- La evidencia del consumidor conserva la desviación del selector que reejecutó dos subtests previamente aceptados. No se presenta como cumplimiento íntegro del alcance ni certificación PostgreSQL, económica o PDF nativa.
+- QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño. El footer y health compilan la versión real de este release.
+
+## v2.1.80 — 2026-10-12
+
+- Nueva factura en móvil: controles y totales se apilan a una columna, con ancho contraíble y desglose que puede envolver, sin recortar importes. El estilo permanece scoped al formulario en el stylesheet canónico.
+- Usuarios: el PATCH serializa cambios de membresías mediante el lock de la empresa y comprueba el último OWNER efectivo con membresía y cuenta activas antes de una baja o democión; conserva permisos, selfguard, auditoría y revocación de sesiones.
+- Recovery Pilot offline valida referencias, hashes, identidad y binding explícitos; distingue NOT_RUN de FAIL y no inventa trazas, autores o costos. La validación offline no acredita reparación del inventario productivo ni procedencia económica.
+- Los textos explicativos fiscales conservan las razones sociales y los datos guardados sin normalizar su puntuación. QA visual y verificación SHA postdeploy permanecen diferidas; los tests mocked de OWNER no son prueba nativa PostgreSQL.
+
+## v2.1.81 — 2026-10-12
+
+- Carrito público: Tab y Shift+Tab mantienen el foco dentro del pedido abierto; al cerrar por botón, Escape o fondo se recupera el control de apertura si sigue conectado.
+- Finanzas: la división de un cobro pendiente previsualiza y valida los montos redondeados por parte como el API, respetando de dos a doce partes y el saldo exacto.
+- Usuarios: crear, editar e invitar deshabilitan el envío con datos inválidos y muestran el motivo; los campos permanecen editables y se conservan los permisos y el bloqueo de envíos simultáneos.
+- QA visual y SHA postdeploy continúan diferidos por orden del dueño; las pruebas unitarias no acreditan aceptación visual global.
+
+## v2.1.82 — 2026-10-12
+
+- Correos transaccionales: el renderer compartido usa pares de texto y fondo legibles en modo claro y oscuro, incluidos notas, estados, enlaces, pie y botón; conserva el contenido, URLs y texto plano de los consumidores existentes.
+- Correos en teléfono: contenido y enlaces largos pueden envolver, las tablas se ajustan al ancho y el botón mantiene un área táctil mínima de 44 px. El pie HTML toma la versión real compilada.
+- Inventario: disponibilidad y unidades comprometidas usan singular/plural según sus conteos reales; los datos ausentes se muestran como no disponibles en lugar de inventar cero.
+- Los checks de contraste y estructura son offline; render visual Gmail/Outlook, QA y SHA postdeploy permanecen diferidos. No se envían correos reales como parte de esta verificación.
+
+## v2.1.83 — 2026-10-12
+
+- Sitio público: el menú móvil recupera el acceso a Productos, Servicios, Marcas, Proceso y Contacto; el diálogo bloquea el scroll de fondo, restaura el control de apertura y se cierra al pasar a escritorio.
+- Presupuestos: Pedir cambios exige una nota válida antes de enviar; el botón y el envío comparten la validación del límite de 1000 caracteres del API. Registrar aprobación conserva la nota opcional.
+- QA visual móvil, flujos de navegador y SHA postdeploy permanecen diferidos por orden del dueño; las pruebas offline no acreditan aceptación visual global.

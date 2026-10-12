@@ -216,6 +216,21 @@ nav.scrolled { background: var(--glass); -webkit-backdrop-filter: var(--blur); b
     transition: filter .2s, transform .15s;
 }
 .nav-cta:hover { filter: brightness(1.1); transform: scale(1.03); }
+.public-menu-trigger { display: none; }
+.public-mobile-menu { position: fixed; inset: 0; margin: auto; width: calc(100% - 24px); max-width: 400px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 16px; border: 1px solid var(--border-2); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
+.public-mobile-menu::backdrop { background: rgba(0, 0, 0, .72); }
+.public-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.public-menu-head button, .public-menu-trigger { min-width: 44px; min-height: 44px; border: 1px solid var(--border-2); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.public-menu-head button { font-size: 24px; }
+.public-menu-links { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.public-menu-links a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.public-menu-links a:hover { background: var(--surface-2); color: var(--led); }
+.public-menu-trigger:focus-visible, .public-mobile-menu :focus-visible { outline: 2px solid var(--led); outline-offset: 3px; }
+@media (max-width: 768px) {
+  .public-menu-trigger { display: inline-flex; align-items: center; justify-content: center; padding: 8px; }
+  nav:has(> .public-menu-trigger) { gap: 8px; }
+  nav:has(> .public-menu-trigger) > .nav-cta { margin-left: auto; min-height: 44px; }
+}
 
 /* ─── BOTONES ─── */
 .btn-led {
@@ -1065,6 +1080,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field-heading label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .admin-field-heading a, .admin-back-link { color: var(--a-accent); font-size: 11px; text-decoration: none; }
 .admin-field-heading a:hover, .admin-back-link:hover { text-decoration: underline; }
+.admin-field-heading:has(.admin-field-help) { justify-content: flex-start; gap: 4px; }
+.admin-field-heading:has(.admin-field-help) > a { margin-left: auto; }
+.admin-field-help { display: inline-flex; flex-shrink: 0; }
+.admin-field-help > button { display: inline-grid; place-items: center; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--a-muted-2); box-shadow: none; }
+.admin-field-help > button:hover { color: var(--a-accent); }
+.admin-field-help > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-field-help-text { display: block; white-space: normal; overflow-wrap: anywhere; font: 400 13px/1.5 var(--font-body, system-ui); letter-spacing: normal; text-transform: none; }
 .admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: 36px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s; }
 .admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 .admin-field input::placeholder, .admin-field textarea::placeholder { color: var(--a-muted); opacity: 1; }
@@ -1077,6 +1099,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-money { position: relative; min-width: 0; }
 .admin-money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--a-muted); font-size: 12px; font-weight: 600; }
 .admin-money input { padding-left: 34px; }
+.admin-money--compact { width: 100%; max-width: 14rem; }
+@media (max-width: 760px) { .admin-money--compact { max-width: none; } }
 .admin-field--wide { grid-column: 1 / -1; }
 .admin-field-error { color: var(--a-danger); font-size: 11px; }
 /* ── Combobox (issue #88) ──
@@ -1504,13 +1528,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    van juntos. */
 .admin-form-group--item { grid-template-columns: minmax(10rem, 1.5fr) minmax(8.5rem, 1.1fr) minmax(7.5rem, .9fr) 6.5rem minmax(9rem, 1fr); }
 .admin-form-group--item-edit { grid-template-columns: minmax(10rem, 1.5fr) minmax(8.5rem, 1.1fr) minmax(7.5rem, .9fr) minmax(8rem, .9fr) minmax(9rem, 1fr); }
-.admin-form-group--costs { grid-template-columns: minmax(9rem, 1.2fr) minmax(9rem, 1.2fr); }
+.admin-form-group--costs { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 14rem)); }
 .admin-form-group--photo { grid-template-columns: minmax(13rem, 1.6fr) minmax(11rem, 1fr) minmax(12rem, 1.2fr); }
 .admin-photo-preview { display: inline-flex; align-items: center; gap: 8px; }
 /* Precios por frente (issue #110): normal, umbral «desde X días» corto y el
    precio desde esos días; el mínimo va en su fila. */
-.admin-form-group--prices { grid-template-columns: minmax(9rem, 1.2fr) 6.5rem minmax(9rem, 1.2fr); }
-.admin-form-group--min { grid-template-columns: minmax(9rem, 1.2fr); }
+.admin-form-group--prices { grid-template-columns: minmax(11rem, 14rem) 6.5rem minmax(11rem, 14rem); }
+.admin-form-group--min { grid-template-columns: minmax(11rem, 14rem); }
 @media (max-width: 760px) {
   .admin-form-group--item,
   .admin-form-group--item-edit,
@@ -1518,6 +1542,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-form-group--photo,
   .admin-form-group--prices,
   .admin-form-group--min { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+}
+@media (max-width: 640px) {
+  .admin-form-group--costs,
+  .admin-form-group--prices,
+  .admin-form-group--min { grid-template-columns: minmax(0, 1fr); }
 }
 .admin-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-form-actions { display: flex; flex-wrap: wrap; max-width: 100%; gap: 8px; margin-left: auto; }
@@ -1772,7 +1801,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem 5.5rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 64rem; }
+.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 58.5rem; }
+/* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
+.admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
@@ -1856,6 +1887,38 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-fiscal-line > :first-child { grid-column: 1 / -1; }
   .admin-fiscal-line-sum { text-align: left; }
   .admin-fiscal-total-row { grid-template-columns: minmax(6rem, 1fr) minmax(6rem, auto) minmax(5rem, auto); }
+}
+
+/* #167: responsive invoice form only; shared dialogs stay canonical. */
+.admin-invoice-form .admin-fiscal-line,
+.admin-invoice-form .admin-fiscal-line-sum,
+.admin-invoice-form .admin-fiscal-totals {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .admin-invoice-form .admin-fiscal-line,
+  .admin-invoice-form .admin-fiscal-total-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-invoice-form .admin-fiscal-line > *,
+  .admin-invoice-form .admin-fiscal-total-row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-invoice-form .admin-fiscal-line-sum .admin-cell-sub {
+    overflow-wrap: anywhere;
+  }
+
+  .admin-invoice-form .admin-fiscal-total-row > :first-child {
+    text-align: left;
+  }
+
+  .admin-invoice-form .admin-fiscal-line > button {
+    justify-self: end;
+  }
 }
 
 /* ── Plantillas de mensajes (issue #35) ──
@@ -2156,6 +2219,36 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-cal-alert-date { color: var(--a-muted-2); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .admin-cal-alert > .admin-icon { color: var(--a-muted); }
 .admin-cal-mobile { display: none; }
+.admin-cal-view-switch .admin-viewswitch { height: auto; }
+.admin-cal-view-switch .admin-viewswitch-btn { width: 44px; height: 44px; }
+.admin-events-calendar .admin-cal-months { display: grid; min-width: 0; }
+.admin-events-calendar .admin-cal-months[data-double="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-events-calendar .admin-cal-month-section { min-width: 0; }
+.admin-events-calendar .admin-cal-month-label { padding: 8px 12px; color: var(--a-text-strong); font-size: 12.5px; font-weight: 700; }
+.admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-month { gap: 4px; }
+.admin-events-calendar .admin-cal-months[data-double="true"] .admin-cal-cell { padding: 4px; }
+.admin-events-calendar .admin-cal-item { width: 100%; min-height: 44px; text-align: left; cursor: pointer; }
+.admin-events-calendar .admin-cal-item[data-variant="grid"] { display: flex; flex-direction: column; align-items: stretch; padding: 4px; }
+.admin-events-calendar .admin-cal-item[data-variant="grid"] .admin-cal-item-title,
+.admin-events-calendar .admin-cal-item[data-variant="grid"] .admin-cal-item-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.admin-events-calendar .admin-cal-item:focus-visible,
+.admin-events-calendar .admin-cal-day:focus-visible,
+.admin-events-calendar .admin-cal-more:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-events-calendar .admin-cal-item-title,
+.admin-events-calendar .admin-cal-item-sub { white-space: normal; overflow-wrap: anywhere; }
+.admin-events-calendar .admin-cal-day,
+.admin-events-calendar .admin-cal-more { min-height: 44px; }
+.admin-events-calendar .admin-cal-summary { display: grid; gap: 12px; min-width: 0; }
+.admin-events-calendar .admin-cal-summary:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-events-calendar .admin-cal-summary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-events-calendar .admin-cal-summary dt { color: var(--a-muted); font-size: 11px; }
+.admin-events-calendar .admin-cal-summary dd { color: var(--a-text-strong); font-size: 12.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .admin-events-calendar .admin-cal-months { display: none; }
+  .admin-events-calendar .admin-cal-nav { width: 100%; justify-content: space-between; gap: 4px; }
+  .admin-events-calendar .admin-cal-range { white-space: normal; overflow-wrap: anywhere; }
+  .admin-events-calendar .admin-cal-summary dl { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 720px) {
   .admin-cal-month { display: none; }
   .admin-cal-mobile { display: block; }
@@ -2546,6 +2639,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-panel-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 980px) {
+  .admin-events-calendar .admin-cal-months[data-double="true"] { grid-template-columns: minmax(0, 1fr); }
   .admin-shell { grid-template-columns: minmax(0, 1fr); transition: none; }
   .admin-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: min(84vw, 268px); height: 100vh; transform: translateX(-102%); transition: transform .22s ease; box-shadow: var(--a-shadow); }
   .admin-sidebar.is-open { transform: none; }
