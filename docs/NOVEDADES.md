@@ -284,3 +284,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Guard de release reforzado: el siguiente patch debe actualizar package, lock y NOVEDADES juntos; se rechaza metadata incompleta, reset de versión y alteración del historial.
 - Los documentos firmados conservan sus snapshots. Las correcciones PDF nativas y la nueva composición financiera se califican en sus scopes independientes; este release no las presenta como verificadas.
 - QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño; versión y estado del deploy se acreditan por separado.
+
+## v2.1.79 — 2026-10-12
+
+- El editor de presupuestos utiliza el cálculo comercial canónico después del lock comercial y la comprobación de revisión: totales enteros, descuento fijo, anticipo y líneas excluidas comparten una única aritmética, sin inventar tarifas ni hechos económicos ausentes.
+- La validación conserva el rechazo HTTP 400 de overflow antes de cualquier escritura y las protecciones existentes de firma, empresa y edición concurrente.
+- Tooling offline de procedencia Pilot y política GitHub de pendientes/cierre incorporados junto al cambio real de producto; no habilitan capturas, probes ni aceptación de producción.
+- La evidencia del consumidor conserva la desviación del selector que reejecutó dos subtests previamente aceptados. No se presenta como cumplimiento íntegro del alcance ni certificación PostgreSQL, económica o PDF nativa.
+- QA de aceptación y verificación SHA postdeploy diferidas por orden del dueño. El footer y health compilan la versión real de este release.
