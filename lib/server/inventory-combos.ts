@@ -12,7 +12,9 @@ import {
   buildAvailability,
   committedAssignmentWhere,
   isComboItem,
+  effectiveComponents,
   loadRentalSettings,
+  parseComboSubstitutions,
   lockInventoryItems,
   maintenanceUnits,
   resolveRentalBuffers,
@@ -68,24 +70,7 @@ type ComponentItem = Prisma.InventoryItemGetPayload<{ select: typeof COMPONENT_I
 
 type DefinitionRow = { componentId: string; quantity: number };
 
-/** Sustituciones guardadas en la fila del combo: { componenteOriginal: sustituto }. */
-export function parseComboSubstitutions(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [from, to] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof to === "string" && to) out[from] = to;
-  }
-  return out;
-}
-
-/** Componentes efectivos: la definición con las sustituciones autorizadas aplicadas. */
-export function effectiveComponents(
-  definition: ReadonlyArray<DefinitionRow>,
-  substitutions: unknown,
-): Array<{ definitionId: string; componentId: string; quantity: number }> {
-  const subs = parseComboSubstitutions(substitutions);
-  return definition.map((row) => ({ definitionId: row.componentId, componentId: subs[row.componentId] ?? row.componentId, quantity: row.quantity }));
-}
+export { effectiveComponents, parseComboSubstitutions };
 
 type ComboState = {
   combo: { id: string; name: string; status: InventoryStatus };
@@ -303,7 +288,8 @@ export async function commitComboInTx(tx: Tx, options: ComboCommitOptions, locke
     const contributes = plan.per * quantity;
     const ownBefore = plan.counted ? previousQuantity * plan.per : 0;
     const comboQuantity = (plan.counted && plan.existing ? Math.max(0, plan.existing.comboQuantity - ownBefore) : 0) + contributes;
-    // Con asignación suelta (u otro combo) en la misma fila gana lo firme.
+    // Con asignación suelta (u otro combo) en la misma fila gana lo firme. Si este combo
+    // vence antes, su aporte se descuenta solo (ver `settleExpiredComboContributions`).
     let rowHold: Date | null = comboHold;
     if (plan.counted && plan.existing && plan.other > 0) {
       const existingHold = plan.existing.holdExpiresAt;
@@ -369,7 +355,8 @@ async function releaseComboRows(
 ): Promise<{ ok: true } | { ok: false; name: string }> {
   const effective = effectiveComponents(definition, row.comboSubstitutions);
   const now = new Date();
-  // Una fila liberada o con retención vencida ya no suma: sus componentes tampoco.
+  // Una fila liberada ya no suma. Con retención vencida, el aporte ya se descontó al
+  // tomar el lock (`settleExpiredComboContributions`): no hay nada más que restar.
   if (!assignmentCountsAt(row, now)) return { ok: true };
   const rows = [];
   for (const component of effective) {
@@ -525,6 +512,19 @@ export async function substituteComboComponent(options: {
       const toOther = toCounted && toRow ? toRow.quantity : 0;
       const start = row.startsAt ?? event.setupAt ?? event.startsAt;
       const end = row.endsAt ?? event.strikeAt ?? event.endsAt;
+      // La fila del sustituto es única por evento: si ya tiene unidades en otro rango, no se mezclan.
+      if (toCounted && toRow && toOther > 0) {
+        const sameTime = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+        const toStart = toRow.startsAt ?? event.setupAt ?? event.startsAt;
+        const toEnd = toRow.endsAt ?? event.strikeAt ?? event.endsAt;
+        if (!sameTime(toStart, start) || !sameTime(toEnd, end)) {
+          return {
+            ok: false,
+            reason: "conflict",
+            message: `«${substitute.name}» ya está asignado en «${event.name}» con otro rango de fechas: alineá las fechas antes de sustituir.`,
+          } as const;
+        }
+      }
       const settings = await loadRentalSettings(options.organizationId, tx);
       const availability = await availabilityForRange({
         organizationId: options.organizationId,

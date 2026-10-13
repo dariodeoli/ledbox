@@ -41,6 +41,7 @@ import {
   insufficientMessage,
   isComboAssignment,
   isComboItem,
+  settleComboContributions,
   loadAssignments,
   loadRentalSettings,
   resolveRentalBuffers,
@@ -888,27 +889,37 @@ export async function POST(request: Request) {
   if (kind === "assignment-delete") {
     const id = typeof body.id === "string" ? body.id : "";
     if (!id) return jsonError("Falta la asignación.", 400);
-    const existing = await db.eventInventory.findFirst({
-      where: { id, event: { organizationId } },
-      select: {
-        id: true,
-        quantity: true,
-        startsAt: true,
-        endsAt: true,
-        checkedOut: true,
-        checkedOutAt: true,
-        checkedIn: true,
-        checkedInAt: true,
-        conditionOut: true,
-        conditionIn: true,
-        comboQuantity: true,
-        inventoryId: true,
-        inventory: { select: { name: true } },
-        event: { select: { name: true } },
-      },
-    });
+    const readAssignment = () =>
+      db.eventInventory.findFirst({
+        where: { id, event: { organizationId } },
+        select: {
+          id: true,
+          quantity: true,
+          startsAt: true,
+          endsAt: true,
+          checkedOut: true,
+          checkedOutAt: true,
+          checkedIn: true,
+          checkedInAt: true,
+          conditionOut: true,
+          conditionIn: true,
+          comboQuantity: true,
+          releasedAt: true,
+          holdExpiresAt: true,
+          inventoryId: true,
+          inventory: { select: { name: true } },
+          event: { select: { name: true } },
+        },
+      });
+    let existing = await readAssignment();
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
     if (existing.comboQuantity > 0) {
+      // Un combo cuya retención venció ya no aporta: se descuenta antes de decidir.
+      await settleComboContributions(organizationId, existing.inventoryId);
+      existing = await readAssignment();
+      if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
+    }
+    if (existing.comboQuantity > 0 && assignmentCountsAt(existing, new Date())) {
       return jsonError(`Hay unidades de «${existing.inventory.name}» que vienen de un combo del evento: quitá el combo en lugar del componente.`, 409);
     }
     if (await isComboItem(db, organizationId, existing.inventoryId)) {

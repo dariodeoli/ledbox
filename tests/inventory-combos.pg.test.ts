@@ -222,6 +222,73 @@ test("combos en PostgreSQL: capacidad, expansión bajo lock, liberación, sustit
       assert.equal(await committed(chair.id), 0);
     });
 
+    await t.test("combo con retención vencida sobre una fila compartida con 2 sueltas firmes: liberar, quitar o recomprometer devuelve exactamente su aporte", async () => {
+      for (const action of ["release", "remove", "recommit"] as const) {
+        const { org, chair, table, combo, event, commit, committed } = await seed(25, 3);
+        const a = await event(`Mixto ${action}`);
+        assert.ok((await commit(a.id, chair.id, 2)).ok);
+        const placed = await commit(a.id, combo.id, 1, { hold: true });
+        assert.ok(placed.ok);
+        const comboId = placed.ok ? placed.assignment.id : "";
+        const chairRow = () => db.eventInventory.findUniqueOrThrow({ where: { eventId_inventoryId: { eventId: a.id, inventoryId: chair.id } } });
+        assert.equal((await chairRow()).quantity, 12);
+        assert.equal((await chairRow()).holdExpiresAt, null, "la suelta firme mantiene firme la fila compartida");
+        await db.eventInventory.update({ where: { id: comboId }, data: { holdExpiresAt: new Date(Date.now() - 60_000) } });
+
+        if (action === "release") {
+          assert.ok((await releaseComboAssignment({ organizationId: org, assignmentId: comboId })).ok);
+        } else if (action === "remove") {
+          assert.ok((await releaseComboAssignment({ organizationId: org, assignmentId: comboId, remove: true })).ok);
+        } else {
+          const again = await commit(a.id, combo.id, 1, { hold: false });
+          assert.ok(again.ok, JSON.stringify(again));
+          assert.equal(await committed(chair.id), 12, "recomprometer no suma otra vez el aporte viejo");
+          assert.equal(await committed(table.id), 1);
+          const row = await chairRow();
+          assert.equal(row.quantity, 12);
+          assert.equal(row.comboQuantity, 10);
+          // Liberar ahora devuelve exactamente lo suyo.
+          assert.ok((await releaseComboAssignment({ organizationId: org, assignmentId: comboId })).ok);
+        }
+        const row = await chairRow();
+        assert.equal(row.quantity, 2, `${action}: la suelta queda en 2`);
+        assert.equal(row.comboQuantity, 0, action);
+        assert.equal(await committed(chair.id), 2, action);
+        assert.equal(await committed(table.id), 0, action);
+        // La suelta se puede liberar: no quedan unidades trabadas por el combo.
+        const freed = await releaseAssignment({ organizationId: org, assignmentId: row.id });
+        assert.ok(freed.ok, `${action}: ${JSON.stringify(freed)}`);
+        assert.equal(await committed(chair.id), 0, action);
+      }
+    });
+
+    await t.test("la suelta de una fila compartida con un combo vencido se libera directo (el lock descuenta el aporte vencido)", async () => {
+      const { org, chair, combo, event, commit, committed } = await seed(25, 3);
+      const a = await event("Mixto");
+      assert.ok((await commit(a.id, chair.id, 2)).ok);
+      const placed = await commit(a.id, combo.id, 1, { hold: true });
+      assert.ok(placed.ok);
+      await db.eventInventory.update({ where: { id: placed.ok ? placed.assignment.id : "" }, data: { holdExpiresAt: new Date(Date.now() - 60_000) } });
+      const row = await db.eventInventory.findUniqueOrThrow({ where: { eventId_inventoryId: { eventId: a.id, inventoryId: chair.id } } });
+      const freed = await releaseAssignment({ organizationId: org, assignmentId: row.id });
+      assert.ok(freed.ok, JSON.stringify(freed));
+      assert.equal(await committed(chair.id), 0);
+    });
+
+    await t.test("sustitución: si el sustituto ya está asignado en el evento con otro rango, es conflict", async () => {
+      const { org, combo, chair, event, commit, committed } = await seed(25, 3);
+      const spare = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "Silla tiffany", category: "Mobiliario", quantity: 30 } });
+      const a = await event("A");
+      const placed = await commit(a.id, combo.id, 1);
+      assert.ok(placed.ok);
+      const loose = await commitInventoryAssignment({ organizationId: org, eventId: a.id, inventoryId: spare.id, quantity: 2, startsAt: day(11), endsAt: day(12) });
+      assert.ok(loose.ok);
+      const result = await substituteComboComponent({ organizationId: org, assignmentId: placed.ok ? placed.assignment.id : "", componentId: chair.id, substituteId: spare.id });
+      assert.equal(!result.ok && result.reason, "conflict", JSON.stringify(result));
+      assert.equal(await committed(chair.id), 10, "nada cambió");
+      assert.equal(await committed(spare.id), 2);
+    });
+
     await t.test("una unidad dañada de un componente limita el combo", async () => {
       const { org, table, combo, capacity } = await seed(25, 3);
       for (let i = 0; i < 2; i++) {

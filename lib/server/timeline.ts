@@ -809,6 +809,7 @@ const EVENT_SELECT = {
     select: {
       id: true,
       quantity: true,
+      comboQuantity: true,
       releasedAt: true,
       holdExpiresAt: true,
       startsAt: true,
@@ -820,7 +821,7 @@ const EVENT_SELECT = {
       damagedQuantity: true,
       missingQuantity: true,
       damageNotes: true,
-      inventory: { select: { name: true, sku: true } },
+      inventory: { select: { name: true, sku: true, _count: { select: { components: true } } } },
     },
   },
 } as const;
@@ -832,8 +833,10 @@ function assignmentReserveTitle(
   assignment: { quantity: number; releasedAt: Date | null; holdExpiresAt: Date | null },
   name: string,
   now: Date,
+  isCombo = false,
 ): string {
-  const units = `${name} (${formatNumber(assignment.quantity)} u.)`;
+  // La fila del padre es la de «cuántos combos»; las de sus componentes llevan las unidades.
+  const units = isCombo ? `Combo ${name} × ${formatNumber(assignment.quantity)}` : `${name} (${formatNumber(assignment.quantity)} u.)`;
   if (assignment.releasedAt) return `Equipo liberado: ${units}`;
   if (assignment.holdExpiresAt) {
     return assignment.holdExpiresAt.getTime() > now.getTime()
@@ -1000,9 +1003,10 @@ function eventDrafts(event: EventRow, audits: AuditRow[], audience: TimelineAudi
         id: `reserve:${assignment.id}`,
         at: created.createdAt,
         kind: "inventory",
-        title: assignmentReserveTitle(assignment, name, new Date()),
+        title: assignmentReserveTitle(assignment, name, new Date(), assignment.inventory._count.components > 0),
         detail: [
           assignment.inventory.sku,
+          assignment.comboQuantity > 0 ? `incluye ${formatNumber(assignment.comboQuantity)} de combos` : null,
           assignmentRange(assignment.startsAt ?? event.setupAt, assignment.endsAt ?? event.strikeAt),
         ]
           .filter((part): part is string => Boolean(part))

@@ -404,7 +404,83 @@ export async function lockInventoryItems(
   const rows = await tx.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
   );
-  return new Set(rows.map((row) => row.id));
+  const locked = new Set(rows.map((row) => row.id));
+  await settleExpiredComboContributions(tx, organizationId, [...locked]);
+  return locked;
+}
+
+/** Sustituciones guardadas en la fila del combo: { componenteOriginal: sustituto }. */
+export function parseComboSubstitutions(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [from, to] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof to === "string" && to) out[from] = to;
+  }
+  return out;
+}
+
+/** Componentes efectivos: la definición con las sustituciones autorizadas aplicadas. */
+export function effectiveComponents(
+  definition: ReadonlyArray<{ componentId: string; quantity: number }>,
+  substitutions: unknown,
+): Array<{ definitionId: string; componentId: string; quantity: number }> {
+  const subs = parseComboSubstitutions(substitutions);
+  return definition.map((row) => ({ definitionId: row.componentId, componentId: subs[row.componentId] ?? row.componentId, quantity: row.quantity }));
+}
+
+/**
+ * Regla de los combos con retención sobre filas compartidas: la fila del combo es
+ * la fuente de verdad de su aporte (cantidad × combos × componente efectivo). El
+ * aporte de un combo cuenta solo mientras su propia fila cuenta (no liberada y con
+ * retención vigente), aunque la fila del componente siga firme por una asignación
+ * suelta. Como no hay cron, el vencimiento es perezoso: cada vez que se toma el
+ * lock de un ítem se descuentan de sus filas de componentes los aportes que ya no
+ * cuentan (`comboQuantity` por encima de lo que suman los combos vivos). Es
+ * idempotente (se deriva de las filas de combos, no de un marcador) y corre antes
+ * de cualquier validación de stock, liberación o recompromiso. Las lecturas pasivas
+ * (listas) pueden mostrar ese aporte como comprometido hasta la próxima escritura:
+ * es conservador, nunca sobrevende.
+ */
+async function settleExpiredComboContributions(tx: Prisma.TransactionClient, organizationId: string, inventoryIds: ReadonlyArray<string>): Promise<void> {
+  if (inventoryIds.length === 0) return;
+  const now = new Date();
+  const counting = [{ holdExpiresAt: null }, { holdExpiresAt: { gt: now } }];
+  const rows = await tx.eventInventory.findMany({
+    where: { inventoryId: { in: [...inventoryIds] }, comboQuantity: { gt: 0 }, releasedAt: null, OR: counting, event: { organizationId } },
+    select: { id: true, eventId: true, inventoryId: true, quantity: true, comboQuantity: true, checkedOut: true, checkedOutAt: true, checkedIn: true, checkedInAt: true },
+  });
+  if (rows.length === 0) return;
+  const combos = await tx.eventInventory.findMany({
+    where: { eventId: { in: [...new Set(rows.map((row) => row.eventId))] }, releasedAt: null, OR: counting, inventory: { organizationId, components: { some: {} } } },
+    select: { eventId: true, inventoryId: true, quantity: true, comboSubstitutions: true },
+  });
+  const definitions = combos.length
+    ? await tx.inventoryComponent.findMany({
+        where: { organizationId, parentId: { in: [...new Set(combos.map((combo) => combo.inventoryId))] } },
+        select: { parentId: true, componentId: true, quantity: true },
+      })
+    : [];
+  const expected = new Map<string, number>();
+  for (const combo of combos) {
+    const definition = definitions.filter((entry) => entry.parentId === combo.inventoryId);
+    for (const component of effectiveComponents(definition, combo.comboSubstitutions)) {
+      const key = `${combo.eventId}:${component.componentId}`;
+      expected.set(key, (expected.get(key) ?? 0) + component.quantity * combo.quantity);
+    }
+  }
+  for (const row of rows) {
+    if (inMovement(row)) continue;
+    const alive = expected.get(`${row.eventId}:${row.inventoryId}`) ?? 0;
+    if (row.comboQuantity <= alive) continue;
+    const left = row.quantity - (row.comboQuantity - alive);
+    if (left <= 0) await tx.eventInventory.delete({ where: { id: row.id } });
+    else await tx.eventInventory.update({ where: { id: row.id }, data: { quantity: left, comboQuantity: alive } });
+  }
+}
+
+/** Aplica el vencimiento perezoso de aportes de combos a un ítem (con su lock). */
+export async function settleComboContributions(organizationId: string, inventoryId: string): Promise<void> {
+  await db.$transaction((tx) => lockInventoryItems(tx, organizationId, [inventoryId]), { timeout: 15_000 });
 }
 
 /** ¿El ítem es un combo (tiene componentes)? Un combo no tiene stock propio (fase 2c). */
@@ -1089,6 +1165,8 @@ export async function reserveBudgetInventory(options: {
             // Nunca se achica una asignación existente: se completa hasta lo pedido,
             // sin pasar de lo que hay libre (lo ya reservado se mantiene).
             // Una asignación liberada o con retención vencida no contaba: no hay nada que mantener.
+            // Una fila vencida/liberada no tiene aportes de combos vivos (los combos cuyo
+            // aporte venció ya se descontaron al tomar el lock): reactivarla en cero es coherente.
             const stale = Boolean(existing && !assignmentCountsAt(existing, new Date()));
             // La parte de la fila que viene de combos del evento no es de este ítem de presupuesto.
             const comboPart = existing && !stale ? existing.comboQuantity : 0;
