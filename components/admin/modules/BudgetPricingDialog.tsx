@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { ConfirmDialog as AdminConfirm } from "owncoding-ui";
 import {
   AdminButton,
@@ -26,8 +26,6 @@ import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload } from "./Bu
 import { budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { resolveBudgetPaymentPlan, BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { clientDisplayName } from "@/lib/client-identity";
-import { AdminAvatar } from "../AdminAvatar";
-import { clientLogoUrl } from "@/lib/admin-types";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { useAdminSession } from "@/components/admin/AdminShell";
 import { AdminIcon } from "@/components/admin/AdminIcons";
@@ -142,6 +140,10 @@ export function BudgetPricingDialog({
   const [error, setError] = useState("");
   const [section, setSection] = useState("items");
   const [conditions, setConditions] = useState(() => conditionDrafts(budget.installmentsJson ?? []));
+  const formId = useId();
+  const snapshot = () => JSON.stringify([clientId, eventId, title, draft, conditions]);
+  const [initialSnapshot] = useState(snapshot);
+  const dirty = snapshot() !== initialSnapshot;
   const approved = Boolean(budget.approvedAt);
   const closed = budget.status === "LOST" || budget.status === "CANCELLED";
 
@@ -312,11 +314,24 @@ export function BudgetPricingDialog({
   }
 
   return (
-    <AdminDialog title={`Precio y condiciones · ${budget.title}`} size="wide" icon="finance" onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}>
-      <p className="admin-dialog-text">
-        <span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={32} /><span>{clientDisplayName(budget.client)}</span></span> · Presupuesto Nº {budgetReference(budget.id)}. El cliente ve el
-        precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.
-      </p>
+    <AdminDialog
+      title={`Precio y condiciones · ${budget.title}`}
+      size="wide"
+      icon="finance"
+      description={`${clientDisplayName(budget.client)} · Presupuesto Nº ${budgetReference(budget.id)}. El cliente ve el precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.`}
+      dirty={dirty}
+      onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}
+      footer={<>
+        <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</a>
+        <span className="admin-dialog-spacer" />
+        <AdminButton type="button" onClick={onClose}>
+          Cancelar
+        </AdminButton>
+        <AdminButton type="submit" form={formId} variant="primary" disabled={busy || closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0} aria-busy={busy || undefined}>
+          {busy ? "Guardando…" : needsRepricing ? "Ajustar precios y guardar" : "Guardar"}
+        </AdminButton>
+      </>}
+    >
       {approved ? (
         <AdminNote tone="ok">
           El presupuesto ya está aprobado por el cliente: los ítems, el precio y las condiciones quedan como se enviaron. Los
@@ -328,7 +343,7 @@ export function BudgetPricingDialog({
       <nav className="admin-subtabs" aria-label="Editar presupuesto">
         {[{ value: "items", label: "Ítems y precio" }, { value: "conditions", label: "Condiciones" }, { value: "payments", label: "Plan de pagos" }].map((tab) => <AdminButton type="button" key={tab.value} aria-pressed={section === tab.value} onClick={() => setSection(tab.value)}>{tab.label}</AdminButton>)}
       </nav>
-      <form onSubmit={(event) => void save(event)}>
+      <form id={formId} onSubmit={(event) => void save(event)}>
         <div hidden={section !== "items"}>
         <div className="admin-plan-grid">
           <Combobox label="Cliente" required value={clientId} disabled={approved || closed || busy} options={(clients.data ?? []).map((client) => ({ value: client.id, label: clientDisplayName(client) }))} onChange={setClientId} onCreate={canWriteClients(role) ? setNewClient : undefined} createLabel={(query) => `Crear cliente «${query}»`} />
@@ -439,16 +454,6 @@ export function BudgetPricingDialog({
         </div>
 
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-        <div className="admin-dialog-foot">
-          <AdminButton type="button" onClick={onClose}>
-            Cancelar
-          </AdminButton>
-          <span className="admin-dialog-spacer" />
-          <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</a>
-          <AdminButton type="submit" variant="primary" disabled={busy || closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0} aria-busy={busy || undefined}>
-            {busy ? "Guardando…" : needsRepricing ? "Ajustar precios y guardar" : "Guardar"}
-          </AdminButton>
-        </div>
       </form>
 
       <div className="admin-plan-list">

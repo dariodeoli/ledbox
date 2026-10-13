@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
 import { canWriteOperations } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
@@ -29,6 +29,8 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [limitError, setLimitError] = useState("");
+  const formId = useId();
+  const dirty = JSON.stringify(form) !== JSON.stringify({ ...EMPTY_EVENT_QUICK, name: initialName });
   const lockedClient = clientId ? clients.find((client) => client.id === clientId) : null;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -59,9 +61,18 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
 
   if (!writable) return <AdminDialog title="Crear evento" icon="events" onClose={onClose}><AdminNote>No tenés permiso para crear eventos.</AdminNote></AdminDialog>;
 
-  return <AdminDialog title="Crear evento" icon="events" onClose={onClose}>
-    <p className="admin-dialog-text">Alta rápida: queda elegido en el presupuesto. Los datos de operación son opcionales.</p>
-    <form className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
+  return <AdminDialog
+    title="Crear evento"
+    icon="events"
+    description="Queda elegido en el presupuesto. Los datos de operación son opcionales."
+    dirty={dirty}
+    onClose={onClose}
+    footer={<>
+      <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>Cancelar</AdminButton>
+      <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>Crear evento</AdminButton>
+    </>}
+  >
+    <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
       <EventQuickFields values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus>
         {clientId ? <dl className="admin-dialog-facts"><div><dt>Cliente</dt><dd>{lockedClient ? clientDisplayName(lockedClient) : "El cliente del presupuesto"}</dd></div></dl> :
           <Combobox label="Cliente" required value={formClientId} onChange={setFormClientId}
@@ -70,11 +81,6 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
       </EventQuickFields>
       {limitError ? <AdminPlanLimitNote message={limitError} /> : null}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>Cancelar</AdminButton>
-        <AdminButton variant="primary" icon="check" type="submit" busy={busy}>Crear evento</AdminButton>
-      </div>
     </form>
   </AdminDialog>;
 }
