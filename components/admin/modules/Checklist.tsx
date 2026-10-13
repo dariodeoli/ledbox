@@ -20,6 +20,7 @@ export function ChecklistTable({
   onError,
   emptyHint,
   compact,
+  single,
 }: {
   entries: ChecklistEntry[];
   canToggle: boolean;
@@ -28,14 +29,18 @@ export function ChecklistTable({
   emptyHint: string;
   /** Resumen del dashboard: sin la columna de tipo para entrar en un panel a media pantalla. */
   compact?: boolean;
+  /** Tareas de un solo evento (ficha del evento): sin la columna Evento, con la promotora bajo el título. */
+  single?: boolean;
 }) {
   if (entries.length === 0) return <AdminEmpty icon="check" title="Sin tareas" hint={emptyHint} />;
   return (
     <AdminTable
-      view={compact ? "checklist-resumen" : "checklist"}
+      view={compact ? "checklist-resumen" : single ? "checklist-evento" : "checklist"}
       label="Checklist operativo"
       columns={
-        compact
+        single
+          ? [{ label: "Estado" }, { label: "Tarea" }, { label: "Tipo" }, { label: "Vence", end: true }]
+          : compact
           ? [{ label: "Estado" }, { label: "Tarea" }, { label: "Evento" }, { label: "Vence", end: true }]
           : [{ label: "Estado" }, { label: "Tarea" }, { label: "Evento" }, { label: "Tipo" }, { label: "Vence", end: true }]
       }
@@ -49,8 +54,9 @@ export function ChecklistTable({
             </AdminCell>
             <AdminCell title={task.title}>
               <strong>{task.title}</strong>
+              {single && task.promoter ? <small className="admin-cell-sub"> · {task.promoter.name}</small> : null}
             </AdminCell>
-            <AdminCell title={eventName}>{eventName}</AdminCell>
+            {single ? null : <AdminCell title={eventName}>{eventName}</AdminCell>}
             {compact ? null : (
               <AdminCell>
                 <AdminBadge tone={statusTone(task.type)}>{taskTypeLabel(task.type)}</AdminBadge>

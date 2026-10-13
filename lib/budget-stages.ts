@@ -54,7 +54,7 @@ export function budgetStages(input: BudgetStageInput): BudgetStage[] {
     key: "event",
     label: "Evento",
     state: input.event ? "done" : approved ? "current" : "todo",
-    href: input.event ? "/eventos" : undefined,
+    href: input.event ? `/eventos?evento=${encodeURIComponent(input.event.id)}` : undefined,
     detail: input.event?.name,
   });
   stages.push(paid);
