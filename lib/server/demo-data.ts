@@ -2493,26 +2493,56 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       const sequence = (unitCounters.get(prefix) ?? 0) + 1;
       unitCounters.set(prefix, sequence);
       const inMaintenance = item.id === "demo_inv_totem" && index === 0;
+      // Estados de la historia: un tótem dañado en el traslado y los dos bastidores
+      // que no volvieron de la feria (perdidos, con el reclamo abierto).
+      const damaged = item.id === "demo_inv_totem" && index === 1;
+      const lost = item.id === "demo_inv_panels" && index < 2;
       return {
         id: `demo_unit_${item.id.replace(/^demo_inv_/, "")}_${index + 1}`,
         organizationId,
         inventoryId: item.id,
         code: `${prefix}-${String(sequence).padStart(2, "0")}`,
-        status: inMaintenance ? "MAINTENANCE" : "AVAILABLE",
+        status: damaged ? "DAMAGED" : lost ? "LOST" : inMaintenance ? "MAINTENANCE" : "AVAILABLE",
         purchaseCost: item.replacementCost ?? 0,
-        notes: inMaintenance ? "Volvió con el marco doblado (ver la devolución de la Expo)." : null,
+        notes: inMaintenance
+          ? "Volvió con el marco doblado (ver la devolución de la Expo)."
+          : damaged
+            ? "Base rajada en el traslado; pendiente de presupuesto de reparación."
+            : lost
+              ? "No volvió del predio de la feria; reclamo abierto con el cliente."
+              : null,
         createdAt: at(base, -150, 9, 0),
       };
     });
   });
-  const assignmentsData: Prisma.EventInventoryUncheckedCreateInput[] = [
+  const assignmentsData: Prisma.EventInventoryUncheckedCreateInput[] = ([
     { id: "demo_asg_activacion_p5", eventId: inProgress.id, inventoryId: "demo_inv_led_p5", quantity: 12, startsAt: inProgress.setupAt, endsAt: atDay(inProgress.strikeAt, 0, 12), checkedOut: true, checkedIn: false, checkedOutAt: atDay(inProgress.setupAt, 0, 8, 20), conditionOut: "Bueno" },
     { id: "demo_asg_proximo_p3", eventId: next.id, inventoryId: "demo_inv_led_p3", quantity: 20, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
     { id: "demo_asg_proximo_truss", eventId: next.id, inventoryId: "demo_inv_truss", quantity: 12, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
     { id: "demo_asg_feria_totem", eventId: recentPast.id, inventoryId: "demo_inv_totem", quantity: 3, startsAt: recentPast.setupAt, endsAt: recentPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(recentPast.setupAt, 0, 8, 10), checkedInAt: atDay(recentPast.strikeAt, 0, 11, 20), conditionOut: "Bueno", conditionIn: "Con daño: marco doblado", damagedQuantity: 1, missingQuantity: 0, damageNotes: "Un tótem volvió con el marco doblado; queda en mantenimiento y se descuenta del saldo." },
     { id: "demo_asg_feria_paneles", eventId: longestPast.id, inventoryId: "demo_inv_panels", quantity: 8, startsAt: longestPast.setupAt, endsAt: longestPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(longestPast.setupAt, 0, 8, 15), checkedInAt: atDay(longestPast.strikeAt, 0, 10, 30), conditionOut: "Bueno", conditionIn: "Con faltante: 2 unidades", damagedQuantity: 0, missingQuantity: 2, damageNotes: "Dos bastidores no volvieron del predio; el cliente tiene el reclamo abierto." },
     { id: "demo_asg_showroom_touch", eventId: pastFiller.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: pastFiller.setupAt, endsAt: pastFiller.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(pastFiller.setupAt, 0, 7, 20), checkedInAt: atDay(pastFiller.strikeAt, 0, 10, 0), conditionOut: "Bueno", conditionIn: "Bueno" },
-  ];
+    // Retenciones: una vigente (cuenta para el stock) y una vencida (ya no cuenta;
+    // confirmarla revalida el stock).
+    { id: "demo_asg_hold_vigente", eventId: second.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
+    { id: "demo_asg_hold_vencida", eventId: third.id, inventoryId: "demo_inv_panels", quantity: 4, startsAt: third.setupAt, endsAt: third.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, -1, 12, 0) },
+  ] as Prisma.EventInventoryUncheckedCreateInput[]).map((row) => ({ ...row, organizationId }));
+  // Ajustes de alquiler de la empresa demo: seña 50 %, retención de 48 h y tiempos de ejemplo.
+  const rentalSettingsData: Prisma.OrganizationRentalSettingsUncheckedCreateInput = {
+    id: "demo_rental_settings",
+    organizationId,
+    depositPercent: 50,
+    holdTtlMinutes: 2880,
+    prepBufferMin: 120,
+    transportBufferMin: 60,
+    deliveryBufferMin: 60,
+    returnBufferMin: 60,
+    cleaningBufferMin: 120,
+    publicCatalogEnabled: false,
+    publicShowPrices: true,
+    whatsappPhone: null,
+    createdAt: at(base, -30, 10, 0),
+  };
 
   // ── Leads del sitio (con un pedido de cotización) ──
   const leadsData: Prisma.LeadUncheckedCreateInput[] = LEADS.map((lead) => ({
@@ -2919,6 +2949,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.organizationLogo.createMany({ data: logosData });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.inventoryUnit.createMany({ data: inventoryUnitsData });
+      await tx.organizationRentalSettings.create({ data: rentalSettingsData });
       await tx.eventInventory.createMany({ data: assignmentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
       await tx.lead.createMany({ data: leadsData });
@@ -2947,6 +2978,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.budgetPaymentProof.deleteMany({ where: { organizationId } });
   await tx.expectedPayment.deleteMany({ where: { organizationId } });
   await tx.eventInventory.deleteMany({ where: { event: { organizationId } } });
+  await tx.organizationRentalSettings.deleteMany({ where: { organizationId } });
   await tx.eventTask.deleteMany({ where: { event: { organizationId } } });
   await tx.clientPayment.deleteMany({ where: { organizationId } });
   await tx.budgetChangeRequest.deleteMany({ where: { organizationId } });
