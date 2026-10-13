@@ -394,18 +394,15 @@ export function InventoryCreateDialog({
       size="wide"
       description="Se crean las unidades con código automático. Precios y foto se pueden completar después."
       dirty={createDirty}
+      error={formError}
+      warning={formPriceWarning}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
-          {formError || formPriceWarning ? (
-            <div className="admin-dialog-footer-note">
-              {formError ? <AdminNote tone="error">{formError}</AdminNote> : <AdminNote tone="warn">{formPriceWarning}</AdminNote>}
-            </div>
-          ) : null}
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
-          <AdminButton variant="primary" icon="check" type="submit" form={createFormId} busy={busy || photoBusy}>
+          <AdminButton variant="primary" icon="check" type="submit" form={createFormId} busy={busy || photoBusy} busyLabel="Guardando…">
             Cargar producto
           </AdminButton>
         </>
@@ -414,11 +411,12 @@ export function InventoryCreateDialog({
       <form id={createFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || photoBusy || undefined}>
         {/* Datos del ítem (issues #109 y #131): campos finos; la cantidad va
             corta, el SKU vive en «Más datos» y precios y foto van plegados. */}
-        <AdminDialogSection title="Ítem">
+        <AdminDialogSection title="Datos">
           <TextField
             label="Artículo"
             help={INVENTORY_FIELD_HELP.name}
             required
+            wide
             autoFocus
             maxLength={120}
             value={form.name}
@@ -459,49 +457,9 @@ export function InventoryCreateDialog({
           />
         </AdminDialogSection>
 
-        {/* SKU opcional (issue #131): vive en «Más datos» y el POST lo acepta. */}
-        <AdminDisclosure title="Más datos" hint="SKU">
-          <TextField
-            label="SKU"
-            help="Código opcional del producto, distinto del código único de cada unidad física."
-            maxLength={FIELD_LIMITS.sku}
-            value={form.sku}
-            onChange={(value) => setForm({ ...form, sku: value })}
-            placeholder="Ej.: LED-P3-500"
-            hint="Opcional; ayuda a cruzar el catálogo."
-            error={inventorySkuError(form.sku)}
-          />
-        </AdminDisclosure>
-
-        {/* Foto (issue #109): URL manual o archivo subido (uno de los dos). */}
-        <AdminDisclosure title="Foto y web" hint="foto y visibilidad">
-          <PhotoFields
-            urlValue={form.imageUrl}
-            onUrlChange={(value) => {
-              setPendingPhoto(null);
-              setPhotoError("");
-              setForm({ ...form, imageUrl: value });
-            }}
-            previewUrl={photoPreview}
-            hasPhoto={hasPhoto}
-            onSelectFile={(file) => void selectPhotoFile(file)}
-            onClearPhoto={clearPhoto}
-            error={photoError}
-            disabled={busy || photoBusy}
-          />
-          <SegmentedField
-            label="Visibilidad en la tienda"
-            help={INVENTORY_FIELD_HELP.catalogAudience}
-            value={form.catalogAudience}
-            onChange={(value) => setForm({ ...form, catalogAudience: value as CatalogAudience })}
-            options={[...CATALOG_AUDIENCE_OPTIONS]}
-            hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
-          />
-        </AdminDisclosure>
-
         {/* Precios por frente (issue #110): normal, umbral «desde X días» y
             precio desde esos días; el mínimo es el piso de venta. */}
-        <AdminDisclosure title="Precios" hint="final, mayorista y mínimo">
+        <AdminDialogSection title="Precios" collapsible hint="final, mayorista y mínimo">
           <PriceFrontFields
             title="Precio cliente final"
             normalValue={form.listPrice}
@@ -530,7 +488,46 @@ export function InventoryCreateDialog({
               hint="Piso de venta del ítem."
             />
           </div>
-        </AdminDisclosure>
+        </AdminDialogSection>
+        {/* Foto (issue #109): URL manual o archivo subido (uno de los dos). */}
+        <AdminDialogSection title="Fotos" collapsible hint="foto y visibilidad en la tienda">
+          <PhotoFields
+            urlValue={form.imageUrl}
+            onUrlChange={(value) => {
+              setPendingPhoto(null);
+              setPhotoError("");
+              setForm({ ...form, imageUrl: value });
+            }}
+            previewUrl={photoPreview}
+            hasPhoto={hasPhoto}
+            onSelectFile={(file) => void selectPhotoFile(file)}
+            onClearPhoto={clearPhoto}
+            error={photoError}
+            disabled={busy || photoBusy}
+          />
+          <SegmentedField
+            label="Visibilidad en la tienda"
+            help={INVENTORY_FIELD_HELP.catalogAudience}
+            value={form.catalogAudience}
+            onChange={(value) => setForm({ ...form, catalogAudience: value as CatalogAudience })}
+            options={[...CATALOG_AUDIENCE_OPTIONS]}
+            hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
+          />
+        </AdminDialogSection>
+
+        {/* SKU opcional (issue #131): lo avanzado va plegado en «Más opciones». */}
+        <AdminDialogSection title="Más opciones" collapsible hint="SKU">
+          <TextField
+            label="SKU"
+            help="Código opcional del producto, distinto del código único de cada unidad física."
+            maxLength={FIELD_LIMITS.sku}
+            value={form.sku}
+            onChange={(value) => setForm({ ...form, sku: value })}
+            placeholder="Ej.: LED-P3-500"
+            hint="Opcional; ayuda a cruzar el catálogo."
+            error={inventorySkuError(form.sku)}
+          />
+        </AdminDialogSection>
       </form>
     </AdminDialog>
   );
@@ -562,6 +559,10 @@ export function InventoryEditDialog({
   const [editPhotoError, setEditPhotoError] = useState("");
   const category = useCategoryChoices(categories);
   const editFormId = useId();
+  // «Más opciones» abre de entrada solo si el producto ya tiene algo cargado ahí.
+  const advancedOpen = [baseForm.replacementCost, baseForm.dailyCost, baseForm.notes, baseForm.bufferBeforeHours, baseForm.bufferAfterHours].some(
+    (value) => Boolean(value) && value !== "0",
+  );
   const editDirty = JSON.stringify(editForm) !== JSON.stringify(baseForm) || Boolean(editPendingPhoto) || editPhotoRemoved;
 
   const editPriceWarning = useMemo(() => {
@@ -701,18 +702,15 @@ export function InventoryEditDialog({
       size="wide"
       description="Datos, foto, costos y precios del producto. La cantidad se gestiona por unidad."
       dirty={editDirty}
+      error={editError}
+      warning={editPriceWarning}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
-          {editError || editPriceWarning ? (
-            <div className="admin-dialog-footer-note">
-              {editError ? <AdminNote tone="error">{editError}</AdminNote> : <AdminNote tone="warn">{editPriceWarning}</AdminNote>}
-            </div>
-          ) : null}
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={editBusy}>
             Cancelar
           </AdminButton>
-          <AdminButton variant="primary" icon="check" type="submit" form={editFormId} busy={editBusy}>
+          <AdminButton variant="primary" icon="check" type="submit" form={editFormId} busy={editBusy} busyLabel="Guardando…">
             Guardar cambios
           </AdminButton>
         </>
@@ -720,10 +718,11 @@ export function InventoryEditDialog({
     >
       <form id={editFormId} className="admin-form" onSubmit={(event) => void submitEditItem(event)} aria-busy={editBusy || undefined}>
         {/* Datos del ítem (issue #111): todo editable menos la cantidad (#112). */}
-        <AdminDialogSection title="Ítem">
+        <AdminDialogSection title="Datos">
           <TextField
             label="Artículo"
             required
+            wide
             maxLength={120}
             value={editForm.name}
             help={INVENTORY_FIELD_HELP.name}
@@ -770,9 +769,41 @@ export function InventoryEditDialog({
           />
         </AdminDialogSection>
 
+        {/* Precios: lo que más se edita de un producto existente, justo después de los datos. */}
+        <AdminDialogSection title="Precios">
+          <PriceFrontFields
+            title="Precio cliente final"
+            normalValue={editForm.listPrice}
+            daysValue={editForm.listFromDays}
+            fromValue={editForm.listFromPrice}
+            onNormal={(value) => setEditForm({ ...editForm, listPrice: value })}
+            onDays={(value) => setEditForm({ ...editForm, listFromDays: value })}
+            onFrom={(value) => setEditForm({ ...editForm, listFromPrice: value })}
+          />
+          <PriceFrontFields
+            title="Precio mayorista"
+            normalValue={editForm.wholesalePrice}
+            daysValue={editForm.wholesaleFromDays}
+            fromValue={editForm.wholesaleFromPrice}
+            onNormal={(value) => setEditForm({ ...editForm, wholesalePrice: value })}
+            onDays={(value) => setEditForm({ ...editForm, wholesaleFromDays: value })}
+            onFrom={(value) => setEditForm({ ...editForm, wholesaleFromPrice: value })}
+          />
+          <div className="admin-form-group admin-form-group--min">
+            <span className="admin-form-group-title">Precio mínimo</span>
+            <MoneyField
+              label="Piso de venta"
+              value={editForm.minimumPrice}
+              help={INVENTORY_FIELD_HELP.minimumPrice}
+              onChange={(value) => setEditForm({ ...editForm, minimumPrice: value })}
+              hint="Piso de venta del ítem."
+            />
+          </div>
+        </AdminDialogSection>
+
         {/* Las unidades físicas (issue #112) se gestionan en la ficha: acá
             solo se resume cuántas hay, para no duplicar la lista. */}
-        <AdminDialogSection title="Unidades">
+        <AdminDialogSection title="Stock y tiempos">
           <p className="admin-note admin-field--wide">
             <span>
               {formatNumber(item.units.length)} unidad{item.units.length === 1 ? "" : "es"} · código, estado y costo se
@@ -793,47 +824,6 @@ export function InventoryEditDialog({
               Ver unidades
             </AdminButton>
           </p>
-        </AdminDialogSection>
-
-        {/* Foto (issues #109 y #111): se cambia subiendo otra o se quita. */}
-        <PhotoFields
-          urlValue={editForm.imageUrl}
-          onUrlChange={(value) => {
-            setEditPendingPhoto(null);
-            setEditPhotoError("");
-            setEditPhotoRemoved(false);
-            setEditForm({ ...editForm, imageUrl: value });
-          }}
-          previewUrl={editPhotoPreview}
-          hasPhoto={editHasPhoto}
-          onSelectFile={(file) => void selectEditPhoto(file)}
-          onClearPhoto={clearEditPhoto}
-          error={editPhotoError}
-          disabled={editBusy}
-        />
-
-        {/* Costos internos (issue #111): no son precios de venta. */}
-        <AdminDialogSection title="Costos internos">
-          <AdminDisclosure title="Reposición" hint="Dato interno secundario">
-            <MoneyField
-              label="Reposición"
-              help={INVENTORY_FIELD_HELP.replacementCost}
-              value={editForm.replacementCost}
-              onChange={(value) => setEditForm({ ...editForm, replacementCost: value })}
-              hint="Lo que cuesta reponer la unidad; no es un precio de venta."
-            />
-          </AdminDisclosure>
-          <MoneyField
-            label="Costo diario"
-            help={INVENTORY_FIELD_HELP.dailyCost}
-            value={editForm.dailyCost}
-            onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
-            hint="Costo interno por día de uso."
-          />
-        </AdminDialogSection>
-
-        {/* Tiempos de preparación (alquileres): opcionales, heredan los de la empresa. */}
-        <AdminDialogSection title="Tiempos del producto">
           <NumberField
             label="Tiempo antes (horas)"
             value={editForm.bufferBeforeHours}
@@ -852,7 +842,24 @@ export function InventoryEditDialog({
           />
         </AdminDialogSection>
 
-        <AdminDialogSection title="Notas">
+
+        {/* Foto (issues #109 y #111): se cambia subiendo otra o se quita. */}
+        <AdminDialogSection title="Fotos" collapsible defaultOpen={Boolean(item.imageUrl)} hint="foto y descripción del catálogo">
+          <PhotoFields
+            urlValue={editForm.imageUrl}
+            onUrlChange={(value) => {
+              setEditPendingPhoto(null);
+              setEditPhotoError("");
+              setEditPhotoRemoved(false);
+              setEditForm({ ...editForm, imageUrl: value });
+            }}
+            previewUrl={editPhotoPreview}
+            hasPhoto={editHasPhoto}
+            onSelectFile={(file) => void selectEditPhoto(file)}
+            onClearPhoto={clearEditPhoto}
+            error={editPhotoError}
+            disabled={editBusy}
+          />
           <TextAreaField
             label="Descripción para el catálogo"
             optional
@@ -865,6 +872,24 @@ export function InventoryEditDialog({
             hint="Se muestra en el catálogo público. Las notas internas no se publican."
             disabled={editBusy}
           />
+        </AdminDialogSection>
+
+        {/* Costos internos, notas internas: no son precios de venta ni se publican. */}
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={advancedOpen} hint="costos internos y notas">
+          <MoneyField
+            label="Reposición"
+            help={INVENTORY_FIELD_HELP.replacementCost}
+            value={editForm.replacementCost}
+            onChange={(value) => setEditForm({ ...editForm, replacementCost: value })}
+            hint="Lo que cuesta reponer la unidad; no es un precio de venta."
+          />
+          <MoneyField
+            label="Costo diario"
+            help={INVENTORY_FIELD_HELP.dailyCost}
+            value={editForm.dailyCost}
+            onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
+            hint="Costo interno por día de uso."
+          />
           <TextAreaField
             label="Notas internas"
             help={INVENTORY_FIELD_HELP.notes}
@@ -876,35 +901,6 @@ export function InventoryEditDialog({
             placeholder="Estado del equipo, accesorios, ubicación en depósito…"
           />
         </AdminDialogSection>
-
-        <PriceFrontFields
-          title="Precio cliente final"
-          normalValue={editForm.listPrice}
-          daysValue={editForm.listFromDays}
-          fromValue={editForm.listFromPrice}
-          onNormal={(value) => setEditForm({ ...editForm, listPrice: value })}
-          onDays={(value) => setEditForm({ ...editForm, listFromDays: value })}
-          onFrom={(value) => setEditForm({ ...editForm, listFromPrice: value })}
-        />
-        <PriceFrontFields
-          title="Precio mayorista"
-          normalValue={editForm.wholesalePrice}
-          daysValue={editForm.wholesaleFromDays}
-          fromValue={editForm.wholesaleFromPrice}
-          onNormal={(value) => setEditForm({ ...editForm, wholesalePrice: value })}
-          onDays={(value) => setEditForm({ ...editForm, wholesaleFromDays: value })}
-          onFrom={(value) => setEditForm({ ...editForm, wholesaleFromPrice: value })}
-        />
-        <div className="admin-form-group admin-form-group--min">
-          <span className="admin-form-group-title">Precio mínimo</span>
-          <MoneyField
-            label="Piso de venta"
-            value={editForm.minimumPrice}
-            help={INVENTORY_FIELD_HELP.minimumPrice}
-            onChange={(value) => setEditForm({ ...editForm, minimumPrice: value })}
-            hint="Piso de venta del ítem."
-          />
-        </div>
       </form>
     </AdminDialog>
   );

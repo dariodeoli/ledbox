@@ -657,72 +657,65 @@ export function ClientesModule() {
               : "Alta rápida: alcanza con el nombre. El resto se puede completar después."
           }
           dirty={formDirty}
+          error={formError}
           onClose={closeForm}
           footer={({ requestClose }) => (
             <>
-              {formError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{formError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={clientFormId} busy={busy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={clientFormId} busy={busy} busyLabel="Guardando…">
                 {editingId ? "Guardar cambios" : "Registrar cliente"}
               </AdminButton>
             </>
           )}
         >
           <form id={clientFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
-            {/* Alta rápida (issue #106): Nombre con foco + teléfono/correo; el
-                resto vive en «Más datos» y no se pierde al plegarlo. */}
-            <AdminDialogSection>
-              <ClientQuickFields
-                key={editingId ?? "nuevo"}
-                values={form}
-                onChange={(patch) => setForm({ ...form, ...patch })}
-                errors={fieldErrors}
-                autoFocus={!editingId}
-                moreOpen={Boolean(editingId)}
-              >
-                <div className="admin-form-group admin-form-group--wide">
-                  <span className="admin-form-group-title">Notas</span>
-                  <TextAreaField
-                    label="Notas internas"
-                    maxLength={FIELD_LIMITS.notes}
-                    rows={3}
-                    wide
-                    value={form.notes}
-                    onChange={(value) => setForm({ ...form, notes: value })}
-                    placeholder="Acuerdos, condiciones de facturación, contactos alternos…"
-                  />
-                </div>
-
-                <div className="admin-form-group admin-form-group--image admin-client-logo">
-                  <span className="admin-form-group-title">Logo</span>
-                  <AdminImageUpload
-                    label="Logo del cliente"
-                    mode="logo"
-                    hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
-                    preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
-                    busy={busy}
-                    onPrepared={(image) => {
-                      setPendingLogo(image);
-                      setLogoRemoved(false);
-                    }}
-                    onRemove={
-                      hasLogo
-                        ? () => {
-                            setPendingLogo(null);
-                            setLogoRemoved(true);
-                          }
-                        : undefined
-                    }
-                    removeLabel="Quitar logo"
-                  />
-                </div>
-              </ClientQuickFields>
+            {/* Alta rápida (issue #106): Datos y Contacto a la vista con foco en el
+                nombre; fiscal, ubicación y lo avanzado plegados (abiertos al editar,
+                y no se pierde lo cargado al plegar). */}
+            <ClientQuickFields
+              key={editingId ?? "nuevo"}
+              layout="sections"
+              values={form}
+              onChange={(patch) => setForm({ ...form, ...patch })}
+              errors={fieldErrors}
+              autoFocus={!editingId}
+              moreOpen={Boolean(editingId)}
+            />
+            <AdminDialogSection title="Notas y logo" collapsible defaultOpen={Boolean(editingId)} hint="notas internas y logo del cliente">
+              <TextAreaField
+                label="Notas internas"
+                maxLength={FIELD_LIMITS.notes}
+                rows={3}
+                wide
+                value={form.notes}
+                onChange={(value) => setForm({ ...form, notes: value })}
+                placeholder="Acuerdos, condiciones de facturación, contactos alternos…"
+              />
+              <div className="admin-form-group admin-form-group--image admin-client-logo">
+                <span className="admin-form-group-title">Logo</span>
+                <AdminImageUpload
+                  label="Logo del cliente"
+                  mode="logo"
+                  hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
+                  preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
+                  busy={busy}
+                  onPrepared={(image) => {
+                    setPendingLogo(image);
+                    setLogoRemoved(false);
+                  }}
+                  onRemove={
+                    hasLogo
+                      ? () => {
+                          setPendingLogo(null);
+                          setLogoRemoved(true);
+                        }
+                      : undefined
+                  }
+                  removeLabel="Quitar logo"
+                />
+              </div>
             </AdminDialogSection>
           </form>
         </AdminDialog>

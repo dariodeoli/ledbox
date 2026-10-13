@@ -12,11 +12,11 @@ import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
 
-test("inventario: «Precios» y «Foto y web» plegados, SKU en «Más datos» y nombre es-PY", () => {
+test("inventario: «Precios» y «Fotos» plegados, SKU en «Más opciones» y nombre es-PY", () => {
   const module = inventoryModuleSource();
-  assert.match(module, /<AdminDisclosure title="Más datos" hint="SKU">/, "el SKU vive en Más datos");
-  assert.match(module, /<AdminDisclosure title="Foto y web" hint="foto y visibilidad">/, "foto y web van plegados");
-  assert.match(module, /<AdminDisclosure title="Precios" hint="final, mayorista y mínimo">/, "los precios van plegados");
+  assert.match(module, /<AdminDialogSection title="Más opciones" collapsible hint="SKU">/, "el SKU vive en Más opciones");
+  assert.match(module, /<AdminDialogSection title="Fotos" collapsible hint="foto y visibilidad en la tienda">/, "fotos y visibilidad van plegadas");
+  assert.match(module, /<AdminDialogSection title="Precios" collapsible hint="final, mayorista y mínimo">/, "los precios van plegados");
   // El SKU viaja al POST y el API lo acepta (antes no existía en el alta).
   assert.match(module, /sku: sku \|\| undefined/, "el SKU tiene que viajar en el alta");
   assert.match(module, /error=\{inventorySkuError\(form\.sku\)\}/, "el SKU se avisa con la regla del kit");

@@ -7,7 +7,7 @@ import { canWriteClients } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import type { AdminClientOption, AdminClientContact } from "@/lib/admin-types";
 import { emailValid, FIELD_LIMITS, FIELD_MESSAGES, personNameValid } from "@/lib/field-rules";
-import { AdminButton, AdminDialog, AdminDisclosure, AdminNote } from "../AdminUI";
+import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 import { CityField, EmailField, PhoneField, SegmentedField, TextField } from "../AdminFields";
 import { locationLinkValid } from "./OperationQuickRules";
 import { ClientFiscalFields } from "./ClientFiscalFields";
@@ -155,6 +155,7 @@ export function ClientQuickFields({
   errors,
   autoFocus,
   moreOpen,
+  layout = "quick",
   children,
 }: {
   values: ClientQuickValues;
@@ -164,138 +165,220 @@ export function ClientQuickFields({
   autoFocus?: boolean;
   /** «Más datos» abierto de entrada (al editar, para no esconder lo cargado). */
   moreOpen?: boolean;
+  /**
+   * `quick`: nombre, teléfono y correo a la vista y el resto en «Más datos»
+   * (alta rápida del evento). `sections`: el diálogo completo de Clientes, con
+   * las secciones Datos, Contacto, Datos fiscales, Ubicación y «Más opciones».
+   */
+  layout?: "quick" | "sections";
   children?: React.ReactNode;
 }) {
-  return (
+  const tradeName = (
+    <TextField
+      label="Nombre fantasía / comercial"
+      required={!values.name.trim()}
+      autoFocus={autoFocus}
+      wide={layout === "sections"}
+      maxLength={200}
+      value={values.tradeName}
+      onChange={(tradeName) => onChange({ tradeName })}
+      placeholder="Ej.: Samsung Paraguay"
+      hint="Identidad principal de la cartera; independiente de la razón social y del contacto."
+      error={errors?.tradeName}
+    />
+  );
+  const phone = (
+    <PhoneField
+      label="Teléfono"
+      hint="Opcional · con código de país"
+      value={values.phone}
+      onChange={(value) => onChange({ phone: value })}
+      error={errors?.phone ?? null}
+    />
+  );
+  const email = (
+    <EmailField
+      label="Correo"
+      value={values.email}
+      onChange={(value) => onChange({ email: value })}
+      placeholder="contacto@empresa.com"
+      error={errors?.email ?? null}
+    />
+  );
+  const historicName = values.name ? (
+    <TextField label="Nombre histórico" maxLength={200} value={values.name}
+      onChange={(name) => onChange({ name })} error={errors?.name ?? null}
+      hint="Se conserva sin convertirlo en razón social ni persona de contacto." />
+  ) : null;
+  const company = (
+    <TextField
+      label="Empresa"
+      maxLength={FIELD_LIMITS.company}
+      value={values.company}
+      onChange={(value) => onChange({ company: value })}
+      placeholder="Ej.: Samsung Paraguay"
+      hint="Dato histórico de empresa; no implica razón social."
+    />
+  );
+  const type = (
+    <SegmentedField
+      label="Tipo"
+      value={values.type}
+      onChange={(value) => onChange({ type: value })}
+      options={[
+        { value: "FINAL", label: "Cliente final" },
+        { value: "RESELLER", label: "Mayorista / revendedor" },
+      ]}
+    />
+  );
+  const fiscal = (
+    <ClientFiscalFields ruc={values.ruc} legalName={values.legalName} snapshot={values.rucSnapshot}
+      confirmed={Boolean(values.rucConfirmationToken)} onChange={onChange} />
+  );
+  const billingEmail = <EmailField label="Correo de facturación" value={values.billingEmail} onChange={(billingEmail) => onChange({ billingEmail })} error={errors?.billingEmail} />;
+  const location = (
+    <>
+      <CityField label="Ciudad" value={values.city} onChange={(city) => onChange({ city, department: "" })}
+        onSelect={(city, department) => onChange({ city, department })} hint="Seleccioná una ciudad para completar departamento o escribí a mano." />
+      <TextField label="Departamento" maxLength={120} value={values.department} onChange={(department) => onChange({ department })} hint="Podés completarlo a mano." />
+      <TextField label="Dirección" maxLength={300} value={values.address} onChange={(address) => onChange({ address })} />
+      <TextField label="Referencia de dirección" maxLength={400} value={values.addressReference} onChange={(addressReference) => onChange({ addressReference })} />
+      <TextField label="Enlace de ubicación" maxLength={2000} inputMode="url" value={values.locationUrl} onChange={(locationUrl) => onChange({ locationUrl })} error={errors?.locationUrl} placeholder="https://…" />
+    </>
+  );
+  const contactPerson = (
     <>
       <TextField
-        label="Nombre fantasía / comercial"
-        required={!values.name.trim()}
-        autoFocus={autoFocus}
-        maxLength={200}
-        value={values.tradeName}
-        onChange={(tradeName) => onChange({ tradeName })}
-        placeholder="Ej.: Samsung Paraguay"
-        hint="Identidad principal de la cartera; independiente de la razón social y del contacto."
-        error={errors?.tradeName}
+        label="Nombre del encargado"
+        maxLength={FIELD_LIMITS.name}
+        value={values.contactName}
+        onChange={(value) => onChange({ contactName: value })}
+        placeholder="Ej.: María González"
+      />
+      <TextField
+        label="Cargo"
+        maxLength={FIELD_LIMITS.name}
+        value={values.contactRole}
+        onChange={(value) => onChange({ contactRole: value })}
+        placeholder="Ej.: Gerenta de marketing"
       />
       <PhoneField
-        label="Teléfono"
-        hint="Opcional · con código de país"
-        value={values.phone}
-        onChange={(value) => onChange({ phone: value })}
-        error={errors?.phone ?? null}
+        label="Teléfono directo"
+        value={values.contactPhone}
+        onChange={(value) => onChange({ contactPhone: value })}
+        error={errors?.contactPhone ?? null}
       />
       <EmailField
-        label="Correo"
-        value={values.email}
-        onChange={(value) => onChange({ email: value })}
-        placeholder="contacto@empresa.com"
-        error={errors?.email ?? null}
+        label="Correo directo"
+        value={values.contactEmail}
+        onChange={(value) => onChange({ contactEmail: value })}
+        error={errors?.contactEmail ?? null}
       />
-      <AdminDisclosure title="Más datos" hint="datos fiscales, ubicación y contactos" defaultOpen={moreOpen}>
-        {values.name ? <TextField label="Nombre histórico" maxLength={200} value={values.name}
-          onChange={(name) => onChange({ name })} error={errors?.name ?? null}
-          hint="Se conserva sin convertirlo en razón social ni persona de contacto." /> : null}
-        <TextField
-          label="Empresa"
-          maxLength={FIELD_LIMITS.company}
-          value={values.company}
-          onChange={(value) => onChange({ company: value })}
-          placeholder="Ej.: Samsung Paraguay"
-          hint="Dato histórico de empresa; no implica razón social."
-        />
-        <SegmentedField
-          label="Tipo"
-          value={values.type}
-          onChange={(value) => onChange({ type: value })}
-          options={[
-            { value: "FINAL", label: "Cliente final" },
-            { value: "RESELLER", label: "Mayorista / revendedor" },
-          ]}
-        />
-        <ClientFiscalFields ruc={values.ruc} legalName={values.legalName} snapshot={values.rucSnapshot}
-          confirmed={Boolean(values.rucConfirmationToken)} onChange={onChange} />
-        <EmailField label="Correo de facturación" value={values.billingEmail} onChange={(billingEmail) => onChange({ billingEmail })} error={errors?.billingEmail} />
-        <CityField label="Ciudad" value={values.city} onChange={(city) => onChange({ city, department: "" })}
-          onSelect={(city, department) => onChange({ city, department })} hint="Seleccioná una ciudad para completar departamento o escribí a mano." />
-        <TextField label="Departamento" maxLength={120} value={values.department} onChange={(department) => onChange({ department })} hint="Podés completarlo a mano." />
-        <TextField label="Dirección" maxLength={300} value={values.address} onChange={(address) => onChange({ address })} />
-        <TextField label="Referencia de dirección" maxLength={400} value={values.addressReference} onChange={(addressReference) => onChange({ addressReference })} />
-        <TextField label="Enlace de ubicación" maxLength={2000} inputMode="url" value={values.locationUrl} onChange={(locationUrl) => onChange({ locationUrl })} error={errors?.locationUrl} placeholder="https://…" />
-        <TextField
-          label="Nombre del encargado"
-          maxLength={FIELD_LIMITS.name}
-          value={values.contactName}
-          onChange={(value) => onChange({ contactName: value })}
-          placeholder="Ej.: María González"
-        />
-        <TextField
-          label="Cargo"
-          maxLength={FIELD_LIMITS.name}
-          value={values.contactRole}
-          onChange={(value) => onChange({ contactRole: value })}
-          placeholder="Ej.: Gerenta de marketing"
-        />
-        <PhoneField
-          label="Teléfono directo"
-          value={values.contactPhone}
-          onChange={(value) => onChange({ contactPhone: value })}
-          error={errors?.contactPhone ?? null}
-        />
-        <EmailField
-          label="Correo directo"
-          value={values.contactEmail}
-          onChange={(value) => onChange({ contactEmail: value })}
-          error={errors?.contactEmail ?? null}
-        />
-        <TextField
-          label="Sitio web"
-          maxLength={200}
-          value={values.website}
-          onChange={(value) => onChange({ website: value })}
-          placeholder="empresa.com.py"
-          inputMode="url"
-          error={errors?.website ?? null}
-          hint="Sin «https://» también funciona."
-        />
-        <TextField
-          label="Instagram"
-          maxLength={64}
-          value={values.instagram}
-          onChange={(value) => onChange({ instagram: value })}
-          placeholder="@empresa"
-          error={errors?.instagram ?? null}
-          hint="El usuario con arroba o el link del perfil."
-        />
-        <PhoneField
-          label="WhatsApp"
-          hint="Solo si difiere del teléfono general"
-          value={values.whatsapp}
-          onChange={(value) => onChange({ whatsapp: value })}
-          error={errors?.whatsapp ?? null}
-        />
-        <div className="admin-form-group admin-field--wide">
-          <h3 className="admin-form-group-title">Contactos por función</h3>
-          {values.contacts.map((contact, index) => (
-            <div className="admin-form-group" key={index}>
-              <TextField label={`Contacto ${index + 1} · nombre`} required maxLength={120} value={contact.name}
-                onChange={(name) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, name } : current) })}
-                error={contact.name && !personNameValid(contact.name) ? FIELD_MESSAGES.name : null} />
-              <TextField label={`Contacto ${index + 1} · función`} maxLength={120} value={contact.role ?? ""}
-                onChange={(role) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, role } : current) })} />
-              <PhoneField label={`Contacto ${index + 1} · teléfono`} value={contact.phone ?? ""}
-                onChange={(phone) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, phone } : current) })}
-                error={contact.phone && !contactPhoneValid(contact.phone) ? FIELD_MESSAGES.phone : null} />
-              <EmailField label={`Contacto ${index + 1} · correo`} value={contact.email ?? ""}
-                onChange={(email) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, email } : current) })}
-                error={contact.email && !emailValid(contact.email) ? FIELD_MESSAGES.email : null} />
-              <AdminButton type="button" icon="trash" aria-label={`Quitar contacto ${index + 1}`} onClick={() => onChange({ contacts: values.contacts.filter((_, at) => at !== index) })}>Quitar contacto</AdminButton>
-            </div>
-          ))}
-          {errors?.contacts ? <AdminNote tone="error">{errors.contacts}</AdminNote> : null}
-          <AdminButton type="button" icon="plus" disabled={values.contacts.length >= 20} onClick={() => onChange({ contacts: [...values.contacts, { name: "", role: null, phone: null, email: null }] })}>Agregar contacto</AdminButton>
+    </>
+  );
+  const web = (
+    <>
+      <TextField
+        label="Sitio web"
+        maxLength={200}
+        value={values.website}
+        onChange={(value) => onChange({ website: value })}
+        placeholder="empresa.com.py"
+        inputMode="url"
+        error={errors?.website ?? null}
+        hint="Sin «https://» también funciona."
+      />
+      <TextField
+        label="Instagram"
+        maxLength={64}
+        value={values.instagram}
+        onChange={(value) => onChange({ instagram: value })}
+        placeholder="@empresa"
+        error={errors?.instagram ?? null}
+        hint="El usuario con arroba o el link del perfil."
+      />
+    </>
+  );
+  const whatsapp = (
+    <PhoneField
+      label="WhatsApp"
+      hint="Solo si difiere del teléfono general"
+      value={values.whatsapp}
+      onChange={(value) => onChange({ whatsapp: value })}
+      error={errors?.whatsapp ?? null}
+    />
+  );
+  const functionContacts = (
+    <div className="admin-form-group admin-field--wide">
+      <h3 className="admin-form-group-title">Contactos por función</h3>
+      {values.contacts.map((contact, index) => (
+        <div className="admin-form-group" key={index}>
+          <TextField label={`Contacto ${index + 1} · nombre`} required maxLength={120} value={contact.name}
+            onChange={(name) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, name } : current) })}
+            error={contact.name && !personNameValid(contact.name) ? FIELD_MESSAGES.name : null} />
+          <TextField label={`Contacto ${index + 1} · función`} maxLength={120} value={contact.role ?? ""}
+            onChange={(role) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, role } : current) })} />
+          <PhoneField label={`Contacto ${index + 1} · teléfono`} value={contact.phone ?? ""}
+            onChange={(phone) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, phone } : current) })}
+            error={contact.phone && !contactPhoneValid(contact.phone) ? FIELD_MESSAGES.phone : null} />
+          <EmailField label={`Contacto ${index + 1} · correo`} value={contact.email ?? ""}
+            onChange={(email) => onChange({ contacts: values.contacts.map((current, at) => at === index ? { ...current, email } : current) })}
+            error={contact.email && !emailValid(contact.email) ? FIELD_MESSAGES.email : null} />
+          <AdminButton type="button" icon="trash" aria-label={`Quitar contacto ${index + 1}`} onClick={() => onChange({ contacts: values.contacts.filter((_, at) => at !== index) })}>Quitar contacto</AdminButton>
         </div>
+      ))}
+      {errors?.contacts ? <AdminNote tone="error">{errors.contacts}</AdminNote> : null}
+      <AdminButton type="button" icon="plus" disabled={values.contacts.length >= 20} onClick={() => onChange({ contacts: [...values.contacts, { name: "", role: null, phone: null, email: null }] })}>Agregar contacto</AdminButton>
+    </div>
+  );
+
+  if (layout === "sections") {
+    return (
+      <>
+        <AdminDialogSection title="Datos">
+          {tradeName}
+          {type}
+          {company}
+          {historicName}
+        </AdminDialogSection>
+        <AdminDialogSection title="Contacto">
+          {phone}
+          {email}
+          {contactPerson}
+          {whatsapp}
+        </AdminDialogSection>
+        <AdminDialogSection title="Datos fiscales" collapsible defaultOpen={moreOpen} hint="RUC, razón social y facturación">
+          {fiscal}
+          {billingEmail}
+        </AdminDialogSection>
+        <AdminDialogSection title="Ubicación" collapsible defaultOpen={moreOpen} hint="ciudad, dirección y mapa">
+          {location}
+        </AdminDialogSection>
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={moreOpen} hint="web, redes, contactos por función, notas y logo">
+          {web}
+          {functionContacts}
+          {children}
+        </AdminDialogSection>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {tradeName}
+      {phone}
+      {email}
+      <AdminDisclosure title="Más datos" hint="datos fiscales, ubicación y contactos" defaultOpen={moreOpen}>
+        {historicName}
+        {company}
+        {type}
+        {fiscal}
+        {billingEmail}
+        {location}
+        {contactPerson}
+        {web}
+        {whatsapp}
+        {functionContacts}
         {children}
       </AdminDisclosure>
     </>
@@ -364,13 +447,14 @@ export function ClientQuickDialog({
       icon="clients"
       description="Alta mínima: queda elegido en el evento. El resto se completa en Clientes."
       dirty={dirty}
+      error={error}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
-          <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>
+          <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy} busyLabel="Guardando…">
             Crear cliente
           </AdminButton>
         </>
@@ -383,7 +467,6 @@ export function ClientQuickDialog({
           errors={errors}
           autoFocus
         />
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
     </AdminDialog>
   );
