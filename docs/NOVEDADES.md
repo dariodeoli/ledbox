@@ -475,3 +475,15 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - Cada presupuesto y cada evento se abre con un clic.
   - El catálogo mayorista se muestra solo a mayoristas, o a quien todavía tenga un link activo, para poder revocarlo.
 - Si la cartera supera los 200 clientes, la lista lo avisa para que los indicadores no parezcan el total.
+
+## v2.1.105 — 2026-10-13
+
+- Inventario rediseñado:
+  - Arriba están las acciones «Nuevo producto», «Nuevo combo» e «Incidentes» (con la cantidad de abiertos), y cinco indicadores que filtran la lista.
+  - Pestañas: Todos · Combos · Con incidentes · Publicados en la tienda · Ocultos.
+  - La lista muestra foto, producto y SKU, categoría, stock libre sobre total con una barra, estado, precio de lista, precio mayorista y si está en la tienda. Cada fila tiene una sola acción y el resto queda en «•••».
+  - Las tarjetas con foto se usan en el celular y también se pueden elegir en escritorio.
+- Ficha del producto en un panel lateral:
+  - Secciones: resumen, disponibilidad (con las reservas y retenciones de las próximas 4 semanas), unidades, precios, tienda web, combos, incidentes e historial.
+  - Cada producto tiene su propio link.
+- Al elegir varios productos aparece la edición en lote.
