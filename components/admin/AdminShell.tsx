@@ -828,7 +828,7 @@ export function AdminShell({
                       const active = isAdminNavItemActive(pathname, item);
                       const count = item.countKey ? navCounts.data?.[item.countKey] : undefined;
                       const hasCount = typeof count === "number" && count > 0;
-                      const countText = hasCount ? `${formatNumber(count)} ${item.countHint ?? "pendientes"}` : null;
+                      const countText = hasCount ? `${item.countHint ?? "pendientes"}: ${formatNumber(count)}` : null;
                       return (
                         <li key={item.href}>
                           <Link

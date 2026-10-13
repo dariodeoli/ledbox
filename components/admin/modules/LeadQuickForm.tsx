@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { adminSend } from "@/lib/admin-api";
+import { adminSend, requestAdminRefresh } from "@/lib/admin-api";
 import { canWriteClients } from "@/lib/admin-policy";
 import { emailValid, FIELD_MESSAGES, personNameValid, phoneValid } from "@/lib/field-rules";
 import { useAdminSession } from "../AdminShell";
@@ -65,6 +65,8 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
       setError(result.error);
       return;
     }
+    // El contador de Leads del menú y «Para hacer hoy» salen de datos vivos.
+    requestAdminRefresh();
     onCreated(values.name.trim());
   }
 

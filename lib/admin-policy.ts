@@ -50,6 +50,7 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
 /** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
 const PAGE_TITLES: Record<string, string> = {
   "/perfil": "Mi perfil",
+  "/demo": "Demo",
   // Firmas vive dentro de Presupuestos y Plantillas dentro de Ajustes: siguen
   // siendo rutas propias, pero ya no son ítems del menú.
   "/firmas": "Firmas",

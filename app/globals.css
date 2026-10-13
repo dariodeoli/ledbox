@@ -4304,9 +4304,8 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-today-action { flex: 0 0 auto; }
 .admin-today-more { display: flex; justify-content: center; padding-top: 0 !important; }
 @media (max-width: 560px) {
-  .admin-today-item { flex-wrap: wrap; align-items: flex-start; }
-  .admin-today-text { flex-basis: 100%; }
-  .admin-today-action { width: 100%; justify-content: center; min-height: 44px; }
+  .admin-today-item { gap: 8px; padding-left: 14px; }
+  .admin-today-action { min-height: 44px; padding-inline: 10px; }
   .admin-today-more .admin-btn { min-height: 44px; }
 }
 
@@ -4351,3 +4350,4 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-demo-case-row .admin-demo-case-count[data-tone="ok"] { color: var(--a-ok-text); }
 .admin-demo-case-row .admin-demo-case-text strong { overflow: visible; color: var(--a-text-strong); font-size: 13px; text-overflow: clip; white-space: normal; }
 .admin-demo-case-row .admin-demo-case-text small { overflow: visible; color: var(--a-muted-2); font-size: 12px; text-overflow: clip; white-space: normal; }
+@media (max-width: 720px) { .admin-resumen .admin-panel-link { display: inline-flex; align-items: center; min-height: 44px; } }

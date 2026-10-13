@@ -118,7 +118,7 @@ export function DemoIntro({
           {portalActions}
           <Link className="admin-btn" href="/dashboard">
             <AdminIcon name="overview" size={15} />
-            <span>Ir al resumen</span>
+            <span>Ir al inicio</span>
           </Link>
           {resetForm}
         </div>
@@ -145,7 +145,7 @@ export function DemoIntro({
             hoy cada vez que entrás, y con ellas la mora, los equipos faltantes, los gastos sin proyecto y los
             comprobantes en revisión: la demo muestra también lo que sale mal. La cuenta demo entra como{" "}
             <strong>VIEWER sin PIN ni auto-bloqueo</strong>: no se bloquea sola y los módulos de administración
-            (Usuarios, Empresa, Configuración y Auditoría) quedan para OWNER/ADMIN — acá se resumen en la portada.
+            (Usuarios, Empresa, Correo y Auditoría) quedan para OWNER/ADMIN y no se abren en la demo.
             Para salir de la demo usá «Salir» en la franja superior. Si querés volver al estado inicial,
             «Reiniciar la demo» vuelve a sembrar los datos simulados con las fechas de hoy.
           </p>

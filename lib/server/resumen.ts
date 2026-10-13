@@ -74,8 +74,13 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
     weekEvents,
   ] = await Promise.all([
     db.lead.count({ where: { organizationId, createdAt: { gte: month.start, lt: month.end } } }),
+    // Creados o aprobados este mes: así «Aprobados» nunca supera a «Presupuestos».
     db.budget.aggregate({
-      where: { organizationId, createdAt: { gte: month.start, lt: month.end }, status: { not: "CANCELLED" } },
+      where: {
+        organizationId,
+        status: { not: "CANCELLED" },
+        OR: [{ createdAt: { gte: month.start, lt: month.end } }, { approvedAt: { gte: month.start, lt: month.end } }],
+      },
       _count: { _all: true },
       _sum: { total: true },
     }),

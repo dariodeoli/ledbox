@@ -196,7 +196,7 @@ function FunnelBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<
   const stages = data
     ? [
         { key: "leads", label: "Leads", count: data.funnel.leads, amount: null, href: "/leads", hint: "Consultas que entraron este mes" },
-        { key: "budgets", label: "Presupuestos", count: data.funnel.budgets.count, amount: data.funnel.budgets.amount, href: "/presupuestos", hint: "Presupuestos creados este mes (sin cancelados)" },
+        { key: "budgets", label: "Presupuestos", count: data.funnel.budgets.count, amount: data.funnel.budgets.amount, href: "/presupuestos", hint: "Presupuestos creados o aprobados este mes (sin cancelados)" },
         { key: "approved", label: "Aprobados", count: data.funnel.approved.count, amount: data.funnel.approved.amount, href: "/presupuestos?estado=APPROVED", hint: "Presupuestos aprobados este mes" },
         { key: "events", label: "Eventos", count: data.funnel.events, amount: null, href: "/eventos", hint: "Eventos con fecha de inicio este mes (sin cancelados)" },
       ]

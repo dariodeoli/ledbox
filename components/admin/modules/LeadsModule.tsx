@@ -42,7 +42,7 @@ import {
 import { SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { LeadQuickDialog } from "./LeadQuickForm";
 import { AdminIcon } from "../AdminIcons";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -330,7 +330,7 @@ export function LeadsModule() {
       return;
     }
     setNotice(`Lead de ${selected.name} actualizado.`);
-    leads.reload();
+    requestAdminRefresh();
   }
 
   async function convertToClient() {
