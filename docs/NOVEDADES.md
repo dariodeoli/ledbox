@@ -419,3 +419,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - Señas cobradas y pendientes, y garantías por estado.
   - Rentabilidad estimada por producto, con su criterio escrito en pantalla.
 - Si un mes tiene más movimientos de los que entran, el reporte lo avisa. Si la sección de alquileres no se puede calcular, el resto del reporte se muestra igual.
+
+## v2.1.99 — 2026-10-13
+
+- Panel: mientras cargan, los indicadores muestran una barra de carga en vez de un 0 que todavía no es real. Si un dato no se pudo cargar se ve «—», y los demás indicadores se siguen mostrando igual.
+- Eventos: el selector de vista (lista, tarjetas, calendario) queda siempre en el mismo lugar, y el calendario ya no repite los indicadores.
