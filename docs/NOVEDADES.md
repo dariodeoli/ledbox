@@ -348,3 +348,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Alquileres: nueva sección en Ajustes. Cada empresa define su seña, cuánto dura una reserva sin confirmar (48 h por defecto) y los tiempos de preparación, transporte, entrega, devolución y limpieza. Cada producto puede tener sus propios tiempos.
 - La disponibilidad cuenta esos tiempos. Un equipo que vuelve de un evento no queda libre hasta que termina su limpieza.
 - Las unidades se pueden marcar como dañadas o perdidas, y dejan de contar como disponibles. Una reserva que venció sin confirmarse libera su stock sola. Al confirmarla, se vuelve a revisar que haya lugar.
+
+## v2.1.89 — 2026-10-13
+
+- Presupuestos: cuando el cliente aprueba, el presupuesto avisa «Falta crear el evento» y ofrece el botón «Crear evento». El evento se crea con el cliente, el nombre y la fecha del presupuesto, ya confirmado, y los equipos quedan reservados. Si el evento existía como borrador, el botón lo confirma.
+- Cada presupuesto muestra sus etapas: Lead → Presupuesto → Aprobado → Evento → Cobrado, con un link a cada una.
+- Clientes: la ficha pasa a ser una página propia, con presupuestos, eventos, cobros, leads, historial y datos en pestañas, más el resumen de plata y contacto al costado. Tiene accesos directos a WhatsApp, Editar y Nuevo presupuesto.
