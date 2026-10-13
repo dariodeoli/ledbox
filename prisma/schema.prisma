@@ -450,6 +450,14 @@ model Lead {
   @@index([status, createdAt])
   @@index([email])
   @@index([organizationId, createdAt])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 model QuoteRequest {
@@ -703,6 +711,14 @@ model Client {
   @@index([type, active])
   @@index([createdAt])
   @@index([organizationId, createdAt])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 /// Logo del cliente (issue #36): mismo pipeline de imágenes del panel
@@ -762,6 +778,14 @@ model Event {
   @@index([startsAt, status])
   @@index([clientId, createdAt])
   @@index([organizationId, startsAt])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 model Budget {
@@ -846,6 +870,14 @@ model Budget {
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
   @@index([organizationId, leadId])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 model BudgetItem {
@@ -1375,6 +1407,14 @@ model Supplier {
 
   @@index([category, active])
   @@index([organizationId, name])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 model SupplierJob {
@@ -1736,6 +1776,13 @@ model InventoryItem {
   @@unique([organizationId, sku])
   @@index([status, category])
   @@index([organizationId, name])
+
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 /// Unidad física del ítem (issue #112): cada una con su código de inventario
@@ -1862,6 +1909,8 @@ model OrganizationRentalSettings {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Días hasta la purga de la papelera; NULL = sin purga.
+  trashPurgeDays Int?
 }
 
 /// Link privado del catálogo mayorista de un cliente: identifica al cliente sin
@@ -1949,6 +1998,14 @@ model Promoter {
   @@index([active, name])
   @@index([organizationId, name])
   @@index([organizationId, availability])
+
+  archivedAt     DateTime?
+  archivedById   String?
+  deletedAt      DateTime?
+  deletedById    String?
+  deleteReason   String?
+  anonymizedAt   DateTime?
+  @@index([organizationId, deletedAt])
 }
 
 model EventTask {
