@@ -198,3 +198,9 @@ test("invitar usuario: hoja chica con error en la franja y la nota de tope del p
   assert.match(dialog, /limitError && error \? <AdminPlanLimitNote message=\{error\} \/>/);
   assert.match(dialog, /busyLabel="Enviando…"/);
 });
+
+test("el monto de los diálogos ocupa la columna completa y usa cifras tabulares", () => {
+  const css = read("app", "globals.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.admin-dialog \.admin-money > span\s*\{\s*width:\s*100%/);
+  assert.match(css, /\.admin-dialog \.admin-money input\s*\{\s*font-variant-numeric:\s*tabular-nums/);
+});
