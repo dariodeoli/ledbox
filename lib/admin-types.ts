@@ -2147,9 +2147,10 @@ export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 /**
  * Acciones auditadas: alta, edición, baja, cambio de estado, salida/devolución,
  * conversión, recordatorio al cliente, envío de correo y bloqueo/desbloqueo/PIN
- * fallido del panel (issues #21 y #30).
+ * fallido del panel (issues #21 y #30) y la papelera (archivar, restaurar, eliminar,
+ * borrado definitivo y anonimización; docs/PAPELERA.md).
  */
-export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind", "send", "lock", "unlock", "deny"] as const;
+export const AUDIT_ACTIONS = ["create", "update", "delete", "status", "checkout", "checkin", "convert", "remind", "send", "lock", "unlock", "deny", "archive", "restore", "trash", "purge", "anonymize"] as const;
 
 export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
 

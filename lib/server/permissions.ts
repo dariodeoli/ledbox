@@ -30,7 +30,9 @@ export type AdminCapability =
   // Usuarios y accesos de la empresa activa.
   | "users.manage"
   // API keys de servicio (issue #69): **solo OWNER**.
-  | "api-keys.manage";
+  | "api-keys.manage"
+  // Papelera (docs/PAPELERA.md): ver lo eliminado, restaurar, borrar definitivo y anonimizar.
+  | "trash.manage";
 
 export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
   "profile.write",
@@ -43,6 +45,7 @@ export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
   "finance.write",
   "suppliers.write",
   "users.manage",
+  "trash.manage",
 ];
 
 const VIEWER_CAPABILITIES: readonly AdminCapability[] = [
