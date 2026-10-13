@@ -43,3 +43,14 @@ test("finanzas: «Pagar» del trabajo de proveedor es un AdminDialog con footer,
   assert.match(src, /amount: String\(supplierJobBalance\(job\) \|\| ""\)/);
   assert.match(src, /const amount = Number\(payJob\.amount\);/);
 });
+
+test("create-event: el tope del plan se repite dentro de la transacción, después del FOR UPDATE", () => {
+  const src = read("app/api/admin/budgets/[id]/create-event/route.ts");
+  const tx = src.indexOf("db.$transaction");
+  const lock = src.indexOf('FROM "Budget"', tx);
+  const locked = src.indexOf("lockedEventLimitViolation(tx", tx);
+  const create = src.indexOf("tx.event.create", tx);
+  assert.ok(tx > 0 && lock > tx && locked > lock && create > locked);
+  assert.match(src, /error instanceof PlanLimitError/);
+  assert.match(read("lib/server/plan-limits.ts"), /FROM "Organization" WHERE "id" = \$\{context\.organizationId\} FOR UPDATE/);
+});

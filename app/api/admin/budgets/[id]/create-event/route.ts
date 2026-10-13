@@ -3,12 +3,18 @@ import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { jsonError } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
-import { planLimitViolation } from "@/lib/server/plan-limits";
+import { lockedEventLimitViolation, planLimitViolation } from "@/lib/server/plan-limits";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetReference } from "@/lib/admin-format";
 import { eventDataFromBudget } from "@/lib/budget-event";
+
+class PlanLimitError extends Error {
+  constructor(readonly violation: { error: string; code: string }) {
+    super(violation.error);
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +54,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       if (!budget) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
       if (budget.eventId) throw new QuoteComparisonError(409, "El presupuesto ya tiene un evento.");
       if (budget.status !== "APPROVED") throw new QuoteComparisonError(409, "Solo se crea el evento de un presupuesto aprobado.");
+      // Dos aprobaciones de presupuestos distintos de la misma empresa no se serializan por el
+      // lock del presupuesto: se toma el lock de la empresa y se repite el chequeo del plan
+      // dentro de la transacción, para que ninguna pase del tope mensual.
+      const lockedLimit = await lockedEventLimitViolation(tx, auth.context);
+      if (lockedLimit) throw new PlanLimitError(lockedLimit);
       const data = eventDataFromBudget(budget);
       const event = await tx.event.create({
         data: {
@@ -80,6 +91,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const reservations = await reserveBudgetInventory({ organizationId, budgetId: created.budget.id, context: auth.context });
     return Response.json({ event: created.event, reservations }, { status: 201 });
   } catch (error) {
+    if (error instanceof PlanLimitError) return jsonError(error.violation.error, 403, error.violation.code);
     if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
     console.error("[budgets/create-event] no se pudo crear el evento", error);
     throw error;
