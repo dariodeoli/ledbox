@@ -510,3 +510,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Ajustes → Eliminados (solo dueño y administradores): lista lo eliminado con quién, cuándo y por qué; permite restaurar (vuelve a archivado), eliminar definitivamente escribiendo el nombre y un motivo, o anonimizar cuando hay historial contable.
 - Lo que tiene cobros, facturas, gastos o reservas sin devolver no se borra nunca: el sistema dice qué lo bloquea y ofrece anonimizar los datos personales. Los reportes de dinero siguen contando lo eliminado, rotulado «(eliminado)».
 - Lo eliminado desaparece de listas, búsqueda, calendario, catálogo, disponibilidad y portal; lo archivado sale del inicio, el resumen y los contadores, pero los saldos pendientes siguen contando.
+
+## v2.1.110 — 2026-10-13
+
+- Papelera: en Ajustes → Eliminados elegís «Vaciar automáticamente» (Nunca, 30, 60, 90 o 180 días; por defecto Nunca). Cada fila dice «Se borra en N días»; lo que tiene cobros, facturas o reservas queda «Conservado (contable)» y nunca se borra solo. Cada borrado automático queda en la auditoría como «Sistema».
+- Ajustes de la prueba en pantalla: el menú «•••» ya no queda recortado en Leads, Proveedores y Promotoras; en Eliminados las acciones entran sin desplazar; el motivo de una acción deshabilitada se lee debajo de la opción (también en el celular); los avisos de bloqueo hablan en castellano («Tiene 2 cobros»).
