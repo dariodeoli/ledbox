@@ -614,7 +614,6 @@ function RevokeInviteDialog({
   onConfirm: () => void;
 }) {
   const formId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   return (
     <AdminDialog
