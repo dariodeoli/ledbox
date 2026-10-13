@@ -635,21 +635,18 @@ export function ProveedoresModule() {
         {writable && jobPanel?.mode === "create" ? (
           <AdminDialog
             title="Nuevo trabajo de proveedor"
+            size="lg"
             icon="suppliers"
             description="Registra el trabajo con su costo y vencimiento; el anticipo, si lo cargás, queda como pagado."
             dirty={jobDirty}
             onClose={() => setJobPanel(null)}
+            error={jobError || null}
             footer={({ requestClose }) => (
             <>
-              {jobError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{jobError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={jobBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={jobFormId} busy={jobBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={jobFormId} busy={jobBusy} busyLabel="Guardando…">
                 Cargar trabajo
               </AdminButton>
             </>
@@ -750,20 +747,17 @@ export function ProveedoresModule() {
           <AdminDialog
             title={`Editar trabajo: ${editingJob.description}`}
             icon="suppliers"
+            size="lg"
             description="Concepto, costo, pagos y fechas del trabajo."
             dirty={jobDirty}
             onClose={() => setJobPanel(null)}
+            error={jobError || null}
             footer={({ requestClose }) => (
             <>
-              {jobError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{jobError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={jobBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={jobFormId} busy={jobBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={jobFormId} busy={jobBusy} busyLabel="Guardando…">
                 Guardar cambios
               </AdminButton>
             </>
@@ -780,21 +774,6 @@ export function ProveedoresModule() {
               </div>
             ) : null}
             <TextField label="Proveedor" disabled value={editingJob.supplier.name} onChange={() => {}} />
-            <Combobox
-              label="Evento"
-              hint="Opcional"
-              value={jobForm.eventId}
-              onChange={(value) => setJobForm({ ...jobForm, eventId: value })}
-              placeholder="Buscá el evento…"
-              emptyLabel={events.length > 0 ? "Sin coincidencias." : "No hay eventos cargados."}
-              options={events.map((item) => ({ value: item.id, label: item.name }))}
-            />
-            <SelectField
-              label="Rubro del trabajo"
-              value={jobForm.category}
-              onChange={(value) => setJobForm({ ...jobForm, category: value })}
-              options={CATEGORY_OPTIONS}
-            />
             <div className="admin-countdown-field">
               <DateField
                 label="Vence"
@@ -862,7 +841,22 @@ export function ProveedoresModule() {
               />
             ) : null}
               </AdminDialogSection>
-              <AdminDialogSection title="Notas">
+              <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(jobForm.notes)} hint="evento, rubro y notas">            <Combobox
+              label="Evento"
+              hint="Opcional"
+              value={jobForm.eventId}
+              onChange={(value) => setJobForm({ ...jobForm, eventId: value })}
+              placeholder="Buscá el evento…"
+              emptyLabel={events.length > 0 ? "Sin coincidencias." : "No hay eventos cargados."}
+              options={events.map((item) => ({ value: item.id, label: item.name }))}
+            />
+            <SelectField
+              label="Rubro del trabajo"
+              value={jobForm.category}
+              onChange={(value) => setJobForm({ ...jobForm, category: value })}
+              options={CATEGORY_OPTIONS}
+            />
+
             <TextAreaField
               label="Notas"
               wide
@@ -1075,27 +1069,24 @@ export function ProveedoresModule() {
           <AdminDialog
             title={supplierForm.id ? `Editar proveedor: ${supplierForm.name}` : "Nuevo proveedor"}
             icon="suppliers"
+            size="lg"
             description="Contacto, rubro y condiciones de pago del proveedor."
             dirty={supplierDirty}
             onClose={() => setSupplierForm(null)}
+            error={supplierError || null}
             footer={({ requestClose }) => (
             <>
-              {supplierError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{supplierError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={supplierBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={supplierFormId} busy={supplierBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={supplierFormId} busy={supplierBusy} busyLabel="Guardando…">
                 {supplierForm.id ? "Guardar cambios" : "Cargar proveedor"}
               </AdminButton>
             </>
           )}
           >
             <form id={supplierFormId} className="admin-form" onSubmit={(event) => void submitSupplier(event)} aria-busy={supplierBusy || undefined}>
-              <AdminDialogSection title="Contacto">
+              <AdminDialogSection title="Datos">
             <TextField
               label="Nombre"
               required
@@ -1113,6 +1104,12 @@ export function ProveedoresModule() {
               onChange={(value) => setSupplierForm({ ...supplierForm, company: value })}
               placeholder="Ej.: Lima Hnos. S.A."
             />
+            <SelectField
+              label="Rubro"
+              value={supplierForm.category}
+              onChange={(value) => setSupplierForm({ ...supplierForm, category: value })}
+              options={CATEGORY_OPTIONS}
+            />
             <PhoneField
               label="Teléfono"
               hint="Con código de país"
@@ -1127,14 +1124,7 @@ export function ProveedoresModule() {
               error={supplierForm.email && !emailValid(supplierForm.email) ? FIELD_MESSAGES.email : null}
             />
               </AdminDialogSection>
-              <AdminDialogSection title="Rubro y condiciones">
-            <SelectField
-              label="Rubro"
-              value={supplierForm.category}
-              onChange={(value) => setSupplierForm({ ...supplierForm, category: value })}
-              options={CATEGORY_OPTIONS}
-            />
-            <SelectField
+              <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(supplierForm.id)} hint="condiciones de pago, estado y notas">            <SelectField
               label="Condiciones de pago"
               hint="Contado o a plazo"
               value={supplierForm.paymentTerms}
@@ -1150,8 +1140,7 @@ export function ProveedoresModule() {
                 { value: "inactive", label: "Inactivo" },
               ]}
             />
-              </AdminDialogSection>
-              <AdminDialogSection title="Notas">
+              
             <TextAreaField
               label="Notas"
               wide
@@ -1331,20 +1320,17 @@ function JobStatusPanel({
     <AdminDialog
       title={`Estado del trabajo: ${job.description}`}
       icon="suppliers"
+      size="sm"
       description="Solo se muestran los pasos válidos desde el estado actual."
       dirty={dirty}
       onClose={onClose}
+      error={error || null}
       footer={({ requestClose }) => (
         <>
-          {error ? (
-            <div className="admin-dialog-footer-note">
-              <AdminNote tone="error">{error}</AdminNote>
-            </div>
-          ) : null}
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
-          <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy}>
+          <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy} busyLabel="Guardando…">
             Confirmar cambio
           </AdminButton>
         </>

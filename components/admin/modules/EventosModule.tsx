@@ -53,7 +53,6 @@ import {
   AdminKpis,
   AdminModuleContext,
   AdminNote,
-  AdminPlanLimitNote,
   AdminRow,
   AdminSelect,
   AdminTable,
@@ -697,19 +696,16 @@ export function EventosModule() {
           title="Cerrar igual"
           icon="events"
           description={`El motivo queda en la auditoría de «${closeBlock.event.name}».`}
+          size="sm"
           dirty={forceNote.trim().length > 0}
+          error={forceError}
           onClose={() => setForceOpen(false)}
           footer={({ requestClose }) => (
             <>
-              {forceError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{forceError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={forceBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton variant="primary" icon="check" type="submit" form={forceFormId} busy={forceBusy}>
+              <AdminButton variant="primary" icon="check" type="submit" form={forceFormId} busy={forceBusy} busyLabel="Guardando…">
                 Cerrar el evento
               </AdminButton>
             </>
@@ -733,27 +729,24 @@ export function EventosModule() {
           title={editingEventId ? "Editar evento" : "Nuevo evento"}
           icon="events"
           description={editingEventId ? "El cliente del evento no se puede cambiar." : "Los datos de operación son opcionales."}
+          size="lg"
           dirty={eventFormDirty}
+          error={formError || (formLimit ? `${formLimit} Revisá tu plan en Ajustes → Plan.` : null)}
           onClose={() => setShowForm(false)}
           footer={({ requestClose }) => (
             <>
-              {formError || formLimit || formNotice ? (
-                <div className="admin-dialog-footer-note">
-                  {formError ? <AdminNote tone="error">{formError}</AdminNote> : formLimit ? <AdminPlanLimitNote message={formLimit} /> : <AdminNote tone="ok">{formNotice}</AdminNote>}
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton variant="primary" icon="check" type="submit" form={eventFormId} busy={busy}>
+              <AdminButton variant="primary" icon="check" type="submit" form={eventFormId} busy={busy} busyLabel="Guardando…">
                 {editingEventId ? "Guardar cambios" : "Crear evento"}
               </AdminButton>
             </>
           )}
         >
           <form id={eventFormId} className="admin-form" onSubmit={(formEvent) => void submitEvent(formEvent)} aria-busy={busy || undefined}>
-            <AdminDialogSection title="Evento">
-              <EventQuickFields key={editingEventId ?? "nuevo"} values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
+              {formNotice ? <AdminNote tone="ok">{formNotice}</AdminNote> : null}
+              <EventQuickFields key={editingEventId ?? "nuevo"} layout="sections" values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
                 moreOpen={Boolean(editingEventId)}
                 locationOptions={[...new Set(events.flatMap((event) => event.location ? [event.location] : []))]}>
               <div className="admin-field-action">
@@ -784,7 +777,6 @@ export function EventosModule() {
                 </AdminButton>
               </div>
               </EventQuickFields>
-            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}
