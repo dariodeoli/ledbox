@@ -149,8 +149,8 @@ test("tercera tanda: Clientes, Proveedores, Promotoras, Finanzas y Usuarios son 
     assert.match(source, /footer=\{\(\{ requestClose \}\)/, `${file}: Cancelar debe pasar por requestClose`);
     assert.match(source, /form=\{\w*[Ff]ormId\}/, `${file}: el submit del pie apunta al formulario (Enter envía)`);
   }
-  // Despacho y devolución de equipo (Fase 4) no se tocan en esta tanda.
-  assert.match(mod("EventosModule.tsx"), /<AdminFormPanel/);
+  // Con despacho y devolución en ventana (Fase 4), ya no queda ningún formulario inline.
+  assert.doesNotMatch(mod("EventosModule.tsx"), /AdminFormPanel/);
 });
 
 test("invitar usuario enfoca el correo; revocar no enfoca el botón destructivo; EmailField y MoneyField aceptan autoFocus", () => {

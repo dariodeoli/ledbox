@@ -391,5 +391,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Eventos: «Despachar» registra qué salió, cuánto, quién lo sacó y cuándo, y se puede despachar por partes. «Registrar devolución» admite devoluciones parciales: el evento muestra «Faltan N por devolver» y permite marcar equipos dañados o faltantes.
 - Incidentes: cada daño o faltante abre un incidente vinculado a la reserva y a la unidad. La unidad queda fuera del stock hasta que se repara (vuelve a estar disponible) o se da de baja. Desde Inventario → Incidentes se pasa a reparación, se resuelve o se da de baja, y se registra el costo de la reparación.
 - Lo devuelto no vuelve solo al stock: queda «en limpieza o revisión» durante el tiempo configurado.
-- Un evento no se puede cerrar con equipos sin devolver o faltantes sin resolver. Para eventos anteriores a esta versión hay un cierre forzado con nota obligatoria, que queda registrado.
+- Un evento no se puede cerrar con equipos sin devolver o faltantes sin resolver. Para eventos anteriores a esta versión, el sistema admite un cierre forzado con nota obligatoria que queda registrado; su botón en pantalla llega en una próxima versión.
 - Calendario: muestra las entregas y devoluciones de equipos con sus horarios previstos.
+
+## v2.1.96 — 2026-10-13
+
+- Clientes, Proveedores (proveedor, trabajo y estado), Promotoras, Finanzas (cobro, cuenta, movimiento y gasto) y Usuarios cargan en la ventana nueva. El gasto tiene «Guardar y cargar otro», con el foco en el monto. Un doble clic ya no envía dos veces.
+- Invitar usuario pone el foco en el correo, y en «Revocar» el foco nunca cae sobre el botón destructivo.
+- Celular: el menú muestra tu nombre y tu rol, y la barra inferior no tapa los formularios ni los botones de las ventanas.

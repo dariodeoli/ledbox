@@ -492,68 +492,6 @@ export function AdminDataState({
   return <>{children}</>;
 }
 
-export function AdminFormPanel({
-  title,
-  submitLabel,
-  onSubmit,
-  onCancel,
-  busy,
-  status,
-  statusNote,
-  onEscape,
-  children,
-}: {
-  title: string;
-  submitLabel: string;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
-  onCancel: () => void;
-  busy?: boolean;
-  status?: string | null;
-  /** Aviso propio con acciones (por ejemplo el límite del plan con su link). */
-  statusNote?: React.ReactNode;
-  /**
-   * Escape cancela el formulario (issue #106, sin fricción). No se dispara si
-   * un control ya consumió la tecla (el listado del combobox cierra primero).
-   */
-  onEscape?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <form
-      className="admin-form-panel"
-      onSubmit={onSubmit}
-      aria-busy={busy || undefined}
-      onKeyDown={
-        onEscape
-          ? (event) => {
-              if (event.key !== "Escape" || event.defaultPrevented) return;
-              event.preventDefault();
-              onEscape();
-            }
-          : undefined
-      }
-    >
-      <div className="admin-form-head">
-        <h2 className="admin-form-title">{title}</h2>
-        <button type="button" className="admin-iconbtn" onClick={onCancel} aria-label="Cerrar formulario" title="Cerrar formulario">
-          <AdminIcon name="close" size={15} />
-        </button>
-      </div>
-      <div className="admin-form-grid">{children}</div>
-      <div className="admin-form-foot">
-        {statusNote ? statusNote : status ? <AdminNote tone="error">{status}</AdminNote> : null}
-        <div className="admin-form-actions">
-          <AdminButton icon="close" type="button" onClick={onCancel} disabled={busy}>
-            Cancelar
-          </AdminButton>
-          <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
-            {submitLabel}
-          </AdminButton>
-        </div>
-      </div>
-    </form>
-  );
-}
 
 /**
  * Sección plegable de los formularios («Más datos», issues #88 y #106): deja

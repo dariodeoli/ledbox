@@ -18,7 +18,8 @@ test("el kit suma la sección plegable, el foco automático y Escape para cancel
   // El contenido sigue montado: solo se oculta (lo plegado no pierde lo cargado).
   assert.match(ui, /className="admin-disclosure-body"[\s\S]{0,120}hidden=\{!open\}/, "la sección plegable no puede desmontar su contenido");
   assert.match(ui, /aria-expanded=\{open\}/, "el botón de la sección plegable necesita aria-expanded");
-  assert.match(ui, /onEscape\?: \(\) => void;/, "AdminFormPanel tiene que aceptar Escape para cancelar");
+  assert.match(ui, /event\.key === "Escape"/, "las ventanas de carga se cancelan con Escape");
+  assert.doesNotMatch(ui, /export function AdminFormPanel/, "no queda el formulario inline viejo");
   const fields = repoFile("components/admin/AdminFields.tsx");
   assert.match(fields, /autoFocus\?: boolean;/, "TextField necesita el prop de autofoco");
   assert.match(fields, /autoFocus=\{autoFocus\}/, "TextField tiene que pasar el autofoco al input");
