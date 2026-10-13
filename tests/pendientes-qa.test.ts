@@ -63,3 +63,23 @@ test("catálogo público: la preorden responde 429 al superar el tope diario por
   assert.match(src, /"Retry-After"/);
   assert.ok(src.indexOf("preorderDailyLimit(") > src.indexOf("context.demo"));
 });
+
+test("descripción pública: tope de 600, campo opcional en la edición, catálogo la muestra y la migración es aditiva e idempotente", async () => {
+  const { FIELD_LIMITS } = await import("../lib/field-rules");
+  assert.equal(FIELD_LIMITS.publicDescription, 600);
+  const api = read("app/api/admin/inventory/route.ts");
+  assert.match(api, /body\.publicDescription/);
+  assert.match(api, /FIELD_LIMITS\.publicDescription/);
+  assert.match(api, /"publicDescription",\n  "visibleOnWeb"/);
+  const ui = read("components/admin/modules/InventarioModule.tsx");
+  assert.match(ui, /label="Descripción para el catálogo"\n\s+optional/);
+  assert.match(ui, /maxLength=\{FIELD_LIMITS\.publicDescription\}/);
+  assert.match(read("components/catalog-public/CatalogBrowser.tsx"), /item\.description \?/);
+  const catalog = read("lib/server/catalog-public.ts");
+  assert.match(catalog, /publicDescription: true/);
+  assert.doesNotMatch(catalog.slice(catalog.indexOf("async function loadVisibleRows"), catalog.indexOf("export type PublicRange")), /notes: true/);
+  const sql = read("prisma/migrations/202610150004_inventory_public_description/migration.sql");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "publicDescription" TEXT;/);
+  assert.doesNotMatch(sql, /NOT NULL|DROP|UPDATE|DELETE/);
+  assert.match(read("prisma/schema.prisma"), /publicDescription\s+String\?/);
+});

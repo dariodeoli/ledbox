@@ -67,6 +67,8 @@ export type PublicCatalogItem = {
   category: string;
   sku: string | null;
   imageUrl: string | null;
+  /** Descripción pública del ítem; `null` si no la cargaron. Nunca son las notas internas. */
+  description: string | null;
   /** Precio de venta de referencia por día; `null` si la empresa no muestra precios. */
   price: { listPrice: number; listFromDays: number; listFromPrice: number } | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
@@ -78,6 +80,7 @@ type CatalogRow = {
   name: string;
   category: string;
   sku: string | null;
+  publicDescription: string | null;
   imageUrl: string | null;
   imageMime: string | null;
   updatedAt: Date;
@@ -103,6 +106,7 @@ async function loadVisibleRows(organizationId: string, ids?: readonly string[]):
       name: true,
       category: true,
       sku: true,
+      publicDescription: true,
       imageUrl: true,
       imageMime: true,
       updatedAt: true,
@@ -171,6 +175,7 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     category: row.category,
     sku: row.sku,
     imageUrl: inventoryImageUrl(row),
+    description: row.publicDescription?.trim() || null,
     price: context.settings.publicShowPrices ? { listPrice: row.listPrice, listFromDays: row.listFromDays, listFromPrice: row.listFromPrice } : null,
     availability: hints?.get(row.id) ?? null,
   }));

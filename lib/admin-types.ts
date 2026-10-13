@@ -1627,6 +1627,8 @@ export type AdminInventoryRow = {
   status: string;
   /** «Visible en la web» (issue #111): el catálogo público lo respeta. */
   visibleOnWeb: boolean;
+  /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
+  publicDescription?: string | null;
   quantity: number;
   replacementCost: number;
   dailyCost: number;

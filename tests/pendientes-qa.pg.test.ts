@@ -92,9 +92,58 @@ test("pendientes QA en PostgreSQL", { skip: !process.env.TEST_DATABASE_URL }, as
       assert.ok(hit.retryAfter >= 60 && hit.retryAfter <= 86_400);
       assert.equal((await preorderDailyLimit(b.org, { limit: 2 })).reached, false);
     });
+
+    await t.test("descripción pública: migración idempotente y el catálogo no expone las notas internas", async () => {
+      const file = new URL("../prisma/migrations/202610150004_inventory_public_description/migration.sql", import.meta.url).pathname;
+      for (let i = 0; i < 2; i++) execFileSync("psql", [url.toString(), "-v", "ON_ERROR_STOP=1", "-q", "-f", file], { stdio: "pipe" });
+      const { loadPublicCatalogItems, resolvePublicCatalog } = await import("../lib/server/catalog-public");
+      const a = await seedOrg(null);
+      const other = await seedOrg(null);
+      await db.organizationRentalSettings.create({ data: { id: randomUUID(), organizationId: a.org, publicCatalogEnabled: true, publicShowPrices: true } });
+      const slug = (await db.organization.findUniqueOrThrow({ where: { id: a.org } })).slug;
+      const item = (org: string, over: Record<string, unknown>) =>
+        db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "Pantalla", category: "Pantallas", quantity: 2, visibleOnWeb: true, ...over } });
+      await item(a.org, { name: "Con texto", publicDescription: "  Pantalla LED P3 para interiores  ", notes: "NOTA-INTERNA-SECRETA" });
+      await item(a.org, { name: "Sin texto", notes: "NOTA-INTERNA-SECRETA" });
+      await item(other.org, { name: "Ajena", publicDescription: "TEXTO-DE-OTRA-EMPRESA" });
+      const context = await resolvePublicCatalog(slug);
+      assert.ok(context);
+      const items = await loadPublicCatalogItems(context, null);
+      const withText = items.find((row) => row.name === "Con texto");
+      assert.equal(withText?.description, "Pantalla LED P3 para interiores");
+      assert.equal(items.find((row) => row.name === "Sin texto")?.description, null);
+      const serialized = JSON.stringify(items);
+      assert.ok(!serialized.includes("NOTA-INTERNA-SECRETA"));
+      assert.ok(!serialized.includes("TEXTO-DE-OTRA-EMPRESA"));
+      await db.organizationRentalSettings.deleteMany({ where: { organizationId: a.org } });
+    });
+
+    await t.test("la preorden responde 429 con mensaje claro al superar el tope diario de la empresa", async () => {
+      const { POST } = await import("../app/api/catalog/[orgSlug]/preorder/route");
+      const { PREORDER_DAILY_LIMIT } = await import("../lib/server/catalog-public");
+      const a = await seedOrg(null);
+      await db.organizationRentalSettings.create({ data: { id: randomUUID(), organizationId: a.org, publicCatalogEnabled: true } });
+      const slug = (await db.organization.findUniqueOrThrow({ where: { id: a.org } })).slug;
+      const stock = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: a.org, name: "Pantalla", category: "P", quantity: 5, visibleOnWeb: true } });
+      await db.quoteRequest.createMany({ data: Array.from({ length: PREORDER_DAILY_LIMIT }, () => ({ id: randomUUID(), organizationId: a.org, source: "catalogo", status: "NEW" })) });
+      const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+      const res = await POST(
+        new Request(`http://localhost/api/catalog/${slug}/preorder`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-forwarded-for": "10.9.9.9" },
+          body: JSON.stringify({ name: "Ana Pérez", phone: "+595 981 000 111", email: "ana@example.com", location: "Asunción", from: day(10), to: day(11), items: [{ inventoryId: stock.id, quantity: 1 }] }),
+        }),
+        { params: Promise.resolve({ orgSlug: slug }) },
+      );
+      assert.equal(res.status, 429);
+      assert.ok(Number(res.headers.get("retry-after")) >= 60);
+      assert.match(((await res.json()) as { error: string }).error, /máximo de pedidos/);
+      await db.organizationRentalSettings.deleteMany({ where: { organizationId: a.org } });
+    });
   } finally {
     await db.quoteRequest.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.lead.deleteMany({ where: { organizationId: { in: orgs } } });
+    await db.inventoryItem.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.event.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.client.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.organization.deleteMany({ where: { id: { in: orgs } } });

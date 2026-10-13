@@ -142,6 +142,7 @@ const EMPTY_EDIT = {
   replacementCost: "",
   dailyCost: "",
   notes: "",
+  publicDescription: "",
   visibleOnWeb: false,
   imageUrl: "",
   /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
@@ -166,6 +167,7 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     replacementCost: item.replacementCost > 0 ? String(item.replacementCost) : "",
     dailyCost: item.dailyCost > 0 ? String(item.dailyCost) : "",
     notes: item.notes ?? "",
+    publicDescription: item.publicDescription ?? "",
     visibleOnWeb: item.visibleOnWeb,
     bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
     bufferAfterHours: bufferHoursText(item.bufferAfterMin),
@@ -838,6 +840,7 @@ export function InventarioModule() {
       replacementCost: replacementCost ?? 0,
       dailyCost: dailyCost ?? 0,
       notes: editForm.notes,
+      publicDescription: editForm.publicDescription,
       visibleOnWeb: editForm.visibleOnWeb,
       imageUrl: image,
       // Solo se mandan los tiempos que la persona cambió (no se pisa un valor en minutos no enteros).
@@ -1440,6 +1443,18 @@ export function InventarioModule() {
           </AdminDialogSection>
 
           <AdminDialogSection title="Notas">
+            <TextAreaField
+              label="Descripción para el catálogo"
+              optional
+              help={INVENTORY_FIELD_HELP.publicDescription}
+              maxLength={FIELD_LIMITS.publicDescription}
+              rows={3}
+              wide
+              value={editForm.publicDescription}
+              onChange={(value) => setEditForm({ ...editForm, publicDescription: value })}
+              hint="Se muestra en el catálogo público. Las notas internas no se publican."
+              disabled={editBusy}
+            />
             <TextAreaField
               label="Notas internas"
               help={INVENTORY_FIELD_HELP.notes}

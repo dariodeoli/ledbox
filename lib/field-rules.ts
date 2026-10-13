@@ -64,6 +64,8 @@ export const FIELD_LIMITS = {
   notes: 2000,
   /** Descripciones de trabajo. */
   description: 400,
+  /** Descripción de un producto en el catálogo público. */
+  publicDescription: 600,
   /** Correos: máximo del panel. */
   email: 200,
   /** Seriales/IMEI. */

@@ -93,6 +93,7 @@ const INVENTORY_ITEM_FIELDS = [
   "replacementCost",
   "dailyCost",
   "notes",
+  "publicDescription",
   "visibleOnWeb",
   "imageUrl",
   "bufferBeforeMin",
@@ -107,6 +108,7 @@ type InventoryItemUpdate = Partial<{
   replacementCost: number;
   dailyCost: number;
   notes: string | null;
+  publicDescription: string | null;
   visibleOnWeb: boolean;
   imageUrl: string | null;
   bufferBeforeMin: number | null;
@@ -156,6 +158,14 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
       return { ok: false, error: `Las notas no pueden superar los ${FIELD_LIMITS.notes} caracteres.` };
     }
     data.notes = notes || null;
+  }
+  if (body.publicDescription !== undefined) {
+    if (body.publicDescription !== null && typeof body.publicDescription !== "string") return { ok: false, error: "La descripción para el catálogo no es válida." };
+    const description = (body.publicDescription ?? "").trim();
+    if (description.length > FIELD_LIMITS.publicDescription) {
+      return { ok: false, error: `La descripción para el catálogo no puede superar los ${FIELD_LIMITS.publicDescription} caracteres.` };
+    }
+    data.publicDescription = description || null;
   }
   if (body.visibleOnWeb !== undefined) {
     if (typeof body.visibleOnWeb !== "boolean") return { ok: false, error: "La visibilidad web tiene que ser sí o no." };
@@ -488,6 +498,7 @@ export async function POST(request: Request) {
         replacementCost: true,
         dailyCost: true,
         notes: true,
+        publicDescription: true,
         visibleOnWeb: true,
         imageUrl: true,
         bufferBeforeMin: true,
