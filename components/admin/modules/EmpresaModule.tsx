@@ -11,7 +11,7 @@ import { useAdminSession } from "../AdminShell";
 import { AdminOrgLogo } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
-import { AdminButton, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
  * Empresa (issue #22): OWNER/ADMIN editan el **nombre** de la empresa —el que
@@ -63,6 +63,9 @@ export function EmpresaModule() {
     return version ? organizationLogoUrl(variant, version) : null;
   }
 
+  /** Logo pendiente de confirmar para quitar (diálogo propio, nunca confirm() nativo). */
+  const [logoToRemove, setLogoToRemove] = useState<LogoVariant | null>(null);
+
   const nameChanged = Boolean(organization) && normalizePersonName(name) !== organization?.name;
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
@@ -103,7 +106,7 @@ export function EmpresaModule() {
   }
 
   async function removeLogo(variant: LogoVariant) {
-    if (!window.confirm(`¿Quitar el ${logoVariantLabel(variant).toLowerCase()}? En la hoja imprimible vuelve el monograma LB.`)) return;
+    setLogoToRemove(null);
     setSavingLogo(variant);
     setLogoError("");
     setNotice("");
@@ -210,7 +213,7 @@ export function EmpresaModule() {
                   busy={savingLogo === variant}
                   disabled={readOnly || !organization || savingLogo !== null}
                   onPrepared={(image) => void uploadLogo(variant, image)}
-                  onRemove={logos[variant] ? () => void removeLogo(variant) : undefined}
+                  onRemove={logos[variant] ? () => setLogoToRemove(variant) : undefined}
                   removeLabel={`Quitar ${logoVariantLabel(variant).toLowerCase()}`}
                 />
               ))}
@@ -218,6 +221,17 @@ export function EmpresaModule() {
           </div>
         </AdminPanel>
       </AdminDataState>
+      {logoToRemove ? (
+        <AdminConfirmDialog
+          title={`Quitar el ${logoVariantLabel(logoToRemove).toLowerCase()}`}
+          message="En la hoja imprimible vuelve el monograma LB."
+          confirmLabel="Quitar"
+          icon="trash"
+          danger
+          onConfirm={() => void removeLogo(logoToRemove)}
+          onClose={() => setLogoToRemove(null)}
+        />
+      ) : null}
     </div>
   );
 }
