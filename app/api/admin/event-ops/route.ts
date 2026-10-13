@@ -3,7 +3,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
-import { commitInventoryAssignment, insufficientMessage } from "@/lib/server/inventory-availability";
+import { commitInventoryAssignment, insufficientMessage, isComboAssignment } from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -157,6 +157,7 @@ export async function POST(request: Request) {
       if (committed.reason === "blocked") {
         return jsonError(`«${committed.item.name}» está ${committed.item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
       }
+      if (committed.reason === "conflict") return jsonError(committed.message, 409);
       return Response.json({ error: insufficientMessage(committed), availability: committed.availability }, { status: 409 });
     }
     const { assignment, previous, item: inventory, event } = committed;
@@ -200,6 +201,9 @@ export async function POST(request: Request) {
       },
     });
     if (!existing) return jsonError("Assignment not found.", 404);
+    if (await isComboAssignment({ organizationId, assignmentId: existing.id })) {
+      return jsonError("Un combo no sale ni vuelve como unidad: registrá el movimiento de cada componente.", 409);
+    }
     const assignment = await db.eventInventory.update({
       where: { id: existing.id },
       data: {
