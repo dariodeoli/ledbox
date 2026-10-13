@@ -411,6 +411,9 @@ export type AdminBudgetRow = {
   notes: string | null;
   client: AdminClientRef;
   event: AdminEventRef | null;
+  /** Lead de origen (Lead → Presupuesto); ausente o `null` si el presupuesto no nació de un lead. */
+  leadId?: string | null;
+  lead?: { id: string; createdAt: string } | null;
   items: AdminBudgetItem[];
   payments: AdminPayment[];
   /** Read-only ledger concepts for the next collection instruction (#143/#129). */
@@ -1404,6 +1407,8 @@ export type AdminLeadRow = {
   createdAt: string;
   updatedAt: string;
   quoteRequests: AdminLeadQuote[];
+  /** Presupuestos que nacieron de este lead (Lead → Presupuesto). */
+  budgets?: Array<{ id: string; title: string; status: string; createdAt: string }>;
 };
 
 export type AdminSupplierJobRow = {

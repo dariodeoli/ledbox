@@ -146,6 +146,14 @@ export function canWriteFinance(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN" || role === "FINANCE";
 }
 
+/**
+ * Presupuestos (`budgets.write` en el API): OWNER, ADMIN y FINANCE. VIEWER y
+ * OPERATIONS no arman presupuestos, así que no ven «Armar presupuesto».
+ */
+export function canWriteBudgets(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN" || role === "FINANCE";
+}
+
 /** Checklist operativo y asignaciones de equipos (`/api/admin/event-ops`). */
 export function canWriteOperations(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN" || role === "OPERATIONS";

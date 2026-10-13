@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   billingUnitLabel,
+  budgetReference,
+  budgetStatusLabel,
   formatDate,
   formatDateShort,
   formatDateTime,
@@ -13,7 +17,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
-import { canWriteClients, matchesQuery } from "@/lib/admin-policy";
+import { canWriteBudgets, canWriteClients, matchesQuery } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -110,6 +114,10 @@ export function LeadsModule() {
   const narrow = useAdminNarrowViewport();
 
   const writable = canWriteClients(role);
+  const budgetWritable = canWriteBudgets(role);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const leadParam = searchParams.get("lead")?.trim() ?? "";
   const list = useMemo(() => leads.data ?? [], [leads.data]);
 
   const searched = useMemo(
@@ -278,6 +286,15 @@ export function LeadsModule() {
     setDetailError("");
     setNotice("");
   }
+
+  // Enlace desde un presupuesto (`/leads?lead=<id>`): abre el detalle una vez cargada la lista.
+  useEffect(() => {
+    if (!leadParam || selectedId === leadParam) return;
+    const target = (leads.data ?? []).find((lead) => lead.id === leadParam);
+    if (target) openDetail(target);
+    // openDetail solo escribe estado local; depender de la lista alcanza.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadParam, leads.data]);
 
   function closeDetail() {
     setSelectedId("");
@@ -613,6 +630,41 @@ export function LeadsModule() {
                 ))
               )}
             </div>
+
+            {(selected.budgets?.length ?? 0) > 0 ? (
+              <div className="admin-detail-section">
+                <p className="admin-detail-section-title">
+                  <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
+                    <AdminIcon name="budgets" size={11} />
+                  </span>
+                  Presupuestos del lead
+                </p>
+                <ul className="admin-detail-list">
+                  {selected.budgets?.map((budget) => (
+                    <li key={budget.id}>
+                      <Link href="/presupuestos" title={`Abrir Presupuestos: ${budget.title}`}>
+                        Presupuesto {budgetReference(budget.id)}
+                      </Link>{" "}
+                      · {budgetStatusLabel(budget.status)} · {budget.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {budgetWritable ? (
+              <div className="admin-detail-actions">
+                <AdminButton
+                  type="button"
+                  variant="primary"
+                  icon="budgets"
+                  onClick={() => router.push(`/presupuestos?nuevo=1&lead=${encodeURIComponent(selected.id)}`)}
+                  title="Abre Presupuestos con el cliente, el título y las notas de este lead ya cargados"
+                >
+                  Armar presupuesto
+                </AdminButton>
+              </div>
+            ) : null}
 
             {writable ? (
               <form className="admin-detail-form" onSubmit={saveDetail} aria-busy={saving || converting || undefined}>
