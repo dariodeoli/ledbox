@@ -53,6 +53,19 @@ test("compromiso de stock atómico en PostgreSQL (sin sobreventa)", { skip: !pro
       assert.ok((await commit(org, b.id, item.id, 4)).ok);
     });
 
+    await t.test("equipo afuera (checkedOut sin checkedIn) sigue comprometido aunque el evento se cancele", async () => {
+      const { org, item, event } = await seed(5);
+      const [a, b] = await Promise.all([event("A"), event("B")]);
+      const first = await commit(org, a.id, item.id, 4);
+      assert.ok(first.ok);
+      await db.eventInventory.update({ where: { id: first.assignment.id }, data: { checkedOut: true, checkedOutAt: day(10) } });
+      await db.event.update({ where: { id: a.id }, data: { status: "CANCELLED" } });
+      const blocked = await commit(org, b.id, item.id, 4);
+      assert.equal(!blocked.ok && blocked.reason, "insufficient", "el equipo sigue afuera");
+      await db.eventInventory.update({ where: { id: first.assignment.id }, data: { checkedIn: true, checkedInAt: day(14) } });
+      assert.ok((await commit(org, b.id, item.id, 4)).ok, "devuelto: se libera");
+    });
+
     await t.test("presupuestos todos LOST liberan; uno aprobado sigue comprometiendo", async () => {
       const { org, client, item, event } = await seed(5);
       const [a, b, c] = await Promise.all([event("A"), event("B"), event("C")]);

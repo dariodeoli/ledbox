@@ -33,7 +33,6 @@ import {
   availabilityForRange,
   buildAvailability,
   commitInventoryAssignment,
-  committedEventWhere,
   findSubstitutes,
   insufficientMessage,
   loadAssignments,
@@ -207,7 +206,7 @@ export async function GET(request: Request) {
     });
     const rows = items.length
       ? await db.eventInventory.findMany({
-          where: { inventoryId: { in: items.map((item) => item.id) }, event: committedEventWhere(organizationId) },
+          where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
           select: {
             inventoryId: true,
             quantity: true,
@@ -254,7 +253,7 @@ export async function GET(request: Request) {
   });
   const assignments = items.length
     ? await db.eventInventory.findMany({
-        where: { inventoryId: { in: items.map((item) => item.id) }, event: committedEventWhere(organizationId) },
+        where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
         orderBy: [{ startsAt: "desc" }, { id: "asc" }],
         take: 1000,
         include: { event: { select: EVENT_RANGE_SELECT } },

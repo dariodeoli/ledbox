@@ -192,6 +192,21 @@ export function committedEventWhere(organizationId: string): Prisma.EventWhereIn
   };
 }
 
+/**
+ * Asignaciones que comprometen stock. Un equipo que ya salió y no volvió
+ * (`checkedOut` sin `checkedIn`) cuenta SIEMPRE: está físicamente afuera aunque el
+ * evento se haya cancelado o su presupuesto se haya perdido.
+ */
+export function committedAssignmentWhere(organizationId: string): Prisma.EventInventoryWhereInput {
+  return {
+    event: { organizationId },
+    OR: [
+      { checkedOut: true, checkedIn: false, checkedInAt: null },
+      { event: committedEventWhere(organizationId) },
+    ],
+  };
+}
+
 /** Asignaciones de un ítem en la empresa (opcionalmente sin una fila puntual). */
 export async function loadAssignments(
   inventoryId: string,
@@ -202,7 +217,7 @@ export async function loadAssignments(
   return client.eventInventory.findMany({
     where: {
       inventoryId,
-      event: committedEventWhere(organizationId),
+      ...committedAssignmentWhere(organizationId),
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
     orderBy: { startsAt: "asc" },
@@ -446,7 +461,7 @@ export async function findSubstitutes(options: {
   const rows = await db.eventInventory.findMany({
     where: {
       inventoryId: { in: candidates.map((candidate) => candidate.id) },
-      event: committedEventWhere(options.organizationId),
+      ...committedAssignmentWhere(options.organizationId),
     },
     orderBy: { startsAt: "asc" },
     take: MAX_AVAILABILITY_ASSIGNMENTS * 4,
@@ -663,7 +678,9 @@ export async function reserveBudgetInventory(options: {
       assignment: AssignmentWrite | null;
     };
     const commits = new Map<string, GroupCommit>();
+    let atomicPhaseFailed = false;
     if (event && range) {
+      try {
       await db.$transaction(
         async (tx) => {
           await lockInventoryItems(tx, options.organizationId, groups.map((group) => group.inventory.id));
@@ -748,8 +765,15 @@ export async function reserveBudgetInventory(options: {
             });
           }
         },
-        { timeout: 15_000 },
+        { timeout: Math.min(60_000, 15_000 + groups.length * 100) },
       );
+      } catch (error) {
+        // La aprobación nunca se rompe: sin la fase atómica no se reservó nada
+        // (la transacción hizo rollback) y todo queda pendiente de reservar.
+        atomicPhaseFailed = true;
+        commits.clear();
+        console.error("[reserva] Falló la fase atómica de la reserva; queda pendiente:", error instanceof Error ? error.message : error);
+      }
     }
 
     for (const group of groups) {
@@ -798,6 +822,14 @@ export async function reserveBudgetInventory(options: {
       }
 
       const commit = commits.get(group.inventory.id);
+      if (!commit && atomicPhaseFailed) {
+        outcomes.push({
+          ...base,
+          status: "conflict",
+          reason: `No se pudo reservar «${group.inventory.name}» por un error temporal: quedó pendiente de reservar, completalo desde Eventos.`,
+        });
+        continue;
+      }
       if (!commit) {
         outcomes.push({ ...base, status: "blocked", reason: `«${group.inventory.name}» ya no está disponible para reservar.` });
         continue;
