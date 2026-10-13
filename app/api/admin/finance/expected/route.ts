@@ -1,3 +1,4 @@
+import { withDeletedLabel } from "@/lib/deleted-label";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -42,7 +43,7 @@ const rowInclude = {
       approvedByName: true,
       approvalMethod: true,
       publicToken: true,
-      client: { select: { id: true, name: true, company: true } },
+      client: { select: { id: true, name: true, company: true, deletedAt: true } },
     },
   },
   expectedAccount: { select: accountSelect },
@@ -122,7 +123,7 @@ export async function GET(request: Request) {
   };
 
   return Response.json({
-    expectedPayments,
+    expectedPayments: expectedPayments.map((row) => ({ ...row, budget: row.budget ? { ...row.budget, client: withDeletedLabel(row.budget.client) } : row.budget })),
     expectedSummary: summary,
     // Día de Asunción de hoy: el panel marca los vencidos con el mismo criterio.
     expectedToday: todayKey,

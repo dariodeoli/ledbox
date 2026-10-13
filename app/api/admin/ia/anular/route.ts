@@ -45,8 +45,9 @@ export async function POST(request: Request) {
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
   if (tipo === "cliente") {
+    // `deletedAt: undefined`: un cliente en la papelera también se anula (sus cobros se revierten), siempre dentro de la empresa.
     const cliente = await db.client.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: undefined },
       select: {
         id: true,
         name: true,

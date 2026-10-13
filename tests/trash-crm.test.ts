@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { archivedFieldsForActive, crmActionCapability, CRM_MODELS, CRM_SEGMENTS } from "../lib/server/trash-crm";
 import { roleCan } from "../lib/server/permissions";
+import { deletedLabel, withDeletedLabel } from "../lib/deleted-label";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -60,4 +61,19 @@ test("el portal y el logo no sirven al cliente eliminado", () => {
 test("GET /api/admin/trash lista las 7 entidades", () => {
   const ops = read("lib/server/trash-ops.ts");
   for (const model of ["Event", "InventoryItem", "Client", "Lead", "Supplier", "Promoter", "Budget"]) assert.ok(ops.includes(`type: "${model}"`), model);
+});
+
+test("el rótulo «(eliminado)» sale de un helper compartido y se usa en cobros, por cobrar y gastos", () => {
+  assert.equal(deletedLabel("Ana", new Date()), "Ana (eliminado)");
+  assert.equal(withDeletedLabel({ name: "Ana", deletedAt: null }).name, "Ana");
+  assert.equal(withDeletedLabel({ name: "Ana", deletedAt: new Date() }).name, "Ana (eliminado)");
+  assert.equal(withDeletedLabel(null), null);
+  for (const file of ["app/api/admin/finance/route.ts", "app/api/admin/finance/expected/route.ts", "app/api/admin/expenses/route.ts"]) {
+    assert.ok(read(file).includes("withDeletedLabel"), file);
+    assert.match(read(file), /deletedAt: true/, file);
+  }
+});
+
+test("ia/anular encuentra al cliente eliminado (siempre dentro de la empresa)", () => {
+  assert.match(read("app/api/admin/ia/anular/route.ts"), /where: \{ id, organizationId, deletedAt: undefined \}/);
 });

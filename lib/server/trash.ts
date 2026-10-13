@@ -289,7 +289,7 @@ async function clientBlockers(id: string, organizationId: string, tx: Tx): Promi
 /**
  * Bloqueos del borrado definitivo con las reglas extra de la etapa 3 sobre `blockersFor`:
  * - Budget: el definitivo es solo de borradores (`notDraft`).
- * - Client: presupuestos con firma, cobro, comprobante, factura o pago esperado confirmado
+ * - Client: eventos (incluso eliminados) con gastos, facturas, trabajos, incidentes o reservas sin liberar; presupuestos con firma, cobro, comprobante, factura o pago esperado confirmado
  *   (incluso eliminados) bloquean, porque borrar el cliente los arrastraría por cascada.
  */
 export async function purgeBlockers(model: TrashModel, id: string, organizationId: string, tx: Tx, options?: { lock?: boolean }): Promise<Blocker[]> {
@@ -313,6 +313,19 @@ export async function purgeBlockers(model: TrashModel, id: string, organizationI
       },
     });
     if (withHistory > 0 && !blockers.some((b) => b.kind === "budgetsWithHistory")) blockers.push({ kind: "budgetsWithHistory", count: withHistory });
+    // Borrar el cliente cascadea TODOS sus eventos (también los eliminados): lo que cuelga de ellos
+    // (gastos, facturas, trabajos de proveedor, incidentes; todo SetNull) perdería su vínculo.
+    const event = { organizationId, clientId: id, ...anyState };
+    const [expenses, invoices, supplierJobs, incidents, assignments] = await Promise.all([
+      tx.expense.count({ where: { event } }),
+      tx.invoice.count({ where: { event } }),
+      tx.supplierJob.count({ where: { event, status: { not: "CANCELLED" } } }),
+      tx.inventoryIncident.count({ where: { event } }),
+      tx.eventInventory.count({ where: { event, releasedAt: null, checkedIn: false } }),
+    ]);
+    for (const [kind, count] of Object.entries({ eventExpenses: expenses, eventInvoices: invoices, eventSupplierJobs: supplierJobs, eventIncidents: incidents, eventAssignments: assignments })) {
+      if (count > 0) blockers.push({ kind, count });
+    }
   }
   return blockers;
 }
@@ -372,7 +385,7 @@ export async function anonymize(model: TrashModel, id: string, context: AuditCon
         data: {
           name, company: null, tradeName: null, email: null, billingEmail: null, phone: null,
           contactName: null, contactRole: null, contactPhone: null, contactEmail: null,
-          contacts: [], whatsapp: null, instagram: null, website: null, address: null, addressReference: null, locationUrl: null,
+          contacts: [], whatsapp: null, instagram: null, website: null, address: null, city: null, department: null, addressReference: null, locationUrl: null,
           notes: null, rucSnapshot: Prisma.DbNull,
           ...(invoices > 0 ? {} : { legalName: null, ruc: null }),
           anonymizedAt: now,

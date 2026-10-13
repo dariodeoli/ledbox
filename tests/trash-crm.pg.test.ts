@@ -227,6 +227,24 @@ test("papelera E3: Cliente, Oportunidad, Proveedor, Promotora y Presupuesto en P
       await expectError(crm.anonymizeCrm("Budget", lost.id, input("Pres Uno"), a.ctx), 409);
     });
 
+    await t.test("definitivo de un cliente con un evento eliminado que tiene un gasto da 409 y el gasto conserva su evento; anonimizar borra ciudad y departamento", async () => {
+      const a = await seedOrg();
+      const client = await mkClient(a, { city: "Asunción", department: "Central" });
+      const event = await db.event.create({ data: { id: randomUUID(), organizationId: a.org, clientId: client.id, name: "Ev", status: "COMPLETED", startsAt: new Date(Date.now() - 2 * 864e5), endsAt: new Date(Date.now() - 864e5), archivedAt: new Date(), deletedAt: new Date() } });
+      const account = await db.treasuryAccount.create({ data: { id: randomUUID(), organizationId: a.org, name: "Caja" } });
+      const expense = await db.expense.create({ data: { id: randomUUID(), organizationId: a.org, accountId: account.id, eventId: event.id, date: new Date(), amount: 1000, description: "g", createdByName: "t" } });
+      await crm.archiveCrm("Client", client.id, a.ctx);
+      await crm.trashCrm("Client", client.id, null, a.ctx);
+      const blocked = await expectError(crm.purgeCrm("Client", client.id, input("Cliente Uno"), a.ctx), 409);
+      assert.ok(blocked.blockers?.some((b) => b.kind === "eventExpenses" && b.count === 1));
+      assert.equal((await db.expense.findUniqueOrThrow({ where: { id: expense.id } })).eventId, event.id, "el gasto conserva su evento");
+      assert.equal(await dbWithDeleted.event.count({ where: { id: event.id } }), 1);
+      await crm.anonymizeCrm("Client", client.id, input("Cliente Uno"), a.ctx);
+      const row = await dbWithDeleted.client.findUniqueOrThrow({ where: { id: client.id } });
+      assert.equal(row.city, null);
+      assert.equal(row.department, null);
+    });
+
     await t.test("portal y catálogo con token de un cliente o presupuesto eliminado dan 404", async () => {
       const a = await seedOrg();
       const client = await mkClient(a);

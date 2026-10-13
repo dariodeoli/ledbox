@@ -1,3 +1,4 @@
+import { withDeletedLabel } from "@/lib/deleted-label";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -50,7 +51,7 @@ const accountSelect = { id: true, name: true, type: true } as const;
 const expenseInclude = {
   account: { select: accountSelect },
   event: { select: { id: true, name: true, startsAt: true, status: true } },
-  supplier: { select: { id: true, name: true } },
+  supplier: { select: { id: true, name: true, deletedAt: true } },
 } as const;
 
 /** Campos que se auditan al crear o editar un gasto. */
@@ -168,7 +169,7 @@ export async function GET(request: Request) {
     }),
   ]);
 
-  return Response.json({ expenses, projects, suppliers });
+  return Response.json({ expenses: expenses.map((expense) => ({ ...expense, supplier: withDeletedLabel(expense.supplier) })), projects, suppliers });
 }
 
 export async function POST(request: Request) {
