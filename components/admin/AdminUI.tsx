@@ -52,9 +52,11 @@ type AdminButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   /** Ícono que no sale del set del panel (p. ej. la marca de WhatsApp); tiene prioridad sobre `icon`. */
   iconNode?: React.ReactNode;
   busy?: boolean;
+  /** Texto mientras `busy` (por ejemplo «Guardando…»); sin él se conserva el texto. */
+  busyLabel?: string;
 };
 
-export function AdminButton({ variant = "ghost", icon, iconNode, busy, children, className, disabled, ...rest }: AdminButtonProps) {
+export function AdminButton({ variant = "ghost", icon, iconNode, busy, busyLabel, children, className, disabled, ...rest }: AdminButtonProps) {
   const classes = ["admin-btn"];
   if (variant === "primary") classes.push("admin-btn--primary");
   if (!children) classes.push("admin-btn--only-icon");
@@ -62,7 +64,7 @@ export function AdminButton({ variant = "ghost", icon, iconNode, busy, children,
   return (
     <SharedButton {...rest} type={rest.type ?? "submit"} variant={variant === "primary" ? "primary" : "ghost"} className={classes.join(" ")} disabled={disabled || busy} aria-busy={busy || undefined}>
       {busy ? <AdminSpinner label="Guardando" /> : iconNode ? iconNode : icon ? <AdminIcon name={icon} /> : null}
-      {children ? <span>{children}</span> : null}
+      {children ? <span>{busy && busyLabel ? busyLabel : children}</span> : null}
     </SharedButton>
   );
 }
@@ -562,26 +564,39 @@ export function AdminDisclosure({
  *   `requestClose` para pasar por la misma confirmación que la X y Esc.
  * - `dirty`: con cambios sin guardar, cerrar (X, Esc o clic afuera) pide
  *   confirmación dentro del mismo diálogo.
+ * - `size`: `sm` (440 px), `md` (560 px, por defecto) y `lg` (720 px); `default` y
+ *   `wide` siguen valiendo como alias de `md` y `lg`. `ficha` es el panel lateral.
+ * - `error` / `warning`: franja entre el cuerpo y el pie (siempre visible, no
+ *   se pierde al desplazar el formulario).
+ * - Celular (0-767 px): hoja de 100dvh con safe-area arriba y abajo; con el
+ *   teclado abierto la hoja toma el alto de `visualViewport` y el pie queda
+ *   pegado encima del teclado.
  */
 export function AdminDialog({
   title,
   onClose,
-  size = "default",
+  size = "md",
   icon,
   description,
   footer,
+  error,
+  warning,
   dirty = false,
   children,
 }: {
   title: string;
   onClose: () => void;
-  size?: "default" | "wide" | "ficha";
+  size?: "sm" | "md" | "lg" | "default" | "wide" | "ficha";
   /** Ícono del asunto del diálogo; va en un cuadro con acento suave. */
   icon?: AdminIconName;
   /** Subtítulo de una línea: qué pasa al guardar. */
   description?: string;
   /** Pie fijo del diálogo (acción principal a la derecha). */
   footer?: React.ReactNode | ((api: { requestClose: () => void }) => React.ReactNode);
+  /** Error de la última acción: va arriba del pie, fuera del scroll del cuerpo. */
+  error?: string | null;
+  /** Aviso no bloqueante (por ejemplo, un precio fuera de regla), arriba del pie. */
+  warning?: string | null;
   /** Hay cambios sin guardar: cerrar pide confirmación. */
   dirty?: boolean;
   children: React.ReactNode;
@@ -665,8 +680,31 @@ export function AdminDialog({
     if (confirming) keepRef.current?.focus();
   }, [confirming]);
 
+  // Teclado en pantalla (celular): la hoja toma el alto visible de `visualViewport`
+  // para que el pie quede pegado encima del teclado. En escritorio no hace nada
+  // (el CSS solo usa la variable dentro del breakpoint de la hoja).
+  useEffect(() => {
+    if (!ready) return;
+    const viewport = window.visualViewport;
+    const overlay = sectionRef.current?.parentElement;
+    if (!viewport || !overlay) return;
+    function sync() {
+      if (!viewport || !overlay) return;
+      overlay.style.setProperty("--admin-dialog-vh", `${Math.round(viewport.height)}px`);
+      overlay.style.setProperty("--admin-dialog-vtop", `${Math.round(viewport.offsetTop)}px`);
+    }
+    sync();
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+    };
+  }, [ready]);
+
   const classes = ["admin-dialog", "admin-dialog--sheet"];
-  if (size === "wide") classes.push("admin-dialog--wide");
+  if (size === "sm") classes.push("admin-dialog--sm");
+  if (size === "lg" || size === "wide") classes.push("admin-dialog--lg", "admin-dialog--wide");
   if (size === "ficha") classes.push("admin-dialog--ficha");
   const content = (
     <div
@@ -705,6 +743,11 @@ export function AdminDialog({
           </button>
         </header>
         <div className="admin-dialog-body">{children}</div>
+        {!confirming && (error || warning) ? (
+          <div className="admin-dialog-status">
+            {error ? <AdminNote tone="error">{error}</AdminNote> : <AdminNote tone="warn">{warning}</AdminNote>}
+          </div>
+        ) : null}
         {confirming ? (
           <div className="admin-dialog-confirm" role="alert">
             <div className="admin-dialog-confirm-text">
@@ -742,11 +785,16 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
 /**
  * Sección de un diálogo: título chico en mayúsculas y grilla de dos columnas en
  * escritorio (una en celular). Un campo `wide` ocupa el ancho completo.
+ * `collapsible` la pliega bajo su título («Más opciones»): lo avanzado no
+ * estorba, pero abierto de entrada (`defaultOpen`) cuando ya tiene datos.
  */
 export function AdminDialogSection({
   title,
   id,
   stack,
+  collapsible,
+  defaultOpen,
+  hint,
   children,
 }: {
   title?: string;
@@ -754,13 +802,88 @@ export function AdminDialogSection({
   id?: string;
   /** Contenido en una sola columna de bloques (fichas) en lugar de la grilla de dos columnas de los formularios. */
   stack?: boolean;
+  /** Sección plegable (requiere `title`); por defecto cerrada. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /** Aclaración del título plegable («foto, tiempos y notas»). */
+  hint?: string;
   children: React.ReactNode;
 }) {
+  const grid = <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"}>{children}</div>;
+  if (collapsible && title) {
+    return (
+      <section className="admin-dialog-section admin-dialog-section--collapsible" id={id}>
+        <AdminDisclosure title={title} hint={hint} defaultOpen={defaultOpen}>
+          {grid}
+        </AdminDisclosure>
+      </section>
+    );
+  }
   return (
     <section className="admin-dialog-section" id={id}>
       {title ? <h3 className="admin-dialog-section-title">{title}</h3> : null}
-      <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"}>{children}</div>
+      {grid}
     </section>
+  );
+}
+
+/**
+ * Confirmación propia de una acción destructiva o irreversible (nunca el
+ * cuadro nativo del navegador): diálogo chico con Cancelar y la acción a la derecha.
+ */
+export function AdminConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  busyLabel = "Procesando…",
+  icon = "alert",
+  danger = false,
+  busy = false,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  message: React.ReactNode;
+  confirmLabel: string;
+  busyLabel?: string;
+  icon?: AdminIconName;
+  danger?: boolean;
+  busy?: boolean;
+  error?: string | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <AdminDialog
+      title={title}
+      icon={icon}
+      size="sm"
+      error={error}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton
+            type="button"
+            variant={danger ? "ghost" : "primary"}
+            className={danger ? "admin-btn--danger" : undefined}
+            icon="check"
+            busy={busy}
+            busyLabel={busyLabel}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </AdminButton>
+        </>
+      )}
+    >
+      <p className="admin-dialog-text">{message}</p>
+    </AdminDialog>
   );
 }
 

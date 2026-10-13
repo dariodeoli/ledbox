@@ -11,7 +11,7 @@ import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { PasswordField, TextField } from "../AdminFields";
-import { AdminButton, AdminBadge, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminBadge, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { AdminPinSettings } from "../AdminPinSettings";
 import { ApiKeysPanel } from "../ApiKeysPanel";
@@ -41,6 +41,8 @@ export function PerfilModule() {
   const [avatarVersion, setAvatarVersion] = useState<string | null>(null);
   const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  /** Confirmación propia para quitar la foto (nunca confirm() nativo). */
+  const [confirmAvatar, setConfirmAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState("");
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -104,7 +106,7 @@ export function PerfilModule() {
   }
 
   async function removeAvatar() {
-    if (!window.confirm("¿Quitar tu foto de perfil? El avatar vuelve a tus iniciales.")) return;
+    setConfirmAvatar(false);
     setAvatarBusy(true);
     setAvatarError("");
     setNotice("");
@@ -186,7 +188,7 @@ export function PerfilModule() {
               disabled={readOnly || !data}
               error={avatarError}
               onPrepared={(image) => void uploadAvatar(image)}
-              onRemove={avatarUpdatedAt ? () => void removeAvatar() : undefined}
+              onRemove={avatarUpdatedAt ? () => setConfirmAvatar(true) : undefined}
               removeLabel="Quitar foto"
             />
 
@@ -323,6 +325,17 @@ export function PerfilModule() {
           ) : null}
         </div>
       </AdminPanel>
+      {confirmAvatar ? (
+        <AdminConfirmDialog
+          title="Quitar tu foto de perfil"
+          message="El avatar vuelve a tus iniciales."
+          confirmLabel="Quitar"
+          icon="trash"
+          danger
+          onConfirm={() => void removeAvatar()}
+          onClose={() => setConfirmAvatar(false)}
+        />
+      ) : null}
     </div>
   );
 }

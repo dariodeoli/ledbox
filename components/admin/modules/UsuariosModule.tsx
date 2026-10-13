@@ -19,6 +19,7 @@ import {
   AdminCountdown,
   AdminDataState,
   AdminEmpty,
+  AdminConfirmDialog,
   AdminDialog,
   AdminDialogSection,
   AdminKpi,
@@ -199,12 +200,11 @@ export function UsuariosModule() {
     users.reload();
   }
 
+  /** Usuario cuyo (des)activado espera confirmación (diálogo propio, nunca confirm() nativo). */
+  const [toggleTarget, setToggleTarget] = useState<AdminUserRow | null>(null);
+
   function toggleActive(user: AdminUserRow) {
-    const message = user.active
-      ? `¿Desactivar a ${user.name}? No va a poder iniciar sesión hasta que lo actives de nuevo.`
-      : `¿Activar a ${user.name}?`;
-    if (!window.confirm(message)) return;
-    void patch(user, { active: !user.active });
+    setToggleTarget(user);
   }
 
   // En ancho compacto (≤980 px, issue #154) la lista se lee como tarjetas: la
@@ -310,6 +310,26 @@ export function UsuariosModule() {
       {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
 
       {writable ? <InvitationsPanel /> : null}
+
+      {toggleTarget ? (
+        <AdminConfirmDialog
+          title={toggleTarget.active ? `Desactivar a ${toggleTarget.name}` : `Activar a ${toggleTarget.name}`}
+          message={
+            toggleTarget.active
+              ? "No va a poder iniciar sesión hasta que lo actives de nuevo."
+              : "Va a poder iniciar sesión de nuevo con su cuenta."
+          }
+          confirmLabel={toggleTarget.active ? "Desactivar" : "Activar"}
+          icon={toggleTarget.active ? "lock" : "check"}
+          danger={toggleTarget.active}
+          busy={rowBusy === toggleTarget.id}
+          onConfirm={() => {
+            const target = toggleTarget;
+            void patch(target, { active: !target.active }).then(() => setToggleTarget(null));
+          }}
+          onClose={() => setToggleTarget(null)}
+        />
+      ) : null}
 
       {writable && showForm ? (
         <AdminDialog

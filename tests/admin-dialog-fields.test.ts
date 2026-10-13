@@ -103,7 +103,7 @@ test("ventana: encabezado, cuerpo con scroll propio y pie fijo", () => {
   assert.match(dialog, /admin-dialog-description/);
   assert.match(dialog, /<footer className="admin-dialog-footer">/);
   assert.match(css, /\.admin-dialog-icon\s*\{[^}]*width:\s*36px[^}]*height:\s*36px/);
-  assert.match(css, /\.admin-dialog-close\s*\{[^}]*width:\s*30px/);
+  assert.match(css, /\.admin-dialog-close\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/);
   assert.match(css, /\.admin-dialog-body\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(css, /\.admin-dialog-body \.admin-dialog-foot\s*\{[^}]*position:\s*sticky/, "los pies .admin-dialog-foot existentes quedan fijos igual");
 });
@@ -114,7 +114,7 @@ test("ventana: tamaños 560 / 720 / ficha lateral y hoja completa en celular", (
   assert.match(css, /\.admin-dialog--ficha\s*\{\s*width:\s*min\(1040px, 100%\)/);
   assert.match(css, /\.admin-dialog-overlay--ficha\s*\{[^}]*place-items:\s*stretch end/);
   assert.match(css, /\.admin-dialog-overlay--ficha \.admin-dialog--sheet\s*\{[^}]*height:\s*100dvh/);
-  assert.match(css, /@media \(max-width: 720px\) \{\s*\.admin-dialog-overlay, \.admin-dialog-overlay--ficha \{[^}]*padding:\s*0/);
+  assert.match(css, /@media \(max-width: 767px\) \{\s*[^{]*\.admin-dialog-overlay, \.admin-dialog-overlay--ficha \{[^}]*padding:\s*0/);
   assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
