@@ -24,6 +24,7 @@ import {
   AdminCountdown,
   AdminDataState,
   AdminDialog,
+  AdminDialogSection,
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
@@ -380,7 +381,33 @@ export function FirmasModule() {
       </AdminDataState>
 
       {timeline ? (
-        <AdminDialog title={`Firma · ${timeline.code}`} size="wide" icon="pen" onClose={() => setTimeline(null)}>
+        <AdminDialog
+          title={`Firma · ${timeline.code}`}
+          size="lg"
+          icon="pen"
+          error={error}
+          onClose={() => setTimeline(null)}
+          footer={
+            <>
+              {writable && timeline.active && timeline.recipient.email ? (
+                <AdminButton
+                  icon="mail"
+                  type="button"
+                  busy={busyId === timeline.id}
+                  busyLabel="Enviando…"
+                  onClick={() => void sendByEmail(timeline)}
+                  title={`Enviar por correo a ${maskEmailDisplay(timeline.recipient.email)}`}
+                >
+                  Enviar por correo
+                </AdminButton>
+              ) : null}
+              <AdminButton variant="primary" icon="close" type="button" onClick={() => setTimeline(null)}>
+                Cerrar
+              </AdminButton>
+            </>
+          }
+        >
+          <AdminDialogSection title="Solicitud" stack>
           <dl className="admin-dialog-facts">
             <div>
               <dt>Documento</dt>
@@ -408,12 +435,13 @@ export function FirmasModule() {
               <dd>{formatDate(timeline.expiresAt)}</dd>
             </div>
           </dl>
-          <section aria-label="Evidencias de firma">
-            <h3 className="admin-dialog-title admin-dialog-subtitle">Evidencias</h3>
+          </AdminDialogSection>
+          <AdminDialogSection title="Evidencias" stack>
             <p className="admin-signature-detail">
               {timeline.evidence.map((item) => `${signatureEvidenceLabel(item.type)}: ${EVIDENCE_STATUS[item.status] ?? item.status}`).join(" · ")}
             </p>
-          </section>
+          </AdminDialogSection>
+          <AdminDialogSection title="Cronología" stack>
           <SignatureTimeline
             events={timeline.events}
             chainValid={timeline.chainValid}
@@ -422,47 +450,40 @@ export function FirmasModule() {
             identifier={timeline.signatureIdentifier}
             signedAt={timeline.signedAt}
           />
-          <div className="admin-dialog-foot">
-            {writable && timeline.active && timeline.recipient.email ? (
-              <AdminButton
-                icon="mail"
-                busy={busyId === timeline.id}
-                onClick={() => void sendByEmail(timeline)}
-                title={`Enviar por correo a ${maskEmailDisplay(timeline.recipient.email)}`}
-              >
-                Enviar por correo
-              </AdminButton>
-            ) : null}
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" onClick={() => setTimeline(null)}>
-              Cerrar
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
       {cancelTarget ? (
-        <AdminDialog title={`Cancelar firma · ${cancelTarget.code}`} icon="close" onClose={() => setCancelTarget(null)}>
-          <p className="admin-dialog-text">
-            La solicitud de {cancelTarget.recipient.name} deja de aceptar firma al instante; el link muestra el aviso de
-            cancelada y la cadena guarda el motivo.
-          </p>
-          <TextField
-            label="Motivo de la cancelación (opcional)"
-            value={cancelReason}
-            onChange={setCancelReason}
-            maxLength={300}
-            placeholder="Ej.: el cliente pidió una versión corregida."
-          />
-          <div className="admin-dialog-foot">
-            <AdminButton icon="arrow-left" onClick={() => setCancelTarget(null)} disabled={cancelBusy}>
-              Volver
-            </AdminButton>
-            <span className="admin-dialog-spacer" />
-            <AdminButton variant="primary" icon="close" busy={cancelBusy} onClick={() => void confirmCancel()}>
-              Confirmar cancelación
-            </AdminButton>
-          </div>
+        <AdminDialog
+          title={`Cancelar firma · ${cancelTarget.code}`}
+          icon="close"
+          size="sm"
+          description={`La solicitud de ${cancelTarget.recipient.name} deja de aceptar firma al instante; el link muestra el aviso de cancelada y la cadena guarda el motivo.`}
+          error={error}
+          dirty={cancelReason.trim() !== ""}
+          onClose={() => setCancelTarget(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="arrow-left" type="button" onClick={requestClose} disabled={cancelBusy}>
+                Volver
+              </AdminButton>
+              <AdminButton variant="primary" icon="close" type="button" busy={cancelBusy} busyLabel="Cancelando…" onClick={() => void confirmCancel()}>
+                Confirmar cancelación
+              </AdminButton>
+            </>
+          )}
+        >
+          <AdminDialogSection title="Motivo">
+            <TextField
+              label="Motivo de la cancelación (opcional)"
+              wide
+              value={cancelReason}
+              onChange={setCancelReason}
+              maxLength={300}
+              placeholder="Ej.: el cliente pidió una versión corregida."
+            />
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
     </div>

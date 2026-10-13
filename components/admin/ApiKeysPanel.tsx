@@ -6,7 +6,7 @@ import { adminRoleLabel, formatDateTime } from "@/lib/admin-format";
 import type { AdminApiToken, AdminRole } from "@/lib/admin-types";
 import { useAdminSession } from "./AdminShell";
 import { SelectField, TextField } from "./AdminFields";
-import { AdminBadge, AdminButton, AdminDialog, AdminEmpty, AdminLoadingRows, AdminNote, AdminPanel } from "./AdminUI";
+import { AdminBadge, AdminButton, AdminConfirmDialog, AdminEmpty, AdminLoadingRows, AdminNote, AdminPanel } from "./AdminUI";
 
 /**
  * API keys de servicio (issue #69). Objeto único de la sección: crear (nombre +
@@ -185,25 +185,17 @@ export function ApiKeysPanel() {
       )}
 
       {revokeTarget ? (
-        <AdminDialog
+        <AdminConfirmDialog
           title="Revocar la API key"
-          onClose={() => {
-            if (!revoking) setRevokeTarget(null);
-          }}
-        >
-          <p>
-            La clave «{revokeTarget.name}» ({revokeTarget.prefix}…) deja de funcionar <strong>de inmediato</strong>. Las
-            automatizaciones que la usen van a recibir 401 hasta que cargues una clave nueva.
-          </p>
-          <div className="admin-dialog-actions">
-            <AdminButton type="button" onClick={() => setRevokeTarget(null)} disabled={revoking}>
-              Cancelar
-            </AdminButton>
-            <AdminButton type="button" icon="trash" busy={revoking} onClick={() => void confirmRevoke()}>
-              Revocar clave
-            </AdminButton>
-          </div>
-        </AdminDialog>
+          icon="trash"
+          danger
+          message={`La clave «${revokeTarget.name}» (${revokeTarget.prefix}…) deja de funcionar de inmediato. Las automatizaciones que la usen van a recibir 401 hasta que cargues una clave nueva.`}
+          confirmLabel="Revocar clave"
+          busyLabel="Revocando…"
+          busy={revoking}
+          onConfirm={() => void confirmRevoke()}
+          onClose={() => setRevokeTarget(null)}
+        />
       ) : null}
     </AdminPanel>
   );

@@ -46,6 +46,7 @@ import {
   AdminCsvField,
   AdminDataState,
   AdminDialog,
+  AdminDialogSection,
   AdminEmpty,
   AdminKpi,
   AdminKpis,
@@ -695,7 +696,33 @@ function StatementRowDialog({
   const direction = row.direction === "DEBIT" ? "OUT" : "IN";
 
   return (
-    <AdminDialog title={`Conciliar la fila ${row.line} del extracto`} size="wide" icon="check" onClose={onClose}>
+    <AdminDialog
+      title={`Conciliar la fila ${row.line} del extracto`}
+      size="lg"
+      icon="check"
+      description="Elegí el movimiento de tesorería que corresponde a esta fila, o creá uno desde el extracto."
+      onClose={onClose}
+      footer={
+        <>
+          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
+            Cerrar
+          </AdminButton>
+          <AdminButton
+            variant="primary"
+            icon="plus"
+            type="button"
+            disabled={busy}
+            busy={busy}
+            busyLabel="Procesando…"
+            onClick={onCreate}
+            title={`Crear ${direction === "IN" ? "una entrada" : "una salida"} de ${formatMoney(row.amount)} en «${accountName}» con el detalle del extracto y conciliarla`}
+          >
+            Crear movimiento desde el extracto
+          </AdminButton>
+        </>
+      }
+    >
+      <AdminDialogSection title="Fila del extracto" stack>
       <dl className="admin-dialog-facts">
         <div>
           <dt>Fecha</dt>
@@ -723,13 +750,9 @@ function StatementRowDialog({
           </dd>
         </div>
       </dl>
+      </AdminDialogSection>
 
-      <h3 className="admin-dialog-title admin-dialog-subtitle">
-        <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-          <AdminIcon name="check" size={11} />
-        </span>
-        Sugerencias de conciliación
-      </h3>
+      <AdminDialogSection title="Sugerencias de conciliación" stack>
       {suggestions.length === 0 ? (
         <AdminNote>
           No hay movimientos de «{accountName}» del mismo sentido y importe con fecha ±{STATEMENT_MATCH_WINDOW_DAYS} días.
@@ -759,15 +782,10 @@ function StatementRowDialog({
           ))}
         </ul>
       )}
+      </AdminDialogSection>
 
       {others.length > 0 ? (
-        <>
-          <h3 className="admin-dialog-title admin-dialog-subtitle">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="clock" size={11} />
-            </span>
-            Mismo importe y sentido, otra fecha
-          </h3>
+        <AdminDialogSection title="Mismo importe y sentido, otra fecha" collapsible defaultOpen={suggestions.length === 0} hint={`${formatNumber(others.length)} movimiento(s)`} stack>
           <ul className="admin-match-list">
             {others.slice(0, 12).map((movement) => (
               <li className="admin-match-item" key={movement.id}>
@@ -794,28 +812,12 @@ function StatementRowDialog({
               para ver el que buscás.
             </p>
           ) : null}
-        </>
+        </AdminDialogSection>
       ) : null}
 
       {candidatesTruncated ? (
         <AdminNote>La ventana tiene más movimientos de los que el panel lista: revisá el período si no encontrás el que buscás.</AdminNote>
       ) : null}
-
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton
-          icon="plus"
-          disabled={busy}
-          busy={busy}
-          onClick={onCreate}
-          title={`Crear ${direction === "IN" ? "una entrada" : "una salida"} de ${formatMoney(row.amount)} en «${accountName}» con el detalle del extracto y conciliarla`}
-        >
-          Crear movimiento desde el extracto
-        </AdminButton>
-        <AdminButton icon="close" onClick={onClose} disabled={busy}>
-          Cerrar
-        </AdminButton>
-      </div>
     </AdminDialog>
   );
 }
@@ -958,8 +960,39 @@ function ImportStatementDialog({
   const previewErrors = preview?.rows.filter((row) => row.error).slice(0, 8) ?? [];
 
   return (
-    <AdminDialog title="Importar extracto del banco" size="wide" icon="bank" onClose={onClose}>
-      <div className="admin-import-grid">
+    <AdminDialog
+      title="Importar extracto del banco"
+      size="lg"
+      icon="bank"
+      description="El archivo se analiza en el navegador y se previsualiza antes de importar; las filas ya importadas se marcan como duplicadas."
+      error={importError || previewError}
+      dirty={text.trim() !== ""}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={importBusy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton
+            variant="primary"
+            icon="upload"
+            type="button"
+            busy={importBusy}
+            busyLabel="Importando…"
+            disabled={previewBusy || !preview || importable === 0 || Boolean(mappingError)}
+            onClick={() => void importStatement()}
+            title={
+              importable > 0
+                ? `Importar ${formatNumber(importable)} filas del extracto`
+                : "No hay filas nuevas para importar: revisá los errores y los duplicados"
+            }
+          >
+            Importar {importable > 0 ? formatNumber(importable) : ""} filas
+          </AdminButton>
+        </>
+      )}
+    >
+      <AdminDialogSection title="Extracto">
         <Combobox
           label="Cuenta de tesorería"
           required
@@ -981,14 +1014,8 @@ function ImportStatementDialog({
         />
         <DateField label="Período desde" required value={periodStart} onChange={(value) => changePeriod("periodStart", value)} />
         <DateField label="Período hasta" required value={periodEnd} onChange={(value) => changePeriod("periodEnd", value)} />
-        <TextField
-          label="Nombre del extracto"
-          hint="Opcional: si falta se arma con la cuenta y el período"
-          maxLength={120}
-          value={label}
-          onChange={setLabel}
-          placeholder="Ueno Bank · setiembre"
-        />
+      </AdminDialogSection>
+      <AdminDialogSection title="Archivo del banco" stack>
         <AdminCsvField
           label="Archivo CSV"
           hint="CSV o TSV de hasta 512 KB; el texto no sale del navegador hasta que previsualizás"
@@ -1017,16 +1044,20 @@ function ImportStatementDialog({
             Analizar filas
           </AdminButton>
         </div>
-      </div>
+      </AdminDialogSection>
+      <AdminDialogSection title="Más opciones" collapsible defaultOpen={label.trim() !== ""} hint="nombre del extracto">
+        <TextField
+          label="Nombre del extracto"
+          hint="Opcional: si falta se arma con la cuenta y el período"
+          maxLength={120}
+          value={label}
+          onChange={setLabel}
+          placeholder="Ueno Bank · setiembre"
+        />
+      </AdminDialogSection>
 
       {header.length > 0 ? (
-        <div className="admin-import-mapping">
-          <h3 className="admin-dialog-title admin-dialog-subtitle">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="database" size={11} />
-            </span>
-            Columnas del archivo
-          </h3>
+        <AdminDialogSection title="Columnas del archivo" collapsible defaultOpen={Boolean(mappingError)} hint="se detectan solas; corregilas si hace falta" stack>
           <div className="admin-import-mapping-grid">
             <MappingSelect label="Fecha" value={mapping.date} header={header} onChange={(value) => changeMapping("date", value)} />
             <MappingSelect label="Descripción" value={mapping.description} header={header} onChange={(value) => changeMapping("description", value)} />
@@ -1039,14 +1070,13 @@ function ImportStatementDialog({
             Con débito y crédito separados no hace falta el monto; con una sola columna de monto, el signo define el
             sentido (negativo = débito).
           </p>
-        </div>
+        </AdminDialogSection>
       ) : null}
 
-      {previewError ? <AdminNote tone="error">{previewError}</AdminNote> : null}
       {mappingError ? <AdminNote>{mappingError}</AdminNote> : null}
 
       {preview ? (
-        <>
+        <AdminDialogSection title="Vista previa" stack>
           <p className="admin-import-counts">
             <strong>{formatNumber(preview.total)} filas leídas</strong> · {formatNumber(importable)} listas para importar
             {preview.errors > 0 ? ` · ${formatNumber(preview.errors)} con error` : ""}
@@ -1145,31 +1175,8 @@ function ImportStatementDialog({
               ) : null}
             </ul>
           ) : null}
-        </>
+        </AdminDialogSection>
       ) : null}
-
-      {importError ? <AdminNote tone="error">{importError}</AdminNote> : null}
-
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton
-          variant="primary"
-          icon="upload"
-          busy={importBusy}
-          disabled={importBusy || previewBusy || !preview || importable === 0 || Boolean(mappingError)}
-          onClick={() => void importStatement()}
-          title={
-            importable > 0
-              ? `Importar ${formatNumber(importable)} filas del extracto`
-              : "No hay filas nuevas para importar: revisá los errores y los duplicados"
-          }
-        >
-          Importar {importable > 0 ? formatNumber(importable) : ""} filas
-        </AdminButton>
-        <AdminButton icon="close" onClick={onClose} disabled={importBusy}>
-          Cancelar
-        </AdminButton>
-      </div>
     </AdminDialog>
   );
 }

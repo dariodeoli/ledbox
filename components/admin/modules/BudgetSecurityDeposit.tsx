@@ -7,7 +7,7 @@ import type { AdminBudgetRow } from "@/lib/admin-types";
 import { BUDGET_INT_MAX, defaultDepositPlanRows } from "@/lib/budget-payment-plan";
 import { isSecurityDepositStatus, securityDepositPublic } from "@/lib/budget-security-deposit";
 import { MoneyField, NumberField, TextField } from "../AdminFields";
-import { AdminBadge, AdminButton, AdminDialog, AdminNote } from "../AdminUI";
+import { AdminBadge, AdminButton, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
 
 /** Tono del estado de la garantía (pendiente: aviso; en custodia: info; devuelta: ok; retenida: alerta). */
 export function securityDepositTone(status: string | null | undefined): AdminTone {
@@ -113,10 +113,41 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
         : null;
 
   return (
-    <AdminDialog title={`Depósito de garantía · ${budget.title}`} icon="wallet" onClose={onClose}>
-      <p className="admin-dialog-text">No se suma al total del presupuesto ({formatMoney(budget.total)}) ni cuenta como cobro o seña.</p>
+    <AdminDialog
+      title={`Depósito de garantía · ${budget.title}`}
+      icon="wallet"
+      size="md"
+      description={`No se suma al total del presupuesto (${formatMoney(budget.total)}) ni cuenta como cobro o seña.`}
+      error={error}
+      onClose={onClose}
+      footer={
+        <>
+          <AdminButton type="button" icon="close" disabled={busy} onClick={onClose}>Cerrar</AdminButton>
+          {open ? (
+            <>
+              <AdminButton type="button" busy={busy} disabled={amount === String(budget.securityDeposit ?? "")} onClick={() => void send({ kind: "security-deposit", securityDeposit: amount === "" ? null : Number(amount) }, amount === "" ? "Quitamos la garantía." : "Guardamos la garantía.")}>Guardar monto</AdminButton>
+              {status === "PENDING" ? <AdminButton type="button" variant="primary" icon="check" busy={busy} busyLabel="Guardando…" onClick={() => void send({ kind: "security-deposit-status", to: "HELD" }, "Garantía recibida: queda en custodia.")}>Marcar recibida</AdminButton> : null}
+            </>
+          ) : null}
+          {held && mode === "idle" ? (
+            <>
+              <AdminButton type="button" variant={budget.equipmentReturn === "incidents" ? undefined : "primary"} icon="check" busy={busy} busyLabel="Guardando…" onClick={() => void send({ kind: "security-deposit-status", to: "RETURNED" }, "Garantía devuelta.")}>Devolver garantía</AdminButton>
+              <AdminButton type="button" variant={budget.equipmentReturn === "incidents" ? "primary" : undefined} busy={busy} onClick={() => setMode("partial")}>Retener parcial</AdminButton>
+              <AdminButton type="button" busy={busy} onClick={() => void send({ kind: "security-deposit-status", to: "KEPT" }, "Garantía retenida.")}>Retener todo</AdminButton>
+            </>
+          ) : null}
+          {held && mode === "partial" ? (
+            <>
+              <AdminButton type="button" disabled={busy} onClick={() => setMode("idle")}>Volver</AdminButton>
+              <AdminButton type="button" variant="primary" busy={busy} busyLabel="Guardando…" disabled={!retained || Number(retained) <= 0} onClick={() => void send({ kind: "security-deposit-status", to: "KEPT_PARTIAL", retainedAmount: Number(retained), reason }, "Garantía retenida parcialmente.")}>Retener {retained ? formatMoney(Number(retained)) : ""}</AdminButton>
+            </>
+          ) : null}
+        </>
+      }
+    >
+      <AdminDialogSection title="Garantía">
       {summary ? (
-        <p className="admin-dialog-text">
+        <p className="admin-dialog-text admin-field--wide">
           <AdminBadge tone={securityDepositTone(summary.status)}>{summary.statusLabel}</AdminBadge>{" "}
           <strong className="admin-nowrap">{formatMoney(summary.amount)}</strong>
           {summary.retained > 0 ? <> · retenido <span className="admin-nowrap">{formatMoney(summary.retained)}</span></> : null}
@@ -133,30 +164,7 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
           <TextField label="Motivo" value={reason} maxLength={300} disabled={busy} onChange={setReason} placeholder="Ej.: daño del equipo X" />
         </>
       ) : null}
-      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-      <div className="admin-dialog-foot">
-        <AdminButton type="button" disabled={busy} onClick={onClose}>Cerrar</AdminButton>
-        <span className="admin-dialog-spacer" />
-        {open ? (
-          <>
-            <AdminButton busy={busy} disabled={amount === String(budget.securityDeposit ?? "")} onClick={() => void send({ kind: "security-deposit", securityDeposit: amount === "" ? null : Number(amount) }, amount === "" ? "Quitamos la garantía." : "Guardamos la garantía.")}>Guardar monto</AdminButton>
-            {status === "PENDING" ? <AdminButton variant="primary" icon="check" busy={busy} onClick={() => void send({ kind: "security-deposit-status", to: "HELD" }, "Garantía recibida: queda en custodia.")}>Marcar recibida</AdminButton> : null}
-          </>
-        ) : null}
-        {held && mode === "idle" ? (
-          <>
-            <AdminButton variant={budget.equipmentReturn === "incidents" ? undefined : "primary"} icon="check" busy={busy} onClick={() => void send({ kind: "security-deposit-status", to: "RETURNED" }, "Garantía devuelta.")}>Devolver garantía</AdminButton>
-            <AdminButton variant={budget.equipmentReturn === "incidents" ? "primary" : undefined} busy={busy} onClick={() => setMode("partial")}>Retener parcial</AdminButton>
-            <AdminButton busy={busy} onClick={() => void send({ kind: "security-deposit-status", to: "KEPT" }, "Garantía retenida.")}>Retener todo</AdminButton>
-          </>
-        ) : null}
-        {held && mode === "partial" ? (
-          <>
-            <AdminButton disabled={busy} onClick={() => setMode("idle")}>Volver</AdminButton>
-            <AdminButton variant="primary" busy={busy} disabled={!retained || Number(retained) <= 0} onClick={() => void send({ kind: "security-deposit-status", to: "KEPT_PARTIAL", retainedAmount: Number(retained), reason }, "Garantía retenida parcialmente.")}>Retener {retained ? formatMoney(Number(retained)) : ""}</AdminButton>
-          </>
-        ) : null}
-      </div>
+      </AdminDialogSection>
     </AdminDialog>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { formatDate, maskEmailDisplay } from "@/lib/admin-format";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import type { AdminBudgetRow, AdminSignatureRequestRow } from "@/lib/admin-types";
@@ -10,7 +10,7 @@ import { useAdminSession } from "../AdminShell";
 import { EmailField, PhoneField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
 import { SignatureTimeline } from "../SignatureTimeline";
-import { AdminBadge, AdminButton, AdminDialog, AdminIconLink, AdminNote } from "../AdminUI";
+import { AdminBadge, AdminButton, AdminDialog, AdminDialogSection, AdminIconLink, AdminNote } from "../AdminUI";
 
 /**
  * Diálogo «Firma del cliente» de la ficha del presupuesto (issue #79):
@@ -58,6 +58,7 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [created, setCreated] = useState<CreateResult | null>(null);
+  const createFormId = useId();
   const [notice, setNotice] = useState("");
 
   // Cancelación y reenvío.
@@ -156,11 +157,27 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
   }
 
   return (
-    <AdminDialog title={`Firma del cliente · ${budget.title}`} size="wide" icon="pen" onClose={onClose}>
-      <p className="admin-dialog-text">
-        El cliente recibe un link seguro con código, lee el documento, acepta el consentimiento y firma desde el celular o
-        la computadora. Cada paso queda en una cadena de auditoría inmutable.
-      </p>
+    <AdminDialog
+      title={`Firma del cliente · ${budget.title}`}
+      size="lg"
+      icon="pen"
+      description="El cliente recibe un link seguro con código, lee el documento, acepta el consentimiento y firma desde el celular o la computadora. Cada paso queda en una cadena de auditoría inmutable."
+      error={formError}
+      dirty={!created && writable && (recipientName.trim() !== "" || recipientEmail.trim() !== "" || recipientPhone.trim() !== "" || message.trim() !== "")}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose}>
+            Cerrar
+          </AdminButton>
+          {!created && writable ? (
+            <AdminButton variant="primary" icon="pen" type="submit" form={createFormId} busy={busy} busyLabel="Enviando…" disabled={!recipientName.trim()}>
+              Enviar a firma
+            </AdminButton>
+          ) : null}
+        </>
+      )}
+    >
 
       {created ? (
         <section className="admin-signature-result" aria-label="Solicitud creada">
@@ -213,11 +230,8 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
           </div>
         </section>
       ) : writable ? (
-        <form className="admin-signature-create" onSubmit={(event) => void submitCreate(event)}>
-          <h3 className="admin-dialog-title admin-dialog-subtitle">
-            <AdminIcon name="pen" size={13} /> Enviar a firma
-          </h3>
-          <div className="admin-form-grid">
+        <form id={createFormId} className="admin-form admin-signature-create" onSubmit={(event) => void submitCreate(event)}>
+          <AdminDialogSection title="Enviar a firma">
           <SelectField
             label="Documento a firmar"
             value={attachmentId}
@@ -241,6 +255,8 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
             hint="Opcional: sin correo no se envía el aviso, pero el link se comparte a mano."
           />
           <PhoneField label="Teléfono (opcional)" value={recipientPhone} onChange={setRecipientPhone} />
+          </AdminDialogSection>
+          <AdminDialogSection title="Más opciones" collapsible hint="método, vencimiento, código OTP y mensaje">
           <SelectField
             label="Método de firma"
             value={method}
@@ -267,13 +283,7 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
             rows={2}
             placeholder="Ej.: cualquier duda me escribís antes de firmar."
           />
-          </div>
-          {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
-          <div className="admin-signature-actions">
-            <AdminButton variant="primary" icon="pen" busy={busy} disabled={!recipientName.trim()}>
-              Enviar a firma
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
         </form>
       ) : null}
 
@@ -379,14 +389,6 @@ export function SignatureDialog({ budget, onClose }: { budget: AdminBudgetRow; o
       </section>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
-      {formError && !writable ? <AdminNote tone="error">{formError}</AdminNote> : null}
-
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton icon="close" onClick={onClose}>
-          Cerrar
-        </AdminButton>
-      </div>
     </AdminDialog>
   );
 }

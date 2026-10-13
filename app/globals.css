@@ -1161,6 +1161,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-money { position: relative; min-width: 0; }
 .admin-money--compact { width: 100%; max-width: 14rem; }
 @media (max-width: 760px) { .admin-money--compact { max-width: none; } }
+/* En los diálogos el monto ocupa la columna completa (la librería lo fija en 9 rem) y se alinea con el resto de los campos. */
+.admin-dialog .admin-money > span { width: 100%; }
+.admin-dialog .admin-money input { font-variant-numeric: tabular-nums; }
 .admin-field--wide { grid-column: 1 / -1; }
 .admin-field-error { color: var(--a-danger-text); font-size: 11.5px; font-weight: 500; line-height: 1.4; }
 .admin-field-success { color: var(--a-ok-text); font-size: 11.5px; font-weight: 500; line-height: 1.4; }

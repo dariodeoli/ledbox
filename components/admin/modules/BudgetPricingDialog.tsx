@@ -6,6 +6,7 @@ import {
   AdminButton,
   AdminDialog,
   AdminNote,
+  AdminDialogSection,
   AdminDisclosure,
 } from "@/components/admin/AdminUI";
 import {
@@ -316,9 +317,11 @@ export function BudgetPricingDialog({
   return (
     <AdminDialog
       title={`Precio y condiciones · ${budget.title}`}
-      size="wide"
+      size="lg"
       icon="finance"
       description={`${clientDisplayName(budget.client)} · Presupuesto Nº ${budgetReference(budget.id)}. El cliente ve el precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.`}
+      error={error}
+      warning={closed ? `Este presupuesto está ${budget.status === "LOST" ? "perdido" : "cancelado"}: no se edita.` : undefined}
       dirty={dirty}
       onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}
       footer={({ requestClose }) => <>
@@ -327,8 +330,8 @@ export function BudgetPricingDialog({
         <AdminButton type="button" onClick={requestClose}>
           Cancelar
         </AdminButton>
-        <AdminButton type="submit" form={formId} variant="primary" disabled={busy || closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0} aria-busy={busy || undefined}>
-          {busy ? "Guardando…" : needsRepricing ? "Ajustar precios y guardar" : "Guardar"}
+        <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} busyLabel="Guardando…" disabled={closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0}>
+          {needsRepricing ? "Ajustar precios y guardar" : "Guardar"}
         </AdminButton>
       </>}
     >
@@ -338,25 +341,24 @@ export function BudgetPricingDialog({
           costos internos sí se pueden corregir.
         </AdminNote>
       ) : null}
-      {closed ? <AdminNote tone="warn">Este presupuesto está {budget.status === "LOST" ? "perdido" : "cancelado"}: no se edita.</AdminNote> : null}
 
       <nav className="admin-subtabs" aria-label="Editar presupuesto">
         {[{ value: "items", label: "Ítems y precio" }, { value: "conditions", label: "Condiciones" }, { value: "payments", label: "Plan de pagos" }].map((tab) => <AdminButton type="button" key={tab.value} aria-pressed={section === tab.value} onClick={() => setSection(tab.value)}>{tab.label}</AdminButton>)}
       </nav>
-      <form id={formId} onSubmit={(event) => void save(event)}>
+      <form id={formId} className="admin-form" onSubmit={(event) => void save(event)}>
         <div hidden={section !== "items"}>
-        <div className="admin-plan-grid">
+        <AdminDialogSection title="Cliente y evento">
           <Combobox label="Cliente" required value={clientId} disabled={approved || closed || busy} options={(clients.data ?? []).map((client) => ({ value: client.id, label: clientDisplayName(client) }))} onChange={setClientId} onCreate={canWriteClients(role) ? setNewClient : undefined} createLabel={(query) => `Crear cliente «${query}»`} />
           <Combobox label="Evento" hint="Opcional · distinto del título del presupuesto" value={eventId} disabled={approved || closed || busy} options={(events.data ?? []).map((event) => ({ value: event.id, label: event.name }))} onChange={setEventId} onCreate={canWriteOperations(role) ? setNewEvent : undefined} createLabel={(query) => `Crear evento «${query}»`} />
           <TextField label="Título del presupuesto" required value={title} maxLength={160} disabled={approved || closed || busy} onChange={setTitle} />
-        </div>
-        <h3 className="quote-document-subtitle">Productos y precio final</h3>
+        </AdminDialogSection>
+        <AdminDialogSection title="Productos y precio final" stack>
         <p className="admin-dialog-text">Cantidades, días y precios. Los costos unitarios son internos.</p>
         <BudgetItemsEditor items={draft.items} disabled={approved || closed || busy} onChange={(items) => setDraft((current) => ({ ...current, items, price: String(Math.max(0, items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0) + current.priceAdjustment)) }))} />
 
         <MoneyField label="Precio final (Gs)" hint="Total final, incluido el descuento vigente" limit={BUDGET_INT_MAX} value={draft.price} disabled={approved || closed || busy} onChange={(value) => setDraft({ ...draft, price: value, priceAdjustment: number(value) - itemsSubtotal })} />
-        <AdminDisclosure title="Costos internos y margen" hint="no los ve el cliente">
-        <div className="admin-plan-grid">
+        </AdminDialogSection>
+        <AdminDialogSection title="Costos internos y margen" collapsible hint="no los ve el cliente">
           <MoneyField
             label="Materiales (Gs)"
             hint="Costo interno"
@@ -379,20 +381,20 @@ export function BudgetPricingDialog({
           <AdminButton icon="finance" type="button" disabled={approved || closed} onClick={applySuggestedMargin}>
             {suggested !== null ? `Usar ${formatMoney(suggested)}` : "Calcular precio"}
           </AdminButton>
-        </div>
-
+        <div className="admin-field--wide">
         <AdminNote tone={margin && margin.amount < 0 ? "warn" : undefined}>
           Costo interno {formatMoney(cost.total)} (ítems {formatMoney(cost.items)} · materiales {formatMoney(cost.materials)} ·
           mano de obra {formatMoney(cost.labor)}). Precio final {formatMoney(price)} ·{" "}
           {margin ? `margen ${formatNumber(margin.percent)} % (${formatMoney(margin.amount)})` : "sin margen calculable: cargá el costo interno y el precio final"}.
           {needsRepricing && repriced ? " Al guardar, el precio se reparte entre los precios unitarios de los ítems." : ""}
         </AdminNote>
-        </AdminDisclosure>
+        </div>
+        </AdminDialogSection>
         </div>
         <div hidden={section !== "conditions"}>
         <section className="quote-document-section quote-document-section--conditions" aria-labelledby="quote-editor-conditions">
           <h3 id="quote-editor-conditions" className="quote-document-subtitle">Condiciones y fechas</h3>
-          <div className="admin-plan-grid">
+          <div className="admin-dialog-grid">
             <DateField
               label="Vigencia de la oferta"
               value={draft.validUntil}
@@ -425,7 +427,7 @@ export function BudgetPricingDialog({
           </div>
         </section>
         <section className="quote-document-section quote-document-section--observations" aria-labelledby="quote-editor-observations">
-          <AdminDisclosure title="Observaciones" hint="notas para el cliente">
+          <AdminDisclosure title="Observaciones" hint="notas para el cliente" defaultOpen={Boolean(draft.notes)}>
           <h3 id="quote-editor-observations" className="quote-document-subtitle">Observaciones</h3>
           <TextAreaField
             label="Observaciones para el cliente"
@@ -452,10 +454,9 @@ export function BudgetPricingDialog({
           <p className="admin-dialog-text">La firma electrónica se gestiona por separado.</p>
         </section> : null}
         </div>
-
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
 
+      <AdminDialogSection title="Adjuntos" collapsible defaultOpen={attachments.length > 0} hint="el PDF original u otros archivos" stack>
       <div className="admin-plan-list">
         <AttachmentInput
           label="Adjunto del presupuesto"
@@ -499,6 +500,7 @@ export function BudgetPricingDialog({
           <p className="admin-dialog-text">Sin adjuntos: subí el PDF original del cliente para tenerlo a mano.</p>
         )}
       </div>
+      </AdminDialogSection>
       <BudgetReferenceLinks budgetId={budget.id} initial={budget.referenceLinks ?? []} />
       <AdminConfirm
         open={attachmentToDelete !== null}

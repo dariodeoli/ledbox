@@ -408,7 +408,7 @@ function PaymentRemindersDialog({
     <AdminDialog
       title={`Recordatorios · ${label}`}
       icon="bell"
-      size="wide"
+      size="md"
       description="Historial del cobro y envío de recordatorios."
       onClose={onClose}
       footer={
@@ -596,8 +596,9 @@ function ExpectedReviewDialog({
     <AdminDialog
       title={`${confirming ? "Confirmar en cuenta" : "Observar / rechazar"} · ${concept}`}
       icon="check"
-      size="wide"
+      size="lg"
       description={confirming ? "Registra el cobro y la entrada en la cuenta elegida." : "El cliente ve el motivo en el portal."}
+      error={error}
       dirty={reviewDirty}
       onClose={onClose}
       footer={({ requestClose }) => (
@@ -612,6 +613,7 @@ function ExpectedReviewDialog({
             disabled={!canSubmit || busy}
             type="submit"
             form={formId}
+            busyLabel={confirming ? "Confirmando…" : "Enviando…"}
           >
             {confirming ? "Confirmar en cuenta" : "Enviar observación"}
           </AdminButton>
@@ -690,7 +692,7 @@ function ExpectedReviewDialog({
         ) : null}
 
         {confirming ? (
-          <div className="admin-expected-form">
+          <AdminDialogSection title="Confirmación">
             <Combobox
               label="Cuenta de tesorería"
               hint="Donde entró la plata: mueve el disponible"
@@ -732,21 +734,22 @@ function ExpectedReviewDialog({
               onChange={setReference}
               placeholder="TRF-…"
             />
-          </div>
+          </AdminDialogSection>
         ) : (
-          <TextAreaField
-            label="Motivo de la observación"
-            hint="El cliente lo ve en el portal y puede volver a subir el comprobante"
-            required
-            maxLength={1000}
-            rows={3}
-            value={note}
-            onChange={setNote}
-            placeholder="Ej.: el comprobante muestra un monto menor al de la cuota"
-          />
+          <AdminDialogSection title="Observación">
+            <TextAreaField
+              label="Motivo de la observación"
+              hint="El cliente lo ve en el portal y puede volver a subir el comprobante"
+              required
+              wide
+              maxLength={1000}
+              rows={3}
+              value={note}
+              onChange={setNote}
+              placeholder="Ej.: el comprobante muestra un monto menor al de la cuota"
+            />
+          </AdminDialogSection>
         )}
-
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
 
         {confirming ? (
           <p className="admin-dialog-text">
@@ -808,8 +811,9 @@ function ExpectedSplitDialog({
     <AdminDialog
       title={`Dividir saldo · ${concept}`}
       icon="calendar"
-      size="wide"
+      size="md"
       description="Las partes tienen que sumar el saldo pendiente."
+      error={error}
       dirty={splitDirty}
       onClose={onClose}
       footer={({ requestClose }) => (
@@ -824,6 +828,7 @@ function ExpectedSplitDialog({
             disabled={!valid || busy}
             type="submit"
             form={formId}
+            busyLabel="Dividiendo…"
           >
             Dividir en {parts.length} partes
           </AdminButton>
@@ -852,6 +857,7 @@ function ExpectedSplitDialog({
           </div>
         </dl>
 
+        <AdminDialogSection title="Partes" stack>
         <div className="admin-plan-list">
           {parts.map((part, index) => (
             <div className="admin-plan-row" key={part.key}>
@@ -894,13 +900,12 @@ function ExpectedSplitDialog({
             </AdminButton>
           ) : null}
         </div>
+        </AdminDialogSection>
 
         <p className="admin-dialog-text">
           La seña ya cobrada queda en el concepto original como primera parte; las demás se agregan como saldos con su
           vencimiento. Las partes suman <strong>{formatMoney(total)}</strong> de {formatMoney(remaining)} pendientes.
         </p>
-
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
     </AdminDialog>
   );
@@ -942,6 +947,8 @@ function CollectPaymentDialog({
       title={`Marcar cobrado · ${label}`}
       icon="check"
       description="Registra el cobro y suma el saldo a la cuenta elegida."
+      size="md"
+      error={error}
       dirty={method !== "Transferencia" || accountId !== ""}
       onClose={onClose}
       footer={({ requestClose }) => (
@@ -956,6 +963,7 @@ function CollectPaymentDialog({
             disabled={busy || !effectiveAccountId}
             type="submit"
             form={formId}
+            busyLabel="Guardando…"
           >
             Marcar cobrado
           </AdminButton>
@@ -984,7 +992,7 @@ function CollectPaymentDialog({
           El saldo sube al disponible de esa cuenta.
         </p>
 
-        <div className="admin-expected-form">
+        <AdminDialogSection title="Cobro">
           <SelectField
             label="Método real"
             hint="Con qué entró la plata"
@@ -1015,9 +1023,7 @@ function CollectPaymentDialog({
               }
             />
           )}
-        </div>
-
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+        </AdminDialogSection>
       </form>
     </AdminDialog>
   );
@@ -1116,7 +1122,7 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
     <AdminDialog
       title={`Trazabilidad · ${budget.title}`}
       icon="clock"
-      size="wide"
+      size="md"
       description="Aprobación, pagos esperados, comprobantes y confirmaciones."
       onClose={onClose}
       footer={
@@ -2489,28 +2495,24 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         <AdminDialog
           title="Nuevo cobro de cliente"
           icon="finance"
-          size="wide"
+          size="lg"
           description="Registra lo cobrado, o lo que queda por cobrar a plazo, y lo asocia al cliente y al presupuesto."
+          error={formError}
           dirty={JSON.stringify(form) !== JSON.stringify(EMPTY_PAYMENT_FORM)}
           onClose={() => setShowForm(false)}
           footer={({ requestClose }) => (
             <>
-              {formError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{formError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={paymentFormId} busy={busy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={paymentFormId} busy={busy} busyLabel="Guardando…">
                 {term ? "Registrar cobro a plazo" : "Registrar cobro"}
               </AdminButton>
             </>
           )}
         >
           <form id={paymentFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
-            <AdminDialogSection title="Origen">
+            <AdminDialogSection title="Cobro">
           <Combobox
             label="Cliente"
             required
@@ -2538,33 +2540,6 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               ...clientBudgets.map((budget) => ({ value: budget.id, label: `${budget.title} · ${formatMoney(budget.total)}` })),
             ]}
           />
-          {accountIsPending || form.method === "Efectivo" ? (
-            <div className="admin-field">
-              <span className="admin-field-label">Cuenta de tesorería</span>
-              <span className="admin-field-hint">
-                {accountIsPending
-                  ? "A crédito: la plata todavía no entró, la cuenta se elige al cobrarlo."
-                  : methodAccounts.length > 0
-                    ? `El efectivo entra a «${methodAccounts[0].name}».`
-                    : "No hay una cuenta de efectivo: creala en Tesorería."}
-              </span>
-            </div>
-          ) : (
-            <Combobox
-              label="Cuenta de tesorería"
-              hint={term ? "Donde va a entrar el cobro" : "Donde entra la plata"}
-              value={effectiveAccountId}
-              onChange={(value) => setForm({ ...form, treasuryAccountId: value })}
-              placeholder="Buscá la cuenta…"
-              options={
-                methodAccounts.length > 0
-                  ? methodAccounts.map((account) => ({ value: account.id, label: treasuryAccountLabel(account) }))
-                  : [{ value: "", label: "Sin cuentas para este método" }]
-              }
-            />
-          )}
-            </AdminDialogSection>
-            <AdminDialogSection title="Importe y condiciones">
           <MoneyField
             label="Monto"
             hint="En guaraníes"
@@ -2593,6 +2568,39 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             onChange={(value) => setForm({ ...form, method: value, chequeDate: "", treasuryAccountId: "" })}
             options={(term ? TERM_METHOD_OPTIONS : METHOD_OPTIONS).map((method) => ({ value: method, label: method }))}
           />
+          {accountIsPending || form.method === "Efectivo" ? (
+            <div className="admin-field">
+              <span className="admin-field-label">Cuenta de tesorería</span>
+              <span className="admin-field-hint">
+                {accountIsPending
+                  ? "A crédito: la plata todavía no entró, la cuenta se elige al cobrarlo."
+                  : methodAccounts.length > 0
+                    ? `El efectivo entra a «${methodAccounts[0].name}».`
+                    : "No hay una cuenta de efectivo: creala en Tesorería."}
+              </span>
+            </div>
+          ) : (
+            <Combobox
+              label="Cuenta de tesorería"
+              hint={term ? "Donde va a entrar el cobro" : "Donde entra la plata"}
+              value={effectiveAccountId}
+              onChange={(value) => setForm({ ...form, treasuryAccountId: value })}
+              placeholder="Buscá la cuenta…"
+              options={
+                methodAccounts.length > 0
+                  ? methodAccounts.map((account) => ({ value: account.id, label: treasuryAccountLabel(account) }))
+                  : [{ value: "", label: "Sin cuentas para este método" }]
+              }
+            />
+          )}
+            </AdminDialogSection>
+            <AdminDialogSection
+              key={term ? "plazo" : "contado"}
+              title="Más opciones"
+              collapsible
+              defaultOpen={term}
+              hint={term ? "factura, plazo y vencimiento" : "referencia y seña con saldo"}
+            >
           {term ? (
             <>
               <DateField
@@ -3492,25 +3500,23 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               title={`Pago a ${payJobRow.supplier.name}`}
               icon="check"
               description={`${payJobRow.description} · saldo ${formatMoney(supplierJobBalance(payJobRow))}`}
+              size="md"
+              error={payError}
               dirty={JSON.stringify(payJob) !== JSON.stringify(payJobBase)}
               onClose={() => setPayJob(null)}
               footer={({ requestClose }) => (
                 <>
-                  {payError ? (
-                    <div className="admin-dialog-footer-note">
-                      <AdminNote tone="error">{payError}</AdminNote>
-                    </div>
-                  ) : null}
                   <AdminButton icon="close" type="button" disabled={payBusy} onClick={requestClose}>
                     Cancelar
                   </AdminButton>
-                  <AdminButton variant="primary" icon="check" type="submit" form={payJobFormId} busy={payBusy} disabled={payBusy}>
+                  <AdminButton variant="primary" icon="check" type="submit" form={payJobFormId} busy={payBusy} busyLabel="Guardando…" disabled={payBusy}>
                     Registrar pago
                   </AdminButton>
                 </>
               )}
             >
               <form id={payJobFormId} className="admin-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
+                <AdminDialogSection title="Pago">
                 <MoneyField
                   label="Monto del pago"
                   required
@@ -3535,6 +3541,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   onChange={(value) => setPayJob({ ...payJob, method: value })}
                   options={METHOD_SELECT_OPTIONS}
                 />
+                </AdminDialogSection>
+                <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(payJob.receipt)} hint="comprobante">
                 <TextField
                   label="Comprobante"
                   optional
@@ -3543,6 +3551,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   value={payJob.receipt}
                   onChange={(value) => setPayJob({ ...payJob, receipt: value })}
                 />
+                </AdminDialogSection>
               </form>
             </AdminDialog>
           ) : null}
@@ -3748,6 +3757,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               title={accountForm.id ? `Editar cuenta · ${accountForm.name}` : "Nueva cuenta de tesorería"}
               icon="wallet"
               description="Efectivo, banco o cheques. El saldo inicial es lo que ya había en la cuenta."
+              size="md"
+              error={accountError}
               dirty={accountDirty}
               onClose={() => {
               setShowAccountForm(false);
@@ -3756,15 +3767,10 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             }}
               footer={({ requestClose }) => (
             <>
-              {accountError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{accountError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={accountBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={accountFormId} busy={accountBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={accountFormId} busy={accountBusy} busyLabel="Guardando…">
                 {accountForm.id ? "Guardar cuenta" : "Crear cuenta"}
               </AdminButton>
             </>
@@ -3805,8 +3811,20 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   </datalist>
                 </>
               ) : null}
+              <MoneyField
+                label="Saldo inicial"
+                hint="Lo que ya había en la cuenta (opcional)"
+                value={accountForm.openingBalance}
+                onChange={(value) => setAccountForm({ ...accountForm, openingBalance: value })}
+                placeholder="0"
+              />
                 </AdminDialogSection>
-                <AdminDialogSection title="Datos y saldo">
+                <AdminDialogSection
+                  title="Más opciones"
+                  collapsible
+                  defaultOpen={Boolean(accountForm.id)}
+                  hint="número, alias, orden y estado"
+                >
               <TextField
                 label="Número de cuenta"
                 hint="Para transferir; se muestra junto a la cuenta al cobrar"
@@ -3822,13 +3840,6 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 value={accountForm.alias}
                 onChange={(value) => setAccountForm({ ...accountForm, alias: value })}
                 placeholder="ledbox.cta"
-              />
-              <MoneyField
-                label="Saldo inicial"
-                hint="Lo que ya había en la cuenta (opcional)"
-                value={accountForm.openingBalance}
-                onChange={(value) => setAccountForm({ ...accountForm, openingBalance: value })}
-                placeholder="0"
               />
               <NumberField
                 label="Orden"
@@ -4015,6 +4026,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               title="Nuevo movimiento de tesorería"
               icon="refresh"
               description="Entrada, salida o transferencia entre cuentas; mueve el saldo de las cuentas elegidas."
+              size="md"
+              error={movementError}
               dirty={movementDirty}
               onClose={() => {
                 setShowMovementForm(false);
@@ -4022,15 +4035,10 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               }}
               footer={({ requestClose }) => (
             <>
-              {movementError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{movementError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={movementBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={movementFormId} busy={movementBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={movementFormId} busy={movementBusy} busyLabel="Guardando…">
                 Registrar movimiento
               </AdminButton>
             </>
@@ -4066,7 +4074,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 />
               ) : null}
                 </AdminDialogSection>
-                <AdminDialogSection title="Importe">
+                <AdminDialogSection title="Importe y fecha">
               <MoneyField
                 label="Monto"
                 hint="En guaraníes"
@@ -4257,15 +4265,12 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               title="Nuevo gasto"
               icon="receipt"
               description="Carga el gasto y genera su egreso en la cuenta elegida. «Guardar y cargar otro» conserva cuenta, categoría y proyecto."
+              size="md"
+              error={expenseError}
               dirty={expenseDirty}
               onClose={() => setShowExpenseForm(false)}
               footer={({ requestClose }) => (
                 <>
-                  {expenseError ? (
-                    <div className="admin-dialog-footer-note">
-                      <AdminNote tone="error">{expenseError}</AdminNote>
-                    </div>
-                  ) : null}
                   <AdminButton icon="close" type="button" onClick={requestClose} disabled={expenseBusy}>
                     Cancelar
                   </AdminButton>
@@ -4283,7 +4288,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   >
                     Guardar y cargar otro
                   </AdminButton>
-                  <AdminButton type="submit" variant="primary" icon="check" form={expenseFormId} busy={expenseBusy}>
+                  <AdminButton type="submit" variant="primary" icon="check" form={expenseFormId} busy={expenseBusy} busyLabel="Guardando…">
                     Guardar
                   </AdminButton>
                 </>
@@ -4339,7 +4344,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                     options={projectOptions}
                   />
                 </AdminDialogSection>
-                <AdminDisclosure title="Más opciones" hint="fecha, proveedor, método, comprobante y notas">
+                <AdminDialogSection title="Más opciones" collapsible hint="fecha, proveedor, método, comprobante y notas">
                   <DateField
                     label="Fecha"
                     hint="Por defecto, hoy"
@@ -4375,7 +4380,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                     onChange={(value) => setExpenseForm({ ...expenseForm, notes: value })}
                     placeholder="Notas"
                   />
-                </AdminDisclosure>
+                </AdminDialogSection>
               </form>
             </AdminDialog>
           ) : null}

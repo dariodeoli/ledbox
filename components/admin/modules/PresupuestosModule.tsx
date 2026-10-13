@@ -73,7 +73,9 @@ import {
   AdminCell,
   AdminCountdown,
   AdminDataState,
+  AdminConfirmDialog,
   AdminDialog,
+  AdminDialogSection,
   AdminEmpty,
   AdminKpi,
   AdminKpis,
@@ -392,8 +394,24 @@ export function BudgetProofDialog({
   collectLabel?: string;
 }) {
   return (
-    <AdminDialog title={title} size="wide" icon="budgets" onClose={onClose}>
-      {subtitle ? <p className="admin-dialog-text">{subtitle}</p> : null}
+    <AdminDialog
+      title={title}
+      size="lg"
+      icon="budgets"
+      description={subtitle}
+      onClose={onClose}
+      footer={
+        <>
+          <AdminButton icon="close" type="button" onClick={onClose}>Cerrar</AdminButton>
+          {onCollect ? (
+            <AdminButton variant="primary" icon="check" type="button" busy={collectBusy} busyLabel="Cobrando…" onClick={onCollect}>
+              {collectLabel ?? "Marcar cobrado"}
+            </AdminButton>
+          ) : null}
+        </>
+      }
+    >
+      <AdminDialogSection title="Comprobantes" stack>
       {proofs.length === 0 ? (
         <p className="admin-dialog-text">Este presupuesto todavía no tiene comprobantes subidos desde el portal.</p>
       ) : (
@@ -435,15 +453,7 @@ export function BudgetProofDialog({
           })}
         </div>
       )}
-      <div className="admin-dialog-foot">
-        {onCollect ? (
-          <AdminButton variant="primary" icon="check" busy={collectBusy} onClick={onCollect}>
-            {collectLabel ?? "Marcar cobrado"}
-          </AdminButton>
-        ) : null}
-        <span className="admin-dialog-spacer" />
-        <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
-      </div>
+      </AdminDialogSection>
     </AdminDialog>
   );
 }
@@ -459,6 +469,8 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  // Lo último cargado o guardado: «hay cambios sin guardar» es distinto de eso.
+  const loadedRef = useRef(JSON.stringify({ bank: "", holder: "", ruc: "", account: "", alias: "" }));
 
   useEffect(() => {
     let active = true;
@@ -473,13 +485,15 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           if (!result.sessionInvalid) setError(result.error);
           return;
         }
-        setDetails({
+        const loaded = {
           bank: result.data.paymentDetails?.bank ?? "",
           holder: result.data.paymentDetails?.holder ?? "",
           ruc: result.data.paymentDetails?.ruc ?? "",
           account: result.data.paymentDetails?.account ?? "",
           alias: result.data.paymentDetails?.alias ?? "",
-        });
+        };
+        loadedRef.current = JSON.stringify(loaded);
+        setDetails(loaded);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -500,20 +514,35 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
       setError(result.error);
       return;
     }
+    loadedRef.current = JSON.stringify(details);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2500);
   }
 
   return (
-    <AdminDialog title="Datos de pago de la empresa" size="wide" icon="building" onClose={onClose}>
-      <p className="admin-dialog-text">
-        Se muestran en el portal del cliente cuando el presupuesto está aprobado (junto al monto a transferir) y en la hoja
-        imprimible. Sin datos cargados, el portal no inventa una cuenta.
-      </p>
+    <AdminDialog
+      title="Datos de pago de la empresa"
+      size="md"
+      icon="building"
+      description="Se muestran en el portal con el presupuesto aprobado y en la hoja imprimible. Sin datos, el portal no inventa una cuenta."
+      error={error}
+      dirty={!loading && JSON.stringify(details) !== loadedRef.current}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cerrar
+          </AdminButton>
+          <AdminButton variant="primary" icon="check" type="button" busy={busy} busyLabel="Guardando…" onClick={() => void save()} disabled={loading}>
+            Guardar datos
+          </AdminButton>
+        </>
+      )}
+    >
       {loading ? (
         <p className="admin-dialog-text">Cargando datos de pago…</p>
       ) : (
-        <div className="admin-plan-grid">
+        <AdminDialogSection title="Cuenta bancaria">
           <TextField
             label="Banco"
             hint="Del catálogo o libre; el monograma reemplaza al logo mientras no haya asset"
@@ -563,19 +592,9 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
               </span>
             </div>
           ) : null}
-        </div>
+        </AdminDialogSection>
       )}
-      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       {saved ? <AdminNote tone="ok">Datos de pago guardados.</AdminNote> : null}
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton icon="close" onClick={onClose} disabled={busy}>
-          Cerrar
-        </AdminButton>
-        <AdminButton variant="primary" icon="check" busy={busy} onClick={() => void save()} disabled={loading}>
-          Guardar datos
-        </AdminButton>
-      </div>
     </AdminDialog>
   );
 }
@@ -630,7 +649,18 @@ function ItemLinksDialog({
   }
 
   return (
-    <AdminDialog title={`Inventario del presupuesto · ${budget.title}`} size="wide" icon="inventory" onClose={onClose}>
+    <AdminDialog
+      title={`Inventario del presupuesto · ${budget.title}`}
+      size="lg"
+      icon="inventory"
+      error={error}
+      onClose={onClose}
+      footer={
+        <AdminButton variant="primary" icon="check" type="button" onClick={onClose} busy={Boolean(busyId)} busyLabel="Guardando…">
+          Listo
+        </AdminButton>
+      }
+    >
       <p className="admin-dialog-text">
         Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
         panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
@@ -645,6 +675,7 @@ function ItemLinksDialog({
         no bloquean la aprobación: quedan auditados y el equipo los ve en los avisos y en Inventario (con sustitutos).
       </p>
 
+      <AdminDialogSection title="Ítems del presupuesto" stack>
       <div className="admin-link-list">
         {budget.items.map((item) => {
           const link = links[item.id] ?? null;
@@ -709,15 +740,9 @@ function ItemLinksDialog({
           );
         })}
       </div>
+      </AdminDialogSection>
 
-      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton variant="primary" icon="check" onClick={onClose} busy={Boolean(busyId)}>
-          Listo
-        </AdminButton>
-      </div>
     </AdminDialog>
   );
 }
@@ -839,6 +864,15 @@ export function PresupuestosModule() {
   const [counterDiscount, setCounterDiscount] = useState("");
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [plan, setPlan] = useState<{ budget: AdminBudgetRow; advance: string; terms: string; installments: BudgetConditionDraft[] } | null>(null);
+  // Foto del plan al abrirlo: «hay cambios sin guardar» es distinto de ella.
+  const planRef = useRef(plan);
+  planRef.current = plan;
+  const planBaseRef = useRef("");
+  const planBudgetId = plan?.budget.id ?? "";
+  useEffect(() => {
+    const current = planRef.current;
+    planBaseRef.current = current ? JSON.stringify({ advance: current.advance, terms: current.terms, installments: current.installments }) : "";
+  }, [planBudgetId]);
 
   // Vínculo con inventario y reserva automática (issue #18).
   const [linksBudget, setLinksBudget] = useState<AdminBudgetRow | null>(null);
@@ -1919,7 +1953,42 @@ export function PresupuestosModule() {
       )}
 
       {portalBudget ? (
-        <AdminDialog title={`Portal del cliente · ${portalBudget.title}`} icon="globe" onClose={() => setPortalBudget(null)}>
+        <AdminDialog
+          title={`Portal del cliente · ${portalBudget.title}`}
+          icon="globe"
+          size="md"
+          error={dialogError}
+          onClose={() => setPortalBudget(null)}
+          footer={
+            <>
+              {portalToken ? (
+                <>
+                  <AdminButton
+                    icon="download"
+                    type="button"
+                    title="Copiar el link del portal"
+                    aria-label="Copiar el link del portal"
+                    onClick={() => void copyPortalLink(portalBudget)}
+                  >Copiar enlace del cliente</AdminButton>
+                  <AdminButton
+                    icon="external"
+                    type="button"
+                    title="Abrir el portal en una pestaña nueva"
+                    aria-label="Abrir el portal en una pestaña nueva"
+                    onClick={() => window.open(portalBudgetUrl(portalToken), "_blank", "noopener,noreferrer")}
+                  >Ver como cliente</AdminButton>
+                  <AdminButton icon="power" type="button" onClick={() => void submitPortalAction("revoke")} disabled={dialogBusy}>
+                    Revocar link
+                  </AdminButton>
+                </>
+              ) : null}
+              <AdminButton variant="primary" icon="refresh" type="button" busy={dialogBusy} busyLabel="Procesando…" onClick={() => void submitPortalAction("generate")}>
+                {portalToken ? "Regenerar link" : "Generar link"}
+              </AdminButton>
+            </>
+          }
+        >
+          <AdminDialogSection title="Link del cliente" stack>
           {portalToken ? (
             <>
               <div className="admin-dialog-qr">
@@ -1949,43 +2018,44 @@ export function PresupuestosModule() {
               online.
             </p>
           )}
-          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            {portalToken ? (
-              <>
-                <AdminButton
-                  icon="download"
-                  title="Copiar el link del portal"
-                  aria-label="Copiar el link del portal"
-                  onClick={() => void copyPortalLink(portalBudget)}
-                >Copiar enlace del cliente</AdminButton>
-                <AdminButton
-                  icon="external"
-                  title="Abrir el portal en una pestaña nueva"
-                  aria-label="Abrir el portal en una pestaña nueva"
-                  onClick={() => window.open(portalBudgetUrl(portalToken), "_blank", "noopener,noreferrer")}
-                >Ver como cliente</AdminButton>
-              </>
-            ) : null}
-            <span className="admin-dialog-spacer" />
-            {portalToken ? (
-              <AdminButton icon="power" onClick={() => void submitPortalAction("revoke")} disabled={dialogBusy}>
-                Revocar link
-              </AdminButton>
-            ) : null}
-            <AdminButton variant="primary" icon="refresh" busy={dialogBusy} onClick={() => void submitPortalAction("generate")}>
-              {portalToken ? "Regenerar link" : "Generar link"}
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
       {sendBudget ? (
-        <AdminDialog title={`Enviar por correo · ${sendBudget.title}`} size="wide" icon="mail" onClose={() => { if (!sendBusy && !linkBusy) setSendBudget(null); }}>
-          <p className="admin-dialog-text">
-            El correo sale con la identidad de LedBox: link del portal con el código, resumen de ítems, total y validez,
-            la hoja imprimible y los datos de pago cuando el presupuesto está aprobado.
-          </p>
+        <AdminDialog
+          title={`Enviar por correo · ${sendBudget.title}`}
+          size="lg"
+          icon="mail"
+          description="El correo lleva el link del portal con el código, el resumen de ítems, total y validez, y la hoja imprimible."
+          error={sendError || (!sendBudget.publicToken ? "Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el destino de aprobación." : "")}
+          warning={!emailValid(sendBudget.client.email ?? "") ? "El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá." : undefined}
+          dirty={sendMessage.trim() !== ""}
+          onClose={() => { if (!sendBusy && !linkBusy) setSendBudget(null); }}
+          footer={({ requestClose }) => (
+            <>
+              {!sendBudget.publicToken ? (
+                <AdminButton icon="refresh" type="button" busy={linkBusy} busyLabel="Generando…" disabled={sendBusy} onClick={() => void generateLinkForSend()}>
+                  Generar link del portal
+                </AdminButton>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton
+                variant="primary"
+                icon="mail"
+                type="button"
+                busy={sendBusy}
+                busyLabel={sendPreview ? "Enviando…" : "Preparando…"}
+                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
+                onClick={() => void sendBudgetMail()}
+              >
+                {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
+              </AdminButton>
+            </>
+          )}
+        >
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
@@ -2013,18 +2083,7 @@ export function PresupuestosModule() {
             </div>
           </dl>
 
-          {!sendBudget.publicToken ? (
-            <AdminNote tone="error">
-              Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el
-              destino de aprobación.
-            </AdminNote>
-          ) : null}
-          {!emailValid(sendBudget.client.email ?? "") ? (
-            <AdminNote tone="error">
-              El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá.
-            </AdminNote>
-          ) : null}
-
+          <AdminDialogSection title="Destinatario">
           <EmailField
             label="Destinatario"
             required
@@ -2038,6 +2097,8 @@ export function PresupuestosModule() {
             error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
             hint="Podés cambiarlo: el correo se envía solo a esta dirección."
           />
+          </AdminDialogSection>
+          <AdminDialogSection title="Más opciones" collapsible defaultOpen={sendMessage.trim() !== ""} hint="mensaje corto para el cliente">
           <TextAreaField
             label="Mensaje corto (opcional)"
             wide
@@ -2053,28 +2114,13 @@ export function PresupuestosModule() {
             placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
           />
 
-          {sendPreview ? <AdminMailPreview preview={sendPreview} /> : null}
-          {sendError ? <AdminNote tone="error">{sendError}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            {!sendBudget.publicToken ? (
-              <AdminButton icon="refresh" busy={linkBusy} disabled={sendBusy} onClick={() => void generateLinkForSend()}>
-                Generar link del portal
-              </AdminButton>
-            ) : null}
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" onClick={() => setSendBudget(null)} disabled={sendBusy || linkBusy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton
-              variant="primary"
-              icon="mail"
-              busy={sendBusy}
-              disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
-              onClick={() => void sendBudgetMail()}
-            >
-              {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
+
+          {sendPreview ? (
+            <AdminDialogSection title="Vista previa" stack>
+              <AdminMailPreview preview={sendPreview} />
+            </AdminDialogSection>
+          ) : null}
         </AdminDialog>
       ) : null}
 
@@ -2082,13 +2128,27 @@ export function PresupuestosModule() {
         <AdminDialog
           title={approval.decision === "approve" ? `Aprobar manualmente · ${approval.budget.title}` : `Pedir cambios · ${approval.budget.title}`}
           icon={approval.decision === "approve" ? "check" : "edit"}
-          onClose={() => setApproval(null)}
-        >
-          <p className="admin-dialog-text">
-            {approval.decision === "approve"
+          size="md"
+          description={
+            approval.decision === "approve"
               ? `Se registra la aprobación a nombre de ${clientDisplayName(approval.budget.client)}, con tu usuario y la fecha actual. Si ya hay una aprobación registrada, no se pisa.`
-              : "El cliente no ve el cambio hasta que le compartas la versión actualizada; queda registrado en el presupuesto."}
-          </p>
+              : "El cliente no ve el cambio hasta que le compartas la versión actualizada; queda registrado en el presupuesto."
+          }
+          error={dialogError}
+          dirty={note.trim() !== ""}
+          onClose={() => setApproval(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={dialogBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="button" busy={dialogBusy} busyLabel="Registrando…" disabled={Boolean(budgetApprovalNoteError(approval.decision, note))} onClick={() => void submitApproval()}>
+                {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
+              </AdminButton>
+            </>
+          )}
+        >
+          <AdminDialogSection title={approval.decision === "approve" ? "Nota" : "Cambios pedidos"}>
           <TextAreaField
             label={approval.decision === "approve" ? "Nota (opcional)" : "¿Qué cambios se piden?"}
             wide
@@ -2099,25 +2159,50 @@ export function PresupuestosModule() {
             required={approval.decision === "request_revision"}
             placeholder={approval.decision === "approve" ? "Ej.: aprobado por teléfono, coordina con Santiago" : "Ej.: sumar un día más y cambiar el lugar"}
           />
-          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            <AdminButton icon="close" onClick={() => setApproval(null)} disabled={dialogBusy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton variant="primary" icon="check" busy={dialogBusy} disabled={Boolean(budgetApprovalNoteError(approval.decision, note))} onClick={() => void submitApproval()}>
-              {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
       {talkRequest ? (
         <AdminDialog
           title={`Conversación · ${talkRequest.budget.title}`}
-          size="wide"
+          size="lg"
           icon="globe"
           onClose={() => setTalkRequest(null)}
+          footer={
+            <>
+              <AdminButton icon="close" type="button" onClick={() => setTalkRequest(null)}>
+                Cerrar
+              </AdminButton>
+              {writable && talkRequest.status === "pending" ? (
+                <>
+                  <AdminButton
+                    icon="close"
+                    type="button"
+                    onClick={() => {
+                      openResolution(talkRequest, "reject");
+                      setTalkRequest(null);
+                    }}
+                  >
+                    Rechazar
+                  </AdminButton>
+                  <AdminButton
+                    variant="primary"
+                    icon="check"
+                    type="button"
+                    onClick={() => {
+                      openResolution(talkRequest, "accept");
+                      setTalkRequest(null);
+                    }}
+                  >
+                    Aceptar y aplicar
+                  </AdminButton>
+                </>
+              ) : null}
+            </>
+          }
         >
+          <AdminDialogSection title="Conversación" stack>
           <p className="admin-dialog-text">
             <strong>{talkRequest.requestedByName}</strong> pidió {budgetChangeKindLabel(talkRequest.kind).toLowerCase()} el{" "}
             {formatDateTime(talkRequest.createdAt)}. Comparación original vs propuesta:
@@ -2134,46 +2219,43 @@ export function PresupuestosModule() {
               {talkRequest.responseNote}
             </p>
           ) : null}
-          <div className="admin-dialog-foot">
-            <AdminButton icon="close" onClick={() => setTalkRequest(null)}>
-              Cerrar
-            </AdminButton>
-            {writable && talkRequest.status === "pending" ? (
-              <>
-                <AdminButton
-                  icon="close"
-                  onClick={() => {
-                    openResolution(talkRequest, "reject");
-                    setTalkRequest(null);
-                  }}
-                >
-                  Rechazar
-                </AdminButton>
-                <AdminButton
-                  variant="primary"
-                  icon="check"
-                  onClick={() => {
-                    openResolution(talkRequest, "accept");
-                    setTalkRequest(null);
-                  }}
-                >
-                  Aceptar y aplicar
-                </AdminButton>
-              </>
-            ) : null}
-          </div>
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
       {resolution ? (
-        <AdminDialog title={resolutionLabel} size="wide" icon="edit" onClose={() => setResolution(null)}>
-          <p className="admin-dialog-text">
-            {resolution.request.kind === "items"
+        <AdminDialog
+          title={resolutionLabel}
+          size="lg"
+          icon="edit"
+          description={
+            resolution.request.kind === "items"
               ? "La propuesta del cliente se aplica al presupuesto con los precios unitarios originales. Podés ajustar las cantidades y días como contra-oferta antes de aceptar."
               : resolution.request.kind === "discount"
                 ? "Al aceptar, el descuento se aplica al presupuesto y el total se recalcula. Podés contra-ofertar con otro monto."
-                : "El pedido de cambios queda resuelto: el cliente lo ve respondido en su portal y el presupuesto deja de mostrarse como «cambios solicitados»."}
-          </p>
+                : "El pedido de cambios queda resuelto: el cliente lo ve respondido en su portal y el presupuesto deja de mostrarse como «cambios solicitados»."
+          }
+          error={dialogError}
+          dirty={note.trim() !== ""}
+          onClose={() => setResolution(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={dialogBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton
+                variant={resolution.decision === "accept" ? "primary" : undefined}
+                icon={resolution.decision === "accept" ? "check" : "close"}
+                type="button"
+                busy={dialogBusy}
+                busyLabel="Guardando…"
+                onClick={() => void submitResolution()}
+              >
+                {resolution.decision === "accept" ? "Aceptar y aplicar" : "Rechazar con nota"}
+              </AdminButton>
+            </>
+          )}
+        >
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
@@ -2198,6 +2280,7 @@ export function PresupuestosModule() {
           </dl>
 
           {resolution.decision === "accept" && resolution.request.kind === "items" ? (
+            <AdminDialogSection title="Contra-oferta" stack>
             <div className="admin-dialog-table" role="table" aria-label="Contra-oferta de ítems">
               <div className="admin-dialog-table-head" role="row">
                 <span role="columnheader">Ítem</span>
@@ -2252,17 +2335,18 @@ export function PresupuestosModule() {
                 );
               })}
             </div>
+            </AdminDialogSection>
           ) : null}
 
           {resolution.decision === "accept" && resolution.request.kind === "discount" ? (
-            <div className="admin-plan-grid">
+            <AdminDialogSection title="Contra-oferta">
               <MoneyField
                 label="Descuento final (Gs)"
                 hint="Podés aceptar el pedido o contra-ofertar con otro monto"
                 value={counterDiscount}
                 onChange={setCounterDiscount}
               />
-            </div>
+            </AdminDialogSection>
           ) : null}
 
           {resolution.decision === "accept" ? (
@@ -2285,6 +2369,7 @@ export function PresupuestosModule() {
             </p>
           ) : null}
 
+          <AdminDialogSection title="Respuesta al cliente">
           <TextAreaField
             label={resolution.decision === "accept" ? "Respuesta para el cliente (opcional)" : "Nota del rechazo (obligatoria)"}
             wide
@@ -2299,35 +2384,44 @@ export function PresupuestosModule() {
                 : "Ej.: no podemos bajar más el precio con esa cantidad de días"
             }
           />
-          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            <AdminButton icon="close" onClick={() => setResolution(null)} disabled={dialogBusy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton
-              variant={resolution.decision === "accept" ? "primary" : undefined}
-              icon={resolution.decision === "accept" ? "check" : "close"}
-              busy={dialogBusy}
-              onClick={() => void submitResolution()}
-            >
-              {resolution.decision === "accept" ? "Aceptar y aplicar" : "Rechazar con nota"}
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
-      {eventEdit?.event ? <AdminDialog title="Nombre del evento compartido" onClose={() => setEventEdit(null)}>
-        <AdminNote>Este nombre pertenece al evento y cambia en todos los presupuestos asociados. El título de cada presupuesto se conserva. Las versiones aceptadas o firmadas bloquean el cambio.</AdminNote>
-        <TextField label="Nombre del evento" required maxLength={160} value={eventName} onChange={setEventName} disabled={dialogBusy} />
-        {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
-        <div className="admin-dialog-foot"><AdminButton onClick={() => setEventEdit(null)} disabled={dialogBusy}>Cancelar</AdminButton><AdminButton variant="primary" busy={dialogBusy} disabled={!eventName.trim() || eventName.trim() === eventEdit.event.name} onClick={async () => {
-          setDialogBusy(true); setDialogError("");
-          const result = await adminSend(`/api/admin/budgets/${eventEdit.id}/event`, { name: eventName, originalName: eventEdit.event!.name }, "PATCH");
-          setDialogBusy(false);
-          if (!result.ok) { setDialogError(result.error); return; }
-          setNotice(`Evento renombrado a «${eventName.trim()}» en todos sus presupuestos.`); setEventEdit(null); budgetsResource.reload(); events.reload();
-        }}>Guardar nombre</AdminButton></div>
-      </AdminDialog> : null}
+      {eventEdit?.event ? (
+        <AdminDialog
+          title="Nombre del evento compartido"
+          size="sm"
+          icon="events"
+          description="Este nombre pertenece al evento y cambia en todos los presupuestos asociados. El título de cada presupuesto se conserva. Las versiones aceptadas o firmadas bloquean el cambio."
+          error={dialogError}
+          dirty={eventName.trim() !== eventEdit.event.name}
+          onClose={() => setEventEdit(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton type="button" onClick={requestClose} disabled={dialogBusy}>Cancelar</AdminButton>
+              <AdminButton
+                variant="primary"
+                type="button"
+                busy={dialogBusy}
+                busyLabel="Guardando…"
+                disabled={!eventName.trim() || eventName.trim() === eventEdit.event!.name}
+                onClick={async () => {
+                  setDialogBusy(true); setDialogError("");
+                  const result = await adminSend(`/api/admin/budgets/${eventEdit.id}/event`, { name: eventName, originalName: eventEdit.event!.name }, "PATCH");
+                  setDialogBusy(false);
+                  if (!result.ok) { setDialogError(result.error); return; }
+                  setNotice(`Evento renombrado a «${eventName.trim()}» en todos sus presupuestos.`); setEventEdit(null); budgetsResource.reload(); events.reload();
+                }}
+              >Guardar nombre</AdminButton>
+            </>
+          )}
+        >
+          <AdminDialogSection title="Evento">
+            <TextField label="Nombre del evento" wide required maxLength={160} value={eventName} onChange={setEventName} disabled={dialogBusy} />
+          </AdminDialogSection>
+        </AdminDialog>
+      ) : null}
       {pricing ? (
         <BudgetPricingDialog
           budget={pricing}
@@ -2340,12 +2434,26 @@ export function PresupuestosModule() {
       ) : null}
 
       {plan ? (
-        <AdminDialog title={`Plan de pagos · ${plan.budget.title}`} size="wide" icon="finance" onClose={() => setPlan(null)}>
-          <p className="admin-dialog-text">
-            El anticipo y las cuotas se muestran en el portal cuando el presupuesto está aprobado: el primero (o la primera
-            cuota) aparece como «a transferir ahora». El plan no puede superar el total ({formatMoney(plan.budget.total)}).
-          </p>
-          <div className="admin-plan-grid">
+        <AdminDialog
+          title={`Plan de pagos · ${plan.budget.title}`}
+          size="lg"
+          icon="finance"
+          description={`El anticipo y las cuotas se muestran en el portal con el presupuesto aprobado: el primero (o la primera cuota) aparece como «a transferir ahora». El plan no puede superar el total (${formatMoney(plan.budget.total)}).`}
+          error={dialogError}
+          dirty={planBaseRef.current !== "" && JSON.stringify({ advance: plan.advance, terms: plan.terms, installments: plan.installments }) !== planBaseRef.current}
+          onClose={() => setPlan(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={dialogBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="button" busy={dialogBusy} busyLabel="Guardando…" disabled={Boolean(plan.budget.approvedAt) || !resolveBudgetPaymentPlan(conditionPayload(plan.installments), plan.budget.total, Number(plan.advance) || 0).ok} onClick={() => void submitPlan()}>
+                Guardar plan
+              </AdminButton>
+            </>
+          )}
+        >
+          <AdminDialogSection title="Anticipo y condiciones">
             <MoneyField
               label="Anticipo (Gs)"
               hint="0 = sin anticipo separado"
@@ -2362,18 +2470,10 @@ export function PresupuestosModule() {
               rows={3}
               placeholder="Ej.: 50 % al confirmar y saldo 7 días antes del evento"
             />
-          </div>
-          <BudgetPaymentPlanEditor total={plan.budget.total} advance={Number(plan.advance) || 0} rows={plan.installments} onChange={(installments) => setPlan({ ...plan, installments })} disabled={dialogBusy || Boolean(plan.budget.approvedAt)} />
-          {dialogError ? <AdminNote tone="error">{dialogError}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" onClick={() => setPlan(null)} disabled={dialogBusy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton variant="primary" icon="check" busy={dialogBusy} disabled={Boolean(plan.budget.approvedAt) || !resolveBudgetPaymentPlan(conditionPayload(plan.installments), plan.budget.total, Number(plan.advance) || 0).ok} onClick={() => void submitPlan()}>
-              Guardar plan
-            </AdminButton>
-          </div>
+          </AdminDialogSection>
+          <AdminDialogSection title="Cuotas" stack>
+            <BudgetPaymentPlanEditor total={plan.budget.total} advance={Number(plan.advance) || 0} rows={plan.installments} onChange={(installments) => setPlan({ ...plan, installments })} disabled={dialogBusy || Boolean(plan.budget.approvedAt)} />
+          </AdminDialogSection>
         </AdminDialog>
       ) : null}
 
