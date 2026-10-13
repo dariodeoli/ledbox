@@ -5,6 +5,7 @@ import { db, dbWithDeleted } from "./db";
 import { anonymize, archive, restore, assertLive, blockedError, blockersFor, purgeBlockers, TrashError, trash, trashErrorResponse, unarchive, type Blocker, type TrashModel } from "./trash";
 import type { AdminCapability } from "./permissions";
 import { live } from "./trash-filter";
+import { daysUntilPurge } from "../trash-shared";
 
 /**
  * Papelera, etapa 2 (docs/PAPELERA.md): reglas de Evento y Producto de inventario.
@@ -264,6 +265,10 @@ export type TrashRow = {
   reason: string | null;
   anonymized: boolean;
   blockers: Blocker[];
+  /** Días hasta el vaciado automático (null: apagado, bloqueado o anonimizado). */
+  purgeInDays: number | null;
+  /** Vaciado activo pero la fila tiene bloqueos: «Conservado (contable)». */
+  retained: boolean;
 };
 
 const MAX_ROWS = 200;
@@ -291,7 +296,7 @@ const SOURCES: TrashSource[] = [
 ];
 
 /** Lo eliminado de la empresa (las 7 entidades con papelera), con bloqueos del borrado definitivo. */
-export async function listTrash(organizationId: string): Promise<TrashRow[]> {
+export async function listTrash(organizationId: string, purgeDays: number | null = null, now: Date = new Date()): Promise<TrashRow[]> {
   const groups = await Promise.all(SOURCES.map(async (source) => ({ type: source.type, rows: await source.load(organizationId) })));
   const userIds = [...new Set(groups.flatMap((group) => group.rows.map((row) => row.deletedById)).filter((value): value is string => Boolean(value)))];
   const users = userIds.length ? await db.adminUser.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : [];
@@ -300,17 +305,23 @@ export async function listTrash(organizationId: string): Promise<TrashRow[]> {
     dbWithDeleted.$transaction((tx) => (type === "Event" ? eventPurgeBlockers(id, organizationId, tx, { lock: false }) : purgeBlockers(type, id, organizationId, tx, { lock: false })));
   const rows = await Promise.all(
     groups.flatMap((group) =>
-      group.rows.map(async (row): Promise<TrashRow> => ({
-        type: group.type,
-        id: row.id,
-        name: row.name,
-        deletedAt: row.deletedAt!.toISOString(),
-        deletedById: row.deletedById,
-        deletedByName: row.deletedById ? names.get(row.deletedById) ?? null : null,
-        reason: row.deleteReason,
-        anonymized: Boolean(row.anonymizedAt),
-        blockers: await blockersOf(group.type, row.id),
-      })),
+      group.rows.map(async (row): Promise<TrashRow> => {
+        const blockers = await blockersOf(group.type, row.id);
+        const anonymized = Boolean(row.anonymizedAt);
+        return {
+          type: group.type,
+          id: row.id,
+          name: row.name,
+          deletedAt: row.deletedAt!.toISOString(),
+          deletedById: row.deletedById,
+          deletedByName: row.deletedById ? names.get(row.deletedById) ?? null : null,
+          reason: row.deleteReason,
+          anonymized,
+          blockers,
+          retained: Boolean(purgeDays) && !anonymized && blockers.length > 0,
+          purgeInDays: anonymized || blockers.length > 0 ? null : daysUntilPurge(row.deletedAt!, purgeDays, now),
+        };
+      }),
     ),
   );
   return rows.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));

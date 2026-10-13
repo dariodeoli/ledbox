@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { OrganizationRentalSettings } from "@prisma/client";
 import type { AdminRentalSettings } from "../admin-types";
 import { securityDepositAmountValid } from "../budget-security-deposit";
+import { isTrashPurgeDays } from "../trash-shared";
 import { parseStorefrontAccent } from "../storefront-theme";
 import { db } from "./db";
 import { DEFAULT_HOLD_TTL_MINUTES } from "./inventory-availability";
@@ -29,6 +30,7 @@ export const RENTAL_SETTINGS_DEFAULTS: RentalSettingsView = {
   storefrontTagline: null,
   storefrontAccent: null,
   storefrontEmail: null,
+  trashPurgeDays: null,
 };
 
 const BUFFER_KEYS = ["deliveryBufferMin", "returnBufferMin", "prepBufferMin", "transportBufferMin", "cleaningBufferMin"] as const;
@@ -58,6 +60,7 @@ export const RENTAL_SETTINGS_FIELDS = [
   "storefrontTagline",
   "storefrontAccent",
   "storefrontEmail",
+  "trashPurgeDays",
 ] as const;
 
 export function toRentalSettingsView(row: OrganizationRentalSettings | null): RentalSettingsView {
@@ -77,6 +80,7 @@ export function toRentalSettingsView(row: OrganizationRentalSettings | null): Re
     storefrontTagline: row.storefrontTagline,
     storefrontAccent: row.storefrontAccent,
     storefrontEmail: row.storefrontEmail,
+    trashPurgeDays: row.trashPurgeDays,
   };
 }
 
@@ -165,6 +169,15 @@ export function parseRentalSettingsPatch(
       const email = record.storefrontEmail.trim().toLowerCase();
       if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Ingresá un correo de contacto válido." };
       data.storefrontEmail = email;
+    }
+  }
+  if (record.trashPurgeDays !== undefined) {
+    if (record.trashPurgeDays === null || record.trashPurgeDays === "") {
+      data.trashPurgeDays = null;
+    } else if (typeof record.trashPurgeDays !== "number" || !isTrashPurgeDays(record.trashPurgeDays)) {
+      return { ok: false, error: "El vaciado automático debe ser nunca, 30, 60, 90 o 180 días." };
+    } else {
+      data.trashPurgeDays = record.trashPurgeDays;
     }
   }
   return { ok: true, data };

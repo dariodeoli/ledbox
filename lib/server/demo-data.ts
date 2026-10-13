@@ -2952,6 +2952,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     storefrontTagline: "Pantallas LED, tótems y equipos para que tu evento se vea y se escuche.",
     storefrontAccent: "#0e7490",
     storefrontEmail: "ventas@ledbox.demo",
+    trashPurgeDays: null,
     createdAt: at(base, -30, 10, 0),
   };
 
