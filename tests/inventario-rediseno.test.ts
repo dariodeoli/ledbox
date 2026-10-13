@@ -34,10 +34,10 @@ test("los cinco indicadores filtran al tocarlos y las pestañas son las pedidas"
   assert.equal((module.match(/<AdminKpi\b/g) ?? []).length, 5);
   assert.match(module, /INVENTORY_TABS\.map/);
   const ui = read("components/admin/AdminUI.tsx");
-  assert.match(ui, /className="admin-kpi admin-kpi--action"/);
-  assert.match(ui, /aria-pressed=\{active \?\? false\}/);
-  // Un indicador sin dato no es un botón: nunca se filtra por un cero inventado.
-  assert.match(ui, /if \(onClick && shown\)/);
+  assert.match(ui, /admin-kpi admin-kpi--filter/);
+  assert.match(ui, /"aria-pressed": Boolean\(active\)/);
+  assert.match(ui, /onSelect\?: \(\) => void/);
+  assert.ok(!/admin-kpi--action/.test(ui));
 });
 
 test("la ocupación de la semana es una lectura acotada a la empresa activa y reutiliza el cálculo del Resumen", () => {
@@ -131,4 +131,20 @@ test("el código del módulo no conserva piezas del diseño anterior", () => {
     assert.ok(!source.includes(dead), `quedó código muerto: ${dead}`);
   }
   assert.doesNotMatch(read("app/globals.css"), /\.admin-item-figure|\.admin-item-identity|\.admin-unit-block/);
+});
+
+test("la ficha pide solo las reservas vivas y el tope de 1000 no deja afuera las próximas", () => {
+  const route = read("app/api/admin/inventory/route.ts");
+  assert.match(route, /searchParams\.get\("vivas"\) === "1"/);
+  assert.match(route, /releasedAt: null,\s*OR: \[\s*\{ endsAt: \{ gte: startOfToday \} \}/);
+  assert.match(route, /soloVivas \? \[\{ startsAt: \{ sort: "asc", nulls: "last" \} \}/);
+  // Sin el parámetro el historial sigue igual: más recientes primero.
+  assert.match(route, /\[\{ startsAt: "desc" \}, \{ id: "asc" \}\]/);
+  assert.match(read("components/admin/modules/InventarioModule.tsx"), /new URLSearchParams\(\{ vivas: "1" \}\)/);
+});
+
+test("el formulario de edición congela su línea base al montar", () => {
+  const dialogs = read("components/admin/modules/InventoryItemDialogs.tsx");
+  assert.match(dialogs, /const \[baseForm\] = useState<InventoryEditForm>\(\(\) => editFormFromItem\(item\)\)/);
+  assert.equal((dialogs.match(/editFormFromItem\(item\)/g) ?? []).length, 2, "solo el estado inicial y la línea base leen el item");
 });

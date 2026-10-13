@@ -1441,6 +1441,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-kpi { flex-wrap: wrap; }
   .admin-kpi-label { flex-basis: 100%; }
 }
+/* KPI que filtra la lista (Presupuestos): botón con foco y estado activo visibles. */
+.admin-kpi--filter { width: 100%; min-height: 48px; font: inherit; text-align: left; cursor: pointer; }
+.admin-kpi--filter:hover { border-color: var(--a-line-strong, var(--a-muted)); background: var(--a-panel-2); }
+.admin-kpi--filter:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-kpi--filter[data-active="true"] { border-color: var(--a-accent); box-shadow: inset 0 0 0 1px var(--a-accent); background: var(--a-accent-soft); }
 /* Estado de carga honesto: esqueleto en lugar de un «0» inventado. */
 .admin-kpi-value--loading { display: inline-flex; align-items: center; min-height: 22px; }
 .admin-kpi-skeleton { display: inline-block; width: 44px; height: 14px; border-radius: 6px; background: linear-gradient(90deg, var(--a-line) 25%, var(--a-accent-soft) 50%, var(--a-line) 75%); background-size: 200% 100%; animation: admin-kpi-shimmer 1.2s linear infinite; }
@@ -1855,16 +1860,76 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 @keyframes admin-skeleton { to { background-position: -200% 0; } }
 
 /* Plantillas de columnas por vista */
-/* Clientes con la ficha 360 (issue #34): contratado y última actividad entran
-   al lugar del RUC (que sigue en el título de la fila, la ficha y la búsqueda).
-   Simplificada en #139: Instagram, web, correo y WhatsApp salen de la grilla
-   (viven en la ficha) y la columna de acciones queda con «Ver la ficha», así la
-   tabla entra sin scroll horizontal en desktop (1440). */
-.admin-table--clientes { --clientes-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.2fr) 5.5rem 5.5rem 2.75rem 2.75rem 5.25rem minmax(4.5rem, .9fr) 4.75rem 4.75rem; --admin-cols: var(--clientes-cols); --admin-table-min: 56rem; }
-.admin-table--eventos { --eventos-cols: 7.5rem 7rem minmax(8.5rem, 1.6fr) minmax(6.5rem, 1.1fr) minmax(5.5rem, 1fr) 4rem 4.5rem 5.75rem 7.5rem; --admin-cols: var(--eventos-cols); --admin-table-min: 61rem; }
-/* Presupuestos (issue #143): prioridad visual a monto, vencimiento, cliente y
-   próximo paso; después ítems, cobrado, saldo, margen, portal y acciones. */
-.admin-table--presupuestos { --presupuestos-cols: minmax(18rem, 2fr) minmax(10rem, 1fr) 8rem 7rem 10rem 4rem 8rem 8rem 8rem 9rem 7.5rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 112rem; }
+/* Clientes (rediseño): tabla esencial —cliente, tipo, contacto, eventos,
+   contratado, saldo, última actividad y una acción visible + «•••»—. La fila
+   entera abre la ficha con un enlace extendido (`.admin-row-link::after`). */
+.admin-table--clientes { --clientes-cols: minmax(9.5rem, 1.8fr) 6.75rem minmax(8.5rem, 1.3fr) 4.5rem 7rem 7rem 6rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 58rem; }
+.admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
+.admin-table--clientes .admin-cell--actions { overflow: visible; }
+@media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }
+.admin-table--clientes .admin-cell--actions .admin-btn--row { padding-inline: 8px; font-size: 11px; letter-spacing: 0; }
+.admin-row-link { color: inherit; text-decoration: none; }
+.admin-row-link::after { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
+.admin-row-link:hover strong { text-decoration: underline; }
+.admin-row-link:focus-visible { outline: none; }
+.admin-row-link:focus-visible::after { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-cards-item { position: relative; }
+.admin-cards-foot { position: relative; z-index: 1; }
+.admin-segments { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-segments .admin-subtab { min-height: 36px; }
+.admin-table--eventos { --eventos-cols: 7.5rem minmax(8rem, 1.4fr) minmax(5.5rem, .9fr) minmax(5rem, .8fr) 12.5rem 6rem 12.25rem; --admin-cols: var(--eventos-cols); --admin-table-min: 62rem; }
+.admin-table--checklist-evento { --checklist-evento-cols: 7rem minmax(9rem, 1.8fr) 6rem 7rem; --admin-cols: var(--checklist-evento-cols); --admin-table-min: 28rem; }
+/* Presupuestos (rediseño): una sola plantilla —número, cliente, evento o título,
+   monto, seña/saldo, etapa, vencimiento y la acción de la fila—. Filas finas de
+   una línea; el detalle completo vive en el panel lateral. */
+.admin-table--presupuestos { --presupuestos-cols: 4.5rem minmax(8.5rem, 1fr) minmax(9rem, 1.5fr) 7.25rem 8rem 9.25rem 4.75rem 10.25rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 62rem; }
+.admin-table--presupuestos .admin-quote-title { -webkit-line-clamp: 1; }
+.admin-table--presupuestos .admin-cell--actions { overflow: visible; }
+.admin-table--presupuestos .admin-btn--row { padding-inline: 10px; letter-spacing: .04em; }
+.admin-kpis.admin-kpis--stages { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.admin-kpis--stages .admin-kpi { flex-wrap: wrap; }
+.admin-kpis--stages .admin-kpi-label { flex-basis: 100%; }
+@media (max-width: 900px) { .admin-kpis.admin-kpis--stages { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); } }
+.admin-table--presupuestos .admin-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.admin-quote-ref { color: var(--a-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.admin-btn--row { min-height: 32px; padding-inline: 12px; font-size: 12px; white-space: nowrap; }
+.admin-module-context-action { margin-left: auto; flex: 0 0 auto; }
+.admin-filter-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; color: var(--a-muted); font-size: 12px; }
+.admin-filter-note strong { color: var(--a-text-strong); }
+/* Detalle del presupuesto (panel lateral): secciones apiladas, una sola vista. */
+.admin-bd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-bd-section { display: grid; gap: 8px; align-content: start; margin-top: 12px; min-width: 0; }
+.admin-bd-grid > .admin-bd-section { margin-top: 0; }
+.admin-bd-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.admin-bd-section-title { margin: 0; color: var(--a-muted); font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-bd-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-bd-actions .admin-btn { min-height: 36px; }
+.admin-bd-items { display: grid; border: 1px solid var(--a-line); border-radius: var(--a-radius); overflow: hidden; }
+.admin-bd-items-head, .admin-bd-items-row { display: grid; grid-template-columns: minmax(0, 2fr) 6rem 7rem 7.5rem; gap: 8px; padding: 7px 10px; font-size: 12.5px; align-items: baseline; }
+.admin-bd-items-head { background: var(--a-panel-2); color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.admin-bd-items-row { border-top: 1px solid var(--a-line); }
+.admin-bd-items-row > span { min-width: 0; overflow-wrap: anywhere; }
+.admin-bd-items-row > span:nth-child(n+3), .admin-bd-items-head > span:nth-child(n+3) { text-align: right; }
+.admin-bd-items-row[data-excluded="true"] { color: var(--a-muted); text-decoration: line-through; }
+.admin-bd-note { margin: 0; color: var(--a-muted); font-size: 12px; }
+.admin-bd-footer { display: flex; align-items: center; gap: 8px; width: 100%; }
+.admin-bd-footer .admin-btn { min-height: 44px; }
+@media (max-width: 760px) {
+  .admin-bd-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-bd-items-head { display: none; }
+  .admin-bd-items-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-bd-items-row > span:nth-child(2) { grid-column: 1; color: var(--a-muted); }
+  .admin-bd-items-row > span:nth-child(3) { display: none; }
+  .admin-bd-items-row > span:nth-child(4) { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .admin-bd-actions .admin-btn { min-height: 44px; }
+  .admin-module-context { flex-wrap: wrap; }
+  .admin-module-context-action { width: 100%; }
+  .admin-module-context-action .admin-btn { width: 100%; min-height: 44px; }
+  .admin-cards-foot .admin-btn--row { min-height: 44px; }
+  .admin-module-context-hint, .admin-module-context-meta { display: none; }
+  .admin-kpis.admin-kpis--stages { display: flex; gap: 8px; margin-inline: -16px; padding: 0 16px 4px; overflow-x: auto; scroll-snap-type: x proximity; }
+  .admin-kpis.admin-kpis--stages .admin-kpi { flex: 0 0 9.5rem; scroll-snap-align: start; }
+}
 /* Firmas (issue #81): documento con su presupuesto de origen, destinatario
    enmascarado, estado con el método, vencimiento con cuenta regresiva, último
    correo, alta y acciones. Fila compacta: en mobile la tabla se desplaza sola. */
@@ -1887,7 +1952,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
    pendiente y con qué eventos choca. */
 .admin-table--presupuestos-reserva { --presupuestos-reserva-cols: minmax(9rem, 1.3fr) minmax(9rem, 1.3fr) 5rem 6rem 7.5rem minmax(13rem, 2fr); --admin-cols: var(--presupuestos-reserva-cols); --admin-table-min: 55.5rem; }
-.admin-table--evento-equipos { --evento-equipos-cols: minmax(8.5rem, 1.3fr) 4.5rem 11.5rem 8rem 8rem 10.5rem minmax(6rem, 1fr) 10rem; --admin-cols: var(--evento-equipos-cols); --admin-table-min: 71rem; }
 .admin-table--proveedores { --proveedores-cols: minmax(7rem, 1.2fr) minmax(6.5rem, 1.1fr) 5.75rem 5.5rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem 6.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 54rem; }
 .admin-table--trabajos { --trabajos-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 64rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 6.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 52rem; }
@@ -2603,9 +2667,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-kpis--inventario .admin-kpi-note { white-space: normal; }
 .admin-kpis--inventario .admin-kpi-label-text { overflow: visible; white-space: normal; line-height: 1.25; }
 /* Indicador que filtra: un botón con la misma caja que el KPI estático. */
-.admin-kpi--action { width: 100%; font: inherit; text-align: left; cursor: pointer; appearance: none; transition: border-color .15s, background .15s, box-shadow .15s; }
-.admin-kpi--action:hover { border-color: var(--a-accent); }
-.admin-kpi--action[data-active="true"] { border-color: var(--a-accent); box-shadow: inset 0 0 0 1px var(--a-accent); }
 /* Producto: foto chica + nombre y SKU en dos líneas; todo el bloque abre la ficha. */
 .admin-inv-product { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .admin-inv-product-text { display: grid; min-width: 0; line-height: 1.25; }
@@ -4542,18 +4603,21 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-ficha-sub { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0 0; color: var(--a-muted-2); font-size: 12.5px; }
 .admin-ficha-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .admin-ficha-actions .admin-btn { min-height: 44px; text-decoration: none; }
+.admin-kpis.admin-kpis--ficha { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.admin-kpis--ficha .admin-kpi { flex-wrap: wrap; }
+.admin-kpis--ficha .admin-kpi-label, .admin-kpis--ficha .admin-kpi-note { flex-basis: 100%; }
+@media (max-width: 980px) {
+  .admin-kpis.admin-kpis--ficha { display: flex; gap: 8px; margin-inline: -16px; padding: 0 16px 4px; overflow-x: auto; scroll-snap-type: x proximity; }
+  .admin-kpis--ficha .admin-kpi { flex: 0 0 10.5rem; scroll-snap-align: start; }
+}
 .admin-ficha-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 12px; align-items: start; }
 .admin-ficha-main, .admin-ficha-side { display: grid; gap: 12px; min-width: 0; }
 .admin-ficha-main > .admin-subtabs { margin: 0; }
 .admin-ficha-panel { min-width: 0; }
-.admin-ficha-money, .admin-ficha-contact { display: grid; gap: 4px; margin: 0; }
-.admin-ficha-money > div, .admin-ficha-contact > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
-.admin-ficha-money dt, .admin-ficha-contact dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
-.admin-ficha-money dd, .admin-ficha-contact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--a-text); font-size: 13px; text-align: right; }
-.admin-ficha-money dd { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.admin-ficha-money dd[data-tone="ok"] { color: var(--a-ok-text); }
-.admin-ficha-money dd[data-tone="warn"] { color: var(--a-warn-text); }
-.admin-ficha-money dd[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-ficha-contact { display: grid; gap: 4px; margin: 0; }
+.admin-ficha-contact > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.admin-ficha-contact dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-ficha-contact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--a-text); font-size: 13px; text-align: right; }
 .admin-ficha-moves { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
 .admin-ficha-moves li { display: flex; gap: 8px; min-width: 0; }
 .admin-ficha-moves li > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4565,6 +4629,12 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .admin-ficha-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-ficha-main > .admin-subtabs { flex-wrap: nowrap; overflow-x: auto; }
   .admin-ficha-main .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+}
+/* Clientes: segmentos desplazables y acciones de tarjeta táctiles en móvil. */
+@media (max-width: 980px) {
+  .admin-segments { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+  .admin-segments .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+  .admin-cards-foot .admin-iconbtn { min-width: 44px; min-height: 44px; }
 }
 .admin-quote-title-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .admin-quote-title-btn:hover .admin-quote-title { text-decoration: underline; }
@@ -4699,3 +4769,94 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 @media (max-width: 420px) { .cp-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: no-preference) { .cp-btn, .cp-feat-card, .cp-cat { transition: border-color 0.15s, filter 0.15s, background-color 0.15s; } }
 .admin-store-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; border: 1px solid var(--border-2); }
+
+/* ── Eventos rediseñado: indicadores que filtran, preparación, tarjetas y ficha ── */
+.admin-focus-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-text); font-size: 12.5px; }
+.admin-prep { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; min-width: 0; }
+.admin-prep .admin-badge { gap: 3px; padding-inline: 6px; }
+.admin-prep .admin-badge .admin-icon { flex: 0 0 auto; }
+.admin-event-states { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.admin-link-btn { appearance: none; min-height: 32px; padding: 0; border: 0; background: none; color: var(--a-text-strong); font: inherit; font-weight: 700; text-align: left; text-decoration: underline transparent; text-underline-offset: 3px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.admin-link-btn:hover { text-decoration-color: currentColor; }
+.admin-link-btn:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; border-radius: 4px; }
+.admin-btn--next { border-color: color-mix(in srgb, var(--a-accent) 55%, var(--a-line)); color: var(--a-text-strong); background: var(--a-accent-soft); white-space: nowrap; letter-spacing: 0; text-transform: none; font-size: 12px; padding-inline: 8px; }
+.admin-events-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: nowrap; }
+.admin-cell--actions .admin-events-actions { width: 100%; }
+
+.admin-events-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); margin: 0; padding: 0; list-style: none; }
+.admin-events-card { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-events-card[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 40%, var(--a-line)); }
+.admin-events-card[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 45%, var(--a-line)); }
+.admin-events-card-main { display: flex; align-items: stretch; gap: 12px; width: 100%; min-width: 0; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.admin-events-card-main:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; border-radius: 8px; }
+.admin-events-card-date { display: grid; flex: 0 0 3.9rem; align-content: center; justify-items: center; gap: 1px; padding: 6px 4px; border-radius: 10px; background: var(--a-accent-soft); color: var(--a-text); text-align: center; }
+.admin-events-card-date strong { color: var(--a-text-strong); font: 700 24px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.admin-events-card-date span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-events-card-date small { font-size: 11px; font-variant-numeric: tabular-nums; }
+.admin-events-card-body { display: grid; align-content: center; gap: 2px; min-width: 0; }
+.admin-events-card-name { overflow: hidden; color: var(--a-text-strong); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-events-card-sub { overflow: hidden; color: var(--a-muted-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-events-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-events-card-gap { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 12px; }
+.admin-events-card-gap[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-events-card-gap[data-tone="warn"] { color: var(--a-warn-text, var(--a-text)); }
+.admin-events-card-foot { display: flex; align-items: center; gap: 4px; padding-top: 8px; border-top: 1px solid var(--a-line); }
+.admin-events-card-foot .admin-events-actions { flex: 1 1 auto; justify-content: space-between; }
+@media (max-width: 720px) {
+  .admin-events-cards { grid-template-columns: minmax(0, 1fr); }
+  .admin-events-card-foot .admin-btn, .admin-events-card-foot .admin-iconbtn { min-height: 44px; }
+  .admin-events-card-foot .admin-iconbtn { min-width: 44px; }
+}
+
+.admin-ficha-evento-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-evento-gaps { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-evento-gaps[data-state="gaps"] { border-color: color-mix(in srgb, var(--a-warn) 45%, var(--a-line)); background: color-mix(in srgb, var(--a-warn-surface) 55%, var(--a-panel-2)); }
+.admin-evento-gaps-title { margin: 0; color: var(--a-muted); font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-evento-gaps-ok { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--a-text); font-size: 12.5px; }
+.admin-evento-gaps-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-evento-gap { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--a-line-2); border-radius: 999px; background: var(--a-panel); color: var(--a-text); font: 600 12px var(--font-body); cursor: pointer; text-align: left; }
+.admin-evento-gap[data-tone="danger"] { border-color: var(--a-danger); color: var(--a-danger-text); }
+.admin-evento-gap[data-tone="warn"] { border-color: var(--a-warn); }
+.admin-evento-gap:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+/* El mínimo evita que la grilla del cuerpo del diálogo aplaste a la barra (un contenedor con scroll mide 0 de mínimo). */
+.admin-evento-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; min-height: 44px; padding-bottom: 2px; scrollbar-width: thin; }
+.admin-evento-tabs .admin-subtab { flex: 0 0 auto; min-height: 36px; cursor: pointer; }
+.admin-evento-panel { display: grid; gap: 12px; min-width: 0; }
+.admin-evento-tab-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.admin-evento-tab-head p { margin: 0; }
+.admin-evento-budget { display: grid; gap: 8px; }
+.admin-evento-assign-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); margin: 0; padding: 0; list-style: none; }
+.admin-evento-assign { display: grid; gap: 6px; min-width: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-evento-assign-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.admin-evento-assign-head strong { flex: 1 1 8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--a-text-strong); }
+.admin-evento-assign-qty { flex: 0 0 auto; margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-evento-assign-range { margin: 0; color: var(--a-muted-2); font-size: 12px; }
+.admin-evento-assign-state { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin-evento-assign-moves { display: grid; gap: 2px; margin: 0; }
+.admin-evento-assign-moves > div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.admin-evento-assign-moves dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.admin-evento-assign-moves dd { margin: 0; text-align: right; }
+.admin-evento-assign-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; padding-top: 6px; border-top: 1px solid var(--a-line); }
+.admin-evento-people { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.admin-evento-person { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-evento-person-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-evento-person-tasks { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.admin-evento-person-tasks li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+/* Eventos en celular: los cuatro indicadores en 2×2 (ocupan la mitad del alto) con el rótulo completo en dos líneas. */
+@media (max-width: 720px) {
+  .admin-kpis.admin-kpis--2up { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-kpis--2up .admin-kpi { min-height: 64px; }
+  .admin-kpis--2up .admin-kpi-label-text { white-space: normal; overflow: visible; line-height: 1.2; }
+  .admin-kpis--2up .admin-kpi-note { flex-basis: 100%; }
+}
+
+/* Eventos: cinco indicadores (el quinto abre la vista de tareas) y la barra de la vista «Tareas». */
+@media (min-width: 1100px) { .admin-kpis.admin-kpis--eventos { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.admin-eventos-sections .admin-subtab { min-height: 36px; cursor: pointer; }
+.admin-eventos-tareas { display: grid; gap: 10px; min-width: 0; }
+.admin-eventos-tareas-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.admin-eventos-tareas-bar .admin-subtab { min-height: 36px; cursor: pointer; }
+@media (max-width: 720px) {
+  .admin-eventos-sections .admin-subtab, .admin-eventos-tareas-bar .admin-subtab { min-height: 44px; }
+  .admin-eventos-tareas-bar .admin-select-wrap, .admin-eventos-tareas-bar > div:last-child { flex: 1 1 100%; }
+}

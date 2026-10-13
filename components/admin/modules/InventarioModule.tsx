@@ -7,8 +7,6 @@ import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
-import { kpiState } from "@/components/admin/kpi-state";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminButton,
@@ -22,12 +20,14 @@ import {
   AdminToolbar,
 } from "../AdminUI";
 import { DateField, SearchField } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid } from "../AdminCards";
 import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
-import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { InventoryCreateDialog, InventoryEditDialog, type InventoryNotice } from "./InventoryItemDialogs";
 import { InventoryList } from "./InventoryList";
 import { KIND_OPTIONS, STATUS_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
@@ -86,11 +86,11 @@ export function InventarioModule() {
   // La lista viaja con el rango cuando está completo: el API devuelve la
   // disponibilidad de cada ítem en ese rango además de la de hoy.
   const listPath = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ vivas: "1" });
     if (from) params.set("startsAt", `${from}T00:00`);
     if (to) params.set("endsAt", `${to}T23:59`);
     const search = params.toString();
-    return search ? `/api/admin/inventory?${search}` : "/api/admin/inventory";
+    return `/api/admin/inventory?${search}`;
   }, [from, to]);
 
   const resources = useAdminResource(listPath, (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[]);
@@ -317,7 +317,7 @@ export function InventarioModule() {
           icon="inventory"
           value={formatNumber(totals.active)}
           note={`${formatNumber(totals.combos)} combos · ${formatNumber(totals.archived)} archivados`}
-          onClick={() => setFocus("all")}
+          onSelect={() => setFocus("all")}
           active={focus === "all"}
           actionLabel="Ver todos los productos activos"
         />
@@ -327,7 +327,7 @@ export function InventarioModule() {
           value={formatNumber(totals.free)}
           note={`de ${formatNumber(totals.units)} unidades`}
           tone={totals.free === 0 ? "warn" : "ok"}
-          onClick={() => toggleFocus("free")}
+          onSelect={() => toggleFocus("free")}
           active={focus === "free"}
           actionLabel="Ver los productos con unidades libres hoy"
         />
@@ -337,7 +337,7 @@ export function InventarioModule() {
           value={formatNumber(totals.problems.total)}
           note={`${formatNumber(totals.problems.maintenance)} mant. · ${formatNumber(totals.problems.damaged)} dañ. · ${formatNumber(totals.problems.lost)} perd.`}
           tone={totals.problems.total > 0 ? "warn" : undefined}
-          onClick={() => toggleFocus("incidents")}
+          onSelect={() => toggleFocus("incidents")}
           active={focus === "incidents"}
           actionLabel="Ver los productos con incidentes o unidades fuera de circulación"
         />
@@ -354,7 +354,7 @@ export function InventarioModule() {
               : undefined
           }
           tone={occupancy?.percent != null && occupancy.percent >= 80 ? "accent" : undefined}
-          onClick={() => toggleFocus("week")}
+          onSelect={() => toggleFocus("week")}
           active={focus === "week"}
           actionLabel="Ver los productos con reservas esta semana"
         />
@@ -363,7 +363,7 @@ export function InventarioModule() {
           icon="eye"
           value={formatNumber(totals.published)}
           note={`${formatNumber(totals.active - totals.published)} ocultos`}
-          onClick={() => toggleFocus("published")}
+          onSelect={() => toggleFocus("published")}
           active={focus === "published"}
           actionLabel="Ver los productos publicados en la tienda web"
         />

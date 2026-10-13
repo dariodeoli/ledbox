@@ -43,7 +43,7 @@ test("las etapas siguen Lead → Presupuesto → Aprobado → Evento → Cobrado
   assert.equal(approved.find((stage) => stage.key === "event")?.href, undefined, "sin evento no hay link");
   const withEvent = budgetStages({ ...base, status: "APPROVED", event: { id: "e1", name: "Expo" }, collected: 400_000 });
   assert.equal(withEvent.find((stage) => stage.key === "event")?.state, "done");
-  assert.equal(withEvent.find((stage) => stage.key === "event")?.href, "/eventos");
+  assert.equal(withEvent.find((stage) => stage.key === "event")?.href, "/eventos?evento=e1", "la etapa Evento abre la ficha de ese evento");
   assert.equal(withEvent.find((stage) => stage.key === "paid")?.state, "current");
   const paid = budgetStages({ ...base, status: "APPROVED", event: { id: "e1", name: "Expo" }, collected: 1_000_000 });
   assert.equal(paid.find((stage) => stage.key === "paid")?.state, "done");
@@ -106,8 +106,12 @@ test("aprobar no crea el evento solo: lo decide el botón", () => {
 
 test("Presupuestos: aviso con «Crear evento» en tabla, tarjetas y detalle, y precarga del cliente", () => {
   const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
-  assert.match(module, /budgetEventPrompt\(budget\) \? <span className="admin-cell-event-alert">\{eventNotice\(budget\)\}/, "aviso en la tabla");
-  assert.match(module, /\{eventNotice\(budget\)\}\s*<span className="admin-actions">/, "aviso en las tarjetas");
+  // Tabla, tarjetas y tablero comparten la acción de la fila: «Crear evento» es la
+  // acción principal del aprobado sin evento (y queda también en el menú «•••»).
+  assert.match(module, /case "create_event": return void createEventFor\(budget\)/, "acción de la fila en tabla, tarjetas y tablero");
+  assert.match(module, /footer: rowActions\(budget\)/, "acción en las tarjetas");
+  assert.match(module, /label: "Crear evento", icon: "events"/, "«Crear evento» también en el menú");
+  assert.match(module, /onCreateEvent: \(\) => void createEventFor\(budget\)/, "acción en el detalle");
   assert.match(module, /<BudgetDetailDialog/, "aviso y etapas en el detalle");
   assert.match(module, /\/api\/admin\/budgets\/\$\{budget\.id\}\/create-event/);
   assert.match(module, /eventInFlight\.current/, "single-flight en el clic");
@@ -119,6 +123,7 @@ test("Presupuestos: aviso con «Crear evento» en tabla, tarjetas y detalle, y p
   assert.match(notice, /canAct \?/, "sin permiso solo informa");
   const detail = repoFile("components/admin/modules/BudgetDetailDialog.tsx");
   assert.match(detail, /<StageTrail/);
+  assert.match(detail, /<BudgetEventNotice/, "el detalle conserva el aviso con el botón");
   assert.ok(repoFile("app/globals.css").includes(".admin-stage-trail"), "el CSS de la barra vive en globals.css");
 });
 

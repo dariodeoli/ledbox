@@ -21,15 +21,41 @@ Acción principal: **Nuevo lead**. Por pagar y caja comprometida viven en Finanz
 
 ## Eventos (`/eventos`)
 
-Responde: *¿qué eventos tengo y cómo va cada uno?*
+Responde: *¿qué eventos tengo y qué le falta a cada uno?*
 
-1. KPIs: en curso · próximos 7 días · con checklist incompleto · por cerrar.
-2. Filtros: estado · rango de fecha · búsqueda (una sola barra).
-3. Tablero o lista (vista recordada del usuario) con la plantilla de columnas.
-4. Acciones de fila (ficha, checklist, WhatsApp, timeline).
+1. KPIs que filtran al tocarlos (botones con `aria-pressed`; se quitan con «Quitar filtro»):
+   próximos 7 días · en curso · con faltantes o checklist incompleto · por cerrar
+   (pasaron sin finalizar) · **tareas vencidas** (abre la vista «Tareas» ya filtrada).
+   Misma fuente de verdad para el conteo y para el filtro (`lib/event-readiness.ts`).
+   «Con faltantes» cuenta todos los eventos abiertos con algo por resolver (el
+   despacho solo pesa dentro de los 7 días previos).
+   La seña sale de `GET /api/admin/events/readiness` (agregada en la base, sin el tope
+   de 200 del listado de presupuestos); sin dato se muestra «—».
+2. Barra fija: selector de vista (Lista · Tarjetas · Calendario, no se mueve entre
+   vistas) · búsqueda · estado · **Nuevo evento**.
+3. Lista: fecha y hora · evento · cliente · lugar · **preparación** · estado ·
+   **siguiente paso**. La preparación son cuatro chips compactos: checklist x/y,
+   equipos despachados x/y (los combos se mueven por componentes y no cuentan),
+   seña (cobrada / pendiente / sin dato) y promotoras asignadas. Una sola acción
+   visible por fila, la siguiente lógica: *Completar checklist → Despachar →
+   Registrar devolución → Finalizar*; el resto va en «•••» (abrir detalle, editar,
+   cronología, imprimir, WhatsApp, finalizar). El VIEWER no ve acciones de escritura.
+4. Celular (≤ 980 px): tarjetas con la fecha destacada, estado, preparación, lo
+   primero que falta y la siguiente acción (44 px de alto táctil).
+5. Detalle: panel lateral (`AdminDialog size="ficha"`, abre también con
+   `?evento=<id>`, que es lo que enlaza la etapa «Evento» del presupuesto). Arriba la
+   franja **Qué falta** (cada ítem lleva a su pestaña); pestañas Resumen (datos,
+   responsable, presupuesto vinculado con `StageTrail` y seña), Checklist, Equipos
+   (asignación, despacho, devolución parcial, incidentes, combos), Personal
+   (promotoras y sus tareas) e Historial. El pie lleva la siguiente acción y «•••».
 
-Acción principal: **Nuevo evento**. Por defecto, la vista arranca en lo que está
-en juego (hoy/mañana y checklist incompleto primero en el tablero).
+6. Pestaña **Tareas** (`?vista=tareas`, no es parte del selector de vista): todas las
+   tareas pendientes de los eventos abiertos con el mismo checklist de siempre;
+   filtros Pendientes · Vencidas · Esta semana y por promotora; marcar como hecha
+   solo con permiso de operación; avisa de las promotoras no disponibles.
+
+Acción principal: **Nuevo evento**. Orden por defecto: lo que está en juego primero
+(en curso o por empezar con checklist abierto), lo pasado al final.
 
 ## Presupuestos (`/presupuestos`)
 

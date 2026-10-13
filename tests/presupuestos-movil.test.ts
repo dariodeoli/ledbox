@@ -31,36 +31,50 @@ test("Presupuestos usa el ancho compacto sin tablero en móvil", () => {
   assert.match(module, /\) : view === "board" \? \(/);
 });
 
-test("los filtros de estado van encima del tablero y de la lista", () => {
-  const chips = module.indexOf('aria-label="Filtrar presupuestos por estado"');
-  const dataState = module.indexOf("<AdminDataState", chips);
-  assert.ok(chips > 0, "faltan las pestañas/filtros de estado");
-  assert.ok(dataState > chips, "las pestañas tienen que ir antes de la lista y del tablero");
-  assert.match(module, /const boardRows = useMemo/, "el tablero no tiene su fila filtrada");
-  assert.match(module, /useAdminBoardMove\(\{ rows: boardRows/, "el tablero no usa el filtro de estado");
-  assert.match(module, /statusCounts\.get\(option\.value\)/, "las pestañas no muestran el conteo por estado");
+test("los KPIs por etapa filtran la lista y van encima del tablero y de la lista", () => {
+  const kpis = module.indexOf('label="Etapas de los presupuestos');
+  const dataState = module.indexOf("<AdminDataState", kpis);
+  assert.ok(kpis > 0, "faltan los KPIs por etapa");
+  assert.ok(dataState > kpis, "los KPIs tienen que ir antes de la lista y del tablero");
+  assert.match(module, /onSelect=\{\(\) => setStageFilter/, "cada KPI filtra al tocarlo");
+  assert.match(module, /STAGE_KPIS/, "los KPIs salen de las etapas");
+  assert.match(module, /useAdminBoardMove\(\{ rows: boardRows/, "el tablero no usa el filtro de etapa");
+  assert.match(module, /const boardRows = rows/, "el tablero respeta el mismo filtro que la lista");
+  assert.match(module, /Quitar filtro/, "el filtro vigente se puede quitar");
 });
 
-test("prioridad visual: monto, vencimiento, cliente y próximo paso", () => {
-  assert.match(module, /function budgetNextStep/, "falta el próximo paso del presupuesto");
+test("prioridad visual: número, cliente, evento, monto, seña o saldo, etapa y vencimiento", () => {
+  assert.match(module, /budgetPrimaryAction\(pipelineInput\(budget\)/, "falta la acción principal por etapa");
   const table = module.slice(module.indexOf('view="presupuestos"'), module.indexOf("</AdminTable>", module.indexOf('view="presupuestos"')));
-  const order = ["Presupuesto", "Cliente", "Total", "Vence", "Estado / próximo paso"];
+  const order = ["N°", "Cliente", "Evento o título", "Monto", "Seña / saldo", "Etapa", "Vence", "Acción"];
   let last = -1;
   for (const label of order) {
     const index = table.indexOf(`label: "${label}"`);
     assert.ok(index > last, `${label} fuera de orden en las columnas`);
     last = index;
   }
-  assert.match(module, /const next = budgetNextStep\(budget\)/);
-  assert.match(module, /Próximo paso: \$\{next\.label\}/, "la fila no muestra el próximo paso");
+  assert.match(table, /\{rowActions\(budget\)\}/, "la fila muestra una acción y el menú");
 });
 
-test("acciones unificadas: impresión, firma y portal en un menú", () => {
+test("acciones unificadas: una visible por fila y el resto en el menú", () => {
   assert.match(module, /function budgetMenuItems/, "falta el menú de acciones del presupuesto");
-  assert.match(module, /label: "Imprimir"[\s\S]{0,200}icon: "print"/, "la impresión va en el menú");
+  assert.match(module, /label: "Imprimir \/ PDF"[\s\S]{0,200}icon: "print"/, "la impresión va en el menú");
   assert.match(module, /label: "Firma del cliente"/, "la firma va en el menú");
   assert.match(module, /label: budget\.publicToken \? "Portal del cliente" : "Generar link del portal"/, "el portal va en el menú");
   assert.match(module, /<AdminActionsMenu label=\{`Acciones del presupuesto/, "la fila no usa el menú");
+  for (const label of ["Ver detalle", "Enviar por correo", "WhatsApp con plantilla", "Editar ítems, precio y documentos", "Plan de pagos", "Aprobar manualmente", "Pedir cambios", "Inventario", "Cronología", "Copiar enlace del cliente", "Ver como cliente"]) {
+    assert.ok(module.includes(`label: "${label}"`), `el menú perdió «${label}»`);
+  }
+  assert.match(module, /Comprobantes del portal/, "los comprobantes del portal se abren desde el menú");
+});
+
+test("el detalle es un panel lateral con todo y ?detalle=<id> lo abre", () => {
+  const detail = readFileSync(join(root, "components/admin/modules/BudgetDetailDialog.tsx"), "utf8");
+  assert.match(detail, /size="ficha"/);
+  for (const title of ["Cliente y evento", "Condiciones", "Portal y firma", "Historial"]) assert.ok(detail.includes(`title="${title}"`), title);
+  assert.match(detail, /Ítems \(/);
+  assert.match(module, /searchParams\.get\("detalle"\)/, "falta el parámetro ?detalle=");
+  assert.match(module, /url\.searchParams\.delete\("detalle"\)/, "cerrar el panel quita el parámetro");
 });
 
 test("solicitudes del portal como conversación comparativa", () => {

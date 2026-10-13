@@ -552,6 +552,8 @@ export function InventoryEditDialog({
   onOpenUnits: (itemId: string) => void;
 }) {
   const [editForm, setEditForm] = useState<InventoryEditForm>(() => editFormFromItem(item));
+  // Línea base congelada al abrir: una recarga del padre no cambia el diff de los buffers.
+  const [baseForm] = useState<InventoryEditForm>(() => editFormFromItem(item));
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
   const [editPendingPhoto, setEditPendingPhoto] = useState<PreparedInventoryPhoto | null>(null);
@@ -560,7 +562,7 @@ export function InventoryEditDialog({
   const [editPhotoError, setEditPhotoError] = useState("");
   const category = useCategoryChoices(categories);
   const editFormId = useId();
-  const editDirty = JSON.stringify(editForm) !== JSON.stringify(editFormFromItem(item)) || Boolean(editPendingPhoto) || editPhotoRemoved;
+  const editDirty = JSON.stringify(editForm) !== JSON.stringify(baseForm) || Boolean(editPendingPhoto) || editPhotoRemoved;
 
   const editPriceWarning = useMemo(() => {
     const prices = readInventoryPriceValues(editForm);
@@ -630,7 +632,7 @@ export function InventoryEditDialog({
     }
 
     setEditBusy(true);
-    const original = editFormFromItem(item);
+    const original = baseForm;
     // Datos del ítem (issue #111) y después precios (issues #90 y #110).
     const itemResult = await adminSend<{ inventory?: { id?: string } }>("/api/admin/inventory", {
       kind: "item",

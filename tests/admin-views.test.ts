@@ -31,6 +31,9 @@ test("los módulos con cuadrícula la ofrecen en el conmutador o en la lista com
       assert.match(ownerSource, /useAdminModuleView\(/, `${owner}: falta la vista recordada que decide ${file}`);
       assert.match(ownerSource, /AdminViewSwitch/, `${owner}: falta el conmutador de vistas`);
       assert.match(ownerSource, /useAdminNarrowViewport/, `${owner}: falta el ancho compacto`);
+      // La vista grid llega a la cuadrícula: el módulo se la pide a la lista y la lista la dibuja.
+      assert.match(ownerSource, /cards=\{view === "grid" \|\| narrow\}/, `${owner}: la vista grid/compacta tiene que activar las tarjetas`);
+      assert.match(readFileSync(join(MODULES_DIR, file), "utf8"), /<AdminCardGrid\b/, `${file}: tiene que dibujar AdminCardGrid`);
       continue;
     }
     const source = readFileSync(join(MODULES_DIR, file), "utf8");
@@ -77,12 +80,13 @@ test("eventos ofrece lista, tarjetas y calendario canónicos con entrada por URL
   assert.match(source, /<CalendarioModule hideKpis events=\{operations.data \?\? \[\]\}/, "el calendario reutiliza la ficha del recurso real");
   // Selector fijo: el filtro de estado ya no depende de la vista (no salta al alternar).
   assert.doesNotMatch(source, /view === "list"/, "el filtro de estado no puede quedar solo en lista");
-  // Paridad de acciones entre la fila y la tarjeta (las mismas de siempre).
-  assert.equal((source.match(/eventActions\(event\)/g) ?? []).length, 2, "acciones en fila y tarjeta");
+  // Paridad de acciones entre la fila y la tarjeta: una sola función (la siguiente acción + «•••»).
+  assert.equal((source.match(/rowActions\(item\)/g) ?? []).length, 1, "acciones en la fila");
+  assert.match(source, /renderActions=\{rowActions\}/, "las tarjetas usan las mismas acciones que la fila");
   // Búsqueda y filtro compartidos por las dos vistas (mismo `rows`): la
   // cuadrícula y el ancho compacto comparten las tarjetas (issue #139).
-  assert.match(source, /const eventCards: AdminCardData\[\] = rows\.map\(/, "las tarjetas tienen que salir de las filas filtradas");
-  assert.match(source, /cardView \? \(\n\s*<AdminCardGrid label="Eventos" cards=\{eventCards\} \/>/, "la cuadrícula tiene que usar las filas filtradas");
+  assert.match(source, /<EventCards items=\{rows\}/, "las tarjetas tienen que salir de las filas filtradas");
+  assert.match(source, /cardView \? \(\n\s*<EventCards items=\{rows\}/, "la cuadrícula tiene que usar las filas filtradas");
 });
 
 /**

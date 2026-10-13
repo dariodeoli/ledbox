@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { damageSummary, formatNumber, ITEM_CONDITIONS } from "@/lib/admin-format";
 import type { AdminEventAssignment } from "@/lib/admin-types";
+import { assignmentDispatched, assignmentPending } from "@/lib/event-readiness";
 import { adminApiGet } from "@/lib/admin-api";
 import { useOfflineQueue } from "../AdminOffline";
 import { CheckboxField, DateTimeField, NumberField, SelectField, TextAreaField } from "../AdminFields";
@@ -13,18 +14,6 @@ function nowInput(): string {
   const date = new Date();
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** Unidades que ya salieron: lo despachado o, en filas viejas, toda la asignación. */
-export function assignmentDispatched(assignment: Pick<AdminEventAssignment, "quantity" | "checkedOut" | "checkedOutAt" | "checkoutQuantity">): number {
-  if ((assignment.checkoutQuantity ?? 0) > 0) return assignment.checkoutQuantity ?? 0;
-  return assignment.checkedOut || assignment.checkedOutAt ? assignment.quantity : 0;
-}
-
-/** Unidades que salieron y todavía no volvieron ni se declararon faltantes. */
-export function assignmentPending(assignment: AdminEventAssignment): number {
-  if (assignment.checkedIn || assignment.checkedInAt) return 0;
-  return Math.max(0, assignmentDispatched(assignment) - (assignment.returnedQuantity ?? 0) - assignment.missingQuantity);
 }
 
 type Unit = { id: string; code: string; status: string };

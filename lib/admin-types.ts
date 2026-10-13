@@ -191,6 +191,8 @@ export type AdminClientRow = AdminClientRef & {
   active: boolean;
   createdAt: string;
   _count: { events: number; budgets: number };
+  /** Hay un link vigente del catálogo mayorista (lo trae la lista; la ficha lo lee aparte). */
+  catalogLinkActive?: boolean;
   /** Ficha 360 (issue #34): métricas reales derivadas de presupuestos, cobros y eventos. */
   metrics: AdminClientMetrics;
 };

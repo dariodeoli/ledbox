@@ -1,6 +1,7 @@
 "use client";
 
 import { kpiState } from "@/components/admin/kpi-state";
+import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -8,21 +9,24 @@ import {
   formatDate,
   formatDateShort,
   formatMoney,
+  clientWhatsappMessage,
   formatNumber,
   instagramHref,
   instagramLabel,
   websiteHref,
   whatsappHref,
 } from "@/lib/admin-format";
-import { canWriteClients, matchesQuery } from "@/lib/admin-policy";
+import { canWriteBudgets, canWriteClients, matchesQuery } from "@/lib/admin-policy";
+import { CLIENT_SEGMENTS, matchesKpi, portfolioKpis, type ClientKpiKey, type ClientSegment } from "@/lib/client-portfolio";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { clientLogoUrl } from "@/lib/admin-types";
 import type { AdminClientRow } from "@/lib/admin-types";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
-import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
+import { AdminIcon } from "../AdminIcons";
 import {
+  AdminActionsMenu,
   AdminBadge,
   AdminButton,
   AdminCell,
@@ -41,7 +45,7 @@ import {
   AdminTable,
   AdminToolbar,
   AdminWhatsappLink,
-  AdminWhatsappTemplateButton,
+  type AdminMenuItem,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { SearchField, TextAreaField } from "../AdminFields";
@@ -54,19 +58,13 @@ import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 /** Vistas de la cartera (issue #57): lista densa y cuadrícula de fichas. */
 const CLIENTES_VIEWS = ["list", "grid"] as const;
 
-const TYPE_OPTIONS = [
-  { value: "ALL", label: "Todos los tipos" },
-  { value: "FINAL", label: "Cliente final" },
-  { value: "RESELLER", label: "Mayorista / revendedor" },
-];
-
-// La cartera se filtra por hechos reales (issue #34): deuda vencida (cobros
-// pendientes con vencimiento pasado) y clientes que todavía no cerraron ningún
-// contrato (ningún presupuesto aprobado).
+// Filtros por hechos reales (issue #34): deuda vencida (cobros pendientes con
+// vencimiento pasado), clientes sin responsable cargado y los que todavía no
+// cerraron ningún contrato. Los KPI y los segmentos por tipo filtran aparte.
 const FILTER_OPTIONS = [
   { value: "ALL", label: "Toda la cartera" },
-  { value: "NO_RESPONSIBLE", label: "Sin responsable cargado" },
   { value: "OVERDUE", label: "Con deuda vencida" },
+  { value: "NO_RESPONSIBLE", label: "Sin responsable cargado" },
   { value: "NO_PURCHASES", label: "Sin compras" },
 ];
 
@@ -150,6 +148,38 @@ function sortClients(list: AdminClientRow[], order: string): AdminClientRow[] {
   return rows.sort((a, b) => activityTime(b) - activityTime(a) || compareByName(a, b));
 }
 
+/** Contacto principal: el encargado manda sobre el teléfono general. */
+function clientContactLine(client: AdminClientRow): string {
+  const phone = client.contactPhone || client.phone;
+  const email = client.contactEmail || client.email;
+  return (client.contactName ? [client.contactName, phone] : [phone ?? email]).filter(Boolean).join(" · ");
+}
+
+function contractedTitle(client: AdminClientRow): string {
+  const metrics = client.metrics;
+  return metrics.contracts > 0
+    ? `${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"} · ticket promedio ${formatMoney(metrics.averageTicket)}`
+    : "Sin contratos aprobados";
+}
+
+function balanceText(client: AdminClientRow): string {
+  return client.metrics.balance > 0 ? formatMoney(client.metrics.balance) : "—";
+}
+
+function balanceTitle(client: AdminClientRow): string {
+  const { balance, overdue, overdueCount } = client.metrics;
+  if (overdue > 0) {
+    return `Saldo ${formatMoney(Math.max(0, balance))} · ${formatMoney(overdue)} vencido en ${formatNumber(overdueCount)} cobro${overdueCount === 1 ? "" : "s"}`;
+  }
+  return balance > 0 ? `Saldo pendiente de ${formatMoney(balance)}` : "Sin saldo pendiente";
+}
+
+function activityTitle(client: AdminClientRow): string {
+  return client.metrics.lastActivityAt
+    ? `Última actividad comercial: ${formatDate(client.metrics.lastActivityAt)}`
+    : "Sin actividad comercial registrada";
+}
+
 /**
  * Identidad del cliente (issue #36): logo subido servido con sesión o el
  * monograma de iniciales del avatar único del panel. Nunca un `<img>` a mano.
@@ -176,36 +206,20 @@ export function ClientLogo({
 }
 
 /**
- * Links directos del cliente (issue #36): WhatsApp con el mensaje prellenado,
- * Instagram y sitio web. Cada link sale de su propio dato —cuando falta, no se
- * dibuja ni se reemplaza por otro— y el WhatsApp usa el número propio si
- * difiere del teléfono general.
+ * Links directos del cliente (issue #36): Instagram y sitio web. Cada link sale
+ * de su propio dato —cuando falta, no se dibuja ni se reemplaza por otro—. El
+ * WhatsApp y el correo viven en la acción principal y en el menú de cada vista.
  */
-export function ClientLinks({
-  client,
-  name,
-  message,
-  compact = false,
-  skipWhatsapp = false,
-}: {
-  client: Pick<AdminClientRow, "phone" | "whatsapp" | "website" | "instagram">;
-  name: string;
-  message?: string | null;
-  compact?: boolean;
-  /** Con envío por plantilla disponible, el link simple no se dibuja. */
-  skipWhatsapp?: boolean;
-}) {
+export function ClientLinks({ client, name }: { client: Pick<AdminClientRow, "website" | "instagram">; name: string }) {
   const instagram = instagramHref(client.instagram);
-  const instagramHandle = instagramLabel(client.instagram);
   const web = websiteHref(client.website);
   return (
     <>
-      {skipWhatsapp ? null : <AdminWhatsappLink phone={client.whatsapp || client.phone} name={name} message={compact ? null : message} />}
       {instagram ? (
         <AdminIconLink
           href={instagram}
           icon="instagram"
-          label={`Ver el Instagram de ${name} (${instagramHandle})`}
+          label={`Ver el Instagram de ${name} (${instagramLabel(client.instagram)})`}
           external
         />
       ) : null}
@@ -219,9 +233,15 @@ export function ClientesModule() {
   // La lista trae las métricas reales de cada cliente (issue #34): deuda
   // vencida, monto contratado y última actividad salen del mismo payload, sin
   // una segunda llamada a finanzas.
-  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
+  const clientsResource = useAdminResource("/api/admin/clients", (payload) => ({
+    list: payload.clients ?? [],
+    truncated: payload.truncated === true,
+  }));
+  const clients = { ...clientsResource, data: clientsResource.data?.list ?? null };
+  const truncated = clientsResource.data?.truncated === true;
   const [query, setQuery] = useState("");
-  const [type, setType] = useState("ALL");
+  const [segment, setSegment] = useState<ClientSegment>("ALL");
+  const [kpi, setKpi] = useState<ClientKpiKey | null>(null);
   const [filter, setFilter] = useState("ALL");
   const [order, setOrder] = useState("ACTIVITY");
   const [showForm, setShowForm] = useState(false);
@@ -243,10 +263,12 @@ export function ClientesModule() {
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
   const writable = canWriteClients(role);
+  const canQuote = canWriteBudgets(role);
 
   const rows = useMemo(() => {
     const list = (clients.data ?? [])
-      .filter((client) => (type === "ALL" ? true : client.type === type))
+      .filter((client) => (segment === "ALL" ? true : client.type === segment))
+      .filter((client) => (kpi ? matchesKpi(client, kpi) : true))
       .filter((client) => {
         if (filter === "NO_RESPONSIBLE") return !client.contactName;
         if (filter === "OVERDUE") return client.metrics.overdue > 0;
@@ -268,36 +290,79 @@ export function ClientesModule() {
         ]),
       );
     return sortClients(list, order);
-  }, [clients.data, query, type, filter, order]);
+  }, [clients.data, query, segment, kpi, filter, order]);
 
   /**
-   * Tarjetas del cliente (issues #57 y #139): las comparten la cuadrícula y la
-   * lista en ancho compacto —cliente, contacto principal, deuda, última
-   * actividad y estado— con las mismas acciones que la fila.
+   * Acciones de la fila y de la tarjeta (rediseño): una sola visible —cobrar
+   * por WhatsApp si debe y hay número; si no, armar un presupuesto (con permiso);
+   * si no, WhatsApp— y todo lo demás en «•••». Nada se pierde respecto de antes:
+   * ficha, WhatsApp (simple y con plantilla), Instagram, sitio web y correo salen
+   * del menú, y «Editar» se suma acá además de la ficha.
    */
+  function rowActions(client: AdminClientRow) {
+    const name = clientDisplayName(client);
+    const phone = client.whatsapp || client.phone;
+    const waHref = whatsappHref(phone);
+    const email = client.contactEmail || client.email;
+    const instagram = instagramHref(client.instagram);
+    const web = websiteHref(client.website);
+    const quoteHref = `/presupuestos?nuevo=1&cliente=${encodeURIComponent(client.id)}`;
+    const items: AdminMenuItem[] = [
+      { label: "Ver ficha", icon: "eye", href: `/clientes/${client.id}`, title: `Ver la ficha de ${name}` },
+    ];
+    if (canQuote) items.push({ label: "Nuevo presupuesto", icon: "plus", href: quoteHref, title: `Armar un presupuesto para ${name}` });
+    if (waHref) {
+      if (writable) {
+        items.push({
+          label: "WhatsApp con plantilla",
+          icon: "pen",
+          title: `Enviar por WhatsApp con plantilla a ${name}`,
+          onClick: () => setTemplateTarget({ kind: "client", id: client.id, label: name, phone }),
+        });
+      }
+      items.push({ label: "Abrir WhatsApp", icon: "external", href: waHref, external: true, title: `Escribir por WhatsApp a ${name}` });
+    }
+    if (email) items.push({ label: "Enviar correo", icon: "mail", href: `mailto:${email}`, external: true, title: `Enviar correo a ${name}` });
+    if (instagram) items.push({ label: "Ver Instagram", icon: "instagram", href: instagram, external: true, title: `Ver el Instagram de ${name} (${instagramLabel(client.instagram)})` });
+    if (web) items.push({ label: "Abrir sitio web", icon: "globe", href: web, external: true, title: `Abrir el sitio web de ${name}` });
+    if (writable) items.push({ label: "Editar", icon: "edit", onClick: () => openEdit(client), title: `Editar ${name}` });
+
+    return (
+      <span className="admin-actions">
+        {client.metrics.overdue > 0 && waHref ? (
+          <AdminWhatsappLink phone={phone} name={name} message={`Hola ${client.contactName || name}: te escribimos de LedBox por un saldo pendiente.`} />
+        ) : canQuote ? (
+          <Link className="admin-btn admin-btn--row" href={quoteHref} title={`Armar un presupuesto para ${name}`} aria-label={`Nuevo presupuesto para ${name}`}>
+            Nuevo presupuesto
+          </Link>
+        ) : (
+          <AdminWhatsappLink phone={phone} name={name} message={clientWhatsappMessage(client.contactName || name)} />
+        )}
+        <AdminActionsMenu label={`Más acciones de ${name}`} items={items} />
+      </span>
+    );
+  }
+
+  /** Mismos datos que la fila, para ancho compacto: tarjeta que abre la ficha. */
   const clientCards: AdminCardData[] = rows.map((client): AdminCardData => {
     const name = clientDisplayName(client);
     const metrics = client.metrics;
-    const contact = [client.contactPhone || client.phone, client.contactEmail || client.email].filter(Boolean).join(" · ");
-    const lastActivity = metrics.lastActivityAt ? formatDateShort(metrics.lastActivityAt) : null;
-    // Contacto principal (issues #57 y #139): el encargado manda sobre el
-    // teléfono general; el resto de los datos sigue en la ficha.
-    const primaryContact = client.contactName
-      ? [client.contactName, client.contactPhone || client.phone].filter(Boolean).join(" · ")
-      : contact;
+    const primaryContact = clientContactLine(client);
     return {
       id: client.id,
       title: (
         <>
           <ClientLogo client={client} size={22} />
-          <strong>{name}</strong>
+          <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
+            <strong>{name}</strong>
+          </Link>
         </>
       ),
       titleTooltip: `${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`,
-      subtitle: [client.company && client.company !== name ? client.company : null, primaryContact].filter(Boolean).join(" · ") || null,
+      subtitle: [clientLegalName(client), primaryContact].filter(Boolean).join(" · ") || null,
       badges: [
         { label: clientTypeLabel(client.type), tone: client.type === "RESELLER" ? "accent" : "neutral" },
-        { label: client.active ? "Activo" : "Inactivo", tone: client.active ? "ok" : "neutral" },
+        ...(client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
         ...(client.contactName
           ? []
           : [
@@ -309,72 +374,36 @@ export function ClientesModule() {
             ]),
       ],
       fields: [
+        { label: "Eventos", value: formatNumber(client._count.events), title: `${client._count.events} eventos` },
         {
           label: "Contratado",
           value: metrics.contracts > 0 ? formatMoney(metrics.contracted) : "—",
-          title:
-            metrics.contracts > 0
-              ? `${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"} · ticket promedio ${formatMoney(metrics.averageTicket)}`
-              : "Sin contratos aprobados",
+          title: contractedTitle(client),
         },
-        { label: "Eventos", value: formatNumber(client._count.events), title: `${client._count.events} eventos` },
-        { label: "Presupuestos", value: formatNumber(client._count.budgets), title: `${client._count.budgets} presupuestos` },
-        {
-          label: "Deuda vencida",
-          value: metrics.overdue > 0 ? formatMoney(metrics.overdue) : "—",
-          title:
-            metrics.overdue > 0
-              ? `${formatMoney(metrics.overdue)} en ${formatNumber(metrics.overdueCount)} cobro${metrics.overdueCount === 1 ? "" : "s"} vencido${metrics.overdueCount === 1 ? "" : "s"}`
-              : "Sin cobros vencidos",
-        },
+        { label: "Saldo", value: balanceText(client), title: balanceTitle(client) },
         {
           label: "Última actividad",
-          value: lastActivity ?? "—",
-          title: metrics.lastActivityAt
-            ? `Última actividad comercial: ${formatDate(metrics.lastActivityAt)}`
-            : "Sin actividad comercial registrada",
+          value: metrics.lastActivityAt ? formatDateShort(metrics.lastActivityAt) : "—",
+          title: activityTitle(client),
         },
       ],
-      footer: (
-        <span className="admin-actions">
-          <AdminIconLink href={`/clientes/${client.id}`} icon="eye" label={`Ver la ficha de ${name}`} />
-          <ClientLinks client={client} name={name} compact skipWhatsapp={writable} />
-          {writable && whatsappHref(client.whatsapp || client.phone) ? (
-            <AdminWhatsappTemplateButton
-              title={`Enviar por WhatsApp con plantilla a ${name}`}
-              onClick={() =>
-                setTemplateTarget({
-                  kind: "client",
-                  id: client.id,
-                  label: name,
-                  phone: client.whatsapp || client.phone,
-                })
-              }
-            />
-          ) : null}
-          {client.contactEmail || client.email ? (
-            <AdminIconLink
-              href={`mailto:${client.contactEmail || client.email}`}
-              icon="mail"
-              label={`Enviar correo a ${name}`}
-            />
-          ) : null}
-        </span>
-      ),
+      footer: rowActions(client),
     };
   });
 
-  const totals = useMemo(() => {
+  const totals = useMemo(() => portfolioKpis(clients.data ?? []), [clients.data]);
+  const segmentCounts = useMemo(() => {
     const list = clients.data ?? [];
-    return {
-      total: list.length,
-      active: list.filter((client) => client.active).length,
-      resellers: list.filter((client) => client.type === "RESELLER").length,
-      overdue: list.filter((client) => client.metrics.overdue > 0).length,
-      overdueAmount: list.reduce((sum, client) => sum + client.metrics.overdue, 0),
-      overdueCount: list.reduce((sum, client) => sum + client.metrics.overdueCount, 0),
-    };
+    return { ALL: list.length, FINAL: list.filter((c) => c.type === "FINAL").length, RESELLER: list.filter((c) => c.type === "RESELLER").length };
   }, [clients.data]);
+  const toggleKpi = (key: ClientKpiKey) => setKpi((current) => (current === key ? null : key));
+  const filtering = Boolean(query || kpi || segment !== "ALL" || filter !== "ALL");
+  function clearFilters() {
+    setQuery("");
+    setKpi(null);
+    setSegment("ALL");
+    setFilter("ALL");
+  }
 
   // Ayuda del front con el mismo mensaje que revalida el API (regla única); la
   // comparten el alta de Clientes y el «+ Nuevo cliente» del evento (#106).
@@ -501,35 +530,94 @@ export function ClientesModule() {
     <div className="admin-module-page">
       <AdminModuleContext
         breadcrumb="Clientes"
-        hint="Cartera, responsables y actividad comercial en una vista operativa."
+        hint="A quién le vendés, cuánto te deben y quién se está enfriando."
         meta={`${formatNumber(rows.length)} visibles`}
+        action={
+          writable ? (
+            <AdminButton
+              variant="primary"
+              icon="plus"
+              onClick={() => {
+                setFormError("");
+                if (showForm && !editingId) setShowForm(false);
+                else openCreate();
+              }}
+              aria-expanded={showForm}
+            >
+              Nuevo cliente
+            </AdminButton>
+          ) : undefined
+        }
       />
-      <AdminKpis state={kpiState(clients)} label="Indicadores de clientes">
-        <AdminKpi label="Clientes" icon="clients" value={formatNumber(totals.total)} note="en cartera" />
-        <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
+      <AdminKpis className="admin-kpis--stages" state={kpiState(clients)} label="Indicadores de clientes (tocá uno para filtrar la lista)">
         <AdminKpi
-          label="Con deuda vencida" icon="alert"
-          value={formatNumber(totals.overdue)}
-          note={`${formatNumber(totals.overdueCount)} cobro${totals.overdueCount === 1 ? "" : "s"} vencido${totals.overdueCount === 1 ? "" : "s"}`}
-          tone={totals.overdue > 0 ? "danger" : undefined}
+          label="Activos" icon="check"
+          value={formatNumber(totals.active)}
+          note={`de ${formatNumber(totals.total)} en cartera`}
+          tone="ok"
+          onSelect={() => toggleKpi("ACTIVE")}
+          active={kpi === "ACTIVE"}
         />
         <AdminKpi
-          label="Deuda vencida" icon="alert"
-          value={formatMoney(totals.overdueAmount)}
-          note="cobros pendientes con vencimiento pasado"
-          tone={totals.overdueAmount > 0 ? "danger" : undefined}
+          label="Con saldo pendiente" icon="alert"
+          value={formatNumber(totals.withBalance)}
+          note={formatMoney(totals.balanceAmount)}
+          tone={totals.withBalance > 0 ? "warn" : undefined}
+          onSelect={() => toggleKpi("BALANCE")}
+          active={kpi === "BALANCE"}
         />
-        <AdminKpi label="Revendedores" icon="clients" value={formatNumber(totals.resellers)} note="mayoristas" tone="accent" />
+        <AdminKpi
+          label="Mayoristas con link" icon="globe"
+          value={formatNumber(totals.wholesaleLink)}
+          note={`de ${formatNumber(totals.resellers)} mayorista${totals.resellers === 1 ? "" : "s"}`}
+          tone="accent"
+          onSelect={() => toggleKpi("WHOLESALE_LINK")}
+          active={kpi === "WHOLESALE_LINK"}
+        />
+        <AdminKpi
+          label="Nuevos del mes" icon="plus"
+          value={formatNumber(totals.newThisMonth)}
+          note="altas este mes"
+          onSelect={() => toggleKpi("NEW_MONTH")}
+          active={kpi === "NEW_MONTH"}
+        />
+        <AdminKpi
+          label="Sin actividad" icon="clock"
+          value={formatNumber(totals.dormant)}
+          note="hace más de 6 meses"
+          tone={totals.dormant > 0 ? "warn" : undefined}
+          onSelect={() => toggleKpi("DORMANT")}
+          active={kpi === "DORMANT"}
+        />
       </AdminKpis>
+      {truncated ? (
+        <AdminNote tone="warn">
+          Mostrando los primeros 200 clientes: los indicadores no incluyen el resto. Afiná con la búsqueda.
+        </AdminNote>
+      ) : null}
 
       <AdminToolbar>
         <SearchField
           value={query}
           onChange={setQuery}
           label="Buscar clientes"
-          placeholder="Buscar por nombre, empresa, RUC o contacto…"
+          placeholder="Buscar por nombre, RUC, teléfono o correo…"
         />
-        <AdminSelect value={type} onChange={setType} label="Filtrar por tipo" options={TYPE_OPTIONS} />
+        <div className="admin-segments" role="group" aria-label="Tipo de cliente">
+          {CLIENT_SEGMENTS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className="admin-subtab"
+              aria-pressed={segment === item.key}
+              data-active={segment === item.key ? "true" : undefined}
+              onClick={() => setSegment(item.key)}
+            >
+              {item.label}
+              <span className="admin-subtab-count">{formatNumber(segmentCounts[item.key])}</span>
+            </button>
+          ))}
+        </div>
         <AdminSelect value={filter} onChange={setFilter} label="Filtrar la cartera" options={FILTER_OPTIONS} />
         <AdminSelect value={order} onChange={setOrder} label="Ordenar clientes por" options={ORDER_OPTIONS} />
         {/* En ancho compacto lista y cuadrícula se ven igual (tarjetas): el
@@ -537,20 +625,6 @@ export function ClientesModule() {
         {narrow ? null : (
           <AdminViewSwitch view={view} onChange={setView} label="Vista de clientes" views={CLIENTES_VIEWS} />
         )}
-        {writable ? (
-          <AdminButton
-            variant="primary"
-            icon="plus"
-            onClick={() => {
-              setFormError("");
-              if (showForm && !editingId) setShowForm(false);
-              else openCreate();
-            }}
-            aria-expanded={showForm}
-          >
-            Nuevo cliente
-          </AdminButton>
-        ) : null}
       </AdminToolbar>
 
       {status ? <AdminNote tone="ok">{status}</AdminNote> : null}
@@ -650,8 +724,8 @@ export function ClientesModule() {
           <AdminEmpty
             icon="search"
             title="Sin resultados"
-            hint="Probá con otro término de búsqueda o cambiá el filtro."
-            action={query ? <button type="button" className="admin-empty-link" onClick={() => setQuery("")}>Limpiar búsqueda →</button> : undefined}
+            hint="Probá con otro término de búsqueda o cambiá los filtros."
+            action={filtering ? <button type="button" className="admin-empty-link" onClick={clearFilters}>Quitar filtros →</button> : undefined}
           />
         ) : cardView ? (
           <AdminCardGrid label="Clientes" cards={clientCards} />
@@ -661,41 +735,42 @@ export function ClientesModule() {
             label="Clientes"
             columns={[
               { label: "Cliente" },
-              { label: "Contacto" },
               { label: "Tipo" },
-              { label: "Contratado", end: true },
+              { label: "Contacto" },
               { label: "Eventos", end: true },
-              { label: "Presup.", end: true },
-              { label: "Deuda vencida", end: true },
-              { label: "Última actividad", end: true },
-              { label: "Estado" },
+              { label: "Contratado", end: true },
+              { label: "Saldo", end: true },
+              { label: "Actividad", end: true },
               { label: "Acciones", end: true },
             ]}
           >
             {rows.map((client) => {
               const name = clientDisplayName(client);
               const metrics = client.metrics;
-              // Contacto principal de la fila (issue #139): el teléfono. El
-              // correo, Instagram, la web y WhatsApp salen de la grilla —el
-              // ancho de la tabla era el problema— y quedan en la ficha.
-              const contact = client.contactPhone || client.phone;
+              const contact = clientContactLine(client);
               const contactTitle =
-                [client.contactName, contact, client.contactEmail || client.email].filter(Boolean).join(" · ") ||
+                [client.contactName, client.contactPhone || client.phone, client.contactEmail || client.email].filter(Boolean).join(" · ") ||
                 "Sin contacto cargado";
               return (
                 <AdminRow key={client.id}>
                   <AdminCell title={`${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`}>
                     <span className="admin-identity">
                       <ClientLogo client={client} size={22} />
-                      <strong>{name}</strong>
+                      {/* Enlace extendido: toda la fila abre la ficha (teclado y clic
+                          derecho incluidos); las acciones quedan por encima. */}
+                      <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
+                        <strong>{name}</strong>
+                      </Link>
                       {clientLegalName(client) ? <small className="admin-cell-sub"> · {clientLegalName(client)}</small> : null}
+                      {client.active ? null : <AdminBadge tone="neutral">Inactivo</AdminBadge>}
                     </span>
                   </AdminCell>
+                  <AdminCell>
+                    <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
+                  </AdminCell>
                   <AdminCell title={contactTitle}>
-                    {/* Señal compacta del dato que falta para el portal: sin
-                        responsable cargado, la aprobación del presupuesto no
-                        tiene a quién prellenarle el nombre. El chip va primero
-                        para que el ancho fijo de la columna no lo recorte. */}
+                    {/* Sin responsable cargado, la aprobación del presupuesto no
+                        tiene a quién prellenarle el nombre. */}
                     {client.contactName ? null : (
                       <AdminBadge
                         tone="warn"
@@ -707,60 +782,26 @@ export function ClientesModule() {
                     )}{" "}
                     {contact || "—"}
                   </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
-                  </AdminCell>
-                  <AdminCell
-                    end
-                    title={
-                      metrics.contracts > 0
-                        ? `${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"} · ticket promedio ${formatMoney(metrics.averageTicket)}`
-                        : "Sin contratos aprobados"
-                    }
-                  >
-                    {metrics.contracts > 0 ? <span className="admin-nowrap">{formatMoney(metrics.contracted)}</span> : <span className="admin-muted">—</span>}
-                  </AdminCell>
                   <AdminCell end title={`${client._count.events} eventos`}>
                     {formatNumber(client._count.events)}
                   </AdminCell>
-                  <AdminCell end title={`${client._count.budgets} presupuestos`}>
-                    {formatNumber(client._count.budgets)}
+                  <AdminCell end title={contractedTitle(client)}>
+                    {metrics.contracts > 0 ? <span className="admin-nowrap">{formatMoney(metrics.contracted)}</span> : <span className="admin-muted">—</span>}
                   </AdminCell>
-                  <AdminCell
-                    end
-                    title={
-                      metrics.overdue > 0
-                        ? `${formatMoney(metrics.overdue)} en ${formatNumber(metrics.overdueCount)} cobro${metrics.overdueCount === 1 ? "" : "s"} vencido${metrics.overdueCount === 1 ? "" : "s"}`
-                        : "Sin cobros vencidos"
-                    }
-                  >
-                    {metrics.overdue > 0 ? (
-                      <span className="admin-nowrap" data-tone="danger">
-                        {formatMoney(metrics.overdue)}
+                  <AdminCell end title={balanceTitle(client)}>
+                    {metrics.balance > 0 ? (
+                      <span className="admin-nowrap" data-tone={metrics.overdue > 0 ? "danger" : undefined}>
+                        {formatMoney(metrics.balance)}
                       </span>
                     ) : (
                       <span className="admin-muted">—</span>
                     )}
                   </AdminCell>
-                  <AdminCell
-                    end
-                    title={
-                      metrics.lastActivityAt
-                        ? `Última actividad comercial: ${formatDate(metrics.lastActivityAt)}`
-                        : "Sin actividad comercial registrada"
-                    }
-                  >
+                  <AdminCell end title={activityTitle(client)}>
                     {metrics.lastActivityAt ? formatDateShort(metrics.lastActivityAt) : <span className="admin-muted">—</span>}
                   </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
-                  </AdminCell>
                   <AdminCell end className="admin-cell--actions">
-                    {/* La fila se queda con la ficha (issue #139): los links de
-                        contacto salen de la grilla y viven en el detalle. */}
-                    <span className="admin-actions">
-                      <AdminIconLink href={`/clientes/${client.id}`} icon="eye" label={`Ver la ficha de ${name}`} />
-                    </span>
+                    {rowActions(client)}
                   </AdminCell>
                 </AdminRow>
               );
@@ -769,11 +810,7 @@ export function ClientesModule() {
         )}
       </AdminDataState>
 
-
-      {templateTarget ? (
-        <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
-
-      ) : null}
+      {templateTarget ? <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} /> : null}
     </div>
   );
 }

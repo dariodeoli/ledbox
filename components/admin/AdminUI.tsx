@@ -351,6 +351,8 @@ export type AdminSubtabItem = {
   label: string;
   icon: AdminIconName;
   active?: boolean;
+  /** Contador al lado del nombre (por ejemplo, solicitudes pendientes). */
+  count?: number;
 };
 
 /**
@@ -370,6 +372,7 @@ export function AdminSubtabs({ label, items }: { label: string; items: readonly 
         >
           <AdminIcon name={item.icon} size={13} />
           {item.label}
+          {item.count ? <span className="admin-subtab-count">{formatNumber(item.count)}</span> : null}
         </Link>
       ))}
     </nav>
@@ -863,7 +866,8 @@ export function AdminTimeline({
  * los dibuja con el timeline compartido. Cualquier rol con membresía lee
  * (VIEWER incluido); el aislamiento por empresa lo resuelve el API.
  */
-export function AdminTimelineDialog({ title, path, onClose }: { title: string; path: string; onClose: () => void }) {
+/** Cronología real que se pide sola: la usa el diálogo y la pestaña Historial de la ficha del evento. */
+export function AdminTimelineLoader({ path }: { path: string }) {
   const [entries, setEntries] = useState<AdminTimelineEntry[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -889,15 +893,21 @@ export function AdminTimelineDialog({ title, path, onClose }: { title: string; p
   }, [path, attempt]);
 
   return (
+    <AdminTimeline
+      entries={entries ?? []}
+      loading={entries === null && !error}
+      error={error}
+      onRetry={() => setAttempt((current) => current + 1)}
+      emptyTitle="Todavía no hay hitos registrados"
+      emptyHint="Los hitos aparecen solos cuando el presupuesto o el evento tienen movimientos reales."
+    />
+  );
+}
+
+export function AdminTimelineDialog({ title, path, onClose }: { title: string; path: string; onClose: () => void }) {
+  return (
     <AdminDialog title={title} size="wide" icon="clock" onClose={onClose}>
-      <AdminTimeline
-        entries={entries ?? []}
-        loading={entries === null && !error}
-        error={error}
-        onRetry={() => setAttempt((current) => current + 1)}
-        emptyTitle="Todavía no hay hitos registrados"
-        emptyHint="Los hitos aparecen solos cuando el presupuesto o el evento tienen movimientos reales."
-      />
+      <AdminTimelineLoader path={path} />
       <div className="admin-dialog-foot">
         <span className="admin-dialog-spacer" />
         <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
@@ -958,10 +968,13 @@ export function AdminModuleContext({
   breadcrumb,
   hint,
   meta,
+  action,
 }: {
   breadcrumb: string;
   hint: string;
   meta?: string;
+  /** Acción principal del módulo (por ejemplo «Nuevo presupuesto»), a la derecha. */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="admin-module-context">
@@ -972,6 +985,7 @@ export function AdminModuleContext({
         <p className="admin-module-context-hint">{hint}</p>
       </div>
       {meta ? <span className="admin-module-context-meta">{meta}</span> : null}
+      {action ? <div className="admin-module-context-action">{action}</div> : null}
     </div>
   );
 }
@@ -1012,11 +1026,14 @@ export function AdminKpi({
   icon,
   loading,
   state,
-  onClick,
+  onSelect,
   active,
   actionLabel,
 }: {
   label: string;
+  /** Con `onSelect` el indicador es un botón-filtro (`active` = filtro vigente). */
+  onSelect?: () => void;
+  active?: boolean;
   /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
   value: string | null | undefined;
   note?: string;
@@ -1026,19 +1043,30 @@ export function AdminKpi({
   loading?: boolean;
   /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
   state?: KpiState;
-  /** Con acción, el indicador es un botón que filtra la pantalla al tocarlo. */
-  onClick?: () => void;
-  /** El filtro que dispara este indicador está aplicado. */
-  active?: boolean;
-  /** Qué hace al tocarlo (nombre accesible y `title`). */
+  /** Nombre accesible del botón-filtro («Filtrar por próximos 7 días»); por defecto, el rótulo + valor. */
   actionLabel?: string;
 }) {
   const groupState = useContext(AdminKpiStateContext);
   const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
   const current: KpiState = effective === "ready" && value == null ? "loading" : effective;
   const shown = current === "ready";
-  const inner = (
-    <>
+  const Wrapper = onSelect ? "button" : "div";
+  return (
+    <Wrapper
+      className={onSelect ? "admin-kpi admin-kpi--filter" : "admin-kpi"}
+      {...(onSelect
+        ? {
+            type: "button" as const,
+            onClick: onSelect,
+            "aria-pressed": Boolean(active),
+            "aria-label": actionLabel ? `${actionLabel}${shown && value != null ? `: ${value}` : ""}` : undefined,
+            "data-active": active ? "true" : undefined,
+          }
+        : {})}
+      data-tone={shown ? tone : undefined}
+      data-loading={current === "loading" ? "true" : undefined}
+      data-state={current}
+    >
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -1062,28 +1090,7 @@ export function AdminKpi({
         <strong className="admin-kpi-value" title={value ?? undefined}>{value}</strong>
       )}
       {note && shown ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
-    </>
-  );
-  const attrs = { "data-tone": shown ? tone : undefined, "data-loading": current === "loading" ? "true" : undefined, "data-state": current };
-  if (onClick && shown) {
-    return (
-      <button
-        type="button"
-        className="admin-kpi admin-kpi--action"
-        {...attrs}
-        aria-pressed={active ?? false}
-        data-active={active ? "true" : undefined}
-        title={actionLabel ?? `Filtrar por ${label}`}
-        onClick={onClick}
-      >
-        {inner}
-      </button>
-    );
-  }
-  return (
-    <div className="admin-kpi" {...attrs}>
-      {inner}
-    </div>
+    </Wrapper>
   );
 }
 

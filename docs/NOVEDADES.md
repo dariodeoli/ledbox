@@ -443,3 +443,35 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Cada producto elige dónde se muestra: Oculto, Cliente final, Mayorista o Ambos. El cliente final ve el precio de lista (o «Consultar»).
 - Catálogo mayorista: desde la ficha del cliente, «Compartir catálogo mayorista» genera un link privado con precios mayoristas. El link se puede revocar y no aparece en buscadores. El pedido llega al panel ya vinculado a ese cliente y el presupuesto usa los precios mayoristas.
 - Los links anteriores /catalogo/<empresa> siguen funcionando y llevan a la tienda.
+
+## v2.1.102 — 2026-10-13
+
+- Presupuestos rediseñados:
+  - Arriba, cinco indicadores por etapa con cantidad y monto: Borrador, Enviado, Aprobado sin evento, Aprobado y Perdido. Al tocar uno se filtra la lista.
+  - La lista entra completa en pantalla: número, cliente, evento, monto, seña o saldo, etapa y vencimiento. Cada fila muestra una sola acción, la que toca ahora (Enviar, Aprobar, Responder, Crear evento o Cobrar seña), y el resto queda en «•••».
+  - El detalle se abre en un panel lateral con todo en un solo lugar: etapas, cliente y evento, condiciones (seña, plan de pagos y garantía), ítems, portal y firma, e historial.
+  - Pestañas: Presupuestos · Firmas · Solicitudes del portal.
+  - Vuelven a estar disponibles «WhatsApp con plantilla» y «Comprobantes del portal».
+- En el celular, cada presupuesto se ve como una tarjeta con su etapa, el monto y la próxima acción.
+
+## v2.1.103 — 2026-10-13
+
+- Eventos rediseñado:
+  - Arriba, cuatro indicadores que filtran la lista: Próximos 7 días, En curso, Con pendientes y Por cerrar. También está «Tareas vencidas».
+  - Cada fila muestra qué tan listo está el evento: checklist, equipos despachados, seña y promotoras. Tiene una sola acción, la que toca ahora (completar checklist, despachar, registrar devolución o finalizar), y el resto queda en «•••».
+  - El detalle se abre en un panel lateral con «Qué falta» arriba y pestañas: Resumen (con el presupuesto y sus etapas), Checklist, Equipos, Personal e Historial. Cada evento tiene su propio link, y las etapas del presupuesto llevan directo a él.
+  - Pestaña «Tareas»: las tareas pendientes de todos los eventos, con filtros por vencidas, esta semana y promotora, y avisos de promotora no disponible.
+- En el celular, cada evento se ve como una tarjeta con la fecha destacada, su estado, lo que falta y la próxima acción.
+
+## v2.1.104 — 2026-10-13
+
+- Clientes rediseñado:
+  - Lista con cinco indicadores que filtran: Activos, Con saldo pendiente, Mayoristas con link, Nuevos del mes y Sin actividad hace más de 6 meses.
+  - Segmentos Cliente final y Mayorista, y búsqueda por nombre, RUC, teléfono o correo.
+  - La tabla muestra cliente, tipo, contacto, eventos, contratado, saldo y última actividad. Hay una acción por fila y la fila entera abre la ficha.
+- Ficha del cliente:
+  - La acción principal cambia según el estado: «Cobrar» si tiene saldo vencido, «Seguir presupuesto» si hay uno enviado, y si no, «Nuevo presupuesto».
+  - Franja con contratado, cobrado, saldo, eventos y último evento.
+  - Cada presupuesto y cada evento se abre con un clic.
+  - El catálogo mayorista se muestra solo a mayoristas, o a quien todavía tenga un link activo, para poder revocarlo.
+- Si la cartera supera los 200 clientes, la lista lo avisa para que los indicadores no parezcan el total.
