@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { BillingUnit, LeadStatus, type Prisma } from "@prisma/client";
 import { registroConsentimiento } from "owncoding-ui/utils";
 import { rucDocument } from "@/lib/field-rules";
+import { resolveClientFromLead } from "@/lib/server/lead-client";
 import { APP_VERSION } from "@/lib/version";
 import { db } from "@/lib/server/db";
 import { requireAdminContext, resolveDefaultOrganizationId } from "@/lib/server/tenancy";
@@ -15,30 +16,19 @@ export const dynamic = "force-dynamic";
 
 const MAX_INTERNAL_NOTES = 2000;
 
-/** Contrato de lectura del panel: el lead con todos sus pedidos e ítems. */
-const LEAD_INCLUDE = { quoteRequests: { include: { items: true } } } satisfies Prisma.LeadInclude;
+/**
+ * Contrato de lectura del panel: el lead con todos sus pedidos e ítems y los
+ * presupuestos que nacieron de él (Lead → Presupuesto).
+ */
+const LEAD_INCLUDE = {
+  quoteRequests: { include: { items: true } },
+  budgets: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+} satisfies Prisma.LeadInclude;
 
 function parseDate(value?: string) {
   if (!value) return undefined;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-/**
- * Clave nacional del teléfono para el dedup: solo dígitos, sin prefijo de país
- * ni 0 inicial, con la guarda de los números demasiado cortos (no identifican
- * a nadie).
- *
- * Anotado del #105 (Tanda 1 del plan #100): la librería tiene
- * `claveTelefonoCliente`/`coincideTelefonoCliente` para esto, pero todavía
- * **no salen por `owncoding-ui/utils`** (solo por el entry root); migrar cuando
- * upstream las publique en el subcamino, junto con `limpiarPercent`.
- */
-function phoneKey(value: string | null | undefined): string {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  if (digits.length < 6) return "";
-  if (digits.startsWith("595")) return digits.slice(3);
-  return digits.startsWith("0") ? digits.slice(1) : digits;
 }
 
 export async function POST(request: Request) {
@@ -168,37 +158,10 @@ export async function PATCH(request: Request) {
       // Sin duplicar: si ya hay un cliente de la empresa con el mismo email o
       // teléfono (comparado por su clave nacional), se reutiliza y solo se
       // marca WON.
-      const email = lead.email.trim().toLowerCase();
-      const phone = phoneKey(lead.phone);
-      const candidates = await tx.client.findMany({
-        where: { organizationId: auth.context.organizationId, OR: [{ email: { not: null } }, { phone: { not: null } }] },
-        orderBy: { createdAt: "desc" },
-        take: 1000,
-        select: { id: true, name: true, company: true, email: true, phone: true },
-      });
-      const existing = candidates.find(
-        (candidate) =>
-          (email.length > 0 && candidate.email?.trim().toLowerCase() === email) ||
-          (phone.length > 0 && phoneKey(candidate.phone) === phone),
-      );
-      if (existing) {
-        client = { id: existing.id, name: existing.name, company: existing.company };
-      } else {
-        const created = await tx.client.create({
-          data: {
-            id: randomUUID(),
-            organizationId: auth.context.organizationId,
-            type: "FINAL",
-            name: lead.name,
-            company: lead.company || undefined,
-            email: lead.email.trim().toLowerCase() || undefined,
-            phone: lead.phone || undefined,
-            ruc: rucDocument(lead.ruc) || undefined,
-          },
-          select: { id: true, name: true, company: true },
-        });
-        client = created;
-        clientCreated = true;
+      const resolved = await resolveClientFromLead(tx, auth.context.organizationId, lead);
+      if (resolved) {
+        client = resolved.client;
+        clientCreated = resolved.created;
       }
       data.status = LeadStatus.WON;
     }

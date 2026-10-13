@@ -439,6 +439,7 @@ model Lead {
   updatedAt     DateTime   @updatedAt
 
   quoteRequests  QuoteRequest[]
+  budgets        Budget[]
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
@@ -740,6 +741,8 @@ model Budget {
   organizationId       String
   clientId             String
   eventId              String?
+  /// Lead del que nació el presupuesto (Lead → Presupuesto); se limpia si se borra el lead.
+  leadId               String?
   title                String
   status               CommercialStatus      @default(DRAFT)
   subtotal             Int                   @default(0)
@@ -786,6 +789,7 @@ model Budget {
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client               Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
   event                Event?                @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  lead                 Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
   items                BudgetItem[]
   payments             ClientPayment[]
   changeRequests       BudgetChangeRequest[]
@@ -804,6 +808,7 @@ model Budget {
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
+  @@index([organizationId, leadId])
 }
 
 model BudgetItem {

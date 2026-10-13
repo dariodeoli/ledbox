@@ -9,6 +9,8 @@ import { budgetStatusLabel } from "@/lib/admin-format";
 import { INVOICE_TAX_TYPES } from "@/lib/fiscal";
 import type { AdminInvoiceTaxType } from "@/lib/admin-types";
 import { requireAdminContext, type AdminContext } from "@/lib/server/tenancy";
+import { roleCan } from "@/lib/server/permissions";
+import { findMatchingClient, leadStatusAfterBudget, resolveClientFromLead } from "@/lib/server/lead-client";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
@@ -85,6 +87,7 @@ export async function GET() {
       include: {
         client: { include: { logo: { select: { updatedAt: true } } } },
         event: true,
+        lead: { select: { id: true, createdAt: true } },
         items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } },
         expectedPayments: { where: { status: { not: "CANCELLED" } }, orderBy: [{ installmentNumber: "asc" }, { createdAt: "asc" }], select: { status: true, concept: true, label: true, amount: true, paidAmount: true } },
         payments: true,
@@ -193,11 +196,24 @@ export async function POST(request: Request) {
   const materialCost = body.materialCost === undefined ? 0 : body.materialCost;
   const laborCost = body.laborCost === undefined ? 0 : body.laborCost;
   if (typeof materialCost !== "number" || !budgetMoneyValid(materialCost) || typeof laborCost !== "number" || !budgetMoneyValid(laborCost)) return jsonError("Los costos deben ser enteros no negativos en guaraníes dentro del límite Int.", 400);
-  if (typeof body.clientId !== "string" || typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 160) {
+  const leadId = typeof body.leadId === "string" ? body.leadId.trim() : "";
+  const clientIdInput = typeof body.clientId === "string" ? body.clientId : "";
+  if ((!clientIdInput && !leadId) || typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 160) {
     return jsonError("Elegí el cliente y escribí el título del presupuesto.", 400);
   }
-  const client = await db.client.findFirst({ where: { id: body.clientId, organizationId }, select: { id: true } });
-  if (!client) return jsonError("El cliente no existe en esta empresa.", 404);
+  // Lead → Presupuesto: el lead debe ser de la empresa activa (404 si no lo es).
+  const lead = leadId ? await db.lead.findFirst({ where: { id: leadId, organizationId } }) : null;
+  if (leadId && !lead) return jsonError("El lead no existe en esta empresa.", 404);
+  // Sin `clientId`, el cliente sale del lead (se reutiliza o se crea, sin duplicar).
+  // Crear el cliente exige además `clients.write`.
+  if (!clientIdInput && lead && !roleCan(auth.context.user.role, "clients.write")) {
+    const known = await db.client.findMany({ where: { organizationId, OR: [{ email: { not: null } }, { phone: { not: null } }] }, take: 1000, select: { id: true, name: true, company: true, email: true, phone: true } });
+    if (!findMatchingClient(known, lead)) return jsonError("El lead todavía no es cliente: pedí a alguien con permiso de clientes que lo convierta.", 403);
+  }
+  if (clientIdInput) {
+    const client = await db.client.findFirst({ where: { id: clientIdInput, organizationId }, select: { id: true } });
+    if (!client) return jsonError("El cliente no existe en esta empresa.", 404);
+  }
   const eventId = typeof body.eventId === "string" ? body.eventId : "";
   if (eventId) {
     const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } });
@@ -229,38 +245,87 @@ export async function POST(request: Request) {
   if (!valid.ok) return jsonError("La vigencia no es válida.", 400);
   const ivaType = ivaField(body.ivaType);
   if (body.ivaType !== undefined && ivaType === undefined) return jsonError("La condición de IVA no es válida.", 400);
-  const budget = await db.budget.create({
-    data: {
-      id: randomUUID(),
-      organizationId,
-      clientId: client.id,
-      eventId: eventId || undefined,
-      title: body.title.trim(),
-      status: "DRAFT",
-      subtotal,
-      discount,
-      total,
-      costEstimate,
-      materialCost,
-      laborCost,
-      deliveryAt: delivery.value,
-      validUntil: valid.value,
-      ivaType: ivaType ?? undefined,
-      warranty: textField(body.warranty, MAX_WARRANTY),
-      notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
-      items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
-    },
-    include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
+  const title = body.title.trim();
+  // Presupuestos que el lead ya tenía: no bloquean el alta, la UI los avisa.
+  const existingBudgets = lead
+    ? await db.budget.findMany({ where: { organizationId, leadId: lead.id }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, status: true, createdAt: true } })
+    : [];
+  const created = await db.$transaction(async (tx) => {
+    let clientId = clientIdInput;
+    let clientCreated: { id: string; name: string; company: string | null } | null = null;
+    if (!clientId && lead) {
+      const resolved = await resolveClientFromLead(tx, organizationId, lead, { allowCreate: roleCan(auth.context.user.role, "clients.write") });
+      if (!resolved) throw new Error("lead-client-unresolved");
+      clientId = resolved.client.id;
+      if (resolved.created) clientCreated = resolved.client;
+    }
+    const row = await tx.budget.create({
+      data: {
+        id: randomUUID(),
+        organizationId,
+        clientId,
+        eventId: eventId || undefined,
+        leadId: lead?.id,
+        title,
+        status: "DRAFT",
+        subtotal,
+        discount,
+        total,
+        costEstimate,
+        materialCost,
+        laborCost,
+        deliveryAt: delivery.value,
+        validUntil: valid.value,
+        ivaType: ivaType ?? undefined,
+        warranty: textField(body.warranty, MAX_WARRANTY),
+        notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
+        items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
+      },
+      include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
+    });
+    // Un lead nuevo o contactado pasa a Cotizado; uno ganado no baja.
+    const nextStatus = lead ? leadStatusAfterBudget(lead.status) : null;
+    if (lead && nextStatus && nextStatus !== lead.status) {
+      await tx.lead.update({ where: { id: lead.id }, data: { status: nextStatus } });
+    }
+    return { budget: row, clientCreated, leadStatus: nextStatus };
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.message === "lead-client-unresolved") return null;
+    throw error;
   });
+  if (!created) return jsonError("Tu rol no puede crear clientes y este lead todavía no tiene uno. Pedile a un administrador que lo convierta en cliente.", 403);
+  const { budget, clientCreated, leadStatus } = created;
+  if (clientCreated) {
+    await recordAudit({
+      context: auth.context,
+      action: "create",
+      entity: "Client",
+      entityId: clientCreated.id,
+      summary: `Creó el cliente «${clientCreated.name}» al armar un presupuesto desde el lead`,
+      detail: { fields: { name: clientCreated.name, company: clientCreated.company, fromLeadId: lead?.id ?? null } },
+    });
+  }
+  if (lead && leadStatus && leadStatus !== lead.status) {
+    await recordAudit({
+      context: auth.context,
+      action: "status",
+      entity: "Lead",
+      entityId: lead.id,
+      summary: `Cambió el estado del lead «${lead.name}» al armarle un presupuesto`,
+      detail: { changes: { status: { from: lead.status, to: leadStatus } } },
+    });
+  }
   await recordAudit({
     context: auth.context,
     action: "create",
     entity: "Budget",
     entityId: budget.id,
-    summary: `Creó el presupuesto «${budget.title}» del cliente «${budget.client.name}»`,
+    summary: lead
+      ? `Creó el presupuesto «${budget.title}» del cliente «${budget.client.name}» desde el lead «${lead.name}»`
+      : `Creó el presupuesto «${budget.title}» del cliente «${budget.client.name}»`,
     detail: {
       fields: {
-        ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "materialCost", "laborCost", "deliveryAt", "validUntil", "ivaType", "eventId"]),
+        ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "materialCost", "laborCost", "deliveryAt", "validUntil", "ivaType", "eventId", "leadId"]),
         items: budget.items.length,
         ...(budget.items.some((item) => item.inventoryId)
           ? { inventario: budget.items.filter((item) => item.inventory?.name).map((item) => `${item.name} → ${item.inventory?.name}`) }
@@ -269,7 +334,7 @@ export async function POST(request: Request) {
     },
   });
   const { logo, ...clientRow } = budget.client;
-  return Response.json({ budget: { ...budget, client: { ...clientRow, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) } }, { status: 201 });
+  return Response.json({ budget: { ...budget, client: { ...clientRow, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) }, ...(lead ? { existingBudgets, leadStatus } : {}) }, { status: 201 });
 }
 
 /**

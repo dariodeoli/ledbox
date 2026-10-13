@@ -4,6 +4,8 @@ import { budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "../AdminAvatar";
 import { clientLogoUrl } from "@/lib/admin-types";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminMailPreview } from "../AdminMailPreview";
 import type { MailPreview } from "@/lib/mail-preview";
@@ -14,6 +16,7 @@ import {
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
+  budgetReference,
   budgetStatusLabel,
   daysUntilDue,
   formatBytes,
@@ -147,6 +150,17 @@ function compareBudgetUrgency(a: AdminBudgetRow, b: AdminBudgetRow): number {
   // cerrado, del más reciente al más viejo.
   return rankA === 0 ? timeA - timeB : timeB - timeA;
 }
+
+/** Precarga del alta desde un lead (`GET /api/admin/budgets/lead-draft`). */
+type LeadDraft = {
+  lead: { id: string; name: string; company: string | null; status: string; createdAt: string };
+  title: string;
+  notes: string;
+  eventDate: string | null;
+  client: { id: string; name: string; company: string | null } | null;
+  canCreateClient: boolean;
+  existingBudgets: Array<{ id: string; title: string; status: string; createdAt: string }>;
+};
 
 const EMPTY_FORM = {
   clientId: "",
@@ -731,6 +745,12 @@ export function PresupuestosModule() {
   const [eventEdit, setEventEdit] = useState<AdminBudgetRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  /** Lead → Presupuesto: id del lead de origen y lo que el API precargó (sin datos personales en la URL). */
+  const [leadId, setLeadId] = useState("");
+  const [leadDraft, setLeadDraft] = useState<LeadDraft | null>(null);
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [notes, setNotes] = useState("");
+  const searchParams = useSearchParams();
   // Catálogos del alta de presupuesto (issue #59): cliente y evento solo se usan
   // en ese formulario, así que se piden al abrirlo y no en el primer render (la
   // lista ya trae cliente y evento de cada presupuesto).
@@ -745,6 +765,34 @@ export function PresupuestosModule() {
   );
   const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? [], { enabled: showForm });
   const [notice, setNotice] = useState("");
+  const writableForLead = canWriteFinance(role);
+  const leadParam = searchParams.get("lead")?.trim() ?? "";
+  const newRequested = searchParams.get("nuevo") === "1";
+  useEffect(() => {
+    if (!newRequested || !writableForLead) return;
+    setShowForm(true);
+    if (!leadParam) return;
+    let active = true;
+    setLeadId(leadParam);
+    setLeadLoading(true);
+    setFormError("");
+    adminApiGet<LeadDraft>(`/api/admin/budgets/lead-draft?leadId=${encodeURIComponent(leadParam)}`, { fresh: true }).then((result) => {
+      if (!active) return;
+      setLeadLoading(false);
+      if (!result.ok) {
+        setLeadId("");
+        setFormError(result.error);
+        return;
+      }
+      const draft = result.data;
+      setLeadDraft(draft);
+      setForm((current) => ({ ...current, title: current.title || draft.title, clientId: current.clientId || draft.client?.id || "" }));
+      setNotes((current) => current || draft.notes);
+    });
+    return () => {
+      active = false;
+    };
+  }, [newRequested, leadParam, writableForLead]);
   /** Altas rápidas desde el propio formulario (issue #88): nombre tipeado o null. */
   const [newClientName, setNewClientName] = useState<string | null>(null);
   const [newEventName, setNewEventName] = useState<string | null>(null);
@@ -990,6 +1038,13 @@ export function PresupuestosModule() {
             { label: next.label, tone: "neutral", title: next.hint },
           ],
           fields: [
+            ...(budget.lead
+              ? [{
+                  label: "Origen",
+                  value: <Link className="admin-empty-link" href={`/leads?lead=${encodeURIComponent(budget.lead.id)}`}>Viene del lead del {formatDateShort(budget.lead.createdAt)}</Link>,
+                  title: `Presupuesto armado desde el lead del ${formatDate(budget.lead.createdAt)}`,
+                }]
+              : []),
             { label: "Cliente", value: <span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={28} /><span>{clientDisplayName(budget.client)}</span></span> },
             { label: "Total", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
             {
@@ -1100,7 +1155,7 @@ export function PresupuestosModule() {
     event.preventDefault();
     // El combobox no tiene `required` nativo (puede llevar texto sin elegir):
     // se valida acá y el API revalida.
-    if (!form.clientId) {
+    if (!form.clientId && !leadId) {
       setFormError("Elegí el cliente del presupuesto.");
       return;
     }
@@ -1111,7 +1166,9 @@ export function PresupuestosModule() {
     setFormError("");
     setNotice("");
     const result = await adminSend("/api/admin/budgets", {
-      clientId: form.clientId,
+      clientId: form.clientId || undefined,
+      leadId: leadId || undefined,
+      notes: leadId && notes.trim() ? notes : undefined,
       eventId: form.eventId || undefined,
       title: form.title,
       items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes })),
@@ -1123,8 +1180,17 @@ export function PresupuestosModule() {
     }
     setForm(EMPTY_FORM);
     setCreateItems([]);
-    setNotice(`Presupuesto «${form.title}» creado como borrador. Podés abrir vista previa o enviarlo desde sus acciones.`);
+    if (leadId) closeLeadDraft();
+    setNotice(`Presupuesto «${form.title}» creado como borrador${leadId ? " desde el lead; el lead quedó en Cotizado si todavía no estaba ganado" : ""}. Podés abrir vista previa o enviarlo desde sus acciones.`);
     budgetsResource.reload();
+  }
+
+  /** Cierra la precarga del lead y limpia `?nuevo=1&lead=` de la URL. */
+  function closeLeadDraft() {
+    setLeadId("");
+    setLeadDraft(null);
+    setNotes("");
+    if (typeof window !== "undefined" && window.location.search) window.history.replaceState(null, "", window.location.pathname);
   }
 
   /** Alta rápida de cliente (issue #88): lo deja elegido y refresca el catálogo. */
@@ -1496,10 +1562,26 @@ export function PresupuestosModule() {
       {writable && showForm ? (
         <form className="admin-form-panel" onSubmit={submit} aria-busy={busy}>
           <h2 className="admin-form-title">Nuevo presupuesto</h2>
+          {leadLoading ? <AdminNote>Cargando los datos del lead…</AdminNote> : null}
+          {leadDraft ? (
+            <AdminNote tone={leadDraft.client || leadDraft.canCreateClient ? undefined : "error"}>
+              {`Viene del lead de ${leadDraft.lead.company || leadDraft.lead.name}. `}
+              {leadDraft.client
+                ? `Cliente existente: «${leadDraft.client.company || leadDraft.client.name}».`
+                : leadDraft.canCreateClient
+                  ? "Todavía no es cliente: se creará al guardar (o se reutilizará uno con el mismo email o teléfono)."
+                  : "Todavía no es cliente y tu rol no puede crearlo: pedí que lo conviertan desde Leads."}
+            </AdminNote>
+          ) : null}
+          {leadDraft && leadDraft.existingBudgets.length > 0 ? (
+            <AdminNote tone="warn">
+              {`Este lead ya tiene ${leadDraft.existingBudgets.length === 1 ? "un presupuesto" : `${leadDraft.existingBudgets.length} presupuestos`}: ${leadDraft.existingBudgets.map((b) => `${budgetReference(b.id)} · ${budgetStatusLabel(b.status)}`).join(", ")}. Podés crear otro igual.`}
+            </AdminNote>
+          ) : null}
           <div className="admin-form-grid">
           <Combobox
             label="Cliente"
-            required
+            required={!leadId}
             value={form.clientId}
             onChange={(value) => setForm({ ...form, clientId: value })}
             options={clientChoices}
@@ -1535,12 +1617,23 @@ export function PresupuestosModule() {
             onChange={(value) => setForm({ ...form, title: value })}
             placeholder="Ej.: Alquiler pantalla LED 6×3"
           />
+          {leadId ? (
+            <TextAreaField
+              label="Notas del pedido"
+              hint="Vienen del lead y las ve el cliente en el presupuesto; editalas si hace falta."
+              wide
+              rows={3}
+              maxLength={2000}
+              value={notes}
+              onChange={setNotes}
+            />
+          ) : null}
           </div>
           <BudgetItemsEditor items={createItems} onChange={setCreateItems} disabled={busy} range={formRange} />
           {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
           <div className="admin-dialog-foot">
-            <AdminButton type="button" disabled={busy} onClick={() => setShowForm(false)}>Cancelar</AdminButton>
-            <AdminButton type="submit" variant="primary" busy={busy} disabled={!form.clientId || !form.title.trim() || !createItems.length || createItems.some((item) => !item.unitPrice || !item.quantity || !item.days || budgetItemError({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice) })) || !budgetMoneyValid(budgetDraftSubtotal(createItems))}>Guardar borrador</AdminButton>
+            <AdminButton type="button" disabled={busy} onClick={() => { setShowForm(false); if (leadId) closeLeadDraft(); }}>Cancelar</AdminButton>
+            <AdminButton type="submit" variant="primary" busy={busy} disabled={(!form.clientId && !leadId) || (Boolean(leadDraft) && !form.clientId && !leadDraft?.client && !leadDraft?.canCreateClient) || leadLoading || !form.title.trim() || !createItems.length || createItems.some((item) => !item.unitPrice || !item.quantity || !item.days || budgetItemError({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice) })) || !budgetMoneyValid(budgetDraftSubtotal(createItems))}>Guardar borrador</AdminButton>
           </div>
         </form>
       ) : null}
@@ -1733,6 +1826,13 @@ export function PresupuestosModule() {
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
                     <strong className="admin-quote-title">{budget.title}</strong>
                     {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
+                    {budget.lead ? (
+                      <small className="admin-cell-sub" style={{ display: "block" }}>
+                        <Link href={`/leads?lead=${encodeURIComponent(budget.lead.id)}`} title="Abrir el lead de origen">
+                          Viene del lead del {formatDateShort(budget.lead.createdAt)}
+                        </Link>
+                      </small>
+                    ) : null}
                   </AdminCell>
                   <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
                   <AdminCell end title={formatMoney(budget.total)}>
