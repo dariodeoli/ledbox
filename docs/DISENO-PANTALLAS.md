@@ -148,3 +148,9 @@ Lo que se revisa en estas superficies (además de la guía de la fase 2):
 5. Capturas claro/oscuro, desktop 1440 y mobile 390, contra el «antes».
 6. Los checks verdes (`typecheck`, `build`, `test:rules`, `check:fields`) y sin
    scroll horizontal a 390.
+
+## Inicio (Resumen) como tablero (13-10-2026)
+
+- Arriba, «Para hacer hoy» (lo accionable) y la tira de plata (por cobrar, mora, cobrado del mes); debajo, un tablero de 6 bloques: previsibilidad de cobros (8 semanas, apilado con comprobante / pendiente / mora, totales a 30-60-90 días), pendientes por antigüedad (cada tramo enlaza a `/finanzas/por-cobrar?vence=al-dia|1-30|31-60|60-mas`), presupuestos en juego (con embudo y conversión; los 5 mayores abren `/presupuestos?detalle=<id>`), tendencia de 6 meses, operación (eventos por semana y ocupación de la semana, reutilizando `lib/server/rental-report.ts`) y «Esta semana».
+- Gráficos en SVG propio (`components/admin/charts/`: `ChartBars`, `ChartBarList`, `ChartSkeleton`; estilos `.admin-chart*` y `.admin-barlist*` en `globals.css`). El SVG es decorativo; la tabla `sr-only` es el equivalente accesible y cada columna lleva `<title>`.
+- Datos: `GET /api/admin/resumen` devuelve `{ resumen, board }`; `board` lo arma `lib/server/resumen-board.ts` con agregados en la base y las agrupaciones puras de `lib/resumen-board.ts`.

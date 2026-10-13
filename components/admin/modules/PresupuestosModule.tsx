@@ -784,6 +784,8 @@ export function PresupuestosModule() {
     if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
   }, [estadoParam]);
   // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
+  // Enlace del Resumen: `?detalle=<id>` abre el detalle de ese presupuesto.
+  const detalleParam = searchParams.get("detalle")?.trim() ?? "";
   const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
     if (!newRequested || !writableForLead) return;
@@ -846,6 +848,9 @@ export function PresupuestosModule() {
   const [signatureBudget, setSignatureBudget] = useState<AdminBudgetRow | null>(null);
   // Evento del presupuesto aprobado: detalle abierto y acción en curso (una sola a la vez).
   const [detailBudgetId, setDetailBudgetId] = useState<string | null>(null);
+  useEffect(() => {
+    if (detalleParam) setDetailBudgetId(detalleParam);
+  }, [detalleParam]);
   const [eventBusyId, setEventBusyId] = useState<string | null>(null);
   const eventInFlight = useRef(false);
   const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);

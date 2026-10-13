@@ -176,7 +176,17 @@ function overlapPrefilter(period: { start: Date; end: Date }, marginMin: number)
   };
 }
 
-async function occupancySection(organizationId: string, period: ReportPeriod, now: Date): Promise<AdminRentalReport["occupancy"]> {
+/**
+ * Filas de ocupación de los productos alquilables en `period` (misma regla del
+ * motor). `unusedTake` limita cuántos productos sin uso se incluyen; sin él entran
+ * todos, que es lo que necesita un porcentaje global honesto (Resumen).
+ */
+async function loadOccupancyRows(
+  organizationId: string,
+  period: Pick<ReportPeriod, "start" | "end" | "days">,
+  now: Date,
+  unusedTake?: number,
+): Promise<{ rows: AdminRentalOccupancyRow[]; usedCount: number; unusedCount: number; truncated: boolean }> {
   const [settings, overrides] = await Promise.all([
     loadRentalSettings(organizationId),
     db.inventoryItem.aggregate({ where: { organizationId }, _max: { bufferBeforeMin: true, bufferAfterMin: true } }),
@@ -217,7 +227,7 @@ async function occupancySection(organizationId: string, period: ReportPeriod, no
     db.inventoryItem.findMany({
       where: { ...rentableItemWhere(organizationId), id: { notIn: usedIds } },
       orderBy: { name: "asc" },
-      take: LIST_LIMIT * 3,
+      take: unusedTake,
       select: itemSelect,
     }),
     db.inventoryItem.count({ where: { ...rentableItemWhere(organizationId), id: { notIn: usedIds } } }),
@@ -238,8 +248,38 @@ async function occupancySection(organizationId: string, period: ReportPeriod, no
     );
     if (row) rows.push(row);
   }
+  return { rows, usedCount: used.length, unusedCount, truncated };
+}
+
+async function occupancySection(organizationId: string, period: ReportPeriod, now: Date): Promise<AdminRentalReport["occupancy"]> {
+  const { rows, usedCount, unusedCount, truncated } = await loadOccupancyRows(organizationId, period, now, LIST_LIMIT * 3);
   const { top, least } = rankOccupancy(rows);
-  return { rankedItems: used.length + unusedCount, top, least, truncated };
+  return { rankedItems: usedCount + unusedCount, top, least, truncated };
+}
+
+/**
+ * Ocupación del inventario alquilable en una ventana cualquiera (Resumen: «esta
+ * semana»): porcentaje global (días-unidad comprometidos / disponibles) y los
+ * productos más ocupados. Reutiliza el cálculo del reporte mensual.
+ */
+export async function getOccupancyWindow(
+  organizationId: string,
+  window: { start: Date; end: Date },
+  now = new Date(),
+  topLimit = 5,
+): Promise<{ percent: number | null; committedDays: number; availableDays: number; items: number; top: AdminRentalOccupancyRow[]; truncated: boolean }> {
+  const days = Math.max(1, Math.round((window.end.getTime() - window.start.getTime()) / DAY_MS));
+  const { rows, truncated } = await loadOccupancyRows(organizationId, { start: window.start, end: window.end, days }, now);
+  const committedDays = round1(rows.reduce((sum, row) => sum + row.committedDays, 0));
+  const availableDays = round1(rows.reduce((sum, row) => sum + row.availableDays, 0));
+  return {
+    percent: percentOf(committedDays, availableDays, true),
+    committedDays,
+    availableDays,
+    items: rows.length,
+    top: rankOccupancy(rows, topLimit).top,
+    truncated,
+  };
 }
 
 async function catalogSection(organizationId: string, period: ReportPeriod, now: Date): Promise<AdminRentalReport["catalog"]> {

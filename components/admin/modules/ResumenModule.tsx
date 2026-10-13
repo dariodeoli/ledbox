@@ -2,27 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { formatMoney, formatMoneyCompact, formatMonthKey, formatNumber, formatTime } from "@/lib/admin-format";
+import { formatNumber, formatTime } from "@/lib/admin-format";
 import { canWriteClients } from "@/lib/admin-policy";
 import type { AdminResumen } from "@/lib/admin-types";
+import type { AdminResumenBoard } from "@/lib/resumen-board";
 import { buildTodayActions, TODAY_ACTIONS_LIMIT, weekEventChip, type TodayAction } from "@/lib/resumen-actions";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
 import { AdminBadge, AdminDataState, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminNote, AdminPanel } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { useAdminResource } from "@/lib/admin-api";
+import { AgingBlock, BudgetsBlock, ForecastBlock, MoneyStrip, OperationBlock, TrendBlock } from "./ResumenBoard";
 
 /**
- * Resumen (inicio del panel): cuatro bloques que responden «¿qué hago ahora?».
- *
- * 1. Para hacer hoy: hasta 5 acciones por urgencia (rojo → ámbar → cian), con su
- *    botón al lugar exacto; «Ver todos» muestra el resto.
- * 2. Embudo del mes: Leads → Presupuestos → Aprobados → Eventos, con cantidad y
- *    monto, cada etapa enlazada a su lista.
- * 3. Plata: por cobrar, en mora y cobrado del mes (montos completos o en millones).
- * 4. Esta semana: los eventos de los próximos 7 días con su chip de estado.
- *
- * Todo sale de datos reales (`/api/admin/notifications` y `/api/admin/resumen`);
- * nada se inventa: sin datos se dice «Todo al día» o «Sin eventos».
+ * Resumen (inicio del panel): «Para hacer hoy» arriba (lo accionable) y debajo un
+ * tablero con gráficos: previsibilidad de cobros, pendientes por antigüedad,
+ * presupuestos en juego con el embudo, tendencia de 6 meses, operación y «Esta
+ * semana». Todo sale de datos reales (`/api/admin/notifications` y
+ * `/api/admin/resumen`); nada se inventa: sin datos cada bloque dice qué falta.
  */
 
 const TIME_ZONE = "America/Asuncion";
@@ -49,10 +45,12 @@ function capitalize(value: string): string {
 
 export function ResumenModule() {
   const { role, user } = useAdminSession();
-  const resumen = useAdminResource<AdminResumen | null>(
-    "/api/admin/resumen",
-    (payload) => (payload as { resumen?: AdminResumen }).resumen ?? null,
-  );
+  const resource = useAdminResource<{ resumen: AdminResumen | null; board: AdminResumenBoard | null }>("/api/admin/resumen", (payload) => {
+    const body = payload as { resumen?: AdminResumen; board?: AdminResumenBoard };
+    return { resumen: body.resumen ?? null, board: body.board ?? null };
+  });
+  // «Para hacer hoy» y «Esta semana» solo necesitan el Resumen clásico.
+  const resumen = { ...resource, data: resource.data?.resumen ?? null };
   const notifications = useAdminNotifications();
   // La fecha se arma en el navegador: evita diferencias de hidratación con el servidor.
   const [now, setNow] = useState<Date | null>(null);
@@ -79,17 +77,29 @@ export function ResumenModule() {
         ) : null}
       </header>
 
-      <div className="admin-resumen-grid">
-        <div className="admin-resumen-area" data-area="hoy">
-          <TodayBlock now={now} resumen={resumen} notifications={notifications} />
+      <div className="admin-resumen-today-row">
+        <TodayBlock now={now} resumen={resumen} notifications={notifications} />
+      </div>
+
+      <MoneyStrip resource={resource} />
+
+      <div className="admin-board-grid">
+        <div className="admin-board-cell" data-area="forecast">
+          <ForecastBlock resource={resource} />
         </div>
-        <div className="admin-resumen-area" data-area="embudo">
-          <FunnelBlock resumen={resumen} />
+        <div className="admin-board-cell" data-area="aging">
+          <AgingBlock resource={resource} />
         </div>
-        <div className="admin-resumen-area" data-area="plata">
-          <MoneyBlock resumen={resumen} />
+        <div className="admin-board-cell" data-area="budgets">
+          <BudgetsBlock resource={resource} />
         </div>
-        <div className="admin-resumen-area" data-area="semana">
+        <div className="admin-board-cell" data-area="trend">
+          <TrendBlock resource={resource} />
+        </div>
+        <div className="admin-board-cell" data-area="operation">
+          <OperationBlock resource={resource} />
+        </div>
+        <div className="admin-board-cell" data-area="week">
           <WeekBlock resumen={resumen} />
         </div>
       </div>
@@ -189,108 +199,7 @@ function TodayBlock({
   );
 }
 
-// ── (b) Embudo del mes ──────────────────────────────────────────────────────
-
-function FunnelBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
-  const data = resumen.data;
-  const stages = data
-    ? [
-        { key: "leads", label: "Leads", count: data.funnel.leads, amount: null, href: "/leads", hint: "Consultas que entraron este mes" },
-        { key: "budgets", label: "Presupuestos", count: data.funnel.budgets.count, amount: data.funnel.budgets.amount, href: "/presupuestos", hint: "Presupuestos creados o aprobados este mes (sin cancelados)" },
-        { key: "approved", label: "Aprobados", count: data.funnel.approved.count, amount: data.funnel.approved.amount, href: "/presupuestos?estado=APPROVED", hint: "Presupuestos aprobados este mes" },
-        { key: "events", label: "Eventos", count: data.funnel.events, amount: null, href: "/eventos", hint: "Eventos con fecha de inicio este mes (sin cancelados)" },
-      ]
-    : [];
-  const max = Math.max(1, ...stages.map((stage) => stage.count));
-
-  return (
-    <AdminPanel title="Embudo del mes" icon="leads" meta={data ? formatMonthKey(data.month) : undefined}>
-      <AdminDataState loading={resumen.loading} error={resumen.error} onRetry={resumen.reload} rows={4}>
-        <ol className="admin-funnel">
-          {stages.map((stage) => (
-            <li key={stage.key}>
-              <Link className="admin-funnel-stage" href={stage.href} title={`${stage.hint}. Ver la lista`}>
-                <span className="admin-funnel-bar" style={{ width: `${Math.max(stage.count > 0 ? 6 : 0, Math.round((stage.count / max) * 100))}%` }} aria-hidden="true" />
-                <span className="admin-funnel-label">{stage.label}</span>
-                <span className="admin-funnel-count">{formatNumber(stage.count)}</span>
-                <span className="admin-funnel-amount">{stage.amount !== null && stage.count > 0 ? formatMoneyCompact(stage.amount) : ""}</span>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </AdminDataState>
-    </AdminPanel>
-  );
-}
-
-// ── (c) Plata ───────────────────────────────────────────────────────────────
-
-function MoneyBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
-  const money = resumen.data?.money;
-  const cards = money
-    ? [
-        {
-          key: "receivable",
-          label: "Por cobrar",
-          value: money.receivable,
-          note: "saldo de presupuestos aprobados",
-          href: "/finanzas/por-cobrar",
-          tone: undefined as "danger" | "ok" | undefined,
-        },
-        {
-          key: "overdue",
-          label: "En mora",
-          value: money.overdueAmount,
-          note: money.overdueCount > 0 ? `${formatNumber(money.overdueCount)} ${money.overdueCount === 1 ? "cobro vencido" : "cobros vencidos"}` : "sin cobros vencidos",
-          href: "/finanzas/por-cobrar",
-          tone: money.overdueCount > 0 ? ("danger" as const) : undefined,
-        },
-        {
-          key: "collected",
-          label: "Cobrado este mes",
-          value: money.collectedMonth,
-          note: "cobros confirmados",
-          href: "/finanzas",
-          tone: money.collectedMonth > 0 ? ("ok" as const) : undefined,
-        },
-      ]
-    : [];
-
-  return (
-    <AdminPanel
-      title="Plata"
-      icon="finance"
-      action={
-        <Link className="admin-panel-link" href="/finanzas">
-          Ver finanzas →
-        </Link>
-      }
-    >
-      <AdminDataState loading={resumen.loading} error={resumen.error} onRetry={resumen.reload} rows={3}>
-        <ul className="admin-money-list">
-          {cards.map((card) => {
-            const compact = formatMoneyCompact(card.value);
-            const full = formatMoney(card.value);
-            return (
-              <li key={card.key}>
-                <Link className="admin-money-card" data-tone={card.tone} href={card.href} title={`${card.label}: ${full}`}>
-                  <span className="admin-money-label">{card.label}</span>
-                  <strong className="admin-money-value">{compact}</strong>
-                  <span className="admin-money-note">
-                    {compact !== full ? `${full} · ` : ""}
-                    {card.note}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </AdminDataState>
-    </AdminPanel>
-  );
-}
-
-// ── (d) Esta semana ─────────────────────────────────────────────────────────
+// ── Esta semana ─────────────────────────────────────────────────────────
 
 function WeekBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
   const events = resumen.data?.week ?? [];
