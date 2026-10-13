@@ -76,26 +76,26 @@ function ActionDialog({ action, onClose, onDone }: { action: Action; onClose: ()
       title={`${copy.title} · ${action.incident.inventory.name}`}
       icon="inventory"
       description={copy.help}
+      size="sm"
       dirty={notes !== ""}
+      error={error || null}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
-          <span className="admin-dialog-spacer" />
           <AdminButton type="button" onClick={requestClose}>
             Cancelar
           </AdminButton>
-          <AdminButton type="submit" form={formId} variant="primary" disabled={busy} aria-busy={busy || undefined}>
-            {busy ? "Guardando…" : copy.submit}
+          <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} busyLabel="Guardando…">
+            {copy.submit}
           </AdminButton>
         </>
       )}
     >
-      <form id={formId} onSubmit={submit}>
-        <AdminDialogSection>
+      <form id={formId} className="admin-form" onSubmit={submit} aria-busy={busy || undefined}>
+        <AdminDialogSection title="Resolución">
           <MoneyField label="Costo de reparación o reposición" hint="Opcional. En guaraníes." value={cost} onChange={setCost} />
           <TextAreaField label="Notas" wide rows={2} maxLength={400} value={notes} onChange={setNotes} hint="Qué se hizo o por qué (opcional)" />
         </AdminDialogSection>
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
     </AdminDialog>
   );

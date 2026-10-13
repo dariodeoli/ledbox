@@ -6,7 +6,7 @@ import { formatNumber } from "@/lib/admin-format";
 import { comboCapacity, comboCapacityLabel, MAX_COMBO_COMPONENTS } from "@/lib/inventory-combos";
 import { FIELD_LIMITS, FIELD_MESSAGES, inventorySkuError, normalizeInventorySku, personNameValid } from "@/lib/field-rules";
 import type { AdminInventoryItemRow } from "@/lib/admin-types";
-import { AdminButton, AdminDialog, AdminNote } from "../AdminUI";
+import { AdminButton, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
 import { Combobox, NumberField, TextField } from "../AdminFields";
 
 type ComponentDraft = { key: number; componentId: string; quantity: string };
@@ -105,29 +105,28 @@ export function ComboDialog({
     <AdminDialog
       title={combo ? `Editar combo · ${combo.name}` : "Nuevo combo"}
       icon="inventory"
-      size="wide"
+      size="lg"
       description="Un combo no tiene unidades propias: al reservarlo se reservan sus componentes y comparten el stock con los productos sueltos."
       dirty={dirty}
+      error={error || null}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
-          <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>
+          <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy} busyLabel="Guardando…">
             {combo ? "Guardar combo" : "Crear combo"}
           </AdminButton>
         </>
       )}
     >
       <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
-        <TextField label="Nombre del combo" required maxLength={FIELD_LIMITS.name} value={name} onChange={setName} placeholder="Ej.: Kit pantalla LED 3×2" autoFocus disabled={busy} />
-        <TextField label="Categoría" maxLength={80} value={category} onChange={setCategory} disabled={busy} hint="Los componentes se sustituyen por ítems de su propia categoría, no de esta." />
-        <TextField label="SKU" optional maxLength={FIELD_LIMITS.sku} value={sku} onChange={(value) => setSku(normalizeInventorySku(value))} error={inventorySkuError(sku)} disabled={busy} />
-
-        <fieldset className="admin-form-group admin-combo-group">
-          <legend className="admin-form-group-title">Componentes</legend>
-          {candidates.length === 0 ? <AdminNote>Todavía no hay productos sueltos para armar el combo: cargá primero los ítems.</AdminNote> : null}
+        <AdminDialogSection title="Datos">
+        <TextField label="Nombre del combo" required maxLength={FIELD_LIMITS.name} value={name} onChange={setName} placeholder="Ej.: Kit pantalla LED 3×2" autoFocus wide disabled={busy} />
+        </AdminDialogSection>
+        <AdminDialogSection title="Componentes">
+                  {candidates.length === 0 ? <div className="admin-field--wide"><AdminNote>Todavía no hay productos sueltos para armar el combo: cargá primero los ítems.</AdminNote></div> : null}
           {rows.map((row, index) => (
             <div key={row.key} className="admin-combo-row">
               <Combobox
@@ -151,6 +150,7 @@ export function ComboDialog({
               />
             </div>
           ))}
+          <div className="admin-field--wide">
           <AdminButton
             icon="plus"
             type="button"
@@ -162,8 +162,9 @@ export function ComboDialog({
           >
             Agregar componente
           </AdminButton>
-        </fieldset>
+          </div>
 
+        <div className="admin-field--wide">
         {preview ? (
           <AdminNote tone={preview.capacity === 0 ? "warn" : "ok"}>
             {comboCapacityLabel(preview.capacity)}
@@ -172,7 +173,13 @@ export function ComboDialog({
         ) : (
           <AdminNote>Elegí los componentes y sus cantidades para ver cuántos combos se pueden armar con el stock libre de hoy.</AdminNote>
         )}
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+        </div>
+        </AdminDialogSection>
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(combo?.sku) || Boolean(combo && combo.category !== "Combos")} hint="categoría y SKU">
+        <TextField label="Categoría" maxLength={80} value={category} onChange={setCategory} disabled={busy} hint="Los componentes se sustituyen por ítems de su propia categoría, no de esta." />
+        <TextField label="SKU" optional maxLength={FIELD_LIMITS.sku} value={sku} onChange={(value) => setSku(normalizeInventorySku(value))} error={inventorySkuError(sku)} disabled={busy} />
+
+        </AdminDialogSection>
       </form>
     </AdminDialog>
   );

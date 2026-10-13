@@ -147,22 +147,24 @@ export function InventoryMovementDialog({
           ? `${formatNumber(assignment.quantity)} asignadas · ${formatNumber(remaining)} por despachar`
           : `${formatNumber(assignmentDispatched(assignment))} salieron · ${formatNumber(pending)} por devolver`
       }
+      size="md"
       dirty={notes !== "" || damagedCount > 0 || missingCount > 0}
+      error={error || null}
+      warning={unitsError ? `No pudimos cargar las unidades con código: ${unitsError}` : null}
       onClose={onClose}
       footer={({ requestClose }) => (
         <>
-          <span className="admin-dialog-spacer" />
           <AdminButton type="button" onClick={requestClose}>
             Cancelar
           </AdminButton>
-          <AdminButton type="submit" form={formId} variant="primary" disabled={busy} aria-busy={busy || undefined}>
-            {busy ? "Guardando…" : checkout ? "Despachar" : "Registrar devolución"}
+          <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} busyLabel="Guardando…">
+            {checkout ? "Despachar" : "Registrar devolución"}
           </AdminButton>
         </>
       )}
     >
-      <form id={formId} onSubmit={submit} noValidate>
-        <AdminDialogSection>
+      <form id={formId} className="admin-form" onSubmit={submit} noValidate aria-busy={busy || undefined}>
+        <AdminDialogSection title={checkout ? "Salida" : "Devolución"}>
           <DateTimeField label={checkout ? "Fecha y hora de salida" : "Fecha y hora de devolución"} required value={at} onChange={setAt} />
           <SelectField
             label={checkout ? "Estado al retirar" : "Estado al devolver"}
@@ -178,12 +180,16 @@ export function InventoryMovementDialog({
             value={quantity}
             onChange={setQuantity}
           />
-          {checkout ? null : (
-            <>
-              <NumberField label="De esas, dañadas" hint="Abre un incidente de daño." maxLength={6} value={damaged} onChange={setDamaged} />
-              <NumberField label="Faltantes (no vuelven)" hint="Abre un incidente de faltante." maxLength={6} value={missing} onChange={setMissing} />
-            </>
-          )}
+        </AdminDialogSection>
+
+        {checkout ? null : (
+          <AdminDialogSection title="Daños y faltantes" collapsible defaultOpen={damagedCount > 0 || missingCount > 0} hint="abren un incidente">
+            <NumberField label="De esas, dañadas" hint="Abre un incidente de daño." maxLength={6} value={damaged} onChange={setDamaged} />
+            <NumberField label="Faltantes (no vuelven)" hint="Abre un incidente de faltante." maxLength={6} value={missing} onChange={setMissing} />
+          </AdminDialogSection>
+        )}
+
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={notes !== ""} hint="notas">
           <TextAreaField
             label={checkout ? "Nota de la salida" : "Notas"}
             hint={checkout ? "Quién retira, observaciones (opcional)" : "Detalle de daños o faltantes (opcional)"}
@@ -226,13 +232,11 @@ export function InventoryMovementDialog({
           </AdminDialogSection>
         ) : null}
 
-        {unitsError ? <AdminNote tone="warn">No pudimos cargar las unidades con código: {unitsError}</AdminNote> : null}
         {!checkout && (damagedCount > 0 || missingCount > 0) ? (
           <AdminNote>
             Las unidades dañadas o faltantes no vuelven a lo libre hasta resolver su incidente (reparado o dado de baja).
           </AdminNote>
         ) : null}
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
     </AdminDialog>
   );

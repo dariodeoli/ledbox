@@ -251,21 +251,18 @@ export function PromotorasModule() {
       {writable && showForm ? (
         <AdminDialog
           title="Nueva promotora"
+          size="sm"
           icon="promoters"
           description="Queda en el equipo disponible para asignarla a tareas de eventos."
           dirty={createDirty}
           onClose={() => setShowForm(false)}
+          error={formError || null}
           footer={({ requestClose }) => (
             <>
-              {formError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{formError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy} busyLabel="Guardando…">
                 Cargar promotora
               </AdminButton>
             </>
@@ -276,6 +273,7 @@ export function PromotorasModule() {
               <TextField
                 label="Nombre"
                 required
+                wide
                 autoFocus
                 maxLength={120}
                 value={form.name}
@@ -297,6 +295,8 @@ export function PromotorasModule() {
                 placeholder="promotora@correo.com"
                 error={form.email && !emailValid(form.email) ? FIELD_MESSAGES.email : null}
               />
+            </AdminDialogSection>
+            <AdminDialogSection title="Más opciones" collapsible hint="especialidades">
               <TextField
                 label="Especialidades"
                 hint="Separadas por coma"
@@ -313,21 +313,18 @@ export function PromotorasModule() {
       {writable && editing ? (
         <AdminDialog
           title={`Disponibilidad · ${editing.name}`}
+          size="sm"
           icon="promoters"
           description="Se ve al asignarla a una tarea del evento. No bloquea la asignación."
           dirty={availabilityDirty}
           onClose={() => setEditing(null)}
+          error={availabilityError || null}
           footer={({ requestClose }) => (
             <>
-              {availabilityError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{availabilityError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={availabilityBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={availabilityFormId} busy={availabilityBusy}>
+              <AdminButton type="submit" variant="primary" icon="check" form={availabilityFormId} busy={availabilityBusy} busyLabel="Guardando…">
                 Guardar disponibilidad
               </AdminButton>
             </>

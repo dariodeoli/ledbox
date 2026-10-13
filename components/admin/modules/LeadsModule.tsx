@@ -894,19 +894,16 @@ export function LeadsModule() {
           title={`Seguimiento · ${selected.name}`}
           icon="leads"
           description="Estado del lead y notas internas. El cliente no ve las notas."
+          size="sm"
           dirty={draftStatus !== selected.status || draftNotes !== (selected.internalNotes ?? "")}
+          error={followUpError || null}
           onClose={() => setFollowUpOpen(false)}
           footer={({ requestClose }) => (
             <>
-              {followUpError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{followUpError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={saving}>
                 Cancelar
               </AdminButton>
-              <AdminButton variant="primary" icon="check" type="submit" form={followUpFormId} busy={saving}>
+              <AdminButton variant="primary" icon="check" type="submit" form={followUpFormId} busy={saving} busyLabel="Guardando…">
                 Guardar cambios
               </AdminButton>
             </>

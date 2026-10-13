@@ -5,7 +5,7 @@ import { INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/
 import { adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS } from "@/lib/catalog-audience";
 import { MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
-import { AdminButton, AdminDialog, AdminDisclosure, AdminNote } from "../AdminUI";
+import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 
 type Draft = { mode: string; value: string };
 
@@ -51,19 +51,21 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClo
   return <AdminDialog
     title={`Edición en lote · ${target === "items" ? "productos" : "unidades"}`}
     icon="edit"
-    size="wide"
+    size="lg"
     description={`Se aplica solo a los ${selection.length} seleccionados; el resto no cambia.`}
     dirty={dirty}
+    error={error || null}
     onClose={onClose}
     footer={({ requestClose }) => <>
       <AdminButton type="button" onClick={onClear} disabled={busy}>Quitar selección</AdminButton>
       <AdminButton type="button" onClick={requestClose} disabled={busy}>Cerrar</AdminButton>
-      <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} disabled={!selection.length || selection.length > 100}>Aplicar a {selection.length} seleccionados</AdminButton>
+      <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} busyLabel="Guardando…" disabled={!selection.length || selection.length > 100}>Aplicar a {selection.length} seleccionados</AdminButton>
     </>}
   >
     <p className="admin-note">Selección explícita ({selection.length}): {selection.map(row => row.label).join(" · ")}</p>
     <AdminNote>No cambiar conserva cada valor. Vaciar borra textos opcionales o deja un importe/umbral en 0. El lote se guarda completo: ante un error no se aplica ningún cambio. Los códigos, nombres y cantidades derivadas se editan individualmente.</AdminNote>
     <form id={formId} className="admin-form" onSubmit={event => void submit(event)}>
+      <AdminDialogSection title="Campos a cambiar" stack>
       {fields.map(field => {
         const draft = drafts[field.key] ?? { mode: "keep", value: "" };
         const help = INVENTORY_FIELD_HELP[target === "units" && field.key === "status" ? "unitStatus" : field.key];
@@ -79,7 +81,7 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClo
             : <SelectField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[{ value: "", label: "Elegir valor" }, ...options]} disabled={busy} /> : null}
         </AdminDisclosure>;
       })}
-      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+      </AdminDialogSection>
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
     </form>
   </AdminDialog>;

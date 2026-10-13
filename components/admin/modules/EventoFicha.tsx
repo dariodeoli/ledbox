@@ -184,13 +184,9 @@ export function EventoFicha(props: EventoFichaProps) {
       icon="events"
       description={`${clientDisplayName(event.client)} · ${when}`}
       onClose={onClose}
+      error={closeError || null}
       footer={({ requestClose }) => (
         <>
-          {closeError ? (
-            <div className="admin-dialog-footer-note">
-              <AdminNote tone="error">{closeError}</AdminNote>
-            </div>
-          ) : null}
           {menuItems.length > 0 ? <AdminActionsMenu label={`Más acciones del evento ${event.name}`} items={menuItems} /> : null}
           <span className="admin-dialog-spacer" />
           <AdminButton icon="close" type="button" onClick={requestClose}>
