@@ -3,6 +3,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { commitInventoryAssignment, insufficientMessage } from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,22 +141,25 @@ export async function POST(request: Request) {
 
   if (kind === "assignment") {
     if (typeof body.eventId !== "string" || typeof body.inventoryId !== "string") return jsonError("Event and inventory are required.", 400);
-    const [event, inventory] = await Promise.all([
-      db.event.findFirst({ where: { id: body.eventId, organizationId }, select: { id: true, name: true } }),
-      db.inventoryItem.findFirst({ where: { id: body.inventoryId, organizationId }, select: { id: true, name: true } }),
-    ]);
-    if (!event) return jsonError("Event not found.", 404);
-    if (!inventory) return jsonError("Inventory item not found.", 404);
-    const quantity = Math.max(1, Number(body.quantity || 1));
-    const previous = await db.eventInventory.findUnique({
-      where: { eventId_inventoryId: { eventId: event.id, inventoryId: inventory.id } },
-      select: { id: true, quantity: true },
+    const quantity = Number(body.quantity ?? 1);
+    if (!Number.isInteger(quantity) || quantity < 1) return jsonError("La cantidad debe ser un entero mayor a cero.", 400);
+    // Misma validación atómica que la asignación manual de inventario: sin esto
+    // event-ops sobrevendía stock. El rango propio de la fila no se toca.
+    const committed = await commitInventoryAssignment({
+      organizationId,
+      eventId: body.eventId,
+      inventoryId: body.inventoryId,
+      quantity,
     });
-    const assignment = await db.eventInventory.upsert({
-      where: { eventId_inventoryId: { eventId: event.id, inventoryId: inventory.id } },
-      create: { id: randomUUID(), eventId: event.id, inventoryId: inventory.id, quantity },
-      update: { quantity },
-    });
+    if (!committed.ok) {
+      if (committed.reason === "event-missing") return jsonError("Event not found.", 404);
+      if (committed.reason === "item-missing") return jsonError("Inventory item not found.", 404);
+      if (committed.reason === "blocked") {
+        return jsonError(`«${committed.item.name}» está ${committed.item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
+      }
+      return Response.json({ error: insufficientMessage(committed), availability: committed.availability }, { status: 409 });
+    }
+    const { assignment, previous, item: inventory, event } = committed;
     const changes = previous
       ? auditChanges({ quantity: previous.quantity }, { quantity: assignment.quantity }, ["quantity"])
       : null;

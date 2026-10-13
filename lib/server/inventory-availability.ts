@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { InventoryStatus, Prisma } from "@prisma/client";
+import { Prisma, type InventoryStatus } from "@prisma/client";
 import { db } from "./db";
 import { recordAudit, type AuditContext } from "./audit";
 
@@ -176,16 +176,33 @@ export function eventReservationRange(event: {
   return { startsAt, endsAt: endsAt && endsAt.getTime() >= startsAt.getTime() ? endsAt : null };
 }
 
+/** Cliente de lectura: el global o el de una transacción. */
+export type AvailabilityClient = Prisma.TransactionClient | typeof db;
+
+/**
+ * Filtro de `event` para las asignaciones que **comprometen** stock. Un evento
+ * cancelado libera su stock y un evento cuyos presupuestos están todos perdidos
+ * o cancelados también (sin presupuestos, la asignación es manual y cuenta).
+ */
+export function committedEventWhere(organizationId: string): Prisma.EventWhereInput {
+  return {
+    organizationId,
+    status: { not: "CANCELLED" },
+    OR: [{ budgets: { none: {} } }, { budgets: { some: { status: { notIn: ["LOST", "CANCELLED"] } } } }],
+  };
+}
+
 /** Asignaciones de un ítem en la empresa (opcionalmente sin una fila puntual). */
 export async function loadAssignments(
   inventoryId: string,
   organizationId: string,
   excludeId?: string | null,
+  client: AvailabilityClient = db,
 ): Promise<AssignmentRecord[]> {
-  return db.eventInventory.findMany({
+  return client.eventInventory.findMany({
     where: {
       inventoryId,
-      event: { organizationId },
+      event: committedEventWhere(organizationId),
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
     orderBy: { startsAt: "asc" },
@@ -247,9 +264,148 @@ export async function availabilityForRange(options: {
   startsAt: Date;
   endsAt: Date;
   excludeId?: string | null;
+  client?: AvailabilityClient;
 }): Promise<RangeAvailability> {
-  const rows = await loadAssignments(options.item.id, options.organizationId, options.excludeId);
+  const rows = await loadAssignments(options.item.id, options.organizationId, options.excludeId, options.client);
   return buildAvailability(options.item, rows, options.startsAt, options.endsAt);
+}
+
+// ── Compromiso atómico de stock ───────────────────────────────────────────────
+// Leer la disponibilidad y escribir sin lock deja pasar dos asignaciones
+// concurrentes. Todo compromiso de stock (asignación manual, event-ops y reserva
+// al aprobar) toma `FOR UPDATE` sobre las filas de InventoryItem involucradas,
+// en orden de id (sin deadlocks), y recalcula la disponibilidad con el cliente de
+// la transacción antes de escribir.
+
+const OPEN_RANGE_START = new Date(-8.64e15);
+const OPEN_RANGE_END = new Date(8.64e15);
+
+/** Bloquea las filas de la empresa, ordenadas por id. Devuelve los ids que existen. */
+export async function lockInventoryItems(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  inventoryIds: ReadonlyArray<string>,
+): Promise<Set<string>> {
+  const ids = [...new Set(inventoryIds)].sort();
+  if (ids.length === 0) return new Set();
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
+  );
+  return new Set(rows.map((row) => row.id));
+}
+
+export type CommitAssignmentResult =
+  | { ok: true; assignment: AssignmentWrite; previous: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null; item: { id: string; name: string }; event: { id: string; name: string } }
+  | { ok: false; reason: "event-missing" }
+  | { ok: false; reason: "item-missing" }
+  | { ok: false; reason: "blocked"; item: { id: string; name: string; status: InventoryStatus } }
+  | { ok: false; reason: "insufficient"; quantity: number; item: { id: string; name: string }; availability: RangeAvailability; open: boolean };
+
+type AssignmentWrite = { id: string; eventId: string; inventoryId: string; quantity: number; startsAt: Date | null; endsAt: Date | null };
+
+/**
+ * Compromete `quantity` unidades de un ítem para un evento, de forma atómica.
+ * `startsAt`/`endsAt` `undefined` = no tocar el rango propio de la asignación (se
+ * valida contra el de la fila existente o el del evento; sin ninguno, el rango
+ * es abierto y ocupa siempre, como el resto del módulo).
+ */
+export async function commitInventoryAssignment(options: {
+  organizationId: string;
+  eventId: string;
+  inventoryId: string;
+  quantity: number;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
+}): Promise<CommitAssignmentResult> {
+  return db.$transaction(
+    async (tx) => {
+      const locked = await lockInventoryItems(tx, options.organizationId, [options.inventoryId]);
+      const [event, item] = await Promise.all([
+        tx.event.findFirst({ where: { id: options.eventId, organizationId: options.organizationId }, select: EVENT_RANGE_SELECT }),
+        locked.has(options.inventoryId)
+          ? tx.inventoryItem.findFirst({
+              where: { id: options.inventoryId, organizationId: options.organizationId },
+              omit: { imageData: true },
+              include: { _count: { select: MAINTENANCE_UNITS_SELECT } },
+            })
+          : null,
+      ]);
+      if (!event) return { ok: false, reason: "event-missing" } as const;
+      if (!item) return { ok: false, reason: "item-missing" } as const;
+      if (BLOCKED_INVENTORY_STATUSES.includes(item.status)) {
+        return { ok: false, reason: "blocked", item: { id: item.id, name: item.name, status: item.status } } as const;
+      }
+
+      const previous = await tx.eventInventory.findUnique({
+        where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
+        select: { id: true, quantity: true, startsAt: true, endsAt: true },
+      });
+      const effective = {
+        start: options.startsAt === undefined ? (previous?.startsAt ?? event.setupAt ?? event.startsAt) : (options.startsAt ?? event.setupAt ?? event.startsAt),
+        end:
+          options.endsAt === undefined
+            ? (previous?.endsAt ?? event.strikeAt ?? event.endsAt)
+            : (options.endsAt ?? event.strikeAt ?? event.endsAt),
+      };
+      const open = !effective.start || !effective.end;
+      const checkStart = effective.start ?? OPEN_RANGE_START;
+      const checkEnd = effective.end ?? OPEN_RANGE_END;
+
+      const availability = await availabilityForRange({
+        organizationId: options.organizationId,
+        item: { ...item, maintenance: maintenanceUnits(item) },
+        startsAt: checkStart,
+        endsAt: checkEnd,
+        excludeId: previous?.id ?? null,
+        client: tx,
+      });
+      if (options.quantity > availability.available) {
+        return {
+          ok: false,
+          reason: "insufficient",
+          quantity: options.quantity,
+          item: { id: item.id, name: item.name },
+          availability,
+          open,
+        } as const;
+      }
+
+      const rangeData = {
+        ...(options.startsAt !== undefined ? { startsAt: options.startsAt } : {}),
+        ...(options.endsAt !== undefined ? { endsAt: options.endsAt } : {}),
+      };
+      const assignment = await tx.eventInventory.upsert({
+        where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
+        create: {
+          id: randomUUID(),
+          eventId: event.id,
+          inventoryId: item.id,
+          quantity: options.quantity,
+          startsAt: options.startsAt ?? null,
+          endsAt: options.endsAt ?? null,
+        },
+        update: { quantity: options.quantity, ...rangeData },
+      });
+      return {
+        ok: true,
+        assignment,
+        previous,
+        item: { id: item.id, name: item.name },
+        event: { id: event.id, name: event.name },
+      } as const;
+    },
+    { timeout: 15_000 },
+  );
+}
+
+/** Mensaje 409 de «sin disponibilidad», igual para la asignación manual y event-ops. */
+export function insufficientMessage(result: Extract<CommitAssignmentResult, { reason: "insufficient" }>): string {
+  const { availability } = result;
+  const detail = availability.conflicts.length
+    ? ` En el rango: ${availability.conflicts.map((conflict) => `${conflict.eventName} (${conflict.quantity})`).join(", ")}.`
+    : "";
+  const where = result.open ? "sin fechas definidas (se toma como ocupado siempre)" : `entre ${rangeLabel(availability.startsAt, availability.endsAt)}`;
+  return `Sin disponibilidad: pediste ${result.quantity} y hay ${availability.available} de ${availability.total} libres ${where}.${detail}`;
 }
 
 export type InventorySubstitute = {
@@ -290,7 +446,7 @@ export async function findSubstitutes(options: {
   const rows = await db.eventInventory.findMany({
     where: {
       inventoryId: { in: candidates.map((candidate) => candidate.id) },
-      event: { organizationId: options.organizationId },
+      event: committedEventWhere(options.organizationId),
     },
     orderBy: { startsAt: "asc" },
     take: MAX_AVAILABILITY_ASSIGNMENTS * 4,
@@ -495,6 +651,107 @@ export async function reserveBudgetInventory(options: {
     const requested = groups.reduce((sum, group) => sum + group.quantity, 0);
     const outcomes: ReservationOutcome[] = [];
 
+    // Fase atómica: lock de los ítems, disponibilidad recalculada con el cliente
+    // de la transacción y escritura. Dos aprobaciones (o una aprobación y una
+    // asignación manual) sobre el mismo equipo se serializan acá y no sobrevenden.
+    // La aprobación no depende de esto: si falta stock queda «pendiente de reservar».
+    type GroupCommit = {
+      existing: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null;
+      movement: boolean;
+      availability: RangeAvailability | null;
+      reserved: number;
+      assignment: AssignmentWrite | null;
+    };
+    const commits = new Map<string, GroupCommit>();
+    if (event && range) {
+      await db.$transaction(
+        async (tx) => {
+          await lockInventoryItems(tx, options.organizationId, groups.map((group) => group.inventory.id));
+          for (const group of groups) {
+            const fresh = await tx.inventoryItem.findFirst({
+              where: { id: group.inventory.id, organizationId: options.organizationId },
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                category: true,
+                quantity: true,
+                status: true,
+                _count: { select: MAINTENANCE_UNITS_SELECT },
+              },
+            });
+            // Con el stock y el estado leídos bajo el lock (los del presupuesto pueden estar viejos).
+            if (fresh) group.inventory = fresh;
+            if (!fresh || BLOCKED_INVENTORY_STATUSES.includes(fresh.status)) continue;
+
+            const existing = await tx.eventInventory.findUnique({
+              where: { eventId_inventoryId: { eventId: event.id, inventoryId: fresh.id } },
+              select: {
+                id: true,
+                quantity: true,
+                startsAt: true,
+                endsAt: true,
+                checkedOut: true,
+                checkedOutAt: true,
+                checkedIn: true,
+                checkedInAt: true,
+              },
+            });
+            if (existing && inMovement(existing)) {
+              commits.set(fresh.id, { existing, movement: true, availability: null, reserved: existing.quantity, assignment: null });
+              continue;
+            }
+
+            const availability = await availabilityForRange({
+              organizationId: options.organizationId,
+              item: { ...fresh, maintenance: maintenanceUnits(fresh) },
+              startsAt: range.startsAt,
+              endsAt: range.endsAt,
+              excludeId: existing?.id ?? null,
+              client: tx,
+            });
+            // Nunca se achica una asignación existente: se completa hasta lo pedido,
+            // sin pasar de lo que hay libre (lo ya reservado se mantiene).
+            const kept = existing?.quantity ?? 0;
+            const target = Math.max(group.quantity, kept);
+            const reserved = Math.max(kept, Math.min(target, availability.available));
+            const rangeChanged = existing
+              ? existing.startsAt?.getTime() !== range.startsAt.getTime() || existing.endsAt?.getTime() !== range.endsAt.getTime()
+              : false;
+            // Nunca se crea una asignación en cero: sin unidades libres solo se reporta
+            // el conflicto (y si ya había una reserva, esa se mantiene).
+            const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved || rangeChanged);
+            let assignment: AssignmentWrite | null = null;
+            if (mustWrite) {
+              assignment = existing
+                ? await tx.eventInventory.update({
+                    where: { id: existing.id },
+                    data: { quantity: reserved, startsAt: range.startsAt, endsAt: range.endsAt },
+                  })
+                : await tx.eventInventory.create({
+                    data: {
+                      id: randomUUID(),
+                      eventId: event.id,
+                      inventoryId: fresh.id,
+                      quantity: reserved,
+                      startsAt: range.startsAt,
+                      endsAt: range.endsAt,
+                    },
+                  });
+            }
+            commits.set(fresh.id, {
+              existing: existing ? { id: existing.id, quantity: existing.quantity, startsAt: existing.startsAt, endsAt: existing.endsAt } : null,
+              movement: false,
+              availability,
+              reserved,
+              assignment,
+            });
+          }
+        },
+        { timeout: 15_000 },
+      );
+    }
+
     for (const group of groups) {
       const base: ReservationOutcome = {
         itemId: group.itemIds[0],
@@ -540,21 +797,14 @@ export async function reserveBudgetInventory(options: {
         continue;
       }
 
-      const existing = await db.eventInventory.findUnique({
-        where: { eventId_inventoryId: { eventId: event.id, inventoryId: group.inventory.id } },
-        select: {
-          id: true,
-          quantity: true,
-          startsAt: true,
-          endsAt: true,
-          checkedOut: true,
-          checkedOutAt: true,
-          checkedIn: true,
-          checkedInAt: true,
-        },
-      });
+      const commit = commits.get(group.inventory.id);
+      if (!commit) {
+        outcomes.push({ ...base, status: "blocked", reason: `«${group.inventory.name}» ya no está disponible para reservar.` });
+        continue;
+      }
+      const { existing, availability, assignment } = commit;
 
-      if (existing && inMovement(existing)) {
+      if (commit.movement && existing) {
         outcomes.push({
           ...base,
           status: "in-movement",
@@ -564,26 +814,10 @@ export async function reserveBudgetInventory(options: {
         });
         continue;
       }
+      if (!availability) continue;
 
-      const availability = await availabilityForRange({
-        organizationId: options.organizationId,
-        item: { ...group.inventory, maintenance: maintenanceUnits(group.inventory) },
-        startsAt: range.startsAt,
-        endsAt: range.endsAt,
-        excludeId: existing?.id ?? null,
-      });
-      // Nunca se achica una asignación existente: se completa hasta lo pedido,
-      // sin pasar de lo que hay libre (lo ya reservado se mantiene).
-      const kept = existing?.quantity ?? 0;
-      const target = Math.max(group.quantity, kept);
-      const reserved = Math.max(kept, Math.min(target, availability.available));
+      const reserved = commit.reserved;
       const shortfall = group.quantity - reserved;
-      const rangeChanged = existing
-        ? existing.startsAt?.getTime() !== range.startsAt.getTime() || existing.endsAt?.getTime() !== range.endsAt.getTime()
-        : false;
-      // Nunca se crea una asignación en cero: sin unidades libres solo se reporta
-      // el conflicto (y si ya había una reserva, esa se mantiene).
-      const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved || rangeChanged);
       const substitutes = shortfall > 0
         ? await findSubstitutes({
             organizationId: options.organizationId,
@@ -595,23 +829,7 @@ export async function reserveBudgetInventory(options: {
 
       let status: ReservationStatus = shortfall > 0 ? "conflict" : "unchanged";
 
-      if (mustWrite) {
-        const assignment = existing
-          ? await db.eventInventory.update({
-              where: { id: existing.id },
-              data: { quantity: reserved, startsAt: range.startsAt, endsAt: range.endsAt },
-            })
-          : await db.eventInventory.create({
-              data: {
-                id: randomUUID(),
-                eventId: event.id,
-                inventoryId: group.inventory.id,
-                quantity: reserved,
-                startsAt: range.startsAt,
-                endsAt: range.endsAt,
-              },
-            });
-
+      if (assignment) {
         await recordAudit({
           context: options.context,
           action: existing ? "update" : "create",

@@ -32,7 +32,10 @@ import {
   assignmentRange,
   availabilityForRange,
   buildAvailability,
+  commitInventoryAssignment,
+  committedEventWhere,
   findSubstitutes,
+  insufficientMessage,
   loadAssignments,
   maintenanceUnits,
   parseDate,
@@ -204,7 +207,7 @@ export async function GET(request: Request) {
     });
     const rows = items.length
       ? await db.eventInventory.findMany({
-          where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
+          where: { inventoryId: { in: items.map((item) => item.id) }, event: committedEventWhere(organizationId) },
           select: {
             inventoryId: true,
             quantity: true,
@@ -251,7 +254,7 @@ export async function GET(request: Request) {
   });
   const assignments = items.length
     ? await db.eventInventory.findMany({
-        where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
+        where: { inventoryId: { in: items.map((item) => item.id) }, event: committedEventWhere(organizationId) },
         orderBy: [{ startsAt: "desc" }, { id: "asc" }],
         take: 1000,
         include: { event: { select: EVENT_RANGE_SELECT } },
@@ -619,53 +622,29 @@ export async function POST(request: Request) {
     const eventId = typeof body.eventId === "string" ? body.eventId : "";
     const inventoryId = typeof body.inventoryId === "string" ? body.inventoryId : "";
     if (!eventId || !inventoryId) return jsonError("Elegí el evento y el ítem de inventario.", 400);
-    const [event, item] = await Promise.all([
-      db.event.findFirst({ where: { id: eventId, organizationId }, select: EVENT_RANGE_SELECT }),
-      db.inventoryItem.findFirst({
-        where: { id: inventoryId, organizationId },
-        omit: { imageData: true },
-        include: { _count: { select: MAINTENANCE_UNITS_SELECT } },
-      }),
-    ]);
-    if (!event) return jsonError("El evento no existe en esta empresa.", 404);
-    if (!item) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
-
     const quantity = Number(body.quantity ?? 1);
     if (!Number.isInteger(quantity) || quantity < 1) return jsonError("La cantidad debe ser un entero mayor a cero.", 400);
+
+    const event = await db.event.findFirst({ where: { id: eventId, organizationId }, select: EVENT_RANGE_SELECT });
+    if (!event) return jsonError("El evento no existe en esta empresa.", 404);
 
     const startsAt = parseDate(body.startsAt) ?? event.setupAt ?? event.startsAt;
     const endsAt = parseDate(body.endsAt) ?? event.strikeAt ?? event.endsAt;
     if (!startsAt || !endsAt) return jsonError("Indicá el rango de fechas de la asignación (el evento todavía no tiene fechas).", 400);
     if (endsAt.getTime() < startsAt.getTime()) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
 
-    if (BLOCKED_INVENTORY_STATUSES.includes(item.status)) {
-      return jsonError(`«${item.name}» está ${item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
+    // Lock del ítem + disponibilidad recalculada + escritura en una transacción:
+    // dos asignaciones concurrentes no pueden pasar las dos.
+    const committed = await commitInventoryAssignment({ organizationId, eventId: event.id, inventoryId, quantity, startsAt, endsAt });
+    if (!committed.ok) {
+      if (committed.reason === "event-missing") return jsonError("El evento no existe en esta empresa.", 404);
+      if (committed.reason === "item-missing") return jsonError("El ítem de inventario no existe en esta empresa.", 404);
+      if (committed.reason === "blocked") {
+        return jsonError(`«${committed.item.name}» está ${committed.item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
+      }
+      return Response.json({ error: insufficientMessage(committed), availability: committed.availability }, { status: 409 });
     }
-
-    const existing = await db.eventInventory.findUnique({
-      where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-      select: { id: true, quantity: true, startsAt: true, endsAt: true },
-    });
-    const rows = await loadAssignments(item.id, organizationId, existing?.id);
-    const availability = buildAvailability({ ...item, maintenance: maintenanceUnits(item) }, rows, startsAt, endsAt);
-    if (quantity > availability.available) {
-      const detail = availability.conflicts.length
-        ? ` En el rango: ${availability.conflicts.map((conflict) => `${conflict.eventName} (${conflict.quantity})`).join(", ")}.`
-        : "";
-      return Response.json(
-        {
-          error: `Sin disponibilidad: pediste ${quantity} y hay ${availability.available} de ${availability.total} libres entre ${rangeLabel(startsAt, endsAt)}.${detail}`,
-          availability,
-        },
-        { status: 409 },
-      );
-    }
-
-    const assignment = await db.eventInventory.upsert({
-      where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-      create: { id: randomUUID(), eventId: event.id, inventoryId: item.id, quantity, startsAt, endsAt },
-      update: { quantity, startsAt, endsAt },
-    });
+    const { assignment, previous: existing, item } = committed;
     const assignmentChanges = existing
       ? auditChanges(existing, assignment, ["quantity", "startsAt", "endsAt"])
       : null;
