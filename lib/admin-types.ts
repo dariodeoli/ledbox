@@ -1615,6 +1615,16 @@ export type AdminInventoryRow = {
   minimumPrice: number;
   notes: string | null;
   updatedAt: string;
+  /** Solo en combos: sin unidades propias, «libres» es lo que se puede armar. */
+  combo?: AdminInventoryCombo;
+};
+
+/** Composición y capacidad de un combo (alquileres fase 2c): lo que arma `/api/admin/inventory`. */
+export type AdminInventoryCombo = {
+  /** Combos que se pueden armar (ahora o en el rango pedido). */
+  capacity: number;
+  limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
+  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string }>;
 };
 
 /** Asignación de inventario a un evento, tal como la sirve `/api/admin/inventory`. */

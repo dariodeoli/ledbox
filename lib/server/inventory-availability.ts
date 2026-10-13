@@ -404,17 +404,113 @@ export async function lockInventoryItems(
   const rows = await tx.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
   );
-  return new Set(rows.map((row) => row.id));
+  const locked = new Set(rows.map((row) => row.id));
+  await settleExpiredComboContributions(tx, organizationId, [...locked]);
+  return locked;
+}
+
+/** Sustituciones guardadas en la fila del combo: { componenteOriginal: sustituto }. */
+export function parseComboSubstitutions(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [from, to] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof to === "string" && to) out[from] = to;
+  }
+  return out;
+}
+
+/** Componentes efectivos: la definición con las sustituciones autorizadas aplicadas. */
+export function effectiveComponents(
+  definition: ReadonlyArray<{ componentId: string; quantity: number }>,
+  substitutions: unknown,
+): Array<{ definitionId: string; componentId: string; quantity: number }> {
+  const subs = parseComboSubstitutions(substitutions);
+  return definition.map((row) => ({ definitionId: row.componentId, componentId: subs[row.componentId] ?? row.componentId, quantity: row.quantity }));
+}
+
+/**
+ * Regla de los combos con retención sobre filas compartidas: la fila del combo es
+ * la fuente de verdad de su aporte (cantidad × combos × componente efectivo). El
+ * aporte de un combo cuenta solo mientras su propia fila cuenta (no liberada y con
+ * retención vigente), aunque la fila del componente siga firme por una asignación
+ * suelta. Como no hay cron, el vencimiento es perezoso: cada vez que se toma el
+ * lock de un ítem se descuentan de sus filas de componentes los aportes que ya no
+ * cuentan (`comboQuantity` por encima de lo que suman los combos vivos). Es
+ * idempotente (se deriva de las filas de combos, no de un marcador) y corre antes
+ * de cualquier validación de stock, liberación o recompromiso. Las lecturas pasivas
+ * (listas) pueden mostrar ese aporte como comprometido hasta la próxima escritura:
+ * es conservador, nunca sobrevende.
+ */
+async function settleExpiredComboContributions(tx: Prisma.TransactionClient, organizationId: string, inventoryIds: ReadonlyArray<string>): Promise<void> {
+  if (inventoryIds.length === 0) return;
+  const now = new Date();
+  const counting = [{ holdExpiresAt: null }, { holdExpiresAt: { gt: now } }];
+  const rows = await tx.eventInventory.findMany({
+    where: { inventoryId: { in: [...inventoryIds] }, comboQuantity: { gt: 0 }, releasedAt: null, OR: counting, event: { organizationId } },
+    select: { id: true, eventId: true, inventoryId: true, quantity: true, comboQuantity: true, checkedOut: true, checkedOutAt: true, checkedIn: true, checkedInAt: true },
+  });
+  if (rows.length === 0) return;
+  const combos = await tx.eventInventory.findMany({
+    where: { eventId: { in: [...new Set(rows.map((row) => row.eventId))] }, releasedAt: null, OR: counting, inventory: { organizationId, components: { some: {} } } },
+    select: { eventId: true, inventoryId: true, quantity: true, comboSubstitutions: true },
+  });
+  const definitions = combos.length
+    ? await tx.inventoryComponent.findMany({
+        where: { organizationId, parentId: { in: [...new Set(combos.map((combo) => combo.inventoryId))] } },
+        select: { parentId: true, componentId: true, quantity: true },
+      })
+    : [];
+  const expected = new Map<string, number>();
+  for (const combo of combos) {
+    const definition = definitions.filter((entry) => entry.parentId === combo.inventoryId);
+    for (const component of effectiveComponents(definition, combo.comboSubstitutions)) {
+      const key = `${combo.eventId}:${component.componentId}`;
+      expected.set(key, (expected.get(key) ?? 0) + component.quantity * combo.quantity);
+    }
+  }
+  for (const row of rows) {
+    if (inMovement(row)) continue;
+    const alive = expected.get(`${row.eventId}:${row.inventoryId}`) ?? 0;
+    if (row.comboQuantity <= alive) continue;
+    const left = row.quantity - (row.comboQuantity - alive);
+    if (left <= 0) await tx.eventInventory.delete({ where: { id: row.id } });
+    else await tx.eventInventory.update({ where: { id: row.id }, data: { quantity: left, comboQuantity: alive } });
+  }
+}
+
+/** Aplica el vencimiento perezoso de aportes de combos a un ítem (con su lock). */
+export async function settleComboContributions(organizationId: string, inventoryId: string): Promise<void> {
+  await db.$transaction((tx) => lockInventoryItems(tx, organizationId, [inventoryId]), { timeout: 15_000 });
+}
+
+/** ¿El ítem es un combo (tiene componentes)? Un combo no tiene stock propio (fase 2c). */
+export async function isComboItem(
+  client: { inventoryComponent: { count: (args: { where: { organizationId: string; parentId: string } }) => Promise<number> } },
+  organizationId: string,
+  inventoryId: string,
+): Promise<boolean> {
+  return (await client.inventoryComponent.count({ where: { organizationId, parentId: inventoryId } })) > 0;
+}
+
+/** ¿La asignación es la fila de un combo? Acotado a la empresa. */
+export async function isComboAssignment(options: { organizationId: string; assignmentId: string }): Promise<boolean> {
+  const row = await db.eventInventory.findFirst({
+    where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
+    select: { inventoryId: true },
+  });
+  return row ? isComboItem(db, options.organizationId, row.inventoryId) : false;
 }
 
 /** Vigencia por defecto de una retención: 48 h. */
 export const DEFAULT_HOLD_TTL_MINUTES = 2880;
 
 export type CommitAssignmentResult =
-  | { ok: true; assignment: AssignmentWrite; previous: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null; item: { id: string; name: string }; event: { id: string; name: string } }
+  | { ok: true; assignment: AssignmentWrite; previous: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null; item: { id: string; name: string }; event: { id: string; name: string }; /** Combos: cuántos se podían armar en el rango (con lo propio ya reservado). */ capacity?: number }
   | { ok: false; reason: "event-missing" }
   | { ok: false; reason: "item-missing" }
   | { ok: false; reason: "blocked"; item: { id: string; name: string; status: InventoryStatus } }
+  /** Choque con otra asignación del mismo evento (combo, movimiento o rango distinto). */
+  | { ok: false; reason: "conflict"; message: string }
   | { ok: false; reason: "insufficient"; quantity: number; item: { id: string; name: string }; availability: RangeAvailability; open: boolean };
 
 type AssignmentWrite = { id: string; eventId: string; inventoryId: string; quantity: number; startsAt: Date | null; endsAt: Date | null; holdExpiresAt?: Date | null; releasedAt?: Date | null };
@@ -440,6 +536,11 @@ export async function commitInventoryAssignment(options: {
   hold?: boolean;
   budgetId?: string | null;
 }): Promise<CommitAssignmentResult> {
+  // Un combo no tiene stock propio: se expande en sus componentes (fase 2c).
+  if (await isComboItem(db, options.organizationId, options.inventoryId)) {
+    const { commitComboAssignment } = await import("./inventory-combos");
+    return commitComboAssignment({ ...options });
+  }
   return db.$transaction(
     async (tx) => {
       const now = new Date();
@@ -462,8 +563,17 @@ export async function commitInventoryAssignment(options: {
 
       const previous = await tx.eventInventory.findUnique({
         where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-        select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true },
+        select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true, releasedAt: true, comboQuantity: true },
       });
+      // La parte que vino de combos no se pisa desde una edición suelta.
+      const previousCounted = Boolean(previous && assignmentCountsAt(previous, now));
+      if (previousCounted && previous && options.quantity < previous.comboQuantity) {
+        return {
+          ok: false,
+          reason: "conflict",
+          message: `${previous.comboQuantity} unidad${previous.comboQuantity === 1 ? "" : "es"} de «${item.name}» vienen de combos de este evento: la cantidad no puede ser menor; liberá el combo para quitarlas.`,
+        } as const;
+      }
       const effective = {
         start: options.startsAt === undefined ? (previous?.startsAt ?? event.setupAt ?? event.startsAt) : (options.startsAt ?? event.setupAt ?? event.startsAt),
         end:
@@ -507,7 +617,14 @@ export async function commitInventoryAssignment(options: {
       const previousHoldExpired = Boolean(previous?.holdExpiresAt && previous.holdExpiresAt.getTime() <= now.getTime());
       const holdData =
         options.hold === true
-          ? { holdExpiresAt: previous && previous.holdExpiresAt === null ? null : holdExpiresAt }
+          ? {
+              // Una retención suelta nunca acorta la de un combo vivo que comparte la fila.
+              holdExpiresAt: previous && previous.holdExpiresAt === null
+                ? null
+                : previous?.holdExpiresAt && (previous.comboQuantity ?? 0) > 0 && previous.holdExpiresAt > holdExpiresAt
+                  ? previous.holdExpiresAt
+                  : holdExpiresAt,
+            }
           : options.hold === false || !previous || previousHoldExpired
             ? { holdExpiresAt: null }
             : {};
@@ -525,12 +642,21 @@ export async function commitInventoryAssignment(options: {
           holdExpiresAt: options.hold === true ? holdExpiresAt : null,
           budgetId: options.budgetId ?? null,
         },
-        update: { quantity: options.quantity, ...rangeData, ...holdData, ...budgetData, organizationId: options.organizationId, releasedAt: null },
+        update: {
+          quantity: options.quantity,
+          ...rangeData,
+          ...holdData,
+          ...budgetData,
+          organizationId: options.organizationId,
+          releasedAt: null,
+          // Una fila liberada o vencida ya no arrastra unidades de combos.
+          ...(previousCounted ? {} : { comboQuantity: 0 }),
+        },
       });
       return {
         ok: true,
         assignment,
-        previous,
+        previous: previous ? { id: previous.id, quantity: previous.quantity, startsAt: previous.startsAt, endsAt: previous.endsAt } : null,
         item: { id: item.id, name: item.name },
         event: { id: event.id, name: event.name },
       } as const;
@@ -555,6 +681,7 @@ export type HoldResult =
   | { ok: false; reason: "released" }
   | { ok: false; reason: "in-movement" }
   | { ok: false; reason: "blocked"; item: { id: string; name: string; status: InventoryStatus } }
+  | { ok: false; reason: "conflict"; message: string }
   | { ok: false; reason: "insufficient"; quantity: number; item: { id: string; name: string }; availability: RangeAvailability; open: boolean };
 
 /**
@@ -563,6 +690,10 @@ export type HoldResult =
  * como si fuera una asignación nueva: sin lugar, 409 («insufficient»).
  */
 export async function confirmHold(options: { organizationId: string; assignmentId: string }): Promise<HoldResult> {
+  if (await isComboAssignment(options)) {
+    const { confirmComboHold } = await import("./inventory-combos");
+    return confirmComboHold(options);
+  }
   return db.$transaction(
     async (tx) => {
       const now = new Date();
@@ -628,6 +759,10 @@ export async function confirmHold(options: { organizationId: string; assignmentI
  * ya salió y no volvió no se libera (siempre cuenta hasta su devolución).
  */
 export async function releaseAssignment(options: { organizationId: string; assignmentId: string }): Promise<HoldResult> {
+  if (await isComboAssignment(options)) {
+    const { releaseComboAssignment } = await import("./inventory-combos");
+    return releaseComboAssignment(options);
+  }
   return db.$transaction(
     async (tx) => {
       const found = await tx.eventInventory.findFirst({
@@ -643,6 +778,9 @@ export async function releaseAssignment(options: { organizationId: string; assig
       if (!row) return { ok: false, reason: "not-found" } as const;
       if (row.checkedOut && !row.checkedIn && !row.checkedInAt) return { ok: false, reason: "in-movement" } as const;
       if (row.releasedAt) return { ok: true, assignment: row, unchanged: true, revalidated: false } as const;
+      if (row.comboQuantity > 0 && assignmentCountsAt(row, new Date())) {
+        return { ok: false, reason: "conflict", message: "Hay unidades de esta asignación que vienen de un combo del evento: liberá el combo en lugar del componente." } as const;
+      }
       const assignment = await tx.eventInventory.update({
         where: { id: row.id },
         data: { releasedAt: new Date(), organizationId: options.organizationId },
@@ -804,7 +942,7 @@ type LinkedItem = {
     category: string;
     quantity: number;
     status: InventoryStatus;
-    _count: { units: number };
+    _count: { units: number; components: number };
   };
 };
 
@@ -833,6 +971,28 @@ function groupLinkedItems(
     });
   }
   return [...grouped.values()];
+}
+
+/** Disponibilidad sintética de un combo (capacidad de sus componentes) para el resultado de la reserva. */
+function comboAvailability(
+  inventory: { id: string; name: string; status: InventoryStatus },
+  capacity: number,
+  range: { startsAt: Date; endsAt: Date },
+  conflicts: AvailabilityConflict[],
+): RangeAvailability {
+  return {
+    inventoryId: inventory.id,
+    name: inventory.name,
+    status: inventory.status,
+    total: capacity,
+    committed: 0,
+    maintenance: 0,
+    available: capacity,
+    blocked: false,
+    startsAt: range.startsAt,
+    endsAt: range.endsAt,
+    conflicts,
+  };
 }
 
 type MovementState = { checkedOut: boolean; checkedOutAt: Date | null; checkedIn: boolean; checkedInAt: Date | null };
@@ -875,7 +1035,7 @@ export async function reserveBudgetInventory(options: {
                 category: true,
                 quantity: true,
                 status: true,
-                _count: { select: MAINTENANCE_UNITS_SELECT },
+                _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } },
               },
             },
           },
@@ -906,6 +1066,8 @@ export async function reserveBudgetInventory(options: {
       movement: boolean;
       availability: RangeAvailability | null;
       reserved: number;
+      /** Unidades totales de la fila después de la operación (incluye la parte de combos). */
+      total: number;
       assignment: AssignmentWrite | null;
     };
     const commits = new Map<string, GroupCommit>();
@@ -914,8 +1076,54 @@ export async function reserveBudgetInventory(options: {
       try {
       await db.$transaction(
         async (tx) => {
-          await lockInventoryItems(tx, options.organizationId, groups.map((group) => group.inventory.id));
-          for (const group of groups) {
+          // Los combos bloquean también todos sus componentes (una sola sentencia, por id).
+          const comboIds = groups.filter((group) => group.inventory._count.components > 0).map((group) => group.inventory.id);
+          const comboParts = comboIds.length
+            ? await tx.inventoryComponent.findMany({ where: { organizationId: options.organizationId, parentId: { in: comboIds } }, select: { componentId: true } })
+            : [];
+          await lockInventoryItems(tx, options.organizationId, [...groups.map((group) => group.inventory.id), ...comboParts.map((part) => part.componentId)]);
+          // Primero los combos: su expansión es parte de lo comprometido que ven los sueltos.
+          const ordered = [...groups].sort((a, b) => Number(b.inventory._count.components > 0) - Number(a.inventory._count.components > 0));
+          for (const group of ordered) {
+            if (group.inventory._count.components > 0) {
+              const { commitComboInTx } = await import("./inventory-combos");
+              const comboRow = await tx.eventInventory.findUnique({
+                where: { eventId_inventoryId: { eventId: event.id, inventoryId: group.inventory.id } },
+                select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true, releasedAt: true },
+              });
+              const committed = await commitComboInTx(
+                tx,
+                {
+                  organizationId: options.organizationId,
+                  eventId: event.id,
+                  inventoryId: group.inventory.id,
+                  quantity: group.quantity,
+                  startsAt: range.startsAt,
+                  endsAt: range.endsAt,
+                  hold: false,
+                  budgetId: options.budgetId,
+                  partial: true,
+                },
+                false,
+              );
+              if (committed.ok) {
+                const capacity = committed.capacity ?? committed.assignment.quantity;
+                commits.set(group.inventory.id, {
+                  existing: comboRow,
+                  movement: false,
+                  availability: comboAvailability(group.inventory, capacity, range, []),
+                  reserved: committed.assignment.quantity,
+                  total: committed.assignment.quantity,
+                  assignment:
+                    comboRow && comboRow.quantity === committed.assignment.quantity && !comboRow.holdExpiresAt && !comboRow.releasedAt ? null : committed.assignment,
+                });
+              } else if (committed.reason === "insufficient") {
+                commits.set(group.inventory.id, { existing: comboRow, movement: false, availability: committed.availability, reserved: 0, total: 0, assignment: null });
+              } else if (committed.reason === "conflict") {
+                commits.set(group.inventory.id, { existing: comboRow, movement: true, availability: null, reserved: comboRow?.quantity ?? 0, total: comboRow?.quantity ?? 0, assignment: null });
+              }
+              continue;
+            }
             const fresh = await tx.inventoryItem.findFirst({
               where: { id: group.inventory.id, organizationId: options.organizationId },
               select: {
@@ -925,7 +1133,7 @@ export async function reserveBudgetInventory(options: {
                 category: true,
                 quantity: true,
                 status: true,
-                _count: { select: MAINTENANCE_UNITS_SELECT },
+                _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } },
               },
             });
             // Con el stock y el estado leídos bajo el lock (los del presupuesto pueden estar viejos).
@@ -945,10 +1153,11 @@ export async function reserveBudgetInventory(options: {
                 checkedInAt: true,
                 releasedAt: true,
                 holdExpiresAt: true,
+                comboQuantity: true,
               },
             });
             if (existing && inMovement(existing)) {
-              commits.set(fresh.id, { existing, movement: true, availability: null, reserved: existing.quantity, assignment: null });
+              commits.set(fresh.id, { existing, movement: true, availability: null, reserved: existing.quantity, total: existing.quantity, assignment: null });
               continue;
             }
 
@@ -963,10 +1172,14 @@ export async function reserveBudgetInventory(options: {
             // Nunca se achica una asignación existente: se completa hasta lo pedido,
             // sin pasar de lo que hay libre (lo ya reservado se mantiene).
             // Una asignación liberada o con retención vencida no contaba: no hay nada que mantener.
+            // Una fila vencida/liberada no tiene aportes de combos vivos (los combos cuyo
+            // aporte venció ya se descontaron al tomar el lock): reactivarla en cero es coherente.
             const stale = Boolean(existing && !assignmentCountsAt(existing, new Date()));
-            const kept = existing && !stale ? existing.quantity : 0;
+            // La parte de la fila que viene de combos del evento no es de este ítem de presupuesto.
+            const comboPart = existing && !stale ? existing.comboQuantity : 0;
+            const kept = existing && !stale ? existing.quantity - comboPart : 0;
             const target = Math.max(group.quantity, kept);
-            const reserved = Math.max(kept, Math.min(target, availability.available));
+            const reserved = Math.max(kept, Math.min(target, Math.max(0, availability.available - comboPart)));
             const rangeChanged = existing
               ? existing.startsAt?.getTime() !== range.startsAt.getTime() || existing.endsAt?.getTime() !== range.endsAt.getTime()
               : false;
@@ -974,20 +1187,21 @@ export async function reserveBudgetInventory(options: {
             // el conflicto (y si ya había una reserva, esa se mantiene).
             // La aprobación vuelve firme la retención y reactiva la liberada.
             const toFirm = Boolean(existing && (existing.releasedAt || existing.holdExpiresAt));
-            const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved || rangeChanged || toFirm);
+            const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved + comboPart || rangeChanged || toFirm);
             let assignment: AssignmentWrite | null = null;
             if (mustWrite) {
               assignment = existing
                 ? await tx.eventInventory.update({
                     where: { id: existing.id },
                     data: {
-                      quantity: reserved,
+                      quantity: reserved + comboPart,
                       startsAt: range.startsAt,
                       endsAt: range.endsAt,
                       holdExpiresAt: null,
                       releasedAt: null,
                       organizationId: options.organizationId,
                       budgetId: options.budgetId,
+                      ...(stale ? { comboQuantity: 0 } : {}),
                     },
                   })
                 : await tx.eventInventory.create({
@@ -1008,6 +1222,7 @@ export async function reserveBudgetInventory(options: {
               movement: false,
               availability,
               reserved,
+              total: reserved + comboPart,
               assignment,
             });
           }
@@ -1034,7 +1249,7 @@ export async function reserveBudgetInventory(options: {
         status: "unchanged",
         reserved: 0,
         available: 0,
-        total: group.inventory.quantity,
+        total: group.inventory._count.components > 0 ? 0 : group.inventory.quantity,
         conflicts: [],
         substitutes: [],
         reason: null,
@@ -1115,7 +1330,7 @@ export async function reserveBudgetInventory(options: {
           entity: "EventInventory",
           entityId: assignment.id,
           summary: existing
-            ? `Actualizó la reserva de «${group.inventory.name}» (${existing.quantity} → ${reserved} u.) en «${event.name}» al aprobar el presupuesto «${budget.title}»`
+            ? `Actualizó la reserva de «${group.inventory.name}» (${existing.quantity} → ${commit.total} u.) en «${event.name}» al aprobar el presupuesto «${budget.title}»`
             : `Reservó «${group.inventory.name}» (${reserved} u.) para «${event.name}» al aprobar el presupuesto «${budget.title}»`,
           detail: existing
             ? {

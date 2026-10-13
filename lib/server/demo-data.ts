@@ -432,7 +432,25 @@ const INVENTORY = [
   { id: "demo_inv_cable", name: "Cable UTP Cat6 (rollo 100 m)", category: "Insumos", sku: "CBL-UTP6", kind: "CONSUMABLE", status: "AVAILABLE", quantity: 12, replacementCost: 180_000, dailyCost: 0, notes: null },
   { id: "demo_inv_truss", name: "Estructura de truss 2 m", category: "Estructuras", sku: "TRS-2M", kind: "REUSABLE", status: "RESERVED", quantity: 30, replacementCost: 450_000, dailyCost: 12_000, notes: null },
   { id: "demo_inv_panels", name: "Bastidor de piso para pantalla", category: "Estructuras", sku: "BAS-PISO", kind: "REUSABLE", status: "AVAILABLE", quantity: 18, replacementCost: 620_000, dailyCost: 18_000, notes: "Dos bastidores quedaron sin volver de la última feria (reclamo abierto)." },
+  // Componentes de los combos (alquileres fase 2c).
+  { id: "demo_inv_procesador", name: "Procesador de video LED", category: "Equipos de video", sku: "PRO-LED", kind: "REUSABLE", status: "AVAILABLE", quantity: 3, replacementCost: 5_800_000, dailyCost: 150_000, notes: "Un procesador por pantalla." },
+  { id: "demo_inv_parlante", name: "Parlante activo 15\"", category: "Sonido", sku: "PAR-15", kind: "REUSABLE", status: "AVAILABLE", quantity: 6, replacementCost: 2_900_000, dailyCost: 80_000, notes: null },
+  { id: "demo_inv_mezcladora", name: "Mezcladora digital 12 canales", category: "Sonido", sku: "MEZ-12", kind: "REUSABLE", status: "AVAILABLE", quantity: 2, replacementCost: 4_200_000, dailyCost: 110_000, notes: "Una de las dos volvió con el fader dañado (ver unidades)." },
+  { id: "demo_inv_tripode", name: "Trípode para parlante", category: "Sonido", sku: "TRI-PAR", kind: "REUSABLE", status: "AVAILABLE", quantity: 8, replacementCost: 350_000, dailyCost: 10_000, notes: null },
+  // Combos: sin unidades propias; se arman con los componentes de abajo.
+  { id: "demo_inv_kit_led", name: "Kit pantalla LED 3×2", category: "Combos", sku: "KIT-LED-3X2", kind: "REUSABLE", status: "AVAILABLE", quantity: 0, replacementCost: 0, dailyCost: 0, listPrice: 4_800_000, minimumPrice: 4_200_000, notes: "Pantalla de 1,5 × 1 m: 6 módulos P3.9, procesador y estructura." },
+  { id: "demo_inv_kit_sonido", name: "Kit sonido básico", category: "Combos", sku: "KIT-SON", kind: "REUSABLE", status: "AVAILABLE", quantity: 0, replacementCost: 0, dailyCost: 0, listPrice: 2_600_000, minimumPrice: 2_200_000, notes: "Dos parlantes con trípode y mezcladora. Lo limita la mezcladora con la unidad dañada." },
 ] satisfies Array<{ id: string } & Omit<Prisma.InventoryItemUncheckedCreateInput, "id" | "organizationId">>;
+
+/** Componentes de los combos de la demo (cantidad por combo). */
+const INVENTORY_COMBOS = [
+  { parent: "demo_inv_kit_led", component: "demo_inv_led_p3", quantity: 6 },
+  { parent: "demo_inv_kit_led", component: "demo_inv_procesador", quantity: 1 },
+  { parent: "demo_inv_kit_led", component: "demo_inv_truss", quantity: 2 },
+  { parent: "demo_inv_kit_sonido", component: "demo_inv_parlante", quantity: 2 },
+  { parent: "demo_inv_kit_sonido", component: "demo_inv_tripode", quantity: 2 },
+  { parent: "demo_inv_kit_sonido", component: "demo_inv_mezcladora", quantity: 1 },
+] as const;
 
 /**
  * Promotoras del equipo de campo (issue #24): la disponibilidad es un estado
@@ -1616,7 +1634,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       installments: Array<{ label: string; amount: number; dueInDays?: number; dueAt?: Date }>;
     };
     createdAt: Date;
-    items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number }>;
+    items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number; inventoryId?: string }>;
   }> = [
     {
       id: "demo_budget_aprobado",
@@ -1649,7 +1667,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       items: [
         { id: "demo_budget_item_a1", name: "Pantalla LED P3.9 500x500 (m²)", quantity: 20, days: 1, unitPrice: 950_000, costPrice: 380_000 },
         { id: "demo_budget_item_a2", name: "Tótem LED 2x1 m", quantity: 2, days: 1, unitPrice: 1_800_000, costPrice: 700_000 },
-        { id: "demo_budget_item_a3", name: "Sonido e iluminación de escenario", quantity: 1, days: 1, unitPrice: 6_500_000, costPrice: 3_000_000 },
+        { id: "demo_budget_item_a3", name: "Sonido e iluminación de escenario", quantity: 1, days: 1, unitPrice: 6_500_000, costPrice: 3_000_000, inventoryId: "demo_inv_kit_sonido" },
         { id: "demo_budget_item_a4", name: "Operación técnica y montaje", quantity: 1, days: 2, unitPrice: 1_650_000, costPrice: 600_000 },
       ],
     },
@@ -1816,6 +1834,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const budgetTotals = new Map<string, number>();
   const budgetsData: Prisma.BudgetUncheckedCreateInput[] = [];
   const budgetItemsData: Prisma.BudgetItemUncheckedCreateInput[] = [];
+  // Vínculos con inventario: se escriben después de crear el inventario (FK).
+  const budgetItemLinks: Array<{ id: string; inventoryId: string }> = [];
   for (const budget of budgetSeeds) {
     const subtotal = budget.items.reduce((sum, item) => sum + item.quantity * item.days * item.unitPrice, 0);
     const costEstimate = budget.items.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
@@ -1874,6 +1894,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
         costPrice: item.costPrice,
         subtotal: item.quantity * item.days * item.unitPrice,
       });
+      if (item.inventoryId) budgetItemLinks.push({ id: item.id, inventoryId: item.inventoryId });
     }
   }
 
@@ -2584,6 +2605,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   // en mantenimiento, como cierra la historia de la Expo (tótem dañado). ──
   const unitCounters = new Map<string, number>();
   const inventoryUnitsData: Prisma.InventoryUnitUncheckedCreateInput[] = INVENTORY.flatMap((item) => {
+    // Un combo no tiene unidades propias.
+    if (INVENTORY_COMBOS.some((combo) => combo.parent === item.id)) return [];
     const prefix = inventoryUnitPrefix(item.name);
     return Array.from({ length: Math.max(1, item.quantity) }, (_, index) => {
       const sequence = (unitCounters.get(prefix) ?? 0) + 1;
@@ -2593,15 +2616,19 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       // que no volvieron de la feria (perdidos, con el reclamo abierto).
       const damaged = item.id === "demo_inv_totem" && index === 1;
       const lost = item.id === "demo_inv_panels" && index < 2;
+      // Mezcladora con el fader dañado: limita el «Kit sonido básico».
+      const damagedMixer = item.id === "demo_inv_mezcladora" && index === 1;
       return {
         id: `demo_unit_${item.id.replace(/^demo_inv_/, "")}_${index + 1}`,
         organizationId,
         inventoryId: item.id,
         code: `${prefix}-${String(sequence).padStart(2, "0")}`,
-        status: damaged ? "DAMAGED" : lost ? "LOST" : inMaintenance ? "MAINTENANCE" : "AVAILABLE",
+        status: damaged || damagedMixer ? "DAMAGED" : lost ? "LOST" : inMaintenance ? "MAINTENANCE" : "AVAILABLE",
         purchaseCost: item.replacementCost ?? 0,
         notes: inMaintenance
           ? "Volvió con el marco doblado (ver la devolución de la Expo)."
+          : damagedMixer
+            ? "Fader del canal 3 dañado; pendiente de presupuesto de reparación."
           : damaged
             ? "Base rajada en el traslado; pendiente de presupuesto de reparación."
             : lost
@@ -2622,7 +2649,26 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     // confirmarla revalida el stock).
     { id: "demo_asg_hold_vigente", eventId: second.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
     { id: "demo_asg_hold_vencida", eventId: third.id, inventoryId: "demo_inv_panels", quantity: 4, startsAt: third.setupAt, endsAt: third.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, -1, 12, 0) },
+    // Combos (fase 2c). «Kit sonido básico» ×1 va firme en el evento próximo (viene del
+    // presupuesto aprobado); «Kit pantalla LED 3×2» ×1 es una retención vigente en el
+    // segundo evento. La fila del combo no compromete stock: lo hacen sus componentes.
+    { id: "demo_asg_proximo_kit_sonido", eventId: next.id, inventoryId: "demo_inv_kit_sonido", quantity: 1, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false, budgetId: "demo_budget_aprobado" },
+    { id: "demo_asg_proximo_parlante", eventId: next.id, inventoryId: "demo_inv_parlante", quantity: 2, comboQuantity: 2, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false, budgetId: "demo_budget_aprobado" },
+    { id: "demo_asg_proximo_tripode", eventId: next.id, inventoryId: "demo_inv_tripode", quantity: 2, comboQuantity: 2, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false, budgetId: "demo_budget_aprobado" },
+    { id: "demo_asg_proximo_mezcladora", eventId: next.id, inventoryId: "demo_inv_mezcladora", quantity: 1, comboQuantity: 1, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false, budgetId: "demo_budget_aprobado" },
+    { id: "demo_asg_hold_kit_led", eventId: second.id, inventoryId: "demo_inv_kit_led", quantity: 1, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
+    { id: "demo_asg_hold_kit_led_p3", eventId: second.id, inventoryId: "demo_inv_led_p3", quantity: 6, comboQuantity: 6, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
+    { id: "demo_asg_hold_kit_led_procesador", eventId: second.id, inventoryId: "demo_inv_procesador", quantity: 1, comboQuantity: 1, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
+    { id: "demo_asg_hold_kit_led_truss", eventId: second.id, inventoryId: "demo_inv_truss", quantity: 2, comboQuantity: 2, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
   ] as Prisma.EventInventoryUncheckedCreateInput[]).map((row) => ({ ...row, organizationId }));
+  const inventoryComponentsData: Prisma.InventoryComponentUncheckedCreateInput[] = INVENTORY_COMBOS.map((row) => ({
+    id: `demo_combo_${row.parent.replace(/^demo_inv_/, "")}_${row.component.replace(/^demo_inv_/, "")}`,
+    organizationId,
+    parentId: row.parent,
+    componentId: row.component,
+    quantity: row.quantity,
+    createdAt: at(base, -20, 9, 0),
+  }));
   // Ajustes de alquiler de la empresa demo: seña 50 %, retención de 48 h y tiempos de ejemplo.
   const rentalSettingsData: Prisma.OrganizationRentalSettingsUncheckedCreateInput = {
     id: "demo_rental_settings",
@@ -3078,6 +3124,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.organizationLogo.createMany({ data: logosData });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.inventoryUnit.createMany({ data: inventoryUnitsData });
+      await tx.inventoryComponent.createMany({ data: inventoryComponentsData });
+      for (const link of budgetItemLinks) await tx.budgetItem.update({ where: { id: link.id }, data: { inventoryId: link.inventoryId } });
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
       await tx.eventInventory.createMany({ data: assignmentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
@@ -3123,6 +3171,8 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.supplier.deleteMany({ where: { organizationId } });
   await tx.clientLogo.deleteMany({ where: { client: { organizationId } } });
   await tx.client.deleteMany({ where: { organizationId } });
+  // Los componentes de combos restringen el borrado del ítem: primero se sueltan.
+  await tx.inventoryComponent.deleteMany({ where: { organizationId } });
   await tx.inventoryItem.deleteMany({ where: { organizationId } });
   await tx.promoter.deleteMany({ where: { organizationId } });
   await tx.treasuryAccount.deleteMany({ where: { organizationId } });

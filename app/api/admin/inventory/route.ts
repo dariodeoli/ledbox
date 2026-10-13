@@ -39,6 +39,9 @@ import {
   releaseAssignment,
   findSubstitutes,
   insufficientMessage,
+  isComboAssignment,
+  isComboItem,
+  settleComboContributions,
   loadAssignments,
   loadRentalSettings,
   resolveRentalBuffers,
@@ -46,6 +49,7 @@ import {
   parseDate,
   rangeLabel,
 } from "@/lib/server/inventory-availability";
+import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -198,6 +202,29 @@ export async function GET(request: Request) {
     if (!startsAt || !endsAt) return jsonError("Indicá el rango de fechas para calcular la disponibilidad.", 400);
     if (endsAt.getTime() < startsAt.getTime()) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
     const excludeId = url.searchParams.get("excludeId");
+    if (await isComboItem(db, organizationId, item.id)) {
+      // Un combo no tiene stock propio: su disponibilidad es la capacidad de sus componentes.
+      const capacities = await comboCapacitiesForRange({ organizationId, comboIds: [item.id], startsAt, endsAt });
+      const capacity = capacities.get(item.id);
+      const definition = (await loadComboDefinitions(organizationId, [item.id])).get(item.id);
+      return Response.json({
+        availability: {
+          inventoryId: item.id,
+          name: item.name,
+          status: item.status,
+          total: capacity?.capacity ?? 0,
+          committed: 0,
+          maintenance: 0,
+          available: BLOCKED_INVENTORY_STATUSES.includes(item.status) ? 0 : (capacity?.capacity ?? 0),
+          blocked: BLOCKED_INVENTORY_STATUSES.includes(item.status),
+          startsAt,
+          endsAt,
+          conflicts: [],
+        },
+        substitutes: [],
+        combo: capacity ? { capacity: capacity.capacity, limiting: capacity.limiting, components: capacity.components.map((c) => ({ ...c, category: definition?.components.find((d) => d.componentId === c.componentId)?.category ?? "" })) } : null,
+      });
+    }
     const availability = await availabilityForRange({
       organizationId,
       item: { ...item, maintenance: maintenanceUnits(item) },
@@ -264,7 +291,8 @@ export async function GET(request: Request) {
         },
       };
     });
-    return Response.json({ inventory });
+    const definitions = await loadComboDefinitions(organizationId, inventory.map((row) => row.id));
+    return Response.json({ inventory: withComboAvailability(inventory, definitions) });
   }
 
   // Sin el binario de la foto (issue #109): la lista solo necesita la URL
@@ -346,7 +374,13 @@ export async function GET(request: Request) {
     };
   });
 
-  return Response.json({ inventory });
+  // Combos: sin stock propio; «libres» es la capacidad de sus componentes (fase 2c).
+  const definitions = await loadComboDefinitions(organizationId, inventory.map((row) => row.id));
+  const rangeCapacities =
+    range && definitions.size > 0
+      ? await comboCapacitiesForRange({ organizationId, comboIds: [...definitions.keys()], startsAt: range.start, endsAt: range.end })
+      : null;
+  return Response.json({ inventory: withComboAvailability(inventory, definitions, rangeCapacities) });
 }
 
 export async function POST(request: Request) {
@@ -488,6 +522,7 @@ export async function POST(request: Request) {
       select: { id: true, name: true },
     });
     if (!item) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
+    if (await isComboItem(db, organizationId, item.id)) return jsonError("Un combo no tiene unidades propias: sus unidades son las de sus componentes.", 409);
 
     // Código: el que mandan (validado) o autogenerado con el prefijo del ítem.
     const requestedCode = readInventoryUnitCode(body.code);
@@ -694,6 +729,7 @@ export async function POST(request: Request) {
       if (committed.reason === "blocked") {
         return jsonError(`«${committed.item.name}» está ${committed.item.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`, 409);
       }
+      if (committed.reason === "conflict") return jsonError(committed.message, 409);
       return Response.json({ error: insufficientMessage(committed), availability: committed.availability }, { status: 409 });
     }
     const { assignment, previous: existing, item } = committed;
@@ -736,6 +772,9 @@ export async function POST(request: Request) {
     });
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
     if (existing.checkedOutAt || existing.checkedOut) return jsonError("La salida ya está registrada para esta asignación.", 409);
+    if (await isComboAssignment({ organizationId, assignmentId: existing.id })) {
+      return jsonError("Un combo no sale ni vuelve como unidad: registrá el movimiento de cada componente.", 409);
+    }
     const at = parseDate(body.at) ?? new Date();
     const assignment = await db.eventInventory.update({
       where: { id: existing.id },
@@ -787,6 +826,9 @@ export async function POST(request: Request) {
       },
     });
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
+    if (await isComboAssignment({ organizationId, assignmentId: existing.id })) {
+      return jsonError("Un combo no sale ni vuelve como unidad: registrá el movimiento de cada componente.", 409);
+    }
     if (!existing.checkedOutAt && !existing.checkedOut) return jsonError("Registrá primero la salida del equipo.", 409);
     if (existing.checkedInAt || existing.checkedIn) return jsonError("La devolución ya está registrada para esta asignación.", 409);
     if (damagedQuantity + missingQuantity > existing.quantity) {
@@ -828,6 +870,7 @@ export async function POST(request: Request) {
       if (result.reason === "released") return jsonError("La retención ya fue liberada: volvé a asignar el equipo.", 409);
       if (result.reason === "in-movement") return jsonError("El equipo está afuera: registrá la devolución antes de liberarlo.", 409);
       if (result.reason === "blocked") return jsonError(`«${result.item.name}» no se puede asignar en su estado actual.`, 409);
+      if (result.reason === "conflict") return jsonError(result.message, 409);
       return Response.json({ error: insufficientMessage(result), availability: result.availability }, { status: 409 });
     }
     if (!result.unchanged) {
@@ -846,24 +889,56 @@ export async function POST(request: Request) {
   if (kind === "assignment-delete") {
     const id = typeof body.id === "string" ? body.id : "";
     if (!id) return jsonError("Falta la asignación.", 400);
-    const existing = await db.eventInventory.findFirst({
-      where: { id, event: { organizationId } },
-      select: {
-        id: true,
-        quantity: true,
-        startsAt: true,
-        endsAt: true,
-        checkedOut: true,
-        checkedOutAt: true,
-        checkedIn: true,
-        checkedInAt: true,
-        conditionOut: true,
-        conditionIn: true,
-        inventory: { select: { name: true } },
-        event: { select: { name: true } },
-      },
-    });
+    const readAssignment = () =>
+      db.eventInventory.findFirst({
+        where: { id, event: { organizationId } },
+        select: {
+          id: true,
+          quantity: true,
+          startsAt: true,
+          endsAt: true,
+          checkedOut: true,
+          checkedOutAt: true,
+          checkedIn: true,
+          checkedInAt: true,
+          conditionOut: true,
+          conditionIn: true,
+          comboQuantity: true,
+          releasedAt: true,
+          holdExpiresAt: true,
+          inventoryId: true,
+          inventory: { select: { name: true } },
+          event: { select: { name: true } },
+        },
+      });
+    let existing = await readAssignment();
     if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
+    if (existing.comboQuantity > 0) {
+      // Un combo cuya retención venció ya no aporta: se descuenta antes de decidir.
+      await settleComboContributions(organizationId, existing.inventoryId);
+      existing = await readAssignment();
+      if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
+    }
+    if (existing.comboQuantity > 0 && assignmentCountsAt(existing, new Date())) {
+      return jsonError(`Hay unidades de «${existing.inventory.name}» que vienen de un combo del evento: quitá el combo en lugar del componente.`, 409);
+    }
+    if (await isComboItem(db, organizationId, existing.inventoryId)) {
+      // Quitar un combo devuelve al stock exactamente sus componentes.
+      const removed = await releaseComboAssignment({ organizationId, assignmentId: existing.id, remove: true });
+      if (!removed.ok) {
+        if (removed.reason === "in-movement") return jsonError(`Un componente de «${existing.inventory.name}» está afuera: registrá la devolución antes de quitarlo.`, 409);
+        return jsonError("La asignación no existe en esta empresa.", 404);
+      }
+      await recordAudit({
+        context: auth.context,
+        action: "delete",
+        entity: "EventInventory",
+        entityId: existing.id,
+        summary: `Quitó el combo «${existing.inventory.name}» de «${existing.event.name}» y liberó sus componentes`,
+        detail: { before: auditPick(existing, ["quantity", "startsAt", "endsAt"]) },
+      });
+      return Response.json({ ok: true });
+    }
     const isOut = Boolean(existing.checkedOutAt || existing.checkedOut);
     const isBack = Boolean(existing.checkedInAt || existing.checkedIn);
     if (isOut && !isBack) {

@@ -161,6 +161,7 @@ model Organization {
   supplierJobs      SupplierJob[]
   inventoryItems    InventoryItem[]
   inventoryUnits    InventoryUnit[]
+  inventoryComponents InventoryComponent[]
   rentalSettings    OrganizationRentalSettings?
   promoters         Promoter[]
   auditLogs         AuditLog[]
@@ -1697,6 +1698,9 @@ model InventoryItem {
   updatedAt          DateTime         @updatedAt
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments        EventInventory[]
+  /// Combo: componentes que arma (este ítem es el padre) y combos que lo usan.
+  components         InventoryComponent[] @relation("ComboParent")
+  usedInCombos       InventoryComponent[] @relation("ComboComponent")
   budgetItems        BudgetItem[]
   quoteItems         QuoteItem[]
   units              InventoryUnit[]
@@ -1730,6 +1734,24 @@ model InventoryUnit {
 
   @@unique([organizationId, code])
   @@index([inventoryId, status])
+}
+
+/// Componente de un combo (alquileres fase 2c). Un combo es un InventoryItem con
+/// componentes y sin unidades propias; no se anidan combos.
+model InventoryComponent {
+  id             String        @id
+  organizationId String
+  parentId       String
+  componentId    String
+  quantity       Int
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         InventoryItem @relation("ComboParent", fields: [parentId], references: [id], onDelete: Cascade)
+  component      InventoryItem @relation("ComboComponent", fields: [componentId], references: [id], onDelete: Restrict)
+
+  @@unique([parentId, componentId])
+  @@index([organizationId, parentId])
+  @@index([organizationId, componentId])
 }
 
 enum InventoryUnitStatus {
@@ -1788,6 +1810,11 @@ model EventInventory {
   /// Asignación liberada: no compromete stock.
   releasedAt      DateTime?
   returnedQuantity Int          @default(0)
+  /// Unidades de esta fila que vienen de combos comprometidos en el mismo evento
+  /// (el resto es asignación suelta). En la fila del propio combo queda en 0.
+  comboQuantity   Int           @default(0)
+  /// Sustituciones autorizadas de un componente del combo: { componenteOriginal: sustituto }.
+  comboSubstitutions Json?
   event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   inventory       InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 

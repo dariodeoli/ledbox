@@ -67,6 +67,8 @@ import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AdminIcon } from "../AdminIcons";
 import { AdminImageBox } from "../AdminImageBox";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
+import { ComboDialog } from "./ComboDialog";
+import { comboCapacityLabel } from "@/lib/inventory-combos";
 import { INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 
 const KIND_OPTIONS = [
@@ -445,6 +447,7 @@ export function InventarioModule() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [comboDialog, setComboDialog] = useState<{ item: AdminInventoryItemRow | null } | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
@@ -1094,12 +1097,31 @@ export function InventarioModule() {
             Nuevo ítem
           </AdminButton>
         ) : null}
+        {writable ? (
+          <AdminButton icon="inventory" onClick={() => setComboDialog({ item: null })} title="Armar un combo con productos que ya tenés cargados">
+            Nuevo combo
+          </AdminButton>
+        ) : null}
       </AdminToolbar>
 
       {notice ? <AdminNote tone={noticeTone}>{notice}</AdminNote> : null}
       {statusError ? <AdminNote tone="error">{statusError}</AdminNote> : null}
       {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
+
+      {writable && comboDialog ? (
+        <ComboDialog
+          combo={comboDialog.item}
+          inventory={inventory}
+          onClose={() => setComboDialog(null)}
+          onSaved={(message) => {
+            setComboDialog(null);
+            setNoticeTone("ok");
+            setNotice(message);
+            resources.reload();
+          }}
+        />
+      ) : null}
 
       {writable && showForm ? (
         <AdminFormPanel
@@ -1452,7 +1474,7 @@ export function InventarioModule() {
                 title: `Ver asignaciones y disponibilidad: ${item.name}`,
               },
             ];
-            const availableTitle = `${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
+            const availableTitle = item.combo ? `${comboCapacityLabel(available ?? 0)}${item.combo.limiting ? ` · lo limita «${item.combo.limiting.name}»` : ""}` : `${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
               rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
             }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`;
             return {
@@ -1467,11 +1489,11 @@ export function InventarioModule() {
               titleTooltip: item.sku ? `${item.name} · ${item.sku}` : item.name,
               subtitle: item.sku ? `SKU ${item.sku} · ${item.category}` : item.category,
               badges: [
-                { label: inventoryKindLabel(item.kind), tone: statusTone(item.kind) },
+                item.combo ? { label: "Combo", tone: "accent" as const, title: "Sin unidades propias: se arma con sus componentes." } : { label: inventoryKindLabel(item.kind), tone: statusTone(item.kind) },
                 ...(overcommitted ? [{ label: "Conflicto", tone: "danger" as const, title: "Hay más unidades comprometidas que las que tiene el ítem." }] : []),
               ],
               fields: [
-                { label: "Cantidad", value: formatNumber(item.quantity), title: `${formatNumber(item.quantity)} unidades` },
+                { label: "Cantidad", value: item.combo ? "—" : formatNumber(item.quantity), title: item.combo ? "Un combo no tiene unidades propias" : `${formatNumber(item.quantity)} unidades` },
                 { label: rangeActive ? "Libres en rango" : "Libres ahora", value: available == null ? "—" : formatNumber(available), title: availableTitle },
                 { label: "Costo diario", value: formatMoney(item.dailyCost), title: formatMoney(item.dailyCost) },
                 {
@@ -1547,16 +1569,24 @@ export function InventarioModule() {
                   </AdminCell>
                   <AdminCell title={item.category}>{item.category}</AdminCell>
                   <AdminCell>
-                    <AdminBadge tone={statusTone(item.kind)}>{inventoryKindLabel(item.kind)}</AdminBadge>
+                    {item.combo ? (
+                      <AdminBadge tone="accent" title="Sin unidades propias: se arma con sus componentes.">Combo</AdminBadge>
+                    ) : (
+                      <AdminBadge tone={statusTone(item.kind)}>{inventoryKindLabel(item.kind)}</AdminBadge>
+                    )}
                   </AdminCell>
-                  <AdminCell end title={`${formatNumber(item.quantity)} unidades`}>
-                    {formatNumber(item.quantity)}
+                  <AdminCell end title={item.combo ? "Un combo no tiene unidades propias" : `${formatNumber(item.quantity)} unidades`}>
+                    {item.combo ? "—" : formatNumber(item.quantity)}
                   </AdminCell>
                   <AdminCell
                     end
-                    title={`${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
-                      rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
-                    }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`}
+                    title={
+                      item.combo
+                        ? `${comboCapacityLabel(available ?? 0)}${item.combo.limiting ? ` · lo limita «${item.combo.limiting.name}»` : ""}`
+                        : `${inventoryAvailabilityLabel(available)} de ${formatNumber(item.quantity)} · ${inventoryAvailabilityLabel(committed, "committed")} ${
+                            rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"
+                          }${conflictEvents.length > 0 ? ` · ${conflictEvents.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`
+                    }
                   >
                     <span className="admin-nowrap" data-tone={available === 0 ? "warn" : undefined}>
                       {available == null ? "—" : formatNumber(available)}
@@ -1633,9 +1663,11 @@ export function InventarioModule() {
         <AdminPanel
           title={`Disponibilidad · ${selected.name}`} icon="inventory"
           meta={
-            rangeActive
-              ? `${inventoryAvailabilityLabel(selectedRange?.available)} de ${formatNumber(selected.quantity)} entre ${dayRangeLabel(from, to)}`
-              : `${inventoryAvailabilityLabel(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} ahora`
+            selected.combo
+              ? `${comboCapacityLabel(rangeActive ? (selectedRange?.available ?? 0) : selected.availability.availableNow)} ${rangeActive ? `entre ${dayRangeLabel(from, to)}` : "ahora"}`
+              : rangeActive
+                ? `${inventoryAvailabilityLabel(selectedRange?.available)} de ${formatNumber(selected.quantity)} entre ${dayRangeLabel(from, to)}`
+                : `${inventoryAvailabilityLabel(selected.availability.availableNow)} de ${formatNumber(selected.quantity)} ahora`
           }
           action={
             <span className="admin-panel-actions">
@@ -1644,7 +1676,7 @@ export function InventarioModule() {
                   icon="edit"
                   title={`Editar ítem: ${selected.name}`}
                   aria-label={`Editar ítem: ${selected.name}`}
-                  onClick={() => openEditItem(selected)}
+                  onClick={() => (selected.combo ? setComboDialog({ item: selected }) : openEditItem(selected))}
                 />
               ) : null}
               <AdminButton
@@ -1702,6 +1734,37 @@ export function InventarioModule() {
           {selectedPriceWarning ? <AdminNote tone="warn">{selectedPriceWarning}</AdminNote> : null}
 
           {/* Unidades físicas (issue #112): código, estado y costo por unidad. */}
+          {selected.combo ? (
+            <section className="admin-unit-block" aria-label={`Componentes de ${selected.name}`}>
+              <header className="admin-unit-head">
+                <span className="admin-form-group-title">Componentes · {formatNumber(selected.combo.components.length)}</span>
+              </header>
+              <AdminNote tone={selected.combo.capacity === 0 ? "warn" : "ok"}>
+                {comboCapacityLabel(selected.combo.capacity)}
+                {selected.combo.limiting
+                  ? ` · componente limitante: «${selected.combo.limiting.name}» (${formatNumber(selected.combo.limiting.available)} libres, ${formatNumber(selected.combo.limiting.perCombo)} por combo)`
+                  : ""}
+              </AdminNote>
+              <AdminTable
+                view="inventario-combo"
+                label={`Componentes de ${selected.name}`}
+                columns={[{ label: "Componente" }, { label: "Por combo", end: true }, { label: "Libres", end: true }, { label: "Alcanza para", end: true }]}
+              >
+                {selected.combo.components.map((component) => (
+                  <AdminRow key={component.componentId}>
+                    <AdminCell title={component.name}>
+                      <strong>{component.name}</strong>
+                      {selected.combo?.limiting?.componentId === component.componentId ? <AdminBadge tone="warn" title="Es el componente que fija cuántos combos se pueden armar.">Limitante</AdminBadge> : null}
+                      <small className="admin-cell-sub"> · {component.category}</small>
+                    </AdminCell>
+                    <AdminCell end>{formatNumber(component.quantity)}</AdminCell>
+                    <AdminCell end>{formatNumber(component.available)}</AdminCell>
+                    <AdminCell end>{formatNumber(component.canMake)}</AdminCell>
+                  </AdminRow>
+                ))}
+              </AdminTable>
+            </section>
+          ) : (
           <section className="admin-unit-block" aria-label={`Unidades de ${selected.name}`}>
             <header className="admin-unit-head">
               <span className="admin-form-group-title">
@@ -1797,6 +1860,7 @@ export function InventarioModule() {
               </AdminTable>
             )}
           </section>
+          )}
 
           {rangeActive ? (
             rangeLoading ? (
