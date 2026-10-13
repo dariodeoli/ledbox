@@ -10,6 +10,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-lim
 import { isHoneypotTriggered, leadSchema, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
+import { live } from "@/lib/server/trash-filter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ const MAX_INTERNAL_NOTES = 2000;
  */
 const LEAD_INCLUDE = {
   quoteRequests: { orderBy: { createdAt: "desc" }, include: { items: true, budget: { select: { id: true } } } },
-  budgets: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+  budgets: { where: live, select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
 } satisfies Prisma.LeadInclude;
 
 function parseDate(value?: string) {

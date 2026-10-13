@@ -82,12 +82,12 @@ export async function resolveCatalogAccess(slug: string, token: string): Promise
       revokedAt: true,
       lastUsedAt: true,
       organization: { select: { id: true, name: true, slug: true, active: true } },
-      client: { select: { id: true, name: true, company: true, tradeName: true, active: true, organizationId: true } },
+      client: { select: { id: true, name: true, company: true, tradeName: true, active: true, deletedAt: true, organizationId: true } },
     },
   });
   if (!row || row.revokedAt) return null;
   if (!row.organization.active || row.organization.slug !== normalized) return null;
-  if (!row.client.active || row.client.organizationId !== row.organization.id) return null;
+  if (!row.client.active || row.client.deletedAt || row.client.organizationId !== row.organization.id) return null;
   const now = new Date();
   if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_THROTTLE_MS) {
     // La traza de uso no puede romper la página, pero un fallo no se traga en silencio.

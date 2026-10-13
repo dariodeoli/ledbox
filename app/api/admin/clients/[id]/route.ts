@@ -7,6 +7,7 @@ import { clientMetrics } from "../metrics";
 import { leadsForClient } from "@/lib/server/lead-client";
 import { parseClientFields } from "../client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
+import { live } from "@/lib/server/trash-filter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const client = await db.client.findFirst({
     where: { id, organizationId },
-    include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
+    include: { _count: { select: { events: { where: live }, budgets: { where: live } } }, logo: { select: { updatedAt: true } } },
   });
   if (!client) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
   const { logo, ...clientRow } = client;
