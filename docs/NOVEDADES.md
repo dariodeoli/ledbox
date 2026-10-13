@@ -424,3 +424,15 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Panel: mientras cargan, los indicadores muestran una barra de carga en vez de un 0 que todavía no es real. Si un dato no se pudo cargar se ve «—», y los demás indicadores se siguen mostrando igual.
 - Eventos: el selector de vista (lista, tarjetas, calendario) queda siempre en el mismo lugar, y el calendario ya no repite los indicadores.
+
+## v2.1.100 — 2026-10-13
+
+- Inicio con gráficos y estadísticas. «Para hacer hoy» sigue arriba, y debajo hay un tablero con seis bloques:
+  - Previsibilidad de cobros: lo que debería entrar en las próximas 8 semanas y los totales a 30, 60 y 90 días.
+  - Pendientes de cobro por antigüedad: cada barra abre Por cobrar ya filtrado.
+  - Presupuestos en juego: monto total, los 5 más grandes y el embudo del mes con la tasa de conversión entre etapas.
+  - Tendencia de 6 meses: venta aprobada y cobrado.
+  - Operación: eventos de las próximas semanas y ocupación del inventario.
+  - Esta semana.
+- Los gráficos se adaptan al celular y tienen una tabla equivalente para lectores de pantalla.
+- Finanzas → Por cobrar se puede filtrar por antigüedad, y un link puede abrir directo el detalle de un presupuesto.
