@@ -749,6 +749,8 @@ export async function loadPublicBudget(
   if (!code) return null;
   const budget = await db.budget.findUnique({ where: { publicToken: code }, include: portalInclude });
   if (!budget) return null;
+  // Papelera: el portal de un cliente eliminado no existe (404), aunque el presupuesto siga vivo.
+  if (budget.client.deletedAt) return null;
   if (!quotePortalAvailable(budget)) return null;
   const demo = isDemoOrganizationSlug(budget.organization.slug);
   if (options.sealView && !demo) await sealPortalView(budget.id);

@@ -1,3 +1,4 @@
+import { withDeletedLabel } from "@/lib/deleted-label";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { after } from "next/server";
@@ -139,7 +140,7 @@ export async function GET() {
       // —notas, RUC, dirección— ni de la evidencia interna del presupuesto
       // (`approvalIp`, `approvalUserAgent`), que no tienen por qué viajar.
       include: {
-        client: { select: { id: true, name: true, company: true, type: true, email: true, phone: true } },
+        client: { select: { id: true, name: true, company: true, type: true, email: true, phone: true, deletedAt: true } },
         budget: { select: { id: true, title: true, publicToken: true } },
         // Historial de recordatorios del cobro (issue #19) para el "enviado hoy"
         // de la fila y el detalle del cobro.
@@ -153,12 +154,15 @@ export async function GET() {
       orderBy: { dueAt: "asc" },
       take: 200,
       include: {
-        supplier: { select: { id: true, name: true, phone: true, category: true } },
+        supplier: { select: { id: true, name: true, phone: true, category: true, deletedAt: true } },
         event: { select: { id: true, name: true, startsAt: true, status: true } },
       },
     }),
   ]);
-  return Response.json({ clientPayments, supplierJobs });
+  return Response.json({
+    clientPayments: clientPayments.map((payment) => ({ ...payment, client: withDeletedLabel(payment.client) })),
+    supplierJobs: supplierJobs.map((job) => ({ ...job, supplier: withDeletedLabel(job.supplier) })),
+  });
 }
 
 export async function POST(request: Request) {

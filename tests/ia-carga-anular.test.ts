@@ -76,11 +76,16 @@ test("anular exige permiso del tipo y guardas de historial", () => {
   assert.match(route, /requireAdminContext\(CAPACIDAD\[tipo\]\)/, "el permiso depende del tipo");
   assert.match(route, /_count: \{ select: \{ events: true, budgets: true, payments: true, invoices: true \} \}/, "historial del cliente");
   assert.match(route, /no se anula/, "con historial no se borra");
-  assert.match(route, /_count: \{ select: \{ assignments: true, budgetItems: true \} \}/, "uso del ítem");
-  assert.match(route, /action: "delete"/, "la anulación se audita como baja");
+  // El ítem se anula con el mismo criterio que el borrado definitivo (blockersFor): asignaciones, incidentes, combos y presupuestos.
+  assert.match(route, /annulInventoryItem\(id, lote, auth\.context\)/, "uso del ítem");
+  const ops = repoFile("lib/server/trash-ops.ts");
+  assert.match(ops, /blockersFor\("InventoryItem"/, "bloqueos del ítem");
+  assert.match(ops, /budgetItems/, "presupuestos del ítem");
+  assert.match(route, /action: "delete"/, "la anulación del cliente se audita como baja");
+  assert.match(ops, /action: "delete"/, "la anulación del ítem se audita como baja");
   assert.match(route, /entity: "Client"/, "la baja del cliente se audita sobre el cliente");
-  assert.match(route, /entity: "InventoryItem"/);
-  assert.match(route, /lote: lote \|\| null/, "la anulación lleva el lote");
+  assert.match(ops, /entity: "InventoryItem"/);
+  assert.match(ops, /lote: lote \|\| null/, "la anulación lleva el lote");
   assert.match(route, /Los cobros se anulan desde Finanzas/);
 });
 

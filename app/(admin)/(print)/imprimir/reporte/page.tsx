@@ -14,6 +14,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { loadOrganizationLogos } from "@/lib/server/branding";
 import { getRentalReport } from "@/lib/server/rental-report";
 import { ReporteView } from "../../_components/ReporteView";
+import { live } from "@/lib/server/trash-filter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
       orderBy: { startsAt: "asc" },
       include: {
         client: true,
-        budgets: { where: { status: { notIn: [...LOST_BUDGET_STATUSES] } } },
+        budgets: { where: { ...live, status: { notIn: [...LOST_BUDGET_STATUSES] } } },
         supplierJobs: { select: { id: true, total: true } },
       },
     }),

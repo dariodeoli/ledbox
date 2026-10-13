@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { SUPPLIER_CATEGORIES, type SupplierCategoryValue } from "@/lib/admin-types";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
+import { archivedFieldsForActive } from "@/lib/server/trash-crm";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { FIELD_MESSAGES, emailValid, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
@@ -114,7 +116,12 @@ export async function PATCH(request: Request) {
   if (email === false) return jsonError(FIELD_MESSAGES.email, 400);
   if (body.active !== undefined && typeof body.active !== "boolean") return jsonError("El estado del proveedor tiene que ser activo o inactivo.", 400);
 
-  const updated = await db.supplier.update({
+  let updated;
+  try {
+    updated = await db.$transaction(async (tx) => {
+      // Papelera: un proveedor eliminado entre la lectura y la escritura da 404, no se edita.
+      await assertLive("Supplier", supplier.id, organizationId, tx);
+      return tx.supplier.update({
     where: { id: supplier.id },
     data: {
       ...(name !== undefined ? { name } : {}),
@@ -124,9 +131,16 @@ export async function PATCH(request: Request) {
       ...(body.category !== undefined && isCategory(body.category) ? { category: body.category } : {}),
       ...(body.paymentTerms !== undefined ? { paymentTerms: optionalText(body.paymentTerms, MAX.terms) } : {}),
       ...(body.notes !== undefined ? { notes: optionalText(body.notes, MAX.notes) } : {}),
-      ...(body.active !== undefined ? { active: body.active as boolean } : {}),
+      // active y archivedAt van juntos (docs/PAPELERA.md): desactivar archiva y activar desarchiva.
+      ...(body.active !== undefined ? { active: body.active as boolean, ...archivedFieldsForActive(body.active as boolean, supplier, auth.context.user.id) } : {}),
     },
-  });
+      });
+    });
+  } catch (error) {
+    const response = trashErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
   const changes = auditChanges(supplier, updated, SUPPLIER_AUDIT_FIELDS);
   if (changes) {
     await recordAudit({

@@ -6,6 +6,7 @@ import { auditPick, recordAudit } from "@/lib/server/audit";
 import { clientMetrics, factsByClient, type ClientMetricFacts } from "./metrics";
 import { parseClientFields } from "./client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
+import { live } from "@/lib/server/trash-filter";
 
 /** Tope de la lista; si hay más, la respuesta trae `truncated: true`. */
 const CLIENT_LIST_LIMIT = 200;
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     where: { organizationId },
     orderBy: { createdAt: "desc" },
     take: CLIENT_LIST_LIMIT + 1,
-    include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
+    include: { _count: { select: { events: { where: live }, budgets: { where: live } } }, logo: { select: { updatedAt: true } } },
   });
 
   const truncated = fetched.length > CLIENT_LIST_LIMIT;

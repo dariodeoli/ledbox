@@ -4,6 +4,7 @@ import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
 import type { InventoryKind, InventoryStatus, Prisma } from "@prisma/client";
 import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { deadResponse } from "@/lib/server/trash-ops";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
@@ -441,6 +442,8 @@ export async function POST(request: Request) {
     if (!id) return jsonError("Falta el producto.", 400);
     const existing = await db.inventoryItem.findFirst({ where: { id, organizationId }, select: { id: true, name: true, archivedAt: true } });
     if (!existing) return jsonError("El producto no existe en esta empresa.", 404);
+    const dead = await deadResponse("InventoryItem", existing.id, organizationId);
+    if (dead) return dead;
     const archivedAt = kind === "item-archive" ? existing.archivedAt ?? new Date() : null;
     const inventory = await db.inventoryItem.update({ where: { id: existing.id }, data: { archivedAt }, omit: { imageData: true } });
     const changes = auditChanges(existing, inventory, ["archivedAt"]);
@@ -501,6 +504,8 @@ export async function POST(request: Request) {
     if (!(INVENTORY_STATUSES as readonly string[]).includes(status)) return jsonError("Estado de inventario inválido.", 400);
     const existing = await db.inventoryItem.findFirst({ where: { id, organizationId }, select: { id: true, name: true, status: true } });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
+    const dead = await deadResponse("InventoryItem", existing.id, organizationId);
+    if (dead) return dead;
     const inventory = await db.inventoryItem.update({ where: { id: existing.id }, data: { status: status as InventoryStatus } });
     const changes = auditChanges({ status: existing.status }, { status: inventory.status }, ["status"]);
     if (changes) {
@@ -541,6 +546,8 @@ export async function POST(request: Request) {
       },
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
+    const dead = await deadResponse("InventoryItem", existing.id, organizationId);
+    if (dead) return dead;
     const inventory = await db.inventoryItem.update({
       where: { id: existing.id },
       data: update.data,

@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   if (!code) return jsonError("Logo no encontrado.", 404);
   const budget = await db.budget.findUnique({ where: { publicToken: code }, select: { clientId: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
   if (!budget || !quotePortalAvailable(budget)) return jsonError("Logo no encontrado.", 404);
-  const logo = await db.clientLogo.findFirst({ where: { clientId: budget.clientId, client: { organizationId: budget.organizationId } }, select: { data: true, mime: true } });
+  const logo = await db.clientLogo.findFirst({ where: { clientId: budget.clientId, client: { organizationId: budget.organizationId, deletedAt: null } }, select: { data: true, mime: true } });
   const mime = logo ? detectIdentityImageMime(logo.data) : null;
   if (!logo || !mime || mime !== logo.mime) return jsonError("Logo no encontrado.", 404);
   return new Response(new Uint8Array(logo.data), { headers: { "Content-Type": mime, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" } });

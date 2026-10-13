@@ -272,6 +272,7 @@ export type AvailabilityClient = Prisma.TransactionClient | typeof db;
 export function committedEventWhere(organizationId: string): Prisma.EventWhereInput {
   return {
     organizationId,
+    deletedAt: null, // papelera: la extensión de db no filtra relaciones anidadas
     status: { not: "CANCELLED" },
     OR: [{ budgets: { none: {} } }, { budgets: { some: { status: { notIn: ["LOST", "CANCELLED"] } } } }],
   };

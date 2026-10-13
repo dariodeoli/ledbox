@@ -10,6 +10,8 @@ import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-lim
 import { isHoneypotTriggered, leadSchema, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
+import { live } from "@/lib/server/trash-filter";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +24,7 @@ const MAX_INTERNAL_NOTES = 2000;
  */
 const LEAD_INCLUDE = {
   quoteRequests: { orderBy: { createdAt: "desc" }, include: { items: true, budget: { select: { id: true } } } },
-  budgets: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+  budgets: { where: live, select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
 } satisfies Prisma.LeadInclude;
 
 function parseDate(value?: string) {
@@ -150,7 +152,11 @@ export async function PATCH(request: Request) {
   const convert = body.convertToClient === true;
   if (!convert && Object.keys(data).length === 0) return jsonError("Nothing to update.", 400);
 
-  const result = await db.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await db.$transaction(async (tx) => {
+    // Papelera: un lead eliminado entre la lectura y la escritura da 404, no se edita.
+    await assertLive("Lead", lead.id, auth.context.organizationId, tx);
     let client: { id: string; name: string; company: string | null } | null = null;
     let clientCreated = false;
 
@@ -168,7 +174,12 @@ export async function PATCH(request: Request) {
 
     const updated = await tx.lead.update({ where: { id: lead.id }, data, include: LEAD_INCLUDE });
     return { lead: updated, client, clientCreated };
-  });
+    });
+  } catch (error) {
+    const response = trashErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
 
   if (convert) {
     const convertedClient = result.client;

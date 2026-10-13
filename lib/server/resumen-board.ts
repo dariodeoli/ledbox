@@ -89,6 +89,7 @@ export async function getResumenBoard(organizationId: string, now = new Date()):
       SELECT to_char(date_trunc('month', "approvedAt" - ${ZONE_SHIFT}::interval), 'YYYY-MM') AS "month",
              COALESCE(SUM("total"), 0)::bigint AS "amount", COUNT(*)::int AS "count"
       FROM "Budget"
+      -- Papelera: un presupuesto APPROVED no se puede eliminar, por eso no filtra deletedAt.
       WHERE "organizationId" = ${organizationId} AND "status" = 'APPROVED'
         AND "approvedAt" >= ${trendFrom}::timestamp AND "approvedAt" < ${trendTo}::timestamp
       GROUP BY 1
@@ -104,7 +105,7 @@ export async function getResumenBoard(organizationId: string, now = new Date()):
     db.$queryRaw<RawWeek[]>`
       SELECT FLOOR(EXTRACT(EPOCH FROM ("startsAt" - ${today}::timestamp)) / 604800)::int AS "week", COUNT(*)::int AS "count"
       FROM "Event"
-      WHERE "organizationId" = ${organizationId} AND "status" NOT IN ('CANCELLED', 'COMPLETED')
+      WHERE "organizationId" = ${organizationId} AND "deletedAt" IS NULL AND "status" NOT IN ('CANCELLED', 'COMPLETED')
         AND "startsAt" >= ${today}::timestamp AND "startsAt" < ${eventsEnd}::timestamp
       GROUP BY 1
     `,

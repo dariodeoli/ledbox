@@ -1,5 +1,6 @@
 import { isOverdue } from "@/lib/admin-format";
 import { db } from "@/lib/server/db";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -7,6 +8,7 @@ import { clientMetrics } from "../metrics";
 import { leadsForClient } from "@/lib/server/lead-client";
 import { parseClientFields } from "../client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
+import { live } from "@/lib/server/trash-filter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const client = await db.client.findFirst({
     where: { id, organizationId },
-    include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
+    include: { _count: { select: { events: { where: live }, budgets: { where: live } } }, logo: { select: { updatedAt: true } } },
   });
   if (!client) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
   const { logo, ...clientRow } = client;
@@ -175,11 +177,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     fiscal = await clientRucPatch(raw.rucConfirmationToken !== undefined ? raw : { ...raw, ...parsed.data }, organizationId, auth.context.user.id, before);
   } catch (error) { return jsonError(error instanceof Error ? error.message : "Confirmación de RUC inválida.", 400); }
 
-  const updated = await db.client.update({
-    where: { id: before.id },
-    data: { ...parsed.data, ...fiscal },
-    include: { logo: { select: { updatedAt: true } } },
-  });
+  // Papelera: un cliente eliminado entre la lectura y la escritura da 404, no se edita.
+  let updated;
+  try {
+    updated = await db.$transaction(async (tx) => {
+      await assertLive("Client", before.id, organizationId, tx);
+      return tx.client.update({
+        where: { id: before.id },
+        data: { ...parsed.data, ...fiscal },
+        include: { logo: { select: { updatedAt: true } } },
+      });
+    });
+  } catch (error) {
+    const response = trashErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
   const { logo, ...clientRow } = updated;
 
   const changes = auditChanges(before, updated, CLIENT_AUDIT_FIELDS);

@@ -3,6 +3,7 @@ import { closureBlockMessage, eventClosureBlockers } from "@/lib/server/inventor
 import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
@@ -156,7 +157,11 @@ export async function PATCH(request: Request) {
   if (closing && event.status === "CANCELLED") return jsonError("Un evento cancelado no se puede finalizar.", 409);
   let blockedMessage: string | null = null;
   let forcedOver: string | null = null;
-  const updated = await db.$transaction(async (tx) => {
+  let updated;
+  try {
+    updated = await db.$transaction(async (tx) => {
+    // Papelera: un id eliminado entre la lectura y la escritura da 404, no se edita.
+    await assertLive("Event", event.id, auth.context.organizationId, tx);
     if (closing) {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} AND "organizationId" = ${auth.context.organizationId} FOR UPDATE`;
       const message = closureBlockMessage(await eventClosureBlockers(auth.context.organizationId, event.id, tx));
@@ -179,7 +184,12 @@ export async function PATCH(request: Request) {
       }, tx);
     }
     return row;
-  });
+    });
+  } catch (error) {
+    const response = trashErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
   if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409, "closure_blocked");
   if (changes) {
     await recordAudit({

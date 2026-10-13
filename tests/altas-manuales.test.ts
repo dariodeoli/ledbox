@@ -24,7 +24,8 @@ test("inventario: «Precios» y «Foto y web» plegados, SKU en «Más datos» y
   assert.match(route, /inventorySkuValid\(skuRaw\)/, "el API revalida el SKU");
   assert.match(route, /sku: skuRaw \|\| null/, "el POST guarda el SKU");
   // El SKU es único por empresa: repetirlo avisa en es-PY (nada de 500).
-  assert.match(route, /isUniqueConstraintError\(error\)[\s\S]{0,140}Ya hay un ítem con el SKU/, "el SKU repetido avisa en es-PY");
+  assert.match(route, /isUniqueConstraintError\(error\)[\s\S]{0,140}skuConflictMessage/, "el SKU repetido avisa en es-PY");
+  assert.match(repoFile("lib/server/trash-ops.ts"), /Ya hay un ítem con el SKU/, "el aviso genérico sigue en es-PY");
   // Nombre: check del front con el mensaje del kit (antes caía en el inglés del API).
   assert.match(module, /if \(!personNameValid\(form\.name\)\) \{\n\s+setFormError\(FIELD_MESSAGES\.name\);/);
   assert.match(route, /personNameValid\(itemName\)[\s\S]{0,60}FIELD_MESSAGES\.name/, "el API responde el mismo mensaje");

@@ -1,6 +1,7 @@
 import type { AdminNavCounts, AdminResumen, AdminResumenWeekEvent } from "@/lib/admin-types";
 import { db } from "./db";
 import { clientLabel, DAY_MS, dayKeyOf, dayStart, placeLabel, shiftDayKey } from "./notifications";
+import { live } from "@/lib/server/trash-filter";
 
 /**
  * Datos del Resumen y del menú que no salen de los listados. Todo es `count` o
@@ -104,6 +105,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
     // Se suma en la base (saldo por presupuesto, nunca negativo) en vez de traer
     // todos los aprobados con sus cobros; `organizationId` va parametrizado.
     db.$queryRaw<Array<{ balance: bigint | number | string | null }>>`
+      -- Papelera: un presupuesto APPROVED no se puede eliminar, por eso no filtra deletedAt.
       SELECT COALESCE(SUM(GREATEST(b."total" - COALESCE(p."paid", 0), 0)), 0)::bigint AS "balance"
       FROM "Budget" b
       LEFT JOIN (
@@ -155,7 +157,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
         client: { select: { name: true, company: true } },
         tasks: { select: { completedAt: true } },
         budgets: {
-          where: { status: "APPROVED", advanceAmount: { gt: 0 } },
+          where: { ...live, status: "APPROVED", advanceAmount: { gt: 0 } },
           select: { advanceAmount: true, payments: { where: { status: "RECEIVED" }, select: { amount: true } } },
         },
       },

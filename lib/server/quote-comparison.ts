@@ -2,6 +2,7 @@ import { selectionApprovalError } from "../quote-selection";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { quotePortalAvailable } from "../quote-sharing";
+import { live } from "@/lib/server/trash-filter";
 
 export class QuoteComparisonError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -39,7 +40,7 @@ export async function withQuoteApproval<T>(budgetId: string, organizationId: str
 }
 
 export async function findPublicComparison(token: string) {
-  const group = await db.quoteComparison.findUnique({ where: { publicToken: token }, include: { budgets: { orderBy: { comparisonLabel: "asc" } } } });
+  const group = await db.quoteComparison.findUnique({ where: { publicToken: token }, include: { budgets: { where: live, orderBy: { comparisonLabel: "asc" } } } });
   if (!group || group.revokedAt || group.expiresAt <= new Date() || group.budgets.length < 2 || group.budgets.length > 4) return null;
   if (group.budgets.some((q) => q.organizationId !== group.organizationId || q.clientId !== group.clientId || !quotePortalAvailable(q))) return null;
   return group;
