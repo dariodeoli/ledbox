@@ -2412,6 +2412,90 @@ export type AdminMonthlyReportTotals = {
   committedBalance: number;
 };
 
+/**
+ * Sección «Alquileres» del reporte mensual (fase 5). Los montos son Int PYG; un
+ * dato que no existe viaja como `null` (la pantalla escribe «sin dato», nunca 0).
+ */
+export type AdminRentalOccupancyRow = {
+  id: string;
+  name: string;
+  /** Días-unidad (24 h) bloqueados dentro del período, con los tiempos del motor. */
+  committedDays: number;
+  /** Días-unidad disponibles: unidades utilizables × días del período. */
+  availableDays: number;
+  /** committed / available en %, con un decimal y tope 100. */
+  percent: number;
+};
+
+export type AdminRentalIncidentRow = {
+  kind: string;
+  status: string;
+  count: number;
+  quantity: number;
+  /** Σ de los costos cargados; `null` si ningún incidente del grupo tiene costo. */
+  knownCost: number | null;
+  /** Incidentes del grupo sin costo cargado. */
+  unknownCostCount: number;
+};
+
+export type AdminRentalGuaranteeRow = {
+  status: string;
+  count: number;
+  amount: number;
+  retained: number;
+  returned: number;
+};
+
+export type AdminRentalProfitRow = {
+  inventoryId: string;
+  name: string;
+  revenue: number;
+  /** Σ de costos de incidentes con costo cargado; `null` si no hay ninguno con costo. */
+  incidentCost: number | null;
+  unknownCostCount: number;
+  /** revenue − incidentCost (con costo parcial si hay incidentes sin dato). */
+  net: number;
+};
+
+export type AdminRentalReport = {
+  days: number;
+  occupancy: {
+    rankedItems: number;
+    top: AdminRentalOccupancyRow[];
+    least: AdminRentalOccupancyRow[];
+  };
+  catalog: {
+    received: number;
+    converted: number;
+    declined: number;
+    expired: number;
+    open: number;
+    /** converted / received en % con un decimal; `null` sin pedidos. */
+    conversionRate: number | null;
+  };
+  cancellations: {
+    events: { count: number; rows: Array<{ id: string; name: string; client: string; date: string }> };
+    budgets: {
+      lost: number;
+      cancelled: number;
+      amount: number;
+      rows: Array<{ id: string; title: string; client: string; status: string; total: number }>;
+    };
+  };
+  incidents: {
+    total: number;
+    rows: AdminRentalIncidentRow[];
+    knownCost: number | null;
+    unknownCostCount: number;
+  };
+  deposits: {
+    advances: { collected: number; pending: number; proofInReview: number; count: number };
+    guarantees: AdminRentalGuaranteeRow[];
+  };
+  /** `null` cuando no hay ingresos identificables por producto en el período. */
+  profitability: { rows: AdminRentalProfitRow[] } | null;
+};
+
 export type AdminMonthlyReport = {
   /** Mes del período (`YYYY-MM`). */
   month: string;
@@ -2431,6 +2515,8 @@ export type AdminMonthlyReport = {
   collections: AdminMonthlyReportCollectionRow[];
   supplierPayments: AdminMonthlyReportSupplierPaymentRow[];
   supplierPending: AdminMonthlyReportSupplierPendingRow[];
+  /** Sección «Alquileres»; la arma la página con `getRentalReport`. */
+  rentals: AdminRentalReport;
 };
 
 /** Ajustes de alquiler de la empresa (`GET /api/admin/settings/rental`); tiempos en minutos. */
