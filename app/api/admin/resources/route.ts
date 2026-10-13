@@ -1,6 +1,7 @@
 import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { skuConflictMessage } from "@/lib/server/trash-ops";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -320,14 +321,25 @@ export async function POST(request: Request) {
       select: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true },
     });
     if (!existing) return jsonError("Promotora no encontrada.", 404);
-    const promoter = await db.promoter.update({
-      where: { id: existing.id },
-      data: {
-        availability: availability.data.availability ?? undefined,
-        availabilityNote: availability.data.availabilityNote ?? null,
-        unavailableUntil: availability.data.unavailableUntil ?? null,
-      },
-    });
+    let promoter;
+    try {
+      promoter = await db.$transaction(async (tx) => {
+        // Papelera: una promotora eliminada entre la lectura y la escritura da 404.
+        await assertLive("Promoter", existing.id, auth.context.organizationId, tx);
+        return tx.promoter.update({
+          where: { id: existing.id },
+          data: {
+            availability: availability.data.availability ?? undefined,
+            availabilityNote: availability.data.availabilityNote ?? null,
+            unavailableUntil: availability.data.unavailableUntil ?? null,
+          },
+        });
+      });
+    } catch (error) {
+      const response = trashErrorResponse(error);
+      if (response) return response;
+      throw error;
+    }
     const changes = auditChanges(existing, promoter, ["availability", "availabilityNote", "unavailableUntil"]);
     if (changes) {
       await recordAudit({

@@ -15,6 +15,7 @@ import { requireAdminContext, type AdminContext } from "@/lib/server/tenancy";
 import { roleCan } from "@/lib/server/permissions";
 import { findMatchingClient, leadStatusAfterBudget, resolveClientFromLead } from "@/lib/server/lead-client";
 import { db } from "@/lib/server/db";
+import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
@@ -372,7 +373,12 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: Request) {
   try { return await patchBudget(request); }
-  catch (error) { if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status); throw error; }
+  catch (error) {
+    if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
+    const response = trashErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
 }
 
 async function patchBudget(request: Request) {
@@ -382,6 +388,8 @@ async function patchBudget(request: Request) {
   const body = await readJson(request) as Record<string, unknown>;
   const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
   if (!budgetId) return jsonError("Falta el presupuesto.", 400);
+  // Papelera: un presupuesto eliminado (o de otra empresa) responde 404 en toda edición por id.
+  await assertLive("Budget", budgetId, organizationId);
 
   if (body.status !== undefined) {
     const status = typeof body.status === "string" ? body.status.toUpperCase() : "";

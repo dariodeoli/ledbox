@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /**
  * `GET /api/admin/trash` (`trash.manage`, OWNER y ADMIN): lo eliminado de la empresa activa
  * con tipo, nombre, quién y cuándo lo eliminó, motivo y bloqueos del borrado definitivo.
- * Hoy lista Evento y Producto; la etapa 3 suma las demás entidades.
+ * Lista las 7 entidades: Evento, Producto, Cliente, Oportunidad, Proveedor, Promotora y Presupuesto.
  */
 export async function GET() {
   const auth = await requireAdminContext("trash.manage");

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { AuditContext } from "./audit";
 import { recordAudit } from "./audit";
 import { db, dbWithDeleted } from "./db";
-import { anonymize, archive, restore, assertLive, blockedError, blockersFor, TrashError, trash, trashErrorResponse, unarchive, type Blocker, type TrashModel } from "./trash";
+import { anonymize, archive, restore, assertLive, blockedError, blockersFor, purgeBlockers, TrashError, trash, trashErrorResponse, unarchive, type Blocker, type TrashModel } from "./trash";
 import type { AdminCapability } from "./permissions";
 import { live } from "./trash-filter";
 
@@ -255,7 +255,7 @@ export async function annulInventoryItem(id: string, lote: string, context: Audi
 // ── Lectura de la papelera ───────────────────────────────────────────────────
 
 export type TrashRow = {
-  type: "Event" | "InventoryItem";
+  type: TrashModel;
   id: string;
   name: string;
   deletedAt: string;
@@ -268,31 +268,51 @@ export type TrashRow = {
 
 const MAX_ROWS = 200;
 
-/** Lo eliminado de la empresa (Event e InventoryItem; las otras entidades las suma la etapa 3). */
+type TrashSource = { type: TrashModel; load: (organizationId: string) => Promise<{ id: string; name: string; deletedAt: Date | null; deletedById: string | null; deleteReason: string | null; anonymizedAt: Date | null }[]> };
+
+const trashWhere = (organizationId: string) => ({ organizationId, deletedAt: { not: null } }) as const;
+const nameSelect = { id: true, name: true, deletedAt: true, deletedById: true, deleteReason: true, anonymizedAt: true } as const;
+const orderBy = { deletedAt: "desc" } as const;
+
+const SOURCES: TrashSource[] = [
+  { type: "Event", load: (o) => dbWithDeleted.event.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "InventoryItem", load: (o) => dbWithDeleted.inventoryItem.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "Client", load: (o) => dbWithDeleted.client.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "Lead", load: (o) => dbWithDeleted.lead.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "Supplier", load: (o) => dbWithDeleted.supplier.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "Promoter", load: (o) => dbWithDeleted.promoter.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  {
+    type: "Budget",
+    load: async (o) => {
+      const rows = await dbWithDeleted.budget.findMany({ where: trashWhere(o), select: { id: true, title: true, deletedAt: true, deletedById: true, deleteReason: true, anonymizedAt: true }, orderBy, take: MAX_ROWS });
+      return rows.map(({ title, ...rest }) => ({ ...rest, name: title }));
+    },
+  },
+];
+
+/** Lo eliminado de la empresa (las 7 entidades con papelera), con bloqueos del borrado definitivo. */
 export async function listTrash(organizationId: string): Promise<TrashRow[]> {
-  const where = { organizationId, deletedAt: { not: null } } as const;
-  const select = { id: true, name: true, deletedAt: true, deletedById: true, deleteReason: true, anonymizedAt: true } as const;
-  const [events, items] = await Promise.all([
-    dbWithDeleted.event.findMany({ where, select, orderBy: { deletedAt: "desc" }, take: MAX_ROWS }),
-    dbWithDeleted.inventoryItem.findMany({ where, select, orderBy: { deletedAt: "desc" }, take: MAX_ROWS }),
-  ]);
-  const userIds = [...new Set([...events, ...items].map((row) => row.deletedById).filter((value): value is string => Boolean(value)))];
+  const groups = await Promise.all(SOURCES.map(async (source) => ({ type: source.type, rows: await source.load(organizationId) })));
+  const userIds = [...new Set(groups.flatMap((group) => group.rows.map((row) => row.deletedById)).filter((value): value is string => Boolean(value)))];
   const users = userIds.length ? await db.adminUser.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : [];
   const names = new Map(users.map((user) => [user.id, user.name]));
-  const blockersOf = (type: "Event" | "InventoryItem", id: string) =>
-    dbWithDeleted.$transaction((tx) => (type === "Event" ? eventPurgeBlockers(id, organizationId, tx, { lock: false }) : blockersFor(type, id, organizationId, tx, { lock: false })));
-  const build = async (type: TrashRow["type"], row: (typeof events)[number]): Promise<TrashRow> => ({
-    type,
-    id: row.id,
-    name: row.name,
-    deletedAt: row.deletedAt!.toISOString(),
-    deletedById: row.deletedById,
-    deletedByName: row.deletedById ? names.get(row.deletedById) ?? null : null,
-    reason: row.deleteReason,
-    anonymized: Boolean(row.anonymizedAt),
-    blockers: await blockersOf(type, row.id),
-  });
-  const rows = await Promise.all([...events.map((row) => build("Event", row)), ...items.map((row) => build("InventoryItem", row))]);
+  const blockersOf = (type: TrashModel, id: string) =>
+    dbWithDeleted.$transaction((tx) => (type === "Event" ? eventPurgeBlockers(id, organizationId, tx, { lock: false }) : purgeBlockers(type, id, organizationId, tx, { lock: false })));
+  const rows = await Promise.all(
+    groups.flatMap((group) =>
+      group.rows.map(async (row): Promise<TrashRow> => ({
+        type: group.type,
+        id: row.id,
+        name: row.name,
+        deletedAt: row.deletedAt!.toISOString(),
+        deletedById: row.deletedById,
+        deletedByName: row.deletedById ? names.get(row.deletedById) ?? null : null,
+        reason: row.deleteReason,
+        anonymized: Boolean(row.anonymizedAt),
+        blockers: await blockersOf(group.type, row.id),
+      })),
+    ),
+  );
   return rows.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
 

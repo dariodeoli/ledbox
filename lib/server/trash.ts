@@ -286,6 +286,37 @@ async function clientBlockers(id: string, organizationId: string, tx: Tx): Promi
   return Object.entries({ approvedBudgets, signedBudgets, payments, invoices, eventsWithPayments }).flatMap(([kind, count]) => (count > 0 ? [{ kind, count }] : []));
 }
 
+/**
+ * Bloqueos del borrado definitivo con las reglas extra de la etapa 3 sobre `blockersFor`:
+ * - Budget: el definitivo es solo de borradores (`notDraft`).
+ * - Client: presupuestos con firma, cobro, comprobante, factura o pago esperado confirmado
+ *   (incluso eliminados) bloquean, porque borrar el cliente los arrastraría por cascada.
+ */
+export async function purgeBlockers(model: TrashModel, id: string, organizationId: string, tx: Tx, options?: { lock?: boolean }): Promise<Blocker[]> {
+  const blockers = await blockersFor(model, id, organizationId, tx, options);
+  if (model === "Budget") {
+    const row = await tx.budget.findFirst({ where: { id, organizationId, ...anyState }, select: { status: true } });
+    if (row && row.status !== "DRAFT") blockers.push({ kind: "notDraft", count: 1 });
+  } else if (model === "Client") {
+    const withHistory = await tx.budget.count({
+      where: {
+        organizationId,
+        clientId: id,
+        ...anyState,
+        OR: [
+          { signatureRequests: { some: {} } },
+          { payments: { some: {} } },
+          { paymentProofs: { some: {} } },
+          { invoices: { some: {} } },
+          { expectedPayments: { some: { status: "CONFIRMED" } } },
+        ],
+      },
+    });
+    if (withHistory > 0 && !blockers.some((b) => b.kind === "budgetsWithHistory")) blockers.push({ kind: "budgetsWithHistory", count: withHistory });
+  }
+  return blockers;
+}
+
 /** Mensaje concreto del 409 de bloqueo. */
 export function blockersMessage(blockers: Blocker[]): string {
   const parts = blockers.map((b) => `${b.count} ${b.kind}`);
@@ -301,6 +332,8 @@ export function blockedError(blockers: Blocker[]): TrashError {
 const ANON_NAME: Partial<Record<TrashModel, string>> = {
   Client: "Cliente eliminado",
   Lead: "Contacto eliminado",
+  Supplier: "Proveedor eliminado",
+  Promoter: "Promotora eliminada",
 };
 
 /**
@@ -309,7 +342,8 @@ const ANON_NAME: Partial<Record<TrashModel, string>> = {
  * No se puede deshacer; la ruta exige `trash.manage`, nombre exacto y motivo.
  */
 export async function anonymize(model: TrashModel, id: string, context: AuditContext, options?: TrashActionOptions): Promise<void> {
-  if (model !== "Client" && model !== "Lead" && model !== "Event") throw new TrashError(`Anonimizar ${LABELS[model].toLowerCase()} todavía no está disponible.`, 501);
+  if (model === "Budget") throw new TrashError("Un presupuesto no se anonimiza: su documento y snapshot se conservan o se borra el borrador sin historial.", 409);
+  if (model === "InventoryItem") throw new TrashError(`Anonimizar ${LABELS[model].toLowerCase()} todavía no está disponible.`, 501);
   await run(options, async (tx) => {
     const row = await existsIncludingDeleted(model, id, context.organizationId, tx);
     if (!row) throw new TrashError(`${LABELS[model]} no existe.`, 404);
@@ -346,6 +380,11 @@ export async function anonymize(model: TrashModel, id: string, context: AuditCon
       });
       await tx.clientLogo.deleteMany({ where: { clientId: id } });
       await tx.catalogAccessToken.updateMany({ where: { organizationId: context.organizationId, clientId: id, revokedAt: null }, data: { revokedAt: now } });
+    } else if (model === "Supplier") {
+      // El proveedor conserva trabajos, gastos y facturas de compra (libros); salen el contacto y las notas.
+      await tx.supplier.update({ where: { id }, data: { name, company: null, phone: null, email: null, paymentTerms: null, notes: null, anonymizedAt: now } });
+    } else if (model === "Promoter") {
+      await tx.promoter.update({ where: { id }, data: { name, phone: null, email: null, photoUrl: null, specialties: null, notes: null, availabilityNote: null, anonymizedAt: now } });
     } else {
       await tx.lead.update({
         where: { id },
