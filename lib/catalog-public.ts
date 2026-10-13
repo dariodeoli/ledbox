@@ -1,4 +1,5 @@
 import { whatsappHref } from "./admin-format";
+import type { PriceList } from "./catalog-audience";
 import { quoteProductPrice } from "./quote-sharing";
 
 /**
@@ -104,8 +105,37 @@ export const MAX_PREORDER_DAYS = 90;
 
 // ── Precio de referencia ─────────────────────────────────────────────────────
 
-/** Campos de precio de venta que el catálogo puede mostrar; nunca costos ni mayorista. */
+/** Campos de precio de venta de cliente final; nunca costos ni mayorista. */
 export type CatalogPriceFields = { listPrice: number; listFromDays: number; listFromPrice: number };
+
+/**
+ * Precio que ve el público, neutro respecto de la lista: en el catálogo de cliente
+ * final sale de los campos de lista y en el mayorista de los campos mayoristas, pero
+ * el DTO nunca dice de cuál (ni expone el otro).
+ */
+export type CatalogPrice = { unit: number; fromDays: number; fromPrice: number };
+
+type TieredFields = {
+  listPrice: number; listFromDays: number; listFromPrice: number;
+  wholesalePrice: number; wholesaleFromDays: number; wholesaleFromPrice: number;
+};
+
+/** Precio de la lista elegida a partir de una fila de inventario. */
+export function catalogPriceFor(row: Partial<TieredFields>, list: PriceList): CatalogPrice {
+  return list === "WHOLESALE"
+    ? { unit: row.wholesalePrice ?? 0, fromDays: row.wholesaleFromDays ?? 0, fromPrice: row.wholesaleFromPrice ?? 0 }
+    : { unit: row.listPrice ?? 0, fromDays: row.listFromDays ?? 0, fromPrice: row.listFromPrice ?? 0 };
+}
+
+/** Precio por día de un `CatalogPrice` para `days` días; 0 = sin precio cargado («Consultar»). */
+export function catalogDailyPrice(price: CatalogPrice, days: number): number {
+  return quoteProductPrice({ listPrice: price.unit, listFromDays: price.fromDays, listFromPrice: price.fromPrice }, Math.max(1, days), "FINAL");
+}
+
+/** Precio por día de la lista elegida directo desde una fila de inventario. */
+export function listDailyPrice(row: Partial<TieredFields>, list: PriceList, days: number): number {
+  return catalogDailyPrice(catalogPriceFor(row, list), days);
+}
 
 /** Precio por día de referencia para `days` días; 0 = sin precio cargado («Consultar»). */
 export function referenceDailyPrice(item: CatalogPriceFields, days: number): number {

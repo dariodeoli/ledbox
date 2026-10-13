@@ -8,13 +8,18 @@ import {
   PREORDER_RESPONSE_HOURS,
   addBusinessHours,
   availabilityHint,
+  catalogPriceFor,
   estimatedSubtotal,
+  listDailyPrice,
   preorderWhatsappMessage,
   preorderWhatsappUrl,
-  referenceDailyPrice,
   rentalDaysBetween,
   type AvailabilityHint,
+  type CatalogPrice,
 } from "@/lib/catalog-public";
+import { catalogAudienceWhere, type PriceList } from "@/lib/catalog-audience";
+import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
+import { resolveCatalogAccess, type ResolvedCatalogAccess } from "./catalog-access";
 import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { inventoryImageUrl } from "./inventory-images";
@@ -36,18 +41,29 @@ import { phoneKey } from "./lead-client";
  * Catálogo público por empresa y preórdenes (alquileres fase 3).
  *
  * Reglas que no se negocian:
- * - Solo se publica lo que la empresa marcó (`visibleOnWeb`) y solo si el
- *   catálogo está encendido; si no, la empresa "no existe" (404).
+ * - Solo se publica lo que la empresa marcó (`catalogAudience`) y solo si la tienda
+ *   está encendida; si no, la empresa "no existe" (404). El catálogo de cliente final
+ *   muestra RETAIL y BOTH con precio de lista; el mayorista (link privado por cliente)
+ *   muestra WHOLESALE y BOTH con precio mayorista. Un producto WHOLESALE nunca sale
+ *   en el catálogo público ni su precio mayorista en ningún DTO del público.
  * - Los DTO se arman campo por campo: nunca se serializa una fila de inventario
  *   (costos, mayorista, piso, notas internas y stock exacto no salen).
  * - Una preorden NO toca `EventInventory`: no compromete stock.
  */
 
 export type PublicOrganization = { id: string; name: string; slug: string };
-export type PublicCatalogContext = { organization: PublicOrganization; settings: RentalSettingsView; demo: boolean };
+export type PublicCatalogContext = {
+  organization: PublicOrganization;
+  settings: RentalSettingsView;
+  demo: boolean;
+  /** Lista de precios del catálogo: cliente final (público) o mayorista (link privado). */
+  priceList: PriceList;
+  /** Solo en el catálogo mayorista: el link y el cliente al que pertenece. */
+  access: ResolvedCatalogAccess | null;
+};
 
-/** Empresa con catálogo público encendido; `null` si no existe, está inactiva o lo apagó. */
-export async function resolvePublicCatalog(slug: string): Promise<PublicCatalogContext | null> {
+/** Empresa con tienda encendida; `null` si no existe, está inactiva o la apagó. */
+async function resolveStore(slug: string): Promise<Omit<PublicCatalogContext, "priceList" | "access"> | null> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized || normalized.length > 80) return null;
   const organization = await db.organization.findFirst({
@@ -60,6 +76,49 @@ export async function resolvePublicCatalog(slug: string): Promise<PublicCatalogC
   return { organization, settings, demo: isDemoOrganizationSlug(organization.slug) };
 }
 
+/** Catálogo público (cliente final); `null` si la empresa no existe o apagó la tienda. */
+export async function resolvePublicCatalog(slug: string): Promise<PublicCatalogContext | null> {
+  const store = await resolveStore(slug);
+  return store ? { ...store, priceList: "RETAIL", access: null } : null;
+}
+
+/**
+ * Catálogo mayorista por link privado: `null` si la tienda está apagada, el token no
+ * existe, está revocado o es de otra empresa (todos son 404 para quien visita).
+ */
+export async function resolveWholesaleCatalog(slug: string, token: string): Promise<PublicCatalogContext | null> {
+  const store = await resolveStore(slug);
+  if (!store) return null;
+  const access = await resolveCatalogAccess(slug, token);
+  if (!access || access.organization.id !== store.organization.id) return null;
+  return { ...store, priceList: "WHOLESALE", access };
+}
+
+export type PublicStorefront = {
+  name: string;
+  slug: string;
+  tagline: string | null;
+  email: string | null;
+  whatsappPhone: string | null;
+  theme: StorefrontTheme;
+  logos: { light: boolean; dark: boolean };
+};
+
+/** Identidad de la tienda para la portada: solo datos que la empresa cargó para el público. */
+export async function loadStorefront(context: PublicCatalogContext): Promise<PublicStorefront> {
+  const logos = await db.organizationLogo.findMany({ where: { organizationId: context.organization.id }, select: { variant: true } });
+  const variants = new Set(logos.map((logo) => logo.variant));
+  return {
+    name: context.organization.name,
+    slug: context.organization.slug,
+    tagline: context.settings.storefrontTagline,
+    email: context.settings.storefrontEmail,
+    whatsappPhone: context.settings.whatsappPhone,
+    theme: storefrontTheme(context.settings.storefrontAccent),
+    logos: { light: variants.has("light"), dark: variants.has("dark") },
+  };
+}
+
 /** Artículo tal como lo ve el público: sin costos, sin stock exacto, sin notas. */
 export type PublicCatalogItem = {
   id: string;
@@ -69,8 +128,8 @@ export type PublicCatalogItem = {
   imageUrl: string | null;
   /** Descripción pública del ítem; `null` si no la cargaron. Nunca son las notas internas. */
   description: string | null;
-  /** Precio de venta de referencia por día; `null` si la empresa no muestra precios. */
-  price: { listPrice: number; listFromDays: number; listFromPrice: number } | null;
+  /** Precio por día de la lista del catálogo; `null` si la empresa no muestra precios. */
+  price: CatalogPrice | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
   availability: AvailabilityHint | null;
 };
@@ -89,6 +148,9 @@ type CatalogRow = {
   listPrice: number;
   listFromDays: number;
   listFromPrice: number;
+  wholesalePrice: number;
+  wholesaleFromDays: number;
+  wholesaleFromPrice: number;
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
   incidentHold: number;
@@ -96,9 +158,9 @@ type CatalogRow = {
 };
 
 /** Lectura mínima (sin `imageData` ni ningún costo): solo lo que el DTO necesita. */
-async function loadVisibleRows(organizationId: string, ids?: readonly string[]): Promise<CatalogRow[]> {
+async function loadVisibleRows(organizationId: string, list: PriceList, ids?: readonly string[]): Promise<CatalogRow[]> {
   return db.inventoryItem.findMany({
-    where: { organizationId, visibleOnWeb: true, archivedAt: null, status: { not: "RETIRED" }, ...(ids ? { id: { in: [...ids] } } : {}) },
+    where: { organizationId, ...catalogAudienceWhere(list), archivedAt: null, status: { not: "RETIRED" }, ...(ids ? { id: { in: [...ids] } } : {}) },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 500,
     select: {
@@ -115,6 +177,9 @@ async function loadVisibleRows(organizationId: string, ids?: readonly string[]):
       listPrice: true,
       listFromDays: true,
       listFromPrice: true,
+      wholesalePrice: true,
+      wholesaleFromDays: true,
+      wholesaleFromPrice: true,
       bufferBeforeMin: true,
       bufferAfterMin: true,
       incidentHold: true,
@@ -167,7 +232,7 @@ async function hintsFor(organizationId: string, rows: readonly CatalogRow[], ran
 
 /** Catálogo de la empresa listo para serializar al público. */
 export async function loadPublicCatalogItems(context: PublicCatalogContext, range: PublicRange | null): Promise<PublicCatalogItem[]> {
-  const rows = await loadVisibleRows(context.organization.id);
+  const rows = await loadVisibleRows(context.organization.id, context.priceList);
   const hints = range ? await hintsFor(context.organization.id, rows, range) : null;
   return rows.map((row) => ({
     id: row.id,
@@ -176,7 +241,7 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     sku: row.sku,
     imageUrl: inventoryImageUrl(row),
     description: row.publicDescription?.trim() || null,
-    price: context.settings.publicShowPrices ? { listPrice: row.listPrice, listFromDays: row.listFromDays, listFromPrice: row.listFromPrice } : null,
+    price: context.settings.publicShowPrices ? catalogPriceFor(row, context.priceList) : null,
     availability: hints?.get(row.id) ?? null,
   }));
 }
@@ -240,17 +305,22 @@ export async function createPreorder(
   for (const item of input.items) quantities.set(item.inventoryId, (quantities.get(item.inventoryId) ?? 0) + item.quantity);
   const ids = [...quantities.keys()];
   const rows = await tx.inventoryItem.findMany({
-    where: { organizationId, visibleOnWeb: true, archivedAt: null, status: { not: "RETIRED" }, id: { in: ids } },
-    select: { id: true, name: true, sku: true, listPrice: true, listFromDays: true, listFromPrice: true },
+    where: { organizationId, ...catalogAudienceWhere(context.priceList), archivedAt: null, status: { not: "RETIRED" }, id: { in: ids } },
+    select: {
+      id: true, name: true, sku: true,
+      listPrice: true, listFromDays: true, listFromPrice: true,
+      wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
+    },
   });
   if (rows.length !== ids.length) return { ok: false, status: 400, error: "Alguno de los artículos ya no está en el catálogo. Actualizá la página y revisá tu selección." };
   if ([...quantities.values()].some((quantity) => quantity > 99)) return { ok: false, status: 400, error: "La cantidad por artículo no puede superar 99." };
 
   const showPrices = context.settings.publicShowPrices;
+  const wholesale = context.priceList === "WHOLESALE";
   const lines = rows.map((row) => ({
     row,
     quantity: quantities.get(row.id) ?? 1,
-    unitPrice: showPrices ? referenceDailyPrice(row, range.days) || null : null,
+    unitPrice: showPrices ? listDailyPrice(row, context.priceList, range.days) || null : null,
   }));
   const subtotal = showPrices ? estimatedSubtotal(lines.map((line) => ({ name: line.row.name, quantity: line.quantity, unitPrice: line.unitPrice })), range.days) : null;
 
@@ -274,11 +344,11 @@ export async function createPreorder(
         name: input.name,
         phone: input.phone,
         email,
-        reason: "Pedido del catálogo público",
+        reason: wholesale ? "Pedido del catálogo mayorista" : "Pedido del catálogo público",
         eventDate: range.startsAt,
         location: input.location,
         message: input.notes || undefined,
-        source: "catalogo",
+        source: wholesale ? "catalogo-mayorista" : "catalogo",
         consentAt: new Date(consent.fecha),
         consentChannel: consent.canal,
         consentVersion: consent.version,
@@ -297,6 +367,9 @@ export async function createPreorder(
       leadId,
       status: "NEW",
       source: "catalogo",
+      priceList: context.priceList,
+      // El pedido mayorista nace vinculado al cliente del link.
+      clientId: context.access?.client.id,
       startsAt: range.startsAt,
       endsAt: range.endsAt,
       eventDate: range.startsAt,
@@ -352,7 +425,9 @@ export type PublicOrderView = {
   endsAt: string | null;
   location: string | null;
   subtotal: number | null;
-  organization: { name: string; whatsappPhone: string | null };
+  /** Lista de precios del pedido: el seguimiento dice si fue un pedido mayorista. */
+  priceList: "RETAIL" | "WHOLESALE";
+  organization: { name: string; slug: string; whatsappPhone: string | null; theme: StorefrontTheme };
   items: Array<{ name: string; quantity: number }>;
 };
 
@@ -369,14 +444,15 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
       endsAt: true,
       location: true,
       referenceTotal: true,
+      priceList: true,
       organizationId: true,
       items: { orderBy: { productName: "asc" }, select: { productName: true, quantity: true } },
     },
   });
   if (!quote?.organizationId) return null;
   const [organization, settings] = await Promise.all([
-    db.organization.findUnique({ where: { id: quote.organizationId }, select: { name: true } }),
-    db.organizationRentalSettings.findUnique({ where: { organizationId: quote.organizationId }, select: { whatsappPhone: true } }),
+    db.organization.findUnique({ where: { id: quote.organizationId }, select: { name: true, slug: true } }),
+    db.organizationRentalSettings.findUnique({ where: { organizationId: quote.organizationId }, select: { whatsappPhone: true, storefrontAccent: true } }),
   ]);
   if (!organization) return null;
   return {
@@ -387,7 +463,8 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     endsAt: quote.endsAt?.toISOString() ?? null,
     location: quote.location,
     subtotal: quote.referenceTotal,
-    organization: { name: organization.name, whatsappPhone: settings?.whatsappPhone ?? null },
+    priceList: quote.priceList === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
+    organization: { name: organization.name, slug: organization.slug, whatsappPhone: settings?.whatsappPhone ?? null, theme: storefrontTheme(settings?.storefrontAccent) },
     items: quote.items.map((item) => ({ name: item.productName, quantity: item.quantity })),
   };
 }
@@ -396,19 +473,20 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
 export const PREORDER_DAILY_LIMIT = 200;
 
 /**
- * ¿La empresa ya recibió el tope de preórdenes hoy (día de Asunción)? Cuenta los pedidos
- * reales del catálogo guardados; `retryAfter` son los segundos hasta el próximo día.
+ * ¿La empresa ya recibió el tope de preórdenes hoy (día de Asunción)? El tope es por lista
+ * de precios: una ráfaga en el catálogo público no bloquea a los mayoristas ni al revés.
+ * Cuenta los pedidos reales del catálogo guardados; `retryAfter` son los segundos hasta el próximo día.
  * Es un tope blando: dos pedidos simultáneos justo en el límite pueden pasarlo por poco.
  */
 export async function preorderDailyLimit(
   organizationId: string,
-  options: { now?: Date; limit?: number; client?: Pick<typeof db, "quoteRequest"> } = {},
+  options: { now?: Date; limit?: number; client?: Pick<typeof db, "quoteRequest">; priceList?: PriceList } = {},
 ): Promise<{ reached: boolean; used: number; limit: number; retryAfter: number }> {
   const now = options.now ?? new Date();
   const limit = options.limit ?? PREORDER_DAILY_LIMIT;
   const today = dayKeyOf(now);
   const used = await (options.client ?? db).quoteRequest.count({
-    where: { organizationId, source: "catalogo", createdAt: { gte: dayStart(today) } },
+    where: { organizationId, source: "catalogo", priceList: options.priceList ?? "RETAIL", createdAt: { gte: dayStart(today) } },
   });
   const retryAfter = Math.max(60, Math.ceil((dayStart(nextDayKey(today)).getTime() - now.getTime()) / 1000));
   return { reached: used >= limit, used, limit, retryAfter };

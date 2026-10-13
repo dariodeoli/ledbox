@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { QUOTE_REQUEST_PUBLIC_COPY, formatDayKey, isQuoteRequestStatus, preorderWhatsappUrl } from "@/lib/catalog-public";
 import { loadPublicOrder } from "@/lib/server/catalog-public";
 import { dayKeyOf } from "@/lib/server/notifications";
+import { storefrontThemeVars } from "@/lib/storefront-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +28,10 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   const open = order.status === "NEW" || order.status === "REVIEWING";
   const whatsapp = preorderWhatsappUrl(order.organization.whatsappPhone, `Hola ${order.organization.name}! Consulto por mi pedido del catálogo.`);
   return (
+    <div className="cp-theme" style={storefrontThemeVars(order.organization.theme) as CSSProperties}>
     <main className="cp-main cp-narrow">
       <header className="cp-header">
-        <p className="cp-eyebrow">{order.organization.name}</p>
+        <p className="cp-eyebrow">{order.organization.name}{order.priceList === "WHOLESALE" ? " · Pedido mayorista" : ""}</p>
         <h1 className="cp-h1">Seguimiento de tu pedido</h1>
       </header>
       <section className="cp-card" aria-labelledby="estado">
@@ -74,7 +77,11 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
             Escribir por WhatsApp
           </a>
         ) : null}
+        {order.priceList === "RETAIL" ? (
+          <a className="cp-link" href={`/tienda/${encodeURIComponent(order.organization.slug)}`}>Volver a la tienda</a>
+        ) : null}
       </section>
     </main>
+    </div>
   );
 }

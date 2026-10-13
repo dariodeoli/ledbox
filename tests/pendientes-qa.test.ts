@@ -56,9 +56,16 @@ test("create-event: el tope del plan se repite dentro de la transacción, despu�
 });
 
 test("catálogo público: la preorden responde 429 al superar el tope diario por empresa, además del rate-limit por IP", () => {
-  const src = read("app/api/catalog/[orgSlug]/preorder/route.ts");
-  assert.match(src, /rateLimit\(`catalog:preorder:/);
-  assert.match(src, /preorderDailyLimit\(context\.organization\.id\)/);
+  // La lógica común (rate-limit, honeypot, tope diario e idempotencia) vive en un solo handler que usan
+  // el endpoint público y el mayorista; cada ruta solo aporta su llave de rate-limit y su resolver.
+  const route = read("app/api/catalog/[orgSlug]/preorder/route.ts");
+  const wholesale = read("app/api/catalog/[orgSlug]/mayorista/[token]/preorder/route.ts");
+  assert.match(route, /rateKey: "catalog:preorder"/);
+  assert.match(wholesale, /rateKey: "catalog:wholesale"/);
+  for (const source of [route, wholesale]) assert.match(source, /handlePreorder\(request/);
+  const src = read("lib/server/catalog-preorder-http.ts");
+  assert.match(src, /rateLimit\(`\$\{options\.rateKey\}:/);
+  assert.match(src, /preorderDailyLimit\(context\.organization\.id, \{ priceList: context\.priceList \}\)/);
   assert.match(src, /status: 429/);
   assert.match(src, /"Retry-After"/);
   assert.ok(src.indexOf("preorderDailyLimit(") > src.indexOf("context.demo"));

@@ -25,9 +25,9 @@ test("catálogo público y preórdenes en PostgreSQL", { skip: !process.env.TEST
       data: { id: randomUUID(), organizationId: org, publicCatalogEnabled: opts.enabled ?? true, publicShowPrices: opts.prices ?? true, depositPercent: opts.deposit === undefined ? 50 : opts.deposit, whatsappPhone: "+595981123456" },
     });
     const visible = await db.inventoryItem.create({
-      data: { id: randomUUID(), organizationId: org, name: "Pantalla visible", category: "Pantallas", sku: "PV-1", quantity: opts.stock ?? 5, visibleOnWeb: true, listPrice: 100_000, dailyCost: 33_333, replacementCost: 7_777_777, wholesalePrice: 55_555, minimumPrice: 44_444, notes: "NOTA-INTERNA-SECRETA" },
+      data: { id: randomUUID(), organizationId: org, name: "Pantalla visible", category: "Pantallas", sku: "PV-1", quantity: opts.stock ?? 5, visibleOnWeb: true, catalogAudience: "BOTH", listPrice: 100_000, dailyCost: 33_333, replacementCost: 7_777_777, wholesalePrice: 55_555, minimumPrice: 44_444, notes: "NOTA-INTERNA-SECRETA" },
     });
-    const hidden = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "Oculto", category: "Pantallas", quantity: 3, visibleOnWeb: false } });
+    const hidden = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "Oculto", category: "Pantallas", quantity: 3, visibleOnWeb: false, catalogAudience: "HIDDEN" } });
     return { org, slug, visible, hidden };
   }
   let ipCounter = 0;
