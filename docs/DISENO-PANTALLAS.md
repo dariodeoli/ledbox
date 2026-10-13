@@ -80,6 +80,32 @@ Responde: *¿qué facturé, qué compras tengo y cómo va el mes?*
 
 Acción principal: **Emitir factura** (desde presupuesto o manual).
 
+## Inventario (`/inventario`)
+
+Responde: *¿qué tengo, cuánto queda libre hoy y qué necesita atención?* (rediseño
+del 13-10-2026; la disponibilidad la sigue calculando el API, la pantalla solo la muestra)
+
+1. Encabezado con las acciones: **Nuevo producto** (principal), **Nuevo combo**,
+   **Incidentes (n abiertos)** y Exportar CSV. Las altas solo con permiso de escritura.
+2. Cinco indicadores que **filtran al tocarlos**: Productos activos · Unidades
+   disponibles hoy · En reparación / dañadas / perdidas · Ocupación de esta semana
+   (`GET /api/admin/inventory/occupancy`, mismo cálculo que el Resumen) · Publicados
+   en la tienda.
+3. Pestañas con conteo: Todos · Combos · Con incidentes · Publicados en tienda · Ocultos.
+4. Filtros: búsqueda, tipo, estado y rango «Disponible desde / Hasta».
+5. Lista con una plantilla de columnas (`--inventario-cols`): selección, producto
+   (foto chica y SKU), categoría, libres hoy sobre el total con barra mini, estado,
+   lista, mayorista, tienda (chip de alcance) y **una** acción visible («Ficha»);
+   el resto va en «•••». Tarjetas con foto en celular (siempre) y como opción en
+   escritorio. Al seleccionar filas aparece la barra de lote (ventana «Edición en lote»).
+6. **Ficha** como panel lateral (`AdminDialog size="ficha"`, `?producto=<id>` la abre
+   por link): Resumen · Disponibilidad (línea de tiempo de 4 semanas con reservas
+   y retenciones, rango y sustitutos) · Unidades · Precios · Tienda web · Combos donde
+   se usa / Componentes · Incidentes · Historial (asignaciones y, para OWNER/ADMIN,
+   cambios registrados).
+
+Un VIEWER ve la misma pantalla sin controles que mutan (el servidor además responde 403).
+
 ## Calendario (vista de Eventos)
 
 Desde la consolidación del 23-09-2026 (issue #56) el calendario **no es un
