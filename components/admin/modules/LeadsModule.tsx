@@ -20,6 +20,7 @@ import {
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
 import { canWriteBudgets, canWriteClients, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, quoteRequestStatusLabel } from "@/lib/catalog-public";
+import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -47,6 +48,7 @@ import {
 import { CheckboxField, SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { LeadQuickDialog } from "./LeadQuickForm";
 import { AdminIcon } from "../AdminIcons";
+import { leadArchiveBlockedReason } from "@/lib/trash-shared";
 import { adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_FILTER_OPTIONS = [
@@ -163,18 +165,24 @@ export function LeadsModule() {
     setNewOpen(false);
     if (newRequested) router.replace("/leads");
   }, [newRequested, router]);
-  const list = useMemo(() => leads.data ?? [], [leads.data]);
+  // Lo archivado (papelera) sale de las pestañas de estado y de los totales; se ve en «Archivados».
+  const allLeads = useMemo(() => leads.data ?? [], [leads.data]);
+  const list = useMemo(() => allLeads.filter((lead) => !lead.archivedAt), [allLeads]);
+  const archivedLeads = useMemo(() => allLeads.filter((lead) => Boolean(lead.archivedAt)), [allLeads]);
+  const trash = useTrashFlow("Lead", { onChanged: leads.reload, onTrashed: (id) => setSelectedId((current) => (current === id ? "" : current)) });
+  const trashMenu = (lead: AdminLeadRow) =>
+    trash.menu({ id: lead.id, name: lead.company || lead.name, archived: Boolean(lead.archivedAt), canWrite: writable, archiveBlockedReason: leadArchiveBlockedReason(lead.status, lead.updatedAt) });
 
   const searched = useMemo(
     () =>
-      list.filter((lead) =>
+      (status === "ARCHIVED" ? archivedLeads : list).filter((lead) =>
         matchesQuery(query, [lead.name, lead.company, lead.email, lead.phone, lead.ruc, lead.reason, lead.location, lead.message]),
       ),
-    [list, query],
+    [list, archivedLeads, status, query],
   );
 
   const rows = useMemo(
-    () => searched.filter((lead) => (status === "ALL" ? true : lead.status === status)),
+    () => searched.filter((lead) => (status === "ALL" || status === "ARCHIVED" ? true : lead.status === status)),
     [searched, status],
   );
 
@@ -246,6 +254,7 @@ export function LeadsModule() {
           ...(lead.email
             ? [{ label: "Enviar correo", icon: "mail" as const, href: `mailto:${lead.email}`, title: `Enviar correo a ${lead.name}` }]
             : []),
+          ...trashMenu(lead),
         ];
         return {
           id: lead.id,
@@ -309,10 +318,10 @@ export function LeadsModule() {
           ),
         };
       }),
-    [rows],
+    [rows, trash],
   );
 
-  const selected = useMemo(() => list.find((lead) => lead.id === selectedId) ?? null, [list, selectedId]);
+  const selected = useMemo(() => allLeads.find((lead) => lead.id === selectedId) ?? null, [allLeads, selectedId]);
 
   const totals = useMemo(
     () => ({
@@ -478,6 +487,8 @@ export function LeadsModule() {
       ) : null}
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {trash.note}
+      {writable ? trash.dialog : null}
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       {/* Pestañas de estado (issue #151): encima de la lista y del tablero; en
@@ -506,13 +517,23 @@ export function LeadsModule() {
             <span className="admin-subtab-count">{formatNumber(statusCounts.get(option.value) ?? 0)}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className="admin-subtab"
+          data-active={status === "ARCHIVED" ? "true" : undefined}
+          aria-pressed={status === "ARCHIVED"}
+          onClick={() => setStatus("ARCHIVED")}
+        >
+          Archivados
+          <span className="admin-subtab-count">{formatNumber(archivedLeads.length)}</span>
+        </button>
       </nav>
 
       <AdminDataState
         loading={leads.loading}
         error={leads.error}
         onRetry={leads.reload}
-        empty={list.length === 0}
+        empty={allLeads.length === 0}
         emptyTitle="Todavía no hay leads" emptyIcon="leads"
         emptyHint="Cuando alguien pida una cotización desde el sitio, el lead entra acá con su pedido y datos de contacto."
       >
@@ -617,6 +638,7 @@ export function LeadsModule() {
                       />
                       <AdminWhatsappLink phone={lead.phone} name={lead.name} />
                       {lead.email ? <AdminIconLink href={`mailto:${lead.email}`} icon="mail" label={`Enviar correo a ${lead.name}`} /> : null}
+                      {writable ? <AdminActionsMenu label={`Más acciones del lead ${lead.name}`} items={trashMenu(lead)} /> : null}
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -631,7 +653,10 @@ export function LeadsModule() {
           title={`Lead · ${selected.name}`} icon="leads"
           meta={`Ingresó el ${formatDateTime(selected.createdAt)} · ${leadSourceLabel(selected.source)}`}
           action={
-            <AdminButton icon="close" onClick={closeDetail} aria-label="Cerrar el detalle del lead" title="Cerrar el detalle del lead" />
+            <>
+              {writable ? <AdminActionsMenu label={`Más acciones del lead ${selected.name}`} items={trashMenu(selected)} /> : null}
+              <AdminButton icon="close" onClick={closeDetail} aria-label="Cerrar el detalle del lead" title="Cerrar el detalle del lead" />
+            </>
           }
         >
           <div className="admin-detail">

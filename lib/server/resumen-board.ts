@@ -105,7 +105,7 @@ export async function getResumenBoard(organizationId: string, now = new Date()):
     db.$queryRaw<RawWeek[]>`
       SELECT FLOOR(EXTRACT(EPOCH FROM ("startsAt" - ${today}::timestamp)) / 604800)::int AS "week", COUNT(*)::int AS "count"
       FROM "Event"
-      WHERE "organizationId" = ${organizationId} AND "deletedAt" IS NULL AND "status" NOT IN ('CANCELLED', 'COMPLETED')
+      WHERE "organizationId" = ${organizationId} AND "deletedAt" IS NULL AND "archivedAt" IS NULL AND "status" NOT IN ('CANCELLED', 'COMPLETED')
         AND "startsAt" >= ${today}::timestamp AND "startsAt" < ${eventsEnd}::timestamp
       GROUP BY 1
     `,

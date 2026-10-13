@@ -125,7 +125,7 @@ export function TrashDialog({
     }
     onDone(
       mode === "trash"
-        ? `${capital(entity.label)} «${name}» está en la papelera. Podés restaurarlo desde Ajustes → Eliminados.`
+        ? `${capital(entity.label)} «${name}» está en la papelera. Podés restaurar desde Ajustes → Eliminados.`
         : mode === "purge"
           ? `${capital(entity.label)} «${name}» se eliminó definitivamente.`
           : `${capital(entity.label)} «${name}» se anonimizó: se conserva el historial contable.`,
@@ -215,4 +215,63 @@ export function TrashDialog({
 
 function capital(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/**
+ * Flujo completo de archivar / desarchivar / eliminar de un módulo (Clientes, Leads,
+ * Proveedores, Promotoras, Presupuestos): arma las entradas del «•••», corre la acción,
+ * muestra el aviso y monta el diálogo de eliminar. El módulo solo pasa `onChanged` (recarga).
+ */
+export function useTrashFlow(type: TrashEntityType, options: { onChanged: () => void; onTrashed?: (id: string) => void }) {
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(null);
+  const [busyId, setBusyId] = useState("");
+  const [feedback, setFeedback] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const entity = TRASH_ENTITIES[type];
+
+  async function toggleArchive(id: string, name: string, restore: boolean) {
+    if (busyId) return;
+    setBusyId(id);
+    setFeedback(null);
+    const result = await runTrashAction(type, id, restore ? "unarchive" : "archive");
+    setBusyId("");
+    if (!result.ok) {
+      setFeedback({ tone: "error", text: result.error });
+      return;
+    }
+    setFeedback({ tone: "ok", text: restore ? `«${name}» desarchivado.` : `«${name}» archivado. Lo ves con el filtro «Archivados».` });
+    options.onChanged();
+  }
+
+  function menu(row: { id: string; name: string; archived: boolean; canWrite: boolean; archiveBlockedReason?: string | null }): AdminMenuItem[] {
+    return trashMenuItems({
+      type,
+      name: row.name,
+      archived: row.archived,
+      canWrite: row.canWrite,
+      archiveBlockedReason: row.archiveBlockedReason,
+      busy: Boolean(busyId),
+      onArchive: () => void toggleArchive(row.id, row.name, false),
+      onUnarchive: () => void toggleArchive(row.id, row.name, true),
+      onTrash: () => setTarget({ id: row.id, name: row.name }),
+    });
+  }
+
+  const dialog = target ? (
+    <TrashDialog
+      mode="trash"
+      type={type}
+      id={target.id}
+      name={target.name}
+      onClose={() => setTarget(null)}
+      onDone={(message) => {
+        const id = target.id;
+        setTarget(null);
+        setFeedback({ tone: "ok", text: message });
+        options.onTrashed?.(id);
+        options.onChanged();
+      }}
+    />
+  ) : null;
+  const note = feedback ? <AdminNote tone={feedback.tone}>{feedback.text}</AdminNote> : null;
+  return { menu, dialog, note, entity };
 }

@@ -25,13 +25,13 @@ export async function GET() {
   }
   const now = new Date();
   const [clients, budgets, events, suppliers, inventory, promoters, leads, receivables, pendingCollections, payables, upcoming] = await Promise.all([
-    db.client.count({ where: { organizationId, active: true } }),
-    db.budget.count({ where: { organizationId, status: { notIn: ["LOST", "CANCELLED"] } } }),
-    db.event.count({ where: { organizationId, status: { not: "CANCELLED" } } }),
-    db.supplier.count({ where: { organizationId, active: true } }),
+    db.client.count({ where: { organizationId, archivedAt: null, active: true } }),
+    db.budget.count({ where: { organizationId, archivedAt: null, status: { notIn: ["LOST", "CANCELLED"] } } }),
+    db.event.count({ where: { organizationId, archivedAt: null, status: { not: "CANCELLED" } } }),
+    db.supplier.count({ where: { organizationId, archivedAt: null, active: true } }),
     db.inventoryItem.count({ where: { organizationId, status: { not: "RETIRED" } } }),
-    db.promoter.count({ where: { organizationId, active: true } }),
-    db.lead.count({ where: { organizationId, status: "NEW" } }),
+    db.promoter.count({ where: { organizationId, archivedAt: null, active: true } }),
+    db.lead.count({ where: { organizationId, archivedAt: null, status: "NEW" } }),
     // Solo los cobros cobrados descuentan el saldo (issue #16): un cobro a plazo
     // pendiente es parte de lo que queda por cobrar, no plata cobrada.
     db.budget.findMany({
@@ -44,7 +44,7 @@ export async function GET() {
     db.clientPayment.findMany({ where: { organizationId, status: "PENDING", budgetId: null }, select: { amount: true } }),
     db.supplierJob.findMany({ where: { organizationId, status: { notIn: ["PAID", "CANCELLED"] } }, select: { total: true, advance: true } }),
     db.event.findMany({
-      where: { organizationId, startsAt: { gte: now }, status: { not: "CANCELLED" } },
+      where: { organizationId, archivedAt: null, startsAt: { gte: now }, status: { not: "CANCELLED" } },
       orderBy: { startsAt: "asc" },
       take: 8,
       include: { client: { select: { name: true, company: true } }, assignments: { include: { inventory: true } }, tasks: true },

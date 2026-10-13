@@ -151,7 +151,8 @@ export async function GET(request: Request) {
     inventoryRows,
     wanted("promoters")
       ? db.promoter.findMany({
-          where: { organizationId, active: true },
+          // `archived=1` (papelera, Promotoras → «Archivados»): solo las archivadas; si no, las activas de siempre.
+          where: url.searchParams.get("archived") === "1" ? { organizationId, archivedAt: { not: null } } : { organizationId, active: true },
           orderBy: { name: "asc" },
           take: 200,
           ...(selector ? { select: SELECTOR_FIELDS.promoters } : {}),

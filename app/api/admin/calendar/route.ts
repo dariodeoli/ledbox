@@ -129,6 +129,7 @@ export async function GET(request: Request) {
     db.event.findMany({
       where: {
         organizationId,
+        archivedAt: null,
         status: { not: "CANCELLED" },
         OR: [
           { startsAt: { lt: to }, endsAt: { gt: from } },
@@ -157,7 +158,7 @@ export async function GET(request: Request) {
     }),
     db.eventTask.findMany({
       where: {
-        event: { organizationId, status: { not: "CANCELLED" } },
+        event: { organizationId, archivedAt: null, status: { not: "CANCELLED" } },
         completedAt: null,
         dueAt: { gte: from, lt: to },
       },

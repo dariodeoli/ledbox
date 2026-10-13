@@ -202,7 +202,7 @@ export function EventoFicha(props: EventoFichaProps) {
     >
       <div className="admin-ficha-evento-head">
         <EventStateBadges item={item} />
-        {event.status === "IN_PROGRESS" || readiness.phase === "closed" || readiness.phase === "ended" || !event.startsAt ? null : (
+        {event.archivedAt || event.status === "IN_PROGRESS" || readiness.phase === "closed" || readiness.phase === "ended" || !event.startsAt ? null : (
           <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
         )}
       </div>

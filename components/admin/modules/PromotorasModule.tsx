@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { PROMOTER_AVAILABILITIES, type AdminPromoterRow } from "@/lib/admin-types";
+import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminViewSwitch, useAdminModuleView } from "../AdminBoard";
@@ -31,6 +32,7 @@ import {
   AdminKpis,
   AdminNote,
   AdminRow,
+  AdminActionsMenu,
   AdminSelect,
   AdminTable,
   AdminToolbar,
@@ -51,6 +53,7 @@ const AVAILABILITY_OPTIONS = PROMOTER_AVAILABILITIES.map((value) => ({
 const AVAILABILITY_FILTERS = [
   { value: "ALL", label: "Todas las disponibilidades" },
   ...AVAILABILITY_OPTIONS,
+  { value: "ARCHIVED", label: "Archivadas" },
 ];
 
 /** Nota de disponibilidad: mismo criterio que la API (`backend` revalida). */
@@ -69,6 +72,14 @@ export function PromotorasModule() {
 
   const [query, setQuery] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState("ALL");
+  // «Archivadas» (papelera) se pide aparte: el catálogo activo nunca las trae.
+  const archivedView = availabilityFilter === "ARCHIVED";
+  const archivedResource = useAdminResource("/api/admin/resources?only=promoters&archived=1", (payload) => ({ promoters: payload.promoters ?? [] }), { enabled: archivedView });
+  const current = archivedView ? archivedResource : resources;
+  const reloadAll = () => {
+    resources.reload();
+    if (archivedView) archivedResource.reload();
+  };
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -94,26 +105,28 @@ export function PromotorasModule() {
       });
 
   const writable = canWriteOperations(role);
-  const promoters = useMemo(() => resources.data?.promoters ?? [], [resources.data]);
+  const trash = useTrashFlow("Promoter", { onChanged: reloadAll });
+  const activePromoters = useMemo(() => resources.data?.promoters ?? [], [resources.data]);
+  const promoters = useMemo(() => (archivedView ? archivedResource.data?.promoters ?? [] : activePromoters), [archivedView, archivedResource.data, activePromoters]);
 
   const rows = useMemo(
     () =>
       promoters
-        .filter((promoter) => (availabilityFilter === "ALL" ? true : promoter.availability === availabilityFilter))
+        .filter((promoter) => (availabilityFilter === "ALL" || archivedView ? true : promoter.availability === availabilityFilter))
         .filter((promoter) =>
           matchesQuery(query, [promoter.name, promoter.specialties, promoter.phone, promoter.email]),
         ),
-    [promoters, query, availabilityFilter],
+    [promoters, query, availabilityFilter, archivedView],
   );
 
   const totals = useMemo(
     () => ({
-      reachable: promoters.filter((promoter) => whatsappHref(promoter.phone) || promoter.email).length,
-      available: promoters.filter((promoter) => promoter.availability === "AVAILABLE").length,
-      unavailable: promoters.filter((promoter) => promoter.availability === "UNAVAILABLE").length,
-      toDefine: promoters.filter((promoter) => promoter.availability === "TO_DEFINE").length,
+      reachable: activePromoters.filter((promoter) => whatsappHref(promoter.phone) || promoter.email).length,
+      available: activePromoters.filter((promoter) => promoter.availability === "AVAILABLE").length,
+      unavailable: activePromoters.filter((promoter) => promoter.availability === "UNAVAILABLE").length,
+      toDefine: activePromoters.filter((promoter) => promoter.availability === "TO_DEFINE").length,
     }),
-    [promoters],
+    [activePromoters],
   );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -232,6 +245,8 @@ export function PromotorasModule() {
       </AdminToolbar>
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {trash.note}
+      {writable ? trash.dialog : null}
 
       {writable && showForm ? (
         <AdminDialog
@@ -351,10 +366,10 @@ export function PromotorasModule() {
       ) : null}
 
       <AdminDataState
-        loading={resources.loading}
-        error={resources.error}
-        onRetry={resources.reload}
-        empty={promoters.length === 0}
+        loading={current.loading}
+        error={current.error}
+        onRetry={current.reload}
+        empty={!archivedView && promoters.length === 0}
         emptyTitle="Todavía no hay promotoras" emptyIcon="promoters"
         emptyHint="Cargá el staff de promoción para asignarlo a las tareas de cada evento."
       >
@@ -381,8 +396,8 @@ export function PromotorasModule() {
                   title: detail || promoterAvailabilityLabel(promoter.availability),
                 },
                 {
-                  label: promoter.active ? "Activa" : "Inactiva",
-                  tone: promoter.active ? "ok" : "neutral",
+                  label: promoter.archivedAt ? "Archivada" : promoter.active ? "Activa" : "Inactiva",
+                  tone: promoter.active && !promoter.archivedAt ? "ok" : "neutral",
                   title: promoter.active ? "Puede tomar tareas" : "No puede tomar tareas",
                 },
               ],
@@ -415,6 +430,7 @@ export function PromotorasModule() {
                       onClick={() => startAvailabilityEdit(promoter)}
                     />
                   ) : null}
+                  {writable ? <AdminActionsMenu label={`Más acciones de ${promoter.name}`} items={trash.menu({ id: promoter.id, name: promoter.name, archived: Boolean(promoter.archivedAt), canWrite: writable })} /> : null}
                 </span>
               ),
             };
@@ -465,7 +481,7 @@ export function PromotorasModule() {
                     <span className="admin-nowrap">{formatDate(promoter.createdAt)}</span>
                   </AdminCell>
                   <AdminCell>
-                    <AdminBadge tone={promoter.active ? "ok" : "neutral"}>{promoter.active ? "Activa" : "Inactiva"}</AdminBadge>
+                    <AdminBadge tone={promoter.active && !promoter.archivedAt ? "ok" : "neutral"}>{promoter.archivedAt ? "Archivada" : promoter.active ? "Activa" : "Inactiva"}</AdminBadge>
                   </AdminCell>
                   <AdminCell end>
                     <span className="admin-actions">
@@ -479,6 +495,7 @@ export function PromotorasModule() {
                           onClick={() => startAvailabilityEdit(promoter)}
                         />
                       ) : null}
+                      {writable ? <AdminActionsMenu label={`Más acciones de ${promoter.name}`} items={trash.menu({ id: promoter.id, name: promoter.name, archived: Boolean(promoter.archivedAt), canWrite: writable })} /> : null}
                       {!writable && !whatsappHref(promoter.phone) && !promoter.email ? <span className="admin-muted">—</span> : null}
                     </span>
                   </AdminCell>

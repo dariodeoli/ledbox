@@ -24,6 +24,7 @@ import {
   type AdminSupplierJobPanelRow,
   type AdminSupplierRow,
 } from "@/lib/admin-types";
+import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -32,6 +33,7 @@ import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 type JobRow = AdminSupplierJobPanelRow;
 import {
   AdminActionsMenu,
+  AdminSelect,
   AdminBadge,
   AdminButton,
   AdminCell,
@@ -244,9 +246,13 @@ export function ProveedoresModule() {
   const jobs = useMemo<JobRow[]>(() => jobsResource.data ?? [], [jobsResource.data]);
   const events = useMemo(() => eventsResource.data ?? [], [eventsResource.data]);
 
+  // Lo archivado (papelera) sale del directorio activo y de los indicadores; se ve con «Archivados».
+  const [supplierScope, setSupplierScope] = useState("ACTIVE");
+  const trash = useTrashFlow("Supplier", { onChanged: suppliersResource.reload });
+  const liveSuppliers = useMemo(() => suppliers.filter((supplier) => !supplier.archivedAt), [suppliers]);
   const supplierRows = useMemo(
-    () => suppliers.filter((supplier) => matchesQuery(query, [supplier.name, supplier.company, supplier.category, supplier.phone, supplier.email])),
-    [suppliers, query],
+    () => suppliers.filter((supplier) => (supplierScope === "ARCHIVED" ? Boolean(supplier.archivedAt) : !supplier.archivedAt)).filter((supplier) => matchesQuery(query, [supplier.name, supplier.company, supplier.category, supplier.phone, supplier.email])),
+    [suppliers, supplierScope, query],
   );
 
   /** Búsqueda compartida por lista, tarjetas y tablero. */
@@ -425,6 +431,7 @@ export function ProveedoresModule() {
           ...(writable
             ? [{ label: "Editar proveedor", icon: "edit" as const, onClick: () => openSupplierEdit(supplier), title: `Editar proveedor: ${supplier.name}` }]
             : []),
+          ...trash.menu({ id: supplier.id, name: supplier.name, archived: Boolean(supplier.archivedAt), canWrite: writable }),
         ];
         return {
           id: supplier.id,
@@ -436,7 +443,7 @@ export function ProveedoresModule() {
               label: supplierCategoryLabel(supplier.category),
               tone: supplier.category === "OTHER" ? "neutral" : "info",
             },
-            { label: supplier.active ? "Activo" : "Inactivo", tone: supplier.active ? "ok" : "neutral" },
+            supplier.archivedAt ? { label: "Archivado", tone: "neutral" } : { label: supplier.active ? "Activo" : "Inactivo", tone: supplier.active ? "ok" : "neutral" },
           ],
           fields: [
             { label: "Trabajos", value: formatNumber(jobCount), title: `${formatNumber(jobCount)} trabajos` },
@@ -456,18 +463,18 @@ export function ProveedoresModule() {
           ),
         };
       }),
-    [supplierRows, writable],
+    [supplierRows, writable, trash],
   );
 
   const totals = useMemo(() => {
     const open = jobs.filter((job) => isSupplierJobOpen(job.status));
     return {
-      activeSuppliers: suppliers.filter((supplier) => supplier.active).length,
+      activeSuppliers: liveSuppliers.filter((supplier) => supplier.active).length,
       open: open.length,
       payable: jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0),
       overdue: open.filter((job) => job.dueAt && new Date(job.dueAt).getTime() < Date.now()).length,
     };
-  }, [jobs, suppliers]);
+  }, [jobs, liveSuppliers]);
 
   function openSupplierCreate() {
     setSupplierError("");
@@ -590,7 +597,7 @@ export function ProveedoresModule() {
   return (
     <div className="admin-module-page">
       <AdminKpis label="Indicadores de proveedores">
-        <AdminKpi state={kpiState(suppliersResource)} label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
+        <AdminKpi state={kpiState(suppliersResource)} label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(liveSuppliers.length)}`} />
         <AdminKpi state={kpiState(jobsResource)} label="Trabajos abiertos" icon="suppliers" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
         <AdminKpi state={kpiState(jobsResource)} label="Saldo por pagar" icon="finance" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
         <AdminKpi
@@ -1037,9 +1044,18 @@ export function ProveedoresModule() {
 
       <AdminPanel
         title="Proveedores" icon="suppliers"
-        meta={`${formatNumber(supplierRows.length)} de ${formatNumber(suppliers.length)}`}
+        meta={`${formatNumber(supplierRows.length)} de ${formatNumber(supplierScope === "ARCHIVED" ? suppliers.length - liveSuppliers.length : liveSuppliers.length)}`}
         action={
           <span className="admin-panel-actions">
+            <AdminSelect
+              value={supplierScope}
+              onChange={setSupplierScope}
+              label="Ver proveedores"
+              options={[
+                { value: "ACTIVE", label: "Activos" },
+                { value: "ARCHIVED", label: "Archivados" },
+              ]}
+            />
             {narrow ? null : (
               <AdminViewSwitch view={suppliersView} onChange={setSuppliersView} label="Vista de proveedores" views={PROVEEDORES_VIEWS} />
             )}
@@ -1052,6 +1068,8 @@ export function ProveedoresModule() {
         }
       >
         {supplierError && supplierForm === null ? <AdminNote tone="error">{supplierError}</AdminNote> : null}
+        {trash.note}
+        {writable ? trash.dialog : null}
 
         {writable && supplierForm ? (
           <AdminDialog
@@ -1195,7 +1213,7 @@ export function ProveedoresModule() {
                     <AdminCell title={supplier.email || "Sin correo"}>{supplier.email || "—"}</AdminCell>
                     <AdminCell title={supplier.paymentTerms || "Sin condiciones cargadas"}>{supplier.paymentTerms || "—"}</AdminCell>
                     <AdminCell>
-                      <AdminBadge tone={supplier.active ? "ok" : "neutral"}>{supplier.active ? "Activo" : "Inactivo"}</AdminBadge>
+                      <AdminBadge tone={supplier.active && !supplier.archivedAt ? "ok" : "neutral"}>{supplier.archivedAt ? "Archivado" : supplier.active ? "Activo" : "Inactivo"}</AdminBadge>
                     </AdminCell>
                     <AdminCell end>
                       <span className="admin-actions">
@@ -1209,6 +1227,12 @@ export function ProveedoresModule() {
                             title={`Editar proveedor: ${supplier.name}`}
                             aria-label={`Editar proveedor: ${supplier.name}`}
                             onClick={() => openSupplierEdit(supplier)}
+                          />
+                        ) : null}
+                        {writable ? (
+                          <AdminActionsMenu
+                            label={`Más acciones de ${supplier.name}`}
+                            items={trash.menu({ id: supplier.id, name: supplier.name, archived: Boolean(supplier.archivedAt), canWrite: writable })}
                           />
                         ) : null}
                         {!writable && !supplier.email ? <span className="admin-muted">—</span> : null}

@@ -840,7 +840,7 @@ export function EventosModule() {
                 <AdminRow key={event.id} tone={itemTone(item)}>
                   <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
                     <strong>{event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}</strong>
-                    {readiness.phase === "closed" || readiness.phase === "ended" || event.status === "IN_PROGRESS" || !event.startsAt ? null : (
+                    {event.archivedAt || readiness.phase === "closed" || readiness.phase === "ended" || event.status === "IN_PROGRESS" || !event.startsAt ? null : (
                       <AdminCountdown value={event.startsAt} short className="admin-countdown--inline" title={`Cuánto falta para el inicio: ${event.name}`} />
                     )}
                   </AdminCell>
