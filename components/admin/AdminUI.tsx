@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button as SharedButton } from "owncoding-ui";
 import { createPortal } from "react-dom";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
 import {
@@ -597,66 +597,208 @@ export function AdminDisclosure({
 }
 
 /**
- * Diálogo único del panel: overlay a pantalla completa y panel centrado.
- * Contrato mínimo: rol dialog, foco al abrir (respeta un campo con `autoFocus`),
- * cierre con Escape y clic afuera. `wide` para las tablas chicas y `ficha` para
- * la ficha 360 del cliente (issue #34), que necesita ancho para sus listas.
+ * Diálogo único del panel: overlay a pantalla completa y hoja centrada.
+ * Contrato: rol dialog con `aria-modal`, foco al abrir (respeta un campo con
+ * `autoFocus`), trampa de foco con Tab, cierre con Escape y clic afuera, y el
+ * foco vuelve al disparador al cerrar. `wide` para las tablas chicas y `ficha`
+ * para la ficha 360 del cliente (issue #34): panel lateral a pantalla completa
+ * de alto. En celular las tres son una hoja a pantalla completa.
+ *
+ * - `description`: una línea bajo el título que dice qué pasa al guardar.
+ * - `footer`: pie fijo, siempre visible, con la acción principal a la derecha.
+ *   Los diálogos que arman su pie con `.admin-dialog-foot` dentro de los hijos
+ *   conservan su contrato: el estilo del pie fijo se les aplica igual.
+ * - `footer` también acepta una función `({ requestClose })`: «Cancelar» debe usar
+ *   `requestClose` para pasar por la misma confirmación que la X y Esc.
+ * - `dirty`: con cambios sin guardar, cerrar (X, Esc o clic afuera) pide
+ *   confirmación dentro del mismo diálogo.
  */
 export function AdminDialog({
   title,
   onClose,
   size = "default",
   icon,
+  description,
+  footer,
+  dirty = false,
   children,
 }: {
   title: string;
   onClose: () => void;
   size?: "default" | "wide" | "ficha";
-  /** Ícono del asunto del diálogo; mismo chip que los títulos de sección. */
+  /** Ícono del asunto del diálogo; va en un cuadro con acento suave. */
   icon?: AdminIconName;
+  /** Subtítulo de una línea: qué pasa al guardar. */
+  description?: string;
+  /** Pie fijo del diálogo (acción principal a la derecha). */
+  footer?: React.ReactNode | ((api: { requestClose: () => void }) => React.ReactNode);
+  /** Hay cambios sin guardar: cerrar pide confirmación. */
+  dirty?: boolean;
   children: React.ReactNode;
 }) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  // El diálogo se monta dentro de `.admin-root` (tokens y tema) pero fuera del
+  // diálogo que lo abrió: un `fixed` dentro de un padre con `backdrop-filter`
+  // se recortaba a la hoja de abajo (por ejemplo, «Nuevo cliente» desde «Precio y condiciones»).
+  const [host, setHost] = useState<HTMLElement | "inline" | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const [confirming, setConfirming] = useState(false);
+  // Siempre el último estado, sin re-suscribir el teclado en cada render.
+  const latest = useRef({ onClose, dirty, confirming });
+  latest.current = { onClose, dirty, confirming };
+
+  const requestClose = useCallback(() => {
+    const current = latest.current;
+    if (current.dirty) setConfirming(true);
+    else current.onClose();
+  }, []);
+
   useEffect(() => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setHost(anchorRef.current?.closest<HTMLElement>(".admin-root") ?? "inline");
+  }, []);
+
+  const ready = host !== null;
+  useEffect(() => {
+    if (!ready) return;
+    const token = Symbol("dialog");
+    DIALOG_STACK.push(token);
+    const opener = openerRef.current;
     // Si un campo del diálogo ya tomó el foco al montar (`autoFocus`), se
     // respeta: el botón de cerrar es solo el respaldo (issue #106).
     const active = document.activeElement;
     const ownsFocus = active instanceof HTMLElement && Boolean(active.closest(".admin-dialog"));
     if (!ownsFocus) closeRef.current?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !event.defaultPrevented) onClose();
+      // Con diálogos apilados, Escape y Tab son del que está arriba.
+      if (DIALOG_STACK[DIALOG_STACK.length - 1] !== token) return;
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        if (latest.current.confirming) setConfirming(false);
+        else requestClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const root = sectionRef.current;
+      if (!root) return;
+      const current = document.activeElement;
+      if (current instanceof HTMLElement && document.body.contains(current) && !root.contains(current) && current !== document.body) return;
+      const focusables = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((node) => node.offsetParent !== null || node === current);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && (current === first || !root.contains(current))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (current === last || !root.contains(current))) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  const classes = ["admin-dialog"];
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      const at = DIALOG_STACK.indexOf(token);
+      if (at >= 0) DIALOG_STACK.splice(at, 1);
+      if (opener && document.body.contains(opener)) opener.focus();
+    };
+  }, [requestClose, ready]);
+
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus();
+  }, [confirming]);
+
+  const classes = ["admin-dialog", "admin-dialog--sheet"];
   if (size === "wide") classes.push("admin-dialog--wide");
   if (size === "ficha") classes.push("admin-dialog--ficha");
-  return (
+  const content = (
     <div
-      className="admin-dialog-overlay"
+      className={size === "ficha" ? "admin-dialog-overlay admin-dialog-overlay--ficha" : "admin-dialog-overlay"}
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <section className={classes.join(" ")} role="dialog" aria-modal="true" aria-label={title}>
+      <section
+        ref={sectionRef}
+        className={classes.join(" ")}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        aria-describedby={description ? descriptionId : undefined}
+      >
         <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            {icon ? (
-              <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-                <AdminIcon name={icon} size={11} />
-              </span>
+          {icon ? (
+            <span className="admin-dialog-icon" aria-hidden="true">
+              <AdminIcon name={icon} size={18} />
+            </span>
+          ) : null}
+          <div className="admin-dialog-heading">
+            <h2 className="admin-dialog-title" id={titleId}>
+              {title}
+            </h2>
+            {description ? (
+              <p className="admin-dialog-description" id={descriptionId}>
+                {description}
+              </p>
             ) : null}
-            {title}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
+          </div>
+          <button ref={closeRef} type="button" className="admin-iconbtn admin-dialog-close" onClick={requestClose} aria-label="Cerrar" title="Cerrar">
             <AdminIcon name="close" size={15} />
           </button>
         </header>
-        {children}
+        <div className="admin-dialog-body">{children}</div>
+        {confirming ? (
+          <div className="admin-dialog-confirm" role="alert">
+            <div className="admin-dialog-confirm-text">
+              <strong>¿Descartar los cambios?</strong>
+              <span>Lo que cargaste todavía no se guardó.</span>
+            </div>
+            <div className="admin-dialog-actions">
+              <button ref={keepRef} type="button" className="admin-btn" onClick={() => setConfirming(false)}>
+                <span>Seguir editando</span>
+              </button>
+              <button type="button" className="admin-btn admin-btn--danger" onClick={() => latest.current.onClose()}>
+                <span>Descartar</span>
+              </button>
+            </div>
+          </div>
+        ) : footer ? (
+          <footer className="admin-dialog-footer">{typeof footer === "function" ? footer({ requestClose }) : footer}</footer>
+        ) : null}
       </section>
     </div>
+  );
+  return (
+    <>
+      <span ref={anchorRef} hidden />
+      {host === null ? null : host === "inline" ? content : createPortal(content, host)}
+    </>
+  );
+}
+
+/** Pila de diálogos abiertos: el teclado es del último. */
+const DIALOG_STACK: symbol[] = [];
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Sección de un diálogo: título chico en mayúsculas y grilla de dos columnas en
+ * escritorio (una en celular). Un campo `wide` ocupa el ancho completo.
+ */
+export function AdminDialogSection({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <section className="admin-dialog-section">
+      {title ? <h3 className="admin-dialog-section-title">{title}</h3> : null}
+      <div className="admin-dialog-grid">{children}</div>
+    </section>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { CLIENT_LINK_MESSAGES, contactPhoneValid, instagramValid, websiteValid } from "@/lib/admin-format";
 import { adminSend } from "@/lib/admin-api";
 import { canWriteClients } from "@/lib/admin-policy";
@@ -318,6 +318,8 @@ export function ClientQuickDialog({
   onCreated: (client: AdminClientOption) => void;
 }) {
   const [values, setValues] = useState<ClientQuickValues>({ ...EMPTY_CLIENT_QUICK, tradeName: initialName });
+  const formId = useId();
+  const dirty = JSON.stringify(values) !== JSON.stringify({ ...EMPTY_CLIENT_QUICK, tradeName: initialName });
   const { role } = useAdminSession();
   const writable = canWriteClients(role);
   const [busy, setBusy] = useState(false);
@@ -357,11 +359,24 @@ export function ClientQuickDialog({
   if (!writable) return <AdminDialog title="Nuevo cliente" icon="clients" onClose={onClose}><AdminNote>No tenés permiso para crear clientes.</AdminNote></AdminDialog>;
 
   return (
-    <AdminDialog title="Nuevo cliente" icon="clients" onClose={onClose}>
-      <p className="admin-dialog-text">
-        Alta mínima: al crearlo queda elegido en el evento. El resto de la ficha se completa después en Clientes.
-      </p>
-      <form className="admin-form" onSubmit={(event) => void submit(event)}>
+    <AdminDialog
+      title="Nuevo cliente"
+      icon="clients"
+      description="Alta mínima: queda elegido en el evento. El resto se completa en Clientes."
+      dirty={dirty}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>
+            Crear cliente
+          </AdminButton>
+        </>
+      )}
+    >
+      <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)}>
         <ClientQuickFields
           values={values}
           onChange={(patch) => setValues((current) => ({ ...current, ...patch }))}
@@ -369,15 +384,6 @@ export function ClientQuickDialog({
           autoFocus
         />
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
-            Cancelar
-          </AdminButton>
-          <AdminButton variant="primary" icon="check" type="submit" busy={busy}>
-            Crear cliente
-          </AdminButton>
-        </div>
       </form>
     </AdminDialog>
   );

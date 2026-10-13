@@ -469,3 +469,61 @@ operación»** (tiempo, faltantes, margen: el mecanismo concreto, sin métricas
 inventadas) y **«Para quién es»** (productoras, alquiladores, agencias); las
 secciones quedan más cerca (128 → 96 px entre «Cómo funciona» y «Preguntas») y
 las anclas ya no aterrizan bajo la barra pegajosa (`scroll-margin-top: 76px`).
+
+## 14. Campos y ventanas de carga (13-10-2026)
+
+Rediseño de `AdminFields` y de `AdminDialog`; todo el CSS vive en
+`app/globals.css` bajo `.admin-*` y los tokens nuevos (`--a-field-*`,
+`--a-focus-halo`, `--a-danger-halo`, `--a-ok-halo`, `--a-dialog-*`) se definen
+en los dos temas. Guardas en `tests/admin-dialog-fields.test.ts`.
+
+**Campos.**
+- Alto `--a-field-h`: 40 px en escritorio y 44 px a ≤ 720 px; radio 9 px; fondo
+  `--a-field-bg` (un tono más oscuro que el panel en oscuro, blanco en claro).
+- Etiqueta arriba, 12 px semibold. `required` agrega «*» en el acento
+  (`aria-hidden`: el input ya es `required`); `optional` agrega «opcional» a la
+  derecha. Hint 11,5 px tenue.
+- Foco: borde del acento + halo de 3 px. Error: borde rojo + halo + mensaje
+  debajo en `--a-danger-text` (`aria-invalid` + `aria-describedby`). Válido
+  (`success`, por ejemplo RUC encontrado): borde verde suave y mensaje verde
+  (`data-state="valid"`). Deshabilitado o solo lectura: opacidad .55.
+- Prefijo fijo con separador: «Gs» (`MoneyField`), «+595» (`PhoneField`: el
+  selector de país y el número son un solo campo) y «%» (`PercentField`, detrás
+  del número porque así se lee). Mismo segmento visual (`.admin-money`).
+- `SegmentedField` de 40 px con la opción activa en acento suave.
+- Nuevo `CheckboxField` (casilla con texto, `tone` ok/warn/danger); el checklist
+  operativo y «Retirado / no incluido» de Presupuestos dejaron de usar `<input>`
+  sueltos. Los filtros de barra (`.admin-toolbar`) siguen a 36 px a propósito.
+
+**Contraste medido** (tokens reales, ventana opaca `--a-dialog-bg`): texto
+16,1 (oscuro) / 17,1 (claro); hint/placeholder 7,4 / 6,7; etiqueta 11,7 / 11,0;
+«*» 11,3 / 5,7; error 9,9 / 7,0; válido 13,3 / 6,6; borde de control 3,8 / 3,6;
+borde de error 7,6 / 5,8; borde de foco 11,3 / 5,7. El test recalcula los
+contrastes de texto ≥ 4,5 y de borde ≥ 3 desde `globals.css`.
+
+**Ventanas (`AdminDialog`).**
+- Encabezado: ícono en cuadro de 36 px (acento suave), título en display 16 px,
+  `description` opcional (una línea: qué pasa al guardar) y cerrar de 30 px.
+- Cuerpo con scroll propio. `AdminDialogSection` (título chico en mayúsculas) y
+  `.admin-dialog-grid`: 2 columnas en escritorio, 1 en celular; `wide` en un
+  campo ocupa el ancho completo.
+- Pie fijo: prop `footer` (acción principal a la derecha). Los
+  `.admin-dialog-foot` dentro de los hijos se estilizan igual y quedan pegados
+  abajo (sticky), así que los usos existentes no cambian. Si el botón vive fuera
+  del `<form>`, se enlaza con `form={id}`.
+- Tamaños: default 560 px, `wide` 720 px, `ficha` = panel lateral derecho de alto
+  completo (máx. 1040 px). A ≤ 720 px las tres son una hoja a pantalla completa
+  con el pie fijo (`100dvh`, safe-area).
+- `dirty`: cerrar con X, Esc o clic afuera pide confirmación dentro del mismo
+  diálogo («Seguir editando» / «Descartar»); Esc dentro de la confirmación
+  vuelve a editar. Sin `window.confirm`.
+- Foco al abrir (respeta `autoFocus`), trampa de foco con Tab/Shift+Tab, foco de
+  vuelta al disparador, `aria-modal`, y Esc/Tab solo del diálogo de arriba. El
+  diálogo se monta dentro de `.admin-root` (portal): uno abierto desde otro ya no
+  queda recortado por la hoja de abajo.
+- Los siete diálogos armados a mano (`Finanzas`, `Usuarios`) conservan su
+  estructura y toman el encabezado y el ancho nuevos; pasarlos a `AdminDialog` y
+  convertir los `AdminFormPanel` inline queda para otra tanda.
+- Adoptados con `description`, `footer` y `dirty`: Nuevo cliente
+  (`ClientQuickForm`), Crear evento (`BudgetQuickCreate`) y Precio y condiciones
+  (`BudgetPricingDialog`).

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { normalizarBusqueda } from "owncoding-ui/utils";
 import { adminApiGet, adminSend, newIdempotencyKey, requestAdminRefresh } from "@/lib/admin-api";
 import { ADMIN_ROOT_ID } from "@/lib/admin-theme";
@@ -244,6 +244,7 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
   const [config, setConfig] = useState<ConfigIa | null>(null);
   const [configError, setConfigError] = useState("");
   const [reintento, setReintento] = useState(0);
+  const formId = useId();
   const [texto, setTexto] = useState("");
   const [fase, setFase] = useState<"entrada" | "revision" | "listo">("entrada");
   const [analizando, setAnalizando] = useState(false);
@@ -1014,11 +1015,69 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
     return listar(cantidad, nombres[tipo][0], nombres[tipo][1]);
   }
 
+  const footer =
+    config && !config.configurada ? (
+      <>
+            <span className="admin-dialog-spacer" />
+            <AdminButton icon="refresh" onClick={() => setReintento((valor) => valor + 1)}>
+              Volver a chequear
+            </AdminButton>
+            <AdminButton variant="primary" icon="check" onClick={onClose}>
+              Entendido
+            </AdminButton>
+    </>
+    ) : config?.configurada && fase === "entrada" ? (
+      <>
+            <span className="admin-dialog-spacer" />
+            <AdminButton icon="close" onClick={onClose} disabled={analizando}>
+              Cancelar
+            </AdminButton>
+            <AdminButton variant="primary" icon="sparkles" type="submit" form={formId} busy={analizando} disabled={!texto.trim()}>
+              Analizar con IA
+            </AdminButton>
+    </>
+    ) : config?.configurada && fase === "revision" ? (
+      <>
+            <span className="admin-dialog-spacer" />
+            <AdminButton icon="arrow-left" onClick={() => setFase("entrada")} disabled={creando}>
+              Volver
+            </AdminButton>
+            <AdminButton
+              variant="primary"
+              icon="check"
+              busy={creando}
+              disabled={creando || totalIncluidos === 0 || pendientes > 0}
+              onClick={() => void aplicarTodo()}
+            >
+              {`Aplicar todo (${totalIncluidos})`}
+            </AdminButton>
+    </>
+    ) : fase === "listo" && resultado ? (
+      <>
+            <span className="admin-dialog-spacer" />
+            <AdminButton
+              icon="refresh"
+              onClick={() => {
+                setTexto("");
+                setResultado(null);
+                setError("");
+                setAvisos([]);
+                setFase("entrada");
+              }}
+            >
+              Cargar otro texto
+            </AdminButton>
+            <AdminButton variant="primary" icon="check" onClick={onClose}>
+              Listo
+            </AdminButton>
+    </>
+    ) : undefined;
+
   // Portal a la raíz del panel (mismo patrón que la paleta): el topbar tiene
   // `backdrop-filter` y eso ancla los `fixed` a su caja; además la raíz
   // (`.admin-root`) es donde viven los tokens del tema (issue #120).
   return createPortal(
-    <AdminDialog title="Carga con IA" icon="sparkles" size="ficha" onClose={onClose}>
+    <AdminDialog title="Carga con IA" icon="sparkles" size="ficha" onClose={onClose} footer={footer}>
       {!config && !configError ? <p className="admin-dialog-text">Consultando la configuración…</p> : null}
 
       {configError ? <AdminNote tone="error">{configError}</AdminNote> : null}
@@ -1032,20 +1091,12 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
           <p className="admin-dialog-text">
             Mientras tanto, los clientes, eventos y productos se cargan a mano desde cada módulo, sin perder nada.
           </p>
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="refresh" onClick={() => setReintento((valor) => valor + 1)}>
-              Volver a chequear
-            </AdminButton>
-            <AdminButton variant="primary" icon="check" onClick={onClose}>
-              Entendido
-            </AdminButton>
-          </div>
         </>
       ) : null}
 
       {config?.configurada && fase === "entrada" ? (
         <form
+          id={formId}
           className="admin-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -1072,15 +1123,6 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
             .
           </p>
           {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" onClick={onClose} disabled={analizando}>
-              Cancelar
-            </AdminButton>
-            <AdminButton variant="primary" icon="sparkles" type="submit" busy={analizando} disabled={!texto.trim()}>
-              Analizar con IA
-            </AdminButton>
-          </div>
         </form>
       ) : null}
 
@@ -1659,21 +1701,6 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
               {`Resolvé ${listar(pendientes, "registro", "registros")}: elegí si refieren a un existente o marcalos como «Crear nuevo».`}
             </AdminNote>
           ) : null}
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="arrow-left" onClick={() => setFase("entrada")} disabled={creando}>
-              Volver
-            </AdminButton>
-            <AdminButton
-              variant="primary"
-              icon="check"
-              busy={creando}
-              disabled={creando || totalIncluidos === 0 || pendientes > 0}
-              onClick={() => void aplicarTodo()}
-            >
-              {`Aplicar todo (${totalIncluidos})`}
-            </AdminButton>
-          </div>
         </>
       ) : null}
 
@@ -1740,24 +1767,6 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
             Lo aplicado quedó auditado como cualquier operación del panel (los cobros con su movimiento de tesorería); las
             pantallas abiertas se actualizaron solas.
           </p>
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton
-              icon="refresh"
-              onClick={() => {
-                setTexto("");
-                setResultado(null);
-                setError("");
-                setAvisos([]);
-                setFase("entrada");
-              }}
-            >
-              Cargar otro texto
-            </AdminButton>
-            <AdminButton variant="primary" icon="check" onClick={onClose}>
-              Listo
-            </AdminButton>
-          </div>
         </>
       ) : null}
     </AdminDialog>,
