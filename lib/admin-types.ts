@@ -305,6 +305,8 @@ export type AdminEventRow = {
   strikeAt: string | null;
   status: string;
   notes: string | null;
+  /** Archivado (papelera): fuera de las listas activas y del calendario. */
+  archivedAt?: string | null;
   client: AdminClientRef;
   assignments: AdminEventAssignment[];
   tasks: AdminEventTask[];

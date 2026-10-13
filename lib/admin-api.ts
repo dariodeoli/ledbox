@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminApiResponse } from "./admin-types";
+import { readBlockers, type TrashBlocker } from "./trash-shared";
 
 /**
  * Cliente API único del panel: timeout por request, caché corta solo-GET,
@@ -47,7 +48,7 @@ function invalidateSession(): void {
 }
 
 export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; sessionInvalid?: boolean; aborted?: boolean };
-export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string };
+export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; blockers?: TrashBlocker[] };
 
 /**
  * Aviso global de refresco (issue #120): la «Carga con IA» crea registros desde
@@ -254,6 +255,9 @@ async function sendMutation<T>(
   if (outcome.status < 200 || outcome.status >= 300) {
     const message = typeof outcome.payload.error === "string" ? outcome.payload.error : "No pudimos guardar los cambios.";
     const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
+    // 409 de la papelera: los bloqueos concretos (`{ kind, count }`) viajan al diálogo.
+    const blockers = readBlockers(outcome.payload);
+    if (blockers.length) return { ok: false, error: message, blockers };
     return code ? { ok: false, error: message, code } : { ok: false, error: message };
   }
   return { ok: true, data: outcome.payload as T };
