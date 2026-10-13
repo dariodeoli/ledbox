@@ -192,9 +192,13 @@ async function occupancySection(organizationId: string, period: ReportPeriod, no
         overlapPrefilter(period, marginMin),
       ],
     },
-    take: MAX_PERIOD_ASSIGNMENTS,
+    take: MAX_PERIOD_ASSIGNMENTS + 1,
+    orderBy: [{ inventoryId: "asc" }, { id: "asc" }],
     select: { inventoryId: true, quantity: true, startsAt: true, endsAt: true, checkedInAt: true, event: { select: EVENT_RANGE_SELECT } },
   });
+  // Corte determinista: si hay más asignaciones que el tope, el reporte lo avisa en vez de subestimar en silencio.
+  const truncated = assignments.length > MAX_PERIOD_ASSIGNMENTS;
+  if (truncated) assignments.length = MAX_PERIOD_ASSIGNMENTS;
   const byItem = new Map<string, typeof assignments>();
   for (const row of assignments) byItem.set(row.inventoryId, [...(byItem.get(row.inventoryId) ?? []), row]);
   const usedIds = [...byItem.keys()];
@@ -235,7 +239,7 @@ async function occupancySection(organizationId: string, period: ReportPeriod, no
     if (row) rows.push(row);
   }
   const { top, least } = rankOccupancy(rows);
-  return { rankedItems: used.length + unusedCount, top, least };
+  return { rankedItems: used.length + unusedCount, top, least, truncated };
 }
 
 async function catalogSection(organizationId: string, period: ReportPeriod, now: Date): Promise<AdminRentalReport["catalog"]> {
@@ -321,6 +325,8 @@ async function depositsSection(organizationId: string, period: ReportPeriod): Pr
   const budgetRef: Prisma.BudgetWhereInput = {
     organizationId,
     securityDeposit: { not: null },
+    // Solo garantías de presupuestos vigentes: un borrador, perdido o cancelado no custodia nada.
+    status: { notIn: ["DRAFT", "LOST", "CANCELLED"] },
     OR: [
       { event: { startsAt: { gte: period.start, lt: period.end } } },
       { OR: [{ eventId: null }, { event: { startsAt: null } }], createdAt: { gte: period.start, lt: period.end } },

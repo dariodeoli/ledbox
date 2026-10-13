@@ -2463,6 +2463,8 @@ export type AdminRentalReport = {
     rankedItems: number;
     top: AdminRentalOccupancyRow[];
     least: AdminRentalOccupancyRow[];
+    /** El período superó el tope de asignaciones leídas: la ocupación es parcial. */
+    truncated: boolean;
   };
   catalog: {
     received: number;
@@ -2516,7 +2518,8 @@ export type AdminMonthlyReport = {
   supplierPayments: AdminMonthlyReportSupplierPaymentRow[];
   supplierPending: AdminMonthlyReportSupplierPendingRow[];
   /** Sección «Alquileres»; la arma la página con `getRentalReport`. */
-  rentals: AdminRentalReport;
+  /** `null` si la sección de alquileres no se pudo calcular: el resto del reporte se muestra igual. */
+  rentals: AdminRentalReport | null;
 };
 
 /** Ajustes de alquiler de la empresa (`GET /api/admin/settings/rental`); tiempos en minutos. */

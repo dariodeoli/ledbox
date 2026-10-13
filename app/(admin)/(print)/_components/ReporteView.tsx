@@ -102,7 +102,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
           ["Total", "", "", "", "", "", "", report.totals.committedBalance],
         ],
       },
-      ...rentalCsvBlocks(report.rentals),
+      ...(report.rentals ? rentalCsvBlocks(report.rentals) : []),
     ];
     downloadCsv(`ledbox-reporte-${report.month}.csv`, blocks);
   }
@@ -376,7 +376,11 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
           </p>
         </PrintSection>
 
-        <RentalReportSection rentals={report.rentals} periodLabel={report.monthLabel} />
+        {report.rentals ? (
+          <RentalReportSection rentals={report.rentals} periodLabel={report.monthLabel} />
+        ) : (
+          <p className="lbprint-subtitle">La sección Alquileres no se pudo calcular ahora; el resto del reporte está completo.</p>
+        )}
 
         <PrintFooter note={`Reporte mensual · ${report.monthLabel}`} />
       </article>

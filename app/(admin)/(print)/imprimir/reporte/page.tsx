@@ -87,7 +87,10 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
       orderBy: { dueAt: "asc" },
       include: { supplier: true, event: { select: { name: true } } },
     }),
-    getRentalReport(organizationId, month),
+    getRentalReport(organizationId, month).catch((error: unknown) => {
+      console.error("[reporte] sección Alquileres", error);
+      return null;
+    }),
   ]);
 
   const eventRows = events.map((event) => {

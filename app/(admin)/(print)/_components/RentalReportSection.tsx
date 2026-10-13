@@ -121,6 +121,7 @@ export function RentalReportSection({ rentals, periodLabel }: { rentals: AdminRe
   return (
     <>
       <PrintSection title={`Alquileres · ocupación por producto (${periodLabel})`}>
+        {occupancy.truncated ? <p className="lbprint-subtitle">El período tiene más movimientos de los que entran en este reporte: la ocupación es parcial. Elegí un mes con menos actividad o pedí el detalle.</p> : null}
         <h3 className="lbprint-subtitle">Los 10 más usados</h3>
         <OccupancyTable rows={occupancy.top} empty="Ningún producto tuvo unidades comprometidas en el período." />
         <h3 className="lbprint-subtitle">Los menos usados</h3>

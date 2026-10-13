@@ -96,7 +96,7 @@ test("rentabilidad: ingresos menos costo conocido; sin costo cargado no resta ni
 test("el CSV de alquileres escribe «sin dato» y omite la rentabilidad cuando no hay datos", () => {
   const rentals: AdminRentalReport = {
     days: 31,
-    occupancy: { rankedItems: 0, top: [], least: [] },
+    occupancy: { rankedItems: 0, top: [], least: [], truncated: false },
     catalog: { received: 0, converted: 0, declined: 0, expired: 0, open: 0, conversionRate: null },
     cancellations: { events: { count: 0, rows: [] }, budgets: { lost: 0, cancelled: 0, amount: 0, rows: [] } },
     incidents: { total: 1, rows: [{ kind: "MISSING", status: "OPEN", count: 1, quantity: 1, knownCost: null, unknownCostCount: 1 }], knownCost: null, unknownCostCount: 1 },
