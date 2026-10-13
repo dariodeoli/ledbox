@@ -123,6 +123,21 @@ test("alto tráfico: los tres diálogos usan description y footer", () => {
   }
 });
 
+test("las altas de evento e inventario y los diálogos de Finanzas y Usuarios usan AdminDialog con pie y dirty", () => {
+  const mod = (file: string) => readFileSync(join(root, "components", "admin", "modules", file), "utf8");
+  for (const file of ["EventosModule.tsx", "InventarioModule.tsx", "LeadsModule.tsx"]) {
+    const source = mod(file);
+    assert.match(source, /<AdminDialog\b/, `${file}: el alta/edición va en AdminDialog`);
+    assert.match(source, /dirty=\{/, `${file}: falta dirty`);
+    assert.match(source, /requestClose/, `${file}: Cancelar debe pasar por requestClose`);
+  }
+  for (const file of ["FinanzasModule.tsx", "UsuariosModule.tsx"]) {
+    const source = mod(file);
+    assert.doesNotMatch(source, /className="admin-dialog-overlay"/, `${file}: no deben quedar diálogos armados a mano`);
+    assert.match(source, /<AdminDialog\b[\s\S]*footer=/, `${file}: los diálogos llevan footer`);
+  }
+});
+
 test("contraste AA de los tokens de campos y ventanas, en oscuro y claro", () => {
   const dark = tokens(".admin-root {\n  color-scheme: dark;", '.admin-root[data-theme="light"]');
   const light = tokens('.admin-root[data-theme="light"] {\n  color-scheme: light;', ".admin-root :focus-visible");

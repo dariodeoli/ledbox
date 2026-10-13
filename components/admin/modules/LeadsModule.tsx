@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   billingUnitLabel,
   budgetReference,
@@ -28,6 +28,8 @@ import {
   AdminButton,
   AdminCell,
   AdminCountdown,
+  AdminDialog,
+  AdminDialogSection,
   AdminDataState,
   AdminEmpty,
   AdminIconLink,
@@ -123,6 +125,10 @@ export function LeadsModule() {
   const [draftStatus, setDraftStatus] = useState("NEW");
   const [draftNotes, setDraftNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  /** Ventana «Editar seguimiento» (estado y notas); el detalle queda como vista de lectura. */
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpError, setFollowUpError] = useState("");
+  const followUpFormId = useId();
   const [converting, setConverting] = useState(false);
   /** Pedido del catálogo que se está convirtiendo o al que se le retiene stock. */
   const [quoteBusy, setQuoteBusy] = useState("");
@@ -336,20 +342,31 @@ export function LeadsModule() {
   function closeDetail() {
     setSelectedId("");
     setDetailError("");
+    setFollowUpOpen(false);
+  }
+
+  function openFollowUp() {
+    if (!selected) return;
+    setDraftStatus(selected.status);
+    setDraftNotes(selected.internalNotes ?? "");
+    setFollowUpError("");
+    setFollowUpOpen(true);
   }
 
   async function saveDetail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
+    if (saving) return;
     setSaving(true);
-    setDetailError("");
+    setFollowUpError("");
     setNotice("");
     const result = await adminSend<LeadMutation>("/api/leads", { id: selected.id, status: draftStatus, internalNotes: draftNotes }, "PATCH");
     setSaving(false);
     if (!result.ok) {
-      setDetailError(result.error);
+      setFollowUpError(result.error);
       return;
     }
+    setFollowUpOpen(false);
     setNotice(`Lead de ${selected.name} actualizado.`);
     requestAdminRefresh();
   }
@@ -810,39 +827,24 @@ export function LeadsModule() {
             ) : null}
 
             {writable ? (
-              <form className="admin-detail-form" onSubmit={saveDetail} aria-busy={saving || converting || undefined}>
+              <div className="admin-detail-section">
                 <p className="admin-detail-section-title">
                   <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
                     <AdminIcon name="overview" size={11} />
                   </span>
                   Seguimiento comercial
                 </p>
-                <SelectField
-                  label="Estado del lead"
-                  value={draftStatus}
-                  onChange={setDraftStatus}
-                  options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                />
-                <TextAreaField
-                  label="Notas internas"
-                  hint="No las ve el cliente; máximo 2000 caracteres."
-                  rows={4}
-                  maxLength={2000}
-                  wide
-                  value={draftNotes}
-                  onChange={setDraftNotes}
-                  placeholder="Ej.: pidió presupuesto para el 12/10, coordinar visita al predio."
-                />
+                {selected.internalNotes ? <p className="admin-detail-text">{selected.internalNotes}</p> : <p className="admin-muted">Sin notas registradas.</p>}
                 {detailError ? <AdminNote tone="error">{detailError}</AdminNote> : null}
-                <div className="admin-detail-actions">
-                  <AdminButton type="button" icon="check" onClick={convertToClient} busy={converting} disabled={saving}>
+                <div className="admin-detail-actions" aria-busy={converting || undefined}>
+                  <AdminButton type="button" icon="edit" onClick={openFollowUp} disabled={converting}>
+                    Editar seguimiento
+                  </AdminButton>
+                  <AdminButton type="button" icon="check" onClick={convertToClient} busy={converting}>
                     Convertir en cliente
                   </AdminButton>
-                  <AdminButton type="submit" variant="primary" icon="check" busy={saving} disabled={converting}>
-                    Guardar cambios
-                  </AdminButton>
                 </div>
-              </form>
+              </div>
             ) : (
               <div className="admin-detail-section">
                 <p className="admin-detail-section-title">
@@ -857,6 +859,52 @@ export function LeadsModule() {
             )}
           </div>
         </AdminPanel>
+      ) : null}
+
+      {writable && selected && followUpOpen ? (
+        <AdminDialog
+          title={`Seguimiento · ${selected.name}`}
+          icon="leads"
+          description="Estado del lead y notas internas. El cliente no ve las notas."
+          dirty={draftStatus !== selected.status || draftNotes !== (selected.internalNotes ?? "")}
+          onClose={() => setFollowUpOpen(false)}
+          footer={({ requestClose }) => (
+            <>
+              {followUpError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{followUpError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={saving}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="submit" form={followUpFormId} busy={saving}>
+                Guardar cambios
+              </AdminButton>
+            </>
+          )}
+        >
+          <form id={followUpFormId} className="admin-form" onSubmit={(event) => void saveDetail(event)} aria-busy={saving || undefined}>
+            <AdminDialogSection title="Seguimiento comercial">
+              <SelectField
+                label="Estado del lead"
+                value={draftStatus}
+                onChange={setDraftStatus}
+                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+              <TextAreaField
+                label="Notas internas"
+                hint="No las ve el cliente; máximo 2000 caracteres."
+                rows={4}
+                maxLength={2000}
+                wide
+                value={draftNotes}
+                onChange={setDraftNotes}
+                placeholder="Ej.: pidió presupuesto para el 12/10, coordinar visita al predio."
+              />
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
     </div>
   );

@@ -44,7 +44,8 @@ test("el endpoint suma la edición del ítem sin romper los contratos", () => {
 test("el formulario de edición cubre el ítem completo", () => {
   const module = repoFile("components/admin/modules/InventarioModule.tsx");
   assert.match(module, /title=\{`Editar ítem · \$\{editForm\.name \|\| editItem\.name\}`\}/);
-  assert.match(module, /onSubmit=\{submitEditItem\}/);
+  assert.match(module, /onSubmit=\{\(event\) => void submitEditItem\(event\)\}/);
+  assert.match(module, /<AdminDialog[\s\S]{0,200}title=\{`Editar ítem/, "la edición vive en una ventana (AdminDialog)");
   for (const label of [
     "Artículo",
     "Categoría",
