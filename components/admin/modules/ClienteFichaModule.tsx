@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   budgetStatusLabel,
   checklistProgress,
@@ -22,7 +22,8 @@ import {
   paymentStatusTone,
   statusTone,
 } from "@/lib/admin-format";
-import { canWriteBudgets, canWriteClients } from "@/lib/admin-policy";
+import { canWriteBudgets, canWriteClients, canWriteFinance } from "@/lib/admin-policy";
+import { clientPrimaryAction, lastClientEvent } from "@/lib/client-portfolio";
 import { useAdminResource } from "@/lib/admin-api";
 import { clientHistory } from "@/lib/client-history";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
@@ -35,6 +36,9 @@ import {
   AdminDataState,
   AdminEmpty,
   AdminIconLink,
+  AdminKpi,
+  AdminKpis,
+  AdminNote,
   AdminPanel,
   AdminRow,
   AdminTable,
@@ -145,12 +149,15 @@ export function ClienteFichaModule({ clientId }: { clientId: string }) {
 function ClientFicha({ detail }: { detail: AdminClientDetail }) {
   const { role } = useAdminSession();
   const [tab, setTab] = useState<TabKey>("presupuestos");
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   const { client, metrics } = detail;
   const name = clientDisplayName(client);
   const events = useMemo(() => sortClientEvents(detail.events), [detail.events]);
   const history = useMemo(() => clientHistory(detail), [detail]);
+  const lastEvent = useMemo(() => lastClientEvent(detail.events), [detail.events]);
   const canEdit = canWriteClients(role);
   const canQuote = canWriteBudgets(role);
+  const primary = clientPrimaryAction(detail, { collect: canWriteFinance(role), quote: canQuote });
   const where = [client.city, client.department].filter(Boolean).join(", ");
   const contactPhone = client.whatsapp || client.contactPhone || client.phone;
   const counts: Record<TabKey, number | null> = {
@@ -161,6 +168,28 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
     historial: history.length,
     datos: null,
   };
+  const primaryHref =
+    primary?.kind === "collect"
+      ? "/finanzas/por-cobrar"
+      : primary?.kind === "follow"
+        ? `/presupuestos?detalle=${encodeURIComponent(primary.budgetId)}`
+        : `/presupuestos?nuevo=1&cliente=${encodeURIComponent(client.id)}`;
+  const primaryTitle =
+    primary?.kind === "collect"
+      ? `${formatMoney(metrics.overdue)} vencido: cobrarlo desde Por cobrar`
+      : primary?.kind === "follow"
+        ? `Abrir el presupuesto enviado a ${name}`
+        : `Armar un presupuesto para ${name}`;
+
+  /** Flechas, Inicio y Fin mueven entre pestañas (patrón de tablist). */
+  function onTabKey(event: React.KeyboardEvent, index: number) {
+    const keys: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 };
+    if (!(event.key in keys)) return;
+    event.preventDefault();
+    const next = TABS[(keys[event.key] + TABS.length) % TABS.length].key;
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  }
 
   return (
     <>
@@ -173,12 +202,19 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
             <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
           </div>
           <p className="admin-ficha-sub">
+            {clientLegalName(client) ? <span>{clientLegalName(client)}</span> : null}
             <span className="admin-nowrap">RUC <span className="admin-code">{client.ruc || "—"}</span></span>
             {where ? <span>{where}</span> : null}
             <span className="admin-nowrap">Cliente desde {formatDate(client.createdAt)}</span>
           </p>
         </div>
         <div className="admin-ficha-actions">
+          {primary ? (
+            <Link className="admin-btn admin-btn--primary" href={primaryHref} title={primaryTitle}>
+              <AdminIcon name={primary.kind === "collect" ? "finance" : primary.kind === "follow" ? "budgets" : "plus"} />
+              <span>{primary.label}</span>
+            </Link>
+          ) : null}
           <AdminWhatsappLink phone={contactPhone} name={name} message={clientWhatsappMessage(client.contactName || name)} />
           {canEdit ? (
             <Link className="admin-btn" href={`/clientes?editar=${encodeURIComponent(client.id)}`} title={`Editar ${name}`}>
@@ -186,33 +222,50 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
               <span>Editar</span>
             </Link>
           ) : null}
-          {canQuote ? (
-            <Link
-              className="admin-btn admin-btn--primary"
-              href={`/presupuestos?nuevo=1&cliente=${encodeURIComponent(client.id)}`}
-              title={`Armar un presupuesto para ${name}`}
-            >
-              <AdminIcon name="plus" />
-              <span>Nuevo presupuesto</span>
-            </Link>
-          ) : null}
         </div>
       </header>
+
+      <AdminKpis className="admin-kpis--ficha" label={`Indicadores de ${name}`}>
+        <AdminKpi label="Contratado" icon="receipt" value={formatMoney(metrics.contracted)} note={`${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"}`} />
+        <AdminKpi label="Cobrado" icon="wallet" value={formatMoney(metrics.collected)} tone={metrics.collected > 0 ? "ok" : undefined} note="cobros recibidos" />
+        <AdminKpi
+          label="Saldo" icon="alert"
+          value={formatMoney(Math.max(0, metrics.balance))}
+          tone={metrics.overdue > 0 ? "danger" : metrics.balance > 0 ? "warn" : undefined}
+          note={metrics.overdue > 0 ? `${formatMoney(metrics.overdue)} vencido` : metrics.balance > 0 ? "por cobrar" : "al día"}
+        />
+        <AdminKpi
+          label="Eventos" icon="events"
+          value={formatNumber(metrics.events)}
+          note={metrics.upcomingEvents > 0 ? `${formatNumber(metrics.upcomingEvents)} por venir` : "ninguno por venir"}
+        />
+        <AdminKpi
+          label="Último evento" icon="calendar"
+          value={lastEvent?.startsAt ? formatDateShort(lastEvent.startsAt) : "—"}
+          note={lastEvent ? lastEvent.name : "todavía sin eventos realizados"}
+        />
+      </AdminKpis>
+      {metrics.collected > metrics.contracted ? (
+        <AdminNote tone="warn">Lo cobrado supera lo contratado: hay cobros sobre presupuestos sin aprobar.</AdminNote>
+      ) : null}
 
       <div className="admin-ficha-grid">
         <div className="admin-ficha-main">
           <nav className="admin-subtabs" role="tablist" aria-label={`Secciones de la ficha de ${name}`}>
-            {TABS.map((item) => (
+            {TABS.map((item, index) => (
               <button
                 key={item.key}
+                ref={(node) => { tabRefs.current[item.key] = node; }}
                 type="button"
                 role="tab"
                 id={`ficha-tab-${item.key}`}
                 aria-selected={tab === item.key}
                 aria-controls="ficha-panel"
+                tabIndex={tab === item.key ? 0 : -1}
                 className="admin-subtab"
                 data-active={tab === item.key ? "true" : undefined}
                 onClick={() => setTab(item.key)}
+                onKeyDown={(event) => onTabKey(event, index)}
               >
                 {item.label}
                 {counts[item.key] === null ? null : <span className="admin-subtab-count">{formatNumber(counts[item.key] ?? 0)}</span>}
@@ -232,16 +285,6 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
         </div>
 
         <aside className="admin-ficha-side" aria-label={`Resumen de ${name}`}>
-          <AdminPanel title="Plata" icon="finance">
-            <dl className="admin-ficha-money">
-              <div><dt>Contratado</dt><dd>{formatMoney(metrics.contracted)}</dd></div>
-              <div><dt>Cobrado</dt><dd data-tone={metrics.collected > 0 ? "ok" : undefined}>{formatMoney(metrics.collected)}</dd></div>
-              <div><dt>Saldo</dt><dd data-tone={metrics.balance > 0 ? "warn" : undefined}>{formatMoney(Math.max(0, metrics.balance))}</dd></div>
-              {metrics.overdue > 0 ? <div><dt>Vencido</dt><dd data-tone="danger">{formatMoney(metrics.overdue)}</dd></div> : null}
-            </dl>
-            {metrics.collected > metrics.contracted ? <p className="admin-note">Lo cobrado supera lo contratado: hay cobros sobre presupuestos sin aprobar.</p> : null}
-          </AdminPanel>
-
           <AdminPanel title="Contacto" icon="clients">
             <dl className="admin-ficha-contact">
               {client.contactName ? <div><dt>Encargado</dt><dd>{client.contactName}{client.contactRole ? ` · ${client.contactRole}` : ""}</dd></div> : null}
@@ -249,14 +292,18 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
               <div><dt>Correo</dt><dd>{client.contactEmail || client.email || "—"}</dd></div>
             </dl>
             <span className="admin-actions">
-              <ClientLinks client={client} name={name} skipWhatsapp />
+              <ClientLinks client={client} name={name} />
               {client.contactEmail || client.email ? (
                 <AdminIconLink href={`mailto:${client.contactEmail || client.email}`} icon="mail" label={`Enviar correo a ${name}`} />
               ) : null}
             </span>
           </AdminPanel>
 
-          <ClientCatalogAccess clientId={client.id} clientName={name} phone={contactPhone} canEdit={canEdit} />
+          {client.type === "RESELLER" ? (
+            <ClientCatalogAccess clientId={client.id} clientName={name} phone={contactPhone} canEdit={canEdit} />
+          ) : (
+            <NonWholesaleCatalog clientId={client.id} name={name} phone={contactPhone} canEdit={canEdit} />
+          )}
 
           <AdminPanel title="Últimos movimientos" icon="clock">
             {history.length === 0 ? (
@@ -275,6 +322,31 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
         </aside>
       </div>
     </>
+  );
+}
+
+/**
+ * Cliente que no es mayorista: se explica por qué no hay catálogo, salvo que
+ * conserve un link activo (creado antes de cambiar su tipo). Ese link sigue
+ * abriendo el catálogo, así que se muestra el panel completo para poder revocarlo.
+ */
+function NonWholesaleCatalog({ clientId, name, phone, canEdit }: { clientId: string; name: string; phone: string | null; canEdit: boolean }) {
+  const status = useAdminResource<boolean>(
+    `/api/admin/clients/${clientId}/catalog-access`,
+    (payload) => Boolean((payload as unknown as { access?: { active?: unknown } }).access?.active),
+  );
+  if (status.data) {
+    return (
+      <>
+        <AdminNote tone="warn">Este cliente ya no es mayorista pero tiene un link activo: revocalo si no corresponde.</AdminNote>
+        <ClientCatalogAccess clientId={clientId} clientName={name} phone={phone} canEdit={canEdit} />
+      </>
+    );
+  }
+  return (
+    <AdminPanel title="Catálogo mayorista" icon="inventory">
+      <p className="admin-note">El link del catálogo mayorista es solo para clientes mayoristas. Si {name} compra por mayor, cambiá su tipo desde «Editar».</p>
+    </AdminPanel>
   );
 }
 
@@ -298,8 +370,10 @@ function BudgetsTab({ detail, name }: { detail: AdminClientDetail; name: string 
           <AdminRow key={budget.id}>
             <AdminCell title={`Alta del presupuesto: ${formatDate(budget.createdAt)}`}>{formatDateShort(budget.createdAt)}</AdminCell>
             <AdminCell title={budget.event ? `${budget.title} · ${budget.event.name}` : budget.title}>
-              <strong>{budget.title}</strong>
-              {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
+              <Link href={`/presupuestos?detalle=${encodeURIComponent(budget.id)}`}><strong>{budget.title}</strong></Link>
+              {budget.event ? (
+                <small className="admin-cell-sub"> · <Link href={`/eventos?evento=${encodeURIComponent(budget.event.id)}`}>{budget.event.name}</Link></small>
+              ) : null}
             </AdminCell>
             <AdminCell title={approval}>
               <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
@@ -340,7 +414,9 @@ function EventsTab({ events, name }: { events: AdminClientEventRow[]; name: stri
             <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
               {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
             </AdminCell>
-            <AdminCell title={event.location || "Sin lugar definido"}><strong>{event.name}</strong></AdminCell>
+            <AdminCell title={event.location || "Sin lugar definido"}>
+              <Link href={`/eventos?evento=${encodeURIComponent(event.id)}`}><strong>{event.name}</strong></Link>
+            </AdminCell>
             <AdminCell><AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge></AdminCell>
             <AdminCell end title={progress.title}>
               {event.tasks.length === 0 ? <span className="admin-muted">—</span> : <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>}
