@@ -60,11 +60,14 @@ import {
 } from "@/lib/admin-types";
 import { portalBudgetUrl } from "@/lib/public-config";
 import { qrDataUrl } from "@/lib/qr";
+import { useTrashFlow } from "../TrashDialogs";
+import { budgetArchiveBlockedReason } from "@/lib/trash-shared";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import {
   AdminActionsMenu,
+  AdminSelect,
   AdminBadge,
   AdminButton,
   AdminCell,
@@ -904,26 +907,34 @@ export function PresupuestosModule() {
   const formEvent = useMemo(() => eventOptions.find((event) => event.id === form.eventId) ?? null, [eventOptions, form.eventId]);
   const formRange = useMemo(() => eventAvailabilityRange(formEvent), [formEvent]);
 
-  const budgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
+  // Lo archivado (papelera) sale de la lista, el tablero y las etapas; se ve con el filtro «Archivados».
+  const allBudgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
+  const budgetRows = useMemo(() => allBudgetRows.filter((budget) => !budget.archivedAt), [allBudgetRows]);
+  const archivedBudgetRows = useMemo(() => allBudgetRows.filter((budget) => Boolean(budget.archivedAt)), [allBudgetRows]);
+  const [archivedView, setArchivedView] = useState(false);
+  const trash = useTrashFlow("Budget", {
+    onChanged: budgetsResource.reload,
+    onTrashed: (id) => setDetailBudgetId((current) => (current === id ? null : current)),
+  });
   // `?detalle=<id>`: abre el detalle si el presupuesto es de esta empresa; si no existe
   // (otra empresa, borrado) se ignora. En ambos casos se limpia de la URL.
   useEffect(() => {
     if (!detalleParam || budgetsResource.loading || !budgetsResource.data) return;
-    if (budgetRows.some((budget) => budget.id === detalleParam)) setDetailBudgetId(detalleParam);
+    if (allBudgetRows.some((budget) => budget.id === detalleParam)) setDetailBudgetId(detalleParam);
     const url = new URL(window.location.href);
     url.searchParams.delete("detalle");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [detalleParam, budgetsResource.loading, budgetsResource.data, budgetRows]);
+  }, [detalleParam, budgetsResource.loading, budgetsResource.data, allBudgetRows]);
   const requestRows = useMemo(() => budgetsResource.data?.requests ?? [], [budgetsResource.data]);
   const showRequests = vistaParam === "solicitudes" && requestRows.length > 0;
   const pendingRequests = useMemo(() => requestRows.filter((request) => request.status === "pending"), [requestRows]);
 
   const rows = useMemo(() => {
-    return budgetRows
-      .filter((budget) => matchesPipelineFilter(budgetPipelineStage(budget), stageFilter))
+    return (archivedView ? archivedBudgetRows : budgetRows)
+      .filter((budget) => archivedView || matchesPipelineFilter(budgetPipelineStage(budget), stageFilter))
       .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name, budgetReference(budget.id)]))
       .sort(compareBudgetUrgency);
-  }, [budgetRows, query, stageFilter]);
+  }, [budgetRows, archivedBudgetRows, archivedView, query, stageFilter]);
 
   /** Cantidad y monto por etapa para los KPIs-filtro. */
   const stageTotals = useMemo(() => {
@@ -1031,6 +1042,17 @@ export function PresupuestosModule() {
    * Todas las acciones del presupuesto en un solo menú «•••». La acción lógica
    * siguiente también vive en el botón de la fila, pero acá no se pierde nada.
    */
+  /** Archivar / Desarchivar / Eliminar (`budgets.write`); solo se archivan borradores, perdidos o cancelados. */
+  function budgetTrashMenu(budget: AdminBudgetRow): AdminMenuItem[] {
+    return trash.menu({
+      id: budget.id,
+      name: budget.title,
+      archived: Boolean(budget.archivedAt),
+      canWrite: writable,
+      archiveBlockedReason: budgetArchiveBlockedReason(budget.status),
+    });
+  }
+
   function budgetMenuItems(budget: AdminBudgetRow): AdminMenuItem[] {
     const prompt = budgetEventPrompt(budget);
     const proofs = (proofsByBudget[budget.id] ?? []).length;
@@ -1057,6 +1079,7 @@ export function PresupuestosModule() {
       ...(proofs > 0 ? [{ label: `Comprobantes del portal (${proofs})`, icon: "upload" as const, onClick: () => setProofDialog(budget) }] : []),
       { label: "Imprimir / PDF", icon: "print" as const, href: `/imprimir/presupuesto/${budget.id}`, external: true, title: `Imprimir presupuesto: ${budget.title}` },
       { label: "Cronología", icon: "audit" as const, onClick: () => setTimelineBudget(budget) },
+      ...budgetTrashMenu(budget),
     ];
   }
 
@@ -1097,6 +1120,7 @@ export function PresupuestosModule() {
     const primary = primaryOf(budget);
     return {
       onPrimary: primary ? () => runPrimary(budget, primary) : undefined,
+      trashMenu: budgetTrashMenu(budget),
       onSend: writable ? () => openSend(budget) : undefined,
       onEdit: writable ? () => setPricing(budget) : undefined,
       onPlan: writable ? () => openPlan(budget) : undefined,
@@ -1601,6 +1625,15 @@ export function PresupuestosModule() {
           label="Buscar presupuestos"
           placeholder="Buscar por número, título, cliente o evento…"
         />
+        <AdminSelect
+          value={archivedView ? "ARCHIVED" : "ACTIVE"}
+          onChange={(value) => setArchivedView(value === "ARCHIVED")}
+          label="Ver presupuestos"
+          options={[
+            { value: "ACTIVE", label: "Activos" },
+            { value: "ARCHIVED", label: "Archivados" },
+          ]}
+        />
         {narrow ? null : <AdminViewSwitch view={view} onChange={setView} label="Vista de presupuestos" />}
         {writable ? <BudgetComparisons quotes={budgetRows} /> : null}
         {canManagePayments ? (
@@ -1624,6 +1657,8 @@ export function PresupuestosModule() {
       )}
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {trash.note}
+      {writable ? trash.dialog : null}
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       {writable && showForm && !showRequests ? (
@@ -1796,7 +1831,7 @@ export function PresupuestosModule() {
         loading={budgetsResource.loading}
         error={budgetsResource.error}
         onRetry={budgetsResource.reload}
-        empty={budgetRows.length === 0}
+        empty={allBudgetRows.length === 0}
         emptyTitle="Todavía no hay presupuestos" emptyIcon="budgets"
         emptyHint="Creá un presupuesto para seguir venta, costos, margen y cobros."
         emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => { setFormError(""); setShowForm(true); }}>Crear presupuesto →</button> : undefined}
@@ -2466,7 +2501,7 @@ export function PresupuestosModule() {
       ) : null}
 
       {detailBudgetId ? (() => {
-        const detailBudget = budgetRows.find((budget) => budget.id === detailBudgetId);
+        const detailBudget = allBudgetRows.find((budget) => budget.id === detailBudgetId);
         return detailBudget ? (
           <BudgetDetailDialog
             budget={detailBudget}

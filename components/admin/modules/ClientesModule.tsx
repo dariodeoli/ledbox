@@ -22,6 +22,7 @@ import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { clientLogoUrl } from "@/lib/admin-types";
 import type { AdminClientRow } from "@/lib/admin-types";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
+import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
@@ -66,6 +67,7 @@ const FILTER_OPTIONS = [
   { value: "OVERDUE", label: "Con deuda vencida" },
   { value: "NO_RESPONSIBLE", label: "Sin responsable cargado" },
   { value: "NO_PURCHASES", label: "Sin compras" },
+  { value: "ARCHIVED", label: "Archivados" },
 ];
 
 const ORDER_OPTIONS = [
@@ -237,7 +239,11 @@ export function ClientesModule() {
     list: payload.clients ?? [],
     truncated: payload.truncated === true,
   }));
-  const clients = { ...clientsResource, data: clientsResource.data?.list ?? null };
+  // Lo archivado (papelera) sale de la cartera y de los indicadores; se ve con el filtro «Archivados».
+  const allClients = clientsResource.data?.list ?? null;
+  const activeClients = useMemo(() => (allClients ? allClients.filter((client) => !client.archivedAt) : null), [allClients]);
+  const clients = { ...clientsResource, data: activeClients };
+  const archivedClients = useMemo(() => (allClients ?? []).filter((client) => Boolean(client.archivedAt)), [allClients]);
   const truncated = clientsResource.data?.truncated === true;
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<ClientSegment>("ALL");
@@ -264,9 +270,10 @@ export function ClientesModule() {
 
   const writable = canWriteClients(role);
   const canQuote = canWriteBudgets(role);
+  const trash = useTrashFlow("Client", { onChanged: clientsResource.reload });
 
   const rows = useMemo(() => {
-    const list = (clients.data ?? [])
+    const list = (filter === "ARCHIVED" ? archivedClients : clients.data ?? [])
       .filter((client) => (segment === "ALL" ? true : client.type === segment))
       .filter((client) => (kpi ? matchesKpi(client, kpi) : true))
       .filter((client) => {
@@ -290,7 +297,7 @@ export function ClientesModule() {
         ]),
       );
     return sortClients(list, order);
-  }, [clients.data, query, segment, kpi, filter, order]);
+  }, [clients.data, archivedClients, query, segment, kpi, filter, order]);
 
   /**
    * Acciones de la fila y de la tarjeta (rediseño): una sola visible —cobrar
@@ -326,6 +333,7 @@ export function ClientesModule() {
     if (instagram) items.push({ label: "Ver Instagram", icon: "instagram", href: instagram, external: true, title: `Ver el Instagram de ${name} (${instagramLabel(client.instagram)})` });
     if (web) items.push({ label: "Abrir sitio web", icon: "globe", href: web, external: true, title: `Abrir el sitio web de ${name}` });
     if (writable) items.push({ label: "Editar", icon: "edit", onClick: () => openEdit(client), title: `Editar ${name}` });
+    items.push(...trash.menu({ id: client.id, name, archived: Boolean(client.archivedAt), canWrite: writable }));
 
     return (
       <span className="admin-actions">
@@ -362,7 +370,7 @@ export function ClientesModule() {
       subtitle: [clientLegalName(client), primaryContact].filter(Boolean).join(" · ") || null,
       badges: [
         { label: clientTypeLabel(client.type), tone: client.type === "RESELLER" ? "accent" : "neutral" },
-        ...(client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
+        ...(client.archivedAt ? [{ label: "Archivado", tone: "neutral" as const }] : client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
         ...(client.contactName
           ? []
           : [
@@ -628,6 +636,8 @@ export function ClientesModule() {
       </AdminToolbar>
 
       {status ? <AdminNote tone="ok">{status}</AdminNote> : null}
+      {trash.note}
+      {writable ? trash.dialog : null}
 
       {writable && showForm ? (
         <AdminDialog
@@ -715,7 +725,7 @@ export function ClientesModule() {
         loading={clients.loading}
         error={clients.error}
         onRetry={clients.reload}
-        empty={(clients.data ?? []).length === 0}
+        empty={(allClients ?? []).length === 0}
         emptyTitle="Todavía no hay clientes" emptyIcon="clients"
         emptyHint="Registrá el primer cliente para asociarle eventos y presupuestos."
         emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={openCreate}>Registrar cliente →</button> : undefined}
@@ -762,7 +772,7 @@ export function ClientesModule() {
                         <strong>{name}</strong>
                       </Link>
                       {clientLegalName(client) ? <small className="admin-cell-sub"> · {clientLegalName(client)}</small> : null}
-                      {client.active ? null : <AdminBadge tone="neutral">Inactivo</AdminBadge>}
+                      {client.archivedAt ? <AdminBadge tone="neutral">Archivado</AdminBadge> : client.active ? null : <AdminBadge tone="neutral">Inactivo</AdminBadge>}
                     </span>
                   </AdminCell>
                   <AdminCell>

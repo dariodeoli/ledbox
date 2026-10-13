@@ -23,7 +23,7 @@ import { SECURITY_DEPOSIT_LABEL, isSecurityDepositStatus } from "@/lib/budget-se
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetApprovalState, collectedAmount } from "@/lib/admin-types";
 import type { AdminBudgetRow, AdminTimelineEntry } from "@/lib/admin-types";
-import { AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline } from "../AdminUI";
+import { AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
 import { BudgetEventNotice } from "../BudgetEventNotice";
 import { StageTrail } from "../StageTrail";
 import { securityDepositTone } from "./BudgetSecurityDeposit";
@@ -57,6 +57,8 @@ export function planSummary(budget: AdminBudgetRow): string {
  * Un callback ausente oculta el botón (permisos por rol).
  */
 export type BudgetDetailActions = {
+  /** «•••» de la papelera (Archivar / Desarchivar / Eliminar); vacío sin permiso. */
+  trashMenu?: AdminMenuItem[];
   onSend?: () => void;
   onEdit?: () => void;
   onPlan?: () => void;
@@ -166,6 +168,7 @@ export function BudgetDetailDialog({
       footer={
         <div className="admin-bd-footer">
           <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Imprimir / PDF</a>
+          {actions.trashMenu && actions.trashMenu.length > 0 ? <AdminActionsMenu label={`Más acciones de ${budget.title}`} items={actions.trashMenu} /> : null}
           <span className="admin-dialog-spacer" />
           <AdminButton onClick={onClose}>Cerrar</AdminButton>
           {primary && actions.onPrimary ? <AdminButton variant="primary" busy={busy} onClick={actions.onPrimary}>{primary.label}</AdminButton> : null}

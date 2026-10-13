@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import {
   budgetStatusLabel,
@@ -29,6 +30,7 @@ import { clientHistory } from "@/lib/client-history";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import type { AdminClientDetail, AdminClientEventRow, AdminClientPaymentRow } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
+import { useTrashFlow } from "../TrashDialogs";
 import { AdminIcon } from "../AdminIcons";
 import {
   AdminBadge,
@@ -44,6 +46,7 @@ import {
   AdminTable,
   AdminTimeline,
   AdminWhatsappLink,
+  AdminActionsMenu,
 } from "../AdminUI";
 import { ClientCatalogAccess } from "./ClientCatalogAccess";
 import { ClientFiscalSnapshot } from "./ClientFiscalFields";
@@ -140,14 +143,15 @@ export function ClienteFichaModule({ clientId }: { clientId: string }) {
         emptyIcon="clients"
         emptyHint="No pudimos leer la ficha de este cliente."
       >
-        {detail.data ? <ClientFicha detail={detail.data} /> : null}
+        {detail.data ? <ClientFicha detail={detail.data} onReload={detail.reload} /> : null}
       </AdminDataState>
     </div>
   );
 }
 
-function ClientFicha({ detail }: { detail: AdminClientDetail }) {
+function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload: () => void }) {
   const { role } = useAdminSession();
+  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("presupuestos");
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   const { client, metrics } = detail;
@@ -157,6 +161,7 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
   const lastEvent = useMemo(() => lastClientEvent(detail.events), [detail.events]);
   const canEdit = canWriteClients(role);
   const canQuote = canWriteBudgets(role);
+  const trash = useTrashFlow("Client", { onChanged: onReload, onTrashed: () => router.push("/clientes") });
   const primary = clientPrimaryAction(detail, { collect: canWriteFinance(role), quote: canQuote });
   const where = [client.city, client.department].filter(Boolean).join(", ");
   const contactPhone = client.whatsapp || client.contactPhone || client.phone;
@@ -199,7 +204,7 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
           <div className="admin-client-title">
             <h1 className="admin-ficha-name">{name}</h1>
             <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
-            <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
+            <AdminBadge tone={client.active && !client.archivedAt ? "ok" : "neutral"}>{client.archivedAt ? "Archivado" : client.active ? "Activo" : "Inactivo"}</AdminBadge>
           </div>
           <p className="admin-ficha-sub">
             {clientLegalName(client) ? <span>{clientLegalName(client)}</span> : null}
@@ -222,8 +227,13 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
               <span>Editar</span>
             </Link>
           ) : null}
+          {canEdit ? (
+            <AdminActionsMenu label={`Más acciones de ${name}`} items={trash.menu({ id: client.id, name, archived: Boolean(client.archivedAt), canWrite: canEdit })} />
+          ) : null}
         </div>
       </header>
+      {trash.note}
+      {canEdit ? trash.dialog : null}
 
       <AdminKpis className="admin-kpis--ficha" label={`Indicadores de ${name}`}>
         <AdminKpi label="Contratado" icon="receipt" value={formatMoney(metrics.contracted)} note={`${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"}`} />

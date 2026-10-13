@@ -157,7 +157,7 @@ export function EventCards({
             </button>
             <div className="admin-events-card-meta">
               <EventStateBadges item={item} />
-              {event.status === "IN_PROGRESS" || readiness.phase === "closed" || !event.startsAt ? null : (
+              {event.archivedAt || event.status === "IN_PROGRESS" || readiness.phase === "closed" || !event.startsAt ? null : (
                 readiness.phase === "ended" ? null : <AdminCountdown value={event.startsAt} short title={`Cuánto falta para el inicio: ${event.name}`} />
               )}
             </div>
