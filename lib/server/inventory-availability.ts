@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, type InventoryStatus } from "@prisma/client";
+import { Prisma, type InventoryStatus, type InventoryUnitStatus } from "@prisma/client";
 import { db } from "./db";
 import { recordAudit, type AuditContext } from "./audit";
 
@@ -30,8 +30,14 @@ export const MAX_AVAILABILITY_ASSIGNMENTS = 500;
  * mantenimiento o retirada no está libre. Va como `_count` de la relación
  * `units` para no traer las unidades enteras al calcular disponibilidad.
  */
+export const UNAVAILABLE_UNIT_STATUSES = ["MAINTENANCE", "DAMAGED", "LOST"] as const satisfies readonly InventoryUnitStatus[];
+
+/**
+ * Una unidad en mantenimiento, dañada o perdida no está libre (el nombre del
+ * contador es histórico: cubre los tres estados).
+ */
 export const MAINTENANCE_UNITS_SELECT = {
-  units: { where: { status: "MAINTENANCE" } },
+  units: { where: { status: { in: [...UNAVAILABLE_UNIT_STATUSES] } } },
 } satisfies Prisma.InventoryItemCountOutputTypeSelect;
 
 /** Unidades en mantenimiento de un ítem con `_count` (0 si no vino el conteo). */
@@ -72,8 +78,10 @@ export type AvailabilityItem = {
   name: string;
   quantity: number;
   status: InventoryStatus;
-  /** Unidades en mantenimiento (issue #112): se descuentan del stock libre. */
+  /** Unidades en mantenimiento, dañadas o perdidas: se descuentan del stock libre. */
   maintenance: number;
+  /** Colchones antes/después del evento; sin dato, el período bloqueado es el del evento. */
+  buffers?: RentalBuffers;
 };
 
 export type AvailabilityConflict = {
@@ -108,6 +116,67 @@ const rangeFormat = new Intl.DateTimeFormat("es-PY", {
   hourCycle: "h23",
 });
 
+// ── Tiempos de preparación (alquileres fase 2b) ───────────────────────────────
+// El período bloqueado de una asignación es el rango del evento extendido antes
+// por (preparación + transporte + entrega) y después por (devolución + transporte
+// + limpieza). El override del producto reemplaza el total de cada lado; sin
+// override rigen los de la empresa y sin ajustes, 0. Se calcula al leer, nunca
+// se materializa.
+
+export type RentalBufferSettings = {
+  deliveryBufferMin: number;
+  returnBufferMin: number;
+  prepBufferMin: number;
+  transportBufferMin: number;
+  cleaningBufferMin: number;
+};
+
+export type RentalBuffers = { beforeMin: number; afterMin: number };
+
+export const NO_RENTAL_BUFFERS: RentalBuffers = { beforeMin: 0, afterMin: 0 };
+
+function bufferMinutes(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/** Colchones de un producto: su override si existe; si no, los de la empresa; si no hay ajustes, 0. */
+export function resolveRentalBuffers(
+  settings: Partial<RentalBufferSettings> | null | undefined,
+  item?: { bufferBeforeMin?: number | null; bufferAfterMin?: number | null } | null,
+): RentalBuffers {
+  const orgBefore = bufferMinutes(settings?.prepBufferMin) + bufferMinutes(settings?.transportBufferMin) + bufferMinutes(settings?.deliveryBufferMin);
+  const orgAfter = bufferMinutes(settings?.returnBufferMin) + bufferMinutes(settings?.transportBufferMin) + bufferMinutes(settings?.cleaningBufferMin);
+  return {
+    beforeMin: item?.bufferBeforeMin == null ? orgBefore : bufferMinutes(item.bufferBeforeMin),
+    afterMin: item?.bufferAfterMin == null ? orgAfter : bufferMinutes(item.bufferAfterMin),
+  };
+}
+
+const MAX_TIME = 8.64e15;
+
+/**
+ * Rango bloqueado: el del evento extendido por los colchones. Una punta `null`
+ * (rango abierto) se queda abierta y el resultado nunca sale del rango válido de
+ * `Date` (los rangos «siempre ocupado» usan los extremos).
+ */
+export function extendedRentalRange(
+  start: Date | null,
+  end: Date | null,
+  buffers: RentalBuffers,
+): { start: Date | null; end: Date | null } {
+  const shift = (date: Date | null, minutes: number): Date | null => {
+    if (!date || minutes === 0) return date;
+    const time = Math.min(MAX_TIME, Math.max(-MAX_TIME, date.getTime() + minutes * 60_000));
+    return new Date(time);
+  };
+  return { start: shift(start, -buffers.beforeMin), end: shift(end, buffers.afterMin) };
+}
+
+/** Ajustes de alquiler de la empresa (o `null` si nunca se configuraron). */
+export async function loadRentalSettings(organizationId: string, client: AvailabilityClient = db) {
+  return client.organizationRentalSettings.findUnique({ where: { organizationId } });
+}
+
 /** Fecha de un parámetro de query; `null` si falta o es inválida. */
 export function parseDate(value: unknown): Date | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -130,15 +199,27 @@ export function rangeLabel(startsAt: Date, endsAt: Date): string {
  * ahora» y el selector muestran el mismo número.
  */
 export function assignmentIsActiveNow(
-  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event"> & { checkedIn: boolean; checkedInAt: Date | null },
+  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event"> & {
+    checkedIn: boolean;
+    checkedInAt: Date | null;
+    releasedAt?: Date | null;
+    holdExpiresAt?: Date | null;
+  },
   now: Date,
 ): boolean {
   if (row.checkedInAt || row.checkedIn) return false;
+  if (!assignmentCountsAt(row, now)) return false;
   const { start, end } = assignmentRange(row);
   if (!start && !end) return true;
   if (start && start.getTime() > now.getTime()) return false;
   if (end && end.getTime() < now.getTime()) return false;
   return true;
+}
+
+/** Una asignación liberada o con retención vencida no compromete stock (vencimiento perezoso, sin cron). */
+export function assignmentCountsAt(row: { releasedAt?: Date | null; holdExpiresAt?: Date | null }, now: Date): boolean {
+  if (row.releasedAt) return false;
+  return !row.holdExpiresAt || row.holdExpiresAt.getTime() > now.getTime();
 }
 
 /** Rango efectivo de una asignación: el propio y, si falta, el del evento. */
@@ -197,12 +278,17 @@ export function committedEventWhere(organizationId: string): Prisma.EventWhereIn
  * (`checkedOut` sin `checkedIn`) cuenta SIEMPRE: está físicamente afuera aunque el
  * evento se haya cancelado o su presupuesto se haya perdido.
  */
-export function committedAssignmentWhere(organizationId: string): Prisma.EventInventoryWhereInput {
+export function committedAssignmentWhere(organizationId: string, now: Date = new Date()): Prisma.EventInventoryWhereInput {
   return {
     event: { organizationId },
     OR: [
       { checkedOut: true, checkedIn: false, checkedInAt: null },
-      { event: committedEventWhere(organizationId) },
+      {
+        // Liberadas y retenciones vencidas no cuentan (vencimiento perezoso).
+        releasedAt: null,
+        AND: [{ OR: [{ holdExpiresAt: null }, { holdExpiresAt: { gt: now } }] }],
+        event: committedEventWhere(organizationId),
+      },
     ],
   };
 }
@@ -236,12 +322,21 @@ export function buildAvailability(
   startsAt: Date,
   endsAt: Date,
 ): RangeAvailability {
+  const buffers = item.buffers ?? NO_RENTAL_BUFFERS;
+  // Se extienden los dos períodos (el pedido y el de cada asignación): entre dos
+  // usos tiene que entrar la limpieza del primero más la preparación del segundo.
+  const requested = extendedRentalRange(startsAt, endsAt, buffers);
+  const blockedRange = (row: AssignmentRecord) => {
+    const { start, end } = assignmentRange(row);
+    return extendedRentalRange(start, end, buffers);
+  };
   const conflicts = rows
     .filter((row) => {
-      const { start, end } = assignmentRange(row);
-      return overlaps(start, end, startsAt, endsAt);
+      const { start, end } = blockedRange(row);
+      return overlaps(start, end, requested.start ?? startsAt, requested.end ?? endsAt);
     })
     .map((row) => {
+      // El detalle muestra el rango real del evento, no el extendido.
       const { start, end } = assignmentRange(row);
       return {
         id: row.id,
@@ -282,7 +377,10 @@ export async function availabilityForRange(options: {
   client?: AvailabilityClient;
 }): Promise<RangeAvailability> {
   const rows = await loadAssignments(options.item.id, options.organizationId, options.excludeId, options.client);
-  return buildAvailability(options.item, rows, options.startsAt, options.endsAt);
+  const item = options.item.buffers
+    ? options.item
+    : { ...options.item, buffers: resolveRentalBuffers(await loadRentalSettings(options.organizationId, options.client), options.item as { bufferBeforeMin?: number | null; bufferAfterMin?: number | null }) };
+  return buildAvailability(item, rows, options.startsAt, options.endsAt);
 }
 
 // ── Compromiso atómico de stock ───────────────────────────────────────────────
@@ -309,6 +407,9 @@ export async function lockInventoryItems(
   return new Set(rows.map((row) => row.id));
 }
 
+/** Vigencia por defecto de una retención: 48 h. */
+export const DEFAULT_HOLD_TTL_MINUTES = 2880;
+
 export type CommitAssignmentResult =
   | { ok: true; assignment: AssignmentWrite; previous: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null; item: { id: string; name: string }; event: { id: string; name: string } }
   | { ok: false; reason: "event-missing" }
@@ -316,7 +417,7 @@ export type CommitAssignmentResult =
   | { ok: false; reason: "blocked"; item: { id: string; name: string; status: InventoryStatus } }
   | { ok: false; reason: "insufficient"; quantity: number; item: { id: string; name: string }; availability: RangeAvailability; open: boolean };
 
-type AssignmentWrite = { id: string; eventId: string; inventoryId: string; quantity: number; startsAt: Date | null; endsAt: Date | null };
+type AssignmentWrite = { id: string; eventId: string; inventoryId: string; quantity: number; startsAt: Date | null; endsAt: Date | null; holdExpiresAt?: Date | null; releasedAt?: Date | null };
 
 /**
  * Compromete `quantity` unidades de un ítem para un evento, de forma atómica.
@@ -331,9 +432,17 @@ export async function commitInventoryAssignment(options: {
   quantity: number;
   startsAt?: Date | null;
   endsAt?: Date | null;
+  /**
+   * `true`: la asignación es una retención que vence a los `holdTtlMinutes` de la
+   * empresa. `false`: firme (confirma una retención existente). `undefined`: una
+   * asignación nueva es firme y una existente conserva su estado.
+   */
+  hold?: boolean;
+  budgetId?: string | null;
 }): Promise<CommitAssignmentResult> {
   return db.$transaction(
     async (tx) => {
+      const now = new Date();
       const locked = await lockInventoryItems(tx, options.organizationId, [options.inventoryId]);
       const [event, item] = await Promise.all([
         tx.event.findFirst({ where: { id: options.eventId, organizationId: options.organizationId }, select: EVENT_RANGE_SELECT }),
@@ -353,7 +462,7 @@ export async function commitInventoryAssignment(options: {
 
       const previous = await tx.eventInventory.findUnique({
         where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-        select: { id: true, quantity: true, startsAt: true, endsAt: true },
+        select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true },
       });
       const effective = {
         start: options.startsAt === undefined ? (previous?.startsAt ?? event.setupAt ?? event.startsAt) : (options.startsAt ?? event.setupAt ?? event.startsAt),
@@ -389,6 +498,18 @@ export async function commitInventoryAssignment(options: {
         ...(options.startsAt !== undefined ? { startsAt: options.startsAt } : {}),
         ...(options.endsAt !== undefined ? { endsAt: options.endsAt } : {}),
       };
+      const settings = await loadRentalSettings(options.organizationId, tx);
+      const holdTtlMinutes = settings?.holdTtlMinutes ?? DEFAULT_HOLD_TTL_MINUTES;
+      const holdExpiresAt = new Date(now.getTime() + holdTtlMinutes * 60_000);
+      // Una retención vencida que se vuelve a comprometer con `hold` undefined se
+      // vuelve firme: lo que se acaba de validar es una asignación, no una retención.
+      const holdData =
+        options.hold === true
+          ? { holdExpiresAt: previous && previous.holdExpiresAt === null ? null : holdExpiresAt }
+          : options.hold === false || !previous
+            ? { holdExpiresAt: null }
+            : {};
+      const budgetData = options.budgetId !== undefined ? { budgetId: options.budgetId } : {};
       const assignment = await tx.eventInventory.upsert({
         where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
         create: {
@@ -398,8 +519,11 @@ export async function commitInventoryAssignment(options: {
           quantity: options.quantity,
           startsAt: options.startsAt ?? null,
           endsAt: options.endsAt ?? null,
+          organizationId: options.organizationId,
+          holdExpiresAt: options.hold === true ? holdExpiresAt : null,
+          budgetId: options.budgetId ?? null,
         },
-        update: { quantity: options.quantity, ...rangeData },
+        update: { quantity: options.quantity, ...rangeData, ...holdData, ...budgetData, organizationId: options.organizationId, releasedAt: null },
       });
       return {
         ok: true,
@@ -421,6 +545,110 @@ export function insufficientMessage(result: Extract<CommitAssignmentResult, { re
     : "";
   const where = result.open ? "sin fechas definidas (se toma como ocupado siempre)" : `entre ${rangeLabel(availability.startsAt, availability.endsAt)}`;
   return `Sin disponibilidad: pediste ${result.quantity} y hay ${availability.available} de ${availability.total} libres ${where}.${detail}`;
+}
+
+export type HoldResult =
+  | { ok: true; assignment: AssignmentWrite; /** Ya era firme: no cambió nada. */ unchanged: boolean; /** Estaba vencida y se revalidó el stock. */ revalidated: boolean }
+  | { ok: false; reason: "not-found" }
+  | { ok: false; reason: "released" }
+  | { ok: false; reason: "in-movement" }
+  | { ok: false; reason: "blocked"; item: { id: string; name: string; status: InventoryStatus } }
+  | { ok: false; reason: "insufficient"; quantity: number; item: { id: string; name: string }; availability: RangeAvailability; open: boolean };
+
+/**
+ * Confirma una retención (`holdExpiresAt` → NULL) con el mismo lock del ítem. Si
+ * ya venció dejó de contar, así que antes de volverla firme se revalida el stock
+ * como si fuera una asignación nueva: sin lugar, 409 («insufficient»).
+ */
+export async function confirmHold(options: { organizationId: string; assignmentId: string }): Promise<HoldResult> {
+  return db.$transaction(
+    async (tx) => {
+      const now = new Date();
+      const found = await tx.eventInventory.findFirst({
+        where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
+        select: { inventoryId: true },
+      });
+      if (!found) return { ok: false, reason: "not-found" } as const;
+      const locked = await lockInventoryItems(tx, options.organizationId, [found.inventoryId]);
+      if (!locked.has(found.inventoryId)) return { ok: false, reason: "not-found" } as const;
+      // Releída bajo el lock: otra transacción pudo liberarla o confirmarla.
+      const row = await tx.eventInventory.findFirst({
+        where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
+        include: { event: { select: EVENT_RANGE_SELECT } },
+      });
+      if (!row) return { ok: false, reason: "not-found" } as const;
+      if (row.releasedAt) return { ok: false, reason: "released" } as const;
+      if (row.holdExpiresAt === null) return { ok: true, assignment: row, unchanged: true, revalidated: false } as const;
+
+      const expired = row.holdExpiresAt.getTime() <= now.getTime();
+      if (expired) {
+        const item = await tx.inventoryItem.findFirst({
+          where: { id: row.inventoryId, organizationId: options.organizationId },
+          omit: { imageData: true },
+          include: { _count: { select: MAINTENANCE_UNITS_SELECT } },
+        });
+        if (!item) return { ok: false, reason: "not-found" } as const;
+        if (BLOCKED_INVENTORY_STATUSES.includes(item.status)) {
+          return { ok: false, reason: "blocked", item: { id: item.id, name: item.name, status: item.status } } as const;
+        }
+        const { start, end } = assignmentRange(row);
+        const availability = await availabilityForRange({
+          organizationId: options.organizationId,
+          item: { ...item, maintenance: maintenanceUnits(item) },
+          startsAt: start ?? OPEN_RANGE_START,
+          endsAt: end ?? OPEN_RANGE_END,
+          excludeId: row.id,
+          client: tx,
+        });
+        if (row.quantity > availability.available) {
+          return {
+            ok: false,
+            reason: "insufficient",
+            quantity: row.quantity,
+            item: { id: item.id, name: item.name },
+            availability,
+            open: !start || !end,
+          } as const;
+        }
+      }
+      const assignment = await tx.eventInventory.update({
+        where: { id: row.id },
+        data: { holdExpiresAt: null, organizationId: options.organizationId },
+      });
+      return { ok: true, assignment, unchanged: false, revalidated: expired } as const;
+    },
+    { timeout: 15_000 },
+  );
+}
+
+/**
+ * Libera una asignación (`releasedAt`): deja de comprometer stock. Un equipo que
+ * ya salió y no volvió no se libera (siempre cuenta hasta su devolución).
+ */
+export async function releaseAssignment(options: { organizationId: string; assignmentId: string }): Promise<HoldResult> {
+  return db.$transaction(
+    async (tx) => {
+      const found = await tx.eventInventory.findFirst({
+        where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
+        select: { inventoryId: true },
+      });
+      if (!found) return { ok: false, reason: "not-found" } as const;
+      const locked = await lockInventoryItems(tx, options.organizationId, [found.inventoryId]);
+      if (!locked.has(found.inventoryId)) return { ok: false, reason: "not-found" } as const;
+      const row = await tx.eventInventory.findFirst({
+        where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
+      });
+      if (!row) return { ok: false, reason: "not-found" } as const;
+      if (row.checkedOut && !row.checkedIn && !row.checkedInAt) return { ok: false, reason: "in-movement" } as const;
+      if (row.releasedAt) return { ok: true, assignment: row, unchanged: true, revalidated: false } as const;
+      const assignment = await tx.eventInventory.update({
+        where: { id: row.id },
+        data: { releasedAt: new Date(), organizationId: options.organizationId },
+      });
+      return { ok: true, assignment, unchanged: false, revalidated: false } as const;
+    },
+    { timeout: 15_000 },
+  );
 }
 
 export type InventorySubstitute = {
@@ -458,6 +686,7 @@ export async function findSubstitutes(options: {
     include: { _count: { select: MAINTENANCE_UNITS_SELECT } },
   });
   if (candidates.length === 0) return [];
+  const settings = await loadRentalSettings(options.organizationId);
   const rows = await db.eventInventory.findMany({
     where: {
       inventoryId: { in: candidates.map((candidate) => candidate.id) },
@@ -470,7 +699,7 @@ export async function findSubstitutes(options: {
   return candidates
     .flatMap((candidate) => {
       const availability = buildAvailability(
-        { ...candidate, maintenance: maintenanceUnits(candidate) },
+        { ...candidate, maintenance: maintenanceUnits(candidate), buffers: resolveRentalBuffers(settings, candidate) },
         rows.filter((row) => row.inventoryId === candidate.id),
         options.startsAt,
         options.endsAt,
@@ -712,6 +941,8 @@ export async function reserveBudgetInventory(options: {
                 checkedOutAt: true,
                 checkedIn: true,
                 checkedInAt: true,
+                releasedAt: true,
+                holdExpiresAt: true,
               },
             });
             if (existing && inMovement(existing)) {
@@ -729,7 +960,9 @@ export async function reserveBudgetInventory(options: {
             });
             // Nunca se achica una asignación existente: se completa hasta lo pedido,
             // sin pasar de lo que hay libre (lo ya reservado se mantiene).
-            const kept = existing?.quantity ?? 0;
+            // Una asignación liberada o con retención vencida no contaba: no hay nada que mantener.
+            const stale = Boolean(existing && !assignmentCountsAt(existing, new Date()));
+            const kept = existing && !stale ? existing.quantity : 0;
             const target = Math.max(group.quantity, kept);
             const reserved = Math.max(kept, Math.min(target, availability.available));
             const rangeChanged = existing
@@ -737,13 +970,23 @@ export async function reserveBudgetInventory(options: {
               : false;
             // Nunca se crea una asignación en cero: sin unidades libres solo se reporta
             // el conflicto (y si ya había una reserva, esa se mantiene).
-            const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved || rangeChanged);
+            // La aprobación vuelve firme la retención y reactiva la liberada.
+            const toFirm = Boolean(existing && (existing.releasedAt || existing.holdExpiresAt));
+            const mustWrite = reserved > 0 && (!existing || existing.quantity !== reserved || rangeChanged || toFirm);
             let assignment: AssignmentWrite | null = null;
             if (mustWrite) {
               assignment = existing
                 ? await tx.eventInventory.update({
                     where: { id: existing.id },
-                    data: { quantity: reserved, startsAt: range.startsAt, endsAt: range.endsAt },
+                    data: {
+                      quantity: reserved,
+                      startsAt: range.startsAt,
+                      endsAt: range.endsAt,
+                      holdExpiresAt: null,
+                      releasedAt: null,
+                      organizationId: options.organizationId,
+                      budgetId: options.budgetId,
+                    },
                   })
                 : await tx.eventInventory.create({
                     data: {
@@ -753,6 +996,8 @@ export async function reserveBudgetInventory(options: {
                       quantity: reserved,
                       startsAt: range.startsAt,
                       endsAt: range.endsAt,
+                      organizationId: options.organizationId,
+                      budgetId: options.budgetId,
                     },
                   });
             }

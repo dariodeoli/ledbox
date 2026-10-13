@@ -234,6 +234,8 @@ const INVENTORY_STATUS: Record<string, string> = {
   IN_USE: "En uso",
   MAINTENANCE: "Mantenimiento",
   RETIRED: "Retirado",
+  DAMAGED: "Dañada",
+  LOST: "Perdida",
 };
 
 const TASK_TYPE: Record<string, string> = {
@@ -329,6 +331,7 @@ const TONES: Record<string, AdminTone> = {
   IN_USE: "warn",
   MAINTENANCE: "warn",
   RETIRED: "neutral",
+  DAMAGED: "danger",
   REUSABLE: "neutral",
   CONSUMABLE: "neutral",
   DISPOSABLE: "neutral",

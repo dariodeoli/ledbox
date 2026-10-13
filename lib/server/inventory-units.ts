@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, InventoryUnitStatus } from "@prisma/client";
+import { INVENTORY_UNIT_STATUSES } from "@/lib/admin-types";
 import { inventoryUnitPrefix, normalizeInventoryUnitCode } from "@/lib/field-rules";
 
 /**
@@ -87,7 +88,7 @@ export function isUniqueConstraintError(error: unknown): boolean {
 /** Estado de unidad válido o `null` (issue #112). */
 export function readInventoryUnitStatus(raw: unknown): InventoryUnitStatus | null {
   const status = String(raw ?? "");
-  return status === "AVAILABLE" || status === "MAINTENANCE" || status === "RETIRED" ? status : null;
+  return (INVENTORY_UNIT_STATUSES as readonly string[]).includes(status) ? (status as InventoryUnitStatus) : null;
 }
 
 /** Código de unidad normalizado tal como llega (recortado y en mayúsculas). */

@@ -28,14 +28,19 @@ import {
   BLOCKED_INVENTORY_STATUSES,
   EVENT_RANGE_SELECT,
   MAINTENANCE_UNITS_SELECT,
+  assignmentCountsAt,
   assignmentIsActiveNow,
   assignmentRange,
   availabilityForRange,
   buildAvailability,
   commitInventoryAssignment,
+  confirmHold,
+  releaseAssignment,
   findSubstitutes,
   insufficientMessage,
   loadAssignments,
+  loadRentalSettings,
+  resolveRentalBuffers,
   maintenanceUnits,
   parseDate,
   rangeLabel,
@@ -84,6 +89,8 @@ const INVENTORY_ITEM_FIELDS = [
   "notes",
   "visibleOnWeb",
   "imageUrl",
+  "bufferBeforeMin",
+  "bufferAfterMin",
 ] as const;
 
 type InventoryItemUpdate = Partial<{
@@ -96,7 +103,12 @@ type InventoryItemUpdate = Partial<{
   notes: string | null;
   visibleOnWeb: boolean;
   imageUrl: string | null;
+  bufferBeforeMin: number | null;
+  bufferAfterMin: number | null;
 }>;
+
+/** Tope de un colchón de preparación: 30 días en minutos. */
+const MAX_BUFFER_MIN = 30 * 24 * 60;
 
 /** Datos del ítem (issue #111) normalizados: `undefined` = no tocar el campo. */
 function readInventoryItemUpdate(body: Record<string, unknown>):
@@ -142,6 +154,19 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
   if (body.visibleOnWeb !== undefined) {
     if (typeof body.visibleOnWeb !== "boolean") return { ok: false, error: "La visibilidad web tiene que ser sí o no." };
     data.visibleOnWeb = body.visibleOnWeb;
+  }
+  for (const field of ["bufferBeforeMin", "bufferAfterMin"] as const) {
+    if (body[field] === undefined) continue;
+    // null / vacío = hereda el tiempo de la empresa.
+    if (body[field] === null || body[field] === "") {
+      data[field] = null;
+      continue;
+    }
+    const minutes = Number(body[field]);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_BUFFER_MIN) {
+      return { ok: false, error: "El tiempo debe ser un número entero de minutos entre 0 y 43200 (30 días)." };
+    }
+    data[field] = minutes;
   }
   if (body.imageUrl !== undefined) {
     const imageUrl = readInventoryImageUrl(body.imageUrl);
@@ -214,6 +239,8 @@ export async function GET(request: Request) {
             endsAt: true,
             checkedIn: true,
             checkedInAt: true,
+            releasedAt: true,
+            holdExpiresAt: true,
             event: { select: EVENT_RANGE_SELECT },
           },
         })
@@ -267,6 +294,7 @@ export async function GET(request: Request) {
   const range = rangeStart && rangeEnd && rangeEnd.getTime() >= rangeStart.getTime() ? { start: rangeStart, end: rangeEnd } : null;
 
   const now = new Date();
+  const rentalSettings = range ? await loadRentalSettings(organizationId) : null;
   const inventory = items.map((item) => {
     // La URL efectiva (issue #109): la manual manda; si no, la foto subida.
     const { imageMime: _imageMime, _count, ...row } = item;
@@ -277,7 +305,7 @@ export async function GET(request: Request) {
     const maintenanceNow = maintenanceUnits(item);
     const usable = Math.max(0, item.quantity - maintenanceNow);
     const rangeAvailability = range
-      ? buildAvailability({ ...item, maintenance: maintenanceNow }, rows, range.start, range.end)
+      ? buildAvailability({ ...item, maintenance: maintenanceNow, buffers: resolveRentalBuffers(rentalSettings, item) }, rows.filter((row) => assignmentCountsAt(row, now)), range.start, range.end)
       : null;
     return {
       ...row,
@@ -412,6 +440,8 @@ export async function POST(request: Request) {
         notes: true,
         visibleOnWeb: true,
         imageUrl: true,
+        bufferBeforeMin: true,
+        bufferAfterMin: true,
       },
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
@@ -634,7 +664,16 @@ export async function POST(request: Request) {
 
     // Lock del ítem + disponibilidad recalculada + escritura en una transacción:
     // dos asignaciones concurrentes no pueden pasar las dos.
-    const committed = await commitInventoryAssignment({ organizationId, eventId: event.id, inventoryId, quantity, startsAt, endsAt });
+    if (body.hold !== undefined && typeof body.hold !== "boolean") return jsonError("La retención tiene que ser sí o no.", 400);
+    const committed = await commitInventoryAssignment({
+      organizationId,
+      eventId: event.id,
+      inventoryId,
+      quantity,
+      startsAt,
+      endsAt,
+      ...(typeof body.hold === "boolean" ? { hold: body.hold } : {}),
+    });
     if (!committed.ok) {
       if (committed.reason === "event-missing") return jsonError("El evento no existe en esta empresa.", 404);
       if (committed.reason === "item-missing") return jsonError("El ítem de inventario no existe en esta empresa.", 404);
@@ -761,6 +800,33 @@ export async function POST(request: Request) {
       });
     }
     return Response.json({ assignment });
+  }
+
+  if (kind === "hold-confirm" || kind === "assignment-release") {
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return jsonError("Falta la asignación.", 400);
+    const result =
+      kind === "hold-confirm"
+        ? await confirmHold({ organizationId, assignmentId: id })
+        : await releaseAssignment({ organizationId, assignmentId: id });
+    if (!result.ok) {
+      if (result.reason === "not-found") return jsonError("La asignación no existe en esta empresa.", 404);
+      if (result.reason === "released") return jsonError("La retención ya fue liberada: volvé a asignar el equipo.", 409);
+      if (result.reason === "in-movement") return jsonError("El equipo está afuera: registrá la devolución antes de liberarlo.", 409);
+      if (result.reason === "blocked") return jsonError(`«${result.item.name}» no se puede asignar en su estado actual.`, 409);
+      return Response.json({ error: insufficientMessage(result), availability: result.availability }, { status: 409 });
+    }
+    if (!result.unchanged) {
+      await recordAudit({
+        context: auth.context,
+        action: "update",
+        entity: "EventInventory",
+        entityId: result.assignment.id,
+        summary: kind === "hold-confirm" ? "Confirmó una retención de inventario" : "Liberó una asignación de inventario",
+        detail: { fields: { kind, revalidated: result.revalidated } },
+      });
+    }
+    return Response.json({ assignment: result.assignment });
   }
 
   if (kind === "assignment-delete") {

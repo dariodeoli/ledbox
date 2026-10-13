@@ -17,7 +17,7 @@ export const INVENTORY_FIELD_HELP: Record<string, string> = {
   wholesaleFromPrice: "Tarifa mayorista desde su umbral de días; no cambia la tarifa de cliente final.",
   minimumPrice: "Piso de venta existente del producto; no sustituye sus tarifas normales.",
   purchaseCost: "Costo de adquisición de esta unidad; no es un presupuesto de reparación ni precio de venta.",
-  unitStatus: "Disponible, mantenimiento o retirada. Las retiradas no cuentan como unidades activas; mantenimiento reduce las libres.",
+  unitStatus: "Disponible, mantenimiento, retirada, dañada o perdida. Las retiradas no cuentan como unidades activas; mantenimiento, dañadas y perdidas reducen las libres.",
   code: "Identificador único de la unidad dentro de la empresa. En alta puede generarse automáticamente.",
 };
 
