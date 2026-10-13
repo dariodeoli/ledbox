@@ -8,7 +8,10 @@ import {
   eventPhase,
   eventReadiness,
   matchesFocus,
+  pendingTaskEntries,
+  taskInScope,
 } from "../lib/event-readiness";
+import { pickEventBudgets } from "../lib/server/event-readiness";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const HOUR = 3_600_000;
@@ -213,4 +216,78 @@ test("ninguna acción se pierde: despacho, devolución, incidentes, checklist, a
   assert.match(ui, /onSelect\?: \(\) => void/, "una sola API: onSelect + active + actionLabel");
   assert.ok(!/admin-kpi--action|onClick\?: \(\) => void;\s*active/.test(ui), "no queda un segundo nombre para el mismo comportamiento");
   assert.match(module, /onSelect: \(\) => toggleFocus/, "Eventos usa onSelect");
+});
+
+test("la seña sale de un endpoint liviano acotado por empresa, sin bajar todos los presupuestos", () => {
+  const route = read("app/api/admin/events/readiness/route.ts");
+  const server = read("lib/server/event-readiness.ts");
+  assert.match(route, /export async function GET/);
+  assert.ok(!/export async function (POST|PATCH|PUT|DELETE)/.test(route), "solo lectura");
+  assert.match(route, /requireAdminContext\(\)/);
+  assert.match(route, /auth\.context\.organizationId/);
+  assert.match(route, /console\.error/, "los errores se registran");
+  // Todas las lecturas van acotadas por empresa, el cobrado se suma en la base y no hay tope de filas.
+  assert.ok((server.match(/organizationId/g) ?? []).length >= 4);
+  assert.match(server, /clientPayment\.groupBy/);
+  assert.match(server, /status: "RECEIVED"/);
+  assert.ok(!/\btake:/.test(server), "sin tope arbitrario");
+  const module = read("components/admin/modules/EventosModule.tsx");
+  assert.match(module, /"\/api\/admin\/events\/readiness"/);
+  // /api/admin/budgets (con su tope de 200) solo se pide al abrir la ficha, para las etapas; nunca para la seña.
+  assert.equal((module.match(/"\/api\/admin\/budgets"/g) ?? []).length, 1);
+  assert.match(module, /"\/api\/admin\/budgets",[\s\S]{0,200}enabled: Boolean\(fichaId\)/);
+});
+
+test("el presupuesto del evento: el aprobado manda y, si no, el más reciente", () => {
+  const d = (n: number) => new Date(Date.UTC(2033, 0, n));
+  const picked = pickEventBudgets([
+    { id: "viejo", eventId: "e1", status: "DRAFT", createdAt: d(1) },
+    { id: "nuevo", eventId: "e1", status: "SENT", createdAt: d(5) },
+    { id: "aprobado", eventId: "e2", status: "APPROVED", createdAt: d(2) },
+    { id: "posterior", eventId: "e2", status: "SENT", createdAt: d(9) },
+    { id: "sin-evento", eventId: null, status: "APPROVED", createdAt: d(3) },
+  ]);
+  assert.equal(picked.get("e1")?.id, "nuevo");
+  assert.equal(picked.get("e2")?.id, "aprobado");
+  assert.equal(picked.size, 2);
+});
+
+test("la vista «Tareas»: todas las pendientes de eventos abiertos, vencidas, esta semana y por promotora", () => {
+  const ev = (id: string, status: AdminEventPanelRow["status"], tasks: Array<{ id: string; dueAt: string | null; done?: boolean; promoterId?: string }>): AdminEventPanelRow =>
+    ({
+      id,
+      name: `Evento ${id}`,
+      status,
+      startsAt: iso(48 * HOUR),
+      endsAt: iso(50 * HOUR),
+      assignments: [],
+      tasks: tasks.map((t) => ({ id: t.id, eventId: id, title: t.id, type: "EVENT", dueAt: t.dueAt, completedAt: t.done ? iso(-HOUR) : null, promoter: t.promoterId ? { id: t.promoterId, name: t.promoterId, availability: "AVAILABLE" } : null })),
+    }) as unknown as AdminEventPanelRow;
+  const events = [
+    ev("a", "CONFIRMED", [
+      { id: "vencida", dueAt: iso(-3 * 24 * HOUR), promoterId: "ana" },
+      { id: "semana", dueAt: iso(3 * 24 * HOUR) },
+      { id: "lejos", dueAt: iso(30 * 24 * HOUR) },
+      { id: "sin-fecha", dueAt: null },
+      { id: "hecha", dueAt: iso(-3 * 24 * HOUR), done: true },
+    ]),
+    ev("b", "COMPLETED", [{ id: "de-evento-cerrado", dueAt: iso(-5 * 24 * HOUR) }]),
+  ];
+  const entries = pendingTaskEntries(events);
+  assert.deepEqual(entries.map((entry) => entry.task.id), ["vencida", "semana", "lejos", "sin-fecha"], "ni las hechas ni las de eventos cerrados; sin fecha al final");
+  const ids = (scope: "pending" | "overdue" | "week") => entries.filter((entry) => taskInScope(entry.task, scope)).map((entry) => entry.task.id);
+  assert.deepEqual(ids("overdue"), ["vencida"]);
+  assert.deepEqual(ids("week"), ["semana"]);
+  assert.equal(ids("pending").length, 4);
+
+  const module = read("components/admin/modules/EventosModule.tsx");
+  const view = read("components/admin/modules/EventosTareas.tsx");
+  assert.match(module, /label="Tareas vencidas"/, "el indicador de tareas vencidas existe");
+  assert.match(module, /onSelect=\{\(\) => \{[\s\S]{0,300}changeSection\("tareas"\)/, "y abre la vista filtrada en vencidas");
+  assert.match(module, /<EventosTareas/);
+  assert.match(view, /<ChecklistTable/, "reutiliza el checklist");
+  assert.match(view, /canToggle=\{writable\}/, "marcar como hecha solo con permiso");
+  assert.match(view, /!promoterIsAvailable\(task\.promoter\)/, "avisa de la promotora no disponible");
+  for (const text of ["Filtrar por promotora", "Sin promotora"]) assert.ok(view.includes(text), `falta «${text}»`);
+  assert.match(read("lib/event-readiness.ts"), /overdue: "Vencidas"[\s\S]{0,40}week: "Esta semana"/);
 });

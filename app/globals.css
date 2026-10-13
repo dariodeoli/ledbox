@@ -4735,3 +4735,14 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .admin-kpis--2up .admin-kpi-label-text { white-space: normal; overflow: visible; line-height: 1.2; }
   .admin-kpis--2up .admin-kpi-note { flex-basis: 100%; }
 }
+
+/* Eventos: cinco indicadores (el quinto abre la vista de tareas) y la barra de la vista «Tareas». */
+@media (min-width: 1100px) { .admin-kpis.admin-kpis--eventos { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.admin-eventos-sections .admin-subtab { min-height: 36px; cursor: pointer; }
+.admin-eventos-tareas { display: grid; gap: 10px; min-width: 0; }
+.admin-eventos-tareas-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.admin-eventos-tareas-bar .admin-subtab { min-height: 36px; cursor: pointer; }
+@media (max-width: 720px) {
+  .admin-eventos-sections .admin-subtab, .admin-eventos-tareas-bar .admin-subtab { min-height: 44px; }
+  .admin-eventos-tareas-bar .admin-select-wrap, .admin-eventos-tareas-bar > div:last-child { flex: 1 1 100%; }
+}

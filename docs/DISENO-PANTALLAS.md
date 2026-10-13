@@ -25,8 +25,12 @@ Responde: *¿qué eventos tengo y qué le falta a cada uno?*
 
 1. KPIs que filtran al tocarlos (botones con `aria-pressed`; se quitan con «Quitar filtro»):
    próximos 7 días · en curso · con faltantes o checklist incompleto · por cerrar
-   (pasaron sin finalizar). Misma fuente de verdad para el conteo y para el filtro
-   (`lib/event-readiness.ts`).
+   (pasaron sin finalizar) · **tareas vencidas** (abre la vista «Tareas» ya filtrada).
+   Misma fuente de verdad para el conteo y para el filtro (`lib/event-readiness.ts`).
+   «Con faltantes» cuenta todos los eventos abiertos con algo por resolver (el
+   despacho solo pesa dentro de los 7 días previos).
+   La seña sale de `GET /api/admin/events/readiness` (agregada en la base, sin el tope
+   de 200 del listado de presupuestos); sin dato se muestra «—».
 2. Barra fija: selector de vista (Lista · Tarjetas · Calendario, no se mueve entre
    vistas) · búsqueda · estado · **Nuevo evento**.
 3. Lista: fecha y hora · evento · cliente · lugar · **preparación** · estado ·
@@ -44,6 +48,11 @@ Responde: *¿qué eventos tengo y qué le falta a cada uno?*
    responsable, presupuesto vinculado con `StageTrail` y seña), Checklist, Equipos
    (asignación, despacho, devolución parcial, incidentes, combos), Personal
    (promotoras y sus tareas) e Historial. El pie lleva la siguiente acción y «•••».
+
+6. Pestaña **Tareas** (`?vista=tareas`, no es parte del selector de vista): todas las
+   tareas pendientes de los eventos abiertos con el mismo checklist de siempre;
+   filtros Pendientes · Vencidas · Esta semana y por promotora; marcar como hecha
+   solo con permiso de operación; avisa de las promotoras no disponibles.
 
 Acción principal: **Nuevo evento**. Orden por defecto: lo que está en juego primero
 (en curso o por empezar con checklist abierto), lo pasado al final.

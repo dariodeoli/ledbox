@@ -43,6 +43,18 @@ export type EventDeposit = "paid" | "pending" | "none" | "unknown";
 /** Lo mínimo del presupuesto vinculado que hace falta para saber si la seña entró. */
 export type EventBudgetPrep = { advanceAmount: number; collected: number };
 
+/** Fila de `GET /api/admin/events/readiness`: la seña de un evento, agregada en la base. */
+export type EventBudgetSummary = {
+  eventId: string;
+  budgetId: string | null;
+  hasBudget: boolean;
+  advanceAmount: number;
+  collected: number;
+  title: string | null;
+  status: string | null;
+  total: number | null;
+};
+
 export type EventReadiness = {
   phase: EventPhase;
   tasks: { total: number; done: number; pending: number; overdue: number };
@@ -219,4 +231,42 @@ export function matchesFocus(event: ReadinessEvent, focus: EventFocus, readiness
     case "close":
       return readiness.phase === "ended";
   }
+}
+
+/** Alcance de la vista transversal de tareas. */
+export type TaskScope = "pending" | "overdue" | "week";
+
+export const TASK_SCOPE_LABEL: Record<TaskScope, string> = {
+  pending: "Pendientes",
+  overdue: "Vencidas",
+  week: "Esta semana",
+};
+
+type TaskEvent = Pick<AdminEventPanelRow, "id" | "name" | "status" | "startsAt" | "endsAt" | "tasks">;
+
+export type EventTaskEntry = { task: AdminEventPanelRow["tasks"][number]; eventId: string; eventName: string };
+
+/**
+ * Todas las tareas pendientes de los eventos abiertos (un evento finalizado o
+ * cancelado ya no tiene nada que operar), de la que vence antes a la que vence
+ * después; las que no tienen fecha van al final.
+ */
+export function pendingTaskEntries(events: readonly TaskEvent[], now = Date.now()): EventTaskEntry[] {
+  const entries: EventTaskEntry[] = [];
+  for (const event of events) {
+    if (eventPhase(event, now) === "closed") continue;
+    for (const task of event.tasks) {
+      if (!task.completedAt) entries.push({ task, eventId: event.id, eventName: event.name });
+    }
+  }
+  return entries.sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999"));
+}
+
+/** Vencida = pendiente con fecha pasada; «esta semana» = vence entre hoy y dentro de 7 días (día de Asunción). */
+export function taskInScope(task: Pick<AdminEventPanelRow["tasks"][number], "completedAt" | "dueAt">, scope: TaskScope): boolean {
+  if (task.completedAt) return false;
+  if (scope === "pending") return true;
+  const days = daysUntilDue(task.dueAt);
+  if (days === null) return false;
+  return scope === "overdue" ? days < 0 : days >= 0 && days <= 7;
 }

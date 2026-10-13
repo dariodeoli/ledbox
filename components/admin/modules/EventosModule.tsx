@@ -14,7 +14,6 @@ import {
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import {
-  collectedAmount,
   type AdminBudgetRow,
   type AdminClientOption,
   type AdminEventAssignment,
@@ -30,12 +29,17 @@ import {
   matchesFocus,
   startsWithinDays,
   type EventBudgetPrep,
+  type EventBudgetSummary,
   type EventDetailTab,
   type EventFocus,
+  type TaskScope,
+  pendingTaskEntries,
+  taskInScope,
 } from "@/lib/event-readiness";
 import { useAdminSession } from "../AdminShell";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport, type AdminModuleView } from "../AdminBoard";
 import { CalendarioModule } from "./CalendarioModule";
+import { EventosTareas } from "./EventosTareas";
 import {
   AdminActionsMenu,
   AdminButton,
@@ -146,10 +150,10 @@ export function EventosModule() {
     "/api/admin/resources?only=promoters&fields=selector",
     (payload) => (payload as { promoters?: AdminPromoterOption[] }).promoters ?? [],
   );
-  // Presupuestos (solo lectura): dan la seña y el presupuesto vinculado de cada evento.
-  const budgetsResource = useAdminResource(
-    "/api/admin/budgets",
-    (payload) => (payload as { budgets?: AdminBudgetRow[] }).budgets ?? [],
+  // Seña por evento: lectura liviana agregada en la base (sin bajar todos los presupuestos).
+  const readinessResource = useAdminResource(
+    "/api/admin/events/readiness",
+    (payload) => (payload as { readiness?: EventBudgetSummary[] }).readiness ?? [],
   );
 
   const [query, setQuery] = useState("");
@@ -168,6 +172,21 @@ export function EventosModule() {
   useEffect(() => {
     setCalendarOpen(calendarRequested);
   }, [calendarRequested]);
+  // Vista transversal «Tareas» (`?vista=tareas`): pestaña propia, no entra en el selector de vista.
+  const tasksRequested = (searchParams.get("vista") ?? "").trim().toLowerCase() === "tareas";
+  const [section, setSection] = useState<"eventos" | "tareas">(tasksRequested ? "tareas" : "eventos");
+  const [taskScope, setTaskScope] = useState<TaskScope>("pending");
+  useEffect(() => {
+    setSection(tasksRequested ? "tareas" : "eventos");
+  }, [tasksRequested]);
+  function changeSection(next: "eventos" | "tareas") {
+    setSection(next);
+    if (next === "tareas") setCalendarOpen(false);
+    const url = new URL(window.location.href);
+    if (next === "tareas") url.searchParams.set("vista", "tareas");
+    else if (url.searchParams.get("vista") === "tareas") url.searchParams.delete("vista");
+    window.history.replaceState(null, "", url.toString());
+  }
   const activeView: AdminModuleView = calendarOpen ? "calendar" : view;
   // En ancho compacto la lista también se lee como tarjetas (issue #139): es la
   // única forma de que el nombre del evento entre en 390 sin scroll horizontal.
@@ -233,18 +252,19 @@ export function EventosModule() {
   const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
   const promoters = useMemo(() => promotersResource.data ?? [], [promotersResource.data]);
 
-  // Presupuesto vinculado por evento: el aprobado manda; si no, el más reciente.
-  const budgetsKnown = !budgetsResource.loading && !budgetsResource.error && budgetsResource.data !== null;
+  // Seña por evento: sin dato (cargando o error) queda «—», nunca «sin presupuesto».
+  const budgetsKnown = !readinessResource.loading && !readinessResource.error && readinessResource.data !== null;
   const budgetByEvent = useMemo(() => {
-    const map = new Map<string, AdminBudgetRow>();
-    for (const budget of budgetsResource.data ?? []) {
-      const eventId = budget.event?.id;
-      if (!eventId) continue;
-      const current = map.get(eventId);
-      if (!current || (current.status !== "APPROVED" && budget.status === "APPROVED")) map.set(eventId, budget);
-    }
+    const map = new Map<string, EventBudgetSummary>();
+    for (const row of readinessResource.data ?? []) if (row.hasBudget) map.set(row.eventId, row);
     return map;
-  }, [budgetsResource.data]);
+  }, [readinessResource.data]);
+  // El detalle completo (etapas) solo se pide al abrir la ficha; si el presupuesto no entra en esa lista, no se dibujan las etapas.
+  const fullBudgets = useAdminResource(
+    "/api/admin/budgets",
+    (payload) => (payload as { budgets?: AdminBudgetRow[] }).budgets ?? [],
+    { enabled: Boolean(fichaId) },
+  );
 
   const queued = useCallback((assignmentId: string) => queuedKind(queuedActions, assignmentId), [queuedActions]);
 
@@ -252,7 +272,7 @@ export function EventosModule() {
     () =>
       events.map((event) => {
         const budget = budgetByEvent.get(event.id) ?? null;
-        const prep: EventBudgetPrep | null = budget ? { advanceAmount: budget.advanceAmount, collected: collectedAmount(budget.payments) } : null;
+        const prep: EventBudgetPrep | null = budget ? { advanceAmount: budget.advanceAmount, collected: budget.collected } : null;
         return { event, readiness: eventReadiness(event, { deposit: depositState(prep, budgetsKnown), queued }) };
       }),
     [events, budgetByEvent, budgetsKnown, queued],
@@ -268,6 +288,9 @@ export function EventosModule() {
         .sort(compareEventUrgency),
     [items, query, status, focus],
   );
+
+  const taskEntries = useMemo(() => pendingTaskEntries(events), [events]);
+  const overdueTaskCount = useMemo(() => taskEntries.filter(({ task }) => taskInScope(task, "overdue")).length, [taskEntries]);
 
   const counts = useMemo(() => {
     const total = (key: EventFocus) => items.filter((item) => matchesFocus(item.event, key, item.readiness)).length;
@@ -307,7 +330,8 @@ export function EventosModule() {
 
   function toggleFocus(next: EventFocus) {
     setFocus((current) => (current === next ? null : next));
-    // El calendario no filtra: tocar un indicador lleva a la lista.
+    // El calendario y las tareas no filtran eventos: tocar un indicador lleva a la lista.
+    if (section === "tareas") changeSection("eventos");
     if (activeView === "calendar") changeView("list");
   }
 
@@ -498,14 +522,14 @@ export function EventosModule() {
         hint="Qué falta de cada evento: checklist, equipos, seña y personal."
         meta={`${formatNumber(events.length)} eventos`}
       />
-      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos" className="admin-kpis--2up">
+      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos" className="admin-kpis--2up admin-kpis--eventos">
         <AdminKpi label="Próximos 7 días" icon="calendar" value={formatNumber(counts.next7)} note="por empezar" tone="accent" {...kpiFor("next7")} />
         <AdminKpi label="En curso" icon="checkin" value={formatNumber(counts.live)} note="operación activa" {...kpiFor("live")} />
         <AdminKpi
           label="Faltantes o checklist incompleto"
           icon="alert"
           value={formatNumber(counts.gaps)}
-          note="eventos con pendientes"
+          note="abiertos con pendientes"
           tone={counts.gaps > 0 ? "warn" : "ok"}
           {...kpiFor("gaps")}
         />
@@ -517,8 +541,33 @@ export function EventosModule() {
           tone={counts.close > 0 ? "danger" : "ok"}
           {...kpiFor("close")}
         />
+        <AdminKpi
+          label="Tareas vencidas"
+          icon="clock"
+          value={formatNumber(overdueTaskCount)}
+          note="de eventos abiertos"
+          tone={overdueTaskCount > 0 ? "danger" : "ok"}
+          onSelect={() => {
+            const off = section === "tareas" && taskScope === "overdue";
+            setTaskScope(off ? "pending" : "overdue");
+            changeSection("tareas");
+          }}
+          active={section === "tareas" && taskScope === "overdue"}
+          actionLabel="Ver las tareas vencidas"
+        />
       </AdminKpis>
 
+      <nav className="admin-subtabs admin-eventos-sections" aria-label="Secciones de Eventos">
+        <button type="button" className="admin-subtab" data-active={section === "eventos" ? "true" : undefined} aria-pressed={section === "eventos"} onClick={() => changeSection("eventos")}>
+          Eventos
+        </button>
+        <button type="button" className="admin-subtab" data-active={section === "tareas" ? "true" : undefined} aria-pressed={section === "tareas"} onClick={() => changeSection("tareas")}>
+          Tareas
+          {operations.data ? <span className="admin-subtab-count">{formatNumber(taskEntries.length)}</span> : null}
+        </button>
+      </nav>
+
+      {section === "tareas" ? null : (
       <AdminToolbar>
         {/* Primero en la barra: el conmutador queda FIJO en las tres vistas (en calendario no hay búsqueda ni filtro). */}
         {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
@@ -539,8 +588,9 @@ export function EventosModule() {
           </AdminButton>
         ) : null}
       </AdminToolbar>
+      )}
 
-      {focus && activeView !== "calendar" ? (
+      {focus && activeView !== "calendar" && section === "eventos" ? (
         <div className="admin-focus-bar" role="status">
           <span>
             Mostrando: <strong>{FOCUS_LABEL[focus]}</strong> · {formatNumber(rows.length)} evento{rows.length === 1 ? "" : "s"}
@@ -684,7 +734,18 @@ export function EventosModule() {
         </AdminDialog>
       ) : null}
 
-      {activeView === "calendar" ? (
+      {section === "tareas" ? (
+        <EventosTareas
+          events={events}
+          loading={operations.loading}
+          error={operations.error}
+          onRetry={operations.reload}
+          writable={writable}
+          scope={taskScope}
+          onScope={setTaskScope}
+          onOpenEvent={(id) => openFicha(id)}
+        />
+      ) : activeView === "calendar" ? (
         /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
           <CalendarioModule hideKpis events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
@@ -760,7 +821,8 @@ export function EventosModule() {
           onClose={closeFicha}
           writable={writable}
           budget={budgetByEvent.get(ficha.event.id) ?? null}
-          budgetState={budgetsResource.loading ? "loading" : budgetsResource.error ? "error" : "ready"}
+          stageBudget={fullBudgets.data?.find((row) => row.id === budgetByEvent.get(ficha.event.id)?.budgetId) ?? null}
+          budgetState={readinessResource.loading ? "loading" : readinessResource.error ? "error" : "ready"}
           promoters={promoters}
           inventoryItems={inventoryItems}
           queuedActions={queuedActions}

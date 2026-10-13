@@ -10,7 +10,7 @@ import { adminSend } from "@/lib/admin-api";
 import { useOfflineQueue } from "../AdminOffline";
 import { queuedActionForTask } from "@/lib/offline-queue";
 
-export type ChecklistEntry = { task: AdminEventTask; eventName: string };
+export type ChecklistEntry = { task: AdminEventTask; eventName: string; eventId?: string };
 
 /** Checklist operativo: una tabla para Resumen y Eventos (mismo contrato de `/api/admin/event-ops`). */
 export function ChecklistTable({
@@ -21,6 +21,7 @@ export function ChecklistTable({
   emptyHint,
   compact,
   single,
+  onOpenEvent,
 }: {
   entries: ChecklistEntry[];
   canToggle: boolean;
@@ -31,6 +32,8 @@ export function ChecklistTable({
   compact?: boolean;
   /** Tareas de un solo evento (ficha del evento): sin la columna Evento, con la promotora bajo el título. */
   single?: boolean;
+  /** Vista transversal: el nombre del evento abre su ficha. */
+  onOpenEvent?: (eventId: string) => void;
 }) {
   if (entries.length === 0) return <AdminEmpty icon="check" title="Sin tareas" hint={emptyHint} />;
   return (
@@ -45,7 +48,7 @@ export function ChecklistTable({
           : [{ label: "Estado" }, { label: "Tarea" }, { label: "Evento" }, { label: "Tipo" }, { label: "Vence", end: true }]
       }
     >
-      {entries.map(({ task, eventName }) => {
+      {entries.map(({ task, eventName, eventId }) => {
         const done = Boolean(task.completedAt);
         return (
           <AdminRow key={task.id}>
@@ -54,9 +57,19 @@ export function ChecklistTable({
             </AdminCell>
             <AdminCell title={task.title}>
               <strong>{task.title}</strong>
-              {single && task.promoter ? <small className="admin-cell-sub"> · {task.promoter.name}</small> : null}
+              {!compact && task.promoter ? <small className="admin-cell-sub"> · {task.promoter.name}</small> : null}
             </AdminCell>
-            {single ? null : <AdminCell title={eventName}>{eventName}</AdminCell>}
+            {single ? null : (
+              <AdminCell title={eventName}>
+                {onOpenEvent && eventId ? (
+                  <button type="button" className="admin-link-btn" onClick={() => onOpenEvent(eventId)} aria-haspopup="dialog" aria-label={`Abrir el evento ${eventName}`}>
+                    {eventName}
+                  </button>
+                ) : (
+                  eventName
+                )}
+              </AdminCell>
+            )}
             {compact ? null : (
               <AdminCell>
                 <AdminBadge tone={statusTone(task.type)}>{taskTypeLabel(task.type)}</AdminBadge>

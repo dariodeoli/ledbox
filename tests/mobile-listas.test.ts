@@ -35,6 +35,12 @@ test("eventos: tarjetas en ancho compacto con la fecha destacada, el estado, la 
   assert.match(cards, /<PrepChips item=\{item\} \/>/, "la preparación va en la tarjeta");
   assert.match(cards, /readiness\.gaps\[0\]/, "lo primero que falta se lee en la tarjeta");
   assert.match(cards, /renderActions\(item\)/, "el pie lleva la siguiente acción y «•••»");
+  // El checklist y los equipos siguen en la tarjeta, ahora como chips de preparación
+  // (checklist cumplido/total y equipos despachados/total), con su texto completo accesible.
+  assert.match(cards, /export function PrepChips/, "los chips de preparación existen");
+  assert.match(cards, /Checklist: \$\{tasks\.done\} de \$\{tasks\.total\} tareas cumplidas/, "el chip de checklist dice cuántas tareas se cumplieron");
+  assert.match(cards, /Equipos despachados: \$\{equipment\.dispatched\} de \$\{equipment\.units\}/, "el chip de equipos dice cuántos salieron");
+  assert.match(cards, /<AdminIcon name="audit" size=\{12\} \/>[\s\S]{0,320}<AdminIcon name="inventory" size=\{12\} \/>/, "checklist y equipos son chips distintos");
   // El conmutador no se dibuja en ancho compacto (lista y cuadrícula serían iguales).
   assert.match(module, /<div className="admin-cal-view-switch">\s*<AdminViewSwitch/, "el calendario se alcanza también desde el selector móvil");
 });

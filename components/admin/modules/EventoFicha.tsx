@@ -21,7 +21,6 @@ import {
 } from "@/lib/admin-format";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import {
-  collectedAmount,
   promoterIsAvailable,
   type AdminBudgetRow,
   type AdminEventAssignment,
@@ -31,7 +30,7 @@ import {
   type AdminPromoterOption,
 } from "@/lib/admin-types";
 import { adminApiGet, adminSend } from "@/lib/admin-api";
-import { assignmentControls, type EventDetailTab, type QueuedMovement } from "@/lib/event-readiness";
+import { assignmentControls, type EventBudgetSummary, type EventDetailTab, type QueuedMovement } from "@/lib/event-readiness";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import {
   AdminActionsMenu,
@@ -126,7 +125,10 @@ export type EventoFichaProps = {
   onTab: (tab: EventDetailTab) => void;
   onClose: () => void;
   writable: boolean;
-  budget: AdminBudgetRow | null;
+  /** Seña y presupuesto vinculado (lectura liviana). */
+  budget: EventBudgetSummary | null;
+  /** Presupuesto completo, solo para las etapas; `null` si no llegó. */
+  stageBudget: AdminBudgetRow | null;
   budgetState: "loading" | "error" | "ready";
   promoters: AdminPromoterOption[];
   inventoryItems: AdminInventoryOption[];
@@ -150,7 +152,7 @@ export type EventoFichaProps = {
  * siempre vive en su pestaña; el pie lleva la siguiente acción lógica y «•••».
  */
 export function EventoFicha(props: EventoFichaProps) {
-  const { item, tab, onTab, onClose, writable, budget, budgetState, closeBusy, closeError, menuItems, onRunNext } = props;
+  const { item, tab, onTab, onClose, writable, budget, stageBudget, budgetState, closeBusy, closeError, menuItems, onRunNext } = props;
   const { event, readiness } = item;
   const tablistId = useId();
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -254,7 +256,7 @@ export function EventoFicha(props: EventoFichaProps) {
       </nav>
 
       <div id={`${tablistId}-panel`} role="tabpanel" aria-labelledby={`${tablistId}-${tab}`} className="admin-evento-panel">
-        {tab === "resumen" ? <ResumenTab event={event} budget={budget} budgetState={budgetState} item={item} /> : null}
+        {tab === "resumen" ? <ResumenTab event={event} budget={budget} stageBudget={stageBudget} budgetState={budgetState} item={item} /> : null}
         {tab === "checklist" ? (
           <ChecklistTab event={event} writable={writable} promoters={props.promoters} onReload={props.onReload} />
         ) : null}
@@ -268,11 +270,11 @@ export function EventoFicha(props: EventoFichaProps) {
   );
 }
 
-function ResumenTab({ event, budget, budgetState, item }: { event: AdminEventPanelRow; budget: AdminBudgetRow | null; budgetState: "loading" | "error" | "ready"; item: EventItem }) {
+function ResumenTab({ event, budget, stageBudget, budgetState, item }: { event: AdminEventPanelRow; budget: EventBudgetSummary | null; stageBudget: AdminBudgetRow | null; budgetState: "loading" | "error" | "ready"; item: EventItem }) {
   const where = [event.location, event.city, event.department].filter(Boolean).join(" · ");
   const legal = clientLegalName(event.client);
   const phone = whatsappHref(event.client.phone);
-  const collected = budget ? collectedAmount(budget.payments) : 0;
+  const collected = budget?.collected ?? 0;
   return (
     <>
       <dl className="admin-dialog-facts">
@@ -330,17 +332,17 @@ function ResumenTab({ event, budget, budgetState, item }: { event: AdminEventPan
           <p className="admin-muted">Este evento no tiene un presupuesto vinculado.</p>
         ) : (
           <>
-            <StageTrail stages={stagesOfBudget(budget)} label={`Etapas de ${budget.title}`} />
+            {stageBudget ? <StageTrail stages={stagesOfBudget(stageBudget)} label={`Etapas de ${budget.title ?? "el presupuesto"}`} /> : null}
             <dl className="admin-dialog-facts">
               <div>
                 <dt>Presupuesto</dt>
                 <dd>
-                  <Link href={`/presupuestos?detalle=${encodeURIComponent(budget.id)}`}>{budget.title}</Link>{" "}
-                  <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
+                  <Link href={`/presupuestos?detalle=${encodeURIComponent(budget.budgetId ?? "")}`}>{budget.title ?? "Ver presupuesto"}</Link>{" "}
+                  {budget.status ? <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge> : null}
                 </dd>
               </div>
-              <div><dt>Total</dt><dd>{formatMoney(budget.total)}</dd></div>
-              <div><dt>Cobrado</dt><dd>{formatMoney(collected)} · saldo {formatMoney(Math.max(0, budget.total - collected))}</dd></div>
+              <div><dt>Total</dt><dd>{budget.total != null ? formatMoney(budget.total) : "—"}</dd></div>
+              <div><dt>Cobrado</dt><dd>{formatMoney(collected)}{budget.total != null ? ` · saldo ${formatMoney(Math.max(0, budget.total - collected))}` : ""}</dd></div>
               <div>
                 <dt>Seña</dt>
                 <dd>
