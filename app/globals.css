@@ -4430,7 +4430,8 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .cp-logo img { display: block; height: 36px; width: auto; max-width: 140px; object-fit: contain; }
 .cp-logo--plate { background: #14181d; padding: 4px 8px; border-radius: 8px; }
 .cp-mono { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--cp-accent); color: var(--cp-accent-text); font-family: var(--cp-font-head); font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em; }
-.cp-nav-links { display: flex; gap: 4px; }
+/* El sitio público estila `nav` global (fixed, 64 px): acá se neutraliza, igual que en el pie de la app. */
+.cp-nav-links { position: static; inset: auto; z-index: auto; height: auto; padding: 0; border: 0; background: none; transition: none; -webkit-backdrop-filter: none; backdrop-filter: none; display: flex; gap: 4px; flex: none; }
 .cp-nav-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--cp-text); font-weight: 600; font-size: 0.95rem; text-decoration: none; }
 .cp-nav-links a:hover { background: var(--cp-tint); }
 .cp-main { max-width: 1100px; margin: 0 auto; padding: 16px 16px 140px; display: grid; gap: 40px; }
@@ -4518,6 +4519,8 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .cp-dl { display: grid; gap: 8px; margin: 12px 0; }
 .cp-dl dt { color: var(--cp-muted); font-size: 0.85rem; } .cp-dl dd { margin: 0; font-weight: 600; }
 @media (max-width: 640px) {
+  /* Con logo, el nombre solo queda para lectores de pantalla: el logo ya lo dice y no hay lugar. */
+  .cp-brand--logo .cp-brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .cp-nav-links a:not(:first-child) { display: none; }
   .cp-main { gap: 32px; padding-bottom: 150px; }
   .cp-hero-actions .cp-btn { flex: 1 1 100%; }

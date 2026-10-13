@@ -60,12 +60,13 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
   const hasContact = Boolean(whatsapp || store.email);
+  const hasLogo = store.logos.light || store.logos.dark;
 
   return (
     <div className="cp-theme" style={style}>
       <header className="cp-nav">
         <div className="cp-nav-inner">
-          <a className="cp-brand" href={basePath} aria-label={`Inicio de ${store.name}`}>
+          <a className={hasLogo ? "cp-brand cp-brand--logo" : "cp-brand"} href={basePath} aria-label={`Inicio de ${store.name}`}>
             <Logo store={store} />
             <span className="cp-brand-name">{store.name}</span>
           </a>
