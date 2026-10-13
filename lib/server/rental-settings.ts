@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { OrganizationRentalSettings } from "@prisma/client";
 import type { AdminRentalSettings } from "../admin-types";
+import { securityDepositAmountValid } from "../budget-security-deposit";
 import { db } from "./db";
 import { DEFAULT_HOLD_TTL_MINUTES } from "./inventory-availability";
 
@@ -14,6 +15,7 @@ export type RentalSettingsView = AdminRentalSettings;
 
 export const RENTAL_SETTINGS_DEFAULTS: RentalSettingsView = {
   depositPercent: null,
+  securityDepositDefault: null,
   holdTtlMinutes: DEFAULT_HOLD_TTL_MINUTES,
   deliveryBufferMin: 0,
   returnBufferMin: 0,
@@ -40,6 +42,7 @@ export const MAX_HOLD_TTL_MIN = 90 * 24 * 60;
 
 export const RENTAL_SETTINGS_FIELDS = [
   "depositPercent",
+  "securityDepositDefault",
   "holdTtlMinutes",
   ...BUFFER_KEYS,
   "publicCatalogEnabled",
@@ -51,6 +54,7 @@ export function toRentalSettingsView(row: OrganizationRentalSettings | null): Re
   if (!row) return { ...RENTAL_SETTINGS_DEFAULTS };
   return {
     depositPercent: row.depositPercent,
+    securityDepositDefault: row.securityDepositDefault,
     holdTtlMinutes: row.holdTtlMinutes,
     deliveryBufferMin: row.deliveryBufferMin,
     returnBufferMin: row.returnBufferMin,
@@ -79,6 +83,17 @@ export function parseRentalSettingsPatch(
         return { ok: false, error: "La seña debe ser un porcentaje entero entre 0 y 100." };
       }
       data.depositPercent = percent;
+    }
+  }
+  if (record.securityDepositDefault !== undefined) {
+    if (record.securityDepositDefault === null || record.securityDepositDefault === "" || record.securityDepositDefault === 0) {
+      data.securityDepositDefault = null;
+    } else {
+      const amount = record.securityDepositDefault;
+      if (typeof amount !== "number" || !securityDepositAmountValid(amount)) {
+        return { ok: false, error: "La garantía por defecto debe ser un monto entero en guaraníes mayor a cero." };
+      }
+      data.securityDepositDefault = amount;
     }
   }
   if (record.holdTtlMinutes !== undefined) {

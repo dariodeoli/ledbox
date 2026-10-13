@@ -94,6 +94,24 @@ export function resolveBudgetPaymentPlan(raw: unknown, total: number, advance = 
   return { ok: true, rows, assigned: remainder >= 0 ? total : assigned, remaining: remainder >= 0 ? 0 : total - assigned };
 }
 
+/**
+ * Plan por defecto de la seña de la empresa: «Seña N %» + «Saldo». Única fuente
+ * para la conversión de preórdenes y el alta de presupuestos (manual, desde lead
+ * o API). Sin porcentaje (o con total 0) devuelve `null`: no hay seña.
+ * La suma cierra al guaraní: el saldo es siempre `total - seña`.
+ */
+export function defaultDepositPlanRows(percent: number | null | undefined, total: number): BudgetPaymentCondition[] | null {
+  if (!percent || !Number.isInteger(percent) || percent <= 0 || percent > 100 || total <= 0) return null;
+  const plan = resolveBudgetPaymentPlan(
+    [
+      { label: `Seña ${percent} %`, type: "percent", value: percent, moment: "Al aprobar el presupuesto" },
+      { label: "Saldo", type: "remainder", moment: "Contra entrega" },
+    ],
+    total,
+  );
+  return plan.ok ? plan.rows.map(budgetPaymentConditionPayload) : null;
+}
+
 /** Recalculate only extended plans; never reinterpret old stored amounts. */
 export function hasDynamicBudgetPlan(raw: unknown): boolean {
   return Array.isArray(raw) && raw.some((row) => row?.type === "percent" || row?.type === "remainder");

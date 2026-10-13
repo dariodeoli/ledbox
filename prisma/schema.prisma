@@ -791,6 +791,12 @@ model Budget {
   advanceAmount        Int                   @default(0)
   paymentTerms         String?
   installmentsJson     Json?
+  /// Depósito de garantía del alquiler (PYG). Opcional y APARTE del total: no se
+  /// factura ni cuenta como cobro. Estado: PENDING, HELD, RETURNED, KEPT_PARTIAL o KEPT.
+  securityDeposit         Int?
+  securityDepositStatus   String?
+  /// Monto retenido (KEPT_PARTIAL / KEPT); el resto se devuelve al cliente.
+  securityDepositRetained Int?
   // Portal del cliente (issue #12): token público del presupuesto y evidencia
   // de la aprobación digital o manual. El token es la única credencial del
   // link y se puede regenerar o revocar desde el panel.
@@ -1768,6 +1774,8 @@ model OrganizationRentalSettings {
   id                   String       @id
   organizationId       String       @unique
   depositPercent       Int?
+  /// Depósito de garantía por defecto (PYG) de los presupuestos nuevos; NULL = sin garantía.
+  securityDepositDefault Int?
   holdTtlMinutes       Int          @default(2880)
   deliveryBufferMin    Int          @default(0)
   returnBufferMin      Int          @default(0)

@@ -407,6 +407,13 @@ export type AdminBudgetRow = {
   ivaType: AdminInvoiceTaxType | null;
   /** Garantía ofrecida al cliente (issue #65). */
   warranty: string | null;
+  /** Depósito de garantía del alquiler: aparte del total y de los cobros. */
+  securityDeposit?: number | null;
+  /** PENDING, HELD, RETURNED, KEPT_PARTIAL o KEPT. */
+  securityDepositStatus?: string | null;
+  securityDepositRetained?: number | null;
+  /** Devolución de equipos del evento vinculado: sin daños, con incidentes o pendiente. */
+  equipmentReturn?: "clean" | "incidents" | "pending" | null;
   createdAt: string;
   notes: string | null;
   client: AdminClientRef;
@@ -2401,6 +2408,8 @@ export type AdminMonthlyReport = {
 /** Ajustes de alquiler de la empresa (`GET /api/admin/settings/rental`); tiempos en minutos. */
 export type AdminRentalSettings = {
   depositPercent: number | null;
+  /** Depósito de garantía por defecto (PYG) de los presupuestos nuevos; `null` = sin garantía. */
+  securityDepositDefault: number | null;
   holdTtlMinutes: number;
   deliveryBufferMin: number;
   returnBufferMin: number;
@@ -2434,6 +2443,8 @@ export type AdminApiResponse = {
   events?: AdminEventRow[];
   budgets?: AdminBudgetRow[];
   budgetRequests?: AdminBudgetRequestRow[];
+  /** Valores por defecto de la empresa para presupuestos nuevos (seña y garantía). */
+  rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null };
   proofs?: AdminBudgetPaymentProofRow[];
   clientPayments?: AdminPaymentRow[];
   /** Recordatorio recién enviado/registrado (respuesta de `/api/admin/reminders`). */

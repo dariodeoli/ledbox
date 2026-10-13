@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { budgetPaymentConditionPayload, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
 import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, referenceDailyPrice, rentalDaysBetween } from "@/lib/catalog-public";
 import { db } from "./db";
 import { commitInventoryAssignment, insufficientMessage } from "./inventory-availability";
@@ -51,16 +51,9 @@ function isUnique(error: unknown): boolean {
 
 /** Plan de la seña: porcentaje del total final + saldo. Sin política (o total 0) no hay plan. */
 export function depositPlan(percent: number | null, total: number): { advanceAmount: number; installments: Prisma.InputJsonValue | typeof Prisma.DbNull; amount: number } {
-  if (!percent || percent <= 0 || total <= 0) return { advanceAmount: 0, installments: Prisma.DbNull, amount: 0 };
-  const plan = resolveBudgetPaymentPlan(
-    [
-      { label: `Seña ${percent} %`, type: "percent", value: percent, moment: "Al aprobar el presupuesto" },
-      { label: "Saldo", type: "remainder", moment: "Contra entrega" },
-    ],
-    total,
-  );
-  if (!plan.ok) return { advanceAmount: 0, installments: Prisma.DbNull, amount: 0 };
-  return { advanceAmount: 0, installments: plan.rows.map(budgetPaymentConditionPayload) as unknown as Prisma.InputJsonValue, amount: plan.rows[0]?.amount ?? 0 };
+  const rows = defaultDepositPlanRows(percent, total);
+  if (!rows) return { advanceAmount: 0, installments: Prisma.DbNull, amount: 0 };
+  return { advanceAmount: 0, installments: rows as unknown as Prisma.InputJsonValue, amount: rows[0]?.amount ?? 0 };
 }
 
 export async function convertQuoteRequest(context: AdminContext, quoteRequestId: string): Promise<ConvertFailure | ConvertSuccess> {
@@ -144,6 +137,9 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
           costEstimate,
           advanceAmount: plan.advanceAmount,
           installmentsJson: plan.installments,
+          // Garantía por defecto de la empresa: aparte del total, nace pendiente.
+          securityDeposit: settings.securityDepositDefault,
+          securityDepositStatus: settings.securityDepositDefault ? "PENDING" : null,
           notes: noteLines.join("\n").slice(0, NOTES_MAX),
           items: { create: lines },
         },
