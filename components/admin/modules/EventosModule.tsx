@@ -220,6 +220,11 @@ export function EventosModule() {
   // Vistas recordadas por usuario; la URL explícita prevalece al entrar.
   const [view, setView] = useAdminModuleView("eventos", EVENTOS_VIEWS);
   const searchParams = useSearchParams();
+  // Enlaces del Resumen y del menú: `?estado=CONFIRMED` abre la lista filtrada.
+  const estadoParam = (searchParams.get("estado") ?? "").trim().toUpperCase();
+  useEffect(() => {
+    if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
+  }, [estadoParam]);
   const calendarRequested = ["calendario", "calendar"].includes((searchParams.get("vista") ?? "").trim().toLowerCase());
   const [calendarOpen, setCalendarOpen] = useState(calendarRequested);
   useEffect(() => {
@@ -730,7 +735,7 @@ export function EventosModule() {
   return (
     <div className="admin-module-page">
       <AdminModuleContext
-        breadcrumb="Operación / Eventos"
+        breadcrumb="Ventas / Eventos"
         hint="Agenda, checklist de campo y equipos asignados por evento."
         meta={`${formatNumber(events.length)} eventos`}
       />

@@ -2385,7 +2385,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   return (
     <div className="admin-module-page">
       <AdminModuleContext
-        breadcrumb="Operación / Finanzas"
+        breadcrumb="Plata / Finanzas"
         hint="Cobros, tesorería, gastos y pagos a proveedores con trazabilidad."
         meta={periodLabel}
       />

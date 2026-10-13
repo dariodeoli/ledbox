@@ -5,20 +5,19 @@ Complemento de `docs/DISENO-PANEL.md` para la pasada por pantalla del rediseño
 operativo, al final lo descriptivo**. Cada pantalla tiene **una** acción
 principal, y el encabezado va en el ritmo fijo de la guía (§4).
 
-## Resumen (`/dashboard`)
+## Inicio (`/dashboard`)
 
-Responde: *¿qué me está pidiendo atención hoy?*
+Responde: *¿qué hago ahora y cómo viene el mes?* (rediseño del 13-10-2026,
+detalle en `docs/DISENO-PANEL.md` §15)
 
 | # | Bloque | Por qué |
 | --- | --- | --- |
-| 1 | **Qué mirar hoy** (avisos con acción) | Es lo accionable: venció, hay que confirmar, falta cobrar |
-| 2 | KPIs de cartera (clientes, eventos, presupuestos, leads) | Contexto del negocio en una lectura |
-| 3 | KPIs de dinero (por cobrar, por pagar, caja, inventario) | La foto financiera del día |
-| 4 | Próximos eventos | Agenda operativa |
-| 5 | Checklist pendiente | Trabajo por cerrar |
+| 1 | **Para hacer hoy** (hasta 5 acciones por urgencia, con botón) | Es lo accionable: mora, leads sin contestar, comprobantes |
+| 2 | Embudo del mes (Leads → Presupuestos → Aprobados → Eventos) | El pulso comercial; cada etapa abre su lista |
+| 3 | Plata (por cobrar, en mora, cobrado del mes) | La foto financiera sin abrir Finanzas |
+| 4 | Esta semana | Agenda operativa con su checklist o seña |
 
-Acción principal: **Ver calendario**. Lo que era un párrafo descriptivo vive en
-la ayuda del módulo (`¿Qué es esto?`).
+Acción principal: **Nuevo lead**. Por pagar y caja comprometida viven en Finanzas.
 
 ## Eventos (`/eventos`)
 

@@ -14,6 +14,12 @@ const VIEWER_ROUTES = new Set(
   adminNavGroups("VIEWER").flatMap((group) => group.items.map((item) => item.href)),
 );
 
+/** La ruta (sin query) es un módulo visible para VIEWER o una sección dentro de uno (`/finanzas/por-cobrar`). */
+function viewerCanOpen(href: string): boolean {
+  const path = href.split("?")[0];
+  return [...VIEWER_ROUTES].some((route) => path === route || path.startsWith(`${route}/`));
+}
+
 test("el recorrido guiado tiene 4–6 pasos y todos llevan a módulos de la demo", () => {
   assert.ok(
     DEMO_TOUR_STEPS.length >= 4 && DEMO_TOUR_STEPS.length <= 6,
@@ -25,7 +31,7 @@ test("el recorrido guiado tiene 4–6 pasos y todos llevan a módulos de la demo
     ids.add(step.id);
     assert.ok(step.title.trim().length > 0, `${step.id}: sin título`);
     assert.ok(step.what.trim().length > 0, `${step.id}: sin qué mirar`);
-    assert.ok(VIEWER_ROUTES.has(step.href), `${step.id}: ruta que la demo no puede abrir (${step.href})`);
+    assert.ok(viewerCanOpen(step.href), `${step.id}: ruta que la demo no puede abrir (${step.href})`);
   }
 });
 
@@ -40,6 +46,6 @@ test("los casos fuertes llevan a módulos de la demo y tienen id, etiqueta y ayu
     ids.add(strongCase.id);
     assert.ok(strongCase.label.trim().length > 0, `${strongCase.id}: sin etiqueta`);
     assert.ok(strongCase.hint.trim().length > 0, `${strongCase.id}: sin ayuda`);
-    assert.ok(VIEWER_ROUTES.has(strongCase.href), `${strongCase.id}: ruta que la demo no puede abrir (${strongCase.href})`);
+    assert.ok(viewerCanOpen(strongCase.href), `${strongCase.id}: ruta que la demo no puede abrir (${strongCase.href})`);
   }
 });

@@ -40,8 +40,9 @@ import {
   type AdminMenuItem,
 } from "../AdminUI";
 import { SearchField, SelectField, TextAreaField } from "../AdminFields";
+import { LeadQuickDialog } from "./LeadQuickForm";
 import { AdminIcon } from "../AdminIcons";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -118,6 +119,21 @@ export function LeadsModule() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadParam = searchParams.get("lead")?.trim() ?? "";
+  // Enlaces del Resumen y del menú: `?estado=NEW` abre la lista filtrada y
+  // `?nuevo=1` abre el alta manual.
+  const estadoParam = (searchParams.get("estado") ?? "").trim().toUpperCase();
+  const newRequested = searchParams.get("nuevo") === "1";
+  const [newOpen, setNewOpen] = useState(false);
+  useEffect(() => {
+    if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
+  }, [estadoParam]);
+  useEffect(() => {
+    if (newRequested && writable) setNewOpen(true);
+  }, [newRequested, writable]);
+  const closeNew = useCallback(() => {
+    setNewOpen(false);
+    if (newRequested) router.replace("/leads");
+  }, [newRequested, router]);
   const list = useMemo(() => leads.data ?? [], [leads.data]);
 
   const searched = useMemo(
@@ -314,7 +330,7 @@ export function LeadsModule() {
       return;
     }
     setNotice(`Lead de ${selected.name} actualizado.`);
-    leads.reload();
+    requestAdminRefresh();
   }
 
   async function convertToClient() {
@@ -355,7 +371,23 @@ export function LeadsModule() {
           placeholder="Buscar por nombre, empresa, contacto o motivo…"
         />
         {narrow ? null : <AdminViewSwitch view={view} onChange={setView} label="Vista de leads" />}
+        {writable ? (
+          <AdminButton variant="primary" icon="plus" type="button" onClick={() => setNewOpen(true)}>
+            Nuevo lead
+          </AdminButton>
+        ) : null}
       </AdminToolbar>
+
+      {newOpen ? (
+        <LeadQuickDialog
+          onClose={closeNew}
+          onCreated={(name) => {
+            closeNew();
+            setNotice(`Lead de ${name} cargado: quedó como Nuevo para contactar.`);
+            leads.reload();
+          }}
+        />
+      ) : null}
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}

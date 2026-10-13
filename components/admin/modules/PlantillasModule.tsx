@@ -36,6 +36,7 @@ import {
 } from "../AdminUI";
 import { SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
+import { AjustesTabs } from "./AjustesTabs";
 
 /**
  * Plantillas de mensajes de WhatsApp por contexto (issue #35).
@@ -221,6 +222,7 @@ export function PlantillasModule() {
 
   return (
     <div className="admin-module-page">
+      <AjustesTabs active="plantillas" />
       <section className="admin-kpis" aria-label="Indicadores de plantillas">
         <AdminKpi label="Plantillas" icon="mail" value={formatNumber(totals.total)} note="de mensajes de WhatsApp" />
         <AdminKpi label="Activas" icon="check" value={formatNumber(totals.active)} note="disponibles para enviar" tone="ok" />

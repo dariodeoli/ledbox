@@ -2449,12 +2449,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    organización demo. Mismo lenguaje visual que el resto del shell. */
 .admin-demo-chip { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid color-mix(in srgb, var(--a-accent) 45%, transparent); border-radius: 999px; background: var(--a-accent-soft); color: var(--a-accent); font: 700 10px var(--font-body); letter-spacing: .16em; text-decoration: none; }
 .admin-demo-chip:hover { background: color-mix(in srgb, var(--a-accent) 22%, transparent); }
-.admin-demo-banner { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid color-mix(in srgb, var(--a-accent) 28%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--a-accent) 16%, transparent), transparent 55%); }
 .admin-demo-badge { display: inline-flex; align-items: center; padding: 4px 12px; border: 1px solid color-mix(in srgb, var(--a-accent) 45%, transparent); border-radius: 999px; background: var(--a-panel); color: var(--a-accent); font: 800 11px var(--font-body); letter-spacing: .18em; text-decoration: none; }
-.admin-demo-banner-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; color: var(--a-muted-2); font-size: 12.5px; }
-.admin-demo-banner-text strong { color: var(--a-text-strong); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.admin-demo-banner-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-demo-exit { margin-left: auto; }
 
 .admin-demo-page { gap: 12px; }
 .admin-demo-hero { display: grid; gap: 8px; justify-items: start; padding: 16px; border: 1px solid var(--a-line-2); border-top: 2px solid var(--a-accent); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
@@ -2469,61 +2464,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    (`DemoIntro`), que se cierra con X o «Recorrer la demo» y no vuelve. */
 .admin-demo-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
 .admin-demo-bar .admin-demo-actions { margin-left: auto; }
-.admin-demo-actions--inline { margin-top: 4px; }
-.admin-demo-footnote { margin: 0; color: var(--a-muted); font-size: 11px; line-height: 1.5; }
 
-.admin-demo-list { display: grid; gap: 8px; padding: 12px; }
-.admin-demo-audit, .admin-demo-event { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 8px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; }
-.admin-demo-audit { grid-template-columns: auto minmax(0, 1fr) auto; border-left-color: var(--a-accent); }
-.admin-demo-event:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
-.admin-demo-audit > .admin-icon, .admin-demo-event > .admin-icon { color: var(--a-muted); }
-.admin-demo-amount { justify-self: end; color: var(--a-text-strong); font: 700 12.5px var(--font-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.admin-demo-amount[data-direction="IN"] { color: var(--a-ok); }
-.admin-demo-amount[data-direction="OUT"] { color: var(--a-danger); }
-.admin-demo-amount[data-direction="TRANSFER"] { color: var(--a-info); }
-.admin-demo-list--flush { padding: 0; }
-.admin-demo-panel-note { margin: 0; padding: 0 12px 12px; color: var(--a-muted); font-size: 11px; line-height: 1.45; }
 
-.admin-demo-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 8px; padding: 12px; }
-.admin-demo-module { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; transition: border-color .15s, background .15s, color .15s; }
-.admin-demo-module:hover { border-color: var(--a-accent); background: var(--a-bg-2); color: var(--a-accent); }
-.admin-demo-module-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--a-accent-soft); color: var(--a-accent); }
-.admin-demo-module-text { display: grid; min-width: 0; }
-.admin-demo-module-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
-.admin-demo-module-text small { color: var(--a-muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-
-.admin-demo-resources { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 12px; padding: 12px; }
-.admin-demo-resource { display: grid; gap: 8px; align-content: start; }
-.admin-demo-resource h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
-.admin-demo-resource p { margin: 0; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; }
-.admin-demo-code { color: var(--a-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; overflow-wrap: anywhere; }
-.admin-demo-portal { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.admin-demo-qr { display: grid; place-items: center; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: #fff; }
-.admin-demo-qr svg { display: block; width: 116px; height: auto; }
-.admin-demo-portal-data { display: grid; gap: 8px; justify-items: start; min-width: min(100%, 16rem); }
-.admin-demo-portal-link { margin: 0; color: var(--a-muted-2); font-size: 11px; overflow-wrap: anywhere; }
-
-/* Recorrido guiado y casos fuertes de la demo (issue #58). El recorrido es un
-   panel compacto con pasos numerados; los casos fuertes, accesos directos al
-   caso difícil con su conteo real. */
-.admin-demo-tour { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
-.admin-demo-tour-head { display: flex; align-items: center; gap: 8px; }
-.admin-demo-tour-head .admin-panel-meta { margin-left: auto; }
-.admin-demo-tour-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
-.admin-demo-tour-step { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid var(--a-line); border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .04em; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
-.admin-demo-tour-step:hover { border-color: var(--a-line-2); color: var(--a-accent); }
-.admin-demo-tour-step[aria-current="step"] { border-color: color-mix(in srgb, var(--a-accent) 45%, transparent); background: var(--a-accent-soft); color: var(--a-accent); }
-.admin-demo-tour-num { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--a-panel-2); color: var(--a-muted-2); font: 800 10px var(--font-body); font-variant-numeric: tabular-nums; }
-.admin-demo-tour-step[aria-current="step"] .admin-demo-tour-num { background: var(--a-panel); color: var(--a-accent); }
-.admin-demo-tour-body { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
-.admin-demo-tour-what { margin: 0; color: var(--a-text-strong); font-size: 12.5px; line-height: 1.5; }
-.admin-demo-tour .admin-demo-actions--inline { margin-top: 0; }
-
-.admin-demo-cases { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
-.admin-demo-cases-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.admin-demo-cases-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 8px; }
-.admin-demo-case { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 12px; border: 1px solid var(--a-line); border-left: 2px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-muted-2); text-decoration: none; transition: border-color .15s, background .15s; }
-.admin-demo-case:hover { border-color: var(--a-line-2); background: var(--a-bg-2); }
 .admin-demo-case-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 8px; background: var(--a-panel); color: var(--a-muted-2); font: 800 13px var(--font-body); font-variant-numeric: tabular-nums; }
 .admin-demo-case-count[data-tone="accent"] { color: var(--a-accent); }
 .admin-demo-case-count[data-tone="ok"] { color: var(--a-ok); }
@@ -2532,13 +2474,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-demo-case-text { display: grid; min-width: 0; }
 .admin-demo-case-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-demo-case-text small { overflow: hidden; color: var(--a-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.admin-demo-case > .admin-icon { color: var(--a-muted); }
 
-@media (max-width: 720px) {
-  .admin-demo-banner { flex-wrap: wrap; padding: 8px 12px; }
-  .admin-demo-banner-text span { display: none; }
-  .admin-demo-exit { margin-left: auto; }
-}
 
 /* ── Tableros kanban (issue #26) ──
    Un solo tablero para todos los módulos: columnas por estado con su tono y
@@ -4319,6 +4255,102 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
   .budget-print-sheet .lbprint-table .lbprint-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 }
 
+/* ── Menú por etapas, Resumen y franja demo (13-10-2026) ─────────────────────
+   Inicio · Ventas (Leads → Presupuestos → Eventos, unidos por una línea) ·
+   Clientes · Operación · Plata · Sistema. Los contadores de Ventas son datos
+   reales; sin dato no se dibujan. Ver `docs/DISENO-PANEL.md` §6 y §15. */
+.admin-nav-group[data-bare="true"] { gap: 0; }
+.admin-nav-link { position: relative; }
+.admin-nav-count { margin-left: auto; flex: 0 0 auto; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--a-accent) 18%, var(--a-panel)); color: var(--a-text-strong); font: 700 11px/1.5 var(--font-body); font-variant-numeric: tabular-nums; text-align: center; }
+.admin-nav-link[data-active="true"] .admin-nav-count { background: color-mix(in srgb, var(--a-nav-ink) 20%, transparent); color: var(--a-nav-ink); }
+.admin-nav-list[data-flow="true"] > li { position: relative; }
+.admin-nav-list[data-flow="true"] > li:not(:last-child)::after { content: ""; position: absolute; left: 19px; top: calc(50% + 10px); height: calc(100% + 4px - 20px); width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--a-accent) 45%, var(--a-line-2)); pointer-events: none; }
+.admin-root[data-sidebar="collapsed"] .admin-nav-list[data-flow="true"] > li:not(:last-child)::after { left: calc(50% - 1px); }
+.admin-root[data-sidebar="collapsed"] .admin-nav-count { position: absolute; top: 1px; right: 4px; min-width: 16px; padding: 0 4px; font-size: 9.5px; line-height: 1.5; }
+
+/* Franja demo: una sola línea fina (antes un banner con párrafo). */
+.admin-demo-strip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 28px; padding: 4px 16px; border-bottom: 1px solid color-mix(in srgb, var(--a-accent) 28%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--a-accent) 14%, var(--a-panel)), var(--a-panel) 70%); color: var(--a-muted-2); font-size: 12px; }
+.admin-demo-strip-text { margin: 0; min-width: 0; color: var(--a-text); font-weight: 600; }
+.admin-demo-strip-text strong { color: var(--a-accent-strong); letter-spacing: .14em; }
+.admin-demo-strip-links { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.admin-demo-strip-link { position: relative; padding: 0; border: 0; background: transparent; color: var(--a-accent-strong); font: 700 12px var(--font-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.admin-demo-strip-link::after { content: ""; position: absolute; inset: -12px -8px; }
+.admin-demo-strip-link:hover { color: var(--a-text-strong); }
+.admin-demo-strip-link:disabled { opacity: .5; cursor: default; }
+@media (max-width: 560px) { .admin-demo-strip { gap: 4px 12px; padding: 4px 12px; } .admin-demo-strip-links { gap: 20px; } }
+
+/* Resumen */
+.admin-resumen { gap: 16px; }
+.admin-resumen-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.admin-resumen-title { margin: 0; color: var(--a-text-strong); font: 700 clamp(20px, 3vw, 26px)/1.15 var(--font-display); letter-spacing: .01em; }
+.admin-resumen-date { margin: 2px 0 0; min-height: 1.4em; color: var(--a-muted-2); font-size: 13px; }
+.admin-resumen-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); grid-template-areas: "hoy embudo" "hoy plata" "semana semana"; gap: 12px; align-items: start; }
+.admin-resumen-area { min-width: 0; }
+.admin-resumen-area[data-area="hoy"] { grid-area: hoy; }
+.admin-resumen-area[data-area="embudo"] { grid-area: embudo; }
+.admin-resumen-area[data-area="plata"] { grid-area: plata; }
+.admin-resumen-area[data-area="semana"] { grid-area: semana; }
+@media (max-width: 960px) { .admin-resumen-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hoy" "embudo" "plata" "semana"; } }
+
+.admin-today-list { display: grid; gap: 8px; list-style: none; }
+.admin-today-item { --tone: var(--a-muted); position: relative; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-today-item[data-tone="danger"] { --tone: var(--a-danger); }
+.admin-today-item[data-tone="warn"] { --tone: var(--a-warn); }
+.admin-today-item[data-tone="info"] { --tone: var(--a-accent); }
+.admin-today-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: var(--a-radius) 0 0 var(--a-radius); background: var(--tone); }
+.admin-today-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.admin-today-title { color: var(--a-text-strong); font-size: 13.5px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.admin-today-detail { color: var(--a-muted-2); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.admin-today-action { flex: 0 0 auto; }
+.admin-today-more { display: flex; justify-content: center; padding-top: 0 !important; }
+@media (max-width: 560px) {
+  .admin-today-item { gap: 8px; padding-left: 14px; }
+  .admin-today-action { min-height: 44px; padding-inline: 10px; }
+  .admin-today-more .admin-btn { min-height: 44px; }
+}
+
+.admin-funnel { display: grid; gap: 8px; list-style: none; }
+.admin-funnel-stage { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 12px; min-height: 44px; padding: 8px 12px; overflow: hidden; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-text); text-decoration: none; }
+.admin-funnel-stage:hover { border-color: var(--a-accent); }
+.admin-funnel-bar { position: absolute; inset: 0 auto 0 0; z-index: -1; background: color-mix(in srgb, var(--a-accent) 16%, transparent); }
+.admin-funnel-label { font-size: 13px; font-weight: 600; }
+.admin-funnel-count { color: var(--a-text-strong); font: 700 18px/1.2 var(--font-body); font-variant-numeric: tabular-nums; }
+.admin-funnel-amount { min-width: 6.5rem; color: var(--a-muted-2); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+@media (max-width: 560px) { .admin-funnel-amount { min-width: 0; } .admin-funnel-stage { grid-template-columns: minmax(0, 1fr) auto; } .admin-funnel-amount { grid-column: 1 / -1; text-align: left; } .admin-funnel-amount:empty { display: none; } }
+
+.admin-money-list { display: grid; gap: 8px; list-style: none; }
+.admin-money-card { --tone: var(--a-text-strong); display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-text); text-decoration: none; }
+.admin-money-card:hover { border-color: var(--a-accent); }
+.admin-money-card[data-tone="danger"] { --tone: var(--a-danger-text); border-color: color-mix(in srgb, var(--a-danger) 45%, var(--a-line)); }
+.admin-money-card[data-tone="ok"] { --tone: var(--a-ok-text); }
+.admin-money-label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-money-value { color: var(--tone); font: 700 22px/1.2 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-money-note { color: var(--a-muted-2); font-size: 11.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.admin-week-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 8px; list-style: none; }
+.admin-week-item { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-text); text-decoration: none; }
+.admin-week-item:hover { border-color: var(--a-accent); }
+.admin-week-date { display: grid; place-items: center; flex: 0 0 auto; width: 44px; padding: 4px 0; border-radius: 10px; background: var(--a-accent-soft); color: var(--a-accent-strong); line-height: 1.1; }
+.admin-week-date small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.admin-week-date strong { font: 700 17px var(--font-display); font-variant-numeric: tabular-nums; }
+.admin-week-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.admin-week-name { color: var(--a-text-strong); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-week-detail { color: var(--a-muted-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-week-item .admin-badge { flex: 0 0 auto; max-width: 45%; white-space: normal; text-align: center; }
+@media (max-width: 560px) { .admin-week-item { flex-wrap: wrap; } .admin-week-text { flex-basis: calc(100% - 60px); } .admin-week-item .admin-badge { max-width: 100%; margin-left: 56px; } }
+
+/* /demo liviana: recorrido y casos fuertes como lista compacta. */
+.admin-demo-cases-list { display: grid; gap: 0; list-style: none; border: 1px solid var(--a-line); border-radius: var(--a-radius); overflow: hidden; }
+.admin-demo-cases-list > li + li { border-top: 1px solid var(--a-line); }
+.admin-demo-case-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; background: var(--a-panel-2); color: var(--a-text); text-decoration: none; }
+.admin-demo-case-row:hover { background: var(--a-bg-2); }
+.admin-demo-case-row .admin-demo-case-text { display: grid; gap: 1px; min-width: 0; }
+.admin-demo-case-row .admin-demo-case-count[data-tone="warn"] { color: var(--a-warn-text); }
+.admin-demo-case-row .admin-demo-case-count[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-demo-case-row .admin-demo-case-count[data-tone="ok"] { color: var(--a-ok-text); }
+.admin-demo-case-row .admin-demo-case-text strong { overflow: visible; color: var(--a-text-strong); font-size: 13px; text-overflow: clip; white-space: normal; }
+.admin-demo-case-row .admin-demo-case-text small { overflow: visible; color: var(--a-muted-2); font-size: 12px; text-overflow: clip; white-space: normal; }
+@media (max-width: 720px) { .admin-resumen .admin-panel-link { display: inline-flex; align-items: center; min-height: 44px; } }
 /* ── Presupuesto aprobado → evento, barra de etapas y ficha del cliente ── */
 .admin-stage-trail { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px 0; margin: 0 0 12px; padding: 0; list-style: none; }
 .admin-stage { position: relative; display: flex; align-items: center; min-width: 0; }

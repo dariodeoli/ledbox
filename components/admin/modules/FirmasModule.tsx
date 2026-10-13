@@ -15,6 +15,7 @@ import type { AdminSignatureRequestRow } from "@/lib/admin-types";
 import { signatureEvidenceLabel, signatureStatusLabel, signatureStatusTone } from "@/lib/server/signature/rules";
 import { useAdminSession } from "../AdminShell";
 import { SignatureTimeline } from "../SignatureTimeline";
+import { PresupuestosTabs } from "./PresupuestosTabs";
 import {
   AdminBadge,
   AdminButton,
@@ -218,6 +219,7 @@ export function FirmasModule() {
 
   return (
     <div className="admin-module-page">
+      <PresupuestosTabs active="firmas" />
       <section className="admin-kpis" aria-label="Indicadores de firmas">
         <AdminKpi label="En curso" icon="pen" value={formatNumber(kpis.active)} note="esperando la firma del cliente" />
         <AdminKpi

@@ -2205,6 +2205,10 @@ export type AdminNotification = {
   /** Día de Asunción del hecho (`YYYY-MM-DD`); es la fecha real, no el día de consulta. */
   date: string;
   href: string;
+  /** Concepto del cobro (`Anticipo`, `Saldo`…): solo en `collection_due` y `expected_due`. */
+  label?: string | null;
+  /** Monto real en PYG del cobro o pago esperado, para armar títulos con importe. */
+  amount?: number | null;
   /**
    * Recordatorio por WhatsApp (issue #19): llega solo en los avisos de cobro a
    * plazo con teléfono del cliente, con los datos reales del cobro y el link del
@@ -2223,6 +2227,61 @@ export type AdminNotificationReminder = {
   invoiceNumber: string | null;
   budgetTitle: string | null;
   portalUrl: string | null;
+};
+
+/**
+ * Pendientes de Ventas para el menú (`GET /api/admin/nav-counts`): leads nuevos
+ * sin contactar, presupuestos enviados o en negociación y eventos de los
+ * próximos 7 días. Son `count` reales de la empresa activa.
+ */
+export type AdminNavCounts = {
+  leads: number;
+  budgets: number;
+  events: number;
+};
+
+/** Evento de «Esta semana» del Resumen (`GET /api/admin/resumen`). */
+export type AdminResumenWeekEvent = {
+  id: string;
+  name: string;
+  startsAt: string | null;
+  client: string;
+  place: string | null;
+  tasksTotal: number;
+  tasksDone: number;
+  /** Seña (anticipo) que falta cobrar de los presupuestos aprobados del evento; `0` si no hay. */
+  depositPending: number;
+};
+
+/**
+ * Datos del Resumen que no salen de los listados (`GET /api/admin/resumen`):
+ * embudo del mes, plata, atención de hoy y agenda de la semana. Todo `count`/`sum`
+ * de la empresa activa; los montos son Int PYG.
+ */
+export type AdminResumen = {
+  /** Mes de Asunción (`YYYY-MM`) al que refiere el embudo. */
+  month: string;
+  funnel: {
+    leads: number;
+    budgets: { count: number; amount: number };
+    approved: { count: number; amount: number };
+    events: number;
+  };
+  money: {
+    receivable: number;
+    overdueAmount: number;
+    overdueCount: number;
+    collectedMonth: number;
+  };
+  attention: {
+    newLeads: number;
+    /** Día (`YYYY-MM-DD`) del lead sin contactar más viejo. */
+    oldestLeadDay: string | null;
+    rejectedCheques: number;
+    proofsToConfirm: number;
+    proofsAmount: number;
+  };
+  week: AdminResumenWeekEvent[];
 };
 
 /** Totales reales del feed (sin el recorte) para el contador de la campana. */

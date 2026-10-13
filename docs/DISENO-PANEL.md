@@ -104,25 +104,43 @@ se unifican los componentes, sin cambiar datos ni contratos.
 | Estado de carga | Filas fantasma con la densidad real; sin spinners sueltos |
 | Nota/ayuda | Una línea, al lado del dato que explica; nunca repetida |
 
-## 6. Reordenar: navegación propuesta
+## 6. Reordenar: navegación por etapas (13-10-2026)
 
 | Grupo | Módulos |
 | --- | --- |
-| **General** | Resumen · Eventos |
+| **Inicio** (suelto) | Inicio (`/dashboard`) |
+| **Ventas** (flujo, con línea vertical) | Leads → Presupuestos → Eventos |
+| **Clientes** (suelto) | Clientes |
 | **Operación** | Inventario · Proveedores · Promotoras |
-| **Comercial** | Clientes · Leads · Presupuestos · Plantillas |
-| **Finanzas** | Finanzas · Facturación |
-| **Sistema** | Ajustes · Estado |
+| **Plata** | Finanzas · Facturación |
+| **Sistema** | Ajustes · Estado (solo OWNER/ADMIN) |
 
-> **Consolidación del 23-09-2026 (issue #56):** el nav pasó de 18 a 13 destinos.
-> Calendario es una **vista dentro de Eventos** (`/eventos?vista=calendario`), el
-> PIN vive solo en **Mi perfil**, **Ajustes** agrupa Empresa · Correo · Plan ·
-> Usuarios y **Estado** agrupa Sistema · Auditoría. Las rutas viejas siguen
-> entrando con redirect.
+> **Menú por etapas (13-10-2026).** El orden sigue el recorrido del negocio:
+> entra un lead, se cotiza, se hace el evento; después se cobra. `ADMIN_NAV`
+> (`lib/admin-policy.ts`) es la fuente única; `bare` marca los ítems sueltos (sin
+> encabezado ni acordeón) y `flow` las etapas de un flujo, que se dibujan unidas
+> por una línea vertical (`.admin-nav-list[data-flow]`).
+> **Firmas** pasó a una pestaña de Presupuestos (`/firmas` sigue siendo ruta) y
+> **Plantillas** a una sección de Ajustes (`/plantillas` sigue siendo ruta): el
+> ítem del menú queda activo por `also`, y la barra de pestañas
+> (`PresupuestosTabs`, `AjustesTabs`) se dibuja en las dos pantallas.
+> **Contadores**: cada etapa de Ventas muestra lo pendiente con datos reales de
+> `GET /api/admin/nav-counts` (tres `count` por empresa): leads `NEW` sin
+> contactar, presupuestos `SENT`/`NEGOTIATING` y eventos de los próximos 7 días.
+> Sin dato o en 0 no se dibuja contador. Se refrescan al navegar y con
+> `requestAdminRefresh()`. Los permisos por rol no cambian: `adminNavGroups(role)`
+> filtra igual que antes (solo Estado es restringido).
+> **Móvil**: la barra inferior es Inicio · Leads · Presupuestos · Eventos · Más
+> (el resto vive en el drawer).
+>
+> Consolidación previa (23-09-2026, issue #56): Calendario es una **vista dentro
+> de Eventos** (`/eventos?vista=calendario`), el PIN vive solo en **Mi perfil**,
+> **Ajustes** agrupa Empresa · Correo · Plan · Usuarios · Plantillas y **Estado**
+> agrupa Sistema · Auditoría. Las rutas viejas siguen entrando con redirect.
 
 Reglas del reordenamiento:
-- Lo que se usa todos los días arriba (Resumen, Eventos).
-- Finanzas y Facturación juntas (son el mismo trabajo con dos caras).
+- Lo que se usa todos los días arriba (Inicio, y Ventas en el orden del flujo).
+- Finanzas y Facturación juntas bajo **Plata** (son el mismo trabajo con dos caras).
 - Sistema agrupa lo que se toca de vez en cuando y lo restringido (OWNER/ADMIN).
 - Dentro de cada módulo: primero lo urgente/accionable (avisos, pendientes), después lo
   operativo (listas y tableros), al final lo descriptivo (notas, ayudas, históricos).
@@ -527,3 +545,41 @@ contrastes de texto ≥ 4,5 y de borde ≥ 3 desde `globals.css`.
 - Adoptados con `description`, `footer` y `dirty`: Nuevo cliente
   (`ClientQuickForm`), Crear evento (`BudgetQuickCreate`) y Precio y condiciones
   (`BudgetPricingDialog`).
+
+## 15. Inicio (Resumen) y demo liviana (13-10-2026)
+
+**Inicio** (`/dashboard`, `ResumenModule`) reemplazó la grilla de 8 KPIs y las
+tablas por cuatro bloques y un saludo (nombre del usuario, fecha es-PY y el botón
+principal **Nuevo lead**, solo para quien puede escribir clientes):
+
+1. **Para hacer hoy**: hasta 5 acciones por urgencia, cada una con su botón al
+   lugar exacto, y «Ver todos (N)» que expande el resto. Rojo: mora
+   (`ClientPayment` pendiente vencido), cheque rechazado (anulado en 30 días) y
+   pagos esperados vencidos. Ámbar: leads sin contestar y checklist incompleto de
+   eventos próximos. Cian: comprobantes por confirmar. Neutro: el resto de los
+   avisos. La lógica es pura (`lib/resumen-actions.ts`, test en
+   `tests/nav-resumen.test.ts`) y sale de `useAdminNotifications` +
+   `/api/admin/resumen`; los agregados (mora, leads, comprobantes) reemplazan a
+   sus avisos individuales para no duplicar. Cargando: skeleton; sin nada:
+   «Todo al día».
+2. **Embudo del mes**: Leads → Presupuestos → Aprobados → Eventos con cantidad y
+   monto; cada etapa enlaza a su lista (`/presupuestos?estado=APPROVED`, etc.).
+   «Presupuestos» cuenta los creados o aprobados en el mes, así «Aprobados» nunca
+   lo supera.
+3. **Plata**: Por cobrar (saldo de presupuestos aprobados), En mora y Cobrado este
+   mes. Montos abreviados en millones con `Intl` es-PY (`formatMoneyCompact`,
+   «Gs 47,8 M») y el exacto debajo; `white-space: nowrap`, nunca truncados.
+   «Por pagar» y «Caja comprometida» quedan en Finanzas.
+4. **Esta semana**: eventos de los próximos 7 días con bloque de fecha, nombre, una
+   línea de detalle y un chip (checklist 0/4, seña pendiente, sin checklist).
+
+Los listados de Leads, Presupuestos y Eventos aceptan `?estado=` (NEW, APPROVED,
+CONFIRMED…) y Leads abre el alta manual con `?nuevo=1`.
+
+**Demo.** La franja del shell es una sola línea fina: «DEMO · Datos de ejemplo: no
+se guarda nada», con «Recorrido guiado» (`/demo?recorrido=1`) y «Salir».
+`DemoIntro` se abre sola solo la primera vez (localStorage con try/catch, se marca
+al abrir) o con «Recorrido guiado». `/demo` muestra el recorrido y los casos
+fuertes como listas compactas con su conteo real; los casos salen de las mismas
+reglas que Inicio (`rejectedChequeWhere`, mora, comprobantes), por eso también
+aparecen en «Para hacer hoy».
