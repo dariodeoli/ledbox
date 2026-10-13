@@ -18,8 +18,8 @@ const PRIVATE_ROBOTS = { index: false, follow: false, nocache: true } as const;
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { orgSlug, token } = await params;
   const context = await resolveWholesaleCatalog(orgSlug, token);
-  if (!context) return { title: { absolute: "Catálogo no encontrado" }, robots: PRIVATE_ROBOTS };
-  return { title: { absolute: `${context.organization.name} · Catálogo mayorista` }, robots: PRIVATE_ROBOTS };
+  if (!context) return { title: { absolute: "Catálogo no encontrado" }, robots: PRIVATE_ROBOTS, referrer: "no-referrer" };
+  return { title: { absolute: `${context.organization.name} · Catálogo mayorista` }, robots: PRIVATE_ROBOTS, referrer: "no-referrer" };
 }
 
 /**
