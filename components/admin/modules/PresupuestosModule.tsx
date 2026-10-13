@@ -87,6 +87,7 @@ import {
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { SignatureDialog } from "./SignatureDialog";
 import {
+  CheckboxField,
   Combobox,
   DateField,
   EmailField,
@@ -2090,7 +2091,7 @@ export function PresupuestosModule() {
                       {formatNumber(item.quantity)} × {formatNumber(item.days)} d
                     </span>
                     <span role="cell" className="admin-dialog-counter">
-                      <label><input type="checkbox" checked={Boolean(proposed.excluded)} onChange={(event) => setCounterItems((rows) => ({ ...rows, [item.id]: counterofferExclusion(item, proposed, event.target.checked) }))} /> Retirado / no incluido</label>
+                      <CheckboxField checked={Boolean(proposed.excluded)} onChange={(checked) => setCounterItems((rows) => ({ ...rows, [item.id]: counterofferExclusion(item, proposed, checked) }))} text="Retirado / no incluido" />
                       <NumberField
                         disabled={Boolean(proposed.excluded)}
                         ariaLabel={`Cantidad propuesta de ${item.name}`}

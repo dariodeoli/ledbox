@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { formatDate, formatDateShort, formatSince, isDueSoon, statusTone, taskTypeLabel } from "@/lib/admin-format";
 import type { AdminEventTask } from "@/lib/admin-types";
-import { AdminIcon } from "../AdminIcons";
+import { CheckboxField } from "../AdminFields";
+
 import { AdminBadge, AdminCell, AdminCountdown, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
 import { adminSend } from "@/lib/admin-api";
 import { useOfflineQueue } from "../AdminOffline";
@@ -129,25 +130,14 @@ function ChecklistToggle({
     : `${done ? "Volver a pendiente" : "Marcar como cumplida"}: ${task.title}${task.dueAt ? ` · vence ${formatDate(task.dueAt)}` : ""}`;
 
   return (
-    <label
-      className="admin-check"
-      data-done={done ? "true" : undefined}
-      data-queue={queued ? (queuedFailed ? "failed" : "queued") : undefined}
+    <CheckboxField
+      checked={done}
+      disabled={busy}
+      onChange={() => void toggle()}
+      ariaLabel={`${done ? "Marcar pendiente" : "Marcar cumplida"}: ${task.title}`}
+      tone={queued ? (queuedFailed ? "danger" : "warn") : done ? "ok" : undefined}
       title={title}
-    >
-      <input
-        type="checkbox"
-        checked={done}
-        disabled={busy}
-        onChange={() => void toggle()}
-        aria-label={`${done ? "Marcar pendiente" : "Marcar cumplida"}: ${task.title}`}
-      />
-      <span className="admin-check-box" aria-hidden="true">
-        <AdminIcon name="check" size={11} />
-      </span>
-      <span className="admin-check-text">
-        {queued ? (queuedFailed ? "Falló" : "Sin subir") : done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente"}
-      </span>
-    </label>
+      text={queued ? (queuedFailed ? "Falló" : "Sin subir") : done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente"}
+    />
   );
 }

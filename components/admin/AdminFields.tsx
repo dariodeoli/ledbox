@@ -57,6 +57,12 @@ type FieldChromeProps = {
   ariaLabel?: string;
   hint?: string;
   error?: string | null;
+  /** Confirmación en verde (por ejemplo, RUC encontrado); no reemplaza al error. */
+  success?: string | null;
+  /** Marca el label con «*» en el acento. */
+  required?: boolean;
+  /** Muestra «opcional» a la derecha del label. */
+  optional?: boolean;
   wide?: boolean;
   htmlFor?: string;
   hintId?: string;
@@ -76,10 +82,14 @@ export function AdminFieldHelp({ label, text }: { label: string; text: string })
   </SharedTooltip></span>;
 }
 
-function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, wide, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
+function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, success, required, optional, wide, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
   const message = error ? (
     <span className="admin-field-error" id={errorId} role="alert">
       {error}
+    </span>
+  ) : success ? (
+    <span className="admin-field-success" id={hintId}>
+      {success}
     </span>
   ) : hint ? (
     <span className="admin-field-hint" id={hintId}>
@@ -87,21 +97,25 @@ function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, wide, h
     </span>
   ) : null;
   if (!label && !message && !help) return <>{children}</>;
+  const state = error ? "invalid" : success ? "valid" : undefined;
+  const labelNode = label ? (
+    <label className="admin-field-label" htmlFor={htmlFor}>
+      {label}
+      {required ? <span className="admin-field-req" aria-hidden="true"> *</span> : null}
+    </label>
+  ) : null;
   return (
-    <div className={wide ? "admin-field admin-field--wide" : "admin-field"}>
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-state={state}>
       {label ? (
-        labelAction || help ? (
+        labelAction || help || (optional && !required) ? (
           <span className="admin-field-heading">
-            <label className="admin-field-label" htmlFor={htmlFor}>
-              {label}
-            </label>
+            {labelNode}
             {help ? <AdminFieldHelp label={label} text={help} /> : null}
+            {optional && !required ? <span className="admin-field-optional">opcional</span> : null}
             {labelAction}
           </span>
         ) : (
-          <label className="admin-field-label" htmlFor={htmlFor}>
-            {label}
-          </label>
+          labelNode
         )
       ) : help ? (
         <span className="admin-field-heading">
@@ -153,6 +167,10 @@ export type TextFieldProps = {
   placeholder?: string;
   hint?: string;
   error?: string | null;
+  /** Confirmación en verde bajo el campo (por ejemplo, dato verificado). */
+  success?: string | null;
+  /** «opcional» a la derecha del label. */
+  optional?: boolean;
   wide?: boolean;
   autoComplete?: string;
   inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
@@ -184,6 +202,8 @@ export function TextField({
   placeholder,
   hint,
   error,
+  success,
+  optional,
   wide,
   autoComplete,
   inputMode,
@@ -201,7 +221,7 @@ export function TextField({
 }: TextFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         className={className}
@@ -223,7 +243,7 @@ export function TextField({
         title={title}
         aria-label={label ? undefined : ariaLabel}
         aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy(error, hint, hintId, errorId)}
+        aria-describedby={describedBy(error, hint ?? success ?? undefined, hintId, errorId)}
         onFocus={onFocus}
         onBlur={onBlur}
       />
@@ -244,6 +264,8 @@ export type TextAreaFieldProps = {
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** «opcional» a la derecha del label. */
+  optional?: boolean;
   disabled?: boolean;
   name?: string;
   id?: string;
@@ -264,6 +286,7 @@ export function TextAreaField({
   hint,
   error,
   wide,
+  optional,
   disabled,
   name,
   id,
@@ -271,7 +294,7 @@ export function TextAreaField({
 }: TextAreaFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <textarea
         ref={textareaRef}
         id={label ? fieldId : id}
@@ -365,7 +388,7 @@ export function MoneyField({
     return () => window.cancelAnimationFrame(frame);
   }, [invalid, value]);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}>
         <MoneyInput
           id={label ? fieldId : id}
@@ -424,24 +447,27 @@ export function PercentField({
   const clean = percentInput(value);
   const outOfRange = clean !== "" && parsePercent(clean) === null;
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <SharedPercentField
-        id={label ? fieldId : id}
-        value={clean}
-        onKeyDown={(event) => {
-          if (event.ctrlKey || event.metaKey || event.altKey) return;
-          if (event.key.length === 1 && !/^[\d,]$/.test(event.key)) event.preventDefault();
-        }}
-        onChange={(next) => onChange(percentInput(next))}
-        required={required}
-        placeholder={placeholder}
-        disabled={disabled}
-        name={name}
-        aria-label={label ? undefined : ariaLabel}
-        aria-invalid={error || outOfRange ? true : undefined}
-        aria-describedby={describedBy(error, hint, hintId, errorId)}
-        title={outOfRange ? FIELD_MESSAGES.percent : undefined}
-      />
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+      <div className="admin-money admin-money--compact admin-money--suffix">
+        <SharedPercentField
+          id={label ? fieldId : id}
+          value={clean}
+          onKeyDown={(event) => {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (event.key.length === 1 && !/^[\d,]$/.test(event.key)) event.preventDefault();
+          }}
+          onChange={(next) => onChange(percentInput(next))}
+          required={required}
+          placeholder={placeholder}
+          disabled={disabled}
+          name={name}
+          aria-label={label ? undefined : ariaLabel}
+          aria-invalid={error || outOfRange ? true : undefined}
+          aria-describedby={describedBy(error, hint, hintId, errorId)}
+          title={outOfRange ? FIELD_MESSAGES.percent : undefined}
+        />
+        <span aria-hidden="true">%</span>
+      </div>
     </FieldChrome>
   );
 }
@@ -484,7 +510,7 @@ export function NumberField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         className={className}
@@ -546,7 +572,7 @@ export function PhoneField({
   const sharedRef = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
 
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={sharedRef} className="admin-phone-field-control">
       <SharedPhoneField
         className="admin-shared-phone"
@@ -579,7 +605,7 @@ export function CityField({ label, help, ariaLabel, value, onChange, onSelect, h
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">
         <SharedCityAutocomplete value={value} onChange={onChange} onSelect={(city: string, department?: string) => onSelect(city, department ?? "")} disabled={disabled} placeholder={placeholder} maxLength={FIELD_LIMITS.name} inputProps={{ id: fieldId, required, name, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy(error, hint, hintId, errorId) }} />
       </div>
@@ -596,7 +622,7 @@ export function BancoField({ label, help, ariaLabel, value, onChange, hint, erro
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">
         <SharedBancoCombobox id={fieldId} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} />
       </div>
@@ -638,7 +664,7 @@ export function EmailField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedEmailField
         id={label ? fieldId : id}
         value={value}
@@ -673,6 +699,8 @@ export function RucField({
   onChange,
   hint,
   error,
+  success,
+  optional,
   wide,
   required,
   placeholder = "80012345-6",
@@ -689,6 +717,8 @@ export function RucField({
   onChange: (value: string) => void;
   hint?: string;
   error?: string | null;
+  success?: string | null;
+  optional?: boolean;
   wide?: boolean;
   required?: boolean;
   placeholder?: string;
@@ -701,7 +731,7 @@ export function RucField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         type="text"
@@ -718,7 +748,7 @@ export function RucField({
         name={name}
         aria-label={label ? undefined : ariaLabel}
         aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy(error, hint, hintId, errorId)}
+        aria-describedby={describedBy(error, hint ?? success ?? undefined, hintId, errorId)}
       />
     </FieldChrome>
   );
@@ -756,7 +786,7 @@ export function SerialField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         type="text"
@@ -817,7 +847,7 @@ function DateLikeField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         className={className}
@@ -928,7 +958,7 @@ export function DayField({
 
   const message = error ?? rangeError;
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <input
         id={label ? fieldId : id}
         className={className}
@@ -982,7 +1012,7 @@ export function SelectField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <select
         id={label ? fieldId : id}
         value={value}
@@ -1161,7 +1191,7 @@ export function Combobox({
   }
 
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-combobox" ref={wrapperRef}>
         <input
           ref={inputRef}
@@ -1341,6 +1371,56 @@ export function SwitchField({
         <span className="admin-switch-state">{checked ? "Sí" : "No"}</span>
       </label>
     </FieldChrome>
+  );
+}
+
+/**
+ * Casilla del kit: una opción sí/no con su texto al lado (selección en filas,
+ * "no incluido", tareas). Para ajustes con efecto inmediato se usa
+ * `SwitchField`. El control real queda oculto y el dibujo es `.admin-check-box`.
+ */
+export function CheckboxField({
+  checked,
+  onChange,
+  text,
+  ariaLabel,
+  tone,
+  title,
+  disabled,
+  name,
+  id,
+  className,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  /** Texto visible junto a la casilla. */
+  text?: string;
+  /** Nombre accesible; obligatorio si no hay `text` o si el texto no alcanza. */
+  ariaLabel?: string;
+  /** Color del texto según el estado real (cumplido, sin subir, falló). */
+  tone?: "ok" | "warn" | "danger";
+  title?: string;
+  disabled?: boolean;
+  name?: string;
+  id?: string;
+  className?: string;
+}) {
+  return (
+    <label className={className ? `admin-check ${className}` : "admin-check"} data-tone={tone} title={title}>
+      <input
+        id={id}
+        name={name}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        aria-label={ariaLabel}
+      />
+      <span className="admin-check-box" aria-hidden="true">
+        <AdminIcon name="check" size={11} />
+      </span>
+      {text ? <span className="admin-check-text">{text}</span> : null}
+    </label>
   );
 }
 
@@ -1556,7 +1636,7 @@ export function PinField({
   }, [value, autoSubmit, disabled, expectedLength]);
 
   return (
-    <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-pin" data-focused={focused ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
         <span className="admin-pin-slots" aria-hidden="true">
           {Array.from({ length }, (_, index) => (
