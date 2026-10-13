@@ -399,3 +399,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Clientes, Proveedores (proveedor, trabajo y estado), Promotoras, Finanzas (cobro, cuenta, movimiento y gasto) y Usuarios cargan en la ventana nueva. El gasto tiene «Guardar y cargar otro», con el foco en el monto. Un doble clic ya no envía dos veces.
 - Invitar usuario pone el foco en el correo, y en «Revocar» el foco nunca cae sobre el botón destructivo.
 - Celular: el menú muestra tu nombre y tu rol, y la barra inferior no tapa los formularios ni los botones de las ventanas.
+
+## v2.1.97 — 2026-10-13
+
+- Eventos: nuevo botón «Finalizar evento». Si quedan equipos sin devolver o faltantes, muestra el detalle; para eventos anteriores a esta versión, «Cerrar igual» exige una nota que queda registrada. Un evento cancelado no se puede finalizar.
+- Incidentes: los daños o faltantes cargados sin código de unidad se marcan «Unidad sin identificar».
+- Finanzas: el pago a proveedores se hace en la ventana nueva.
+- Catálogo público: cada producto puede tener una «Descripción para el catálogo», separada de las notas internas, que nunca se muestran. Hay un tope diario de pedidos por empresa contra abusos.
+- Clientes: la ficha muestra todos los leads del cliente, sin el límite anterior de 1.000.
+- Mejoras internas: el límite de eventos del plan se respeta aunque se creen dos a la vez, y los cambios de la garantía quedan registrados en la misma operación.
