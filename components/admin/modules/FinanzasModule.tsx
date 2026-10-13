@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   countdownTone,
   DATE_PERIODS,
@@ -77,6 +77,7 @@ import {
   AdminCountdown,
   AdminDataState,
   AdminEmpty,
+  AdminDialog,
   AdminFormPanel,
   AdminKpi,
   AdminModuleContext,
@@ -397,16 +398,6 @@ function PaymentRemindersDialog({
   onTemplate: (payment: AdminPaymentRow) => void;
   onClose: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const label = payment.client.company || payment.client.name;
   const emailToday = reminderToday(payment, "email");
   const whatsappToday = reminderToday(payment, "whatsapp");
@@ -414,25 +405,18 @@ function PaymentRemindersDialog({
   const emailDoneToday = emailToday?.status === "sent";
 
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title={`Recordatorios · ${label}`}
+      icon="bell"
+      size="wide"
+      description="Historial del cobro y envío de recordatorios."
+      onClose={onClose}
+      footer={
+        <>
+          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
+        </>
+      }
     >
-      <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Recordatorios de ${label}`}>
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="bell" size={11} />
-            </span>
-            Recordatorios · {label}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
 
         <dl className="admin-dialog-facts">
           <div>
@@ -541,13 +525,7 @@ function PaymentRemindersDialog({
             ))}
           </ul>
         )}
-
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
-        </div>
-      </section>
-    </div>
+    </AdminDialog>
   );
 }
 
@@ -584,7 +562,6 @@ function ExpectedReviewDialog({
   onSubmit: (payload: ExpectedReviewSubmit) => void;
   onClose: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
   const [accountId, setAccountId] = useState(
     row.expectedAccount && accounts.some((account) => account.id === row.expectedAccount?.id)
       ? row.expectedAccount.id
@@ -598,15 +575,6 @@ function ExpectedReviewDialog({
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
 
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const label = row.budget.client.company || row.budget.client.name;
   const concept = expectedPaymentConcept(row);
   const confirming = mode === "confirm";
@@ -615,31 +583,42 @@ function ExpectedReviewDialog({
   const partial = amountOk && amountValue < remaining;
   const canSubmit = confirming ? Boolean(accountId) && amountOk && !busy : note.trim().length > 0 && !busy;
 
+  const formId = useId();
+  const initialRef = useRef({ accountId, amount, method, date, reference: "", note: "" });
+  const reviewDirty = JSON.stringify({ accountId, amount, method, date, reference, note }) !== JSON.stringify(initialRef.current);
+  function submitReview() {
+    if (!canSubmit) return;
+    if (confirming) onSubmit({ kind: "confirm", accountId, date, reference: reference.trim(), amount, method });
+    else onSubmit({ kind: "reject", note: note.trim() });
+  }
+
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title={`${confirming ? "Confirmar en cuenta" : "Observar / rechazar"} · ${concept}`}
+      icon="check"
+      size="wide"
+      description={confirming ? "Registra el cobro y la entrada en la cuenta elegida." : "El cliente ve el motivo en el portal."}
+      dirty={reviewDirty}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="arrow-left" type="button" disabled={busy} onClick={requestClose}>
+            Volver
+          </AdminButton>
+          <AdminButton
+            variant="primary"
+            icon={confirming ? "check" : "alert"}
+            busy={busy}
+            disabled={!canSubmit || busy}
+            type="submit"
+            form={formId}
+          >
+            {confirming ? "Confirmar en cuenta" : "Enviar observación"}
+          </AdminButton>
+        </>
+      )}
     >
-      <section
-        className="admin-dialog admin-dialog--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${confirming ? "Confirmar" : "Observar"} ${concept} de ${label}`}
-      >
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="check" size={11} />
-            </span>
-            {confirming ? "Confirmar en cuenta" : "Observar / rechazar"} · {concept}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
+      <form id={formId} className="admin-form" onSubmit={(event) => { event.preventDefault(); submitReview(); }}>
 
         <dl className="admin-dialog-facts">
           <div>
@@ -778,28 +757,8 @@ function ExpectedReviewDialog({
               : "Si el cobro ya existía, se cobra ese registro: no se duplica."}
           </p>
         ) : null}
-
-        <div className="admin-dialog-foot">
-          <AdminButton icon="arrow-left" type="button" disabled={busy} onClick={onClose}>
-            Volver
-          </AdminButton>
-          <span className="admin-dialog-spacer" />
-          <AdminButton
-            variant="primary"
-            icon={confirming ? "check" : "alert"}
-            busy={busy}
-            disabled={!canSubmit || busy}
-            onClick={() =>
-              confirming
-                ? onSubmit({ kind: "confirm", accountId, date, reference: reference.trim(), amount, method })
-                : onSubmit({ kind: "reject", note: note.trim() })
-            }
-          >
-            {confirming ? "Confirmar en cuenta" : "Enviar observación"}
-          </AdminButton>
-        </div>
-      </section>
-    </div>
+      </form>
+    </AdminDialog>
   );
 }
 
@@ -823,7 +782,6 @@ function ExpectedSplitDialog({
   onSplit: (parts: Array<{ amount: number; dueAt: string }>) => void;
   onClose: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
   const nextKey = useRef(3);
   const remaining = Math.max(0, row.amount - row.paidAmount);
   const [parts, setParts] = useState<SplitPartDraft[]>(() => {
@@ -834,44 +792,45 @@ function ExpectedSplitDialog({
     ];
   });
 
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const label = row.budget.client.company || row.budget.client.name;
   const concept = expectedPaymentConcept(row);
   const { total, valid } = validateFinanceSplitAmounts(parts.map((part) => part.amount), remaining);
 
+  const formId = useId();
+  const initialParts = useRef(JSON.stringify(parts));
+  const splitDirty = JSON.stringify(parts) !== initialParts.current;
+  function submitSplit() {
+    if (!valid || busy) return;
+    onSplit(parts.map((part) => ({ amount: Number(part.amount), dueAt: part.dueAt })));
+  }
+
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title={`Dividir saldo · ${concept}`}
+      icon="calendar"
+      size="wide"
+      description="Las partes tienen que sumar el saldo pendiente."
+      dirty={splitDirty}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" disabled={busy} onClick={requestClose}>
+            Cancelar
+          </AdminButton>
+          <AdminButton
+            variant="primary"
+            icon="calendar"
+            busy={busy}
+            disabled={!valid || busy}
+            type="submit"
+            form={formId}
+          >
+            Dividir en {parts.length} partes
+          </AdminButton>
+        </>
+      )}
     >
-      <section
-        className="admin-dialog admin-dialog--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Dividir el saldo de ${concept} de ${label}`}
-      >
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="calendar" size={11} />
-            </span>
-            Dividir saldo · {concept}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
+      <form id={formId} className="admin-form" onSubmit={(event) => { event.preventDefault(); submitSplit(); }}>
 
         <dl className="admin-dialog-facts">
           <div>
@@ -942,24 +901,8 @@ function ExpectedSplitDialog({
         </p>
 
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" type="button" disabled={busy} onClick={onClose}>
-            Cancelar
-          </AdminButton>
-          <AdminButton
-            variant="primary"
-            icon="calendar"
-            busy={busy}
-            disabled={!valid || busy}
-            onClick={() => onSplit(parts.map((part) => ({ amount: Number(part.amount), dueAt: part.dueAt })))}
-          >
-            Dividir en {parts.length} partes
-          </AdminButton>
-        </div>
-      </section>
-    </div>
+      </form>
+    </AdminDialog>
   );
 }
 
@@ -984,18 +927,8 @@ function CollectPaymentDialog({
   onCollect: (payload: { method: string; treasuryAccountId: string }) => void;
   onClose: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
   const [method, setMethod] = useState<string>("Transferencia");
   const [accountId, setAccountId] = useState("");
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const label = payment.client.company || payment.client.name;
   const methodAccounts = accountsForPaymentMethod(method, accounts);
@@ -1003,26 +936,33 @@ function CollectPaymentDialog({
     ? accountId
     : methodAccounts[0]?.id ?? "";
 
+  const formId = useId();
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title={`Marcar cobrado · ${label}`}
+      icon="check"
+      description="Registra el cobro y suma el saldo a la cuenta elegida."
+      dirty={method !== "Transferencia" || accountId !== ""}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" disabled={busy} onClick={requestClose}>
+            Cancelar
+          </AdminButton>
+          <AdminButton
+            variant="primary"
+            icon="check"
+            busy={busy}
+            disabled={busy || !effectiveAccountId}
+            type="submit"
+            form={formId}
+          >
+            Marcar cobrado
+          </AdminButton>
+        </>
+      )}
     >
-      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label={`Marcar cobrado: ${label}`}>
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="check" size={11} />
-            </span>
-            Marcar cobrado · {label}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
+      <form id={formId} className="admin-form" onSubmit={(event) => { event.preventDefault(); if (!busy && effectiveAccountId) onCollect({ method, treasuryAccountId: effectiveAccountId }); }}>
 
         <dl className="admin-dialog-facts">
           <div>
@@ -1078,24 +1018,8 @@ function CollectPaymentDialog({
         </div>
 
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-
-        <div className="admin-dialog-foot">
-          <AdminButton icon="close" type="button" disabled={busy} onClick={onClose}>
-            Cancelar
-          </AdminButton>
-          <span className="admin-dialog-spacer" />
-          <AdminButton
-            variant="primary"
-            icon="check"
-            busy={busy}
-            disabled={busy || !effectiveAccountId}
-            onClick={() => onCollect({ method, treasuryAccountId: effectiveAccountId })}
-          >
-            Marcar cobrado
-          </AdminButton>
-        </div>
-      </section>
-    </div>
+      </form>
+    </AdminDialog>
   );
 }
 
@@ -1163,18 +1087,8 @@ function expectedTimelineSteps(row: AdminExpectedPaymentRow): TimelineStep[] {
  * reales. Se pide el presupuesto entero (incluye lo ya confirmado y cancelado).
  */
 function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow; onClose: () => void }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
   const [rows, setRows] = useState<AdminExpectedPaymentRow[] | null>(null);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   useEffect(() => {
     let active = true;
@@ -1199,25 +1113,18 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
   const label = budget.client.company || budget.client.name;
 
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title={`Trazabilidad · ${budget.title}`}
+      icon="clock"
+      size="wide"
+      description="Aprobación, pagos esperados, comprobantes y confirmaciones."
+      onClose={onClose}
+      footer={
+        <>
+          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
+        </>
+      }
     >
-      <section className="admin-dialog admin-dialog--wide" role="dialog" aria-modal="true" aria-label={`Trazabilidad de ${budget.title}`}>
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="clock" size={11} />
-            </span>
-            Trazabilidad · {budget.title}
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
 
         <p className="admin-dialog-text">
           {label} · total {formatMoney(budget.total)} · {rows?.length ?? 0}{" "}
@@ -1263,13 +1170,7 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
 
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
         {rows === null ? <p className="admin-dialog-text">Cargando la trazabilidad…</p> : null}
-
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
-        </div>
-      </section>
-    </div>
+    </AdminDialog>
   );
 }
 

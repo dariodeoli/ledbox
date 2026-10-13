@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDateTime, formatNumber, invitationStatusLabel, invitationStatusTone, mailStatusLabel, statusTone } from "@/lib/admin-format";
 import type { AdminTeamInvitation } from "@/lib/admin-types";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
@@ -18,6 +18,7 @@ import {
   AdminCountdown,
   AdminDataState,
   AdminEmpty,
+  AdminDialog,
   AdminFormPanel,
   AdminKpi,
   AdminNote,
@@ -530,19 +531,10 @@ function InviteDialog({
   onClose: () => void;
   onSubmit: (invite: { email: string; role: string }) => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const formId = useId();
   const [invite, setInvite] = useState(EMPTY_INVITE);
   const [localError, setLocalError] = useState("");
   const inviteValidity = invitationFormValidity(invite.email);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -556,70 +548,54 @@ function InviteDialog({
   }
 
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title="Invitar por correo"
+      icon="mail"
+      description="Le mandamos el link para sumarse con el rol elegido. Vence en 7 días y queda pendiente hasta que la acepte."
+      dirty={invite.email !== "" || invite.role !== EMPTY_INVITE.role}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton type="submit" variant="primary" icon="mail" form={formId} busy={busy} disabled={inviteValidity.error !== null}>
+            Enviar invitación
+          </AdminButton>
+        </>
+      )}
     >
-      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label="Invitar por correo">
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="mail" size={11} />
-            </span>
-            Invitar por correo
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
-        <p className="admin-dialog-text">
-          Le mandamos un correo con el link para sumarse a la empresa con el rol elegido. El link vence en 7 días y la
-          invitación queda pendiente hasta que la acepte.
-        </p>
-        <form className="admin-form" onSubmit={submit} noValidate>
-          <EmailField
-            label="Correo"
-            required
-            value={invite.email}
-            onChange={(value) => {
-              setInvite({ ...invite, email: value });
-              setLocalError("");
-            }}
-            placeholder="ana@ledbox.online"
-            hint="La persona entra al panel con este correo."
-            autoComplete="off"
-          />
-          <SelectField
-            label="Rol"
-            value={invite.role}
-            onChange={(value) => setInvite({ ...invite, role: value })}
-            options={ROLE_SELECT_OPTIONS}
-            hint="El propietario no se invita por correo."
-          />
-          {inviteValidity.error || localError ? (
-            <AdminNote tone="error">{inviteValidity.error ?? localError}</AdminNote>
-          ) : error ? (
-            limitError ? (
-              <AdminPlanLimitNote message={error} />
-            ) : (
-              <AdminNote tone="error">{error}</AdminNote>
-            )
-          ) : null}
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton type="submit" variant="primary" icon="mail" busy={busy} disabled={inviteValidity.error !== null}>
-              Enviar invitación
-            </AdminButton>
-          </div>
-        </form>
-      </section>
-    </div>
+      <form id={formId} className="admin-form" onSubmit={submit} noValidate>
+        <EmailField
+          label="Correo"
+          required
+          value={invite.email}
+          onChange={(value) => {
+            setInvite({ ...invite, email: value });
+            setLocalError("");
+          }}
+          placeholder="ana@ledbox.online"
+          hint="La persona entra al panel con este correo."
+          autoComplete="off"
+        />
+        <SelectField
+          label="Rol"
+          value={invite.role}
+          onChange={(value) => setInvite({ ...invite, role: value })}
+          options={ROLE_SELECT_OPTIONS}
+          hint="El propietario no se invita por correo."
+        />
+        {inviteValidity.error || localError ? (
+          <AdminNote tone="error">{inviteValidity.error ?? localError}</AdminNote>
+        ) : error ? (
+          limitError ? (
+            <AdminPlanLimitNote message={error} />
+          ) : (
+            <AdminNote tone="error">{error}</AdminNote>
+          )
+        ) : null}
+      </form>
+    </AdminDialog>
   );
 }
 
@@ -637,53 +613,33 @@ function RevokeInviteDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const formId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="admin-dialog-overlay"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AdminDialog
+      title="Revocar invitación"
+      icon="trash"
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton type="submit" icon="trash" form={formId} busy={busy}>
+            Revocar
+          </AdminButton>
+        </>
+      )}
     >
-      <section className="admin-dialog" role="dialog" aria-modal="true" aria-label={`Revocar la invitación de ${invitation.email}`}>
-        <header className="admin-dialog-head">
-          <h2 className="admin-dialog-title">
-            <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
-              <AdminIcon name="trash" size={11} />
-            </span>
-            Revocar invitación
-          </h2>
-          <button ref={closeRef} type="button" className="admin-iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar">
-            <AdminIcon name="close" size={15} />
-          </button>
-        </header>
+      <form id={formId} className="admin-form" onSubmit={(event) => { event.preventDefault(); if (!busy) onConfirm(); }}>
         <p className="admin-dialog-text">
           ¿Revocar la invitación de <strong>{invitation.email}</strong>? El link deja de funcionar y la persona no puede
           sumarse al equipo con esa invitación. Podés invitarla de nuevo cuando quieras.
         </p>
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
-            Cancelar
-          </AdminButton>
-          <AdminButton type="button" icon="trash" busy={busy} onClick={onConfirm}>
-            Revocar
-          </AdminButton>
-        </div>
-      </section>
-    </div>
+      </form>
+    </AdminDialog>
   );
 }
 

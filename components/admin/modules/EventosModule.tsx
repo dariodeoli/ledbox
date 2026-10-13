@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   damageSummary,
@@ -44,6 +44,8 @@ import {
   AdminCell,
   AdminCountdown,
   AdminDataState,
+  AdminDialog,
+  AdminDialogSection,
   AdminDisclosure,
   AdminEmpty,
   AdminFormPanel,
@@ -243,6 +245,7 @@ export function EventosModule() {
   const [showForm, setShowForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_EVENT_FORM);
+  const eventFormId = useId();
   const [taskForm, setTaskForm] = useState(EMPTY_TASK_FORM);
   const [busy, setBusy] = useState(false);
   const [taskBusy, setTaskBusy] = useState(false);
@@ -277,6 +280,8 @@ export function EventosModule() {
   const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
   const events = useMemo(() => operations.data ?? [], [operations.data]);
+  const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) ?? null : null;
+  const eventFormDirty = JSON.stringify(form) !== JSON.stringify(editingEvent ? eventFormFrom(editingEvent) : EMPTY_EVENT_FORM);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
   const clientChoices = useMemo(
@@ -533,9 +538,8 @@ export function EventosModule() {
     operations.reload();
   }
 
-  function openEventEdit(event: EventRow) {
-    setEditingEventId(event.id);
-    setForm({
+  function eventFormFrom(event: EventRow) {
+    return {
       ...EMPTY_EVENT_FORM,
       clientId: event.client.id, name: event.name, location: event.location ?? "", city: event.city ?? "",
       department: event.department ?? "", address: event.address ?? "", addressReference: event.addressReference ?? "", locationUrl: event.locationUrl ?? "",
@@ -543,7 +547,12 @@ export function EventosModule() {
       responsibleName: event.responsibleName ?? "", responsiblePhone: event.responsiblePhone ?? "", responsibleEmail: event.responsibleEmail ?? "",
       modality: event.modality ?? "", attendees: event.attendees == null ? "" : String(event.attendees),
       startsAt: inputDateTime(event.startsAt), endsAt: inputDateTime(event.endsAt),
-    });
+    };
+  }
+
+  function openEventEdit(event: EventRow) {
+    setEditingEventId(event.id);
+    setForm(eventFormFrom(event));
     setFormError(""); setFormLimit(""); setFormNotice("");
     setShowForm(true);
   }
@@ -785,9 +794,10 @@ export function EventosModule() {
               setFormLimit("");
               setEditingEventId(null);
               setForm(EMPTY_EVENT_FORM);
-              setShowForm(editingEventId ? true : !showForm);
+              setFormNotice("");
+              setShowForm(true);
             }}
-            aria-expanded={showForm}
+            aria-haspopup="dialog"
           >
             Nuevo evento
           </AdminButton>
@@ -795,54 +805,64 @@ export function EventosModule() {
       </AdminToolbar>
 
       {writable && showForm ? (
-        <AdminFormPanel
+        <AdminDialog
           title={editingEventId ? "Editar evento" : "Nuevo evento"}
-          submitLabel={editingEventId ? "Guardar cambios" : "Crear evento"}
-          onSubmit={submitEvent}
-          onCancel={() => setShowForm(false)}
-          onEscape={() => setShowForm(false)}
-          busy={busy}
-          status={formError}
-          statusNote={
-            formError ? undefined : formLimit ? (
-              <AdminPlanLimitNote message={formLimit} />
-            ) : formNotice ? (
-              <AdminNote tone="ok">{formNotice}</AdminNote>
-            ) : undefined
-          }
+          icon="events"
+          description={editingEventId ? "El cliente del evento no se puede cambiar." : "Los datos de operación son opcionales."}
+          dirty={eventFormDirty}
+          onClose={() => setShowForm(false)}
+          footer={({ requestClose }) => (
+            <>
+              {formError || formLimit || formNotice ? (
+                <div className="admin-dialog-footer-note">
+                  {formError ? <AdminNote tone="error">{formError}</AdminNote> : formLimit ? <AdminPlanLimitNote message={formLimit} /> : <AdminNote tone="ok">{formNotice}</AdminNote>}
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="submit" form={eventFormId} busy={busy}>
+                {editingEventId ? "Guardar cambios" : "Crear evento"}
+              </AdminButton>
+            </>
+          )}
         >
-          <EventQuickFields key={editingEventId ?? "nuevo"} values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
-            moreOpen={Boolean(editingEventId)}
-            locationOptions={[...new Set(events.flatMap((event) => event.location ? [event.location] : []))]}>
-          <div className="admin-field-action">
-            <Combobox
-              label="Cliente"
-              required
-              disabled={Boolean(editingEventId)}
-              value={form.clientId}
-              onChange={(value) => setForm({ ...form, clientId: value })}
-              options={clientChoices}
-              placeholder="Buscá por nombre o empresa…"
-              emptyLabel={clients.loading ? "Cargando clientes…" : "No hay clientes cargados."}
-              onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
-              createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
-            />
-            <AdminButton
-              type="button"
-              icon="plus"
-              disabled={Boolean(editingEventId)}
-              title="Crear un cliente nuevo y dejarlo elegido"
-              aria-label="Crear un cliente nuevo y dejarlo elegido"
-              onClick={() => {
-                setFormNotice("");
-                setNewClientName("");
-              }}
-            >
-              Nuevo cliente
-            </AdminButton>
-          </div>
-          </EventQuickFields>
-        </AdminFormPanel>
+          <form id={eventFormId} className="admin-form" onSubmit={(formEvent) => void submitEvent(formEvent)} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Evento">
+              <EventQuickFields key={editingEventId ?? "nuevo"} values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
+                moreOpen={Boolean(editingEventId)}
+                locationOptions={[...new Set(events.flatMap((event) => event.location ? [event.location] : []))]}>
+              <div className="admin-field-action">
+                <Combobox
+                  label="Cliente"
+                  required
+                  disabled={Boolean(editingEventId)}
+                  value={form.clientId}
+                  onChange={(value) => setForm({ ...form, clientId: value })}
+                  options={clientChoices}
+                  placeholder="Buscá por nombre o empresa…"
+                  emptyLabel={clients.loading ? "Cargando clientes…" : "No hay clientes cargados."}
+                  onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
+                  createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
+                />
+                <AdminButton
+                  type="button"
+                  icon="plus"
+                  disabled={Boolean(editingEventId)}
+                  title="Crear un cliente nuevo y dejarlo elegido"
+                  aria-label="Crear un cliente nuevo y dejarlo elegido"
+                  onClick={() => {
+                    setFormNotice("");
+                    setNewClientName("");
+                  }}
+                >
+                  Nuevo cliente
+                </AdminButton>
+              </div>
+              </EventQuickFields>
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {activeView === "calendar" ? (

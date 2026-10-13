@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   damageSummary,
   formatDateShort,
@@ -50,7 +50,8 @@ import {
   AdminDataState,
   AdminDisclosure,
   AdminEmpty,
-  AdminFormPanel,
+  AdminDialog,
+  AdminDialogSection,
   AdminKpi,
   AdminNote,
   AdminPanel,
@@ -579,6 +580,11 @@ export function InventarioModule() {
     return prices.ok ? priceWarningFor(prices.values) : null;
   }, [editForm]);
 
+  const createFormId = useId();
+  const editFormId = useId();
+  const createDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_FORM) || Boolean(pendingPhoto);
+  const editDirty = Boolean(editItem) && (JSON.stringify(editForm) !== JSON.stringify(editItem ? editFormFromItem(editItem) : EMPTY_EDIT) || Boolean(editPendingPhoto) || editPhotoRemoved);
+
   const selectedPriceWarning = selected ? inventoryPriceWarning(selected) : null;
 
   // Categorías de la empresa (issue #109): el alta las busca y permite crear
@@ -711,6 +717,7 @@ export function InventarioModule() {
     setPendingPhoto(null);
     setPhotoError("");
     setCategoryExtras([]);
+    setShowForm(false);
     resources.reload();
   }
 
@@ -1087,9 +1094,9 @@ export function InventarioModule() {
             onClick={() => {
               setFormError("");
               setEditItem(null);
-              setShowForm((open) => !open);
+              setShowForm(true);
             }}
-            aria-expanded={showForm}
+            aria-haspopup="dialog"
           >
             Nuevo ítem
           </AdminButton>
@@ -1102,24 +1109,38 @@ export function InventarioModule() {
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
 
       {writable && showForm ? (
-        <AdminFormPanel
+        <AdminDialog
           title="Nuevo ítem de inventario"
-          submitLabel="Cargar ítem"
-          onSubmit={submit}
-          onCancel={() => setShowForm(false)}
-          onEscape={() => setShowForm(false)}
-          busy={busy || photoBusy}
-          status={formError}
-          statusNote={!formError && formPriceWarning ? <AdminNote tone="warn">{formPriceWarning}</AdminNote> : undefined}
+          icon="inventory"
+          size="wide"
+          description="Se crean las unidades con código automático. Precios y foto se pueden completar después."
+          dirty={createDirty}
+          onClose={() => setShowForm(false)}
+          footer={({ requestClose }) => (
+            <>
+              {formError || formPriceWarning ? (
+                <div className="admin-dialog-footer-note">
+                  {formError ? <AdminNote tone="error">{formError}</AdminNote> : <AdminNote tone="warn">{formPriceWarning}</AdminNote>}
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="submit" form={createFormId} busy={busy || photoBusy}>
+                Cargar ítem
+              </AdminButton>
+            </>
+          )}
         >
+          <form id={createFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || photoBusy || undefined}>
           {/* Datos del ítem (issues #109 y #131): campos finos; la cantidad va
               corta, el SKU vive en «Más datos» y precios y foto van plegados. */}
-          <div className="admin-form-group admin-form-group--item">
-            <span className="admin-form-group-title">Ítem</span>
+          <AdminDialogSection title="Ítem">
             <TextField
               label="Artículo"
               help={INVENTORY_FIELD_HELP.name}
               required
+              autoFocus
               maxLength={120}
               value={form.name}
               onChange={(value) => setForm({ ...form, name: value })}
@@ -1161,7 +1182,7 @@ export function InventarioModule() {
               onChange={(value) => setForm({ ...form, quantity: value })}
               hint="Se crean las unidades con código automático."
             />
-          </div>
+          </AdminDialogSection>
 
           {/* SKU opcional (issue #131): vive en «Más datos» y el POST lo acepta. */}
           <AdminDisclosure title="Más datos" hint="SKU">
@@ -1234,23 +1255,37 @@ export function InventarioModule() {
               />
             </div>
           </AdminDisclosure>
-        </AdminFormPanel>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {writable && editItem ? (
-        <AdminFormPanel
+        <AdminDialog
           title={`Editar ítem · ${editForm.name || editItem.name}`}
-          submitLabel="Guardar cambios"
-          onSubmit={submitEditItem}
-          onCancel={() => setEditItem(null)}
-          onEscape={() => setEditItem(null)}
-          busy={editBusy}
-          status={editError}
-          statusNote={!editError && editPriceWarning ? <AdminNote tone="warn">{editPriceWarning}</AdminNote> : undefined}
+          icon="inventory"
+          size="wide"
+          description="Datos, foto, costos y precios del ítem. La cantidad se gestiona por unidad."
+          dirty={editDirty}
+          onClose={() => setEditItem(null)}
+          footer={({ requestClose }) => (
+            <>
+              {editError || editPriceWarning ? (
+                <div className="admin-dialog-footer-note">
+                  {editError ? <AdminNote tone="error">{editError}</AdminNote> : <AdminNote tone="warn">{editPriceWarning}</AdminNote>}
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={editBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="submit" form={editFormId} busy={editBusy}>
+                Guardar cambios
+              </AdminButton>
+            </>
+          )}
         >
+          <form id={editFormId} className="admin-form" onSubmit={(event) => void submitEditItem(event)} aria-busy={editBusy || undefined}>
           {/* Datos del ítem (issue #111): todo editable menos la cantidad (#112). */}
-          <div className="admin-form-group admin-form-group--item-edit">
-            <span className="admin-form-group-title">Ítem</span>
+          <AdminDialogSection title="Ítem">
             <TextField
               label="Artículo"
               required
@@ -1301,13 +1336,12 @@ export function InventarioModule() {
               onChange={(checked) => setEditForm({ ...editForm, visibleOnWeb: checked })}
               hint="Para el catálogo público."
             />
-          </div>
+          </AdminDialogSection>
 
           {/* Las unidades físicas (issue #112) se gestionan en el detalle: acá
               solo se resume cuántas hay, para no duplicar la lista. */}
-          <div className="admin-form-group admin-form-group--wide">
-            <span className="admin-form-group-title">Unidades</span>
-            <p className="admin-note">
+          <AdminDialogSection title="Unidades">
+            <p className="admin-note admin-field--wide">
               <span>
                 {formatNumber(editItem.units.length)} unidad{editItem.units.length === 1 ? "" : "es"} · código, estado y
                 costo se gestionan en el detalle del ítem.
@@ -1323,7 +1357,7 @@ export function InventarioModule() {
                 Ver unidades
               </AdminButton>
             </p>
-          </div>
+          </AdminDialogSection>
 
           {/* Foto (issues #109 y #111): se cambia subiendo otra o se quita. */}
           <PhotoFields
@@ -1343,8 +1377,7 @@ export function InventarioModule() {
           />
 
           {/* Costos internos (issue #111): no son precios de venta. */}
-          <div className="admin-form-group admin-form-group--costs">
-            <span className="admin-form-group-title">Costos internos</span>
+          <AdminDialogSection title="Costos internos">
             <AdminDisclosure title="Reposición" hint="Dato interno secundario">
               <MoneyField label="Reposición" help={INVENTORY_FIELD_HELP.replacementCost} value={editForm.replacementCost} onChange={(value) => setEditForm({ ...editForm, replacementCost: value })} hint="Lo que cuesta reponer la unidad; no es un precio de venta." />
             </AdminDisclosure>
@@ -1355,11 +1388,10 @@ export function InventarioModule() {
               onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
               hint="Costo interno por día de uso."
             />
-          </div>
+          </AdminDialogSection>
 
           {/* Tiempos de preparación (alquileres): opcionales, heredan los de la empresa. */}
-          <div className="admin-form-group">
-            <span className="admin-form-group-title">Tiempos del producto</span>
+          <AdminDialogSection title="Tiempos del producto">
             <NumberField
               label="Tiempo antes (horas)"
               value={editForm.bufferBeforeHours}
@@ -1376,10 +1408,9 @@ export function InventarioModule() {
               hint="Devolución, transporte y limpieza después del evento. Vacío = el tiempo de la empresa."
               disabled={editBusy}
             />
-          </div>
+          </AdminDialogSection>
 
-          <div className="admin-form-group admin-form-group--wide">
-            <span className="admin-form-group-title">Notas</span>
+          <AdminDialogSection title="Notas">
             <TextAreaField
               label="Notas internas"
               help={INVENTORY_FIELD_HELP.notes}
@@ -1390,7 +1421,7 @@ export function InventarioModule() {
               onChange={(value) => setEditForm({ ...editForm, notes: value })}
               placeholder="Estado del equipo, accesorios, ubicación en depósito…"
             />
-          </div>
+          </AdminDialogSection>
 
           <PriceFrontFields
             title="Precio cliente final"
@@ -1420,7 +1451,8 @@ export function InventarioModule() {
               hint="Piso de venta del ítem."
             />
           </div>
-        </AdminFormPanel>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {writable && bulkItemIds.length ? <InventoryBulkEditor target="items" selection={bulkItemIds.map(id => ({ id, label: inventory.find(item => item.id === id)?.name ?? id }))} onSaved={resources.reload} onClear={() => setBulkItemIds([])} /> : null}
