@@ -254,7 +254,7 @@ export async function POST(request: Request) {
     let clientId = clientIdInput;
     let clientCreated: { id: string; name: string; company: string | null } | null = null;
     if (!clientId && lead) {
-      const resolved = await resolveClientFromLead(tx, organizationId, lead);
+      const resolved = await resolveClientFromLead(tx, organizationId, lead, { allowCreate: roleCan(auth.context.user.role, "clients.write") });
       if (!resolved) throw new Error("lead-client-unresolved");
       clientId = resolved.client.id;
       if (resolved.created) clientCreated = resolved.client;
@@ -293,7 +293,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "lead-client-unresolved") return null;
     throw error;
   });
-  if (!created) return jsonError("No pudimos resolver el cliente del lead.", 409);
+  if (!created) return jsonError("Tu rol no puede crear clientes y este lead todavía no tiene uno. Pedile a un administrador que lo convierta en cliente.", 403);
   const { budget, clientCreated, leadStatus } = created;
   if (clientCreated) {
     await recordAudit({

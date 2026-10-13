@@ -89,7 +89,7 @@ test("POST /api/admin/budgets con leadId: 404 de otra empresa, transacción, aud
   assert.match(route, /requireAdminContext\("budgets\.write"\)/, "el POST exige budgets.write (VIEWER = 403)");
   assert.match(route, /db\.lead\.findFirst\(\{ where: \{ id: leadId, organizationId \} \}\)/, "el lead se acota a la empresa activa");
   assert.match(route, /El lead no existe en esta empresa\.", 404/);
-  assert.match(route, /resolveClientFromLead\(tx, organizationId, lead\)/, "usa la conversión compartida, no una copia");
+  assert.match(route, /resolveClientFromLead\(tx, organizationId, lead, \{ allowCreate: roleCan\(auth\.context\.user\.role, "clients\.write"\) \}\)/, "usa la conversión compartida, no una copia");
   assert.match(route, /db\.\$transaction\(async \(tx\) => \{[\s\S]*tx\.budget\.create[\s\S]*tx\.lead\.update/, "presupuesto, cliente y estado en una transacción");
   assert.match(route, /leadStatusAfterBudget\(lead\.status\)/);
   assert.match(route, /desde el lead «/, "queda en la auditoría");
