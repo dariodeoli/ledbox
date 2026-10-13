@@ -2,7 +2,7 @@
 
 import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import {
   formatDate,
@@ -54,7 +54,9 @@ import {
   AdminButton,
   AdminCell,
   AdminDataState,
+  AdminConfirmDialog,
   AdminDialog,
+  AdminDialogSection,
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
@@ -203,11 +205,31 @@ export function FacturacionModule() {
   // Alta de factura (manual o desde un presupuesto aprobado).
   const [invoiceForm, setInvoiceForm] = useState<InvoiceForm | null>(null);
   const [formError, setFormError] = useState("");
+  const invoiceFormId = useId();
+  const purchaseFormId = useId();
+  const voidFormId = useId();
+  const reopenFormId = useId();
+  // Foto del formulario al abrirlo: «hay cambios sin guardar» es compararlo con ella.
+  const invoiceBase = useRef("");
+  const invoiceFormRef = useRef<InvoiceForm | null>(null);
+  const purchaseFormRef = useRef<PurchaseForm | null>(null);
+  const purchaseBase = useRef("");
   // Detalle, anulación, saldado y compras.
   const [detail, setDetail] = useState<AdminInvoiceRow | null>(null);
   const [voidTarget, setVoidTarget] = useState<AdminInvoiceRow | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [purchaseForm, setPurchaseForm] = useState<PurchaseForm | null>(null);
+  invoiceFormRef.current = invoiceForm;
+  purchaseFormRef.current = purchaseForm;
+  const invoiceOpen = invoiceForm !== null;
+  const purchaseOpen = purchaseForm !== null;
+  const purchaseOpenId = purchaseForm?.id ?? "";
+  useEffect(() => {
+    invoiceBase.current = invoiceOpen ? JSON.stringify(invoiceFormRef.current) : "";
+  }, [invoiceOpen]);
+  useEffect(() => {
+    purchaseBase.current = purchaseOpen ? JSON.stringify(purchaseFormRef.current) : "";
+  }, [purchaseOpen, purchaseOpenId]);
   // Catálogos de los diálogos (issue #59): clientes y proveedores solo alimentan
   // sus formularios, así que se piden al abrirlos. Los presupuestos aprobados se
   // siguen pidiendo al entrar: la pestaña los lista para facturar.
@@ -1463,8 +1485,27 @@ export function FacturacionModule() {
       ) : null}
 
       {invoiceForm ? (
-        <AdminDialog title="Nueva factura" size="wide" icon="receipt" onClose={() => setInvoiceForm(null)}>
-          <form className="admin-form-grid admin-invoice-form" onSubmit={submitInvoice} aria-busy={busy || undefined}>
+        <AdminDialog
+          title="Nueva factura"
+          size="lg"
+          icon="receipt"
+          description="Emite un comprobante interno del libro de IVA; el número se asigna al emitir."
+          error={formError}
+          dirty={invoiceBase.current !== "" && JSON.stringify(invoiceForm) !== invoiceBase.current}
+          onClose={() => setInvoiceForm(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="receipt" form={invoiceFormId} busy={busy} busyLabel="Emitiendo…">
+                Emitir factura
+              </AdminButton>
+            </>
+          )}
+        >
+          <form id={invoiceFormId} className="admin-form admin-invoice-form" onSubmit={submitInvoice} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Receptor">
             <SegmentedField
               label="Origen"
               wide
@@ -1535,41 +1576,12 @@ export function FacturacionModule() {
                 />
               </>
             )}
-
-            <SegmentedField
-              label="Condición"
-              value={invoiceForm.condition}
-              onChange={(value) =>
-                setInvoiceForm({ ...invoiceForm, condition: value === "CREDIT" ? "CREDIT" : "CASH", dueAt: value === "CREDIT" ? invoiceForm.dueAt : "" })
-              }
-              options={[
-                { value: "CASH", label: "Contado" },
-                { value: "CREDIT", label: "Crédito" },
-              ]}
-            />
-            <DateField label="Emisión" required value={invoiceForm.issuedAt} onChange={(value) => setInvoiceForm({ ...invoiceForm, issuedAt: value })} />
-            {invoiceForm.condition === "CREDIT" ? (
-              <DateField
-                label="Vencimiento"
-                required
-                value={invoiceForm.dueAt}
-                onChange={(value) => setInvoiceForm({ ...invoiceForm, dueAt: value })}
-                hint="No puede ser anterior a la emisión"
-              />
-            ) : null}
-            <TextAreaField
-              label="Notas"
-              wide
-              rows={2}
-              maxLength={1000}
-              value={invoiceForm.notes}
-              onChange={(value) => setInvoiceForm({ ...invoiceForm, notes: value })}
-              placeholder="Observaciones internas del comprobante (opcional)"
-            />
+            </AdminDialogSection>
 
             {invoiceForm.source === "manual" ? (
+              <AdminDialogSection title="Ítems" stack>
               <div className="admin-field admin-field--wide admin-fiscal-lines">
-                <span className="admin-field-label">Ítems (importes brutos, IVA incluido)</span>
+                <span className="admin-field-label">Importes brutos, IVA incluido</span>
                 {invoiceForm.items.map((item) => {
                   const line = draftLines.find((candidate) => candidate.key === item.key);
                   return (
@@ -1612,8 +1624,35 @@ export function FacturacionModule() {
                   Agregar ítem
                 </AdminButton>
               </div>
+              </AdminDialogSection>
             ) : null}
 
+            <AdminDialogSection title="Condición y fechas">
+            <SegmentedField
+              label="Condición"
+              value={invoiceForm.condition}
+              onChange={(value) =>
+                setInvoiceForm({ ...invoiceForm, condition: value === "CREDIT" ? "CREDIT" : "CASH", dueAt: value === "CREDIT" ? invoiceForm.dueAt : "" })
+              }
+              options={[
+                { value: "CASH", label: "Contado" },
+                { value: "CREDIT", label: "Crédito" },
+              ]}
+            />
+            <DateField label="Emisión" required value={invoiceForm.issuedAt} onChange={(value) => setInvoiceForm({ ...invoiceForm, issuedAt: value })} />
+            {invoiceForm.condition === "CREDIT" ? (
+              <DateField
+                label="Vencimiento"
+                required
+                value={invoiceForm.dueAt}
+                onChange={(value) => setInvoiceForm({ ...invoiceForm, dueAt: value })}
+                hint="No puede ser anterior a la emisión"
+              />
+            ) : null}
+            </AdminDialogSection>
+
+
+            <AdminDialogSection title="Totales" stack>
             <div className="admin-field admin-field--wide admin-fiscal-totals">
               <span className="admin-field-label">Totales de la factura</span>
               <div className="admin-fiscal-total-row">
@@ -1637,24 +1676,40 @@ export function FacturacionModule() {
                 <span className="admin-cell-sub">{draftTotals.count} ítems</span>
               </div>
             </div>
+            </AdminDialogSection>
 
-            {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
-
-            <div className="admin-dialog-foot admin-field--wide">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setInvoiceForm(null)} disabled={busy}>
-                Cancelar
-              </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="receipt" busy={busy}>
-                Emitir factura
-              </AdminButton>
-            </div>
+            <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(invoiceForm.notes)} hint="notas internas">
+            <TextAreaField
+              label="Notas"
+              wide
+              rows={2}
+              maxLength={1000}
+              value={invoiceForm.notes}
+              onChange={(value) => setInvoiceForm({ ...invoiceForm, notes: value })}
+              placeholder="Observaciones internas del comprobante (opcional)"
+            />
+            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}
 
       {detail ? (
-        <AdminDialog title={`Factura ${invoiceNumberLabel(detail.number)}`} size="wide" icon="receipt" onClose={() => setDetail(null)}>
+        <AdminDialog
+          title={`Factura ${invoiceNumberLabel(detail.number)}`}
+          size="lg"
+          icon="receipt"
+          onClose={() => setDetail(null)}
+          footer={
+            <>
+              <AdminButton icon="close" type="button" onClick={() => setDetail(null)}>
+                Cerrar
+              </AdminButton>
+              <Link className="admin-btn admin-btn--primary" href={`/imprimir/factura/${detail.id}`} target="_blank" rel="noreferrer" title="Abrir el comprobante imprimible" aria-label="Abrir el comprobante imprimible">
+                <span>Ver imprimible</span>
+              </Link>
+            </>
+          }
+        >
           <div className="admin-detail">
             <dl className="admin-detail-grid">
               <div className="admin-detail-item">
@@ -1767,23 +1822,32 @@ export function FacturacionModule() {
                 El número {invoiceNumberLabel(detail.number)} queda en el registro y no se reutiliza.
               </AdminNote>
             ) : null}
-
-            <div className="admin-detail-actions">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setDetail(null)}>
-                Cerrar
-              </AdminButton>
-              <Link className="admin-btn" href={`/imprimir/factura/${detail.id}`} target="_blank" rel="noreferrer" title="Abrir el comprobante imprimible" aria-label="Abrir el comprobante imprimible">
-                <span>Ver imprimible</span>
-              </Link>
-            </div>
           </div>
         </AdminDialog>
       ) : null}
 
       {purchaseForm ? (
-        <AdminDialog title={purchaseForm.id ? "Editar compra" : "Registrar compra"} size="wide" icon="suppliers" onClose={() => setPurchaseForm(null)}>
-          <form className="admin-form-grid" onSubmit={submitPurchase} aria-busy={busy || undefined}>
+        <AdminDialog
+          title={purchaseForm.id ? "Editar compra" : "Registrar compra"}
+          size="lg"
+          icon="suppliers"
+          description="Comprobante de compra para el libro de IVA; la base y el crédito se desagregan solos."
+          error={formError}
+          dirty={purchaseBase.current !== "" && JSON.stringify(purchaseForm) !== purchaseBase.current}
+          onClose={() => setPurchaseForm(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={purchaseFormId} busy={busy} busyLabel="Guardando…">
+                {purchaseForm.id ? "Guardar cambios" : "Registrar compra"}
+              </AdminButton>
+            </>
+          )}
+        >
+          <form id={purchaseFormId} className="admin-form" onSubmit={submitPurchase} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Comprobante">
             <TextField
               label="Proveedor (razón social)"
               wide
@@ -1792,15 +1856,6 @@ export function FacturacionModule() {
               onChange={(value) => setPurchaseForm({ ...purchaseForm, reason: value })}
               maxLength={160}
               placeholder="Gráfica del Sur S.A."
-            />
-            <RucField label="RUC" value={purchaseForm.ruc} onChange={(value) => setPurchaseForm({ ...purchaseForm, ruc: value })} placeholder="80055555-1" />
-            <TextField label="Timbrado" value={purchaseForm.timbrado} onChange={(value) => setPurchaseForm({ ...purchaseForm, timbrado: value })} maxLength={30} placeholder="99887766" />
-            <TextField
-              label="Nº de comprobante"
-              value={purchaseForm.number}
-              onChange={(value) => setPurchaseForm({ ...purchaseForm, number: value })}
-              maxLength={40}
-              placeholder="001-001-0000123"
             />
             <DateField label="Fecha del comprobante" required value={purchaseForm.date} onChange={(value) => setPurchaseForm({ ...purchaseForm, date: value })} />
             <SelectField
@@ -1816,6 +1871,22 @@ export function FacturacionModule() {
               value={purchaseForm.total}
               onChange={(value) => setPurchaseForm({ ...purchaseForm, total: value })}
               hint="IVA incluido: la base y el crédito se desagregan solos"
+            />
+            </AdminDialogSection>
+            <AdminDialogSection
+              title="Más opciones"
+              collapsible
+              defaultOpen={Boolean(purchaseForm.id || purchaseForm.ruc || purchaseForm.timbrado || purchaseForm.number || purchaseForm.supplierId || purchaseForm.concept)}
+              hint="RUC, timbrado, número, directorio y concepto"
+            >
+            <RucField label="RUC" value={purchaseForm.ruc} onChange={(value) => setPurchaseForm({ ...purchaseForm, ruc: value })} placeholder="80055555-1" />
+            <TextField label="Timbrado" value={purchaseForm.timbrado} onChange={(value) => setPurchaseForm({ ...purchaseForm, timbrado: value })} maxLength={30} placeholder="99887766" />
+            <TextField
+              label="Nº de comprobante"
+              value={purchaseForm.number}
+              onChange={(value) => setPurchaseForm({ ...purchaseForm, number: value })}
+              maxLength={40}
+              placeholder="001-001-0000123"
             />
             <Combobox
               label="Proveedor del directorio"
@@ -1847,120 +1918,114 @@ export function FacturacionModule() {
               onChange={(value) => setPurchaseForm({ ...purchaseForm, concept: value })}
               placeholder="Impresión de lonas, flete, servicio…"
             />
-            {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
-            <div className="admin-dialog-foot admin-field--wide">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setPurchaseForm(null)} disabled={busy}>
-                Cancelar
-              </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
-                {purchaseForm.id ? "Guardar cambios" : "Registrar compra"}
-              </AdminButton>
-            </div>
+            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}
 
       {voidTarget ? (
-        <AdminDialog title={`Anular factura ${invoiceNumberLabel(voidTarget.number)}`} icon="alert" onClose={() => setVoidTarget(null)}>
+        <AdminDialog
+          title={`Anular factura ${invoiceNumberLabel(voidTarget.number)}`}
+          icon="alert"
+          size="md"
+          warning="La factura no se borra: queda anulada con su número, su motivo y la auditoría. El número no se reutiliza."
+          dirty={voidReason.trim() !== ""}
+          onClose={() => setVoidTarget(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="close" form={voidFormId} busy={busy} busyLabel="Anulando…">
+                Anular factura
+              </AdminButton>
+            </>
+          )}
+        >
           <form
-            className="admin-form-grid"
+            id={voidFormId}
+            className="admin-form"
             onSubmit={(event) => {
               event.preventDefault();
               void confirmVoid();
             }}
             aria-busy={busy || undefined}
           >
-            <AdminNote tone="error">
-              La factura no se borra: queda <strong>anulada</strong> con su número, su motivo y la auditoría. El número
-              no se reutiliza.
-            </AdminNote>
-            <TextAreaField
-              label="Motivo de la anulación"
-              wide
-              required
-              rows={3}
-              maxLength={300}
-              value={voidReason}
-              onChange={setVoidReason}
-              placeholder="Ej.: error en el RUC del receptor; se emite de nuevo"
-            />
-            <div className="admin-dialog-foot admin-field--wide">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setVoidTarget(null)} disabled={busy}>
-                Cancelar
-              </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="close" busy={busy}>
-                Anular factura
-              </AdminButton>
-            </div>
+            <AdminDialogSection title="Motivo">
+              <TextAreaField
+                label="Motivo de la anulación"
+                wide
+                required
+                rows={3}
+                maxLength={300}
+                value={voidReason}
+                onChange={setVoidReason}
+                placeholder="Ej.: error en el RUC del receptor; se emite de nuevo"
+              />
+            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}
 
       {deleteTarget ? (
-        <AdminDialog title={`Borrar compra de «${deleteTarget.reason}»`} icon="trash" onClose={() => setDeleteTarget(null)}>
-          <AdminNote tone="error">
-            Se borra el comprobante del libro de IVA de {monthKeyLabel(monthOf(new Date(deleteTarget.date)))}. Solo se puede
-            con el mes abierto y queda auditado; si el comprobante ya está presentado, anulalo en tu contabilidad.
-          </AdminNote>
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" type="button" onClick={() => setDeleteTarget(null)} disabled={busy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton type="button" variant="primary" icon="trash" busy={busy} onClick={() => void confirmDeletePurchase()}>
-              Borrar compra
-            </AdminButton>
-          </div>
-        </AdminDialog>
+        <AdminConfirmDialog
+          title={`Borrar compra de «${deleteTarget.reason}»`}
+          icon="trash"
+          danger
+          message={`Se borra el comprobante del libro de IVA de ${monthKeyLabel(monthOf(new Date(deleteTarget.date)))}. Solo se puede con el mes abierto y queda auditado; si el comprobante ya está presentado, anulalo en tu contabilidad.`}
+          confirmLabel="Borrar compra"
+          busyLabel="Borrando…"
+          busy={busy}
+          onConfirm={() => void confirmDeletePurchase()}
+          onClose={() => setDeleteTarget(null)}
+        />
       ) : null}
 
       {confirmClose ? (
-        <AdminDialog title={`Cerrar ${monthKeyLabel(month)}`} icon="lock" onClose={() => setConfirmClose(false)}>
-          <AdminNote>
-            El cierre congela el resumen (ventas {formatMoney(summary.sales.total)}, compras {formatMoney(summary.purchases.total)},
-            saldo de IVA {formatMoney(summary.balance)}) y bloquea la emisión, la anulación, el saldado y las compras de {monthKeyLabel(month)}.
-            Se reabre solo con el usuario propietario, con motivo y auditoría.
-          </AdminNote>
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" type="button" onClick={() => setConfirmClose(false)} disabled={busy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton type="button" variant="primary" icon="check" busy={busy} onClick={() => void closeMonth()}>
-              Cerrar mes
-            </AdminButton>
-          </div>
-        </AdminDialog>
+        <AdminConfirmDialog
+          title={`Cerrar ${monthKeyLabel(month)}`}
+          icon="lock"
+          message={`El cierre congela el resumen (ventas ${formatMoney(summary.sales.total)}, compras ${formatMoney(summary.purchases.total)}, saldo de IVA ${formatMoney(summary.balance)}) y bloquea la emisión, la anulación, el saldado y las compras de ${monthKeyLabel(month)}. Se reabre solo con el usuario propietario, con motivo y auditoría.`}
+          confirmLabel="Cerrar mes"
+          busyLabel="Cerrando…"
+          busy={busy}
+          onConfirm={() => void closeMonth()}
+          onClose={() => setConfirmClose(false)}
+        />
       ) : null}
 
       {reopenOpen ? (
-        <AdminDialog title={`Reabrir ${monthKeyLabel(month)}`} icon="refresh" onClose={() => setReopenOpen(false)}>
-          <form className="admin-form-grid" onSubmit={reopenMonth} aria-busy={busy || undefined}>
-            <AdminNote>
-              Reabrir habilita de nuevo la emisión, la anulación y las compras del mes. Queda auditado con tu nombre, la
-              fecha y el motivo.
-            </AdminNote>
-            <TextAreaField
-              label="Motivo de la reapertura"
-              wide
-              required
-              rows={3}
-              maxLength={300}
-              value={reopenReason}
-              onChange={setReopenReason}
-              placeholder="Ej.: corregir la fecha de emisión de la factura 0000004"
-            />
-            <div className="admin-dialog-foot admin-field--wide">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setReopenOpen(false)} disabled={busy}>
+        <AdminDialog
+          title={`Reabrir ${monthKeyLabel(month)}`}
+          icon="refresh"
+          size="md"
+          warning="Reabrir habilita de nuevo la emisión, la anulación y las compras del mes. Queda auditado con tu nombre, la fecha y el motivo."
+          dirty={reopenReason.trim() !== ""}
+          onClose={() => setReopenOpen(false)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="refresh" busy={busy}>
+              <AdminButton type="submit" variant="primary" icon="refresh" form={reopenFormId} busy={busy} busyLabel="Reabriendo…">
                 Reabrir mes
               </AdminButton>
-            </div>
+            </>
+          )}
+        >
+          <form id={reopenFormId} className="admin-form" onSubmit={reopenMonth} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Motivo">
+              <TextAreaField
+                label="Motivo de la reapertura"
+                wide
+                required
+                rows={3}
+                maxLength={300}
+                value={reopenReason}
+                onChange={setReopenReason}
+                placeholder="Ej.: corregir la fecha de emisión de la factura 0000004"
+              />
+            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { whatsappHref } from "@/lib/admin-format";
 import { MESSAGE_TEMPLATE_TARGET_CATEGORIES, type AdminMessageTemplateRow } from "@/lib/admin-types";
-import { AdminButton, AdminDialog, AdminEmpty, AdminLoadingRows, AdminNote } from "./AdminUI";
+import { AdminButton, AdminDialog, AdminDialogSection, AdminEmpty, AdminLoadingRows, AdminNote } from "./AdminUI";
 import { SelectField } from "./AdminFields";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 
@@ -118,9 +118,15 @@ export function MessageTemplateSendDialog({
   const selected = templates.find((template) => template.id === templateId);
 
   return (
-    <AdminDialog title={`Enviar por WhatsApp · ${target.label}`} size="wide" icon="mail" onClose={onClose} footer={<>
-      <span className="admin-dialog-spacer" />
-      <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
+    <AdminDialog
+      title={`Enviar por WhatsApp · ${target.label}`}
+      size="md"
+      icon="mail"
+      description={`Elegí una plantilla: el mensaje se completa con los datos reales de ${target.label} y se abre en WhatsApp listo para enviar.`}
+      error={registerError || (preview.status === "error" ? preview.error : "") || (preview.status === "ready" && !href ? "El cliente no tiene teléfono cargado." : "")}
+      onClose={onClose}
+      footer={<>
+      <AdminButton icon="close" type="button" onClick={onClose}>Cerrar</AdminButton>
       {href ? (
         <a
           className="admin-btn admin-btn--primary"
@@ -134,16 +140,12 @@ export function MessageTemplateSendDialog({
           <span>Enviar por WhatsApp</span>
         </a>
       ) : (
-        <AdminButton variant="primary" iconNode={<WhatsappIcon size={15} />} disabled>
+        <AdminButton variant="primary" type="button" iconNode={<WhatsappIcon size={15} />} disabled>
           Enviar por WhatsApp
         </AdminButton>
       )}
     </>}>
-      <p className="admin-dialog-text">
-        Elegí una plantilla: el mensaje se completa con los datos reales de {target.label} y se abre en WhatsApp listo para
-        enviar.
-      </p>
-
+      <AdminDialogSection title="Plantilla" stack>
       {templatesResource.loading ? (
         <AdminLoadingRows rows={3} />
       ) : templatesResource.error ? (
@@ -170,18 +172,15 @@ export function MessageTemplateSendDialog({
           </Link>
         </div>
       ) : null}
+      </AdminDialogSection>
 
-      {preview.status === "loading" ? <p className="admin-dialog-text">Armando el mensaje con los datos reales…</p> : null}
-      {preview.status === "error" ? <AdminNote tone="error">{preview.error}</AdminNote> : null}
-      {preview.status === "ready" ? (
-        <>
-          <span className="admin-field-label">Vista previa</span>
-          <pre className="admin-message-preview">{preview.message}</pre>
-          {!href ? <AdminNote tone="error">El cliente no tiene teléfono cargado.</AdminNote> : null}
-        </>
+      {preview.status === "loading" || preview.status === "ready" ? (
+        <AdminDialogSection title="Vista previa" stack>
+          {preview.status === "loading" ? <p className="admin-dialog-text">Armando el mensaje con los datos reales…</p> : null}
+          {preview.status === "ready" ? <pre className="admin-message-preview">{preview.message}</pre> : null}
+        </AdminDialogSection>
       ) : null}
 
-      {registerError ? <AdminNote tone="error">{registerError}</AdminNote> : null}
       {registered && !registerError ? (
         <AdminNote tone="ok">
           {registered === "already"

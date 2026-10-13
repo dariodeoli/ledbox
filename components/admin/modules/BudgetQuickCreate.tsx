@@ -59,17 +59,25 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
     onCreated(created, formClientId);
   }
 
-  if (!writable) return <AdminDialog title="Crear evento" icon="events" onClose={onClose}><AdminNote>No tenés permiso para crear eventos.</AdminNote></AdminDialog>;
+  if (!writable) {
+    return (
+      <AdminDialog title="Crear evento" icon="events" size="sm" onClose={onClose} footer={<AdminButton icon="close" type="button" onClick={onClose}>Cerrar</AdminButton>}>
+        <AdminNote>No tenés permiso para crear eventos.</AdminNote>
+      </AdminDialog>
+    );
+  }
 
   return <AdminDialog
     title="Crear evento"
     icon="events"
+    size="md"
     description="Queda elegido en el presupuesto. Los datos de operación son opcionales."
+    error={error}
     dirty={dirty}
     onClose={onClose}
     footer={({ requestClose }) => <>
       <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>Cancelar</AdminButton>
-      <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>Crear evento</AdminButton>
+      <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy} busyLabel="Guardando…">Crear evento</AdminButton>
     </>}
   >
     <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
@@ -80,7 +88,6 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
             placeholder="Buscá por nombre o empresa…" emptyLabel={clientsLoading ? "Cargando clientes…" : "Creá un cliente desde el campo Cliente del presupuesto."} />}
       </EventQuickFields>
       {limitError ? <AdminPlanLimitNote message={limitError} /> : null}
-      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
     </form>
   </AdminDialog>;
 }

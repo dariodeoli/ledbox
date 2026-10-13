@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { canManageOrganization } from "@/lib/admin-policy";
 import { formatDate, formatMoney, formatNumber, planRequestStatusLabel, planRequestStatusTone } from "@/lib/admin-format";
@@ -19,6 +19,7 @@ import {
   AdminRow,
   AdminCell,
   AdminTable,
+  AdminDialogSection,
 } from "../AdminUI";
 
 /**
@@ -107,13 +108,29 @@ function PlanRequestDialog({
   onClose: () => void;
 }) {
   const [note, setNote] = useState("");
+  const formId = useId();
   return (
-    <AdminDialog title={`Solicitar el plan ${plan.name}`} icon="plan" onClose={onClose}>
-      <p className="admin-dialog-text">
-        La solicitud queda registrada con tu usuario y el equipo de Owncoding aplica el cambio.{" "}
-        <strong>Todavía no hay pasarela de pago</strong>: el cobro del plan se coordina aparte.
-      </p>
+    <AdminDialog
+      title={`Solicitar el plan ${plan.name}`}
+      icon="plan"
+      size="md"
+      description="La solicitud queda registrada con tu usuario y el equipo de Owncoding aplica el cambio. Todavía no hay pasarela de pago: el cobro del plan se coordina aparte."
+      error={error}
+      dirty={note.trim() !== ""}
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+            Cancelar
+          </AdminButton>
+          <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy} busyLabel="Enviando…">
+            Enviar solicitud
+          </AdminButton>
+        </>
+      )}
+    >
       <form
+        id={formId}
         className="admin-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -121,25 +138,18 @@ function PlanRequestDialog({
         }}
         noValidate
       >
-        <TextAreaField
-          label="Nota para el equipo (opcional)"
-          rows={3}
-          maxLength={400}
-          value={note}
-          onChange={setNote}
-          placeholder="Ej.: necesitamos sumar 4 usuarios y facturar a 30 días."
-          hint="Máximo 400 caracteres."
-        />
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-        <div className="admin-dialog-foot">
-          <span className="admin-dialog-spacer" />
-          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
-            Cancelar
-          </AdminButton>
-          <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
-            Enviar solicitud
-          </AdminButton>
-        </div>
+        <AdminDialogSection title="Solicitud">
+          <TextAreaField
+            label="Nota para el equipo (opcional)"
+            wide
+            rows={3}
+            maxLength={400}
+            value={note}
+            onChange={setNote}
+            placeholder="Ej.: necesitamos sumar 4 usuarios y facturar a 30 días."
+            hint="Máximo 400 caracteres."
+          />
+        </AdminDialogSection>
       </form>
     </AdminDialog>
   );

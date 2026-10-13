@@ -336,32 +336,24 @@ export function UsuariosModule() {
           title="Nuevo usuario"
           icon="users"
           description="Crea el acceso al panel con una contraseña inicial y el rol elegido."
+          size="md"
+          error={createValidity.error ?? (formError || null)}
           dirty={createDirty}
           onClose={() => setShowForm(false)}
           footer={({ requestClose }) => (
             <>
-              {createValidity.error || formError || formLimit ? (
-                <div className="admin-dialog-footer-note">
-                  {createValidity.error ? (
-                    <AdminNote tone="error">{createValidity.error}</AdminNote>
-                  ) : formError ? (
-                    <AdminNote tone="error">{formError}</AdminNote>
-                  ) : (
-                    <AdminPlanLimitNote message={formLimit} />
-                  )}
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
                 Cancelar
               </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" form={createFormId} busy={busy} disabled={createValidity.error !== null}>
+              <AdminButton type="submit" variant="primary" icon="check" form={createFormId} busy={busy} busyLabel="Creando…" disabled={createValidity.error !== null}>
                 Crear usuario
               </AdminButton>
             </>
           )}
         >
           <form id={createFormId} className="admin-form" onSubmit={submit} aria-busy={busy || undefined}>
-            <AdminDialogSection title="Acceso">
+            {formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
+            <AdminDialogSection title="Persona">
               <TextField
                 label="Nombre"
                 required
@@ -378,6 +370,8 @@ export function UsuariosModule() {
                 onChange={(value) => { setForm({ ...form, email: value }); setFormError(""); }}
                 placeholder="ana@ledbox.online"
               />
+            </AdminDialogSection>
+            <AdminDialogSection title="Acceso">
               <PasswordField
                 label="Contraseña inicial"
                 hint="Mínimo 12 caracteres"
@@ -403,15 +397,12 @@ export function UsuariosModule() {
           title={`Editar usuario · ${editing.name}`}
           icon="users"
           description="Nombre y correo de acceso. Si el correo cambia, se cierran sus sesiones abiertas."
+          size="md"
+          error={editValidity.error ?? (editError || null)}
           dirty={editDirty}
           onClose={() => setEditing(null)}
           footer={({ requestClose }) => (
             <>
-              {editValidity.error || editError ? (
-                <div className="admin-dialog-footer-note">
-                  <AdminNote tone="error">{editValidity.error ?? editError}</AdminNote>
-                </div>
-              ) : null}
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={editBusy}>
                 Cancelar
               </AdminButton>
@@ -421,6 +412,7 @@ export function UsuariosModule() {
                 icon="check"
                 form={editFormId}
                 busy={editBusy}
+                busyLabel="Guardando…"
                 disabled={editValidity.error !== null || !canEditUser(editing)}
               >
                 Guardar cambios
@@ -429,7 +421,7 @@ export function UsuariosModule() {
           )}
         >
           <form id={editFormId} className="admin-form" onSubmit={submitEdit} aria-busy={editBusy || undefined}>
-            <AdminDialogSection title="Acceso">
+            <AdminDialogSection title="Datos">
               <TextField
                 label="Nombre"
                 required
@@ -606,6 +598,8 @@ function InviteDialog({
       title="Invitar por correo"
       icon="mail"
       description="Le mandamos el link para sumarse con el rol elegido. Vence en 7 días y queda pendiente hasta que la acepte."
+      size="sm"
+      error={inviteValidity.error ?? (localError || (!limitError && error ? error : null))}
       dirty={invite.email !== "" || invite.role !== EMPTY_INVITE.role}
       onClose={onClose}
       footer={({ requestClose }) => (
@@ -613,13 +607,15 @@ function InviteDialog({
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
-          <AdminButton type="submit" variant="primary" icon="mail" form={formId} busy={busy} disabled={inviteValidity.error !== null}>
+          <AdminButton type="submit" variant="primary" icon="mail" form={formId} busy={busy} busyLabel="Enviando…" disabled={inviteValidity.error !== null}>
             Enviar invitación
           </AdminButton>
         </>
       )}
     >
       <form id={formId} className="admin-form" onSubmit={submit} noValidate>
+        {limitError && error ? <AdminPlanLimitNote message={error} /> : null}
+        <AdminDialogSection title="Invitación">
         <EmailField
           label="Correo"
           required
@@ -640,15 +636,7 @@ function InviteDialog({
           options={ROLE_SELECT_OPTIONS}
           hint="El propietario no se invita por correo."
         />
-        {inviteValidity.error || localError ? (
-          <AdminNote tone="error">{inviteValidity.error ?? localError}</AdminNote>
-        ) : error ? (
-          limitError ? (
-            <AdminPlanLimitNote message={error} />
-          ) : (
-            <AdminNote tone="error">{error}</AdminNote>
-          )
-        ) : null}
+        </AdminDialogSection>
       </form>
     </AdminDialog>
   );
@@ -668,32 +656,19 @@ function RevokeInviteDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const formId = useId();
-
   return (
-    <AdminDialog
+    <AdminConfirmDialog
       title="Revocar invitación"
       icon="trash"
+      danger
+      message={`¿Revocar la invitación de ${invitation.email}? El link deja de funcionar y la persona no puede sumarse al equipo con esa invitación. Podés invitarla de nuevo cuando quieras.`}
+      confirmLabel="Revocar"
+      busyLabel="Revocando…"
+      busy={busy}
+      error={error || null}
+      onConfirm={onConfirm}
       onClose={onClose}
-      footer={({ requestClose }) => (
-        <>
-          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
-            Cancelar
-          </AdminButton>
-          <AdminButton type="submit" icon="trash" form={formId} busy={busy}>
-            Revocar
-          </AdminButton>
-        </>
-      )}
-    >
-      <form id={formId} className="admin-form" onSubmit={(event) => { event.preventDefault(); if (!busy) onConfirm(); }}>
-        <p className="admin-dialog-text">
-          ¿Revocar la invitación de <strong>{invitation.email}</strong>? El link deja de funcionar y la persona no puede
-          sumarse al equipo con esa invitación. Podés invitarla de nuevo cuando quieras.
-        </p>
-        {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-      </form>
-    </AdminDialog>
+    />
   );
 }
 

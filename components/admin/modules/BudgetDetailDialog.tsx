@@ -171,7 +171,7 @@ export function BudgetDetailDialog({
           {actions.trashMenu && actions.trashMenu.length > 0 ? <AdminActionsMenu label={`Más acciones de ${budget.title}`} items={actions.trashMenu} /> : null}
           <span className="admin-dialog-spacer" />
           <AdminButton onClick={onClose}>Cerrar</AdminButton>
-          {primary && actions.onPrimary ? <AdminButton variant="primary" busy={busy} onClick={actions.onPrimary}>{primary.label}</AdminButton> : null}
+          {primary && actions.onPrimary ? <AdminButton variant="primary" busy={busy} busyLabel="Procesando…" onClick={actions.onPrimary}>{primary.label}</AdminButton> : null}
         </div>
       }
     >

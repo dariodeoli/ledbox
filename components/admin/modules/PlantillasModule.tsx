@@ -1,7 +1,7 @@
 "use client";
 
 import { kpiState } from "@/components/admin/kpi-state";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateShort, formatDateTime, formatNumber, messageTemplateCategoryLabel } from "@/lib/admin-format";
 import { canWriteTemplateCategory, matchesQuery } from "@/lib/admin-policy";
@@ -26,7 +26,9 @@ import {
   AdminButton,
   AdminCell,
   AdminDataState,
+  AdminConfirmDialog,
   AdminDialog,
+  AdminDialogSection,
   AdminEmpty,
   AdminKpi,
   AdminKpis,
@@ -75,6 +77,15 @@ export function PlantillasModule() {
   const [category, setCategory] = useState<MessageTemplateCategoryValue>("budget");
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<TemplateForm | null>(null);
+  const templateFormId = useId();
+  // Foto del formulario al abrirlo: «hay cambios sin guardar» es compararlo con ella.
+  const formRef = useRef(form);
+  formRef.current = form;
+  const formBaseRef = useRef("");
+  const formKey = form ? form.id || "nueva" : "";
+  useEffect(() => {
+    formBaseRef.current = formRef.current ? JSON.stringify(formRef.current) : "";
+  }, [formKey]);
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -413,8 +424,27 @@ export function PlantillasModule() {
       </AdminPanel>
 
       {form ? (
-        <AdminDialog title={form.id ? `Editar plantilla · ${form.title}` : "Nueva plantilla"} size="wide" icon="mail" onClose={() => setForm(null)}>
-          <form className="admin-template-form" onSubmit={submitTemplate} aria-busy={busy || undefined}>
+        <AdminDialog
+          title={form.id ? `Editar plantilla · ${form.title}` : "Nueva plantilla"}
+          size="lg"
+          icon="mail"
+          description="Mensaje reutilizable con variables que se completan con el dato real al enviar."
+          error={formError}
+          dirty={formBaseRef.current !== "" && JSON.stringify(form) !== formBaseRef.current}
+          onClose={() => setForm(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={templateFormId} busy={busy} busyLabel="Guardando…">
+                {form.id ? "Guardar cambios" : "Cargar plantilla"}
+              </AdminButton>
+            </>
+          )}
+        >
+          <form id={templateFormId} className="admin-form admin-template-form" onSubmit={submitTemplate} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Plantilla">
             <SelectField
               label="Categoría"
               required
@@ -433,12 +463,8 @@ export function PlantillasModule() {
               onChange={(value) => setForm({ ...form, title: value })}
               placeholder="Ej.: Recordatorio de pago"
             />
-            <SwitchField
-              label="Activa"
-              checked={form.active}
-              onChange={(active) => setForm({ ...form, active })}
-              hint="Solo las activas se ofrecen al enviar."
-            />
+            </AdminDialogSection>
+            <AdminDialogSection title="Mensaje">
             <TextAreaField
               label="Mensaje"
               wide
@@ -481,38 +507,32 @@ export function PlantillasModule() {
                 <AdminNote tone="error">{preview?.error ?? "Escribí el mensaje para ver la vista previa."}</AdminNote>
               )}
             </div>
-
-            {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
-
-            <div className="admin-dialog-foot">
-              <span className="admin-dialog-spacer" />
-              <AdminButton icon="close" type="button" onClick={() => setForm(null)} disabled={busy}>
-                Cancelar
-              </AdminButton>
-              <AdminButton type="submit" variant="primary" icon="check" busy={busy}>
-                {form.id ? "Guardar cambios" : "Cargar plantilla"}
-              </AdminButton>
-            </div>
+            </AdminDialogSection>
+            <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(form.id) && !form.active} hint="estado de la plantilla">
+            <SwitchField
+              label="Activa"
+              checked={form.active}
+              onChange={(active) => setForm({ ...form, active })}
+              hint="Solo las activas se ofrecen al enviar."
+            />
+            </AdminDialogSection>
           </form>
         </AdminDialog>
       ) : null}
 
       {deleting ? (
-        <AdminDialog title={`Borrar plantilla · ${deleting.title}`} icon="trash" onClose={() => setDeleting(null)}>
-          <AdminNote tone="error">
-            Se borra la plantilla «{deleting.title}» de {messageTemplateCategoryLabel(deleting.category).toLowerCase()}. Los
-            envíos ya registrados en la auditoría no se tocan.
-          </AdminNote>
-          <div className="admin-dialog-foot">
-            <span className="admin-dialog-spacer" />
-            <AdminButton icon="close" type="button" onClick={() => setDeleting(null)} disabled={busy}>
-              Cancelar
-            </AdminButton>
-            <AdminButton type="button" variant="primary" icon="trash" busy={busy} onClick={() => void confirmDelete()}>
-              Borrar plantilla
-            </AdminButton>
-          </div>
-        </AdminDialog>
+        <AdminConfirmDialog
+          title={`Borrar plantilla · ${deleting.title}`}
+          icon="trash"
+          danger
+          message={`Se borra la plantilla «${deleting.title}» de ${messageTemplateCategoryLabel(deleting.category).toLowerCase()}. Los envíos ya registrados en la auditoría no se tocan.`}
+          confirmLabel="Borrar plantilla"
+          busyLabel="Borrando…"
+          busy={busy}
+          error={rowError}
+          onConfirm={() => void confirmDelete()}
+          onClose={() => setDeleting(null)}
+        />
       ) : null}
     </div>
   );

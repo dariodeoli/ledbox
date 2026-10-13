@@ -5,7 +5,7 @@ import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime } from "@/lib/admin-format";
 import { whatsappHref } from "@/lib/admin-format";
 import { TextField } from "../AdminFields";
-import { AdminButton, AdminDialog, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminConfirmDialog, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
  * «Compartir catálogo mayorista» en la ficha del cliente. El link es privado,
@@ -111,19 +111,18 @@ export function ClientCatalogAccess({ clientId, clientName, phone, canEdit }: { 
         </span>
       ) : null}
       {confirmRevoke ? (
-        <AdminDialog
+        <AdminConfirmDialog
           title="Revocar el link mayorista"
-          description={`${clientName} dejará de poder abrir su catálogo mayorista con ese link.`}
+          icon="close"
+          danger
+          message={`${clientName} dejará de poder abrir su catálogo mayorista con ese link. Los pedidos que ya hizo siguen en el panel. Podés generar un link nuevo cuando quieras.`}
+          confirmLabel="Revocar link"
+          busyLabel="Revocando…"
+          busy={busy}
+          error={error || null}
+          onConfirm={() => void revoke()}
           onClose={() => setConfirmRevoke(false)}
-          footer={
-            <>
-              <AdminButton onClick={() => setConfirmRevoke(false)}>Cancelar</AdminButton>
-              <AdminButton variant="primary" busy={busy} onClick={() => void revoke()}>Revocar link</AdminButton>
-            </>
-          }
-        >
-          <p>Los pedidos que ya hizo siguen en el panel. Podés generar un link nuevo cuando quieras.</p>
-        </AdminDialog>
+        />
       ) : null}
     </AdminPanel>
   );
