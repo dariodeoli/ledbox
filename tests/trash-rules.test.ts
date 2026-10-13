@@ -181,3 +181,19 @@ test("E2: rutas de papelera de Evento/Producto exigen la capacidad correcta y el
   assert.match(read("lib/server/trash-ops.ts"), /blockersFor\("InventoryItem"/);
   assert.match(read("lib/server/resumen-board.ts"), /FROM "Event"\s+WHERE "organizationId" = \$\{organizationId\} AND "deletedAt" IS NULL/);
 });
+
+test("papelera E2 fix: el reporte de dinero incluye eliminados, el lock del evento y la tabla cerrada (fuente)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (path: string) => readFileSync(path, "utf8");
+  const report = read("lib/server/report-events.ts");
+  assert.match(report, /deletedAt: undefined/);
+  assert.match(report, /\(eliminado\)/);
+  assert.match(read("app/(admin)/(print)/imprimir/reporte/page.tsx"), /loadMonthlyReportEvents/);
+  assert.match(read("lib/server/rental-report.ts"), /rentableItemWhere\(organizationId\), deletedAt: undefined, id: \{ in: usedIds \}/);
+  const availability = read("lib/server/inventory-availability.ts");
+  assert.match(availability, /"deletedAt" IS NULL FOR UPDATE/);
+  assert.ok(availability.indexOf("lockInventoryItems(tx, options.organizationId, [options.inventoryId])") < availability.indexOf("lockLiveEvent(tx, options.organizationId, options.eventId)"), "orden: ítems antes que evento");
+  const trash = read("lib/server/trash.ts");
+  assert.match(trash, /const TABLES = \{/);
+  assert.match(trash, /as const satisfies Record<TrashModel, string>/);
+});

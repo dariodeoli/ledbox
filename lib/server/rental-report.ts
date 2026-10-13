@@ -218,6 +218,7 @@ async function loadOccupancyRows(
   const itemSelect = {
     id: true,
     name: true,
+    deletedAt: true,
     quantity: true,
     incidentHold: true,
     bufferBeforeMin: true,
@@ -225,7 +226,7 @@ async function loadOccupancyRows(
     _count: { select: MAINTENANCE_UNITS_SELECT },
   } satisfies Prisma.InventoryItemSelect;
   const [used, unused, unusedCount] = await Promise.all([
-    usedIds.length ? db.inventoryItem.findMany({ where: { ...rentableItemWhere(organizationId), id: { in: usedIds } }, select: itemSelect }) : Promise.resolve([]),
+    usedIds.length ? db.inventoryItem.findMany({ where: { ...rentableItemWhere(organizationId), deletedAt: undefined, id: { in: usedIds } }, select: itemSelect }) : Promise.resolve([]),
     unusedMode === "aggregate"
       ? Promise.resolve([])
       : db.inventoryItem.findMany({
@@ -242,7 +243,7 @@ async function loadOccupancyRows(
     const row = occupancyRow(
       {
         id: item.id,
-        name: item.name,
+        name: item.deletedAt ? `${item.name} (eliminado)` : item.name,
         quantity: item.quantity,
         maintenance: maintenanceUnits(item),
         buffers: resolveRentalBuffers(settings, item),
