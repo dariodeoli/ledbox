@@ -544,7 +544,7 @@ export function ClientesModule() {
           ) : undefined
         }
       />
-      <AdminKpis state={kpiState(clients)} label="Indicadores de clientes (tocá uno para filtrar la lista)">
+      <AdminKpis className="admin-kpis--stages" state={kpiState(clients)} label="Indicadores de clientes (tocá uno para filtrar la lista)">
         <AdminKpi
           label="Activos" icon="check"
           value={formatNumber(totals.active)}
@@ -730,7 +730,7 @@ export function ClientesModule() {
               { label: "Eventos", end: true },
               { label: "Contratado", end: true },
               { label: "Saldo", end: true },
-              { label: "Última actividad", end: true },
+              { label: "Actividad", end: true },
               { label: "Acciones", end: true },
             ]}
           >

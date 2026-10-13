@@ -225,7 +225,7 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
         </div>
       </header>
 
-      <AdminKpis label={`Indicadores de ${name}`}>
+      <AdminKpis className="admin-kpis--ficha" label={`Indicadores de ${name}`}>
         <AdminKpi label="Contratado" icon="receipt" value={formatMoney(metrics.contracted)} note={`${formatNumber(metrics.contracts)} contrato${metrics.contracts === 1 ? "" : "s"}`} />
         <AdminKpi label="Cobrado" icon="wallet" value={formatMoney(metrics.collected)} tone={metrics.collected > 0 ? "ok" : undefined} note="cobros recibidos" />
         <AdminKpi

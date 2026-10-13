@@ -110,6 +110,7 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   assert.match(ficha, /client\.type === "RESELLER" \? \(\s*<ClientCatalogAccess/, "el catálogo mayorista se ofrece a los mayoristas");
   assert.match(ficha, /canWriteClients\(role\)/);
   const css = repoFile("app/globals.css");
+  assert.match(css, /\.admin-kpis\.admin-kpis--ficha \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/, "la franja de la ficha son cinco indicadores en una fila");
   assert.match(css, /\.admin-ficha-main > \.admin-subtabs \{ flex-wrap: nowrap; overflow-x: auto; \}/, "las pestañas se desplazan en móvil");
   assert.match(css, /\.admin-ficha-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/, "la columna lateral pasa debajo");
 });

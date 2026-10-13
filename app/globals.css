@@ -1863,11 +1863,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Clientes (rediseño): tabla esencial —cliente, tipo, contacto, eventos,
    contratado, saldo, última actividad y una acción visible + «•••»—. La fila
    entera abre la ficha con un enlace extendido (`.admin-row-link::after`). */
-.admin-table--clientes { --clientes-cols: minmax(10rem, 1.8fr) 5.5rem minmax(8rem, 1.2fr) 3.5rem 6.5rem 6.5rem 5.5rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 56rem; }
+.admin-table--clientes { --clientes-cols: minmax(9.5rem, 1.8fr) 6.75rem minmax(8.5rem, 1.3fr) 4.5rem 7rem 7rem 6rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 58rem; }
 .admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
 .admin-table--clientes .admin-cell--actions { overflow: visible; }
 @media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }
-.admin-table--clientes .admin-cell--actions .admin-btn--row { padding-inline: 10px; letter-spacing: .04em; }
+.admin-table--clientes .admin-cell--actions .admin-btn--row { padding-inline: 8px; font-size: 11px; letter-spacing: 0; }
 .admin-row-link { color: inherit; text-decoration: none; }
 .admin-row-link::after { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
 .admin-row-link:hover strong { text-decoration: underline; }
@@ -1877,10 +1877,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-cards-foot { position: relative; z-index: 1; }
 .admin-segments { display: flex; flex-wrap: wrap; gap: 6px; }
 .admin-segments .admin-subtab { min-height: 36px; }
-@media (max-width: 980px) {
-  .admin-segments { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
-  .admin-segments .admin-subtab { flex: 0 0 auto; min-height: 44px; }
-}
 .admin-table--eventos { --eventos-cols: 7.5rem 7rem minmax(8.5rem, 1.6fr) minmax(6.5rem, 1.1fr) minmax(5.5rem, 1fr) 4rem 4.5rem 5.75rem 7.5rem; --admin-cols: var(--eventos-cols); --admin-table-min: 61rem; }
 /* Presupuestos (rediseño): una sola plantilla —número, cliente, evento o título,
    monto, seña/saldo, etapa, vencimiento y la acción de la fila—. Filas finas de
@@ -4513,6 +4509,13 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-ficha-sub { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0 0; color: var(--a-muted-2); font-size: 12.5px; }
 .admin-ficha-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .admin-ficha-actions .admin-btn { min-height: 44px; text-decoration: none; }
+.admin-kpis.admin-kpis--ficha { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.admin-kpis--ficha .admin-kpi { flex-wrap: wrap; }
+.admin-kpis--ficha .admin-kpi-label, .admin-kpis--ficha .admin-kpi-note { flex-basis: 100%; }
+@media (max-width: 980px) {
+  .admin-kpis.admin-kpis--ficha { display: flex; gap: 8px; margin-inline: -16px; padding: 0 16px 4px; overflow-x: auto; scroll-snap-type: x proximity; }
+  .admin-kpis--ficha .admin-kpi { flex: 0 0 10.5rem; scroll-snap-align: start; }
+}
 .admin-ficha-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 12px; align-items: start; }
 .admin-ficha-main, .admin-ficha-side { display: grid; gap: 12px; min-width: 0; }
 .admin-ficha-main > .admin-subtabs { margin: 0; }
@@ -4532,6 +4535,12 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .admin-ficha-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-ficha-main > .admin-subtabs { flex-wrap: nowrap; overflow-x: auto; }
   .admin-ficha-main .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+}
+/* Clientes: segmentos desplazables y acciones de tarjeta táctiles en móvil. */
+@media (max-width: 980px) {
+  .admin-segments { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+  .admin-segments .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+  .admin-cards-foot .admin-iconbtn { min-width: 44px; min-height: 44px; }
 }
 .admin-quote-title-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .admin-quote-title-btn:hover .admin-quote-title { text-decoration: underline; }

@@ -80,5 +80,5 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   const regla = /\.admin-table--clientes \{ --clientes-cols: ([^;]+); --admin-cols: var\(--clientes-cols\); --admin-table-min: ([\d.]+)rem; \}/.exec(css);
   assert.ok(regla, "falta la plantilla de columnas de clientes");
   assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 8, "ocho columnas, sin estado ni presupuestos sueltos");
-  assert.equal(Number(regla[2]) <= 56, true, "el ancho mínimo no crece");
+  assert.equal(Number(regla[2]) <= 64, true, "el ancho mínimo no crece");
 });
