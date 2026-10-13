@@ -5,6 +5,7 @@ import { useAdminSession } from "../AdminShell";
 import { AjustesTabs, type AdminAjustesSection } from "./AjustesTabs";
 import { AlquileresSettings } from "./AlquileresSettings";
 import { CorreoModule } from "./CorreoModule";
+import { EliminadosModule } from "./EliminadosModule";
 import { EmpresaModule } from "./EmpresaModule";
 import { TiendaWebSettings } from "./TiendaWebSettings";
 import { PlanModule } from "./PlanModule";
@@ -38,6 +39,7 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
       {section === "tienda" && canManage ? <TiendaWebSettings /> : null}
       {section === "plan" ? <PlanModule /> : null}
       {section === "usuarios" && canManage ? <UsuariosModule /> : null}
+      {section === "eliminados" && canManage ? <EliminadosModule /> : null}
     </>
   );
 }
