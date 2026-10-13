@@ -74,6 +74,7 @@ import {
   TextAreaField,
   TextField,
 } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
@@ -742,7 +743,7 @@ export function EventosModule() {
         hint="Agenda, checklist de campo y equipos asignados por evento."
         meta={`${formatNumber(events.length)} eventos`}
       />
-      <AdminKpis loading={operations.data == null} label="Indicadores de eventos">
+      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
         <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
         <AdminKpi label="En curso" icon="checkin" value={formatNumber(inProgress)} note="operación activa" />
@@ -931,7 +932,7 @@ export function EventosModule() {
       {activeView === "calendar" ? (
         /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
-          <CalendarioModule events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
+          <CalendarioModule hideKpis events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
       <>

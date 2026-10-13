@@ -108,6 +108,7 @@ import {
   TextField,
   type ComboboxOption,
 } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
 import { currentMonthKey, monthKeyLabel, monthOf } from "@/lib/fiscal";
@@ -1602,7 +1603,7 @@ export function PresupuestosModule() {
         hint="Vigencia, margen, portal del cliente y próximos pasos comerciales."
         meta={`${formatNumber(rows.length)} visibles`}
       />
-      <AdminKpis loading={budgetsResource.data == null} label="Indicadores de presupuestos">
+      <AdminKpis state={kpiState(budgetsResource)} label="Indicadores de presupuestos">
         <AdminKpi
           label="Vigentes" icon="budgets"
           value={formatNumber(kpis.inPlay)}

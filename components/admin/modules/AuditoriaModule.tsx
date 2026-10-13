@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   auditActionLabel,
@@ -226,7 +227,7 @@ function AuditoriaView() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={audit.data == null} label="Indicadores de auditoría">
+      <AdminKpis state={kpiState(audit)} label="Indicadores de auditoría">
         <AdminKpi label="Registros" icon="audit" value={formatNumber(total)} note={filtersActive ? "según los filtros" : "histórico completo"} tone="accent" />
         <AdminKpi label="Página" icon="overview" value={`${formatNumber(currentPage)} / ${formatNumber(pageCount)}`} note={`${formatNumber(currentPageSize)} por página`} />
         <AdminKpi label="Actores" icon="users" value={formatNumber(actors.length)} note="con actividad registrada" tone="ok" />

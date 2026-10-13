@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useCallback, useId, useMemo, useState } from "react";
 import {
   formatDateShort,
@@ -588,11 +589,12 @@ export function ProveedoresModule() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={suppliersResource.data == null || jobsResource.data == null} label="Indicadores de proveedores">
-        <AdminKpi label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
-        <AdminKpi label="Trabajos abiertos" icon="suppliers" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
-        <AdminKpi label="Saldo por pagar" icon="finance" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
+      <AdminKpis label="Indicadores de proveedores">
+        <AdminKpi state={kpiState(suppliersResource)} label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
+        <AdminKpi state={kpiState(jobsResource)} label="Trabajos abiertos" icon="suppliers" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
+        <AdminKpi state={kpiState(jobsResource)} label="Saldo por pagar" icon="finance" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
         <AdminKpi
+          state={kpiState(jobsResource)}
           label="Vencidos" icon="alert"
           value={formatNumber(totals.overdue)}
           note="con fecha prevista pasada"

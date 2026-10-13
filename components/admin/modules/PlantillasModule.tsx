@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useMemo, useRef, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateShort, formatDateTime, formatNumber, messageTemplateCategoryLabel } from "@/lib/admin-format";
@@ -224,7 +225,7 @@ export function PlantillasModule() {
   return (
     <div className="admin-module-page">
       <AjustesTabs active="plantillas" />
-      <AdminKpis loading={templatesResource.data == null} label="Indicadores de plantillas">
+      <AdminKpis state={kpiState(templatesResource)} label="Indicadores de plantillas">
         <AdminKpi label="Plantillas" icon="mail" value={formatNumber(totals.total)} note="de mensajes de WhatsApp" />
         <AdminKpi label="Activas" icon="check" value={formatNumber(totals.active)} note="disponibles para enviar" tone="ok" />
         <AdminKpi label="Inactivas" icon="eye-off" value={formatNumber(totals.inactive)} note="ocultas en los módulos" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useMemo, useState } from "react";
 import {
   daysUntilDue,
@@ -221,7 +222,7 @@ export function FirmasModule() {
   return (
     <div className="admin-module-page">
       <PresupuestosTabs active="firmas" />
-      <AdminKpis loading={resource.data == null} label="Indicadores de firmas">
+      <AdminKpis state={kpiState(resource)} label="Indicadores de firmas">
         <AdminKpi label="En curso" icon="pen" value={formatNumber(kpis.active)} note="esperando la firma del cliente" />
         <AdminKpi
           label="Por vencer"

@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useId, useMemo, useState } from "react";
 import {
   formatCalendarDayShort,
@@ -188,7 +189,7 @@ export function PromotorasModule() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={resources.data == null} label="Indicadores de promotoras">
+      <AdminKpis state={kpiState(resources)} label="Indicadores de promotoras">
         <AdminKpi label="Promotoras" icon="promoters" value={formatNumber(promoters.length)} note="activas" />
         <AdminKpi label="Disponibles" icon="check" value={formatNumber(totals.available)} note="pueden tomar tareas" tone="ok" />
         <AdminKpi

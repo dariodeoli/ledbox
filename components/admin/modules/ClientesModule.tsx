@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -503,7 +504,7 @@ export function ClientesModule() {
         hint="Cartera, responsables y actividad comercial en una vista operativa."
         meta={`${formatNumber(rows.length)} visibles`}
       />
-      <AdminKpis loading={clients.data == null} label="Indicadores de clientes">
+      <AdminKpis state={kpiState(clients)} label="Indicadores de clientes">
         <AdminKpi label="Clientes" icon="clients" value={formatNumber(totals.total)} note="en cartera" />
         <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
         <AdminKpi

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button as SharedButton } from "owncoding-ui";
+import type { KpiState } from "@/components/admin/kpi-state";
 import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
@@ -963,30 +964,31 @@ export function AdminModuleContext({
   );
 }
 
-const AdminKpiLoadingContext = createContext(false);
+const AdminKpiStateContext = createContext<KpiState>("ready");
 
 /**
- * Grilla de indicadores. Con `loading` todos los AdminKpi hijos muestran un
- * esqueleto en lugar de un «0» inventado hasta que llegan los datos reales
- * (regla «estados honestos»). Un 0 ya cargado se sigue mostrando como 0.
+ * Grilla de indicadores. Con `state="loading"` todos los AdminKpi hijos muestran
+ * un esqueleto en lugar de un «0» inventado; con `state="error"` (falló y no hay
+ * datos) muestran «—». Un 0 ya cargado se sigue mostrando como 0.
  */
 export function AdminKpis({
-  loading = false,
+  state = "ready",
   className,
   label,
   children,
 }: {
-  loading?: boolean;
+  state?: KpiState;
   className?: string;
   label?: string;
   children: React.ReactNode;
 }) {
   return (
-    <AdminKpiLoadingContext.Provider value={loading}>
-      <section className={className ? `admin-kpis ${className}` : "admin-kpis"} aria-label={label} aria-busy={loading || undefined}>
+    <AdminKpiStateContext.Provider value={state}>
+      <section className={className ? `admin-kpis ${className}` : "admin-kpis"} aria-label={label} aria-busy={state === "loading"}>
+        {state === "loading" ? <span className="sr-only" role="status">Cargando indicadores</span> : null}
         {children}
       </section>
-    </AdminKpiLoadingContext.Provider>
+    </AdminKpiStateContext.Provider>
   );
 }
 
@@ -997,6 +999,7 @@ export function AdminKpi({
   tone,
   icon,
   loading,
+  state,
 }: {
   label: string;
   /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
@@ -1004,13 +1007,17 @@ export function AdminKpi({
   note?: string;
   tone?: AdminTone;
   icon?: AdminIconName;
+  /** Explícito: `false` pisa el estado del grupo; `true` fuerza el esqueleto. */
   loading?: boolean;
+  /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
+  state?: KpiState;
 }) {
-  const groupLoading = useContext(AdminKpiLoadingContext);
-  const pending = loading ?? groupLoading ?? false;
-  const empty = pending || value == null;
+  const groupState = useContext(AdminKpiStateContext);
+  const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
+  const current: KpiState = effective === "ready" && value == null ? "loading" : effective;
+  const shown = current === "ready";
   return (
-    <div className="admin-kpi" data-tone={empty ? undefined : tone} data-loading={empty ? "true" : undefined}>
+    <div className="admin-kpi" data-tone={shown ? tone : undefined} data-loading={current === "loading" ? "true" : undefined} data-state={current}>
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -1020,15 +1027,20 @@ export function AdminKpi({
         {/* El texto va en su propio nodo para poder truncarlo sin perder el ícono. */}
         <span className="admin-kpi-label-text" title={label}>{label}</span>
       </span>
-      {empty ? (
-        <strong className="admin-kpi-value admin-kpi-value--loading" role="status" aria-label="Cargando">
+      {current === "loading" ? (
+        <strong className="admin-kpi-value admin-kpi-value--loading">
           <span className="admin-kpi-skeleton" aria-hidden="true" />
+        </strong>
+      ) : current === "error" ? (
+        <strong className="admin-kpi-value" title="No pudimos cargar este dato">
+          <span aria-hidden="true">—</span>
+          <span className="sr-only">Sin dato: no pudimos cargarlo</span>
         </strong>
       ) : (
         /* El `title` deja leer completo lo que el compacto trunca (issue #113). */
-        <strong className="admin-kpi-value" title={value}>{value}</strong>
+        <strong className="admin-kpi-value" title={value ?? undefined}>{value}</strong>
       )}
-      {note && !empty ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
+      {note && shown ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
     </div>
   );
 }

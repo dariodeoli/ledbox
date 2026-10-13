@@ -96,6 +96,7 @@ import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { useAdminNarrowViewport } from "../AdminBoard";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { BudgetProofDialog } from "./PresupuestosModule";
 import { ConciliacionBancaria } from "./ConciliacionBancaria";
@@ -2355,20 +2356,23 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               </Link>
             </span>
           </AdminToolbar>
-          <AdminKpis loading={finance.data == null || expected.data == null} label="Indicadores de finanzas">
+          <AdminKpis label="Indicadores de finanzas">
             <AdminKpi
+              state={kpiState(finance)}
               label="Cobrado a clientes" icon="finance"
               value={formatMoney(totals.collected)}
               note={`${formatNumber(totals.collectedCount)} cobros`}
               tone="ok"
             />
             <AdminKpi
+              state={kpiState(finance)}
               label="Por cobrar" icon="finance"
               value={formatMoney(totals.pendingTotal)}
               note={pendingMeta}
               tone={totals.overdue > 0 ? "danger" : totals.pendingCount > 0 ? "warn" : undefined}
             />
             <AdminKpi
+              state={kpiState(expected)}
               label="Por confirmar" icon="clock"
               value={formatMoney(expectedSummary.pending.total)}
               note={
@@ -2378,8 +2382,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               }
               tone={expectedSummary.overdue.count > 0 ? "danger" : expectedSummary.proof.count > 0 ? "warn" : undefined}
             />
-            <AdminKpi label="Anticipos pagados" icon="suppliers" value={formatMoney(totals.advances)} note="a proveedores" />
+            <AdminKpi state={kpiState(expected)} label="Anticipos pagados" icon="suppliers" value={formatMoney(totals.advances)} note="a proveedores" />
             <AdminKpi
+              state={kpiState(finance)}
               label="Saldo por pagar" icon="suppliers"
               value={formatMoney(totals.payable)}
               note={`${formatNumber(jobs.length)} trabajos de proveedor`}
@@ -3671,7 +3676,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             ) : null
           }
         >
-          <AdminKpis loading={treasury.data == null} className="admin-kpis--treasury" label="Disponible de tesorería">
+          <AdminKpis state={kpiState(treasury)} className="admin-kpis--treasury" label="Disponible de tesorería">
             <AdminKpi
               label="Disponible en efectivo" icon="wallet"
               value={formatMoney(summary.cash)}

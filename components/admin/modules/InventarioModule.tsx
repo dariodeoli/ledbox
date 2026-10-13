@@ -63,6 +63,7 @@ import {
   type AdminMenuItem,
 } from "../AdminUI";
 import { AttachmentInput, Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
 import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
@@ -1039,7 +1040,7 @@ export function InventarioModule() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={resources.data == null} label="Indicadores de inventario">
+      <AdminKpis state={kpiState(resources)} label="Indicadores de inventario">
         <AdminKpi label="Ítems" icon="inventory" value={formatNumber(inventory.length)} note="controlados" />
         <AdminKpi label="Unidades" icon="inventory" value={formatNumber(totals.units)} note="en total" />
         <AdminKpi

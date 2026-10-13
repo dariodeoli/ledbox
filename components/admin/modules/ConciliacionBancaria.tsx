@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useEffect, useMemo, useState } from "react";
 import {
   datePeriodQuery,
@@ -277,7 +278,7 @@ export function ConciliacionBancaria({
         />
       ) : (
         <>
-          <AdminKpis loading={bank.data == null} className="admin-kpis--conciliacion" label="Indicadores de conciliación bancaria">
+          <AdminKpis state={kpiState(bank)} className="admin-kpis--conciliacion" label="Indicadores de conciliación bancaria">
             <AdminKpi
               label="Pendientes" icon="alert"
               value={formatNumber(summary.pending.count)}

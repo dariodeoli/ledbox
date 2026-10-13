@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -232,9 +233,11 @@ function CalendarItemLink({ item, variant, onSelect }: { item: AdminCalendarItem
   );
 }
 
-export function CalendarioModule({ events = [], eventsLoading = false, eventsError = "", onRetryEvents }: {
+export function CalendarioModule({ events = [], eventsLoading = false, eventsError = "", onRetryEvents, hideKpis = false }: {
   events?: AdminEventPanelRow[];
   eventsLoading?: boolean;
+  /** Embebido en Eventos: esa pantalla ya muestra su fila de indicadores. */
+  hideKpis?: boolean;
   eventsError?: string;
   onRetryEvents?: () => void;
 }) {
@@ -311,12 +314,14 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={calendar.data == null} label="Indicadores del calendario">
+      {hideKpis ? null : (
+      <AdminKpis state={kpiState(calendar)} label="Indicadores del calendario">
         <AdminKpi label="Movimientos" icon="calendar" value={formatNumber(items.length)} note="en el período" />
         <AdminKpi label="Cobros" icon="finance" value={formatMoney(collected)} note="registrados en el período" tone="ok" />
         <AdminKpi label="Atrasados" icon="alert" value={formatNumber(overdue)} note="vencimientos vencidos" tone={overdue > 0 ? "danger" : "ok"} />
         <AdminKpi label="Próximos" icon="clock" value={formatNumber(soon)} note="vencen en 7 días" tone={soon > 0 ? "warn" : "ok"} />
       </AdminKpis>
+      )}
 
       <AdminToolbar>
         <div className="admin-cal-nav">

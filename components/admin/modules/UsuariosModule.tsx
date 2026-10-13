@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useEffect, useId, useMemo, useState } from "react";
 import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDateTime, formatNumber, invitationStatusLabel, invitationStatusTone, mailStatusLabel, statusTone } from "@/lib/admin-format";
 import type { AdminTeamInvitation } from "@/lib/admin-types";
@@ -279,7 +280,7 @@ export function UsuariosModule() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={users.data == null} label="Indicadores de usuarios">
+      <AdminKpis state={kpiState(users)} label="Indicadores de usuarios">
         <AdminKpi label="Usuarios" icon="users" value={formatNumber(list.length)} note="con acceso al panel" />
         <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="pueden ingresar" tone="ok" />
         <AdminKpi label="Administradores" icon="users" value={formatNumber(totals.admins)} note="propietarios y admins" tone="accent" />

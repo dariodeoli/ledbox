@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
@@ -563,7 +564,7 @@ export function FacturacionModule() {
 
   return (
     <div className="admin-module-page">
-      <AdminKpis loading={fiscal.data == null} label="Resumen fiscal del período">
+      <AdminKpis state={kpiState(fiscal)} label="Resumen fiscal del período">
         <AdminKpi label="Ventas del mes" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas · ${monthKeyLabel(month)}`} />
         <AdminKpi label="IVA a pagar" icon="finance" value={formatMoney(summary.balance)} note={`débito ${formatMoney(summary.debitIva)} − crédito ${formatMoney(summary.creditIva)}`} tone={summary.balance > 0 ? "warn" : undefined} />
         <AdminKpi label="Compras del mes" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
@@ -1277,7 +1278,7 @@ export function FacturacionModule() {
                   : null
             }
           >
-            <AdminKpis loading={fiscal.data == null} label="Resumen del cierre">
+            <AdminKpis state={kpiState(fiscal)} label="Resumen del cierre">
               <AdminKpi label="Ventas" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas`} />
               <AdminKpi label="Compras" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
               <AdminKpi label="IVA débito" icon="finance" value={formatMoney(summary.debitIva)} note="de las ventas" />
