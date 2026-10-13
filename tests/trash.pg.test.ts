@@ -239,6 +239,10 @@ test("papelera: filtro de lo eliminado, archivar/eliminar/restaurar, bloqueos y 
       assert.equal(l.message, null);
       assert.ok(l.anonymizedAt);
       await expectError(anonymize("Supplier", randomUUID(), a.ctx), 501);
+      // Solo se anonimiza lo que está en la papelera.
+      const live1 = await mkClient(a.org);
+      await expectError(anonymize("Client", live1.id, a.ctx), 409);
+      assert.equal((await dbWithDeleted.client.findUniqueOrThrow({ where: { id: live1.id } })).anonymizedAt, null);
       assert.equal((await db.auditLog.count({ where: { organizationId: a.org, action: "anonymize" } })), 3);
     });
 

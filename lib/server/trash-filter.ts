@@ -31,13 +31,17 @@ export function isFilteredOperation(operation: string): operation is FilteredOpe
   return (FILTERED_OPERATIONS as readonly string[]).includes(operation);
 }
 
-/** `true` si el `where` ya habla de `deletedAt` (en cualquier nivel de AND/OR/NOT): se respeta tal cual. */
+/**
+ * `true` si el `where` ya habla de `deletedAt` en el nivel superior o dentro de un
+ * `AND` (se respeta tal cual). Una mención solo dentro de `OR`/`NOT` no cuenta: sería
+ * una forma de traer lo eliminado sin querer, así que igual se agrega el filtro.
+ */
 export function mentionsDeletedAt(where: unknown): boolean {
   if (!where || typeof where !== "object") return false;
   if (Array.isArray(where)) return where.some(mentionsDeletedAt);
   for (const [key, value] of Object.entries(where as Record<string, unknown>)) {
     if (key === "deletedAt") return true;
-    if ((key === "AND" || key === "OR" || key === "NOT") && mentionsDeletedAt(value)) return true;
+    if (key === "AND" && mentionsDeletedAt(value)) return true;
   }
   return false;
 }

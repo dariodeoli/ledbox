@@ -19,8 +19,13 @@ test("el filtro agrega deletedAt:null y respeta un where explícito", () => {
   // El where explícito (también anidado en AND/OR/NOT) se respeta sin tocar.
   const explicit = { where: { organizationId: "o1", deletedAt: { not: null } } };
   assert.equal(withLiveFilter(explicit), explicit);
-  const nested = { where: { OR: [{ deletedAt: null }, { deletedAt: { gt: new Date(0) } }] } };
-  assert.equal(withLiveFilter(nested), nested);
+  const nested = { where: { AND: [{ organizationId: "o1" }, { deletedAt: { not: null } }] } };
+  assert.equal(withLiveFilter(nested), nested, "una mención dentro de AND se respeta");
+  const inOr = { where: { OR: [{ deletedAt: null }, { deletedAt: { gt: new Date(0) } }] } };
+  assert.equal(mentionsDeletedAt(inOr.where), false, "dentro de OR no cuenta");
+  assert.deepEqual(withLiveFilter(inOr).where, { OR: inOr.where.OR, deletedAt: null }, "con deletedAt solo en un OR igual se agrega el filtro de nivel superior");
+  const inNot = { where: { NOT: { deletedAt: null } } };
+  assert.deepEqual(withLiveFilter(inNot).where, { NOT: { deletedAt: null }, deletedAt: null });
   const undef = { where: { id: "x", deletedAt: undefined } };
   assert.equal(withLiveFilter(undef), undef, "deletedAt:undefined cuenta como mención (lo usan los bloqueos)");
   assert.equal(mentionsDeletedAt({ organizationId: "o" }), false);
@@ -108,8 +113,9 @@ test("blockersFor responde 404 si la fila no es de la empresa", async () => {
 const RELATIONS = new Set(["events", "budgets", "clients", "leads", "suppliers", "promoters", "inventoryItems"]);
 /** `events`/`budgets` que NO son relaciones a modelos con papelera, o conteos de bloqueo que deben ver todo. */
 const ALLOWED_FILES = [
-  "lib/server/signature/", // SignatureRequest.events = eventos de firma
-  "app/api/admin/ia/anular/route.ts", // conteo de historial para BLOQUEAR el borrado: debe incluir lo eliminado (E2 lo reemplaza por blockersFor)
+  "lib/server/signature/admin.ts", // SignatureRequest.events = eventos de firma
+  "lib/server/signature/portal.ts", // SignatureRequest.events = eventos de firma
+  "app/api/admin/ia/anular/route.ts", // conteo de historial del CLIENTE para BLOQUEAR el borrado: debe incluir lo eliminado (el ítem usa blockersFor)
   "lib/server/trash.ts",
 ];
 
@@ -132,7 +138,7 @@ test("los include/select/_count anidados de los modelos con papelera filtran con
   for (const dir of ["app", "lib"]) {
     for (const file of walk(join(root, dir))) {
       const rel = relative(root, file);
-      if (ALLOWED_FILES.some((prefix) => rel.startsWith(prefix))) continue;
+      if (ALLOWED_FILES.includes(rel)) continue;
       const text = readFileSync(file, "utf8");
       if (!/\b(include|select)\b/.test(text)) continue;
       const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -160,4 +166,18 @@ test("los include/select/_count anidados de los modelos con papelera filtran con
     }
   }
   assert.deepEqual(offenders, [], `Falta \`where: live\` (lib/server/trash-filter) en:\n${offenders.join("\n")}`);
+});
+
+test("E2: rutas de papelera de Evento/Producto exigen la capacidad correcta y el SQL crudo de eventos filtra lo eliminado", () => {
+  const read = (path: string) => readFileSync(join(root, path), "utf8");
+  assert.match(read("app/api/admin/trash/route.ts"), /requireAdminContext\("trash\.manage"\)/);
+  for (const path of ["app/api/admin/events/[id]/[action]/route.ts", "app/api/admin/inventory/[id]/[action]/route.ts"]) {
+    const source = read(path);
+    assert.match(source, /ACTION_CAPABILITY/);
+    assert.match(source, /requireAdminContext\(capability\)/);
+    assert.doesNotMatch(source, /dbWithDeleted/, "las rutas no tocan lo eliminado: lo hace trash-ops");
+  }
+  assert.match(read("app/api/admin/ia/anular/route.ts"), /annulInventoryItem/);
+  assert.match(read("lib/server/trash-ops.ts"), /blockersFor\("InventoryItem"/);
+  assert.match(read("lib/server/resumen-board.ts"), /FROM "Event"\s+WHERE "organizationId" = \$\{organizationId\} AND "deletedAt" IS NULL/);
 });

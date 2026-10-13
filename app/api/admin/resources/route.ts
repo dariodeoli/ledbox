@@ -1,5 +1,6 @@
 import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
+import { skuConflictMessage } from "@/lib/server/trash-ops";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -237,7 +238,7 @@ export async function POST(request: Request) {
     } catch (error) {
       // El SKU es único por empresa: mismo criterio que el código de unidad.
       if (skuRaw && isUniqueConstraintError(error)) {
-        return jsonError(`Ya hay un ítem con el SKU «${skuRaw}»; probá con otro.`, 409);
+        return jsonError(await skuConflictMessage(auth.context.organizationId, skuRaw), 409);
       }
       throw error;
     }

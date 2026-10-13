@@ -21,7 +21,7 @@ export const TRASH_ENTITIES = TRASH_MODELS;
 export class TrashError extends Error {
   constructor(
     message: string,
-    readonly status: 404 | 409 | 501,
+    readonly status: 400 | 404 | 409 | 501,
     readonly blockers?: Blocker[],
   ) {
     super(message);
@@ -93,6 +93,8 @@ export type TrashActionOptions = {
   tx?: Tx;
   /** Nombre legible para el resumen de auditoría. */
   label?: string;
+  /** Motivo que se guarda en el detalle de la auditoría (anonimizar). */
+  reason?: string;
 };
 
 async function run<T>(options: TrashActionOptions | undefined, work: (tx: Tx) => Promise<T>): Promise<T> {
@@ -199,9 +201,10 @@ function pick(counts: Record<string, number>, kinds: Record<string, string>): Bl
  * (o conservar). Bloquea la fila con `FOR UPDATE` dentro de la transacción del llamador
  * para que nadie le agregue historial mientras se decide. 404 si la fila no es de la empresa.
  */
-export async function blockersFor(model: TrashModel, id: string, organizationId: string, tx: Tx): Promise<Blocker[]> {
+export async function blockersFor(model: TrashModel, id: string, organizationId: string, tx: Tx, options?: { lock?: boolean }): Promise<Blocker[]> {
   if (!isTrashModel(model)) throw new TypeError(`Entidad sin papelera: ${String(model)}`);
-  const locked = await tx.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM ${TABLES[model]} WHERE "id" = $1 AND "organizationId" = $2 FOR UPDATE`, id, organizationId);
+  // `lock: false` es para listar (solo lectura): no toma FOR UPDATE.
+  const locked = await tx.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM ${TABLES[model]} WHERE "id" = $1 AND "organizationId" = $2${options?.lock === false ? "" : " FOR UPDATE"}`, id, organizationId);
   if (locked.length === 0) throw new TrashError(`${LABELS[model]} no existe.`, 404);
   const where = { id, organizationId, ...anyState };
   const count = async (rows: Promise<{ _count: Record<string, number> } | null>) => (await rows)?._count ?? {};
@@ -306,12 +309,26 @@ const ANON_NAME: Partial<Record<TrashModel, string>> = {
  * No se puede deshacer; la ruta exige `trash.manage`, nombre exacto y motivo.
  */
 export async function anonymize(model: TrashModel, id: string, context: AuditContext, options?: TrashActionOptions): Promise<void> {
-  if (model !== "Client" && model !== "Lead") throw new TrashError(`Anonimizar ${LABELS[model].toLowerCase()} todavía no está disponible.`, 501);
+  if (model !== "Client" && model !== "Lead" && model !== "Event") throw new TrashError(`Anonimizar ${LABELS[model].toLowerCase()} todavía no está disponible.`, 501);
   await run(options, async (tx) => {
     const row = await existsIncludingDeleted(model, id, context.organizationId, tx);
     if (!row) throw new TrashError(`${LABELS[model]} no existe.`, 404);
+    if (!row.deletedAt) throw new TrashError("Eliminalo primero: solo se anonimiza lo que está en la papelera.", 409);
     if (row.anonymizedAt) throw new TrashError("Ya está anonimizado.", 409);
     const now = new Date();
+    if (model === "Event") {
+      // El evento conserva nombre, fechas y vínculos contables; salen las personas y las notas.
+      await tx.event.update({
+        where: { id },
+        data: {
+          responsibleName: null, responsiblePhone: null, responsibleEmail: null,
+          venueContactName: null, venueContactPhone: null, venueContactEmail: null,
+          notes: null, anonymizedAt: now,
+        },
+      });
+      await recordAudit({ context, action: "anonymize", entity: "Event", entityId: id, summary: auditSummary("Anonimizó", model, id, options?.label), detail: options?.reason ? { fields: { reason: options.reason } } : null }, tx);
+      return;
+    }
     const name = `${ANON_NAME[model]} ·#${id.replace(/-/g, "").slice(-4)}`;
     if (model === "Client") {
       // legalName/ruc se conservan solo si una factura los necesita (la factura tiene su snapshot inmutable).

@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { annulInventoryItem } from "@/lib/server/trash-ops";
 import { recordAudit } from "@/lib/server/audit";
 import { jsonError, readJson } from "@/lib/server/http";
 import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -70,27 +71,10 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, tipo, id: cliente.id });
   }
 
-  const item = await db.inventoryItem.findFirst({
-    where: { id, organizationId },
-    select: {
-      id: true,
-      name: true,
-      _count: { select: { assignments: true, budgetItems: true } },
-    },
-  });
-  if (!item) return jsonError("El ítem no existe en esta empresa.", 404);
-  if (item._count.assignments + item._count.budgetItems > 0) {
-    return jsonError("El ítem está en uso (asignaciones a eventos o presupuestos): no se anula.", 409);
+  const outcome = await annulInventoryItem(id, lote, auth.context);
+  if (outcome.status === 404) return jsonError("El ítem no existe en esta empresa.", 404);
+  if (outcome.status === 409) {
+    return Response.json({ error: "El ítem está en uso (asignaciones, incidentes, combos o presupuestos): no se anula.", blockers: outcome.blockers }, { status: 409 });
   }
-  // Las unidades del ítem se borran en cascada (relación propia).
-  await db.inventoryItem.delete({ where: { id: item.id } });
-  await recordAudit({
-    context: auth.context,
-    action: "delete",
-    entity: "InventoryItem",
-    entityId: item.id,
-    summary: `Anuló el ítem «${item.name}» creado por la Carga con IA`,
-    detail: { fields: { nombre: item.name, lote: lote || null } },
-  });
-  return Response.json({ ok: true, tipo, id: item.id });
+  return Response.json({ ok: true, tipo, id: outcome.id });
 }

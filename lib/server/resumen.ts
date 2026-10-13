@@ -105,6 +105,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
     // Se suma en la base (saldo por presupuesto, nunca negativo) en vez de traer
     // todos los aprobados con sus cobros; `organizationId` va parametrizado.
     db.$queryRaw<Array<{ balance: bigint | number | string | null }>>`
+      -- Papelera: un presupuesto APPROVED no se puede eliminar, por eso no filtra deletedAt.
       SELECT COALESCE(SUM(GREATEST(b."total" - COALESCE(p."paid", 0), 0)), 0)::bigint AS "balance"
       FROM "Budget" b
       LEFT JOIN (

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryStatus } from "@prisma/client";
 import { db } from "./db";
+import { live } from "./trash-filter";
+import { skuConflictMessage } from "./trash-ops";
 import {
   BLOCKED_INVENTORY_STATUSES,
   DEFAULT_HOLD_TTL_MINUTES,
@@ -604,7 +606,7 @@ export type ComboDefinition = {
 /** Definiciones de combos de la empresa (todas o las pedidas). Los ajenos no aparecen. */
 export async function loadComboDefinitions(organizationId: string, comboIds?: ReadonlyArray<string>): Promise<Map<string, ComboDefinition>> {
   const rows = await db.inventoryComponent.findMany({
-    where: { organizationId, ...(comboIds ? { parentId: { in: [...comboIds] } } : {}) },
+    where: { organizationId, parent: live, ...(comboIds ? { parentId: { in: [...comboIds] } } : {}) },
     orderBy: [{ parentId: "asc" }, { component: { name: "asc" } }],
     select: { parentId: true, componentId: true, quantity: true, component: { select: { name: true, category: true, status: true } } },
   });
@@ -748,7 +750,7 @@ export async function saveCombo(options: {
       { timeout: 20_000 },
     );
   } catch (error) {
-    if (isUniqueConstraintError(error)) return { ok: false, reason: "duplicate-sku", message: `Ya hay un ítem con el SKU «${options.data.sku ?? ""}»; probá con otro.` };
+    if (isUniqueConstraintError(error)) return { ok: false, reason: "duplicate-sku", message: await skuConflictMessage(organizationId, options.data.sku) };
     throw error;
   }
 }
