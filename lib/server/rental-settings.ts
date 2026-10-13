@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { OrganizationRentalSettings } from "@prisma/client";
 import type { AdminRentalSettings } from "../admin-types";
 import { securityDepositAmountValid } from "../budget-security-deposit";
+import { parseStorefrontAccent } from "../storefront-theme";
 import { db } from "./db";
 import { DEFAULT_HOLD_TTL_MINUTES } from "./inventory-availability";
 
@@ -25,6 +26,9 @@ export const RENTAL_SETTINGS_DEFAULTS: RentalSettingsView = {
   publicCatalogEnabled: false,
   publicShowPrices: true,
   whatsappPhone: null,
+  storefrontTagline: null,
+  storefrontAccent: null,
+  storefrontEmail: null,
 };
 
 const BUFFER_KEYS = ["deliveryBufferMin", "returnBufferMin", "prepBufferMin", "transportBufferMin", "cleaningBufferMin"] as const;
@@ -35,6 +39,9 @@ const BUFFER_LABELS: Record<(typeof BUFFER_KEYS)[number], string> = {
   transportBufferMin: "El tiempo de transporte",
   cleaningBufferMin: "El tiempo de limpieza",
 };
+
+/** Largo máximo de la frase de la portada de la tienda. */
+export const STOREFRONT_TAGLINE_MAX = 140;
 
 /** Tope de un tiempo: 30 días en minutos. Tope de la retención: 90 días. */
 export const MAX_RENTAL_BUFFER_MIN = 30 * 24 * 60;
@@ -48,6 +55,9 @@ export const RENTAL_SETTINGS_FIELDS = [
   "publicCatalogEnabled",
   "publicShowPrices",
   "whatsappPhone",
+  "storefrontTagline",
+  "storefrontAccent",
+  "storefrontEmail",
 ] as const;
 
 export function toRentalSettingsView(row: OrganizationRentalSettings | null): RentalSettingsView {
@@ -64,6 +74,9 @@ export function toRentalSettingsView(row: OrganizationRentalSettings | null): Re
     publicCatalogEnabled: row.publicCatalogEnabled,
     publicShowPrices: row.publicShowPrices,
     whatsappPhone: row.whatsappPhone,
+    storefrontTagline: row.storefrontTagline,
+    storefrontAccent: row.storefrontAccent,
+    storefrontEmail: row.storefrontEmail,
   };
 }
 
@@ -125,6 +138,33 @@ export function parseRentalSettingsPatch(
       const digits = record.whatsappPhone.replace(/\D/g, "");
       if (digits.length < 8 || digits.length > 15) return { ok: false, error: "Ingresá un número de WhatsApp válido con código de país." };
       data.whatsappPhone = `+${digits}`;
+    }
+  }
+  if (record.storefrontTagline !== undefined) {
+    if (record.storefrontTagline === null || record.storefrontTagline === "") {
+      data.storefrontTagline = null;
+    } else if (typeof record.storefrontTagline !== "string") {
+      return { ok: false, error: "La frase de la tienda no es válida." };
+    } else {
+      const tagline = record.storefrontTagline.replace(/\s+/g, " ").trim();
+      if (tagline.length > STOREFRONT_TAGLINE_MAX) return { ok: false, error: `La frase de la tienda no puede superar los ${STOREFRONT_TAGLINE_MAX} caracteres.` };
+      data.storefrontTagline = tagline || null;
+    }
+  }
+  if (record.storefrontAccent !== undefined) {
+    const accent = parseStorefrontAccent(record.storefrontAccent);
+    if (!accent.ok) return { ok: false, error: accent.error };
+    data.storefrontAccent = accent.accent;
+  }
+  if (record.storefrontEmail !== undefined) {
+    if (record.storefrontEmail === null || record.storefrontEmail === "") {
+      data.storefrontEmail = null;
+    } else if (typeof record.storefrontEmail !== "string") {
+      return { ok: false, error: "El correo de la tienda no es válido." };
+    } else {
+      const email = record.storefrontEmail.trim().toLowerCase();
+      if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Ingresá un correo de contacto válido." };
+      data.storefrontEmail = email;
     }
   }
   return { ok: true, data };

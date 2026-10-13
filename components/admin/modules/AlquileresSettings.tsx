@@ -2,16 +2,15 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
-import { publicConfig } from "@/lib/public-config";
 import type { AdminRentalSettings as RentalSettingsView } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
-import { MoneyField, NumberField, PhoneField, SwitchField } from "../AdminFields";
+import { MoneyField, NumberField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
- * Alquileres (fase 2b): seña, vigencia de la retención, tiempos de preparación,
- * catálogo público y WhatsApp de la empresa. Los tiempos se cargan en horas y se
+ * Alquileres (fase 2b): seña, vigencia de la retención y tiempos de preparación.
+ * El catálogo público, los precios y el WhatsApp viven ahora en Ajustes → Tienda web. Los tiempos se cargan en horas y se
  * guardan en minutos; solo se envía lo que la persona cambió, así un valor en
  * minutos no enteros no se pisa. OWNER/ADMIN: el API revalida el rol.
  */
@@ -25,9 +24,6 @@ type Form = {
   deliveryHours: string;
   returnHours: string;
   cleaningHours: string;
-  publicCatalogEnabled: boolean;
-  publicShowPrices: boolean;
-  whatsappPhone: string;
 };
 
 const hours = (minutes: number) => String(Math.ceil(minutes / 60));
@@ -42,9 +38,6 @@ function toForm(settings: RentalSettingsView): Form {
     deliveryHours: hours(settings.deliveryBufferMin),
     returnHours: hours(settings.returnBufferMin),
     cleaningHours: hours(settings.cleaningBufferMin),
-    publicCatalogEnabled: settings.publicCatalogEnabled,
-    publicShowPrices: settings.publicShowPrices,
-    whatsappPhone: settings.whatsappPhone ?? "",
   };
 }
 
@@ -57,8 +50,7 @@ const HOUR_FIELDS = [
 ] as const;
 
 export function AlquileresSettings() {
-  const { demo, organization } = useAdminSession();
-  const catalogUrl = organization?.slug ? `${publicConfig.siteUrl}/catalogo/${organization.slug}` : null;
+  const { demo } = useAdminSession();
   const resource = useAdminResource("/api/admin/settings/rental", (payload) => (payload.settings ?? null) as RentalSettingsView | null);
   const initial = useMemo(() => (resource.data ? toForm(resource.data) : null), [resource.data]);
   const [form, setForm] = useState<Form | null>(null);
@@ -84,9 +76,6 @@ export function AlquileresSettings() {
     for (const field of HOUR_FIELDS) {
       if (form[field.key] !== initial[field.key]) body[field.api] = Number(form[field.key] || "0") * 60;
     }
-    if (form.publicCatalogEnabled !== initial.publicCatalogEnabled) body.publicCatalogEnabled = form.publicCatalogEnabled;
-    if (form.publicShowPrices !== initial.publicShowPrices) body.publicShowPrices = form.publicShowPrices;
-    if (form.whatsappPhone !== initial.whatsappPhone) body.whatsappPhone = form.whatsappPhone || null;
     setBusy(true);
     const result = await adminSend<{ settings: RentalSettingsView }>("/api/admin/settings/rental", body, "PATCH");
     setBusy(false);
@@ -151,48 +140,6 @@ export function AlquileresSettings() {
                     disabled={demo || busy}
                   />
                 ))}
-              </div>
-            </AdminPanel>
-
-            <AdminPanel title="Catálogo público" icon="globe">
-              {catalogUrl ? (
-                <p className="admin-field-hint" data-testid="catalog-link">
-                  {initial?.publicCatalogEnabled ? (
-                    <>
-                      Link público de tu catálogo:{" "}
-                      <a href={catalogUrl} target="_blank" rel="noopener noreferrer">
-                        {catalogUrl}
-                      </a>
-                    </>
-                  ) : (
-                    <>
-                      Tu catálogo está apagado: el link <strong>{catalogUrl}</strong> responde «no encontrado» hasta que lo enciendas y guardes.
-                    </>
-                  )}
-                </p>
-              ) : null}
-              <div className="admin-settings-grid">
-                <SwitchField
-                  label="Catálogo público encendido"
-                  checked={form.publicCatalogEnabled}
-                  onChange={(checked) => setForm({ ...form, publicCatalogEnabled: checked })}
-                  hint="Muestra en la web los productos marcados como visibles."
-                  disabled={demo || busy}
-                />
-                <SwitchField
-                  label="Mostrar precios"
-                  checked={form.publicShowPrices}
-                  onChange={(checked) => setForm({ ...form, publicShowPrices: checked })}
-                  hint="Apagado, el catálogo pide cotización en vez de mostrar precios."
-                  disabled={demo || busy}
-                />
-                <PhoneField
-                  label="WhatsApp de la empresa"
-                  value={form.whatsappPhone}
-                  onChange={(value) => setForm({ ...form, whatsappPhone: value })}
-                  hint="Número al que llegan las consultas del catálogo."
-                  disabled={demo || busy}
-                />
               </div>
             </AdminPanel>
 

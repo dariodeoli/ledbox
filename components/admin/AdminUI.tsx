@@ -351,6 +351,8 @@ export type AdminSubtabItem = {
   label: string;
   icon: AdminIconName;
   active?: boolean;
+  /** Contador al lado del nombre (por ejemplo, solicitudes pendientes). */
+  count?: number;
 };
 
 /**
@@ -370,6 +372,7 @@ export function AdminSubtabs({ label, items }: { label: string; items: readonly 
         >
           <AdminIcon name={item.icon} size={13} />
           {item.label}
+          {item.count ? <span className="admin-subtab-count">{formatNumber(item.count)}</span> : null}
         </Link>
       ))}
     </nav>
@@ -953,10 +956,13 @@ export function AdminModuleContext({
   breadcrumb,
   hint,
   meta,
+  action,
 }: {
   breadcrumb: string;
   hint: string;
   meta?: string;
+  /** Acción principal del módulo (por ejemplo «Nuevo presupuesto»), a la derecha. */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="admin-module-context">
@@ -967,6 +973,7 @@ export function AdminModuleContext({
         <p className="admin-module-context-hint">{hint}</p>
       </div>
       {meta ? <span className="admin-module-context-meta">{meta}</span> : null}
+      {action ? <div className="admin-module-context-action">{action}</div> : null}
     </div>
   );
 }
@@ -1007,11 +1014,14 @@ export function AdminKpi({
   icon,
   loading,
   state,
-  onClick,
+  onSelect,
   active,
   actionLabel,
 }: {
   label: string;
+  /** Con `onSelect` el indicador es un botón-filtro (`active` = filtro vigente). */
+  onSelect?: () => void;
+  active?: boolean;
   /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
   value: string | null | undefined;
   note?: string;
@@ -1021,22 +1031,30 @@ export function AdminKpi({
   loading?: boolean;
   /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
   state?: KpiState;
-  /** Con `onClick` el indicador es un botón que filtra la lista (`active` = filtro puesto). */
-  onClick?: () => void;
-  active?: boolean;
-  /** Nombre accesible del botón («Filtrar por próximos 7 días»). */
+  /** Nombre accesible del botón-filtro («Filtrar por próximos 7 días»); por defecto, el rótulo + valor. */
   actionLabel?: string;
 }) {
   const groupState = useContext(AdminKpiStateContext);
   const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
   const current: KpiState = effective === "ready" && value == null ? "loading" : effective;
   const shown = current === "ready";
-  const Root = onClick ? "button" : "div";
-  const interactive = onClick
-    ? { type: "button" as const, onClick, "aria-pressed": Boolean(active), "aria-label": `${actionLabel ?? label}${shown && value != null ? `: ${value}` : ""}`, "data-active": active ? "true" : undefined }
-    : {};
+  const Wrapper = onSelect ? "button" : "div";
   return (
-    <Root className={onClick ? "admin-kpi admin-kpi--action" : "admin-kpi"} data-tone={shown ? tone : undefined} data-loading={current === "loading" ? "true" : undefined} data-state={current} {...interactive}>
+    <Wrapper
+      className={onSelect ? "admin-kpi admin-kpi--filter" : "admin-kpi"}
+      {...(onSelect
+        ? {
+            type: "button" as const,
+            onClick: onSelect,
+            "aria-pressed": Boolean(active),
+            "aria-label": actionLabel ? `${actionLabel}${shown && value != null ? `: ${value}` : ""}` : undefined,
+            "data-active": active ? "true" : undefined,
+          }
+        : {})}
+      data-tone={shown ? tone : undefined}
+      data-loading={current === "loading" ? "true" : undefined}
+      data-state={current}
+    >
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -1060,7 +1078,7 @@ export function AdminKpi({
         <strong className="admin-kpi-value" title={value ?? undefined}>{value}</strong>
       )}
       {note && shown ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
-    </Root>
+    </Wrapper>
   );
 }
 

@@ -208,5 +208,9 @@ test("ninguna acción se pierde: despacho, devolución, incidentes, checklist, a
   for (const label of ["Próximos 7 días", "En curso", "Faltantes o checklist incompleto", "Por cerrar"]) {
     assert.ok(module.includes(label), `falta el indicador «${label}»`);
   }
-  assert.match(read("components/admin/AdminUI.tsx"), /aria-pressed/, "el indicador que filtra expone su estado");
+  const ui = read("components/admin/AdminUI.tsx");
+  assert.match(ui, /aria-pressed/, "el indicador que filtra expone su estado");
+  assert.match(ui, /onSelect\?: \(\) => void/, "una sola API: onSelect + active + actionLabel");
+  assert.ok(!/admin-kpi--action|onClick\?: \(\) => void;\s*active/.test(ui), "no queda un segundo nombre para el mismo comportamiento");
+  assert.match(module, /onSelect: \(\) => toggleFocus/, "Eventos usa onSelect");
 });

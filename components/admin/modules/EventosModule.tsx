@@ -486,7 +486,7 @@ export function EventosModule() {
   }
 
   const kpiFor = (key: EventFocus) => ({
-    onClick: () => toggleFocus(key),
+    onSelect: () => toggleFocus(key),
     active: focus === key,
     actionLabel: `Filtrar por ${FOCUS_LABEL[key].toLowerCase()}`,
   });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
-import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, referenceDailyPrice, rentalDaysBetween } from "@/lib/catalog-public";
+import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, listDailyPrice, rentalDaysBetween } from "@/lib/catalog-public";
 import { db } from "./db";
 import { commitInventoryAssignment, insufficientMessage } from "./inventory-availability";
 import { leadStatusAfterBudget, resolveClientFromLead } from "./lead-client";
@@ -17,7 +17,9 @@ import type { AdminContext } from "./tenancy";
  * - Un pedido se convierte UNA sola vez: `Budget.quoteRequestId` es único y la
  *   conversión toma `FOR UPDATE` sobre el pedido; la segunda responde 409.
  * - Las líneas copian el artículo, la cantidad, los días del período y el precio
- *   de referencia VIGENTE del inventario (si no hay, el que vio el cliente).
+ *   VIGENTE del inventario en la lista del pedido (cliente final o mayorista; si no
+ *   hay, el que vio el cliente). Un pedido mayorista cotiza SIEMPRE con precios mayoristas.
+ * - Un pedido mayorista ya trae su cliente (el del link privado): no se crea otro.
  * - La seña sale de `depositPercent` de la empresa por el plan de pagos
  *   existente (anticipo porcentual + saldo); sin política, no hay seña.
  * - La retención de stock es un paso aparte (`holdQuoteRequestStock`) que usa el
@@ -77,15 +79,21 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const inventory = inventoryIds.length
     ? await db.inventoryItem.findMany({
         where: { organizationId, id: { in: inventoryIds } },
-        select: { id: true, name: true, dailyCost: true, listPrice: true, listFromDays: true, listFromPrice: true },
+        select: {
+          id: true, name: true, dailyCost: true,
+          listPrice: true, listFromDays: true, listFromPrice: true,
+          wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
+        },
       })
     : [];
   const inventoryById = new Map(inventory.map((row) => [row.id, row]));
 
+  const wholesale = quote.priceList === "WHOLESALE";
+  const priceList = wholesale ? "WHOLESALE" : "RETAIL";
   let unpricedLines = 0;
   const lines = quote.items.map((item, sortOrder) => {
     const linked = item.inventoryId ? inventoryById.get(item.inventoryId) : undefined;
-    const unitPrice = (linked ? referenceDailyPrice(linked, days) : 0) || item.unitPrice || 0;
+    const unitPrice = (linked ? listDailyPrice(linked, priceList, days) : 0) || item.unitPrice || 0;
     if (unitPrice <= 0) unpricedLines += 1;
     const costPrice = linked?.dailyCost ?? 0;
     return {
@@ -107,9 +115,9 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
     quote.startsAt && quote.endsAt ? `Período: ${dayKeyOf(quote.startsAt)} al ${dayKeyOf(quote.endsAt)} (${days} ${days === 1 ? "día" : "días"})` : null,
     quote.location ? `Lugar: ${quote.location}` : null,
     lead.message ? `Notas del cliente: ${lead.message}` : null,
-    "Nació de un pedido del catálogo público.",
+    wholesale ? "Nació de un pedido del catálogo mayorista (precios mayoristas)." : "Nació de un pedido del catálogo público.",
   ].filter(Boolean);
-  const title = `Pedido del catálogo · ${(lead.company || lead.name).trim()}`.slice(0, TITLE_MAX);
+  const title = `${wholesale ? "Pedido mayorista" : "Pedido del catálogo"} · ${(lead.company || lead.name).trim()}`.slice(0, TITLE_MAX);
 
   try {
     return await db.$transaction(async (tx) => {
@@ -119,7 +127,14 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
       if (fresh.budget || fresh.status === "CONVERTED") throw new ConvertConflict(409, "Este pedido ya se convirtió en presupuesto.");
       if (!isQuoteRequestStatus(fresh.status) || !CONVERTIBLE_STATUSES.includes(fresh.status)) throw new ConvertConflict(409, "Este pedido está declinado o vencido: reabrilo antes de convertirlo.");
 
-      const resolved = await resolveClientFromLead(tx, organizationId, lead, { allowCreate: roleCan(context.user.role, "clients.write") });
+      // Pedido mayorista: el cliente es el del link privado (misma empresa); si ya no existe, no se inventa otro.
+      const linkedClient = wholesale && quote.clientId
+        ? await tx.client.findFirst({ where: { id: quote.clientId, organizationId }, select: { id: true, name: true, company: true } })
+        : null;
+      if (wholesale && quote.clientId && !linkedClient) throw new ConvertConflict(409, "El cliente mayorista de este pedido ya no existe en la empresa.");
+      const resolved = linkedClient
+        ? { client: linkedClient, created: false }
+        : await resolveClientFromLead(tx, organizationId, lead, { allowCreate: roleCan(context.user.role, "clients.write") });
       if (!resolved) throw new ConvertConflict(403, "Tu rol no puede crear clientes y este contacto todavía no tiene uno. Pedile a un administrador que lo convierta en cliente.");
 
       const budget = await tx.budget.create({

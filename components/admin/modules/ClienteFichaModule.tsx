@@ -41,6 +41,7 @@ import {
   AdminTimeline,
   AdminWhatsappLink,
 } from "../AdminUI";
+import { ClientCatalogAccess } from "./ClientCatalogAccess";
 import { ClientFiscalSnapshot } from "./ClientFiscalFields";
 import { ClientLinks, ClientLogo } from "./ClientesModule";
 import { locationLinkValid } from "./OperationQuickRules";
@@ -254,6 +255,8 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
               ) : null}
             </span>
           </AdminPanel>
+
+          <ClientCatalogAccess clientId={client.id} clientName={name} phone={contactPhone} canEdit={canEdit} />
 
           <AdminPanel title="Últimos movimientos" icon="clock">
             {history.length === 0 ? (

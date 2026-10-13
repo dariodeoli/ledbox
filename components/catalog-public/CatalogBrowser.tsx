@@ -4,15 +4,17 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AVAILABILITY_HINT_LABEL,
+  catalogDailyPrice,
   estimatedSubtotal,
   formatDayKey,
-  referenceDailyPrice,
   type AvailabilityHint,
+  type CatalogPrice,
 } from "@/lib/catalog-public";
-import { whatsappHref } from "@/lib/admin-format";
 
 /**
- * Catálogo público de una empresa y armado de la preorden (sin cuenta).
+ * Catálogo de la tienda web de una empresa, carrito y armado de la preorden (sin
+ * cuenta). Lo usan la tienda pública (cliente final) y el catálogo mayorista (link
+ * privado): cambia solo la lista de precios y el endpoint del pedido.
  * La preorden NO es una reserva: la pantalla final lo dice con todas las letras.
  */
 
@@ -23,18 +25,22 @@ export type CatalogItemView = {
   sku: string | null;
   imageUrl: string | null;
   description?: string | null;
-  price: { listPrice: number; listFromDays: number; listFromPrice: number } | null;
+  price: CatalogPrice | null;
   availability: AvailabilityHint | null;
 };
 
 type Props = {
-  slug: string;
   organizationName: string;
-  whatsappPhone: string | null;
   showPrices: boolean;
+  /** Endpoint de la preorden: el público o el del link mayorista. */
+  preorderPath: string;
+  wholesale: boolean;
+  /** Cliente del link mayorista (solo se muestra en el pedido). */
+  clientName: string | null;
   demo: boolean;
   items: CatalogItemView[];
   range: { fromKey: string; toKey: string; days: number } | null;
+  initialCategory: string | null;
 };
 
 type Done =
@@ -62,10 +68,11 @@ function Placeholder() {
   );
 }
 
-export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPrices, demo, items, range }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
   const [from, setFrom] = useState(range?.fromKey ?? "");
   const [to, setTo] = useState(range?.toKey ?? "");
   const [selection, setSelection] = useState<Record<string, number>>({});
@@ -73,10 +80,16 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
   const [done, setDone] = useState<Done | null>(null);
   const today = useMemo(todayKey, []);
 
+  // Un link de categoría (`?categoria=`) también mueve el filtro cuando ya se estaba en la página.
+  useEffect(() => {
+    if (initialCategory && items.some((item) => item.category === initialCategory)) setCategory(initialCategory);
+  }, [initialCategory, items]);
+
+  const categories = useMemo(() => [...new Set(items.map((item) => item.category))], [items]);
   const visible = useMemo(() => {
     const needle = norm(query.trim());
-    return needle ? items.filter((item) => norm(`${item.name} ${item.sku ?? ""} ${item.category}`).includes(needle)) : items;
-  }, [items, query]);
+    return items.filter((item) => (!category || item.category === category) && (!needle || norm(`${item.name} ${item.sku ?? ""} ${item.category} ${item.description ?? ""}`).includes(needle)));
+  }, [items, query, category]);
   const groups = useMemo(() => {
     const map = new Map<string, CatalogItemView[]>();
     for (const item of visible) map.set(item.category, [...(map.get(item.category) ?? []), item]);
@@ -85,18 +98,16 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
 
   const days = range?.days ?? 1;
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
-  const lines = chosen.map((item) => ({
-    name: item.name,
-    quantity: selection[item.id],
-    unitPrice: item.price ? referenceDailyPrice(item.price, days) || null : null,
-  }));
+  const unitFor = (item: CatalogItemView) => (item.price ? catalogDailyPrice(item.price, days) : 0);
+  const lines = chosen.map((item) => ({ name: item.name, quantity: selection[item.id], unitPrice: unitFor(item) || null }));
   const subtotal = showPrices && range ? estimatedSubtotal(lines, days) : null;
   const count = chosen.reduce((sum, item) => sum + (selection[item.id] ?? 0), 0);
 
   function applyDates(event: FormEvent) {
     event.preventDefault();
     if (!from || !to) return;
-    router.replace(`${pathname}?desde=${encodeURIComponent(from)}&hasta=${encodeURIComponent(to)}`, { scroll: false });
+    const extra = category ? `&categoria=${encodeURIComponent(category)}` : "";
+    router.replace(`${pathname}?desde=${encodeURIComponent(from)}&hasta=${encodeURIComponent(to)}${extra}#catalogo`, { scroll: false });
   }
   function setQuantity(id: string, next: number) {
     setSelection((current) => {
@@ -107,24 +118,16 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
     });
   }
 
-  const contact = whatsappHref(whatsappPhone, `Hola ${organizationName}! Quiero consultar por el catálogo de alquiler.`);
-
   return (
-    <main className="cp-main">
-      <header className="cp-header">
-        <p className="cp-eyebrow">Catálogo de alquiler</p>
-        <h1 className="cp-h1">{organizationName}</h1>
-        <p className="cp-lead">Elegí los equipos y las fechas. Te respondemos con una cotización: el pedido no es una reserva hasta que la confirmemos.</p>
-        {demo ? <p className="cp-note" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
-        {contact ? (
-          <a className="cp-link" href={contact} target="_blank" rel="noopener noreferrer">
-            Consultar por WhatsApp
-          </a>
-        ) : null}
-      </header>
+    <section id="catalogo" className="cp-section cp-catalog" aria-labelledby="catalogo-titulo">
+      <div className="cp-section-head">
+        <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Catálogo de alquiler"}</p>
+        <h2 id="catalogo-titulo" className="cp-h2 cp-h2--lg">Elegí tus equipos</h2>
+        {wholesale ? <p className="cp-lead">Precios mayoristas, solo para vos{clientName ? ` (${clientName})` : ""}. No compartas este link.</p> : null}
+      </div>
 
-      <section className="cp-card" aria-labelledby="fechas">
-        <h2 id="fechas" className="cp-h2">1. Fechas del alquiler</h2>
+      <div className="cp-card cp-dates" aria-labelledby="fechas">
+        <h3 id="fechas" className="cp-h3 cp-h3--plain">1. Fechas del alquiler</h3>
         <form className="cp-row" onSubmit={applyDates}>
           <label className="cp-field">
             <span>Desde</span>
@@ -141,62 +144,69 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
             ? `Período: ${formatDayKey(range.fromKey)} al ${formatDayKey(range.toKey)} (${range.days} ${range.days === 1 ? "día" : "días"}). La disponibilidad es indicativa: la confirmamos al cotizar.`
             : "Elegí las fechas para ver la disponibilidad indicativa de cada equipo."}
         </p>
-      </section>
+      </div>
 
-      <section aria-labelledby="equipos">
-        <div className="cp-row cp-row--between">
-          <h2 id="equipos" className="cp-h2">2. Equipos</h2>
-          <label className="cp-field cp-field--search">
-            <span className="cp-sr">Buscar equipos</span>
-            <input type="search" placeholder="Buscar por nombre, SKU o categoría" value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
+      <div className="cp-toolbar">
+        <h3 className="cp-h3 cp-h3--plain">2. Equipos</h3>
+        <label className="cp-field cp-field--search">
+          <span className="cp-sr">Buscar equipos</span>
+          <input type="search" placeholder="Buscar por nombre, SKU o categoría" value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+      </div>
+      {categories.length > 1 ? (
+        <div className="cp-cats" role="group" aria-label="Filtrar por categoría">
+          <button type="button" className="cp-cat" aria-pressed={category === null} onClick={() => setCategory(null)}>Todas</button>
+          {categories.map((name) => (
+            <button key={name} type="button" className="cp-cat" aria-pressed={category === name} onClick={() => setCategory(category === name ? null : name)}>{name}</button>
+          ))}
         </div>
-        {items.length === 0 ? <p className="cp-empty">Todavía no hay equipos publicados en este catálogo.</p> : null}
-        {items.length > 0 && visible.length === 0 ? <p className="cp-empty">No encontramos equipos con «{query}».</p> : null}
-        {groups.map(([category, rows]) => (
-          <section key={category} className="cp-group" aria-label={category}>
-            <h3 className="cp-h3">{category}</h3>
-            <ul className="cp-grid">
-              {rows.map((item) => {
-                const unit = item.price && range ? referenceDailyPrice(item.price, days) : item.price ? referenceDailyPrice(item.price, 1) : 0;
-                const quantity = selection[item.id] ?? 0;
-                return (
-                  <li key={item.id} className="cp-item">
-                    <div className="cp-photo">
-                      {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageUrl} alt={item.name} loading="lazy" />
-                      ) : (
-                        <Placeholder />
-                      )}
-                    </div>
-                    <div className="cp-item-body">
-                      <h4 className="cp-item-name">{item.name}</h4>
-                      {item.sku ? <p className="cp-sku">SKU {item.sku}</p> : null}
-                      {item.description ? <p className="cp-desc">{item.description}</p> : null}
-                      <p className="cp-price">
-                        {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>por día</span></>) : "Consultar"}
-                      </p>
-                      {item.availability ? (
-                        <p><span className={`cp-chip ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span></p>
-                      ) : null}
-                      {quantity > 0 ? (
-                        <div className="cp-qty" role="group" aria-label={`Cantidad de ${item.name}`}>
-                          <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity - 1)} aria-label={`Quitar una unidad de ${item.name}`}>−</button>
-                          <output aria-live="polite">{quantity}</output>
-                          <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity + 1)} aria-label={`Agregar una unidad de ${item.name}`}>+</button>
-                        </div>
-                      ) : (
-                        <button type="button" className="cp-btn" onClick={() => setQuantity(item.id, 1)} aria-label={`Agregar ${item.name} al pedido`}>Agregar al pedido</button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
-      </section>
+      ) : null}
+
+      {items.length === 0 ? <p className="cp-empty">Todavía no hay equipos publicados en este catálogo.</p> : null}
+      {items.length > 0 && visible.length === 0 ? <p className="cp-empty">No encontramos equipos con esos filtros.</p> : null}
+      {groups.map(([groupName, rows]) => (
+        <section key={groupName} className="cp-group" aria-label={groupName}>
+          <h3 className="cp-h3">{groupName}</h3>
+          <ul className="cp-grid">
+            {rows.map((item) => {
+              const unit = unitFor(item);
+              const quantity = selection[item.id] ?? 0;
+              return (
+                <li key={item.id} className="cp-item">
+                  <div className="cp-photo">
+                    {item.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.imageUrl} alt={item.name} loading="lazy" />
+                    ) : (
+                      <Placeholder />
+                    )}
+                  </div>
+                  <div className="cp-item-body">
+                    <h4 className="cp-item-name">{item.name}</h4>
+                    {item.sku ? <p className="cp-sku">SKU {item.sku}</p> : null}
+                    {item.description ? <p className="cp-desc">{item.description}</p> : null}
+                    <p className="cp-price">
+                      {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>por día</span></>) : "Consultar"}
+                    </p>
+                    {item.availability ? (
+                      <p><span className={`cp-chip ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span></p>
+                    ) : null}
+                    {quantity > 0 ? (
+                      <div className="cp-qty" role="group" aria-label={`Cantidad de ${item.name}`}>
+                        <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity - 1)} aria-label={`Quitar una unidad de ${item.name}`}>−</button>
+                        <output aria-live="polite">{quantity}</output>
+                        <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity + 1)} aria-label={`Agregar una unidad de ${item.name}`}>+</button>
+                      </div>
+                    ) : (
+                      <button type="button" className="cp-btn cp-btn--block" onClick={() => setQuantity(item.id, 1)} aria-label={`Agregar ${item.name} al pedido`}>Agregar al pedido</button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
 
       {count > 0 ? (
         <aside className="cp-bar" aria-label="Tu pedido">
@@ -205,17 +215,20 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
             {showPrices ? <span> · {subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : range ? "Subtotal a cotizar" : "Elegí fechas para estimar"}</span> : null}
           </p>
           <button type="button" className="cp-btn cp-btn--primary" onClick={() => { setDone(null); setOpen(true); }}>
-            Pedir cotización
+            Ver pedido
           </button>
         </aside>
       ) : null}
 
       {open ? (
         <PreorderDialog
-          slug={slug}
+          preorderPath={preorderPath}
           organizationName={organizationName}
+          wholesale={wholesale}
+          clientName={clientName}
           range={range}
           lines={chosen.map((item) => ({ id: item.id, name: item.name, quantity: selection[item.id] }))}
+          onQuantity={setQuantity}
           subtotal={subtotal}
           showPrices={showPrices}
           done={done}
@@ -224,15 +237,18 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
           onFinish={() => { setSelection({}); setOpen(false); setDone(null); }}
         />
       ) : null}
-    </main>
+    </section>
   );
 }
 
 function PreorderDialog(props: {
-  slug: string;
+  preorderPath: string;
   organizationName: string;
+  wholesale: boolean;
+  clientName: string | null;
   range: Props["range"];
   lines: Array<{ id: string; name: string; quantity: number }>;
+  onQuantity: (id: string, next: number) => void;
   subtotal: number | null;
   showPrices: boolean;
   done: Done | null;
@@ -240,7 +256,7 @@ function PreorderDialog(props: {
   onClose: () => void;
   onFinish: () => void;
 }) {
-  const { slug, range, lines, subtotal, showPrices, done } = props;
+  const { range, lines, subtotal, showPrices, done } = props;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -287,7 +303,7 @@ function PreorderDialog(props: {
     if (!attempt.current || attempt.current.payload !== serialized) attempt.current = { key: crypto.randomUUID(), payload: serialized };
     setBusy(true);
     try {
-      const response = await fetch(`/api/catalog/${encodeURIComponent(slug)}/preorder`, {
+      const response = await fetch(props.preorderPath, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.current.key },
         body: serialized,
@@ -335,12 +351,22 @@ function PreorderDialog(props: {
           </div>
         ) : (
           <form onSubmit={submit} noValidate={false}>
-            <h2 id="pedido-titulo" className="cp-h2">Tu pedido a {props.organizationName}</h2>
+            <h2 id="pedido-titulo" className="cp-h2">{props.wholesale ? "Tu pedido mayorista a" : "Tu pedido a"} {props.organizationName}</h2>
+            {props.wholesale && props.clientName ? <p className="cp-hint">Pedido a nombre de {props.clientName}.</p> : null}
             {!range ? <p className="cp-error" role="alert">Elegí las fechas del alquiler antes de enviar el pedido.</p> : (
               <p className="cp-hint">Del {formatDayKey(range.fromKey)} al {formatDayKey(range.toKey)} ({range.days} {range.days === 1 ? "día" : "días"})</p>
             )}
-            <ul className="cp-list">
-              {lines.map((line) => (<li key={line.id}>{line.quantity} × {line.name}</li>))}
+            <ul className="cp-cart" aria-label="Equipos del pedido">
+              {lines.map((line) => (
+                <li key={line.id} className="cp-cart-line">
+                  <span className="cp-cart-name">{line.name}</span>
+                  <span className="cp-qty" role="group" aria-label={`Cantidad de ${line.name}`}>
+                    <button type="button" className="cp-btn cp-btn--icon" onClick={() => { if (line.quantity <= 1 && lines.length === 1) props.onClose(); props.onQuantity(line.id, line.quantity - 1); }} aria-label={`Quitar una unidad de ${line.name}`}>−</button>
+                    <output aria-live="polite">{line.quantity}</output>
+                    <button type="button" className="cp-btn cp-btn--icon" onClick={() => props.onQuantity(line.id, line.quantity + 1)} aria-label={`Agregar una unidad de ${line.name}`}>+</button>
+                  </span>
+                </li>
+              ))}
             </ul>
             {showPrices ? <p><strong>{subtotal !== null ? `Subtotal estimado: ${money(subtotal)}` : "Subtotal: a cotizar"}</strong> <span className="cp-hint">(referencia, no incluye traslado ni instalación)</span></p> : null}
             <label className="cp-field"><span>Nombre y apellido</span><input ref={first} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" /></label>

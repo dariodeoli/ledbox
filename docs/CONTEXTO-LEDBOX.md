@@ -587,3 +587,11 @@ Pendientes declarados: idempotencia y snapshots de operaciones financieras, PIN/
   DTO público suma esos dos campos sin exponer nada más del cliente.
   Autorizado (o con un pedido en revisión) desaparecen los editores: la página
   queda en solo lectura, con impresión en claro y sin acciones muertas.
+
+## Tienda web por empresa (`/tienda/<slug>`)
+
+- Cada empresa tiene su tienda pública, apagada por defecto: Ajustes → Tienda web (`publicCatalogEnabled`, precios, frase, color de marca, WhatsApp y correo; «Crear tienda» la enciende). Apagada o inexistente: 404. `/catalogo/<slug>` redirige a la tienda. El sitio de `ledbox.online` (`app/(public)`) no se toca.
+- Cada producto tiene un alcance (`InventoryItem.catalogAudience`): Oculto, Cliente final, Mayorista o Ambos; `visibleOnWeb` queda sincronizado (alcance distinto de Oculto). Una fila vieja sin alcance se lee por `visibleOnWeb` y solo en el catálogo de cliente final.
+- Catálogo de cliente final: RETAIL y BOTH con precio de lista o «Consultar». Catálogo mayorista: WHOLESALE y BOTH con precio mayorista, por link privado de un cliente (`/tienda/<slug>/mayorista/<token>`, noindex): se genera en la ficha del cliente con `clients.write`, se guarda solo el hash (`CatalogAccessToken`), se revoca desde la misma ficha y un token revocado, ajeno o inexistente es 404. Sin cuentas.
+- El pedido (`QuoteRequest.priceList` RETAIL o WHOLESALE) usa el mismo endpoint y las mismas defensas (rate-limit, honeypot, idempotencia, tope diario por lista). El pedido mayorista queda vinculado al cliente del link y el presupuesto convertido usa precios mayoristas y ese cliente.
+- El tema sale de `storefrontAccent` (hex con contraste mínimo 4,5:1 sobre blanco; en oscuro se aclara solo); sin color rige un tema neutro. Lógica pura en `lib/storefront-theme.ts` y `lib/catalog-audience.ts`.
