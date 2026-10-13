@@ -338,6 +338,7 @@ export function MoneyField({
   required,
   placeholder,
   disabled,
+  autoFocus,
   readOnly,
   name,
   id,
@@ -355,6 +356,7 @@ export function MoneyField({
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  autoFocus?: boolean;
   readOnly?: boolean;
   name?: string;
   id?: string;
@@ -400,6 +402,7 @@ export function MoneyField({
           required={required}
           placeholder={placeholder}
           disabled={disabled}
+          autoFocus={autoFocus}
           readOnly={readOnly}
           aria-label={label ? undefined : ariaLabel}
           aria-describedby={describedBy(fieldError, hint, hintId, errorId)}
@@ -643,6 +646,7 @@ export function EmailField({
   required,
   placeholder,
   disabled,
+  autoFocus,
   name,
   id,
   autoComplete = "email",
@@ -658,6 +662,7 @@ export function EmailField({
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  autoFocus?: boolean;
   name?: string;
   id?: string;
   autoComplete?: string;
@@ -675,6 +680,7 @@ export function EmailField({
         autoComplete={autoComplete}
         inputMode="email"
         disabled={disabled}
+        autoFocus={autoFocus}
         name={name}
         aria-label={label ? undefined : ariaLabel}
         aria-invalid={error ? true : undefined}
