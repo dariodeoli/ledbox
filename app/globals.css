@@ -4441,6 +4441,7 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .cp-item-body p { margin: 0; }
 .cp-item-name { margin: 0; font-size: 1rem; }
 .cp-sku { color: var(--cp-muted); font-size: 0.85rem; }
+.cp-desc { color: var(--cp-muted); font-size: 0.9rem; line-height: 1.4; margin: 0.25rem 0; white-space: pre-line; overflow-wrap: anywhere; }
 .cp-price span { color: var(--cp-muted); font-size: 0.9rem; }
 .cp-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; font-size: 0.85rem; font-weight: 600; }
 .cp-chip--ok { color: var(--cp-ok); } .cp-chip--warn { color: var(--cp-warn); } .cp-chip--muted { color: var(--cp-muted); }

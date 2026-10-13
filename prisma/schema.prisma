@@ -1702,6 +1702,9 @@ model InventoryItem {
   /// Piso de venta del ítem.
   minimumPrice       Int              @default(0)
   notes              String?
+  /// Descripción para el catálogo público (opcional, hasta 600 caracteres). Es lo único
+  /// de texto libre que se publica: las `notes` son internas y nunca salen.
+  publicDescription  String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)

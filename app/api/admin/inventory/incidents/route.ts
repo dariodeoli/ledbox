@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     orderBy: [{ openedAt: "desc" }],
     take: MAX_LIST,
     include: {
-      inventory: { select: { id: true, name: true, sku: true } },
+      inventory: { select: { id: true, name: true, sku: true, _count: { select: { units: true } } } },
       unit: { select: { id: true, code: true, status: true } },
       event: { select: { id: true, name: true } },
     },

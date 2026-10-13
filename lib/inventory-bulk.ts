@@ -5,6 +5,7 @@ export const INVENTORY_FIELD_HELP: Record<string, string> = {
   inventoryKind: "Clasifica el producto como reutilizable, consumible o descartable.",
   status: "Estado operativo del producto; mantenimiento y retirado bloquean disponibilidad. No es archivo organizacional.",
   visibleOnWeb: "Marca la visibilidad para el catálogo público; no modifica precios ni disponibilidad.",
+  publicDescription: "Texto opcional que muestra el catálogo público debajo del nombre. Las notas internas nunca se publican.",
   notes: "Notas internas opcionales. En unidades no hay fechas, taller ni presupuesto de reparación estructurados.",
   imageUrl: "Imagen manual del producto. Vaciar la URL conserva la foto subida como alternativa, si existe.",
   dailyCost: "Costo interno por día de uso; no es una tarifa al cliente ni un importe de reparación.",

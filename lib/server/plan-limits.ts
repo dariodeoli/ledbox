@@ -1,4 +1,4 @@
-import type { Plan } from "@prisma/client";
+import type { Plan, Prisma } from "@prisma/client";
 import {
   DEFAULT_PLAN_CODE,
   monthKeyOf,
@@ -154,6 +154,8 @@ export type PlanLimitViolation = { error: string; code: "plan_limit" };
 export async function planLimitViolation(
   context: Pick<AdminContext, "organizationId" | "organization">,
   resource: PlanResource,
+  /** Cliente de la transacción en curso: el conteo se hace dentro de ella (chequeo repetido tras el lock). */
+  client: Pick<Prisma.TransactionClient, "event" | "adminMembership" | "teamInvitation"> = db,
 ): Promise<PlanLimitViolation | null> {
   const plan = await resolveOrganizationPlan(context.organizationId, context.organization.planId ?? null);
   if (!plan) return null;
@@ -164,7 +166,7 @@ export async function planLimitViolation(
     const todayKey = dayKeyOf(new Date());
     const monthStart = dayStart(`${monthKeyOf(todayKey)}-01`);
     const monthEnd = dayStart(nextMonthStartKey(todayKey));
-    const used = await db.event.count({
+    const used = await client.event.count({
       where: { organizationId: context.organizationId, createdAt: { gte: monthStart, lt: monthEnd } },
     });
     if (!planLimitReached(limit, used)) return null;
@@ -184,8 +186,8 @@ export async function planLimitViolation(
   if (limit === null) return null;
   await expireDueInvitations(context.organizationId);
   const [members, pendingInvitations] = await Promise.all([
-    db.adminMembership.count({ where: { organizationId: context.organizationId, active: true } }),
-    db.teamInvitation.count({ where: { organizationId: context.organizationId, status: "pending" } }),
+    client.adminMembership.count({ where: { organizationId: context.organizationId, active: true } }),
+    client.teamInvitation.count({ where: { organizationId: context.organizationId, status: "pending" } }),
   ]);
   const used = members + pendingInvitations;
   if (!planLimitReached(limit, used)) return null;
@@ -193,4 +195,18 @@ export async function planLimitViolation(
     error: planLimitMessage({ planName: plan.name, resource, limit, used }),
     code: "plan_limit",
   };
+}
+
+/**
+ * Chequeo del tope de eventos **dentro** de la transacción que crea el evento: toma el
+ * lock de la fila de la empresa (serializa las altas simultáneas de la misma empresa,
+ * aunque sean de presupuestos distintos) y vuelve a contar con el cliente de la
+ * transacción. Devuelve la violación o `null`; el lock dura hasta el commit.
+ */
+export async function lockedEventLimitViolation(
+  tx: Prisma.TransactionClient,
+  context: Pick<AdminContext, "organizationId" | "organization">,
+): Promise<PlanLimitViolation | null> {
+  await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id" = ${context.organizationId} FOR NO KEY UPDATE`;
+  return planLimitViolation(context, "events", tx);
 }

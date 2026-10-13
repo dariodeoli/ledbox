@@ -1276,6 +1276,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const [expenseProjectFilter, setExpenseProjectFilter] = useState("");
   const [expenseAccountFilter, setExpenseAccountFilter] = useState("");
   const [payJob, setPayJob] = useState<PayJobForm | null>(null);
+  const [payJobBase, setPayJobBase] = useState<PayJobForm | null>(null);
+  const payJobFormId = useId();
   const [payBusy, setPayBusy] = useState(false);
   const [payError, setPayError] = useState("");
 
@@ -2258,7 +2260,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   /** Abre el pago de un trabajo de proveedor con el saldo real como monto. */
   function openPayJob(job: AdminSupplierJobRow) {
     setPayError("");
-    setPayJob({
+    const initial: PayJobForm = {
       jobId: job.id,
       accountId: defaultAccountId,
       amount: String(supplierJobBalance(job) || ""),
@@ -2266,7 +2268,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       // Un pago a proveedor es plata que sale: método real (issue #135).
       method: METHOD_OPTIONS[0],
       receipt: "",
-    });
+    };
+    setPayJobBase(initial);
+    setPayJob(initial);
   }
 
   /**
@@ -3444,58 +3448,64 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           }
         >
           {writable && payJob && payJobRow ? (
-            <form className="admin-inline-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
-              <span className="admin-note">
-                <strong>Pago a {payJobRow.supplier.name}</strong>
-                <span className="admin-cell-sub">
-                  {" "}
-                  · {payJobRow.description} · saldo {formatMoney(supplierJobBalance(payJobRow))}
-                </span>
-              </span>
-              <span className="admin-pay-amount">
+            <AdminDialog
+              title={`Pago a ${payJobRow.supplier.name}`}
+              icon="check"
+              description={`${payJobRow.description} · saldo ${formatMoney(supplierJobBalance(payJobRow))}`}
+              dirty={JSON.stringify(payJob) !== JSON.stringify(payJobBase)}
+              onClose={() => setPayJob(null)}
+              footer={({ requestClose }) => (
+                <>
+                  {payError ? (
+                    <div className="admin-dialog-footer-note">
+                      <AdminNote tone="error">{payError}</AdminNote>
+                    </div>
+                  ) : null}
+                  <AdminButton icon="close" type="button" disabled={payBusy} onClick={requestClose}>
+                    Cancelar
+                  </AdminButton>
+                  <AdminButton variant="primary" icon="check" type="submit" form={payJobFormId} busy={payBusy} disabled={payBusy}>
+                    Registrar pago
+                  </AdminButton>
+                </>
+              )}
+            >
+              <form id={payJobFormId} className="admin-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
                 <MoneyField
-                  ariaLabel="Monto del pago"
+                  label="Monto del pago"
                   required
                   value={payJob.amount}
                   onChange={(value) => setPayJob({ ...payJob, amount: value })}
                 />
-              </span>
-              <Combobox
-                ariaLabel="Cuenta del pago"
-                value={payJob.accountId || defaultAccountId}
-                onChange={(value) => setPayJob({ ...payJob, accountId: value })}
-                placeholder="Cuenta…"
-                options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
-              />
-              <DateField
-                ariaLabel="Fecha del pago"
-                title="Fecha del pago"
-                value={payJob.date}
-                onChange={(value) => setPayJob({ ...payJob, date: value })}
-              />
-              <SelectField
-                ariaLabel="Método del pago"
-                value={payJob.method}
-                onChange={(value) => setPayJob({ ...payJob, method: value })}
-                options={METHOD_SELECT_OPTIONS}
-              />
-              <TextField
-                ariaLabel="Comprobante del pago"
-                title="Número o referencia del comprobante (opcional)"
-                maxLength={120}
-                value={payJob.receipt}
-                onChange={(value) => setPayJob({ ...payJob, receipt: value })}
-                placeholder="Comprobante"
-              />
-              <AdminButton type="submit" icon="check" busy={payBusy} disabled={payBusy}>
-                Registrar pago
-              </AdminButton>
-              <AdminButton icon="close" type="button" disabled={payBusy} onClick={() => setPayJob(null)}>
-                Cancelar
-              </AdminButton>
-            </form>
+                <Combobox
+                  label="Cuenta del pago"
+                  value={payJob.accountId || defaultAccountId}
+                  onChange={(value) => setPayJob({ ...payJob, accountId: value })}
+                  placeholder="Cuenta…"
+                  options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
+                />
+                <DateField
+                  label="Fecha del pago"
+                  value={payJob.date}
+                  onChange={(value) => setPayJob({ ...payJob, date: value })}
+                />
+                <SelectField
+                  label="Método del pago"
+                  value={payJob.method}
+                  onChange={(value) => setPayJob({ ...payJob, method: value })}
+                  options={METHOD_SELECT_OPTIONS}
+                />
+                <TextField
+                  label="Comprobante"
+                  optional
+                  hint="Número o referencia del comprobante"
+                  maxLength={120}
+                  value={payJob.receipt}
+                  onChange={(value) => setPayJob({ ...payJob, receipt: value })}
+                />
+              </form>
+            </AdminDialog>
           ) : null}
-          {writable && payJob && payError ? <AdminNote tone="error">{payError}</AdminNote> : null}
 
           <AdminDataState
             loading={finance.loading}

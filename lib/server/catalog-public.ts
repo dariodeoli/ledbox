@@ -67,6 +67,8 @@ export type PublicCatalogItem = {
   category: string;
   sku: string | null;
   imageUrl: string | null;
+  /** Descripción pública del ítem; `null` si no la cargaron. Nunca son las notas internas. */
+  description: string | null;
   /** Precio de venta de referencia por día; `null` si la empresa no muestra precios. */
   price: { listPrice: number; listFromDays: number; listFromPrice: number } | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
@@ -78,6 +80,7 @@ type CatalogRow = {
   name: string;
   category: string;
   sku: string | null;
+  publicDescription: string | null;
   imageUrl: string | null;
   imageMime: string | null;
   updatedAt: Date;
@@ -103,6 +106,7 @@ async function loadVisibleRows(organizationId: string, ids?: readonly string[]):
       name: true,
       category: true,
       sku: true,
+      publicDescription: true,
       imageUrl: true,
       imageMime: true,
       updatedAt: true,
@@ -171,6 +175,7 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     category: row.category,
     sku: row.sku,
     imageUrl: inventoryImageUrl(row),
+    description: row.publicDescription?.trim() || null,
     price: context.settings.publicShowPrices ? { listPrice: row.listPrice, listFromDays: row.listFromDays, listFromPrice: row.listFromPrice } : null,
     availability: hints?.get(row.id) ?? null,
   }));
@@ -385,4 +390,26 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     organization: { name: organization.name, whatsappPhone: settings?.whatsappPhone ?? null },
     items: quote.items.map((item) => ({ name: item.productName, quantity: item.quantity })),
   };
+}
+
+/** Tope diario de preórdenes del catálogo por empresa (además del rate-limit por IP). */
+export const PREORDER_DAILY_LIMIT = 200;
+
+/**
+ * ¿La empresa ya recibió el tope de preórdenes hoy (día de Asunción)? Cuenta los pedidos
+ * reales del catálogo guardados; `retryAfter` son los segundos hasta el próximo día.
+ * Es un tope blando: dos pedidos simultáneos justo en el límite pueden pasarlo por poco.
+ */
+export async function preorderDailyLimit(
+  organizationId: string,
+  options: { now?: Date; limit?: number; client?: Pick<typeof db, "quoteRequest"> } = {},
+): Promise<{ reached: boolean; used: number; limit: number; retryAfter: number }> {
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? PREORDER_DAILY_LIMIT;
+  const today = dayKeyOf(now);
+  const used = await (options.client ?? db).quoteRequest.count({
+    where: { organizationId, source: "catalogo", createdAt: { gte: dayStart(today) } },
+  });
+  const retryAfter = Math.max(60, Math.ceil((dayStart(nextDayKey(today)).getTime() - now.getTime()) / 1000));
+  return { reached: used >= limit, used, limit, retryAfter };
 }

@@ -253,7 +253,8 @@ async function sendMutation<T>(
   }
   if (outcome.status < 200 || outcome.status >= 300) {
     const message = typeof outcome.payload.error === "string" ? outcome.payload.error : "No pudimos guardar los cambios.";
-    return { ok: false, error: message };
+    const code = typeof outcome.payload.code === "string" ? outcome.payload.code : undefined;
+    return code ? { ok: false, error: message, code } : { ok: false, error: message };
   }
   return { ok: true, data: outcome.payload as T };
 }

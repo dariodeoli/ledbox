@@ -22,6 +22,7 @@ export type CatalogItemView = {
   category: string;
   sku: string | null;
   imageUrl: string | null;
+  description?: string | null;
   price: { listPrice: number; listFromDays: number; listFromPrice: number } | null;
   availability: AvailabilityHint | null;
 };
@@ -172,6 +173,7 @@ export function CatalogBrowser({ slug, organizationName, whatsappPhone, showPric
                     <div className="cp-item-body">
                       <h4 className="cp-item-name">{item.name}</h4>
                       {item.sku ? <p className="cp-sku">SKU {item.sku}</p> : null}
+                      {item.description ? <p className="cp-desc">{item.description}</p> : null}
                       <p className="cp-price">
                         {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>por día</span></>) : "Consultar"}
                       </p>

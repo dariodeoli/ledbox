@@ -55,6 +55,63 @@ export function leadBelongsToClient(
   return phone.length > 0 && client.phones.some((value) => phoneKey(value) === phone);
 }
 
+const CLIENT_LEAD_SELECT = {
+  id: true,
+  name: true,
+  phone: true,
+  email: true,
+  company: true,
+  reason: true,
+  eventDate: true,
+  source: true,
+  status: true,
+  createdAt: true,
+} as const;
+const PHONE_SCAN_BATCH = 1000;
+
+/**
+ * Leads de un cliente dentro de la empresa, sin tope y sin traer toda la tabla: por email
+ * (sin mayúsculas) y por los leadId de sus presupuestos se filtra en la consulta; el
+ * teléfono no tiene columna normalizada, así que se recorre la empresa paginando por id
+ * (solo `id` y `phone`) y se traen completas únicamente las filas que coinciden.
+ * `leadBelongsToClient` sigue siendo el match fino. Orden: más nuevos primero.
+ */
+export async function leadsForClient(
+  client: Pick<Prisma.TransactionClient, "lead">,
+  organizationId: string,
+  identity: { emails: ReadonlyArray<string | null | undefined>; phones: ReadonlyArray<string | null | undefined> },
+  budgetLeadIds: ReadonlySet<string>,
+) {
+  const emails = [...new Set(identity.emails.map((value) => value?.trim().toLowerCase() ?? "").filter(Boolean))];
+  const or: Prisma.LeadWhereInput[] = emails.map((email) => ({ email: { equals: email, mode: "insensitive" } }));
+  if (budgetLeadIds.size > 0) or.push({ id: { in: [...budgetLeadIds] } });
+  const direct = or.length > 0 ? await client.lead.findMany({ where: { organizationId, OR: or }, select: CLIENT_LEAD_SELECT }) : [];
+
+  const phoneKeys = new Set(identity.phones.map((value) => phoneKey(value)).filter(Boolean));
+  const byPhone: string[] = [];
+  if (phoneKeys.size > 0) {
+    let cursor: string | undefined;
+    for (;;) {
+      const batch = await client.lead.findMany({
+        where: { organizationId },
+        orderBy: { id: "asc" },
+        take: PHONE_SCAN_BATCH,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true, phone: true },
+      });
+      for (const row of batch) if (phoneKeys.has(phoneKey(row.phone))) byPhone.push(row.id);
+      if (batch.length < PHONE_SCAN_BATCH) break;
+      cursor = batch[batch.length - 1].id;
+    }
+  }
+  const known = new Set(direct.map((lead) => lead.id));
+  const extraIds = byPhone.filter((id) => !known.has(id));
+  const extra = extraIds.length > 0 ? await client.lead.findMany({ where: { organizationId, id: { in: extraIds } }, select: CLIENT_LEAD_SELECT }) : [];
+  return [...direct, ...extra]
+    .filter((lead) => leadBelongsToClient(lead, identity, budgetLeadIds))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 export type ResolvedLeadClient = {
   client: { id: string; name: string; company: string | null };
   created: boolean;

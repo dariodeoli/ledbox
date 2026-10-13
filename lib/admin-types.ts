@@ -272,7 +272,9 @@ export type AdminInventoryIncident = {
   notes: string | null;
   openedAt: string;
   resolvedAt: string | null;
-  inventory: { id: string; name: string; sku: string | null };
+  /** Retenido por cantidad: en ítems con unidades es una «unidad sin identificar». */
+  heldByQuantity?: boolean;
+  inventory: { id: string; name: string; sku: string | null; _count?: { units: number } };
   unit: { id: string; code: string; status: string } | null;
   event: { id: string; name: string } | null;
 };
@@ -1625,6 +1627,8 @@ export type AdminInventoryRow = {
   status: string;
   /** «Visible en la web» (issue #111): el catálogo público lo respeta. */
   visibleOnWeb: boolean;
+  /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
+  publicDescription?: string | null;
   quantity: number;
   replacementCost: number;
   dailyCost: number;

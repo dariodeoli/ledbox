@@ -153,6 +153,7 @@ export async function PATCH(request: Request) {
   const forceNote = typeof body.forceCloseNote === "string" ? body.forceCloseNote.trim() : "";
   if (closing && forceClose && forceNote.length < 5) return jsonError("Para cerrar igual escribí el motivo (mínimo 5 caracteres).", 400);
   if (forceNote.length > 400) return jsonError("El motivo no puede superar 400 caracteres.", 400);
+  if (closing && event.status === "CANCELLED") return jsonError("Un evento cancelado no se puede finalizar.", 409);
   let blockedMessage: string | null = null;
   let forcedOver: string | null = null;
   const updated = await db.$transaction(async (tx) => {
@@ -165,19 +166,21 @@ export async function PATCH(request: Request) {
       }
       forcedOver = message;
     }
-    return tx.event.update({ where: { id: event.id }, data: parsed.data });
+    const row = await tx.event.update({ where: { id: event.id }, data: parsed.data });
+    // La nota del cierre forzado es su justificación: se audita en la misma transacción.
+    if (forcedOver) {
+      await recordAudit({
+        context: auth.context,
+        action: "status",
+        entity: "Event",
+        entityId: event.id,
+        summary: `Cerró igual el evento «${event.name}» con operación de inventario pendiente`,
+        detail: { fields: { forceClose: true, reason: forceNote, pendiente: forcedOver } },
+      }, tx);
+    }
+    return row;
   });
-  if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409);
-  if (forcedOver) {
-    await recordAudit({
-      context: auth.context,
-      action: "status",
-      entity: "Event",
-      entityId: event.id,
-      summary: `Cerró igual el evento «${event.name}» con operación de inventario pendiente`,
-      detail: { fields: { forceClose: true, reason: forceNote, pendiente: forcedOver } },
-    });
-  }
+  if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409, "closure_blocked");
   if (changes) {
     await recordAudit({
       context: auth.context,

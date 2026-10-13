@@ -1,4 +1,4 @@
-import { createPreorder, preorderSchema, resolvePublicCatalog } from "@/lib/server/catalog-public";
+import { createPreorder, preorderDailyLimit, preorderSchema, resolvePublicCatalog } from "@/lib/server/catalog-public";
 import { withIdempotency } from "@/lib/server/idempotency";
 import { jsonError, readJson } from "@/lib/server/http";
 import { getPublicOrigin } from "@/lib/server/public-origin";
@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
  *
  * Crea o reutiliza el lead de ESA empresa y crea el pedido (`QuoteRequest` en
  * NEW) con sus ítems. No toca `EventInventory`: una preorden no es una reserva.
+ * Además del rate-limit por IP hay un tope diario por empresa (`PREORDER_DAILY_LIMIT`, 429).
  * En la empresa demo (solo lectura) no se guarda nada: responde `simulated`.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ orgSlug: string }> }) {
@@ -35,6 +36,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ org
     return Response.json(
       { simulated: true, message: "Esta es una demo: tu pedido no se guardó ni se envió a nadie. En una empresa real quedaría registrado para responderte." },
       { status: 200 },
+    );
+  }
+
+  // Tope diario por empresa: frena una ráfaga de pedidos aunque venga de muchas IP.
+  const daily = await preorderDailyLimit(context.organization.id);
+  if (daily.reached) {
+    return Response.json(
+      { error: "Esta empresa recibió hoy el máximo de pedidos del catálogo. Probá de nuevo mañana o escribinos por WhatsApp." },
+      { status: 429, headers: { "Retry-After": String(daily.retryAfter) } },
     );
   }
 
