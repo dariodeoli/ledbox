@@ -662,7 +662,10 @@ export async function signSignatureRequest(input: SignatureActionInput): Promise
   if (grouped?.comparisonId) {
     const actor = portalAuditContext(row.organizationId, providerResult.signerName, row.recipientEmail);
     const auto = await ensureEventForApprovedBudget({ organizationId: row.organizationId, budgetId: row.budgetId, actor });
-    if (!auto.reservations) await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor });
+    if (!auto.reservations) {
+      try { await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor }); }
+      catch (error) { console.error("[signature] la reserva quedó pendiente", { budgetId: row.budgetId, error }); }
+    }
     await syncBudgetExpectedPayments({ organizationId: row.organizationId, budgetId: row.budgetId, actor, reason: "firma de alternativa" });
   }
   await notifySignatureCompleted(row, providerResult.identifier);

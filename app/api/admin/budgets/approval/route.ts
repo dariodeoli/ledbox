@@ -93,7 +93,11 @@ export async function POST(request: Request) {
       // Evento automático (CONFIRMED) y su reserva; el panel ya validó budgets.write, el evento se crea
       // como parte de la aprobación. Si falla, la aprobación sigue y queda auditado.
       const auto = await ensureEventForApprovedBudget({ organizationId, budgetId: budget.id, actor: auth.context, plan: auth.context });
-      reservations = auto.reservations ?? (await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context }));
+      reservations = auto.reservations;
+      if (!reservations) {
+        try { reservations = await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context }); }
+        catch (error) { console.error("[budgets/approval] la reserva quedó pendiente", { budgetId: budget.id, error }); }
+      }
       // Pagos esperados del plan (issue #28): idempotente y sin tocar lo confirmado.
       await syncBudgetExpectedPayments({
         organizationId,

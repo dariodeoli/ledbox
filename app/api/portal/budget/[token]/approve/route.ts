@@ -111,11 +111,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       actor: portalAuditContext(budget.organizationId, name, budget.client?.email),
     });
     if (!auto.reservations) {
-      await reserveBudgetInventory({
-        organizationId: budget.organizationId,
-        budgetId: budget.id,
-        context: portalAuditContext(budget.organizationId, name, budget.client?.email),
-      });
+      // La aprobación ya está aplicada: una reserva que falla queda pendiente, nunca un 500.
+      try {
+        await reserveBudgetInventory({
+          organizationId: budget.organizationId,
+          budgetId: budget.id,
+          context: portalAuditContext(budget.organizationId, name, budget.client?.email),
+        });
+      } catch (error) {
+        console.error("[portal/approve] la reserva quedó pendiente", { budgetId: budget.id, error });
+      }
     }
     // Pagos esperados del plan (issue #28): el cliente ya puede ver el estado
     // real de cada concepto en el portal y el equipo los confirma en Finanzas.

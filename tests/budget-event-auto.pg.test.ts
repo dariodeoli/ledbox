@@ -101,6 +101,30 @@ test("evento automático al aprobar: portal, panel, borrador, límite del plan, 
     const cross = await ensureEventForApprovedBudget({ organizationId: B.id, budgetId: panelBudget, actor: actor(B) });
     assert.equal(cross.event, "failed");
     assert.equal((await events(B)).length, 0);
+
+    // 7. La reserva lanza: el evento queda creado y la auditoría lo dice (no «No se creó el evento»).
+    const throwing = await budget(A);
+    await approve(throwing);
+    const reserveFails = await ensureEventForApprovedBudget({ organizationId: A.id, budgetId: throwing, actor: actor(A), reserve: async () => { throw new Error("stock roto"); } });
+    assert.equal(reserveFails.event, "created");
+    assert.equal(reserveFails.reservations, null);
+    const throwingBudget = await db.budget.findUniqueOrThrow({ where: { id: throwing } });
+    assert.equal(throwingBudget.status, "APPROVED");
+    assert.ok(throwingBudget.eventId, "el evento sigue vinculado");
+    const logs = JSON.stringify(await db.auditLog.findMany({ where: { organizationId: A.id, entity: "Budget", entityId: throwing } }));
+    assert.match(logs, /Evento creado; la reserva de equipos quedó pendiente: stock roto/);
+    assert.doesNotMatch(logs, /No se creó el evento/);
+
+    // 8. Evento sin endsAt: la reserva real queda pendiente, sin error.
+    const inv = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: A.id, name: "Pantalla", sku: `S-${randomUUID().slice(0, 6)}`, category: "Pantallas", quantity: 5 } as never });
+    const pending = await budget(A);
+    await db.budgetItem.updateMany({ where: { budgetId: pending }, data: { inventoryId: inv.id } });
+    await approve(pending);
+    const pend = await ensureEventForApprovedBudget({ organizationId: A.id, budgetId: pending, actor: actor(A) });
+    assert.equal(pend.event, "created");
+    assert.ok(pend.reservations, "la reserva real responde sin lanzar");
+    assert.equal(pend.reservations!.failed, false);
+    assert.equal(await db.eventInventory.count({ where: { eventId: (await db.budget.findUniqueOrThrow({ where: { id: pending } })).eventId! } }), 0, "sin rango completo no reserva");
   } finally {
     // Datos descartables: la base entera se borra al terminar.
   }

@@ -139,9 +139,13 @@ export async function ensureEventForApprovedBudget(options: {
   actor: AuditContext;
   /** Contexto con plan ya resuelto (panel); si falta se carga el de la empresa. */
   plan?: EventPlanContext;
+  /** Solo para tests: reemplaza la reserva de inventario. */
+  reserve?: typeof reserveBudgetInventory;
 }): Promise<AutoEventResult> {
   const { organizationId, budgetId, actor } = options;
+  const reserve = options.reserve ?? reserveBudgetInventory;
   const via = actor.user.id === "portal" ? " (automático, aprobación del cliente)" : " (automático, aprobación del equipo)";
+  let result: CreateEventForBudgetResult;
   try {
     const plan = options.plan ?? (await systemPlanContext(organizationId));
     if (!plan) throw new QuoteComparisonError(404, "Empresa no encontrada.");
@@ -150,10 +154,9 @@ export async function ensureEventForApprovedBudget(options: {
     // quedaría esperando su propio lock hasta vencer la transacción.
     const resolved = await resolveOrganizationPlan(organizationId, plan.organization.planId);
     const locked: EventPlanContext = { ...plan, organization: { ...plan.organization, planId: resolved?.id ?? plan.organization.planId } };
-    const result = await db.$transaction((tx) => createEventForBudget(tx, locked, budgetId));
-    await auditBudgetEvent(actor, result, via);
-    const reservations = await reserveBudgetInventory({ organizationId, budgetId, context: actor });
-    return { event: result.outcome, reservations };
+    // Un evento en DRAFT que pasa a CONFIRMED no chequea el límite del plan: el borrador ya cuenta
+    // en el consumo mensual, confirmarlo no suma un evento nuevo.
+    result = await db.$transaction((tx) => createEventForBudget(tx, locked, budgetId));
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Error desconocido";
     console.error("[budget-event] no se pudo crear el evento automático", { budgetId, organizationId, error });
@@ -166,5 +169,22 @@ export async function ensureEventForApprovedBudget(options: {
       detail: { fields: { eventAuto: "failed", reason, code: error instanceof PlanLimitError ? error.violation.code : null } },
     });
     return { event: "failed", reservations: null };
+  }
+  await auditBudgetEvent(actor, result, via);
+  try {
+    const reservations = await reserve({ organizationId, budgetId, context: actor });
+    return { event: result.outcome, reservations };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Error desconocido";
+    console.error("[budget-event] el evento quedó creado pero la reserva falló", { budgetId, organizationId, error });
+    await recordAudit({
+      context: actor,
+      action: "status",
+      entity: "Budget",
+      entityId: budgetId,
+      summary: `Evento creado; la reserva de equipos quedó pendiente: ${reason}`,
+      detail: { fields: { eventId: result.event.id, reservation: "pending", reason } },
+    });
+    return { event: result.outcome, reservations: null };
   }
 }

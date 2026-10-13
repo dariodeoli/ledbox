@@ -112,6 +112,20 @@ test("aprobar crea el evento solo, después de la aprobación, en todos los cami
     assert.match(source, /ensureEventForApprovedBudget\(/, `${file} crea el evento al aprobar`);
     assert.equal(/tx\.event\.create|db\.event\.create/.test(source), false, `${file} no duplica la creación`);
   }
+  // Solo bajo `count > 0` y después de la transacción de aprobación, en los 4 caminos.
+  const guards: Array<[string, RegExp, RegExp]> = [
+    ["app/api/portal/budget/[token]/approve/route.ts", /if \(updated\.count > 0\) \{[\s\S]*ensureEventForApprovedBudget\(/, /withQuoteApproval\([\s\S]*ensureEventForApprovedBudget\(/],
+    ["app/api/admin/budgets/approval/route.ts", /if \(applied\.count > 0\) \{[\s\S]*ensureEventForApprovedBudget\(/, /withQuoteApproval\([\s\S]*ensureEventForApprovedBudget\(/],
+    ["app/api/portal/comparison/[token]/approve/route.ts", /if \(updated\.count\) \{[\s\S]*ensureEventForApprovedBudget\(/, /db\.\$transaction\([\s\S]*ensureEventForApprovedBudget\(/],
+    ["lib/server/signature/portal.ts", /if \(grouped\?\.comparisonId\) \{[\s\S]*ensureEventForApprovedBudget\(/, /\$transaction\([\s\S]*ensureEventForApprovedBudget\(/],
+  ];
+  for (const [file, underCount, afterTx] of guards) {
+    const source = repoFile(file);
+    assert.match(source, underCount, `${file}: solo si la aprobación se aplicó`);
+    assert.match(source, afterTx, `${file}: después de la transacción de aprobación`);
+    assert.equal((source.match(/ensureEventForApprovedBudget\(/g) ?? []).length, 1, `${file}: una sola llamada`);
+    assert.match(source, /la reserva quedó pendiente/, `${file}: la reserva de respaldo no tira 500`);
+  }
   const shared = repoFile("lib/server/budget-event.ts");
   assert.match(shared, /catch \(error\)[\s\S]*No se creó el evento automáticamente/, "si falla, se audita el motivo y no se lanza");
 });

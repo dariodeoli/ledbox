@@ -36,7 +36,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       const context = portalAuditContext(group.organizationId, name);
       await recordAudit({ context, action: "status", entity: "Budget", entityId: body.budgetId, summary: "El cliente eligió una alternativa de la comparación", detail: { fields: { comparisonId: group.id } } });
       const auto = await ensureEventForApprovedBudget({ organizationId: group.organizationId, budgetId: body.budgetId, actor: context });
-      if (!auto.reservations) await reserveBudgetInventory({ organizationId: group.organizationId, budgetId: body.budgetId, context });
+      if (!auto.reservations) {
+        try { await reserveBudgetInventory({ organizationId: group.organizationId, budgetId: body.budgetId, context }); }
+        catch (error) { console.error("[comparison/approve] la reserva quedó pendiente", { budgetId: body.budgetId, error }); }
+      }
       await syncBudgetExpectedPayments({ organizationId: group.organizationId, budgetId: body.budgetId, actor: context, reason: "alternativa elegida" });
     }
     return Response.json({ comparison: await loadPublicComparison(code!), alreadyApproved: !updated.count });
