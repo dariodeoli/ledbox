@@ -83,3 +83,14 @@ test("descripción pública: tope de 600, campo opcional en la edición, catálo
   assert.doesNotMatch(sql, /NOT NULL|DROP|UPDATE|DELETE/);
   assert.match(read("prisma/schema.prisma"), /publicDescription\s+String\?/);
 });
+
+test("auditoría: recordAudit acepta un cliente tx opcional y la garantía audita dentro de su transacción", () => {
+  const audit = read("lib/server/audit.ts");
+  assert.match(audit, /recordAudit\(entry: AuditEntry, tx\?: Prisma\.TransactionClient\)/);
+  assert.match(audit, /if \(tx\) throw error;/);
+  const deposit = read("lib/server/security-deposit.ts");
+  const start = deposit.indexOf("export async function transitionBudgetSecurityDeposit");
+  const body = deposit.slice(start, deposit.indexOf("export type EquipmentReturnState"));
+  assert.ok(body.indexOf("recordAudit(") > body.indexOf("db.$transaction") && body.indexOf("recordAudit(") < body.indexOf("  });\n  return { ...result.after"));
+  assert.match(body, /\n      tx,\n    \);/);
+});

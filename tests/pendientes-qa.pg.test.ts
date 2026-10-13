@@ -140,6 +140,31 @@ test("pendientes QA en PostgreSQL", { skip: !process.env.TEST_DATABASE_URL }, as
       assert.match(((await res.json()) as { error: string }).error, /máximo de pedidos/);
       await db.organizationRentalSettings.deleteMany({ where: { organizationId: a.org } });
     });
+
+    await t.test("garantía: la auditoría va dentro de la transacción (si falla, el estado no cambia)", async () => {
+      const { transitionBudgetSecurityDeposit } = await import("../lib/server/security-deposit");
+      const a = await seedOrg(null);
+      const budget = await db.budget.create({
+        data: { id: randomUUID(), organizationId: a.org, clientId: a.client.id, title: "Alquiler", status: "DRAFT", subtotal: 1_000_000, total: 1_000_000, securityDeposit: 500_000, securityDepositStatus: "PENDING" },
+      });
+      const user = { id: "u1", name: "Ana", email: "ana@example.com", role: "FINANCE" as const };
+      // Un NUL no entra en una columna de texto de Postgres: la auditoría falla a propósito.
+      const broken = { organizationId: a.org, user: { ...user, name: "Ana\u0000" } };
+      const quiet = console.error;
+      console.error = () => {};
+      try {
+        await assert.rejects(transitionBudgetSecurityDeposit(broken, budget.id, { to: "HELD" }));
+      } finally {
+        console.error = quiet;
+      }
+      assert.equal((await db.budget.findUniqueOrThrow({ where: { id: budget.id } })).securityDepositStatus, "PENDING");
+      assert.equal(await db.auditLog.count({ where: { entityId: budget.id } }), 0);
+      await transitionBudgetSecurityDeposit({ organizationId: a.org, user }, budget.id, { to: "HELD" });
+      assert.equal((await db.budget.findUniqueOrThrow({ where: { id: budget.id } })).securityDepositStatus, "HELD");
+      assert.equal(await db.auditLog.count({ where: { entityId: budget.id, action: "status" } }), 1);
+      await db.auditLog.deleteMany({ where: { organizationId: a.org } });
+      await db.budget.deleteMany({ where: { organizationId: a.org } });
+    });
   } finally {
     await db.quoteRequest.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.lead.deleteMany({ where: { organizationId: { in: orgs } } });

@@ -86,22 +86,26 @@ export async function transitionBudgetSecurityDeposit(context: AuditContext, bud
       data: { securityDepositStatus: next.status, securityDepositRetained: next.retained },
       select: SELECT,
     });
-    return { before: current, after, returned: next.returned };
-  });
-  const reason = input.reason?.trim().slice(0, 300) || null;
-  await recordAudit({
-    context,
-    action: "status",
-    entity: "Budget",
-    entityId: budgetId,
-    summary: `Cambió la garantía del presupuesto «${result.after.title}» a ${SECURITY_DEPOSIT_LABEL[input.to].toLowerCase()}`,
-    detail: {
-      changes: {
-        securityDepositStatus: { from: result.before.securityDepositStatus, to: result.after.securityDepositStatus },
-        ...(result.after.securityDepositRetained !== result.before.securityDepositRetained ? { securityDepositRetained: { from: result.before.securityDepositRetained, to: result.after.securityDepositRetained } } : {}),
+    // La auditoría va en la misma transacción: no puede quedar un cambio de estado sin su registro.
+    const reason = input.reason?.trim().slice(0, 300) || null;
+    await recordAudit(
+      {
+        context,
+        action: "status",
+        entity: "Budget",
+        entityId: budgetId,
+        summary: `Cambió la garantía del presupuesto «${after.title}» a ${SECURITY_DEPOSIT_LABEL[input.to].toLowerCase()}`,
+        detail: {
+          changes: {
+            securityDepositStatus: { from: current.securityDepositStatus, to: after.securityDepositStatus },
+            ...(after.securityDepositRetained !== current.securityDepositRetained ? { securityDepositRetained: { from: current.securityDepositRetained, to: after.securityDepositRetained } } : {}),
+          },
+          fields: { garantia: after.securityDeposit, devuelto: next.returned, ...(reason ? { motivo: reason } : {}) },
+        },
       },
-      fields: { garantia: result.after.securityDeposit, devuelto: result.returned, ...(reason ? { motivo: reason } : {}) },
-    },
+      tx,
+    );
+    return { after, returned: next.returned };
   });
   return { ...result.after, returned: result.returned };
 }

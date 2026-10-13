@@ -79,9 +79,9 @@ function comparable(value: unknown): unknown {
 }
 
 /** Registra un cambio. Nunca lanza: si falla, la operación principal no se rompe. */
-export async function recordAudit(entry: AuditEntry): Promise<void> {
+export async function recordAudit(entry: AuditEntry, tx?: Prisma.TransactionClient): Promise<void> {
   try {
-    await db.auditLog.create({
+    await (tx ?? db).auditLog.create({
       data: {
         id: randomUUID(),
         organizationId: entry.context.organizationId,
@@ -100,6 +100,10 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
       `[audit] No se pudo registrar ${entry.action} de ${entry.entity}:${entry.entityId}:`,
       error instanceof Error ? error.message : error,
     );
+    // Dentro de una transacción la auditoría es parte del cambio: si falla, Postgres ya dejó la
+    // transacción abortada, así que se propaga y el cambio se revierte completo. Fuera de una
+    // transacción sigue siendo best-effort (se registra el error y no se rompe la operación).
+    if (tx) throw error;
   }
 }
 
