@@ -78,7 +78,7 @@ test("catálogo público y preórdenes en PostgreSQL", { skip: !process.env.TEST
     await t.test("preorden: crea lead y pedido de ESA empresa, no toca EventInventory y reenviar la clave no duplica", async () => {
       const a = await seed();
       const b = await seed();
-      const before = await db.eventInventory.count();
+      const before = await db.eventInventory.count({ where: { OR: [{ organizationId: a.org }, { event: { organizationId: a.org } }] } });
       const key = randomUUID();
       const first = await post(a.slug, body(a.visible.id), { "Idempotency-Key": key });
       assert.equal(first.status, 201);
@@ -91,7 +91,7 @@ test("catálogo público y preórdenes en PostgreSQL", { skip: !process.env.TEST
       assert.equal(await db.quoteRequest.count({ where: { organizationId: a.org } }), 1);
       assert.equal(await db.lead.count({ where: { organizationId: a.org } }), 1);
       assert.equal(await db.lead.count({ where: { organizationId: b.org } }), 0);
-      assert.equal(await db.eventInventory.count(), before, "una preorden no compromete stock");
+      assert.equal(await db.eventInventory.count({ where: { OR: [{ organizationId: a.org }, { event: { organizationId: a.org } }] } }), before, "una preorden no compromete stock");
       const quote = await db.quoteRequest.findFirstOrThrow({ where: { organizationId: a.org }, include: { items: true } });
       assert.equal(quote.status, "NEW");
       assert.ok(quote.startsAt && quote.endsAt && quote.respondBy);

@@ -2639,12 +2639,17 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     });
   });
   const assignmentsData: Prisma.EventInventoryUncheckedCreateInput[] = ([
-    { id: "demo_asg_activacion_p5", eventId: inProgress.id, inventoryId: "demo_inv_led_p5", quantity: 12, startsAt: inProgress.setupAt, endsAt: atDay(inProgress.strikeAt, 0, 12), checkedOut: true, checkedIn: false, checkedOutAt: atDay(inProgress.setupAt, 0, 8, 20), conditionOut: "Bueno" },
+    { id: "demo_asg_activacion_p5", eventId: inProgress.id, inventoryId: "demo_inv_led_p5", quantity: 12, startsAt: inProgress.setupAt, endsAt: atDay(inProgress.strikeAt, 0, 12), checkedOut: true, checkedIn: false, checkedOutAt: atDay(inProgress.setupAt, 0, 8, 20), conditionOut: "Bueno", checkoutQuantity: 12 },
     { id: "demo_asg_proximo_p3", eventId: next.id, inventoryId: "demo_inv_led_p3", quantity: 20, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
     { id: "demo_asg_proximo_truss", eventId: next.id, inventoryId: "demo_inv_truss", quantity: 12, startsAt: next.setupAt, endsAt: atDay(next.strikeAt, 0, 14), checkedOut: false, checkedIn: false },
-    { id: "demo_asg_feria_totem", eventId: recentPast.id, inventoryId: "demo_inv_totem", quantity: 3, startsAt: recentPast.setupAt, endsAt: recentPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(recentPast.setupAt, 0, 8, 10), checkedInAt: atDay(recentPast.strikeAt, 0, 11, 20), conditionOut: "Bueno", conditionIn: "Con daño: marco doblado", damagedQuantity: 1, missingQuantity: 0, damageNotes: "Un tótem volvió con el marco doblado; queda en mantenimiento y se descuenta del saldo." },
-    { id: "demo_asg_feria_paneles", eventId: longestPast.id, inventoryId: "demo_inv_panels", quantity: 8, startsAt: longestPast.setupAt, endsAt: longestPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(longestPast.setupAt, 0, 8, 15), checkedInAt: atDay(longestPast.strikeAt, 0, 10, 30), conditionOut: "Bueno", conditionIn: "Con faltante: 2 unidades", damagedQuantity: 0, missingQuantity: 2, damageNotes: "Dos bastidores no volvieron del predio; el cliente tiene el reclamo abierto." },
-    { id: "demo_asg_showroom_touch", eventId: pastFiller.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: pastFiller.setupAt, endsAt: pastFiller.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(pastFiller.setupAt, 0, 7, 20), checkedInAt: atDay(pastFiller.strikeAt, 0, 10, 0), conditionOut: "Bueno", conditionIn: "Bueno" },
+    { id: "demo_asg_feria_totem", eventId: recentPast.id, inventoryId: "demo_inv_totem", quantity: 3, startsAt: recentPast.setupAt, endsAt: recentPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(recentPast.setupAt, 0, 8, 10), checkedInAt: atDay(recentPast.strikeAt, 0, 11, 20), conditionOut: "Bueno", conditionIn: "Con daño: marco doblado", checkoutQuantity: 3, returnedQuantity: 3, damagedQuantity: 1, missingQuantity: 0, damageNotes: "Un tótem volvió con el marco doblado; queda en mantenimiento y se descuenta del saldo." },
+    { id: "demo_asg_feria_paneles", eventId: longestPast.id, inventoryId: "demo_inv_panels", quantity: 8, startsAt: longestPast.setupAt, endsAt: longestPast.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(longestPast.setupAt, 0, 8, 15), checkedInAt: atDay(longestPast.strikeAt, 0, 10, 30), conditionOut: "Bueno", conditionIn: "Con faltante: 2 unidades", checkoutQuantity: 8, returnedQuantity: 6, damagedQuantity: 0, missingQuantity: 2, damageNotes: "Dos bastidores no volvieron del predio; el cliente tiene el reclamo abierto." },
+    { id: "demo_asg_showroom_touch", eventId: pastFiller.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: pastFiller.setupAt, endsAt: pastFiller.strikeAt, checkedOut: true, checkedIn: true, checkedOutAt: atDay(pastFiller.setupAt, 0, 7, 20), checkedInAt: atDay(pastFiller.strikeAt, 0, 10, 0), conditionOut: "Bueno", conditionIn: "Bueno", checkoutQuantity: 2, returnedQuantity: 2 },
+    // Operaciones (fase 4). Devolución parcial pendiente en un evento pasado: salieron 4 cilindros
+    // y volvieron 2 («faltan 2 por devolver»); no se cierra el evento hasta resolverlo.
+    { id: "demo_asg_feria_cilindro", eventId: recentPast.id, inventoryId: "demo_inv_cilindro", quantity: 4, startsAt: recentPast.setupAt, endsAt: recentPast.strikeAt, checkedOut: true, checkedIn: false, checkedOutAt: atDay(recentPast.setupAt, 0, 8, 30), conditionOut: "Bueno", checkoutQuantity: 4, returnedQuantity: 2, checkedOutById: DEMO_USER_ID, checkoutNote: "Retiró el equipo de montaje (dato simulado)." },
+    // Entrega de hoy ya despachada y su devolución prevista hoy a la noche: se ven en el calendario de esta semana.
+    { id: "demo_asg_activacion_cilindro", eventId: inProgress.id, inventoryId: "demo_inv_cilindro", quantity: 2, startsAt: at(base, 0, 7, 0), endsAt: at(base, 0, 22, 0), checkedOut: true, checkedIn: false, checkedOutAt: at(base, 0, 7, 30), conditionOut: "Bueno", checkoutQuantity: 2, checkedOutById: DEMO_USER_ID, checkoutNote: "Entrega en el predio (dato simulado)." },
     // Retenciones: una vigente (cuenta para el stock) y una vencida (ya no cuenta;
     // confirmarla revalida el stock).
     { id: "demo_asg_hold_vigente", eventId: second.id, inventoryId: "demo_inv_totem_touch", quantity: 2, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
@@ -2661,6 +2666,13 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_asg_hold_kit_led_procesador", eventId: second.id, inventoryId: "demo_inv_procesador", quantity: 1, comboQuantity: 1, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
     { id: "demo_asg_hold_kit_led_truss", eventId: second.id, inventoryId: "demo_inv_truss", quantity: 2, comboQuantity: 2, startsAt: second.setupAt, endsAt: second.strikeAt, checkedOut: false, checkedIn: false, holdExpiresAt: at(base, 2, 12, 0) },
   ] as Prisma.EventInventoryUncheckedCreateInput[]).map((row) => ({ ...row, organizationId }));
+  // Incidentes (fase 4) ligados a las unidades y reservas de la historia: el marco doblado del tótem
+  // (en reparación, con costo) y los dos bastidores que no volvieron (faltantes abiertos, sin decisión).
+  const incidentsData: Prisma.InventoryIncidentUncheckedCreateInput[] = [
+    { id: "demo_inc_totem_marco", organizationId, inventoryId: "demo_inv_totem", assignmentId: "demo_asg_feria_totem", eventId: recentPast.id, unitId: "demo_unit_totem_1", kind: "DAMAGE", quantity: 1, status: "IN_REPAIR", cost: 850_000, notes: "Marco doblado en el traslado; en reparación con el proveedor (dato simulado).", openedAt: atDay(recentPast.strikeAt, 0, 11, 25) },
+    { id: "demo_inc_paneles_1", organizationId, inventoryId: "demo_inv_panels", assignmentId: "demo_asg_feria_paneles", eventId: longestPast.id, unitId: "demo_unit_panels_1", kind: "MISSING", quantity: 1, status: "OPEN", cost: null, notes: "No volvió del predio de la feria; reclamo abierto con el cliente.", openedAt: atDay(longestPast.strikeAt, 0, 10, 35) },
+    { id: "demo_inc_paneles_2", organizationId, inventoryId: "demo_inv_panels", assignmentId: "demo_asg_feria_paneles", eventId: longestPast.id, unitId: "demo_unit_panels_2", kind: "MISSING", quantity: 1, status: "OPEN", cost: null, notes: "No volvió del predio de la feria; reclamo abierto con el cliente.", openedAt: atDay(longestPast.strikeAt, 0, 10, 35) },
+  ];
   const inventoryComponentsData: Prisma.InventoryComponentUncheckedCreateInput[] = INVENTORY_COMBOS.map((row) => ({
     id: `demo_combo_${row.parent.replace(/^demo_inv_/, "")}_${row.component.replace(/^demo_inv_/, "")}`,
     organizationId,
@@ -3128,6 +3140,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       for (const link of budgetItemLinks) await tx.budgetItem.update({ where: { id: link.id }, data: { inventoryId: link.inventoryId } });
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
       await tx.eventInventory.createMany({ data: assignmentsData });
+      await tx.inventoryIncident.createMany({ data: incidentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
       await tx.quoteItem.createMany({ data: quoteItemsData });
       await tx.auditLog.createMany({ data: auditData });
@@ -3152,6 +3165,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.invoiceSequence.deleteMany({ where: { organizationId } });
   await tx.budgetPaymentProof.deleteMany({ where: { organizationId } });
   await tx.expectedPayment.deleteMany({ where: { organizationId } });
+  await tx.inventoryIncident.deleteMany({ where: { organizationId } });
   await tx.eventInventory.deleteMany({ where: { event: { organizationId } } });
   await tx.organizationRentalSettings.deleteMany({ where: { organizationId } });
   await tx.eventTask.deleteMany({ where: { event: { organizationId } } });
