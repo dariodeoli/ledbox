@@ -4,6 +4,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { clientMetrics } from "../metrics";
+import { leadBelongsToClient } from "@/lib/server/lead-client";
 import { parseClientFields } from "../client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
 
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
  * `GET /api/admin/clients/[id]`: ficha 360 del cliente (issue #34) de la empresa
  * activa. Devuelve el cliente con sus métricas reales y los tres hechos que las
  * explican: presupuestos con lo cobrado y lo vencido por presupuesto, eventos
- * con su checklist y cobros con su estado y vencimiento.
+ * con su checklist, cobros con su estado y vencimiento y los leads del cliente
+ * (origen de un presupuesto o coincidencia por email/teléfono).
  *
  * Es lectura para cualquier rol (VIEWER incluido) y el aislamiento es el de
  * siempre: un id de otra empresa no existe para esta consulta (404). La
@@ -33,12 +35,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!client) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
   const { logo, ...clientRow } = client;
 
-  const [budgets, events, payments] = await Promise.all([
+  const [budgets, events, payments, orgLeads] = await Promise.all([
     db.budget.findMany({
       where: { organizationId, clientId: client.id },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        leadId: true,
         title: true,
         status: true,
         total: true,
@@ -88,7 +91,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         budget: { select: { id: true, title: true } },
       },
     }),
+    // Leads de la empresa activa: se filtran abajo con la regla de lead-client.
+    db.lead.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
+      select: { id: true, name: true, phone: true, email: true, company: true, reason: true, eventDate: true, source: true, status: true, createdAt: true },
+    }),
   ]);
+
+  // Leads del cliente: los que dieron origen a uno de sus presupuestos o
+  // coinciden por email o teléfono (misma regla que el alta desde un lead).
+  const budgetLeadIds = new Set(budgets.flatMap((budget) => (budget.leadId ? [budget.leadId] : [])));
+  const identity = {
+    emails: [client.email, client.contactEmail, client.billingEmail],
+    phones: [client.phone, client.contactPhone, client.whatsapp],
+  };
+  const leads = orgLeads.filter((lead) => leadBelongsToClient(lead, identity, budgetLeadIds));
 
   // Cobrado y vencido por presupuesto: mismos cobros que alimentan las métricas
   // del cliente, imputados a su presupuesto cuando lo tienen.
@@ -114,6 +133,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       })),
       events,
       payments,
+      leads,
     },
   });
 }

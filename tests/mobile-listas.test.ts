@@ -66,12 +66,12 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   assert.equal(row.includes("ClientLinks"), false, "los links salen de la grilla");
   assert.equal(row.includes("AdminWhatsappTemplateButton"), false, "WhatsApp sale de la grilla");
   assert.equal(/mailto:/.test(row), false, "el correo sale de la grilla");
-  assert.match(row, /icon="eye"[\s\S]{0,300}setDetail\(client\)/, "la fila se queda con la ficha");
+  assert.match(row, /<AdminIconLink href=\{`\/clientes\/\$\{client\.id\}`\} icon="eye"/, "la fila navega a la ficha como página propia");
   // El correo sale de la celda de contacto: queda el teléfono y el título completo.
   assert.match(module, /const contact = client\.contactPhone \|\| client\.phone;/);
   // La ficha los conserva: es el reemplazo real, no una pérdida.
-  const detail = module.slice(module.indexOf("function ClientDetailBody"));
-  assert.match(detail, /<ClientLinks client=\{client\} name=\{name\} message=/, "la ficha mantiene los links");
+  const detail = repoFile("components/admin/modules/ClienteFichaModule.tsx");
+  assert.match(detail, /<ClientLinks client=\{client\} name=\{name\}/, "la ficha mantiene los links");
   assert.match(detail, /mailto:/, "la ficha mantiene el correo");
   // La plantilla de columnas se acorta: una acción en vez de cinco y menos ancho mínimo.
   const css = repoFile("app/globals.css");

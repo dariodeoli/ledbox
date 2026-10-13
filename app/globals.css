@@ -1917,9 +1917,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--extracto-preview { --extracto-preview-cols: 4rem 6rem minmax(11rem, 1.6fr) 7rem 5.5rem 8.5rem 7rem; --admin-cols: var(--extracto-preview-cols); --admin-table-min: 55rem; }
 /* Ficha 360 del cliente (issue #34): presupuestos con su cobro, eventos con el
    checklist y cobros con su vencimiento. Entran sin scroll en el diálogo. */
-.admin-table--cliente-presupuestos { --cliente-presupuestos-cols: 6.5rem minmax(12rem, 2fr) 8rem 9rem 9rem; --admin-cols: var(--cliente-presupuestos-cols); --admin-table-min: 48rem; }
-.admin-table--cliente-eventos { --cliente-eventos-cols: 7.5rem minmax(14rem, 2fr) 8rem 7rem; --admin-cols: var(--cliente-eventos-cols); --admin-table-min: 39rem; }
-.admin-table--cliente-pagos { --cliente-pagos-cols: 7.5rem minmax(12rem, 2fr) 7.5rem 9rem 7.5rem; --admin-cols: var(--cliente-pagos-cols); --admin-table-min: 46.5rem; }
+.admin-table--cliente-presupuestos { --cliente-presupuestos-cols: 4.75rem minmax(8rem, 2fr) 6.5rem 6.75rem 6.25rem; --admin-cols: var(--cliente-presupuestos-cols); --admin-table-min: 33rem; }
+.admin-table--cliente-eventos { --cliente-eventos-cols: 6.5rem minmax(9rem, 2fr) 6.5rem 5.5rem; --admin-cols: var(--cliente-eventos-cols); --admin-table-min: 28rem; }
+.admin-table--cliente-pagos { --cliente-pagos-cols: 5rem minmax(8rem, 2fr) 6.5rem 6.5rem 6rem; --admin-cols: var(--cliente-pagos-cols); --admin-table-min: 32rem; }
 .admin-table--por-confirmar { --por-confirmar-cols: minmax(8.5rem, 1.4fr) minmax(6rem, 1fr) 6rem 5rem 5.5rem 5.75rem 6.25rem 11.5rem; --admin-cols: var(--por-confirmar-cols); --admin-table-min: 58rem; }
 /* Plantillas de mensajes (issue #35): título, mensaje en una línea, estado y acciones. */
 .admin-table--plantillas { --plantillas-cols: minmax(8rem, 1.1fr) minmax(12rem, 2.2fr) 5.5rem 6.5rem; --admin-cols: var(--plantillas-cols); --admin-table-min: 33.5rem; }
@@ -4351,3 +4351,60 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-demo-case-row .admin-demo-case-text strong { overflow: visible; color: var(--a-text-strong); font-size: 13px; text-overflow: clip; white-space: normal; }
 .admin-demo-case-row .admin-demo-case-text small { overflow: visible; color: var(--a-muted-2); font-size: 12px; text-overflow: clip; white-space: normal; }
 @media (max-width: 720px) { .admin-resumen .admin-panel-link { display: inline-flex; align-items: center; min-height: 44px; } }
+/* ── Presupuesto aprobado → evento, barra de etapas y ficha del cliente ── */
+.admin-stage-trail { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px 0; margin: 0 0 12px; padding: 0; list-style: none; }
+.admin-stage { position: relative; display: flex; align-items: center; min-width: 0; }
+.admin-stage + .admin-stage::before { content: ""; width: 14px; height: 1px; margin: 0 4px; background: var(--a-line-control); flex: 0 0 auto; }
+.admin-stage-link { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 8px; border: 1px solid var(--a-line); border-radius: 999px; background: var(--a-panel); color: var(--a-muted-2); font-size: 12px; font-weight: 600; text-decoration: none; }
+a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-strong); }
+.admin-stage-dot { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex: 0 0 auto; border: 1.5px solid var(--a-line-control); border-radius: 50%; }
+.admin-stage-text { display: inline-flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.admin-stage-detail { max-width: 12rem; overflow: hidden; color: var(--a-muted); font-size: 10.5px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.admin-stage[data-state="done"] .admin-stage-link { color: var(--a-ok-text); }
+.admin-stage[data-state="done"] .admin-stage-dot { border-color: var(--a-ok); background: var(--a-ok-surface); color: var(--a-ok-text); }
+.admin-stage[data-state="current"] .admin-stage-link { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-text-strong); }
+.admin-stage[data-state="current"] .admin-stage-dot { border-color: var(--a-accent); background: var(--a-accent); }
+
+.admin-event-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--a-warn) 45%, transparent); border-radius: 8px; background: var(--a-warn-surface); color: var(--a-warn-text); font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.admin-event-alert-text { flex: 1 1 14rem; min-width: 0; }
+.admin-event-alert .admin-btn { min-height: 36px; }
+.admin-cards-foot > .admin-event-alert { flex: 1 1 100%; }
+.admin-cell-event-alert { display: block; margin-top: 4px; }
+
+.admin-budget-detail-facts { margin: 0 0 12px; }
+
+.admin-ficha { display: grid; gap: 12px; min-width: 0; }
+.admin-ficha-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; min-height: 32px; color: var(--a-muted-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.admin-ficha-back:hover { color: var(--a-text-strong); }
+.admin-ficha-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; min-width: 0; }
+.admin-ficha-id { flex: 1 1 16rem; min-width: 0; }
+.admin-ficha-name { margin: 0; overflow-wrap: anywhere; color: var(--a-text-strong); font-size: 22px; line-height: 1.2; }
+.admin-ficha-sub { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0 0; color: var(--a-muted-2); font-size: 12.5px; }
+.admin-ficha-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.admin-ficha-actions .admin-btn { min-height: 44px; text-decoration: none; }
+.admin-ficha-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 12px; align-items: start; }
+.admin-ficha-main, .admin-ficha-side { display: grid; gap: 12px; min-width: 0; }
+.admin-ficha-main > .admin-subtabs { margin: 0; }
+.admin-ficha-panel { min-width: 0; }
+.admin-ficha-money, .admin-ficha-contact { display: grid; gap: 4px; margin: 0; }
+.admin-ficha-money > div, .admin-ficha-contact > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.admin-ficha-money dt, .admin-ficha-contact dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-ficha-money dd, .admin-ficha-contact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--a-text); font-size: 13px; text-align: right; }
+.admin-ficha-money dd { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-ficha-money dd[data-tone="ok"] { color: var(--a-ok-text); }
+.admin-ficha-money dd[data-tone="warn"] { color: var(--a-warn-text); }
+.admin-ficha-money dd[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-ficha-moves { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+.admin-ficha-moves li { display: flex; gap: 8px; min-width: 0; }
+.admin-ficha-moves li > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-ficha-move-when { flex: 0 0 auto; color: var(--a-muted); font-variant-numeric: tabular-nums; }
+.admin-table--cliente-leads { --cliente-leads-cols: 5rem minmax(9rem, 2fr) 5.5rem 6.5rem; --admin-cols: var(--cliente-leads-cols); --admin-table-min: 27rem; }
+@media (max-width: 980px) {
+  .admin-ficha-back { min-height: 44px; }
+  .admin-ficha .admin-iconbtn { min-width: 44px; min-height: 44px; }
+  .admin-ficha-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-ficha-main > .admin-subtabs { flex-wrap: nowrap; overflow-x: auto; }
+  .admin-ficha-main .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+}
+.admin-quote-title-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.admin-quote-title-btn:hover .admin-quote-title { text-decoration: underline; }

@@ -5,7 +5,7 @@ import type { AdminIconName } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { AdminSubtabs } from "../AdminUI";
 
-export type AdminAjustesSection = "empresa" | "correo" | "plan" | "usuarios";
+export type AdminAjustesSection = "empresa" | "correo" | "alquileres" | "plan" | "usuarios";
 
 const SECTIONS: ReadonlyArray<{
   key: AdminAjustesSection;
@@ -16,6 +16,7 @@ const SECTIONS: ReadonlyArray<{
 }> = [
   { key: "empresa", href: "/ajustes/empresa", label: "Empresa", icon: "building", restricted: true },
   { key: "correo", href: "/ajustes/correo", label: "Correo", icon: "mail", restricted: true },
+  { key: "alquileres", href: "/ajustes/alquileres", label: "Alquileres", icon: "calendar", restricted: true },
   { key: "plan", href: "/ajustes/plan", label: "Plan", icon: "plan", restricted: false },
   { key: "usuarios", href: "/ajustes/usuarios", label: "Usuarios", icon: "users", restricted: true },
 ];

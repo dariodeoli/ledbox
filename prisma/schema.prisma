@@ -161,6 +161,7 @@ model Organization {
   supplierJobs      SupplierJob[]
   inventoryItems    InventoryItem[]
   inventoryUnits    InventoryUnit[]
+  rentalSettings    OrganizationRentalSettings?
   promoters         Promoter[]
   auditLogs         AuditLog[]
   treasuryAccounts  TreasuryAccount[]
@@ -1676,6 +1677,10 @@ model InventoryItem {
   assignments        EventInventory[]
   budgetItems        BudgetItem[]
   units              InventoryUnit[]
+  /// Tiempo de colchón antes/después del evento para este producto (minutos).
+  /// NULL hereda el de la empresa (`OrganizationRentalSettings`).
+  bufferBeforeMin    Int?
+  bufferAfterMin     Int?
 
   @@unique([organizationId, sku])
   @@index([status, category])
@@ -1708,6 +1713,28 @@ enum InventoryUnitStatus {
   AVAILABLE
   MAINTENANCE
   RETIRED
+  DAMAGED
+  LOST
+}
+
+/// Ajustes de alquiler por empresa (1:1). Los tiempos son minutos; `depositPercent`
+/// NULL = sin política de seña.
+model OrganizationRentalSettings {
+  id                   String       @id
+  organizationId       String       @unique
+  depositPercent       Int?
+  holdTtlMinutes       Int          @default(2880)
+  deliveryBufferMin    Int          @default(0)
+  returnBufferMin      Int          @default(0)
+  prepBufferMin        Int          @default(0)
+  transportBufferMin   Int          @default(0)
+  cleaningBufferMin    Int          @default(0)
+  publicCatalogEnabled Boolean      @default(false)
+  publicShowPrices     Boolean      @default(true)
+  whatsappPhone        String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model EventInventory {
@@ -1729,11 +1756,21 @@ model EventInventory {
   damagedQuantity Int           @default(0)
   missingQuantity Int           @default(0)
   damageNotes     String?
+  /// Empresa dueña de la asignación (backfill desde el evento; NULL en filas viejas).
+  organizationId  String?
+  /// Retención: NULL = firme; con fecha, deja de contar al vencer (vencimiento perezoso).
+  holdExpiresAt   DateTime?
+  /// Presupuesto que originó la asignación, si lo hay.
+  budgetId        String?
+  /// Asignación liberada: no compromete stock.
+  releasedAt      DateTime?
+  returnedQuantity Int          @default(0)
   event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   inventory       InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, inventoryId])
   @@index([inventoryId, startsAt, endsAt])
+  @@index([organizationId, inventoryId])
 }
 
 model Promoter {
