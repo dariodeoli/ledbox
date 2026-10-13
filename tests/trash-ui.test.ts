@@ -11,7 +11,10 @@ import {
   TRASH_ENTITIES,
   canConfirmPurge,
   canOfferAnonymize,
+  budgetArchiveBlockedReason,
   eventArchiveBlockedReason,
+  isTrashEntityType,
+  leadArchiveBlockedReason,
   filterTrashItems,
   formatBlocker,
   formatBlockers,
@@ -161,4 +164,80 @@ test("Eventos e Inventario enchufan el menú «•••» de la papelera solo c
   assert.match(dialog, /<AdminDialog/);
   assert.match(dialog, /canConfirmPurge\(typed, name, reason\)/);
   assert.match(dialog, /disabled=\{!ready/);
+});
+
+test("el registro cubre las 7 entidades de la papelera con su ruta de API", () => {
+  assert.deepEqual(Object.keys(TRASH_ENTITIES).sort(), ["Budget", "Client", "Event", "InventoryItem", "Lead", "Promoter", "Supplier"]);
+  assert.equal(trashActionPath("Client", "c1", "archive"), "/api/admin/clients/c1/archive");
+  assert.equal(trashActionPath("Promoter", "p1", "trash"), "/api/admin/promoters/p1/trash");
+  assert.equal(trashActionPath("Budget", "b1", "purge"), "/api/admin/budgets/b1/purge");
+  for (const type of ["Client", "Lead", "Supplier", "Promoter"]) assert.equal(canOfferAnonymize(type, [{ kind: "payments", count: 1 }]), true, type);
+  // El presupuesto no ofrece anonimizar (el servidor responde 409).
+  assert.equal(canOfferAnonymize("Budget", [{ kind: "payments", count: 1 }]), false);
+  assert.equal(isTrashEntityType("Budget"), true);
+});
+
+test("cada kind de bloqueo del servidor tiene un texto concreto (no el genérico)", () => {
+  const sources = ["lib/server/trash.ts", "lib/server/trash-crm.ts", "lib/server/trash-ops.ts"].map((file) => read(...file.split("/"))).join("\n");
+  const kinds = new Set<string>();
+  for (const match of sources.matchAll(/kind: "(\w+)"/g)) kinds.add(match[1]);
+  // Los que salen de tablas `{ clave: "kind" }` y `Object.entries({ kind: n })`.
+  for (const kind of ["supplierJobs", "expenses", "purchaseInvoices", "tasks", "pendingJobs", "futureTasks", "events", "budgets", "notDraft", "budgetsWithHistory", "eventExpenses", "eventInvoices", "eventSupplierJobs", "eventIncidents", "eventAssignments", "signatureRequests", "paymentProofs", "confirmedExpectedPayments", "approvedBudgets", "signedBudgets", "eventsWithPayments", "invoices", "payments"]) kinds.add(kind);
+  for (const kind of kinds) {
+    const text = formatBlocker({ kind, count: 2 });
+    assert.doesNotMatch(text, new RegExp(`Tiene 2 ${kind}$`), `${kind}: sin texto en castellano`);
+  }
+  assert.equal(formatBlocker({ kind: "eventExpenses", count: 3 }), "Sus eventos tienen 3 gastos");
+  assert.equal(formatBlocker({ kind: "pendingJobs", count: 1 }), "Tiene 1 trabajo de proveedor pendiente");
+  assert.equal(formatBlocker({ kind: "notDraft", count: 1 }), "Ya no está en borrador");
+});
+
+test("las reglas de archivado de Lead y Presupuesto coinciden con el servidor", () => {
+  assert.equal(budgetArchiveBlockedReason("DRAFT"), null);
+  assert.equal(budgetArchiveBlockedReason("LOST"), null);
+  assert.equal(budgetArchiveBlockedReason("CANCELLED"), null);
+  assert.notEqual(budgetArchiveBlockedReason("APPROVED"), null);
+  const now = Date.parse("2026-10-13T12:00:00Z");
+  assert.equal(leadArchiveBlockedReason("WON", null, now), null);
+  assert.equal(leadArchiveBlockedReason("LOST", null, now), null);
+  assert.equal(leadArchiveBlockedReason("NEW", "2026-08-01T00:00:00Z", now), null);
+  assert.notEqual(leadArchiveBlockedReason("NEW", "2026-10-10T00:00:00Z", now), null);
+});
+
+test("los módulos de CRM enchufan el menú de la papelera solo con permiso y filtran lo archivado", () => {
+  const modules: Array<[string, string, RegExp]> = [
+    ["ClientesModule.tsx", "Client", /\{ value: "ARCHIVED", label: "Archivados" \}/],
+    ["LeadsModule.tsx", "Lead", /setStatus\("ARCHIVED"\)/],
+    ["ProveedoresModule.tsx", "Supplier", /\{ value: "ARCHIVED", label: "Archivados" \}/],
+    ["PromotorasModule.tsx", "Promoter", /\{ value: "ARCHIVED", label: "Archivadas" \}/],
+    ["PresupuestosModule.tsx", "Budget", /\{ value: "ARCHIVED", label: "Archivados" \}/],
+  ];
+  for (const [file, type, filter] of modules) {
+    const source = read("components", "admin", "modules", file);
+    assert.match(source, new RegExp(`useTrashFlow\\("${type}"`), `${file}: sin useTrashFlow`);
+    assert.match(source, filter, `${file}: sin filtro de archivados`);
+    assert.match(source, /canWrite: (writable|canEdit)/, `${file}: el menú no depende del permiso de escritura`);
+  }
+  // La ficha del cliente y el detalle del presupuesto también.
+  assert.match(read("components", "admin", "modules", "ClienteFichaModule.tsx"), /useTrashFlow\("Client"/);
+  assert.match(read("components", "admin", "modules", "BudgetDetailDialog.tsx"), /actions\.trashMenu/);
+  for (const role of ["VIEWER"] as const) {
+    for (const type of ["Client", "Lead", "Supplier", "Promoter", "Budget"] as const) {
+      assert.deepEqual(trashMenuEntries({ type, name: "X", archived: true, canWrite: canWriteOperations(role) }), []);
+    }
+  }
+});
+
+test("lo archivado no cuenta en dashboard, resumen, calendario ni contadores del menú", () => {
+  for (const file of ["lib/server/resumen.ts", "app/api/admin/overview/route.ts", "app/api/admin/calendar/route.ts", "lib/server/notifications.ts"]) {
+    assert.match(read(...file.split("/")), /archivedAt: null/, `${file}: no excluye lo archivado`);
+  }
+  assert.match(read("lib", "server", "resumen-board.ts"), /"deletedAt" IS NULL AND "archivedAt" IS NULL/);
+  // Reportes de dinero e historial del cliente siguen viendo todo.
+  assert.doesNotMatch(read("lib", "server", "report-events.ts"), /archivedAt/);
+  assert.doesNotMatch(read("app", "api", "admin", "clients", "[id]", "route.ts"), /archivedAt: null/);
+  // Sin cuenta regresiva en eventos archivados.
+  for (const file of ["EventoLista.tsx", "EventosModule.tsx", "EventoFicha.tsx"]) {
+    assert.match(read("components", "admin", "modules", file), /event\.archivedAt \|\|/, `${file}: el archivado muestra «en N d»`);
+  }
 });

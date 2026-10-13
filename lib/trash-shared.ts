@@ -14,6 +14,21 @@ export const PURGE_REASON_MAX = 200;
 /** Estados de evento que se pueden archivar (mismo criterio que el servidor). */
 export const EVENT_ARCHIVABLE_STATUSES = ["COMPLETED", "CANCELLED", "DRAFT"] as const;
 
+/** Mismo criterio que `archiveCrm` del servidor. */
+export const LEAD_STALE_DAYS = 30;
+export const BUDGET_ARCHIVABLE_STATUSES = ["DRAFT", "LOST", "CANCELLED"] as const;
+
+export function budgetArchiveBlockedReason(status: string): string | null {
+  return (BUDGET_ARCHIVABLE_STATUSES as readonly string[]).includes(status) ? null : "Solo se archivan presupuestos en borrador, perdidos o cancelados";
+}
+
+export function leadArchiveBlockedReason(status: string, updatedAt: string | null | undefined, now = Date.now()): string | null {
+  if (status === "WON" || status === "LOST") return null;
+  const last = updatedAt ? new Date(updatedAt).getTime() : NaN;
+  if (Number.isFinite(last) && now - last > LEAD_STALE_DAYS * 864e5) return null;
+  return `Solo se archivan leads ganados, perdidos o sin actividad hace más de ${LEAD_STALE_DAYS} días`;
+}
+
 export function eventArchiveBlockedReason(status: string): string | null {
   return (EVENT_ARCHIVABLE_STATUSES as readonly string[]).includes(status) ? null : "Solo se archivan eventos finalizados, cancelados o en borrador";
 }
@@ -34,6 +49,11 @@ export type TrashEntityConfig = {
 
 export const TRASH_ENTITIES = {
   Event: { label: "evento", typeLabel: "Evento", icon: "events", apiBase: "/api/admin/events", anonymizable: true, demonstrative: "este evento" },
+  Client: { label: "cliente", typeLabel: "Cliente", icon: "clients", apiBase: "/api/admin/clients", anonymizable: true, demonstrative: "este cliente" },
+  Lead: { label: "lead", typeLabel: "Lead", icon: "leads", apiBase: "/api/admin/leads", anonymizable: true, demonstrative: "este lead" },
+  Supplier: { label: "proveedor", typeLabel: "Proveedor", icon: "suppliers", apiBase: "/api/admin/suppliers", anonymizable: true, demonstrative: "este proveedor" },
+  Promoter: { label: "promotora", typeLabel: "Promotora", icon: "promoters", apiBase: "/api/admin/promoters", anonymizable: true, demonstrative: "esta promotora" },
+  Budget: { label: "presupuesto", typeLabel: "Presupuesto", icon: "budgets", apiBase: "/api/admin/budgets", anonymizable: false, demonstrative: "este presupuesto" },
   InventoryItem: { label: "producto", typeLabel: "Producto", icon: "inventory", apiBase: "/api/admin/inventory", anonymizable: false, demonstrative: "este producto" },
 } as const satisfies Record<string, TrashEntityConfig>;
 
@@ -98,6 +118,21 @@ const BLOCKER_TEXT: Record<string, (count: number) => string> = {
   signatureRequests: (n) => `Tiene ${plural(n, "pedido de firma", "pedidos de firma")}`,
   approvedBudgets: (n) => `Tiene ${plural(n, "presupuesto aprobado", "presupuestos aprobados")}`,
   signedBudgets: (n) => `Tiene ${plural(n, "presupuesto firmado", "presupuestos firmados")}`,
+  events: (n) => `Tiene ${plural(n, "evento vivo", "eventos vivos")}`,
+  budgets: (n) => `Tiene ${plural(n, "presupuesto vivo", "presupuestos vivos")}`,
+  pendingJobs: (n) => `Tiene ${plural(n, "trabajo de proveedor pendiente", "trabajos de proveedor pendientes")}`,
+  futureTasks: (n) => `Tiene ${plural(n, "tarea en un evento futuro", "tareas en eventos futuros")}`,
+  tasks: (n) => `Tiene ${plural(n, "tarea asignada", "tareas asignadas")}`,
+  supplierJobs: (n) => `Tiene ${plural(n, "trabajo de proveedor", "trabajos de proveedor")}`,
+  expenses: (n) => `Tiene ${plural(n, "gasto", "gastos")}`,
+  purchaseInvoices: (n) => `Tiene ${plural(n, "factura de compra", "facturas de compra")}`,
+  notDraft: () => "Ya no está en borrador",
+  budgetsWithHistory: (n) => `Tiene ${plural(n, "presupuesto con firma, cobro o factura", "presupuestos con firma, cobro o factura")}`,
+  eventExpenses: (n) => `Sus eventos tienen ${plural(n, "gasto", "gastos")}`,
+  eventInvoices: (n) => `Sus eventos tienen ${plural(n, "factura", "facturas")}`,
+  eventSupplierJobs: (n) => `Sus eventos tienen ${plural(n, "trabajo de proveedor", "trabajos de proveedor")}`,
+  eventIncidents: (n) => `Sus eventos tienen ${plural(n, "incidente", "incidentes")}`,
+  eventAssignments: (n) => (n === 1 ? "Sus eventos tienen 1 reserva sin devolver" : `Sus eventos tienen ${n} reservas sin devolver`),
   eventsWithPayments: (n) => `Tiene ${plural(n, "evento con cobros", "eventos con cobros")}`,
 };
 

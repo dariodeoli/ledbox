@@ -167,6 +167,8 @@ export type AdminClientRef = {
 };
 
 export type AdminClientRow = AdminClientRef & {
+  /** Archivado (papelera): fuera de las listas activas; se ve con el filtro «Archivados». */
+  archivedAt?: string | null;
   ruc: string | null;
   billingEmail?: string | null;
   city?: string | null;
@@ -418,6 +420,8 @@ export function overdueCount(
 }
 
 export type AdminBudgetRow = {
+  /** Archivado (papelera): fuera de las listas activas; se ve con el filtro «Archivados». */
+  archivedAt?: string | null;
   updatedAt?: string;
   comparisonId?: string | null;
   id: string;
@@ -1454,6 +1458,8 @@ export type AdminLeadQuote = {
 };
 
 export type AdminLeadRow = {
+  /** Archivado (papelera): fuera de las listas activas; se ve con el filtro «Archivados». */
+  archivedAt?: string | null;
   id: string;
   name: string;
   phone: string;
@@ -1506,6 +1512,8 @@ export type AdminSupplierJobPanelRow = Omit<AdminSupplierJobRow, "supplier" | "e
 };
 
 export type AdminSupplierRow = {
+  /** Archivado (papelera): fuera de las listas activas; se ve con el filtro «Archivados». */
+  archivedAt?: string | null;
   id: string;
   name: string;
   company: string | null;
@@ -1800,6 +1808,8 @@ export type AdminInventoryOption = Pick<
 };
 
 export type AdminPromoterRow = {
+  /** Archivado (papelera): fuera de las listas activas; se ve con el filtro «Archivados». */
+  archivedAt?: string | null;
   id: string;
   name: string;
   phone: string | null;
