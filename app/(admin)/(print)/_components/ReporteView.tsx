@@ -8,6 +8,7 @@ import { downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminMonthlyReport } from "@/lib/admin-types";
 import { PrintEmpty, PrintFooter, PrintHeader, PrintSection } from "./PrintParts";
 import { PrintToolbar } from "./PrintToolbar";
+import { RentalReportSection, rentalCsvBlocks } from "./RentalReportSection";
 
 /** Meses ofrecidos por el selector: el actual y los 23 anteriores. */
 function monthOptions(current: string): string[] {
@@ -101,6 +102,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
           ["Total", "", "", "", "", "", "", report.totals.committedBalance],
         ],
       },
+      ...(report.rentals ? rentalCsvBlocks(report.rentals) : []),
     ];
     downloadCsv(`ledbox-reporte-${report.month}.csv`, blocks);
   }
@@ -373,6 +375,12 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
             en el período (saldo = total − anticipo).
           </p>
         </PrintSection>
+
+        {report.rentals ? (
+          <RentalReportSection rentals={report.rentals} periodLabel={report.monthLabel} />
+        ) : (
+          <p className="lbprint-subtitle">La sección Alquileres no se pudo calcular ahora; el resto del reporte está completo.</p>
+        )}
 
         <PrintFooter note={`Reporte mensual · ${report.monthLabel}`} />
       </article>

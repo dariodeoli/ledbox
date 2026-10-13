@@ -317,6 +317,21 @@ export async function loadAssignments(
 }
 
 /**
+ * Período bloqueado de una asignación: su rango efectivo extendido por los colchones.
+ * Si volvió después de lo previsto, el equipo vuelve recién ahí y la limpieza o
+ * revisión corre desde la devolución real, no desde el fin del evento. Fuente única:
+ * la usan la disponibilidad y el reporte de ocupación.
+ */
+export function assignmentBlockedRange(
+  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event" | "checkedInAt">,
+  buffers: RentalBuffers,
+): { start: Date | null; end: Date | null } {
+  const { start, end } = assignmentRange(row);
+  const realEnd = row.checkedInAt && end && row.checkedInAt.getTime() > end.getTime() ? row.checkedInAt : end;
+  return extendedRentalRange(start, realEnd, buffers);
+}
+
+/**
  * Disponibilidad de un ítem en un rango: unidades comprometidas por asignaciones
  * que se solapan, libres reales y el detalle de cada rango comprometido.
  */
@@ -330,13 +345,7 @@ export function buildAvailability(
   // Se extienden los dos períodos (el pedido y el de cada asignación): entre dos
   // usos tiene que entrar la limpieza del primero más la preparación del segundo.
   const requested = extendedRentalRange(startsAt, endsAt, buffers);
-  const blockedRange = (row: AssignmentRecord) => {
-    const { start, end } = assignmentRange(row);
-    // Devuelto después de lo previsto: el equipo vuelve recién ahí y la limpieza o
-    // revisión corre desde la devolución real, no desde el fin del evento.
-    const realEnd = row.checkedInAt && end && row.checkedInAt.getTime() > end.getTime() ? row.checkedInAt : end;
-    return extendedRentalRange(start, realEnd, buffers);
-  };
+  const blockedRange = (row: AssignmentRecord) => assignmentBlockedRange(row, buffers);
   const conflicts = rows
     .filter((row) => {
       const { start, end } = blockedRange(row);
