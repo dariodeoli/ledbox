@@ -16,7 +16,7 @@ import {
   canManageOrganization,
   canWriteCarga,
   canWriteFinance,
-  isAdminNavActive,
+  isAdminNavItemActive,
 } from "@/lib/admin-policy";
 import {
   adminRoleLabel,
@@ -35,6 +35,7 @@ import { ADMIN_NAV_GROUP_KEY, ADMIN_ROOT_ID, readStoredPinDigits, storePinDigits
 import {
   adminAvatarUrl,
   organizationLogoUrl,
+  type AdminNavCounts,
   type AdminNotification,
   type AdminNotificationCounts,
   type AdminOrganization,
@@ -626,8 +627,9 @@ export function AdminShell({
   // nav queda como último recurso en alturas extremas.
   const activeNavGroup = useMemo(
     () =>
-      navGroups.find((group) => group.items.some((item) => isAdminNavActive(pathname, item.href)))?.label ??
-      navGroups[0]?.label ??
+      // Los grupos sueltos (Inicio, Clientes) no son acordeón: no se "abren".
+      navGroups.find((group) => !group.bare && group.items.some((item) => isAdminNavItemActive(pathname, item)))?.label ??
+      navGroups.find((group) => !group.bare)?.label ??
       null,
     [navGroups, pathname],
   );
@@ -686,7 +688,7 @@ export function AdminShell({
   // módulo según el agrupamiento nuevo; antes era «LedBox · Operación» fijo,
   // que no cambiaba en la demo ni en otra empresa.
   const activeGroupLabel = navGroups.find((group) =>
-    group.items.some((item) => isAdminNavActive(pathname, item.href)),
+    group.items.some((item) => isAdminNavItemActive(pathname, item)),
   )?.label;
   const eyebrow = [session.organization?.name ?? "EventOS", activeGroupLabel].filter(Boolean).join(" · ");
   const moduleIcon = adminNavIcon(pathname);
@@ -699,6 +701,26 @@ export function AdminShell({
    */
   const demoEntryPending =
     session.loading && !session.user && (demoHost || pathname === "/demo" || pathname.startsWith("/demo/"));
+
+  /**
+   * Contadores de Ventas en el menú (`/api/admin/nav-counts`, tres `count` baratos):
+   * se piden con sesión activa y se refrescan al cambiar de pantalla. Si el dato
+   * no llega, el ítem no dibuja contador (nada inventado).
+   */
+  const navCounts = useAdminResource<AdminNavCounts | null>(
+    "/api/admin/nav-counts",
+    (payload) => (payload as { navCounts?: AdminNavCounts }).navCounts ?? null,
+    { enabled: Boolean(session.user) && !session.locked && !demoEntryPending },
+  );
+  const reloadNavCounts = navCounts.reload;
+  const navCountsFirstRun = useRef(true);
+  useEffect(() => {
+    if (navCountsFirstRun.current) {
+      navCountsFirstRun.current = false;
+      return;
+    }
+    if (session.user && !session.locked) reloadNavCounts();
+  }, [pathname, reloadNavCounts, session.user, session.locked]);
 
   /** Sale de la demo: revoca la sesión demo, limpia la cookie y va al sitio. */
   const exitDemo = useCallback(async () => {
@@ -775,11 +797,12 @@ export function AdminShell({
 
           <div className="admin-sidebar-nav" ref={navRef}>
             {navGroups.map((group, index) => {
-              const groupOpen = !navAccordion || openNavGroup === group.label;
+              const accordion = navAccordion && !group.bare;
+              const groupOpen = !accordion || openNavGroup === group.label;
               const listId = `admin-nav-group-${index}`;
               return (
-                <div className="admin-nav-group" key={group.label}>
-                  {navAccordion ? (
+                <div className="admin-nav-group" key={group.label} data-bare={group.bare ? "true" : undefined}>
+                  {group.bare ? null : accordion ? (
                     <button
                       type="button"
                       className="admin-nav-label admin-nav-toggle"
@@ -794,9 +817,18 @@ export function AdminShell({
                   ) : (
                     <p className="admin-nav-label">{group.label}</p>
                   )}
-                  <ul className="admin-nav-list" id={listId} hidden={!groupOpen}>
+                  <ul
+                    className="admin-nav-list"
+                    id={listId}
+                    hidden={!groupOpen}
+                    data-flow={group.flow ? "true" : undefined}
+                    aria-label={group.flow ? `${group.label}: del primer contacto al evento` : undefined}
+                  >
                     {group.items.map((item) => {
-                      const active = isAdminNavActive(pathname, item.href);
+                      const active = isAdminNavItemActive(pathname, item);
+                      const count = item.countKey ? navCounts.data?.[item.countKey] : undefined;
+                      const hasCount = typeof count === "number" && count > 0;
+                      const countText = hasCount ? `${formatNumber(count)} ${item.countHint ?? "pendientes"}` : null;
                       return (
                         <li key={item.href}>
                           <Link
@@ -804,11 +836,16 @@ export function AdminShell({
                             className="admin-nav-link"
                             data-active={active ? "true" : undefined}
                             aria-current={active ? "page" : undefined}
-                            title={item.label}
-                            aria-label={item.label}
+                            title={countText ? `${item.label} · ${countText}` : item.label}
+                            aria-label={countText ? `${item.label}, ${countText}` : item.label}
                           >
                             <AdminIcon name={item.icon} size={16} />
                             <span className="admin-nav-text">{item.label}</span>
+                            {hasCount ? (
+                              <span className="admin-nav-count" aria-hidden="true">
+                                {count > 99 ? "99+" : formatNumber(count)}
+                              </span>
+                            ) : null}
                           </Link>
                         </li>
                       );
@@ -969,27 +1006,28 @@ export function AdminShell({
           </header>
 
           {session.demo ? (
-            <div className="admin-demo-banner">
-              <Link className="admin-demo-badge" href={demoHome} title="Volver a la presentación de la demo">
-                DEMO
-              </Link>
-              <p className="admin-demo-banner-text" title="Demo de EventOS con datos simulados: solo lectura, no se guardan cambios y no se toca información real. Lo que simules en el portal del cliente vive solo en tu pestaña.">
-                <strong>Datos simulados</strong>
-                <span>
-                  Recorré el panel completo: es de solo lectura, no se guardan cambios y no toca información real; lo que
-                  simules en el portal vive solo en tu pestaña.
-                </span>
+            <div className="admin-demo-strip" role="status">
+              <p className="admin-demo-strip-text" title="Demo de EventOS: es de solo lectura y no toca información real. Lo que simules en el portal del cliente vive solo en tu pestaña.">
+                <strong>DEMO</strong> · Datos de ejemplo: no se guarda nada
               </p>
-              <button
-                type="button"
-                className="admin-btn admin-demo-exit"
-                onClick={() => void exitDemo()}
-                disabled={loggingOut}
-                title="Salir de la demo y volver a ledbox.online"
-              >
-                <AdminIcon name="logout" size={14} />
-                <span>Salir de la demo</span>
-              </button>
+              <div className="admin-demo-strip-links">
+                <Link
+                  className="admin-demo-strip-link"
+                  href={`${demoHome}?recorrido=1`}
+                  title="Abrir la bienvenida y el recorrido guiado de la demo"
+                >
+                  Recorrido guiado
+                </Link>
+                <button
+                  type="button"
+                  className="admin-demo-strip-link"
+                  onClick={() => void exitDemo()}
+                  disabled={loggingOut}
+                  title="Salir de la demo y volver a ledbox.online"
+                >
+                  Salir
+                </button>
+              </div>
             </div>
           ) : null}
 

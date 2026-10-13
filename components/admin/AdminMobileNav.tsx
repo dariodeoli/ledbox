@@ -2,24 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isAdminNavActive } from "@/lib/admin-policy";
+import { isAdminNavItemActive } from "@/lib/admin-policy";
 import type { AdminIconName } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
 
 /**
- * Accesos directos de la barra inferior (mobile ≤720 px). Son las cuatro
- * pantallas de trabajo diario; el resto de los módulos vive en el drawer
- * (`#admin-sidebar`), que abre el botón «Más».
+ * Accesos directos de la barra inferior (mobile ≤720 px): Inicio y las tres etapas
+ * de Ventas (Leads → Presupuestos → Eventos). El resto de los módulos vive en el
+ * drawer (`#admin-sidebar`), que abre el botón «Más». Presupuestos queda activo
+ * también en `/firmas`, que vive dentro de él.
  */
-const MOBILE_NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: AdminIconName }> = [
-  { href: "/dashboard", label: "Resumen", icon: "overview" },
+const MOBILE_NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: AdminIconName; also?: readonly string[] }> = [
+  { href: "/dashboard", label: "Inicio", icon: "overview" },
+  { href: "/leads", label: "Leads", icon: "leads" },
+  { href: "/presupuestos", label: "Presupuestos", icon: "budgets", also: ["/firmas"] },
   { href: "/eventos", label: "Eventos", icon: "events" },
-  { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
-  { href: "/finanzas", label: "Finanzas", icon: "finance" },
 ];
 
 /**
- * Barra de navegación inferior del panel (solo ≤720 px): cuatro módulos de uso
+ * Barra de navegación inferior del panel (solo ≤720 px): cuatro accesos de uso
  * diario + «Más», que abre el drawer existente del shell. El ítem activo queda
  * marcado con `aria-current` y el padding del layout corre el contenido y el
  * footer para que la barra no tape nada. En escritorio no se dibuja.
@@ -30,7 +31,7 @@ export function AdminMobileNav({ menuOpen, onOpenMenu }: { menuOpen: boolean; on
   return (
     <nav className="admin-bottomnav" aria-label="Navegación rápida del panel">
       {MOBILE_NAV_ITEMS.map((item) => {
-        const active = isAdminNavActive(pathname, item.href);
+        const active = isAdminNavItemActive(pathname, item);
         return (
           <Link
             key={item.href}

@@ -24,16 +24,19 @@ test("la navegación respeta los grupos y el orden de la guía (§6)", () => {
   assert.deepEqual(
     ADMIN_NAV.map((group) => ({ label: group.label, hrefs: group.items.map((item) => item.href) })),
     [
-      { label: "General", hrefs: ["/dashboard", "/eventos"] },
+      { label: "Inicio", hrefs: ["/dashboard"] },
+      // Ventas es el flujo del negocio: lead → presupuesto → evento.
+      { label: "Ventas", hrefs: ["/leads", "/presupuestos", "/eventos"] },
+      { label: "Clientes", hrefs: ["/clientes"] },
       { label: "Operación", hrefs: ["/inventario", "/proveedores", "/promotoras"] },
-      { label: "Comercial", hrefs: ["/clientes", "/leads", "/presupuestos", "/firmas", "/plantillas"] },
-      { label: "Finanzas", hrefs: ["/finanzas", "/facturacion"] },
+      { label: "Plata", hrefs: ["/finanzas", "/facturacion"] },
       { label: "Sistema", hrefs: ["/ajustes", "/estado"] },
     ],
   );
-  // Consolidación (issue #56) + Firmas (issue #81): 14 destinos en el nav, sin repetidos.
+  // Firmas vive dentro de Presupuestos y Plantillas dentro de Ajustes: ya no son ítems del menú.
   const items = ADMIN_NAV.flatMap((group) => group.items);
-  assert.equal(items.length, 14);
+  assert.equal(items.length, 12);
+  assert.equal(items.some((item) => item.href === "/firmas" || item.href === "/plantillas"), false);
   // El calendario ya no es un destino: es una vista dentro de Eventos.
   assert.equal(items.some((item) => item.href === "/calendario"), false);
 });
@@ -80,7 +83,7 @@ test("la ayuda tiene 3–5 bullets, 2–3 links internos y links a rutas reales"
 
 test("la ayuda se resuelve por ruta exacta y por prefijo, y no inventa rutas", () => {
   assert.equal(moduleHelpFor("/eventos")?.title, "Eventos");
-  assert.equal(moduleHelpFor("/dashboard")?.title, "Resumen");
+  assert.equal(moduleHelpFor("/dashboard")?.title, "Inicio");
   assert.equal(moduleHelpFor("/ajustes")?.title, "Ajustes");
   assert.equal(moduleHelpFor("/ajustes/correo")?.title, "Correo");
   assert.equal(moduleHelpFor("/estado/auditoria")?.title, "Auditoría");

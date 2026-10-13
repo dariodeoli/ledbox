@@ -30,18 +30,18 @@ export type AdminModuleHelp = {
 
 export const MODULE_HELP: Record<string, AdminModuleHelp> = {
   "/dashboard": {
-    title: "Resumen",
-    summary: "La foto del día: cartera, agenda, plata y equipo en una sola pantalla, sin abrir cada módulo.",
+    title: "Inicio",
+    summary: "Qué hacer hoy, cómo viene el mes, cuánta plata hay en juego y qué eventos se vienen.",
     bullets: [
-      "Los indicadores salen de datos reales de la empresa activa: clientes activos, eventos no cancelados, presupuestos vigentes y leads nuevos.",
-      "«Qué mirar hoy» junta vencimientos, cobros y checklist en riesgo; cada línea lleva al módulo donde se resuelve.",
-      "Los bloques de próximos eventos, tareas vencidas y checklist pendiente abren el registro real.",
-      "Por cobrar y por pagar se derivan de los cobros y pagos registrados: lo pendiente no cuenta como cobrado.",
+      "«Para hacer hoy» ordena hasta 5 acciones por urgencia: mora y cheques rechazados primero, después leads sin contestar y checklist incompleto, y los comprobantes por confirmar.",
+      "El embudo del mes cuenta leads, presupuestos, aprobados y eventos con datos reales; cada etapa abre su lista.",
+      "Plata muestra lo por cobrar, lo que está en mora y lo cobrado este mes; lo pendiente no cuenta como cobrado.",
+      "«Esta semana» lista los eventos de los próximos 7 días con su checklist o la seña que falta.",
     ],
     links: [
-      { href: "/eventos", label: "Agenda de eventos" },
+      { href: "/leads", label: "Leads por contestar" },
       { href: "/finanzas", label: "Cobros y pagos" },
-      { href: "/presupuestos", label: "Pipeline comercial" },
+      { href: "/eventos", label: "Agenda de eventos" },
     ],
   },
   "/eventos": {

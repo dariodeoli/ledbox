@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminIcon } from "./AdminIcons";
 import { AdminDialog } from "./AdminUI";
 
 /**
- * Bienvenida de la demo pública (pedido del 22-09-2026): es un **popup de
- * inicio** con «Recorrer la demo» y la X del diálogo; al cerrarlo no vuelve a
- * mostrarse en ese navegador y la portada se ve normal.
- *
- * La barra fina queda siempre visible: reabre la bienvenida y mantiene a mano
- * los accesos a la autogestión del portal, al resumen y el reinicio de datos.
- * Si se quiere volver a mostrarla a todos, se sube la versión de la clave.
+ * Bienvenida de la demo pública. Se abre **sola una única vez** por navegador (la
+ * primera visita): al abrirse queda marcada como vista, así reiniciar los datos,
+ * recargar o volver no la repiten. Después se abre a pedido: con «Recorrido
+ * guiado» de la franja demo (`?recorrido=1`) o con «¿Cómo funciona la demo?».
+ * El almacenamiento va con try/catch: sin él la bienvenida se muestra al abrir
+ * `/demo`, sin reabrirse sola mientras se navega. Si se quiere volver a mostrarla a todos, se sube la
+ * versión de la clave.
  */
 const STORAGE_KEY = "ledbox.demo.intro.v1";
 
@@ -30,25 +31,38 @@ export function DemoIntro({
 }) {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const requested = useSearchParams().get("recorrido") === "1";
 
-  useEffect(() => {
-    let dismissed = false;
-    try {
-      dismissed = window.localStorage.getItem(STORAGE_KEY) === "1";
-    } catch {
-      dismissed = false;
-    }
-    setOpen(!dismissed);
-    setReady(true);
-  }, []);
-
-  function dismiss() {
+  /** Marca la bienvenida como vista en este navegador (best-effort). */
+  function markSeen() {
     try {
       window.localStorage.setItem(STORAGE_KEY, "1");
     } catch {
-      // Sin almacenamiento (modo privado estricto): se cierra solo en esta visita.
+      // Sin almacenamiento (modo privado estricto): se muestra una vez por visita.
     }
+  }
+
+  useEffect(() => {
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(STORAGE_KEY) === "1";
+    } catch {
+      seen = false;
+    }
+    // Primera visita o pedido explícito. Abrirla ya cuenta como vista.
+    if (requested || !seen) {
+      setOpen(true);
+      markSeen();
+    }
+    setReady(true);
+  }, [requested]);
+
+  function dismiss() {
+    markSeen();
     setOpen(false);
+    if (requested) router.replace(pathname, { scroll: false });
   }
 
   /** Cierra la bienvenida y baja al recorrido guiado de la portada (issue #58). */
@@ -132,7 +146,7 @@ export function DemoIntro({
             comprobantes en revisión: la demo muestra también lo que sale mal. La cuenta demo entra como{" "}
             <strong>VIEWER sin PIN ni auto-bloqueo</strong>: no se bloquea sola y los módulos de administración
             (Usuarios, Empresa, Configuración y Auditoría) quedan para OWNER/ADMIN — acá se resumen en la portada.
-            Para salir de la demo usá «Salir de la demo» en el aviso superior. Si querés volver al estado inicial,
+            Para salir de la demo usá «Salir» en la franja superior. Si querés volver al estado inicial,
             «Reiniciar la demo» vuelve a sembrar los datos simulados con las fechas de hoy.
           </p>
           <div className="admin-dialog-actions">

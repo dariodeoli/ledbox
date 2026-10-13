@@ -7,6 +7,7 @@ import { clientLogoUrl } from "@/lib/admin-types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PresupuestosTabs } from "./PresupuestosTabs";
 import { AdminMailPreview } from "../AdminMailPreview";
 import type { MailPreview } from "@/lib/mail-preview";
 import {
@@ -769,6 +770,11 @@ export function PresupuestosModule() {
   const writableForLead = canWriteFinance(role);
   const leadParam = searchParams.get("lead")?.trim() ?? "";
   const newRequested = searchParams.get("nuevo") === "1";
+  // Enlaces del Resumen: `?estado=APPROVED` abre la lista ya filtrada.
+  const estadoParam = (searchParams.get("estado") ?? "").trim().toUpperCase();
+  useEffect(() => {
+    if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
+  }, [estadoParam]);
   useEffect(() => {
     if (!newRequested || !writableForLead) return;
     setShowForm(true);
@@ -1496,6 +1502,7 @@ export function PresupuestosModule() {
 
   return (
     <div className="admin-module-page">
+      <PresupuestosTabs active="presupuestos" />
       <AdminModuleContext
         breadcrumb="Ventas / Presupuestos"
         hint="Vigencia, margen, portal del cliente y próximos pasos comerciales."

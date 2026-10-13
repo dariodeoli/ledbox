@@ -7,8 +7,29 @@ import type { AdminIconName, AdminRole, MessageTemplateCategoryValue } from "./a
 
 export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
-export type AdminNavItem = { href: string; label: string; icon: AdminIconName; roles?: readonly AdminRole[] };
-export type AdminNavGroup = { label: string; items: readonly AdminNavItem[] };
+/** Contadores del menú (`/api/admin/nav-counts`): solo los ítems de Ventas llevan uno. */
+export type AdminNavCountKey = "leads" | "budgets" | "events";
+
+export type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: AdminIconName;
+  roles?: readonly AdminRole[];
+  /** Rutas hijas que viven dentro de este ítem (p. ej. Firmas dentro de Presupuestos): lo marcan activo. */
+  also?: readonly string[];
+  /** Pendiente real que se dibuja como contador junto al ítem; sin dato no se dibuja. */
+  countKey?: AdminNavCountKey;
+  /** Qué cuenta el contador (para el `title`/lector de pantalla). */
+  countHint?: string;
+};
+export type AdminNavGroup = {
+  label: string;
+  items: readonly AdminNavItem[];
+  /** Sin encabezado ni acordeón: ítems sueltos (Inicio, Clientes). */
+  bare?: boolean;
+  /** Etapas de un flujo: se dibujan unidas por una línea vertical (Ventas). */
+  flow?: boolean;
+};
 
 /**
  * Módulos restringidos: mismo criterio que el API (empresa, correo, usuarios,
@@ -29,22 +50,49 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
 /** Títulos de páginas que no viven en el sidebar (se llega desde el chip de usuario). */
 const PAGE_TITLES: Record<string, string> = {
   "/perfil": "Mi perfil",
+  // Firmas vive dentro de Presupuestos y Plantillas dentro de Ajustes: siguen
+  // siendo rutas propias, pero ya no son ítems del menú.
+  "/firmas": "Firmas",
+  "/plantillas": "Plantillas",
 };
 
 /**
- * Navegación agrupada del panel (orden fijado en `docs/DISENO-PANEL.md` §6).
- * Consolidada el 23-09-2026 (issue #56): 13 destinos en vez de 18. Calendario es
- * una vista dentro de Eventos; **Ajustes** agrupa Empresa, Correo, Plan y
- * Usuarios; **Estado** agrupa Sistema y Auditoría. Las rutas viejas siguen
- * funcionando con redirect (`app/(admin)/(panel)/…`).
+ * Navegación del panel por etapas (orden fijado en `docs/DISENO-PANEL.md` §6).
+ *
+ * Inicio · **Ventas** (Leads → Presupuestos → Eventos, el flujo del negocio) ·
+ * Clientes · **Operación** · **Plata** · **Sistema**. Firmas es una pestaña de
+ * Presupuestos y Plantillas una de Ajustes (`/firmas` y `/plantillas` siguen
+ * respondiendo). Los contadores de Ventas salen de datos reales
+ * (`/api/admin/nav-counts`). Las secciones de Ajustes/Estado siguen consolidadas
+ * (issue #56) y sus rutas viejas entran con redirect.
  */
 export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
-    label: "General",
+    label: "Inicio",
+    bare: true,
+    items: [{ href: "/dashboard", label: "Inicio", icon: "overview" }],
+  },
+  {
+    label: "Ventas",
+    flow: true,
     items: [
-      { href: "/dashboard", label: "Resumen", icon: "overview" },
-      { href: "/eventos", label: "Eventos", icon: "events" },
+      { href: "/leads", label: "Leads", icon: "leads", countKey: "leads", countHint: "leads nuevos sin contactar" },
+      {
+        href: "/presupuestos",
+        label: "Presupuestos",
+        icon: "budgets",
+        // Firma de documentos (issue #81): el listado global es una pestaña de Presupuestos.
+        also: ["/firmas"],
+        countKey: "budgets",
+        countHint: "presupuestos enviados o en negociación",
+      },
+      { href: "/eventos", label: "Eventos", icon: "events", countKey: "events", countHint: "eventos en los próximos 7 días" },
     ],
+  },
+  {
+    label: "Clientes",
+    bare: true,
+    items: [{ href: "/clientes", label: "Clientes", icon: "clients" }],
   },
   {
     label: "Operación",
@@ -55,18 +103,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     ],
   },
   {
-    label: "Comercial",
-    items: [
-      { href: "/clientes", label: "Clientes", icon: "clients" },
-      { href: "/leads", label: "Leads", icon: "leads" },
-      { href: "/presupuestos", label: "Presupuestos", icon: "budgets" },
-      // Firma de documentos (issue #81): listado global de solicitudes.
-      { href: "/firmas", label: "Firmas", icon: "pen" },
-      { href: "/plantillas", label: "Plantillas", icon: "mail" },
-    ],
-  },
-  {
-    label: "Finanzas",
+    label: "Plata",
     items: [
       { href: "/finanzas", label: "Finanzas", icon: "finance" },
       { href: "/facturacion", label: "Facturación", icon: "receipt" },
@@ -75,7 +112,8 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Sistema",
     items: [
-      { href: "/ajustes", label: "Ajustes", icon: "settings" },
+      // Plantillas (issue #35) es una sección de Ajustes.
+      { href: "/ajustes", label: "Ajustes", icon: "settings", also: ["/plantillas"] },
       { href: "/estado", label: "Estado", icon: "database", roles: RESTRICTED_MODULES["/estado/sistema"] },
     ],
   },
@@ -87,6 +125,11 @@ export function asAdminRole(value: unknown): AdminRole {
 
 export function isAdminNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** El ítem está activo en su ruta o en las rutas hijas que viven dentro de él. */
+export function isAdminNavItemActive(pathname: string, item: Pick<AdminNavItem, "href" | "also">): boolean {
+  return isAdminNavActive(pathname, item.href) || (item.also ?? []).some((href) => isAdminNavActive(pathname, href));
 }
 
 export function adminNavLabel(pathname: string): string {
@@ -105,6 +148,8 @@ export function adminNavLabel(pathname: string): string {
 const PAGE_ICONS: Record<string, AdminIconName> = {
   "/perfil": "user",
   "/demo": "overview",
+  "/firmas": "pen",
+  "/plantillas": "mail",
 };
 
 /**
@@ -126,7 +171,7 @@ export function adminNavIcon(pathname: string): AdminIconName {
 
 export function adminNavGroups(role: AdminRole | null | undefined): AdminNavGroup[] {
   return ADMIN_NAV.map((group) => ({
-    label: group.label,
+    ...group,
     items: group.items.filter((item) => !item.roles || (role ? item.roles.includes(role) : false)),
   })).filter((group) => group.items.length > 0);
 }

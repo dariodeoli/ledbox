@@ -1,421 +1,350 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
-import {
-  budgetStatusLabel,
-  checklistProgress,
-  eventStatusLabel,
-  formatCalendarDayShort,
-  formatDateShort,
-  formatDateTime,
-  formatDayWhen,
-  formatMoney,
-  formatNumber,
-  formatTime,
-  isOverdue,
-  isUpcomingWithin,
-  jobStatusLabel,
-  notificationKindLabel,
-  notificationLevelLabel,
-  notificationTone,
-  statusTone,
-} from "@/lib/admin-format";
-import { adminNavLabel, canWriteOperations } from "@/lib/admin-policy";
-import { collectedAmount, supplierJobBalance, type AdminEventChecklistRow, type AdminEventTask, type AdminOverview } from "@/lib/admin-types";
+import { useEffect, useMemo, useState } from "react";
+import { formatMoney, formatMoneyCompact, formatMonthKey, formatNumber, formatTime } from "@/lib/admin-format";
+import { canWriteClients } from "@/lib/admin-policy";
+import type { AdminResumen } from "@/lib/admin-types";
+import { buildTodayActions, TODAY_ACTIONS_LIMIT, weekEventChip, type TodayAction } from "@/lib/resumen-actions";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
-import {
-  AdminBadge,
-  AdminCell,
-  AdminCountdown,
-  AdminDataState,
-  AdminErrorState,
-  AdminKpi,
-  AdminLoadingRows,
-  AdminModuleContext,
-  AdminNote,
-  AdminPanel,
-  AdminRow,
-  AdminTable,
-} from "../AdminUI";
+import { AdminBadge, AdminDataState, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminIcon } from "../AdminIcons";
 import { useAdminResource } from "@/lib/admin-api";
-import { ChecklistTable, type ChecklistEntry } from "./Checklist";
+
+/**
+ * Resumen (inicio del panel): cuatro bloques que responden «¿qué hago ahora?».
+ *
+ * 1. Para hacer hoy: hasta 5 acciones por urgencia (rojo → ámbar → cian), con su
+ *    botón al lugar exacto; «Ver todos» muestra el resto.
+ * 2. Embudo del mes: Leads → Presupuestos → Aprobados → Eventos, con cantidad y
+ *    monto, cada etapa enlazada a su lista.
+ * 3. Plata: por cobrar, en mora y cobrado del mes (montos completos o en millones).
+ * 4. Esta semana: los eventos de los próximos 7 días con su chip de estado.
+ *
+ * Todo sale de datos reales (`/api/admin/notifications` y `/api/admin/resumen`);
+ * nada se inventa: sin datos se dice «Todo al día» o «Sin eventos».
+ */
+
+const TIME_ZONE = "America/Asuncion";
+const dateFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const hourFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, hour: "numeric", hourCycle: "h23" });
+const weekdayFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, weekday: "short" });
+const dayFormat = new Intl.DateTimeFormat("es-PY", { timeZone: TIME_ZONE, day: "2-digit" });
+const dayKeyFormat = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" });
+
+function greetingFor(now: Date): string {
+  const hour = Number(hourFormat.format(now));
+  if (hour < 12) return "Buen día";
+  if (hour < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+function firstName(name: string | undefined): string {
+  return (name ?? "").trim().split(/\s+/)[0] ?? "";
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 export function ResumenModule() {
-  const { role } = useAdminSession();
-  const overview = useAdminResource<AdminOverview | null>("/api/admin/overview", (payload) =>
-    payload.counts && payload.finance ? { counts: payload.counts, finance: payload.finance, upcoming: payload.upcoming ?? [] } : null,
+  const { role, user } = useAdminSession();
+  const resumen = useAdminResource<AdminResumen | null>(
+    "/api/admin/resumen",
+    (payload) => (payload as { resumen?: AdminResumen }).resumen ?? null,
   );
-  const operations = useAdminResource(
-    "/api/admin/event-ops?fields=checklist",
-    (payload) => (payload as { events?: AdminEventChecklistRow[] }).events ?? [],
-  );
-  const budgets = useAdminResource("/api/admin/budgets", (payload) => payload.budgets ?? []);
-  const finance = useAdminResource("/api/admin/finance", (payload) => ({
-    payments: payload.clientPayments ?? [],
-    jobs: payload.supplierJobs ?? [],
-  }));
   const notifications = useAdminNotifications();
-  const [checklistError, setChecklistError] = useState("");
+  // La fecha se arma en el navegador: evita diferencias de hidratación con el servidor.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
 
-  const canToggle = canWriteOperations(role);
-
-  const pendingTasks = useMemo<ChecklistEntry[]>(
-    () =>
-      (operations.data ?? [])
-        .flatMap((event) => event.tasks.filter((task) => !task.completedAt).map((task) => ({ task, eventName: event.name })))
-        .sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999"))
-        .slice(0, 6),
-    [operations.data],
-  );
-
-  /** Tareas vencidas de todos los eventos: el checklist real, no el ideal. */
-  const overdueTasks = useMemo<Array<{ task: AdminEventTask; eventName: string }>>(
-    () =>
-      (operations.data ?? [])
-        .flatMap((event) => event.tasks.filter((task) => !task.completedAt && isOverdue(task.dueAt)).map((task) => ({ task, eventName: event.name })))
-        .sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999")),
-    [operations.data],
-  );
-
-  const pendingTotal = useMemo(
-    () => (operations.data ?? []).flatMap((event) => event.tasks).filter((task) => !task.completedAt).length,
-    [operations.data],
-  );
-
-  const receivables = useMemo(
-    () =>
-      (budgets.data ?? [])
-        // Un presupuesto perdido o cancelado no es cobrable: no entra en "por cobrar".
-        .filter((budget) => budget.status !== "LOST" && budget.status !== "CANCELLED")
-        // Solo los cobros marcados como cobrados descuentan saldo (issue #16):
-        // un cobro a plazo pendiente o anulado todavía no es plata cobrada.
-        .map((budget) => ({ budget, paid: collectedAmount(budget.payments) }))
-        .map((row) => ({ ...row, balance: row.budget.total - row.paid }))
-        .filter((row) => row.balance > 0)
-        .sort((a, b) => b.balance - a.balance)
-        .slice(0, 6),
-    [budgets.data],
-  );
-
-  const payables = useMemo(
-    () =>
-      (finance.data?.jobs ?? [])
-        .map((job) => ({ job, balance: supplierJobBalance(job) }))
-        .filter((row) => row.balance > 0)
-        .sort((a, b) => b.balance - a.balance)
-        .slice(0, 6),
-    [finance.data],
-  );
-
-  const reloadChecklist = useCallback(() => {
-    setChecklistError("");
-    operations.reload();
-  }, [operations.reload]);
-
-  // Avisos operativos (issue #10): los 5 principales ya vienen ordenados por urgencia.
-  const todayNotifications = useMemo(() => (notifications.data?.notifications ?? []).slice(0, 5), [notifications.data]);
-  const notificationCounts = notifications.data?.notificationCounts;
-
-  const counts = overview.data?.counts;
-  const totals = overview.data?.finance;
+  const name = firstName(user?.name);
+  const canCreateLead = canWriteClients(role);
 
   return (
-    <div className="admin-module-page">
-      <AdminModuleContext breadcrumb="Resumen" hint="Prioridades operativas, agenda y saldos que requieren atención." />
-      <div className="admin-panel-grid">
-        <div className="admin-panel-wide">
-          <AdminPanel
-            title="Qué mirar hoy" icon="bell"
-            meta={notificationCounts && notificationCounts.total > 0 ? `${formatNumber(notificationCounts.total)} avisos` : undefined}
-            action={
-              <Link className="admin-panel-link" href="/eventos?vista=calendario" title="El calendario es una vista de Eventos">
-                Ver calendario →
-              </Link>
-            }
-          >
-            <AdminDataState
-              loading={notifications.loading}
-              error={notifications.error}
-              onRetry={notifications.reload}
-              empty={todayNotifications.length === 0}
-              emptyTitle="Nada urgente" emptyIcon="check"
-              emptyHint="No hay vencimientos, checklist pendiente ni cobros con saldo para mirar hoy."
-              emptyAction={<Link className="admin-empty-link" href="/eventos">Revisar eventos →</Link>}
-              rows={3}
-            >
-              <AdminTable
-                view="resumen-avisos"
-                label="Qué mirar hoy"
-                columns={[{ label: "Nivel" }, { label: "Aviso" }, { label: "Módulo" }, { label: "Fecha", end: true }]}
-              >
-                {todayNotifications.map((notification) => (
-                  <AdminRow key={notification.id}>
-                    <AdminCell>
-                      <AdminBadge tone={notificationTone(notification.level)}>{notificationLevelLabel(notification.level)}</AdminBadge>
-                    </AdminCell>
-                    <AdminCell
-                      title={`${notificationKindLabel(notification.kind)}: ${notification.title}${notification.subtitle ? ` · ${notification.subtitle}` : ""}`}
-                    >
-                      <strong>{notification.title}</strong>
-                      {notification.subtitle ? <small className="admin-cell-sub"> · {notification.subtitle}</small> : null}
-                    </AdminCell>
-                    <AdminCell title={`Ir a ${adminNavLabel(notification.href)}`}>
-                      <Link className="admin-panel-link" href={notification.href}>
-                        {adminNavLabel(notification.href)} →
-                      </Link>
-                    </AdminCell>
-                    <AdminCell end title={formatCalendarDayShort(notification.date)}>
-                      <span className="admin-nowrap">
-                        {formatCalendarDayShort(notification.date)} · {formatDayWhen(notification.date)}
-                      </span>
-                    </AdminCell>
-                  </AdminRow>
-                ))}
-              </AdminTable>
-            </AdminDataState>
-          </AdminPanel>
+    <div className="admin-module-page admin-resumen">
+      <header className="admin-resumen-head">
+        <div className="admin-resumen-hello">
+          <h2 className="admin-resumen-title">
+            {now ? greetingFor(now) : "Hola"}
+            {name ? `, ${name}` : ""}
+          </h2>
+          <p className="admin-resumen-date">{now ? capitalize(dateFormat.format(now)) : " "}</p>
+        </div>
+        {canCreateLead ? (
+          <Link className="admin-btn admin-btn--primary" href="/leads?nuevo=1" title="Cargar una consulta que llegó por llamada, WhatsApp o referido">
+            <AdminIcon name="plus" size={15} />
+            <span>Nuevo lead</span>
+          </Link>
+        ) : null}
+      </header>
+
+      <div className="admin-resumen-grid">
+        <div className="admin-resumen-area" data-area="hoy">
+          <TodayBlock now={now} resumen={resumen} notifications={notifications} />
+        </div>
+        <div className="admin-resumen-area" data-area="embudo">
+          <FunnelBlock resumen={resumen} />
+        </div>
+        <div className="admin-resumen-area" data-area="plata">
+          <MoneyBlock resumen={resumen} />
+        </div>
+        <div className="admin-resumen-area" data-area="semana">
+          <WeekBlock resumen={resumen} />
         </div>
       </div>
-
-      {overview.loading ? (
-        <AdminLoadingRows rows={2} label="Cargando indicadores" />
-      ) : overview.error ? (
-        <AdminErrorState message={overview.error} onRetry={overview.reload} />
-      ) : (
-        <section className="admin-kpis" aria-label="Indicadores del negocio">
-          <AdminKpi label="Clientes activos" icon="clients" value={formatNumber(counts?.clients)} note="en cartera" />
-          <AdminKpi label="Eventos" icon="events" value={formatNumber(counts?.events)} note="no cancelados" />
-          <AdminKpi label="Presupuestos" icon="budgets" value={formatNumber(counts?.budgets)} note="vigentes" />
-          <AdminKpi label="Leads nuevos" icon="leads" value={formatNumber(counts?.leads)} note="por contactar" tone={counts && counts.leads > 0 ? "accent" : undefined} />
-          <AdminKpi label="Por cobrar" icon="finance" value={formatMoney(totals?.totalReceivable)} note="ventas aprobadas" tone="ok" />
-          <AdminKpi label="Por pagar" icon="suppliers" value={formatMoney(totals?.totalPayable)} note="proveedores" tone="warn" />
-          <AdminKpi label="Caja comprometida" icon="wallet" value={formatMoney(totals?.committedCash)} note="cobros y pagos" />
-          <AdminKpi label="Inventario" icon="inventory" value={formatNumber(counts?.inventory)} note="ítems controlados" />
-        </section>
-      )}
-
-      <div className="admin-panel-grid">
-        <AdminPanel
-          title="Próximos eventos" icon="calendar"
-          meta={overview.data ? `${formatNumber(overview.data.upcoming.length)} en agenda` : undefined}
-          action={
-            <Link className="admin-panel-link" href="/eventos">
-              Ver eventos →
-            </Link>
-          }
-        >
-          <AdminDataState
-            loading={overview.loading}
-            error={overview.error}
-            onRetry={overview.reload}
-            empty={(overview.data?.upcoming.length ?? 0) === 0}
-            emptyTitle="Sin eventos en agenda" emptyIcon="calendar"
-            emptyHint="Cargá el primer evento para verlo acá con su checklist."
-            emptyAction={<Link className="admin-empty-link" href="/eventos">Cargar un evento →</Link>}
-          >
-            <AdminTable
-              view="resumen-eventos"
-              label="Próximos eventos"
-              columns={[{ label: "Fecha" }, { label: "Evento" }, { label: "Cliente" }, { label: "Checklist", end: true }, { label: "Estado" }]}
-            >
-              {(overview.data?.upcoming ?? []).map((event) => {
-                const progress = checklistProgress(event.tasks, { risk: isUpcomingWithin(event.startsAt) });
-                return (
-                  <AdminRow key={event.id}>
-                    <AdminCell title={event.startsAt ? `${formatDateTime(event.startsAt)} · ${event.name}` : "Fecha a confirmar"}>
-                      {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
-                      <AdminCountdown value={event.startsAt} short className="admin-countdown--inline" title={`Cuánto falta para el inicio: ${event.name}`} />
-                    </AdminCell>
-                    <AdminCell title={`${event.name}${event.location ? ` · ${event.location}` : ""}`}>
-                      <strong>{event.name}</strong>
-                    </AdminCell>
-                    <AdminCell title={event.client.company || event.client.name}>{event.client.company || event.client.name}</AdminCell>
-                    <AdminCell title={progress.title}>
-                      {event.tasks.length === 0 ? (
-                        <span className="admin-muted">—</span>
-                      ) : (
-                        <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
-                      )}
-                    </AdminCell>
-                    <AdminCell>
-                      <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
-                    </AdminCell>
-                  </AdminRow>
-                );
-              })}
-            </AdminTable>
-          </AdminDataState>
-        </AdminPanel>
-
-        <AdminPanel
-          title="Checklist pendiente" icon="audit"
-          meta={
-            pendingTotal > 0
-              ? `${formatNumber(pendingTotal)} pendientes${overdueTasks.length > 0 ? ` · ${formatNumber(overdueTasks.length)} vencida${overdueTasks.length === 1 ? "" : "s"}` : ""}`
-              : undefined
-          }
-          action={
-            <Link className="admin-panel-link" href="/eventos">
-              Ver checklist →
-            </Link>
-          }
-        >
-          {checklistError ? <AdminNote tone="error">{checklistError}</AdminNote> : null}
-          <AdminDataState
-            loading={operations.loading}
-            error={operations.error}
-            onRetry={operations.reload}
-            empty={pendingTasks.length === 0}
-            emptyTitle="Checklist al día" emptyIcon="check"
-            emptyHint="No quedan tareas pendientes en los eventos cargados."
-            emptyAction={<Link className="admin-empty-link" href="/eventos">Abrir operaciones →</Link>}
-            rows={4}
-          >
-            <ChecklistTable
-              entries={pendingTasks}
-              canToggle={canToggle}
-              onChanged={reloadChecklist}
-              onError={setChecklistError}
-              emptyHint="No quedan tareas pendientes en los eventos cargados."
-              compact
-            />
-          </AdminDataState>
-        </AdminPanel>
-
-        <AdminPanel
-          title="Tareas vencidas" icon="alert"
-          meta={overdueTasks.length > 0 ? `${formatNumber(overdueTasks.length)} sin cerrar` : undefined}
-          action={
-            <Link className="admin-panel-link" href="/eventos">
-              Ver eventos →
-            </Link>
-          }
-        >
-          <AdminDataState
-            loading={operations.loading}
-            error={operations.error}
-            onRetry={operations.reload}
-            empty={overdueTasks.length === 0}
-            emptyTitle="Sin tareas vencidas" emptyIcon="check"
-            emptyHint="Ninguna tarea pendiente pasó su fecha de vencimiento."
-            emptyAction={<Link className="admin-empty-link" href="/eventos">Ver calendario →</Link>}
-            rows={3}
-          >
-            <AdminTable
-              view="resumen-vencidas"
-              label="Tareas vencidas"
-              columns={[{ label: "Tarea" }, { label: "Evento" }, { label: "Vence", end: true }]}
-            >
-              {overdueTasks.slice(0, 6).map(({ task, eventName }) => (
-                <AdminRow key={task.id}>
-                  <AdminCell title={task.title}>
-                    <strong>{task.title}</strong>
-                  </AdminCell>
-                  <AdminCell title={eventName}>{eventName}</AdminCell>
-                  <AdminCell
-                    end
-                    title={task.dueAt ? `Venció el ${formatDateTime(task.dueAt)}` : "Sin fecha de vencimiento"}
-                  >
-                    <span className="admin-nowrap">{formatDateShort(task.dueAt)}</span>
-                    <AdminCountdown value={task.dueAt} short className="admin-countdown--inline" title={`Cuánto falta: ${task.title}`} />
-                  </AdminCell>
-                </AdminRow>
-              ))}
-            </AdminTable>
-          </AdminDataState>
-        </AdminPanel>
-
-        <AdminPanel
-          title="Por cobrar" icon="finance"
-          meta={receivables.length > 0 ? `${formatNumber(receivables.length)} saldos` : undefined}
-          action={
-            <Link className="admin-panel-link" href="/presupuestos">
-              Ver presupuestos →
-            </Link>
-          }
-        >
-          <AdminDataState
-            loading={budgets.loading}
-            error={budgets.error}
-            onRetry={budgets.reload}
-            empty={receivables.length === 0}
-            emptyTitle="Nada pendiente de cobro" emptyIcon="check"
-            emptyHint="Los presupuestos aprobados y enviados aparecen acá con su saldo."
-            emptyAction={<Link className="admin-empty-link" href="/presupuestos">Revisar presupuestos →</Link>}
-            rows={4}
-          >
-            <AdminTable
-              view="resumen-cobrar"
-              label="Saldos por cobrar"
-              columns={[
-                { label: "Cliente" },
-                { label: "Presupuesto" },
-                { label: "Saldo", end: true },
-                { label: "Estado" },
-              ]}
-            >
-              {receivables.map(({ budget, balance }) => (
-                <AdminRow key={budget.id}>
-                  <AdminCell title={budget.client.company || budget.client.name}>{budget.client.company || budget.client.name}</AdminCell>
-                  <AdminCell title={`${budget.title} · total ${formatMoney(budget.total)}`}>
-                    <strong>{budget.title}</strong>
-                  </AdminCell>
-                  <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(budget.total)}`}>
-                    <strong>{formatMoney(balance)}</strong>
-                  </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
-                  </AdminCell>
-                </AdminRow>
-              ))}
-            </AdminTable>
-          </AdminDataState>
-        </AdminPanel>
-
-        <AdminPanel
-          title="Por pagar" icon="suppliers"
-          meta={payables.length > 0 ? `${formatNumber(payables.length)} trabajos` : undefined}
-          action={
-            <Link className="admin-panel-link" href="/finanzas">
-              Ver finanzas →
-            </Link>
-          }
-        >
-          <AdminDataState
-            loading={finance.loading}
-            error={finance.error}
-            onRetry={finance.reload}
-            empty={payables.length === 0}
-            emptyTitle="Sin saldos con proveedores" emptyIcon="check"
-            emptyHint="Los trabajos contratados con saldo pendiente aparecen acá."
-            emptyAction={<Link className="admin-empty-link" href="/finanzas">Abrir finanzas →</Link>}
-            rows={4}
-          >
-            <AdminTable
-              view="resumen-pagar"
-              label="Saldos por pagar"
-              columns={[{ label: "Proveedor" }, { label: "Trabajo" }, { label: "Vence" }, { label: "Saldo", end: true }]}
-            >
-              {payables.map(({ job, balance }) => (
-                <AdminRow key={job.id}>
-                  <AdminCell title={job.supplier.name}>
-                    <strong>{job.supplier.name}</strong>
-                  </AdminCell>
-                  <AdminCell title={job.event ? `${job.description} · ${job.event.name}` : job.description}>{job.description}</AdminCell>
-                  <AdminCell title={job.dueAt ? `${formatDateTime(job.dueAt)} · ${jobStatusLabel(job.status)}` : "Sin fecha prevista"}>
-                    <span className="admin-nowrap">{job.dueAt ? formatDateShort(job.dueAt) : "—"}</span>
-                    <AdminCountdown value={job.dueAt} short className="admin-countdown--inline" title={`Vencimiento del trabajo: ${job.description}`} />
-                  </AdminCell>
-                  <AdminCell end title={`Saldo ${formatMoney(balance)} · total ${formatMoney(job.total)}`}>
-                    <strong>{formatMoney(balance)}</strong>
-                  </AdminCell>
-                </AdminRow>
-              ))}
-            </AdminTable>
-          </AdminDataState>
-        </AdminPanel>
-      </div>
     </div>
+  );
+}
+
+// ── (a) Para hacer hoy ──────────────────────────────────────────────────────
+
+function TodayBlock({
+  now,
+  resumen,
+  notifications,
+}: {
+  now: Date | null;
+  resumen: ReturnType<typeof useAdminResource<AdminResumen | null>>;
+  notifications: ReturnType<typeof useAdminNotifications>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const loading = resumen.loading || notifications.loading || !now;
+  const bothFailed = Boolean(resumen.error && notifications.error);
+
+  const actions = useMemo<TodayAction[]>(() => {
+    if (!now) return [];
+    return buildTodayActions({
+      notifications: notifications.data?.notifications ?? [],
+      resumen: resumen.data,
+      today: dayKeyFormat.format(now),
+    });
+  }, [now, notifications.data, resumen.data]);
+
+  const visible = expanded ? actions : actions.slice(0, TODAY_ACTIONS_LIMIT);
+  const hidden = actions.length - TODAY_ACTIONS_LIMIT;
+
+  return (
+    <section className="admin-panel admin-resumen-today" aria-labelledby="resumen-hoy">
+      <header className="admin-panel-head">
+        <span className="admin-panel-icon" aria-hidden="true">
+          <AdminIcon name="bell" size={13} />
+        </span>
+        <h2 className="admin-panel-title" id="resumen-hoy">Para hacer hoy</h2>
+        {!loading && actions.length > 0 ? <span className="admin-panel-meta">{formatNumber(actions.length)} pendientes</span> : null}
+      </header>
+      {loading ? (
+        <AdminLoadingRows rows={4} label="Cargando lo que hay para hacer hoy" />
+      ) : bothFailed ? (
+        <AdminErrorState
+          message={resumen.error}
+          onRetry={() => {
+            resumen.reload();
+            notifications.reload();
+          }}
+        />
+      ) : (
+        <>
+          {resumen.error || notifications.error ? (
+            <AdminNote tone="warn">
+              {resumen.error ? "No pudimos cargar los cobros y leads." : "No pudimos cargar los avisos de eventos."} Lo que ves puede estar incompleto.
+            </AdminNote>
+          ) : null}
+          {actions.length === 0 ? (
+            <AdminEmpty icon="check" title="Todo al día" hint="No hay cobros vencidos, leads sin contestar ni checklist en riesgo." />
+          ) : (
+            <>
+              <ul className="admin-today-list">
+                {visible.map((action) => (
+                  <li className="admin-today-item" data-tone={action.tone} key={action.id}>
+                    <span className="admin-today-rail" aria-hidden="true" />
+                    <div className="admin-today-text">
+                      <strong className="admin-today-title">{action.title}</strong>
+                      {action.detail ? <span className="admin-today-detail">{action.detail}</span> : null}
+                    </div>
+                    <Link className="admin-btn admin-today-action" href={action.href} title={`${action.label}: ${action.title}`}>
+                      <span>{action.label}</span>
+                      <AdminIcon name="arrow-right" size={14} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {hidden > 0 ? (
+                <div className="admin-today-more">
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded((current) => !current)}
+                  >
+                    <span>{expanded ? "Ver menos" : `Ver todos (${formatNumber(actions.length)})`}</span>
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+// ── (b) Embudo del mes ──────────────────────────────────────────────────────
+
+function FunnelBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
+  const data = resumen.data;
+  const stages = data
+    ? [
+        { key: "leads", label: "Leads", count: data.funnel.leads, amount: null, href: "/leads", hint: "Consultas que entraron este mes" },
+        { key: "budgets", label: "Presupuestos", count: data.funnel.budgets.count, amount: data.funnel.budgets.amount, href: "/presupuestos", hint: "Presupuestos creados este mes (sin cancelados)" },
+        { key: "approved", label: "Aprobados", count: data.funnel.approved.count, amount: data.funnel.approved.amount, href: "/presupuestos?estado=APPROVED", hint: "Presupuestos aprobados este mes" },
+        { key: "events", label: "Eventos", count: data.funnel.events, amount: null, href: "/eventos", hint: "Eventos con fecha de inicio este mes (sin cancelados)" },
+      ]
+    : [];
+  const max = Math.max(1, ...stages.map((stage) => stage.count));
+
+  return (
+    <AdminPanel title="Embudo del mes" icon="leads" meta={data ? formatMonthKey(data.month) : undefined}>
+      <AdminDataState loading={resumen.loading} error={resumen.error} onRetry={resumen.reload} rows={4}>
+        <ol className="admin-funnel">
+          {stages.map((stage) => (
+            <li key={stage.key}>
+              <Link className="admin-funnel-stage" href={stage.href} title={`${stage.hint}. Ver la lista`}>
+                <span className="admin-funnel-bar" style={{ width: `${Math.max(stage.count > 0 ? 6 : 0, Math.round((stage.count / max) * 100))}%` }} aria-hidden="true" />
+                <span className="admin-funnel-label">{stage.label}</span>
+                <span className="admin-funnel-count">{formatNumber(stage.count)}</span>
+                <span className="admin-funnel-amount">{stage.amount !== null && stage.count > 0 ? formatMoneyCompact(stage.amount) : ""}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </AdminDataState>
+    </AdminPanel>
+  );
+}
+
+// ── (c) Plata ───────────────────────────────────────────────────────────────
+
+function MoneyBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
+  const money = resumen.data?.money;
+  const cards = money
+    ? [
+        {
+          key: "receivable",
+          label: "Por cobrar",
+          value: money.receivable,
+          note: "saldo de presupuestos aprobados",
+          href: "/finanzas/por-cobrar",
+          tone: undefined as "danger" | "ok" | undefined,
+        },
+        {
+          key: "overdue",
+          label: "En mora",
+          value: money.overdueAmount,
+          note: money.overdueCount > 0 ? `${formatNumber(money.overdueCount)} ${money.overdueCount === 1 ? "cobro vencido" : "cobros vencidos"}` : "sin cobros vencidos",
+          href: "/finanzas/por-cobrar",
+          tone: money.overdueCount > 0 ? ("danger" as const) : undefined,
+        },
+        {
+          key: "collected",
+          label: "Cobrado este mes",
+          value: money.collectedMonth,
+          note: "cobros confirmados",
+          href: "/finanzas",
+          tone: money.collectedMonth > 0 ? ("ok" as const) : undefined,
+        },
+      ]
+    : [];
+
+  return (
+    <AdminPanel
+      title="Plata"
+      icon="finance"
+      action={
+        <Link className="admin-panel-link" href="/finanzas">
+          Ver finanzas →
+        </Link>
+      }
+    >
+      <AdminDataState loading={resumen.loading} error={resumen.error} onRetry={resumen.reload} rows={3}>
+        <ul className="admin-money-list">
+          {cards.map((card) => {
+            const compact = formatMoneyCompact(card.value);
+            const full = formatMoney(card.value);
+            return (
+              <li key={card.key}>
+                <Link className="admin-money-card" data-tone={card.tone} href={card.href} title={`${card.label}: ${full}`}>
+                  <span className="admin-money-label">{card.label}</span>
+                  <strong className="admin-money-value">{compact}</strong>
+                  <span className="admin-money-note">
+                    {compact !== full ? `${full} · ` : ""}
+                    {card.note}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </AdminDataState>
+    </AdminPanel>
+  );
+}
+
+// ── (d) Esta semana ─────────────────────────────────────────────────────────
+
+function WeekBlock({ resumen }: { resumen: ReturnType<typeof useAdminResource<AdminResumen | null>> }) {
+  const events = resumen.data?.week ?? [];
+  return (
+    <AdminPanel
+      title="Esta semana"
+      icon="calendar"
+      meta={resumen.data ? `${formatNumber(events.length)} ${events.length === 1 ? "evento" : "eventos"}` : undefined}
+      action={
+        <Link className="admin-panel-link" href="/eventos?vista=calendario">
+          Ver calendario →
+        </Link>
+      }
+    >
+      <AdminDataState
+        loading={resumen.loading}
+        error={resumen.error}
+        onRetry={resumen.reload}
+        empty={events.length === 0}
+        emptyTitle="Sin eventos esta semana"
+        emptyIcon="calendar"
+        emptyHint="Los eventos de los próximos 7 días aparecen acá con su checklist y su seña."
+        emptyAction={
+          <Link className="admin-empty-link" href="/eventos">
+            Ver eventos →
+          </Link>
+        }
+        rows={3}
+      >
+        <ul className="admin-week-list">
+          {events.map((event) => {
+            const chip = weekEventChip(event);
+            const start = event.startsAt ? new Date(event.startsAt) : null;
+            const detail = [start ? formatTime(start) : "Hora a confirmar", event.client, event.place].filter(Boolean).join(" · ");
+            return (
+              <li key={event.id}>
+                <Link className="admin-week-item" href="/eventos" title={`${event.name} · ${detail}`}>
+                  <span className="admin-week-date" aria-hidden="true">
+                    <small>{start ? weekdayFormat.format(start).replace(/\.$/, "") : "—"}</small>
+                    <strong>{start ? dayFormat.format(start) : "—"}</strong>
+                  </span>
+                  <span className="admin-week-text">
+                    <strong className="admin-week-name">{event.name}</strong>
+                    <span className="admin-week-detail">{detail}</span>
+                  </span>
+                  <AdminBadge tone={chip.tone} title={chip.label}>
+                    {chip.label}
+                  </AdminBadge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </AdminDataState>
+    </AdminPanel>
   );
 }

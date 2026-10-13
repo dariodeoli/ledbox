@@ -36,6 +36,18 @@ export function formatMoney(value: number | null | undefined): string {
   return formatGs(value);
 }
 
+/**
+ * Monto abreviado en millones para tarjetas angostas (`Gs 47,8 M`) con `Intl`
+ * es-PY. Nunca trunca: bajo un millón se dibuja el monto completo y el exacto
+ * siempre va en el `title`/nota de la tarjeta.
+ */
+const millionsFormat = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 });
+export function formatMoneyCompact(value: number | null | undefined): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || Math.abs(amount) < 1_000_000) return formatMoney(amount);
+  return `Gs ${millionsFormat.format(amount / 1_000_000)} M`;
+}
+
 export function formatNumber(value: number | null | undefined): string {
   const amount = Number(value);
   return numberFormat.format(Number.isFinite(amount) ? amount : 0);
@@ -270,6 +282,12 @@ const LEAD_STATUS: Record<string, string> = {
 /** Origen del lead; los valores desconocidos se muestran tal cual llegan. */
 const LEAD_SOURCE: Record<string, string> = {
   website: "Sitio web",
+  // Altas manuales desde el panel («Nuevo lead»).
+  "manual-llamada": "Llamada",
+  "manual-whatsapp": "WhatsApp",
+  "manual-referido": "Referido",
+  "manual-evento": "Evento",
+  "manual-otro": "Carga manual",
 };
 
 const BILLING_UNIT: Record<string, string> = {

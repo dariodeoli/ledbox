@@ -13,6 +13,8 @@ import { test } from "node:test";
 const root = process.cwd();
 const css = readFileSync(join(root, "app", "globals.css"), "utf8");
 const ajustes = readFileSync(join(root, "components", "admin", "modules", "AjustesModule.tsx"), "utf8");
+// La barra vive en `AjustesTabs` (compartida con Plantillas, 13-10-2026).
+const ajustesTabs = readFileSync(join(root, "components", "admin", "modules", "AjustesTabs.tsx"), "utf8");
 
 test("la barra de sub-tabs no agrega aire superior ni lateral", () => {
   const rules = [...css.matchAll(/\.admin-subtabs-bar\s*\{([^}]*)\}/g)].map((match) => match[1]);
@@ -36,8 +38,9 @@ test("el respiro inferior lo aporta el layout base, no la barra", () => {
 });
 
 test("las cuatro secciones se renderizan después de la barra", () => {
-  const bar = ajustes.indexOf('className="admin-subtabs-bar"');
-  assert.ok(bar > 0, "falta la barra de sub-tabs");
+  assert.ok(ajustesTabs.includes('className="admin-subtabs-bar"'), "falta la barra de sub-tabs");
+  const bar = ajustes.indexOf("<AjustesTabs ");
+  assert.ok(bar > 0, "Ajustes no dibuja la barra");
   for (const section of ["EmpresaModule", "CorreoModule", "PlanModule", "UsuariosModule"]) {
     assert.ok(ajustes.indexOf(`<${section} />`) > bar, `${section} no se renderiza después de la barra`);
   }

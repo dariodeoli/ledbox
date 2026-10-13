@@ -27,8 +27,8 @@ export type DemoTourStep = {
 export const DEMO_TOUR_STEPS: readonly DemoTourStep[] = [
   {
     id: "resumen",
-    title: "Resumen",
-    what: "Los números del día: qué está en juego, qué vence y qué queda por cerrar.",
+    title: "Inicio",
+    what: "Para hacer hoy, el embudo del mes, la plata y los eventos de la semana.",
     href: "/dashboard",
   },
   {
@@ -90,21 +90,21 @@ export const DEMO_STRONG_CASES: readonly DemoStrongCase[] = [
     id: "mora",
     label: "Cobros vencidos",
     hint: "Mora viva con su monto y días de atraso: cobrala o seguila por WhatsApp.",
-    href: "/finanzas",
+    href: "/finanzas/por-cobrar",
     tone: "danger",
   },
   {
     id: "cheques",
     label: "Cheque rechazado",
     hint: "Un cheque entró en cartera y fue rechazado: mirá el movimiento y su reversión.",
-    href: "/finanzas",
+    href: "/finanzas/por-cobrar",
     tone: "danger",
   },
   {
     id: "comprobantes",
     label: "Por confirmar",
     hint: "Comprobantes en revisión y esperados vencidos: lo esperado no es plata cobrada.",
-    href: "/finanzas",
+    href: "/finanzas/por-confirmar",
     tone: "warn",
   },
   {
@@ -132,7 +132,7 @@ export const DEMO_STRONG_CASES: readonly DemoStrongCase[] = [
     id: "gastos",
     label: "Gastos «A definir»",
     hint: "Gastos sin proyecto asignado: probá asignarlos desde la fila en Finanzas.",
-    href: "/finanzas",
+    href: "/finanzas/gastos",
     tone: "warn",
   },
   {
@@ -146,7 +146,7 @@ export const DEMO_STRONG_CASES: readonly DemoStrongCase[] = [
     id: "leads",
     label: "Leads sin contactar",
     hint: "Uno entró hace semanas: mirá el pipeline y pasalo a contacto.",
-    href: "/leads",
+    href: "/leads?estado=NEW",
     tone: "accent",
   },
 ];

@@ -567,7 +567,7 @@ export function ClientesModule() {
   return (
     <div className="admin-module-page">
       <AdminModuleContext
-        breadcrumb="Comercial / Clientes"
+        breadcrumb="Clientes"
         hint="Cartera, responsables y actividad comercial en una vista operativa."
         meta={`${formatNumber(rows.length)} visibles`}
       />
