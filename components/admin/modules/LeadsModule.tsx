@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -34,6 +35,7 @@ import {
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -442,12 +444,12 @@ export function LeadsModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de leads">
+      <AdminKpis state={kpiState(leads)} label="Indicadores de leads">
         <AdminKpi label="Leads" icon="leads" value={formatNumber(totals.total)} note="últimos 100 ingresos" />
         <AdminKpi label="Nuevos" icon="plus" value={formatNumber(totals.new)} note="por contactar" tone={totals.new > 0 ? "accent" : undefined} />
         <AdminKpi label="Cotizados" icon="budgets" value={formatNumber(totals.quoted)} note="en pipeline" tone={totals.quoted > 0 ? "warn" : undefined} />
         <AdminKpi label="Ganados" icon="check" value={formatNumber(totals.won)} note="convertidos en cliente" tone={totals.won > 0 ? "ok" : undefined} />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField

@@ -1,5 +1,6 @@
 "use client";
 
+import { kpiState } from "@/components/admin/kpi-state";
 import { useId, useMemo, useState } from "react";
 import {
   formatCalendarDayShort,
@@ -27,6 +28,7 @@ import {
   AdminDialogSection,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminRow,
   AdminSelect,
@@ -187,7 +189,7 @@ export function PromotorasModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de promotoras">
+      <AdminKpis state={kpiState(resources)} label="Indicadores de promotoras">
         <AdminKpi label="Promotoras" icon="promoters" value={formatNumber(promoters.length)} note="activas" />
         <AdminKpi label="Disponibles" icon="check" value={formatNumber(totals.available)} note="pueden tomar tareas" tone="ok" />
         <AdminKpi
@@ -203,7 +205,7 @@ export function PromotorasModule() {
           tone={totals.toDefine > 0 ? "warn" : undefined}
         />
         <AdminKpi label="Contactables" icon="mail" value={formatNumber(totals.reachable)} note="con teléfono o correo" />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar promotoras" placeholder="Buscar por nombre, especialidad o contacto…" />

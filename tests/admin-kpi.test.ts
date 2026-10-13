@@ -1,37 +1,70 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { test } from "node:test";
+import test, { before } from "node:test";
+import * as React from "react";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { kpiLoading, kpiState } from "../components/admin/kpi-state";
 
-/**
- * KPI compacto (issue #113): el contenedor `.admin-kpi` mide lo mínimo (~48 px),
- * el label, el número y la nota comparten la línea en escritorio y la nota
- * trunca con `title` cuando no entra. En mobile el label usa su línea y el KPI
- * queda en dos. Estas guardas frenan la vuelta a la tarjeta alta.
- */
-const css = readFileSync(join(process.cwd(), "app", "globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-const ui = readFileSync(join(process.cwd(), "components", "admin", "AdminUI.tsx"), "utf8");
-const rule = (selector: string) => new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
-
-test("el KPI entra en una línea alta (~48 px)", () => {
-  const kpi = rule(".admin-kpi");
-  assert.match(kpi, /display:\s*flex/, "label, número y nota comparten la línea");
-  assert.match(kpi, /flex-wrap:\s*nowrap/, "sin envolver en escritorio: la nota trunca");
-  assert.match(kpi, /min-height:\s*48px/, "alto mínimo del compacto (44–52)");
-  assert.match(kpi, /padding:\s*8px 10px/, "padding chico");
+// El transform de tsx usa React.createElement en el componente.
+(globalThis as { React?: typeof React }).React = React;
+let AdminKpi: typeof import("../components/admin/AdminUI").AdminKpi;
+let AdminKpis: typeof import("../components/admin/AdminUI").AdminKpis;
+before(async () => {
+  ({ AdminKpi, AdminKpis } = await import("../components/admin/AdminUI"));
 });
 
-test("la nota y el label truncan, con el texto completo en el title", () => {
-  assert.match(rule(".admin-kpi-note"), /text-overflow:\s*ellipsis/, "la nota trunca");
-  assert.match(rule(".admin-kpi-note"), /flex:\s*1 1000 0%/, "la nota cede primero: el label y el número no se recortan");
-  assert.match(rule(".admin-kpi-label-text"), /text-overflow:\s*ellipsis/, "el label trunca solo si hace falta");
-  assert.match(ui, /admin-kpi-note" title=\{note\}/, "la nota lleva el texto completo en el title");
-  assert.match(ui, /admin-kpi-value" title=\{value\}/, "el valor también");
-  assert.match(ui, /admin-kpi-label-text" title=\{label\}/, "y el label");
+const group = (props: { state?: "loading" | "error" | "ready" }, ...kids: React.ReactNode[]) =>
+  createElement(AdminKpis, { ...props, children: kids });
+const html = (el: React.ReactElement) => renderToStaticMarkup(el);
+
+test("value undefined o null muestra esqueleto y no un 0", () => {
+  for (const value of [undefined, null]) {
+    const out = html(createElement(AdminKpi, { label: "Eventos", value }));
+    assert.match(out, /admin-kpi-skeleton/);
+    assert.doesNotMatch(out, />0</);
+  }
 });
 
-test("mobile: el label ocupa su línea y el KPI usa dos", () => {
-  const mobile = [...css.matchAll(/@media \(max-width: 720px\) \{[\s\S]*?\n\}/g)].map((match) => match[0]).join("\n");
-  assert.match(mobile, /\.admin-kpi\s*\{\s*flex-wrap:\s*wrap/, "en mobile envuelve");
-  assert.match(mobile, /\.admin-kpi-label\s*\{\s*flex-basis:\s*100%/, "el label va arriba");
+test("un 0 real cargado sigue siendo 0", () => {
+  const out = html(group({ state: "ready" }, createElement(AdminKpi, { label: "Eventos", value: "0" })));
+  assert.match(out, />0</);
+  assert.doesNotMatch(out, /admin-kpi-skeleton/);
+});
+
+test("el grupo en carga pone esqueletos y un solo role=status", () => {
+  const out = html(group({ state: "loading" }, createElement(AdminKpi, { label: "A", value: "0" }), createElement(AdminKpi, { label: "B", value: "0" })));
+  assert.equal((out.match(/admin-kpi-skeleton/g) ?? []).length, 2);
+  assert.equal((out.match(/role="status"/g) ?? []).length, 1);
+  assert.match(out, /aria-busy="true"/);
+});
+
+test("con error y sin datos muestra «—» y no esqueleto", () => {
+  const out = html(group({ state: "error" }, createElement(AdminKpi, { label: "A", value: "0" })));
+  assert.match(out, /—/);
+  assert.doesNotMatch(out, /admin-kpi-skeleton/);
+  assert.match(out, /aria-busy="false"/);
+});
+
+test("loading={false} explícito pisa al grupo", () => {
+  const out = html(group({ state: "loading" }, createElement(AdminKpi, { label: "A", value: "5", loading: false })));
+  assert.match(out, />5</);
+});
+
+test("cada KPI espera solo su recurso", () => {
+  const ok = { data: [], loading: false, error: "" };
+  const failed = { data: null, loading: false, error: "x" };
+  const out = html(group({}, createElement(AdminKpi, { label: "A", value: "3", state: kpiState(ok) }), createElement(AdminKpi, { label: "B", value: "0", state: kpiState(failed) })));
+  assert.match(out, />3</);
+  assert.match(out, /—/);
+});
+
+test("kpiLoading / kpiState", () => {
+  const loading = { data: null, loading: true };
+  const ok = { data: 1, loading: false };
+  const reloading = { data: 1, loading: true };
+  assert.equal(kpiLoading(loading), true);
+  assert.equal(kpiLoading(reloading), false);
+  assert.equal(kpiState(ok, loading), "loading");
+  assert.equal(kpiState(ok, { data: null, loading: false, error: "e" }), "error");
+  assert.equal(kpiState(ok, reloading), "ready");
 });

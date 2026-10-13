@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Button as SharedButton } from "owncoding-ui";
+import type { KpiState } from "@/components/admin/kpi-state";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
 import {
@@ -963,9 +964,60 @@ export function AdminModuleContext({
   );
 }
 
-export function AdminKpi({ label, value, note, tone, icon }: { label: string; value: string; note?: string; tone?: AdminTone; icon?: AdminIconName }) {
+const AdminKpiStateContext = createContext<KpiState>("ready");
+
+/**
+ * Grilla de indicadores. Con `state="loading"` todos los AdminKpi hijos muestran
+ * un esqueleto en lugar de un «0» inventado; con `state="error"` (falló y no hay
+ * datos) muestran «—». Un 0 ya cargado se sigue mostrando como 0.
+ */
+export function AdminKpis({
+  state = "ready",
+  className,
+  label,
+  children,
+}: {
+  state?: KpiState;
+  className?: string;
+  label?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="admin-kpi" data-tone={tone}>
+    <AdminKpiStateContext.Provider value={state}>
+      <section className={className ? `admin-kpis ${className}` : "admin-kpis"} aria-label={label} aria-busy={state === "loading"}>
+        {state === "loading" ? <span className="sr-only" role="status">Cargando indicadores</span> : null}
+        {children}
+      </section>
+    </AdminKpiStateContext.Provider>
+  );
+}
+
+export function AdminKpi({
+  label,
+  value,
+  note,
+  tone,
+  icon,
+  loading,
+  state,
+}: {
+  label: string;
+  /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
+  value: string | null | undefined;
+  note?: string;
+  tone?: AdminTone;
+  icon?: AdminIconName;
+  /** Explícito: `false` pisa el estado del grupo; `true` fuerza el esqueleto. */
+  loading?: boolean;
+  /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
+  state?: KpiState;
+}) {
+  const groupState = useContext(AdminKpiStateContext);
+  const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
+  const current: KpiState = effective === "ready" && value == null ? "loading" : effective;
+  const shown = current === "ready";
+  return (
+    <div className="admin-kpi" data-tone={shown ? tone : undefined} data-loading={current === "loading" ? "true" : undefined} data-state={current}>
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -975,9 +1027,20 @@ export function AdminKpi({ label, value, note, tone, icon }: { label: string; va
         {/* El texto va en su propio nodo para poder truncarlo sin perder el ícono. */}
         <span className="admin-kpi-label-text" title={label}>{label}</span>
       </span>
-      {/* El `title` deja leer completo lo que el compacto trunca (issue #113). */}
-      <strong className="admin-kpi-value" title={value}>{value}</strong>
-      {note ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
+      {current === "loading" ? (
+        <strong className="admin-kpi-value admin-kpi-value--loading">
+          <span className="admin-kpi-skeleton" aria-hidden="true" />
+        </strong>
+      ) : current === "error" ? (
+        <strong className="admin-kpi-value" title="No pudimos cargar este dato">
+          <span aria-hidden="true">—</span>
+          <span className="sr-only">Sin dato: no pudimos cargarlo</span>
+        </strong>
+      ) : (
+        /* El `title` deja leer completo lo que el compacto trunca (issue #113). */
+        <strong className="admin-kpi-value" title={value ?? undefined}>{value}</strong>
+      )}
+      {note && shown ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
     </div>
   );
 }

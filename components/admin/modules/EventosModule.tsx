@@ -49,6 +49,7 @@ import {
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminModuleContext,
   AdminNote,
   AdminPanel,
@@ -73,6 +74,7 @@ import {
   TextAreaField,
   TextField,
 } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
@@ -741,8 +743,7 @@ export function EventosModule() {
         hint="Agenda, checklist de campo y equipos asignados por evento."
         meta={`${formatNumber(events.length)} eventos`}
       />
-      {activeView === "calendar" ? null : (
-      <section className="admin-kpis" aria-label="Indicadores de eventos">
+      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
         <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
         <AdminKpi label="En curso" icon="checkin" value={formatNumber(inProgress)} note="operación activa" />
@@ -762,10 +763,14 @@ export function EventosModule() {
           note="próximos sin tareas cumplidas"
           tone={atRiskEvents.length > 0 ? "danger" : "ok"}
         />
-      </section>
-      )}
+      </AdminKpis>
 
       <AdminToolbar>
+        {/* Primero en la barra: el conmutador queda FIJO en las tres vistas (en calendario no hay búsqueda ni filtro). */}
+        {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
+        <div className="admin-cal-view-switch">
+          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
+        </div>
         {activeView === "calendar" ? null : (
           <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
         )}
@@ -774,10 +779,6 @@ export function EventosModule() {
         {activeView === "calendar" ? null : (
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         )}
-        {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
-        <div className="admin-cal-view-switch">
-          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
-        </div>
         {writable ? (
           <AdminButton
             variant="primary"
@@ -931,7 +932,7 @@ export function EventosModule() {
       {activeView === "calendar" ? (
         /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
-          <CalendarioModule events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
+          <CalendarioModule hideKpis events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
       <>

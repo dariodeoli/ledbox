@@ -53,6 +53,7 @@ import {
   AdminDialog,
   AdminDialogSection,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -62,6 +63,7 @@ import {
   type AdminMenuItem,
 } from "../AdminUI";
 import { AttachmentInput, Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
 import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
@@ -1038,7 +1040,7 @@ export function InventarioModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de inventario">
+      <AdminKpis state={kpiState(resources)} label="Indicadores de inventario">
         <AdminKpi label="Ítems" icon="inventory" value={formatNumber(inventory.length)} note="controlados" />
         <AdminKpi label="Unidades" icon="inventory" value={formatNumber(totals.units)} note="en total" />
         <AdminKpi
@@ -1053,7 +1055,7 @@ export function InventarioModule() {
           note={totals.conflicts > 0 ? `${formatNumber(totals.conflicts)} ítems en conflicto` : "libres para asignar"}
           tone={totals.available === 0 || totals.conflicts > 0 ? "warn" : "ok"}
         />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
