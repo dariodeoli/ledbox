@@ -12,6 +12,7 @@ import { organizationLogoUrl, supplierJobBalance } from "@/lib/admin-types";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { loadOrganizationLogos } from "@/lib/server/branding";
+import { getRentalReport } from "@/lib/server/rental-report";
 import { ReporteView } from "../../_components/ReporteView";
 
 export const runtime = "nodejs";
@@ -57,7 +58,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
   const { start, end } = monthBounds(month);
   const organizationId = auth.context.organizationId;
 
-  const [events, collections, supplierPayments, supplierPending] = await Promise.all([
+  const [events, collections, supplierPayments, supplierPending, rentals] = await Promise.all([
     db.event.findMany({
       where: { organizationId, startsAt: { gte: start, lt: end } },
       orderBy: { startsAt: "asc" },
@@ -86,6 +87,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
       orderBy: { dueAt: "asc" },
       include: { supplier: true, event: { select: { name: true } } },
     }),
+    getRentalReport(organizationId, month),
   ]);
 
   const eventRows = events.map((event) => {
@@ -162,6 +164,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
     collections: collectionRows,
     supplierPayments: supplierPaymentRows,
     supplierPending: supplierPendingRows,
+    rentals,
   };
 
   return <ReporteView report={report} />;
