@@ -379,3 +379,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Eventos e Inventario: las altas y ediciones se hacen en la ventana de carga nueva, con secciones, botones siempre visibles abajo y aviso si cerrás con cambios sin guardar. En el celular ocupan toda la pantalla.
 - Leads: el detalle queda como vista de lectura y el seguimiento (estado y notas) se edita en su propia ventana.
 - Finanzas y Usuarios: recordatorios, confirmar pagos, dividir saldo, marcar cobrado, trazabilidad, invitar y revocar usan la misma ventana que el resto del panel.
+
+## v2.1.94 — 2026-10-13
+
+- Presupuestos: cada presupuesto nuevo arranca con la seña configurada por la empresa en Ajustes → Alquileres (por ejemplo «Seña 50 %» y «Saldo»), y se puede cambiar. Los presupuestos que ya existían no cambian.
+- Depósito de garantía: se puede pedir una garantía por presupuesto, con un valor por defecto de la empresa. No suma al total ni a los cobros. Su estado (pendiente, retenida, devuelta, retenida en parte o retenida completa) se ve en el panel, en el portal del cliente y en el impreso, y cada cambio queda registrado.
+- Transporte: el botón «Transporte» agrega ese ítem al presupuesto en un clic.
