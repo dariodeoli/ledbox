@@ -83,6 +83,7 @@ test("el historial de la ficha solo usa hechos con fecha real, del más nuevo al
 
 test("create-event: events.write, acotado a la empresa, FOR UPDATE, 404/409 y reserva por el camino existente", () => {
   const route = repoFile("app/api/admin/budgets/[id]/create-event/route.ts");
+  const shared = repoFile("lib/server/budget-event.ts");
   assert.match(route, /requireAdminContext\("events\.write"\)/, "el permiso se revalida en el servidor");
   assert.equal(roleCan("VIEWER", "events.write"), false, "VIEWER no crea eventos");
   assert.equal(roleCan("FINANCE", "events.write"), false);
@@ -90,18 +91,29 @@ test("create-event: events.write, acotado a la empresa, FOR UPDATE, 404/409 y re
   assert.match(route, /where: \{ id, organizationId \}/, "toda lectura va por la empresa activa");
   assert.match(route, /Presupuesto no encontrado\.", 404/, "uno de otra empresa responde 404");
   assert.match(route, /El presupuesto ya tiene un evento\.", 409/, "con evento responde 409");
-  assert.match(route, /FROM "Budget" WHERE "id" = \$\{id\} AND "organizationId" = \$\{organizationId\} FOR UPDATE/, "dos clics simultáneos se serializan");
-  assert.ok(route.indexOf("FOR UPDATE") < route.indexOf("tx.event.create"), "el candado va antes de crear");
-  assert.match(route, /eventId: event\.id/, "vincula budget.eventId");
-  assert.match(route, /desde el presupuesto PRES-/, "auditoría con el código del presupuesto");
-  assert.match(route, /reserveBudgetInventory\(\{ organizationId, budgetId: created\.budget\.id/, "reserva con la firma actual");
+  assert.match(route, /createEventForBudget\(tx, auth\.context, id, \{ confirmDraft: false \}\)/, "el botón usa la función compartida");
+  assert.match(shared, /FROM "Budget" WHERE "id" = \$\{budgetId\} AND "organizationId" = \$\{organizationId\} FOR UPDATE/, "dos clics simultáneos se serializan");
+  assert.ok(shared.indexOf("FOR UPDATE") < shared.indexOf("tx.event.create"), "el candado va antes de crear");
+  assert.match(shared, /eventId: event\.id/, "vincula budget.eventId");
+  assert.match(shared, /desde el presupuesto \$\{ref\}/, "auditoría con el código del presupuesto");
+  assert.match(shared, /PRES-\$\{budgetReference/);
+  assert.match(route, /reserveBudgetInventory\(\{ organizationId, budgetId: id/, "reserva con la firma actual");
   assert.ok(route.indexOf("$transaction") < route.indexOf("reserveBudgetInventory("), "la reserva corre después de la transacción");
 });
 
-test("aprobar no crea el evento solo: lo decide el botón", () => {
-  for (const file of ["app/api/portal/budget/[token]/approve/route.ts", "app/api/admin/budgets/approval/route.ts"]) {
-    assert.equal(/tx\.event\.create|db\.event\.create/.test(repoFile(file)), false, `${file} no crea eventos`);
+test("aprobar crea el evento solo, después de la aprobación, en todos los caminos; el botón queda de respaldo", () => {
+  for (const file of [
+    "app/api/portal/budget/[token]/approve/route.ts",
+    "app/api/admin/budgets/approval/route.ts",
+    "app/api/portal/comparison/[token]/approve/route.ts",
+    "lib/server/signature/portal.ts",
+  ]) {
+    const source = repoFile(file);
+    assert.match(source, /ensureEventForApprovedBudget\(/, `${file} crea el evento al aprobar`);
+    assert.equal(/tx\.event\.create|db\.event\.create/.test(source), false, `${file} no duplica la creación`);
   }
+  const shared = repoFile("lib/server/budget-event.ts");
+  assert.match(shared, /catch \(error\)[\s\S]*No se creó el evento automáticamente/, "si falla, se audita el motivo y no se lanza");
 });
 
 test("Presupuestos: aviso con «Crear evento» en tabla, tarjetas y detalle, y precarga del cliente", () => {

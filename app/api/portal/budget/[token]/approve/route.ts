@@ -8,6 +8,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
+import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
@@ -103,11 +104,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     });
     // Reserva automática del stock comprometido (issue #18). No bloquea la
     // aprobación: los conflictos se auditan y salen en los avisos del panel.
-    await reserveBudgetInventory({
+    // Evento automático (CONFIRMED) y su reserva; si falla, la aprobación sigue y queda auditado.
+    const auto = await ensureEventForApprovedBudget({
       organizationId: budget.organizationId,
       budgetId: budget.id,
-      context: portalAuditContext(budget.organizationId, name, budget.client?.email),
+      actor: portalAuditContext(budget.organizationId, name, budget.client?.email),
     });
+    if (!auto.reservations) {
+      await reserveBudgetInventory({
+        organizationId: budget.organizationId,
+        budgetId: budget.id,
+        context: portalAuditContext(budget.organizationId, name, budget.client?.email),
+      });
+    }
     // Pagos esperados del plan (issue #28): el cliente ya puede ver el estado
     // real de cada concepto en el portal y el equipo los confirma en Finanzas.
     await syncBudgetExpectedPayments({

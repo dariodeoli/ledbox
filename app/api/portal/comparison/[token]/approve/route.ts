@@ -6,6 +6,7 @@ import { normalizeBudgetCode } from "@/lib/public-config";
 import { jsonError } from "@/lib/server/http";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
+import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -34,7 +35,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (updated.count) {
       const context = portalAuditContext(group.organizationId, name);
       await recordAudit({ context, action: "status", entity: "Budget", entityId: body.budgetId, summary: "El cliente eligió una alternativa de la comparación", detail: { fields: { comparisonId: group.id } } });
-      await reserveBudgetInventory({ organizationId: group.organizationId, budgetId: body.budgetId, context });
+      const auto = await ensureEventForApprovedBudget({ organizationId: group.organizationId, budgetId: body.budgetId, actor: context });
+      if (!auto.reservations) await reserveBudgetInventory({ organizationId: group.organizationId, budgetId: body.budgetId, context });
       await syncBudgetExpectedPayments({ organizationId: group.organizationId, budgetId: body.budgetId, actor: context, reason: "alternativa elegida" });
     }
     return Response.json({ comparison: await loadPublicComparison(code!), alreadyApproved: !updated.count });
