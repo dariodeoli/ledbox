@@ -83,7 +83,7 @@ test("el alta suma la categoría buscable/creable y la subida con vista previa",
   assert.match(module, /Crear categoría «\$\{query\}»/);
   assert.match(module, /useCategoryChoices\(categories\)/, "las opciones salen de las categorías de la empresa");
   assert.match(module, /const categories = useMemo/, "el módulo arma las categorías desde el inventario cargado");
-  assert.match(module, /<AdminDialogSection title="Ítem">/, "los datos del ítem van en su sección de la ventana");
+  assert.match(module, /<AdminDialogSection title="Datos">/, "los datos del ítem van en su sección de la ventana");
   assert.match(module, /admin-form-group--photo/, "la foto va en su propia fila");
   assert.match(module, /<AttachmentInput/);
   assert.match(module, /prepareInventoryPhoto/, "la foto se comprime en el navegador");
