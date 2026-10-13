@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Proveedores, Leads e Inventario en móvil (issue #151, críticos 3 y 6 de la
@@ -64,12 +65,12 @@ test("leads: tarjetas con pestañas y sin Kanban cortado en ancho compacto", () 
 });
 
 test("inventario: las tarjetas de la cuadrícula entran también en ancho compacto", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /const narrow = useAdminNarrowViewport\(\);/);
   assert.match(module, /narrow \? null : <AdminViewSwitch view=\{view\}/);
-  assert.match(module, /\) : view === "grid" \|\| narrow \? \(/);
-  assert.match(module, /<AdminCardGrid label="Inventario" cards=\{rows\.map/);
-  assert.match(module, /<AdminActionsMenu label=\{`Acciones del ítem \$\{item\.name\}`\} items=\{menuItems\} \/>/);
+  assert.match(module, /cards=\{view === "grid" \|\| narrow\}/);
+  assert.match(module, /<AdminCardGrid\s+label="Inventario"/);
+  assert.match(module, /<AdminActionsMenu label=\{`Más acciones de \$\{item\.name\}`\} items=\{items\} \/>/);
 });
 
 test("las pestañas de estado del panel envuelven en pantalla chica", () => {

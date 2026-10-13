@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Ítem completo editable + «visible en la web» (issue #111): el formulario de
@@ -42,10 +43,10 @@ test("el endpoint suma la edición del ítem sin romper los contratos", () => {
 });
 
 test("el formulario de edición cubre el ítem completo", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
-  assert.match(module, /title=\{`Editar ítem · \$\{editForm\.name \|\| editItem\.name\}`\}/);
+  const module = inventoryModuleSource();
+  assert.match(module, /title=\{`Editar producto · \$\{editForm\.name \|\| item\.name\}`\}/);
   assert.match(module, /onSubmit=\{\(event\) => void submitEditItem\(event\)\}/);
-  assert.match(module, /<AdminDialog[\s\S]{0,200}title=\{`Editar ítem/, "la edición vive en una ventana (AdminDialog)");
+  assert.match(module, /<AdminDialog[\s\S]{0,200}title=\{`Editar producto/, "la edición vive en una ventana (AdminDialog)");
   for (const label of [
     "Artículo",
     "Categoría",
@@ -65,11 +66,11 @@ test("el formulario de edición cubre el ítem completo", () => {
   }
   // La foto se comparte con el alta y se puede cambiar o quitar.
   assert.match(module, /function PhotoFields/);
-  assert.match(module, /adminApiUpload\(`\/api\/admin\/inventory\/\$\{editItem\.id\}\/image`/);
-  assert.match(module, /adminSend\(`\/api\/admin\/inventory\/\$\{editItem\.id\}\/image`, \{\}, "DELETE"\)/);
+  assert.match(module, /adminApiUpload\(`\/api\/admin\/inventory\/\$\{item\.id\}\/image`/);
+  assert.match(module, /adminSend\(`\/api\/admin\/inventory\/\$\{item\.id\}\/image`, \{\}, "DELETE"\)/);
   assert.match(module, /setEditPhotoRemoved/);
   // El alta también trae el toggle y el detalle lo muestra.
   // El alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos) reemplaza al switch «Visible en la web».
   assert.match(module, /catalogAudience: form\.catalogAudience/);
-  assert.match(module, /effectiveAudience\(selected\) === "HIDDEN" \? "No visible en la tienda"/);
+  assert.match(module, /audience === "HIDDEN"\s*\?\s*"No se publica en la tienda web de la empresa\."/, "la ficha dice si se publica o no");
 });

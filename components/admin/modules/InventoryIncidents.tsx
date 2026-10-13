@@ -103,15 +103,18 @@ function ActionDialog({ action, onClose, onDone }: { action: Action; onClose: ()
 
 /**
  * Lista de incidentes de inventario con sus acciones (A reparación, Resuelto, Dar de
- * baja). La usan la ficha del evento (`eventId`) y el módulo de inventario (todos).
+ * baja). La usan la ficha del evento (`eventId`), la ficha del producto (`inventoryId`) y el diálogo del módulo de inventario (todos).
  */
 export function InventoryIncidentsPanel({
   eventId,
+  inventoryId,
   writable,
   reloadKey = 0,
   onChanged,
 }: {
   eventId?: string;
+  /** Solo los incidentes de este producto (ficha del inventario). */
+  inventoryId?: string;
   writable: boolean;
   reloadKey?: number;
   onChanged?: () => void;
@@ -119,7 +122,7 @@ export function InventoryIncidentsPanel({
   const [filter, setFilter] = useState("open");
   const [action, setAction] = useState<Action | null>(null);
   const [notice, setNotice] = useState("");
-  const query = `status=${filter}${eventId ? `&eventId=${encodeURIComponent(eventId)}` : ""}&r=${reloadKey}`;
+  const query = `status=${filter}${eventId ? `&eventId=${encodeURIComponent(eventId)}` : ""}${inventoryId ? `&inventoryId=${encodeURIComponent(inventoryId)}` : ""}&r=${reloadKey}`;
   const resource = useAdminResource(
     `/api/admin/inventory/incidents?${query}`,
     (payload) => (payload as { incidents?: AdminInventoryIncident[] }).incidents ?? [],

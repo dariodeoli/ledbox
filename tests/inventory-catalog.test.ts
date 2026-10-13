@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { products } from "../lib/catalog";
 import { LEDBOX_INVENTORY_CATALOG, ledboxInventoryItemId } from "../lib/server/inventory-catalog";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Inventario de arranque (issue #86): los 7 productos del catálogo de la landing
@@ -62,7 +63,7 @@ test("la miniatura del inventario cae al ícono y nunca deja un cuadro roto", ()
   const box = repoFile("components/admin/AdminImageBox.tsx");
   assert.match(box, /onError=\{\(\) => setFailed\(true\)\}/);
   assert.match(box, /<AdminIcon name=\{icon\}/);
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /function InventoryThumb/);
   assert.match(module, /<AdminImageBox imageUrl=\{item\.imageUrl\} size=\{size\} \/>/);
   assert.match(module, /label="Imagen \(URL\)"/);

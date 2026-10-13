@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Rediseño de campos y ventanas (13-10-2026): contrato visual y de
@@ -126,7 +127,8 @@ test("alto tráfico: los tres diálogos usan description y footer", () => {
 test("las altas de evento e inventario y los diálogos de Finanzas y Usuarios usan AdminDialog con pie y dirty", () => {
   const mod = (file: string) => readFileSync(join(root, "components", "admin", "modules", file), "utf8");
   for (const file of ["EventosModule.tsx", "InventarioModule.tsx", "LeadsModule.tsx"]) {
-    const source = mod(file);
+    // Inventario reparte sus ventanas en varios archivos: se lee el conjunto.
+    const source = file === "InventarioModule.tsx" ? inventoryModuleSource() : mod(file);
     assert.match(source, /<AdminDialog\b/, `${file}: el alta/edición va en AdminDialog`);
     assert.match(source, /dirty=\{/, `${file}: falta dirty`);
     assert.match(source, /requestClose/, `${file}: Cancelar debe pasar por requestClose`);

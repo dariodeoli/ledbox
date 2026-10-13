@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Altas manuales (issue #131, auditoría #123 §2): menos campos a la vista,
@@ -12,7 +13,7 @@ import { test } from "node:test";
 const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
 
 test("inventario: «Precios» y «Foto y web» plegados, SKU en «Más datos» y nombre es-PY", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /<AdminDisclosure title="Más datos" hint="SKU">/, "el SKU vive en Más datos");
   assert.match(module, /<AdminDisclosure title="Foto y web" hint="foto y visibilidad">/, "foto y web van plegados");
   assert.match(module, /<AdminDisclosure title="Precios" hint="final, mayorista y mínimo">/, "los precios van plegados");

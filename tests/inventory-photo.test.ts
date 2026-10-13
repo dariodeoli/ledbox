@@ -7,6 +7,7 @@ import {
   isInventoryImageMime,
 } from "../lib/admin-types";
 import { inventoryImagePath, inventoryImageUrl } from "../lib/server/inventory-images";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Foto del ítem de inventario (issue #109): el binario vive en la base
@@ -77,10 +78,11 @@ test("las listas exponen la URL efectiva y nunca el binario", () => {
 });
 
 test("el alta suma la categoría buscable/creable y la subida con vista previa", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /<Combobox/, "la categoría usa el combobox del kit");
   assert.match(module, /Crear categoría «\$\{query\}»/);
-  assert.match(module, /categoryChoices/, "las opciones salen de las categorías de la empresa");
+  assert.match(module, /useCategoryChoices\(categories\)/, "las opciones salen de las categorías de la empresa");
+  assert.match(module, /const categories = useMemo/, "el módulo arma las categorías desde el inventario cargado");
   assert.match(module, /<AdminDialogSection title="Ítem">/, "los datos del ítem van en su sección de la ventana");
   assert.match(module, /admin-form-group--photo/, "la foto va en su propia fila");
   assert.match(module, /<AttachmentInput/);

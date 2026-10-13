@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildAvailability, type AssignmentRecord } from "../lib/server/inventory-availability";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 import {
   FIELD_MESSAGES,
   inventoryUnitCodeError,
@@ -117,13 +118,14 @@ test("el API crea y edita unidades y mantiene la cantidad sincronizada", () => {
 });
 
 test("el detalle gestiona las unidades y la edición las resume", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
-  assert.match(module, /admin-unit-block/);
+  const module = inventoryModuleSource();
+  assert.match(module, /view="inventario-unidades"/, "la ficha lista las unidades");
   assert.match(module, /Agregar unidad/);
   assert.match(module, /changeUnitStatus/);
   assert.match(module, /openUnitDialog/);
   assert.match(module, /Costo que tuvo/);
   assert.match(module, /Ver unidades/);
+  assert.match(module, /gestionan en la ficha del producto/, "la edición manda a la ficha, donde viven las unidades");
   assert.match(module, /Se crean las unidades con código automático\./);
   // La demo también trae unidades coherentes con la historia (una en mantenimiento).
   const demo = repoFile("lib/server/demo-data.ts");

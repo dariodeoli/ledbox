@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Precios de venta del inventario (issues #90 y #110): cada frente tiene su
@@ -70,8 +71,9 @@ test("el contrato del panel tipa los precios y las rutas los validan de una vez"
 });
 
 test("el módulo Inventario muestra y edita los precios por frente", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
-  assert.match(module, /label: "Precios", end: true/);
+  const module = inventoryModuleSource();
+  assert.match(module, /label: "Lista", end: true/, "la lista muestra el precio de lista");
+  assert.match(module, /label: "Mayorista", end: true/, "y el mayorista, cada uno en su columna");
   // El bloque por frente lo comparten el alta y la edición.
   assert.match(module, /function PriceFrontFields/);
   for (const title of ["Precio cliente final", "Precio mayorista", "Precio mínimo"]) {
@@ -83,11 +85,11 @@ test("el módulo Inventario muestra y edita los precios por frente", () => {
   for (const label of ["Precio normal", "Desde (días)", "Precio desde esos días", "Piso de venta"]) {
     assert.ok(module.includes(`label="${label}"`), `falta el campo «${label}»`);
   }
-  assert.match(module, /Editar ítem: \$\{item\.name\}/);
+  assert.match(module, /Editar producto: \$\{item\.name\}/);
   assert.match(module, /submitEditItem/);
   // El resumen legible y el aviso de coherencia se ven en lista/tarjetas/detalle.
   assert.match(module, /priceFrontText\("Final"/);
   assert.match(module, /priceFrontText\("Mayorista"/);
   assert.match(module, /formPriceWarning/);
-  assert.match(module, /selectedPriceWarning/);
+  assert.match(module, /const priceWarning = inventoryPriceWarning\(item\)/, "la ficha avisa precios incoherentes");
 });
