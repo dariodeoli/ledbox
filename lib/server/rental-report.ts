@@ -325,8 +325,9 @@ async function depositsSection(organizationId: string, period: ReportPeriod): Pr
   const budgetRef: Prisma.BudgetWhereInput = {
     organizationId,
     securityDeposit: { not: null },
-    // Solo garantías de presupuestos vigentes: un borrador, perdido o cancelado no custodia nada.
-    status: { notIn: ["DRAFT", "LOST", "CANCELLED"] },
+    // Una garantía que ya se movió (en custodia, devuelta o retenida) cuenta siempre; una
+    // todavía pendiente solo cuenta si el presupuesto sigue vigente (no borrador, perdido ni cancelado).
+    AND: [{ OR: [{ securityDepositStatus: { not: "PENDING" } }, { status: { notIn: ["DRAFT", "LOST", "CANCELLED"] } }] }],
     OR: [
       { event: { startsAt: { gte: period.start, lt: period.end } } },
       { OR: [{ eventId: null }, { event: { startsAt: null } }], createdAt: { gte: period.start, lt: period.end } },
