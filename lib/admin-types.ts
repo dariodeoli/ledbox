@@ -2205,6 +2205,10 @@ export type AdminNotification = {
   /** Día de Asunción del hecho (`YYYY-MM-DD`); es la fecha real, no el día de consulta. */
   date: string;
   href: string;
+  /** Concepto del cobro (`Anticipo`, `Saldo`…): solo en `collection_due` y `expected_due`. */
+  label?: string | null;
+  /** Monto real en PYG del cobro o pago esperado, para armar títulos con importe. */
+  amount?: number | null;
   /**
    * Recordatorio por WhatsApp (issue #19): llega solo en los avisos de cobro a
    * plazo con teléfono del cliente, con los datos reales del cobro y el link del

@@ -52,6 +52,13 @@ export async function getNavCounts(organizationId: string, now = new Date()): Pr
   return { leads, budgets, events };
 }
 
+/** `SUM(...)::bigint` llega como bigint/string según el driver: monto Int PYG o 0. */
+export function parseBalance(value: bigint | number | string | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
 /** Embudo del mes, plata, atención de hoy y agenda de la semana. */
 export async function getResumen(organizationId: string, now = new Date()): Promise<AdminResumen> {
   const month = monthWindow(now);
@@ -94,10 +101,19 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
     }),
     // Por cobrar = saldo de los presupuestos aprobados (solo cuenta lo cobrado de
     // verdad, issue #16) + cobros a plazo pendientes que no cuelgan de un presupuesto.
-    db.budget.findMany({
-      where: { organizationId, status: "APPROVED" },
-      select: { total: true, payments: { where: { status: "RECEIVED" }, select: { amount: true } } },
-    }),
+    // Se suma en la base (saldo por presupuesto, nunca negativo) en vez de traer
+    // todos los aprobados con sus cobros; `organizationId` va parametrizado.
+    db.$queryRaw<Array<{ balance: bigint | number | string | null }>>`
+      SELECT COALESCE(SUM(GREATEST(b."total" - COALESCE(p."paid", 0), 0)), 0)::bigint AS "balance"
+      FROM "Budget" b
+      LEFT JOIN (
+        SELECT "budgetId", SUM("amount") AS "paid"
+        FROM "ClientPayment"
+        WHERE "organizationId" = ${organizationId} AND "status" = 'RECEIVED' AND "budgetId" IS NOT NULL
+        GROUP BY "budgetId"
+      ) p ON p."budgetId" = b."id"
+      WHERE b."organizationId" = ${organizationId} AND b."status" = 'APPROVED'
+    `,
     db.clientPayment.aggregate({
       where: { organizationId, status: "PENDING", budgetId: null },
       _sum: { amount: true },
@@ -146,11 +162,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
     }),
   ]);
 
-  const receivable =
-    receivableBudgets.reduce(
-      (sum, budget) => sum + Math.max(0, budget.total - budget.payments.reduce((paid, payment) => paid + payment.amount, 0)),
-      0,
-    ) + (pendingStandalone._sum.amount ?? 0);
+  const receivable = parseBalance(receivableBudgets[0]?.balance) + (pendingStandalone._sum.amount ?? 0);
 
   const weekRows: AdminResumenWeekEvent[] = weekEvents.map((event) => ({
     id: event.id,

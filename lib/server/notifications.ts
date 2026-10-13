@@ -1,3 +1,4 @@
+import { formatGs } from "owncoding-ui/utils";
 import { db } from "./db";
 import { portalBudgetUrl } from "@/lib/public-config";
 import type {
@@ -168,11 +169,9 @@ export function placeLabel(location: string | null | undefined, city: string | n
   return placeKey(place).includes(placeKey(town)) ? place : `${place} · ${town}`;
 }
 
-const pygFormat = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
-
-/** Monto PYG para textos del API (el resto de los avisos no lleva importes). */
+/** Monto PYG para textos del API: el mismo formato del panel (`Gs 4.000.000`). */
 function formatPyg(value: number): string {
-  return pygFormat.format(value);
+  return formatGs(value);
 }
 
 // ── Candidatos ──────────────────────────────────────────────────────────────
@@ -446,6 +445,7 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
         kind: "collection_due" as const,
         level: dayKeyOf(payment.dueAt) < todayKey ? ("overdue" as const) : ("soon" as const),
         title: label,
+        amount: payment.amount,
         subtitle: joinParts([payment.budget?.title, payment.method, formatPyg(payment.amount)]),
         date: dayKeyOf(payment.dueAt),
         href: "/finanzas",
@@ -499,6 +499,8 @@ async function expectedDueCandidates(organizationId: string, now: Date): Promise
         kind: "expected_due" as const,
         level: dayKeyOf(expected.dueAt) < todayKey ? ("overdue" as const) : ("soon" as const),
         title: label,
+        label: expected.label ?? null,
+        amount: expected.amount,
         subtitle: joinParts([expected.budget.title, expected.label, formatPyg(expected.amount), "sin comprobante"]),
         date: dayKeyOf(expected.dueAt),
         href: "/finanzas",

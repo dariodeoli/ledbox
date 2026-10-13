@@ -13,7 +13,7 @@ import {
 import { ADMIN_ROUTES } from "../lib/admin-routes";
 import type { AdminNotification } from "../lib/admin-types";
 import { buildTodayActions, dayDiff, TODAY_ACTIONS_LIMIT, weekEventChip } from "../lib/resumen-actions";
-import { monthWindow, weekWindow } from "../lib/server/resumen";
+import { monthWindow, parseBalance, weekWindow } from "../lib/server/resumen";
 
 /**
  * Menú por etapas, Resumen nuevo y demo liviana (13-10-2026). Fija el orden del
@@ -121,7 +121,10 @@ test("los endpoints nuevos exigen sesión y acotan todo a la empresa activa", ()
   const service = repoFile("lib/server/resumen.ts");
   // Toda consulta del servicio (las relaciones anidadas heredan la del padre) lleva la empresa.
   const queries = [...service.matchAll(/db\.\w+\.\w+\(\{\s*where: (?=([\s\S]{0,160}))/g)].map((match) => match[1]);
-  assert.ok(queries.length >= 16, "se esperan las consultas del Resumen");
+  // El saldo por cobrar pasó a SQL agregado: cada filtro lleva la empresa parametrizada.
+  assert.ok(queries.length >= 15, "se esperan las consultas del Resumen");
+  const rawSql = service.slice(service.indexOf("$queryRaw"), service.indexOf("db.clientPayment.aggregate"));
+  assert.equal((rawSql.match(/"organizationId" = \$\{organizationId\}/g) ?? []).length, 2, "SQL del saldo sin empresa");
   for (const query of queries) assert.match(query, /organizationId|rejectedChequeWhere/, `consulta sin empresa: ${query}`);
   // El alta manual exige clients.write y nace en la empresa activa.
   const lead = repoFile("app/api/admin/leads/route.ts");
@@ -256,4 +259,22 @@ test("demo: franja fina, bienvenida solo la primera vez y lista compacta", () =>
   const page = repoFile("app/(admin)/(panel)/demo/page.tsx");
   assert.doesNotMatch(page, /AdminKpi/, "la demo ya no repite una grilla de KPIs");
   assert.match(page, /admin-demo-cases-list/);
+});
+
+test("resumen: parseBalance normaliza bigint, string y nulos a PYG entero", async () => {
+  assert.equal(parseBalance(BigInt(4000000)), 4000000);
+  assert.equal(parseBalance("1500000"), 1500000);
+  assert.equal(parseBalance(null), 0);
+  assert.equal(parseBalance(-5), 0);
+});
+
+test("buildTodayActions: cobros vencidos llevan concepto, cliente y monto", async () => {
+  const actions = buildTodayActions({
+    today: "2026-10-13",
+    resumen: null,
+    notifications: [
+      notification({ id: "expected_due:1", kind: "expected_due", level: "overdue", title: "Personal", label: "Anticipo", amount: 4000000, href: "/finanzas" }),
+    ],
+  });
+  assert.equal(actions[0].title, "Anticipo vencido · Personal · Gs 4.000.000");
 });

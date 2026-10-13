@@ -6,7 +6,7 @@ import { canWriteClients } from "@/lib/admin-policy";
 import { emailValid, FIELD_MESSAGES, personNameValid, phoneValid } from "@/lib/field-rules";
 import { useAdminSession } from "../AdminShell";
 import { AdminButton, AdminDialog, AdminNote } from "../AdminUI";
-import { EmailField, PhoneField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { CheckboxField, EmailField, PhoneField, SelectField, TextAreaField, TextField } from "../AdminFields";
 
 /**
  * Alta manual de un lead («Nuevo lead», Resumen y Leads): una consulta que llegó
@@ -23,7 +23,7 @@ const SOURCE_OPTIONS = [
   { value: "otro", label: "Otro" },
 ];
 
-const EMPTY = { name: "", phone: "", email: "", company: "", source: "whatsapp", message: "" };
+const EMPTY = { name: "", phone: "", email: "", company: "", source: "whatsapp", message: "", consent: false };
 
 export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   const [values, setValues] = useState(EMPTY);
@@ -39,13 +39,14 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
     name: personNameValid(values.name) ? null : FIELD_MESSAGES.name,
     phone: phoneValid(values.phone) ? null : FIELD_MESSAGES.phone,
     email: emailValid(values.email) ? null : FIELD_MESSAGES.email,
+    consent: values.consent ? null : "Marcá que el contacto pidió que lo llamemos o le cotizemos.",
   };
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy || !writable) return;
     setSubmitted(true);
-    const first = errors.name ?? errors.phone ?? errors.email;
+    const first = errors.name ?? errors.phone ?? errors.email ?? errors.consent;
     if (first) {
       setError(first);
       return;
@@ -59,6 +60,7 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
       company: values.company.trim(),
       message: values.message.trim(),
       source: values.source,
+      consent: values.consent,
     });
     setBusy(false);
     if (!result.ok) {
@@ -144,6 +146,12 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
           optional
           wide
         />
+        <CheckboxField
+          checked={values.consent}
+          onChange={(consent) => setValues((current) => ({ ...current, consent }))}
+          text="El contacto pidió que lo llamemos o le cotizemos"
+        />
+        {submitted && errors.consent ? <AdminNote tone="error">{errors.consent}</AdminNote> : null}
         {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       </form>
     </AdminDialog>

@@ -15,6 +15,8 @@ const MANUAL_SOURCES = ["llamada", "whatsapp", "referido", "evento", "otro"] as 
 
 const manualLeadSchema = leadSchema.pick({ name: true, phone: true, email: true, company: true, message: true }).extend({
   source: z.enum(MANUAL_SOURCES).default("otro"),
+  /** El equipo declara que el contacto pidió que lo llamen o le coticen; sin eso no hay alta. */
+  consent: z.literal(true, { message: "Confirmá que el contacto pidió que lo llamemos o le cotizemos." }),
 });
 
 /**
@@ -23,8 +25,10 @@ const manualLeadSchema = leadSchema.pick({ name: true, phone: true, email: true,
  * `clients.write` (el mismo permiso que mueve el pipeline) y siempre queda en la
  * empresa activa, en estado `NEW`. El alta publica de `/api/leads` no cambia.
  *
- * La constancia de consentimiento no se inventa como si fuera del sitio: el canal
- * queda en `panel-manual` y es el equipo quien declara que el contacto lo pidió.
+ * La constancia de consentimiento no se inventa: `Lead.consentAt` no admite null,
+ * así que el alta exige la casilla `consent` (declaración del equipo de que el
+ * contacto pidió que lo llamen o le coticen) y recién ahí sella la fecha con el
+ * canal `panel-manual`. Ver docs/PRIVACIDAD.md, brecha B2.
  */
 export async function POST(request: Request) {
   const auth = await requireAdminContext("clients.write");

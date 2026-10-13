@@ -119,6 +119,15 @@ export function buildTodayActions(input: {
     }
   }
 
+  /** «Anticipo vencido · Personal · Gs 4.000.000»: concepto, cliente y monto reales. */
+  const dueTitle = (notification: AdminNotification, fallback: string): string => {
+    const concept = notification.label?.trim() || fallback;
+    const state = notification.level === "overdue" ? "vencido" : "por vencer";
+    const parts = [`${concept} ${state}`, notification.title];
+    if (typeof notification.amount === "number") parts.push(money(notification.amount));
+    return parts.join(" · ");
+  };
+
   for (const notification of notifications) {
     const base = {
       id: notification.id,
@@ -136,7 +145,7 @@ export function buildTodayActions(input: {
         actions.push({
           ...base,
           tone: notification.level === "overdue" ? "danger" : "neutral",
-          title: notification.title,
+          title: dueTitle(notification, "Cobro"),
           detail,
           label: "Cobrar",
           href: "/finanzas/por-cobrar",
@@ -146,7 +155,7 @@ export function buildTodayActions(input: {
         actions.push({
           ...base,
           tone: notification.level === "overdue" ? "danger" : "neutral",
-          title: notification.title,
+          title: dueTitle(notification, "Pago esperado"),
           detail,
           label: "Reclamar",
           href: "/finanzas/por-confirmar",
