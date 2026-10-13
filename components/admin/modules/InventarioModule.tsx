@@ -9,6 +9,7 @@ import type { AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccup
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
 import { useAdminSession } from "../AdminShell";
 import {
+  AdminActionsMenu,
   AdminButton,
   AdminDataState,
   AdminDisclosure,
@@ -30,6 +31,7 @@ import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
 import { InventoryCreateDialog, InventoryEditDialog, type InventoryNotice } from "./InventoryItemDialogs";
 import { InventoryList } from "./InventoryList";
+import { TrashDialog, trashMenuItems } from "../TrashDialogs";
 import { KIND_OPTIONS, STATUS_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
 
 /** Vistas del inventario (issue #57): lista densa y cuadrícula de tarjetas. */
@@ -73,6 +75,8 @@ export function InventarioModule() {
   const [statusError, setStatusError] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [archiveBusyId, setArchiveBusyId] = useState("");
+  /** Producto que se está por mandar a la papelera (diálogo de eliminar). */
+  const [trashTarget, setTrashTarget] = useState<AdminInventoryItemRow | null>(null);
   const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS);
@@ -486,6 +490,7 @@ export function InventarioModule() {
             onEdit={setEditItem}
             onEditCombo={(item) => setComboDialog({ item })}
             onArchive={(item) => void archiveItem(item)}
+            onTrash={(item) => setTrashTarget(item)}
             onChangeStatus={(item, next) => void changeStatus(item, next)}
           />
         )}
@@ -523,6 +528,22 @@ export function InventarioModule() {
                       Restaurar
                     </AdminButton>
                   ) : null}
+                  {writable ? (
+                    <AdminActionsMenu
+                      label={`Más acciones de ${item.name}`}
+                      items={trashMenuItems({
+                        type: "InventoryItem",
+                        name: item.name,
+                        archived: true,
+                        canWrite: writable,
+                        only: ["trash"],
+                        busy: Boolean(archiveBusyId),
+                        onArchive: () => void archiveItem(item),
+                        onUnarchive: () => void archiveItem(item, true),
+                        onTrash: () => setTrashTarget(item),
+                      })}
+                    />
+                  ) : null}
                 </span>
               ),
             }))}
@@ -547,9 +568,27 @@ export function InventarioModule() {
           onEdit={setEditItem}
           onEditCombo={(item) => setComboDialog({ item })}
           onArchive={(item, restore) => void archiveItem(item, restore)}
+          onTrash={(item) => setTrashTarget(item)}
           onChangeStatus={(item, next) => void changeStatus(item, next)}
           onChanged={reloadAll}
           onOpenProduct={openFicha}
+        />
+      ) : null}
+
+      {writable && trashTarget ? (
+        <TrashDialog
+          mode="trash"
+          type="InventoryItem"
+          id={trashTarget.id}
+          name={trashTarget.name}
+          onClose={() => setTrashTarget(null)}
+          onDone={(message) => {
+            if (selectedId === trashTarget.id) closeFicha();
+            setBulkItemIds((current) => current.filter((id) => id !== trashTarget.id));
+            setTrashTarget(null);
+            setNotice({ tone: "ok", message });
+            resources.reload();
+          }}
         />
       ) : null}
 

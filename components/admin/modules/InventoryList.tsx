@@ -5,6 +5,7 @@ import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
 import { stockSummary } from "@/lib/inventory-view";
 import type { AdminInventoryItemRow } from "@/lib/admin-types";
+import { trashMenuItems } from "../TrashDialogs";
 import { AdminActionsMenu, AdminBadge, AdminButton, AdminCell, AdminRow, AdminSelect, AdminTable, type AdminMenuItem } from "../AdminUI";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AudienceChip, InventoryThumb, PriceValue, RowCheck, STATUS_PICK_OPTIONS, StockMeter, dayRangeLabel, pricesTitle } from "./InventoryParts";
@@ -25,6 +26,7 @@ export type InventoryListProps = {
   onEdit: (item: AdminInventoryItemRow) => void;
   onEditCombo: (item: AdminInventoryItemRow) => void;
   onArchive: (item: AdminInventoryItemRow) => void;
+  onTrash: (item: AdminInventoryItemRow) => void;
   onChangeStatus: (item: AdminInventoryItemRow, next: string) => void;
 };
 
@@ -68,6 +70,18 @@ export function InventoryList(props: InventoryListProps) {
         title: `Archivar producto ${item.name}`,
         disabled: Boolean(archiveBusyId),
       },
+      // Eliminar solo funciona sobre lo archivado: en la lista activa queda con «Archivalo primero».
+      ...trashMenuItems({
+        type: "InventoryItem",
+        name: item.name,
+        archived: Boolean(item.archivedAt),
+        canWrite: writable,
+        only: ["trash"],
+        busy: Boolean(archiveBusyId),
+        onArchive: () => props.onArchive(item),
+        onUnarchive: () => props.onArchive(item),
+        onTrash: () => props.onTrash(item),
+      }),
     ];
   }
 

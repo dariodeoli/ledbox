@@ -66,6 +66,8 @@ import { EMPTY_EVENT_QUICK, EventQuickFields, eventQuickError, eventQuickPayload
 import { Combobox, SearchField, TextAreaField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { eventArchiveBlockedReason } from "@/lib/trash-shared";
+import { TrashDialog, runTrashAction, trashMenuItems } from "../TrashDialogs";
 import { useOfflineQueue } from "../AdminOffline";
 import { InventoryMovementDialog } from "./InventoryMovementDialog";
 import { EventCards, EventStateBadges, NextActionButton, PrepChips, itemTone, type EventItem } from "./EventoLista";
@@ -81,6 +83,7 @@ const STATUS_OPTIONS = [
   { value: "IN_PROGRESS", label: "En curso" },
   { value: "COMPLETED", label: "Finalizado" },
   { value: "CANCELLED", label: "Cancelado" },
+  { value: "ARCHIVED", label: "Archivados" },
 ];
 
 /** El selector y la URL comparten las vistas canónicas de Eventos. */
@@ -226,6 +229,9 @@ export function EventosModule() {
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
   /** Cierre del evento (alquileres fase 4): estado, bloqueo 409 y cierre forzado con nota. */
   const [closeBusyId, setCloseBusyId] = useState("");
+  /** Papelera: archivar/desarchivar en curso y el diálogo de eliminar abierto. */
+  const [archiveBusyId, setArchiveBusyId] = useState("");
+  const [trashTarget, setTrashTarget] = useState<{ id: string; name: string } | null>(null);
   const [closeError, setCloseError] = useState("");
   const [closeBlock, setCloseBlock] = useState<{ event: EventRow; message: string } | null>(null);
   const [forceOpen, setForceOpen] = useState(false);
@@ -235,8 +241,10 @@ export function EventosModule() {
   const forceFormId = useId();
 
   const writable = canWriteOperations(role);
-  const events = useMemo(() => operations.data ?? [], [operations.data]);
-  const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) ?? null : null;
+  const allEvents = useMemo(() => operations.data ?? [], [operations.data]);
+  // Lo archivado sale de las listas activas, del calendario y de los indicadores: solo se ve con el filtro «Archivados».
+  const events = useMemo(() => allEvents.filter((event) => !event.archivedAt), [allEvents]);
+  const editingEvent = editingEventId ? allEvents.find((event) => event.id === editingEventId) ?? null : null;
   const eventFormDirty = JSON.stringify(form) !== JSON.stringify(editingEvent ? eventFormFrom(editingEvent) : EMPTY_EVENT_FORM);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
@@ -270,12 +278,12 @@ export function EventosModule() {
 
   const items = useMemo<EventItem[]>(
     () =>
-      events.map((event) => {
+      allEvents.map((event) => {
         const budget = budgetByEvent.get(event.id) ?? null;
         const prep: EventBudgetPrep | null = budget ? { advanceAmount: budget.advanceAmount, collected: budget.collected } : null;
         return { event, readiness: eventReadiness(event, { deposit: depositState(prep, budgetsKnown), queued }) };
       }),
-    [events, budgetByEvent, budgetsKnown, queued],
+    [allEvents, budgetByEvent, budgetsKnown, queued],
   );
 
   /** Búsqueda compartida por lista y tarjetas; el estado y el indicador tocado aplican a las dos. */
@@ -283,7 +291,7 @@ export function EventosModule() {
     () =>
       items
         .filter(({ event }) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status]))
-        .filter(({ event }) => (status === "ALL" ? true : event.status === status))
+        .filter(({ event }) => (status === "ARCHIVED" ? Boolean(event.archivedAt) : !event.archivedAt && (status === "ALL" || event.status === status)))
         .filter((item) => (focus ? matchesFocus(item.event, focus, item.readiness) : true))
         .sort(compareEventUrgency),
     [items, query, status, focus],
@@ -293,7 +301,7 @@ export function EventosModule() {
   const overdueTaskCount = useMemo(() => taskEntries.filter(({ task }) => taskInScope(task, "overdue")).length, [taskEntries]);
 
   const counts = useMemo(() => {
-    const total = (key: EventFocus) => items.filter((item) => matchesFocus(item.event, key, item.readiness)).length;
+    const total = (key: EventFocus) => items.filter((item) => !item.event.archivedAt && matchesFocus(item.event, key, item.readiness)).length;
     return { next7: total("next7"), live: total("live"), gaps: total("gaps"), close: total("close") };
   }, [items]);
 
@@ -496,7 +504,38 @@ export function EventosModule() {
     if (closable && readiness.next?.key !== "finalize") {
       entries.push({ label: "Finalizar evento", icon: "check", title: `Finalizar el evento: ${event.name}`, onClick: () => void closeEvent(event) });
     }
+    entries.push(
+      ...trashMenuItems({
+        type: "Event",
+        name: event.name,
+        archived: Boolean(event.archivedAt),
+        canWrite: writable,
+        archiveBlockedReason: eventArchiveBlockedReason(event.status),
+        busy: Boolean(archiveBusyId),
+        onArchive: () => void archiveEvent(event, false),
+        onUnarchive: () => void archiveEvent(event, true),
+        onTrash: () => setTrashTarget({ id: event.id, name: event.name }),
+      }),
+    );
     return entries;
+  }
+
+  /** Archivar / desarchivar (`events.write`); el servidor revalida estado y permisos. */
+  async function archiveEvent(event: EventRow, restore: boolean) {
+    if (archiveBusyId) return;
+    setArchiveBusyId(event.id);
+    setFlash("");
+    setLinkNote("");
+    const result = await runTrashAction("Event", event.id, restore ? "unarchive" : "archive");
+    setArchiveBusyId("");
+    if (!result.ok) {
+      setCloseError(result.error);
+      setFlash("");
+      return;
+    }
+    setCloseError("");
+    setFlash(restore ? `Evento «${event.name}» desarchivado.` : `Evento «${event.name}» archivado. Lo ves con el filtro «Archivados».`);
+    operations.reload();
   }
 
   /** Pie de una fila o tarjeta: una sola acción visible (la siguiente) y «•••». */
@@ -637,6 +676,22 @@ export function EventosModule() {
         </AdminDialog>
       ) : null}
 
+      {writable && trashTarget ? (
+        <TrashDialog
+          mode="trash"
+          type="Event"
+          id={trashTarget.id}
+          name={trashTarget.name}
+          onClose={() => setTrashTarget(null)}
+          onDone={(message) => {
+            setTrashTarget(null);
+            if (fichaId === trashTarget.id) closeFicha();
+            setFlash(message);
+            operations.reload();
+          }}
+        />
+      ) : null}
+
       {writable && closeBlock && forceOpen ? (
         <AdminDialog
           title="Cerrar igual"
@@ -748,14 +803,14 @@ export function EventosModule() {
       ) : activeView === "calendar" ? (
         /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
-          <CalendarioModule hideKpis events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
+          <CalendarioModule hideKpis events={events} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
       <AdminDataState
         loading={operations.loading}
         error={operations.error}
         onRetry={operations.reload}
-        empty={events.length === 0}
+        empty={allEvents.length === 0}
         emptyTitle="Todavía no hay eventos" emptyIcon="events"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
         emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={startNewEvent}>Crear evento →</button> : undefined}

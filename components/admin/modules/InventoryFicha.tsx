@@ -44,6 +44,7 @@ import {
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import {
   AdminBadge,
+  AdminActionsMenu,
   AdminButton,
   AdminCell,
   AdminCountdown,
@@ -56,6 +57,7 @@ import {
   AdminSelect,
   AdminTable,
 } from "../AdminUI";
+import { trashMenuItems } from "../TrashDialogs";
 import { DateField, MoneyField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryIncidentsPanel } from "./InventoryIncidents";
@@ -168,6 +170,7 @@ export function InventoryFicha({
   onEdit,
   onEditCombo,
   onArchive,
+  onTrash,
   onChangeStatus,
   onChanged,
   onOpenProduct,
@@ -185,6 +188,7 @@ export function InventoryFicha({
   onEdit: (item: AdminInventoryItemRow) => void;
   onEditCombo: (item: AdminInventoryItemRow) => void;
   onArchive: (item: AdminInventoryItemRow, restore: boolean) => void;
+  onTrash: (item: AdminInventoryItemRow) => void;
   onChangeStatus: (item: AdminInventoryItemRow, next: string) => void;
   onChanged: () => void;
   onOpenProduct: (id: string) => void;
@@ -361,6 +365,22 @@ export function InventoryFicha({
             >
               {archived ? "Restaurar" : "Archivar"}
             </AdminButton>
+          ) : null}
+          {writable ? (
+            <AdminActionsMenu
+              label={`Más acciones de ${item.name}`}
+              items={trashMenuItems({
+                type: "InventoryItem",
+                name: item.name,
+                archived,
+                canWrite: writable,
+                only: ["trash"],
+                busy: archiveBusy || unitEditorOpen,
+                onArchive: () => onArchive(item, false),
+                onUnarchive: () => onArchive(item, true),
+                onTrash: () => onTrash(item),
+              })}
+            />
           ) : null}
           <span className="admin-dialog-spacer" />
           <AdminButton type="button" icon="close" onClick={requestClose}>
