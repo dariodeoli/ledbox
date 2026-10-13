@@ -783,9 +783,24 @@ export function inventoryAssignmentState(assignment: {
   checkedIn: boolean;
   checkedOutAt?: string | Date | null;
   checkedInAt?: string | Date | null;
+  /** Salida/devolución parcial (alquileres fase 4); sin estos datos rige el estado de siempre. */
+  quantity?: number;
+  checkoutQuantity?: number;
+  returnedQuantity?: number;
+  missingQuantity?: number;
 }): { label: string; tone: AdminTone } {
   if (assignment.checkedInAt || assignment.checkedIn) return { label: "Devuelto", tone: "ok" };
-  if (assignment.checkedOutAt || assignment.checkedOut) return { label: "Afuera", tone: "accent" };
+  if (assignment.checkedOutAt || assignment.checkedOut) {
+    const sent = (assignment.checkoutQuantity ?? 0) > 0 ? assignment.checkoutQuantity ?? 0 : assignment.quantity ?? 0;
+    const pending = sent - (assignment.returnedQuantity ?? 0) - (assignment.missingQuantity ?? 0);
+    if (sent > 0 && (assignment.returnedQuantity ?? 0) > 0 && pending > 0) {
+      return { label: `Faltan ${pending} por devolver`, tone: "warn" };
+    }
+    if ((assignment.checkoutQuantity ?? 0) > 0 && assignment.quantity && sent < assignment.quantity) {
+      return { label: `Salida parcial (${sent} de ${assignment.quantity})`, tone: "accent" };
+    }
+    return { label: "Afuera", tone: "accent" };
+  }
   return { label: "Asignado", tone: "info" };
 }
 
@@ -1225,6 +1240,8 @@ const CALENDAR_KIND: Record<string, string> = {
   supplier_due: "Vence proveedor",
   supplier_delivery: "Entrega proveedor",
   supplier_payment: "Pago proveedor",
+  inventory_out: "Entrega de equipos",
+  inventory_in: "Devolución de equipos",
   task: "Tarea",
 };
 
@@ -1379,6 +1396,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   SupplierJob: "Trabajo de proveedor",
   InventoryItem: "Inventario",
   EventInventory: "Asignación de equipo",
+  InventoryIncident: "Incidente de inventario",
   EventTask: "Tarea",
   Promoter: "Promotora",
   AdminUser: "Usuario",

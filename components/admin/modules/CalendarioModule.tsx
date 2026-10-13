@@ -145,6 +145,9 @@ function calendarRange(anchor: string, view: CalendarView) {
 function itemTagLabel(item: AdminCalendarItem): string | null {
   if (!item.tag) return null;
   if (item.kind === "task") return taskTypeLabel(item.tag);
+  if (item.kind === "inventory_out" || item.kind === "inventory_in") {
+    return item.tag === "DONE" ? "Registrada" : item.tag === "PARTIAL" ? "Parcial · faltan unidades" : "Prevista";
+  }
   if (item.kind === "supplier_due" || item.kind === "supplier_delivery" || item.kind === "supplier_payment") {
     return jobStatusLabel(item.tag);
   }
