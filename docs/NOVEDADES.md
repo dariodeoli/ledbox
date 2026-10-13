@@ -436,3 +436,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - Esta semana.
 - Los gráficos se adaptan al celular y tienen una tabla equivalente para lectores de pantalla.
 - Finanzas → Por cobrar se puede filtrar por antigüedad, y un link puede abrir directo el detalle de un presupuesto.
+
+## v2.1.101 — 2026-10-13
+
+- Tienda web por empresa en /tienda/<empresa>, con portada (logo, frase, categorías destacadas, cómo funciona y contacto), catálogo con búsqueda, disponibilidad para las fechas elegidas, carrito y pedido, todo con el color de marca de la empresa. Se enciende desde Ajustes → Tienda web con «Crear tienda». El sitio de LedBox no cambia.
+- Cada producto elige dónde se muestra: Oculto, Cliente final, Mayorista o Ambos. El cliente final ve el precio de lista (o «Consultar»).
+- Catálogo mayorista: desde la ficha del cliente, «Compartir catálogo mayorista» genera un link privado con precios mayoristas. El link se puede revocar y no aparece en buscadores. El pedido llega al panel ya vinculado a ese cliente y el presupuesto usa los precios mayoristas.
+- Los links anteriores /catalogo/<empresa> siguen funcionando y llevan a la tienda.
