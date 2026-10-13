@@ -453,3 +453,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - Pestañas: Presupuestos · Firmas · Solicitudes del portal.
   - Vuelven a estar disponibles «WhatsApp con plantilla» y «Comprobantes del portal».
 - En el celular, cada presupuesto se ve como una tarjeta con su etapa, el monto y la próxima acción.
+
+## v2.1.103 — 2026-10-13
+
+- Eventos rediseñado:
+  - Arriba, cuatro indicadores que filtran la lista: Próximos 7 días, En curso, Con pendientes y Por cerrar. También está «Tareas vencidas».
+  - Cada fila muestra qué tan listo está el evento: checklist, equipos despachados, seña y promotoras. Tiene una sola acción, la que toca ahora (completar checklist, despachar, registrar devolución o finalizar), y el resto queda en «•••».
+  - El detalle se abre en un panel lateral con «Qué falta» arriba y pestañas: Resumen (con el presupuesto y sus etapas), Checklist, Equipos, Personal e Historial. Cada evento tiene su propio link, y las etapas del presupuesto llevan directo a él.
+  - Pestaña «Tareas»: las tareas pendientes de todos los eventos, con filtros por vencidas, esta semana y promotora, y avisos de promotora no disponible.
+- En el celular, cada evento se ve como una tarjeta con la fecha destacada, su estado, lo que falta y la próxima acción.
