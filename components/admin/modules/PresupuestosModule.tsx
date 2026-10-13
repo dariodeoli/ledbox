@@ -786,6 +786,8 @@ export function PresupuestosModule() {
     if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
   }, [estadoParam]);
   // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
+  // Enlace del Resumen: `?detalle=<id>` abre el detalle de ese presupuesto.
+  const detalleParam = searchParams.get("detalle")?.trim() ?? "";
   const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
     if (!newRequested || !writableForLead) return;
@@ -908,6 +910,15 @@ export function PresupuestosModule() {
   const formRange = useMemo(() => eventAvailabilityRange(formEvent), [formEvent]);
 
   const budgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
+  // `?detalle=<id>`: abre el detalle si el presupuesto es de esta empresa; si no existe
+  // (otra empresa, borrado) se ignora. En ambos casos se limpia de la URL.
+  useEffect(() => {
+    if (!detalleParam || budgetsResource.loading || !budgetsResource.data) return;
+    if (budgetRows.some((budget) => budget.id === detalleParam)) setDetailBudgetId(detalleParam);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("detalle");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [detalleParam, budgetsResource.loading, budgetsResource.data, budgetRows]);
   const requestRows = useMemo(() => budgetsResource.data?.requests ?? [], [budgetsResource.data]);
   const pendingRequests = useMemo(() => requestRows.filter((request) => request.status === "pending"), [requestRows]);
 

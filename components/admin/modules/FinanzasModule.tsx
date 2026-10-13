@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   countdownTone,
@@ -37,6 +38,7 @@ import {
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
+import { AGING_LABELS, agingKeyOf, lateDaysOf, parseAgingParam } from "@/lib/resumen-board";
 import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
 import {
   accountsForPaymentMethod,
@@ -1185,6 +1187,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   }));
 
   const [query, setQuery] = useState("");
+  // Enlaces del Resumen: `?vence=al-dia|1-30|31-60|60-mas` filtra «Por cobrar» por antigüedad.
+  const venceFilter = parseAgingParam(useSearchParams().get("vence"));
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PaymentForm>(EMPTY_PAYMENT_FORM);
   const [busy, setBusy] = useState(false);
@@ -1405,6 +1409,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     () =>
       payments
         .filter((payment) => payment.status === "PENDING")
+        .filter((payment) => !venceFilter || agingKeyOf(lateDaysOf(payment.dueAt, new Date())) === venceFilter)
         .filter((payment) =>
           matchesQuery(query, [
             payment.client.company,
@@ -1416,7 +1421,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           ]),
         )
         .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
-    [payments, query],
+    [payments, query, venceFilter],
   );
 
   const settledPayments = useMemo(
@@ -2977,6 +2982,14 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             </AdminButton>
           }
         >
+          {venceFilter ? (
+            <AdminNote>
+              Filtrado por antigüedad: {AGING_LABELS[venceFilter].toLowerCase()}.{" "}
+              <Link className="admin-panel-link" href="/finanzas/por-cobrar">
+                Quitar filtro
+              </Link>
+            </AdminNote>
+          ) : null}
           <AdminDataState
             loading={finance.loading}
             error={finance.error}
