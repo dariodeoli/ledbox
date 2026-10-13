@@ -58,7 +58,7 @@ test("prioridad visual: número, cliente, evento, monto, seña o saldo, etapa y 
 
 test("acciones unificadas: una visible por fila y el resto en el menú", () => {
   assert.match(module, /function budgetMenuItems/, "falta el menú de acciones del presupuesto");
-  assert.match(module, /label: "Imprimir \/ PDF"[\s\S]{0,200}icon: "print"|icon: "print"/, "la impresión va en el menú");
+  assert.match(module, /label: "Imprimir \/ PDF"[\s\S]{0,200}icon: "print"/, "la impresión va en el menú");
   assert.match(module, /label: "Firma del cliente"/, "la firma va en el menú");
   assert.match(module, /label: budget\.publicToken \? "Portal del cliente" : "Generar link del portal"/, "el portal va en el menú");
   assert.match(module, /<AdminActionsMenu label=\{`Acciones del presupuesto/, "la fila no usa el menú");

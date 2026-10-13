@@ -1586,7 +1586,7 @@ export function PresupuestosModule() {
               value={formatNumber(total.count)}
               note={total.count > 0 ? formatMoney(total.amount) : "sin presupuestos"}
               tone={total.count > 0 ? tone : undefined}
-              active={stageFilter === stage}
+              active={stageFilter === stage || (stageFilter === "approved_any" && (stage === "approved" || stage === "approved_pending_event"))}
               onSelect={() => setStageFilter((current) => (current === stage ? "all" : stage))}
             />
           );
