@@ -170,7 +170,7 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
   };
   const primaryHref =
     primary?.kind === "collect"
-      ? "/finanzas/por-cobrar"
+      ? `/finanzas/por-cobrar?cliente=${encodeURIComponent(client.id)}`
       : primary?.kind === "follow"
         ? `/presupuestos?detalle=${encodeURIComponent(primary.budgetId)}`
         : `/presupuestos?nuevo=1&cliente=${encodeURIComponent(client.id)}`;

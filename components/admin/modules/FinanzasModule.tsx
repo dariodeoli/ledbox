@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   countdownTone,
@@ -1188,7 +1188,24 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
   const [query, setQuery] = useState("");
   // Enlaces del Resumen: `?vence=al-dia|1-30|31-60|60-mas` filtra «Por cobrar» por antigüedad.
-  const venceFilter = parseAgingParam(useSearchParams().get("vence"));
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const venceFilter = parseAgingParam(searchParams.get("vence"));
+  // `?cliente=<id>` (ficha del cliente → Cobrar): se valida contra los cobros cargados de la empresa activa.
+  const clienteParam = searchParams.get("cliente");
+  const clienteFilter = useMemo(
+    () => (clienteParam ? finance.data?.payments.find((payment) => payment.client.id === clienteParam)?.client ?? null : null),
+    [finance.data, clienteParam],
+  );
+  // Un id que no aparece en los datos de la empresa activa se ignora y se limpia de la URL.
+  useEffect(() => {
+    if (!clienteParam || finance.loading || finance.error || clienteFilter) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("cliente");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }, [clienteParam, clienteFilter, finance.loading, finance.error, searchParams, router, pathname]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PaymentForm>(EMPTY_PAYMENT_FORM);
   const [busy, setBusy] = useState(false);
@@ -1410,6 +1427,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       payments
         .filter((payment) => payment.status === "PENDING")
         .filter((payment) => !venceFilter || agingKeyOf(lateDaysOf(payment.dueAt, new Date())) === venceFilter)
+        .filter((payment) => !clienteFilter || payment.client.id === clienteFilter.id)
         .filter((payment) =>
           matchesQuery(query, [
             payment.client.company,
@@ -1421,7 +1439,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           ]),
         )
         .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
-    [payments, query, venceFilter],
+    [payments, query, venceFilter, clienteFilter],
   );
 
   const settledPayments = useMemo(
@@ -2982,6 +3000,14 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             </AdminButton>
           }
         >
+          {clienteFilter ? (
+            <AdminNote>
+              Filtrado por {clienteFilter.company || clienteFilter.name} ·{" "}
+              <Link className="admin-panel-link" href="/finanzas/por-cobrar">
+                Quitar filtro
+              </Link>
+            </AdminNote>
+          ) : null}
           {venceFilter ? (
             <AdminNote>
               Filtrado por antigüedad: {AGING_LABELS[venceFilter].toLowerCase()}.{" "}

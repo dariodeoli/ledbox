@@ -89,7 +89,7 @@ const EVENTOS_VIEWS = ["list", "grid", "calendar"] as const;
 const FOCUS_LABEL: Record<EventFocus, string> = {
   next7: "Próximos 7 días",
   live: "En curso",
-  gaps: "Con faltantes o checklist incompleto",
+  gaps: "Con pendientes · 14 días",
   close: "Por cerrar",
 };
 
@@ -526,10 +526,10 @@ export function EventosModule() {
         <AdminKpi label="Próximos 7 días" icon="calendar" value={formatNumber(counts.next7)} note="por empezar" tone="accent" {...kpiFor("next7")} />
         <AdminKpi label="En curso" icon="checkin" value={formatNumber(counts.live)} note="operación activa" {...kpiFor("live")} />
         <AdminKpi
-          label="Faltantes o checklist incompleto"
+          label="Con pendientes · 14 días"
           icon="alert"
           value={formatNumber(counts.gaps)}
-          note="abiertos con pendientes"
+          note="abiertos o en curso, próximos 14 días"
           tone={counts.gaps > 0 ? "warn" : "ok"}
           {...kpiFor("gaps")}
         />

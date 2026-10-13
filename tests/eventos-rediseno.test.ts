@@ -163,7 +163,9 @@ test("cada indicador de la cabecera filtra con su propio criterio", () => {
   assert.equal(hits(upcoming, "live"), false);
   assert.equal(hits(ended, "close"), true, "pasó y sigue abierto");
   assert.equal(hits(closed, "close"), false, "finalizado no es «por cerrar»");
-  assert.equal(hits(gaps, "gaps"), true);
+  assert.equal(hits(gaps, "gaps"), false, "a 30 días queda fuera de la ventana de 14");
+  const soonGaps = event({ startsAt: iso(10 * 24 * HOUR), endsAt: iso(11 * 24 * HOUR), tasks: [task("1", false)] });
+  assert.equal(hits(soonGaps, "gaps"), true);
   assert.equal(hits(closed, "gaps"), false);
   assert.equal(eventPhase(closed), "closed");
 });
@@ -208,7 +210,7 @@ test("ninguna acción se pierde: despacho, devolución, incidentes, checklist, a
     assert.ok(ficha.includes(text), `falta en la ficha: ${text}`);
   }
   // Los cuatro indicadores de la cabecera son botones que filtran.
-  for (const label of ["Próximos 7 días", "En curso", "Faltantes o checklist incompleto", "Por cerrar"]) {
+  for (const label of ["Próximos 7 días", "En curso", "Con pendientes · 14 días", "Por cerrar"]) {
     assert.ok(module.includes(label), `falta el indicador «${label}»`);
   }
   const ui = read("components/admin/AdminUI.tsx");
@@ -290,4 +292,14 @@ test("la vista «Tareas»: todas las pendientes de eventos abiertos, vencidas, e
   assert.match(view, /!promoterIsAvailable\(task\.promoter\)/, "avisa de la promotora no disponible");
   for (const text of ["Filtrar por promotora", "Sin promotora"]) assert.ok(view.includes(text), `falta «${text}»`);
   assert.match(read("lib/event-readiness.ts"), /overdue: "Vencidas"[\s\S]{0,40}week: "Esta semana"/);
+});
+
+test("«Con pendientes · 14 días» cuenta el evento a 13 días y no el de 15; incluye los en curso", () => {
+  const withGap = (overrides: Partial<AdminEventPanelRow>) => event({ tasks: [task("1", false)], ...overrides });
+  const day = 24 * HOUR;
+  const hits = (candidate: AdminEventPanelRow) => matchesFocus(candidate, "gaps", eventReadiness(candidate));
+  assert.equal(hits(withGap({ startsAt: iso(13 * day), endsAt: iso(13 * day + 4 * HOUR) })), true, "a 13 días cuenta");
+  assert.equal(hits(withGap({ startsAt: iso(15 * day), endsAt: iso(15 * day + 4 * HOUR) })), false, "a 15 días no");
+  assert.equal(hits(withGap({ status: "IN_PROGRESS", startsAt: iso(-2 * HOUR), endsAt: iso(5 * HOUR) })), true, "en curso cuenta");
+  assert.equal(hits(withGap({ status: "COMPLETED", startsAt: iso(-30 * HOUR), endsAt: iso(-6 * HOUR) })), false, "cerrado no");
 });
