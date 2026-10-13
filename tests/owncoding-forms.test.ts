@@ -47,6 +47,20 @@ test("los campos del kit usan los componentes de la librería y no dibujan contr
   assert.doesNotMatch(css, /\.admin-switch-track|\.admin-segmented-item|\.admin-check-box/, "CSS duplicado de Switch/Segmented/Checkbox");
 });
 
+test("el segmentado conserva grupo accesible, descripción, invalidez y deshabilitado sin foco", () => {
+  const seg = fields.slice(fields.indexOf("export function SegmentedField"), fields.indexOf("export function AttachmentInput"));
+  assert.match(seg, /role="group"/);
+  assert.match(seg, /aria-labelledby=\{label \? labelId : undefined\}/);
+  assert.match(seg, /aria-describedby=\{describedBy\(error, hint, hintId, errorId\)\}/);
+  assert.match(seg, /aria-invalid=\{error \? true : undefined\}/);
+  assert.match(seg, /inert=\{disabled \? true : undefined\}/);
+  assert.match(seg, /ariaLabel=\{name\}/);
+});
+
+test("la caja de texto no crece sola salvo que el llamador lo pida", () => {
+  assert.match(fields, /autoGrow = false,/);
+});
+
 test("la caja de texto acepta autoGrow y contador sin cambiar la API existente", () => {
   assert.match(fields, /autoGrow\?: boolean/);
   assert.match(fields, /counter\?: boolean/);

@@ -1157,7 +1157,7 @@ export function PortalBudgetView({
         <div className="portal-pay-grid">
           <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
             <BankLogo bank={budget.paymentDetails.bank} size="h-8" />
-            <span className="portal-bank-name">{mark?.label ?? "Datos de pago"}</span>
+            <span className="portal-bank-name">{mark?.label ?? (budget.paymentDetails.bank?.trim() || "Datos de pago")}</span>
           </div>
           <dl className="portal-facts portal-facts--pay">
             <div>

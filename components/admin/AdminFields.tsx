@@ -302,7 +302,7 @@ export function TextAreaField({
   name,
   id,
   textareaRef,
-  autoGrow = true,
+  autoGrow = false,
   counter = false,
 }: TextAreaFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
@@ -1747,13 +1747,23 @@ export function SegmentedField({
           {ariaLabel}
         </span>
       )}
-      <SharedSegmented
-        value={value}
-        onChange={(next: string) => { if (!disabled) onChange(next); }}
-        options={options.map((option): [string, string] => [option.value, option.label])}
-        ariaLabel={name}
-        className={disabled ? "admin-segmented pointer-events-none opacity-50" : "admin-segmented"}
-      />
+      <div
+        role="group"
+        aria-label={label ? undefined : name}
+        aria-labelledby={label ? labelId : undefined}
+        aria-describedby={describedBy(error, hint, hintId, errorId)}
+        aria-invalid={error ? true : undefined}
+        aria-disabled={disabled ? true : undefined}
+        inert={disabled ? true : undefined}
+      >
+        <SharedSegmented
+          value={value}
+          onChange={(next: string) => { if (!disabled) onChange(next); }}
+          options={options.map((option): [string, string] => [option.value, option.label])}
+          ariaLabel={name}
+          className={disabled ? "admin-segmented pointer-events-none opacity-50" : "admin-segmented"}
+        />
+      </div>
       {message}
     </div>
   );
