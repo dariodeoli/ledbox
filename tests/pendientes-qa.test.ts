@@ -30,3 +30,16 @@ test("incidentes: «Unidad sin identificar» solo para retenidos por cantidad en
   assert.match(read("components/admin/modules/InventoryIncidents.tsx"), /isUnidentifiedUnitIncident\(incident\)/);
   assert.match(read("app/api/admin/inventory/incidents/route.ts"), /_count: \{ select: \{ units: true \} \}/);
 });
+
+test("finanzas: «Pagar» del trabajo de proveedor es un AdminDialog con footer, dirty y form={id}; el monto no cambia", () => {
+  const src = read("components/admin/modules/FinanzasModule.tsx");
+  const start = src.indexOf("savePayJob(event");
+  assert.ok(start > 0);
+  const block = src.slice(src.indexOf("{writable && payJob && payJobRow ?"), src.indexOf("<AdminDataState", src.indexOf("{writable && payJob && payJobRow ?")));
+  assert.match(block, /<AdminDialog/);
+  assert.match(block, /dirty=\{JSON\.stringify\(payJob\) !== JSON\.stringify\(payJobBase\)\}/);
+  assert.match(block, /form=\{payJobFormId\}/);
+  assert.doesNotMatch(block, /admin-inline-form/);
+  assert.match(src, /amount: String\(supplierJobBalance\(job\) \|\| ""\)/);
+  assert.match(src, /const amount = Number\(payJob\.amount\);/);
+});
