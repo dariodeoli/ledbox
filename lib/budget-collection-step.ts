@@ -10,13 +10,18 @@ export type BudgetCollectionConcept = {
   remaining?: number;
 };
 
+/** Saldo del presupuesto: total menos lo cobrado de verdad, nunca negativo. Única fuente para panel y portal. */
+export function budgetBalance(input: { total: number; collected: number }) {
+  return Math.max(0, input.total - input.collected);
+}
+
 export function budgetCollectionStep<T extends BudgetCollectionConcept>(input: {
   total: number;
   collected: number;
   advanceAmount: number;
   expectedPayments?: readonly T[];
 }) {
-  const balance = Math.max(0, input.total - input.collected);
+  const balance = budgetBalance(input);
   if (balance === 0) return { kind: "complete" as const, label: input.total > 0 ? "Cobro completo" : "Sin saldo pendiente", amount: 0, concept: null };
   const open = (input.expectedPayments ?? []).filter((row) => ["AWAITING", "PARTIAL", "PROOF"].includes(row.status));
   const payable = open.find((row) => row.status === "PARTIAL") ?? open.find((row) => row.status === "AWAITING");

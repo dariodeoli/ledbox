@@ -1,6 +1,6 @@
 "use client";
 import { clientDisplayName } from "@/lib/client-identity";
-import { budgetCollectionStep } from "@/lib/budget-collection-step";
+import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "@/components/admin/AdminAvatar";
 import { resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 
@@ -581,7 +581,7 @@ export function PortalBudgetView({
   /** La decisión (autorizar, rebaja o cambio) solo existe mientras el presupuesto está en juego. */
   const decisionVisible = !approved && !revisionPending && !closed;
   /** Saldo real del presupuesto: total menos lo cobrado (un comprobante en revisión no resta). */
-  const balance = Math.max(0, budget.total - (budget.collectedAmount ?? 0));
+  const balance = budgetBalance({ total: budget.total, collected: budget.collectedAmount ?? 0 });
   /** Sección a la que lleva la acción principal fija en celular; sin pendiente, no hay barra. */
   const stickyKind: "authorize" | "pay" | null = stage === "authorize" && decisionVisible ? "authorize" : stage === "pay" ? "pay" : null;
 

@@ -171,3 +171,13 @@ test("no se expone nada nuevo: ni costos internos ni endpoints distintos", () =>
   assert.ok(posts.length > 0 && posts.every((name) => ["approve", "propose", "revision"].includes(name!)), `endpoints inesperados: ${posts.join(", ")}`);
   assert.match(view, /\/api\/portal\/budget\/\$\{encodeURIComponent\(token\)\}\/proof/);
 });
+
+test("el saldo del portal sale del mismo helper que el paso de cobro", async () => {
+  const { budgetBalance, budgetCollectionStep } = await import("../lib/budget-collection-step");
+  assert.equal(budgetBalance({ total: 650_000, collected: 150_000 }), 500_000);
+  assert.equal(budgetBalance({ total: 100, collected: 200 }), 0);
+  const step = budgetCollectionStep({ total: 650_000, collected: 150_000, advanceAmount: 0, expectedPayments: [] });
+  assert.equal(step.amount, budgetBalance({ total: 650_000, collected: 150_000 }));
+  const source = readFileSync(join(process.cwd(), "app/(portal)/_components/PortalBudgetView.tsx"), "utf8");
+  assert.doesNotMatch(source, /budget\.total - \(budget\.collectedAmount/);
+});
