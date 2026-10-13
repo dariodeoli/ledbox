@@ -44,10 +44,10 @@ export function rejectedChequeWhere(organizationId: string, now: Date) {
 export async function getNavCounts(organizationId: string, now = new Date()): Promise<AdminNavCounts> {
   const week = weekWindow(now);
   const [leads, budgets, events] = await Promise.all([
-    db.lead.count({ where: { organizationId, status: "NEW" } }),
-    db.budget.count({ where: { organizationId, status: { in: ["SENT", "NEGOTIATING"] } } }),
+    db.lead.count({ where: { organizationId, archivedAt: null, status: "NEW" } }),
+    db.budget.count({ where: { organizationId, archivedAt: null, status: { in: ["SENT", "NEGOTIATING"] } } }),
     db.event.count({
-      where: { organizationId, status: { notIn: ["CANCELLED", "COMPLETED"] }, startsAt: { gte: week.start, lt: week.end } },
+      where: { organizationId, archivedAt: null, status: { notIn: ["CANCELLED", "COMPLETED"] }, startsAt: { gte: week.start, lt: week.end } },
     }),
   ]);
   return { leads, budgets, events };
@@ -98,7 +98,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
       _sum: { total: true },
     }),
     db.event.count({
-      where: { organizationId, status: { not: "CANCELLED" }, startsAt: { gte: month.start, lt: month.end } },
+      where: { organizationId, archivedAt: null, status: { not: "CANCELLED" }, startsAt: { gte: month.start, lt: month.end } },
     }),
     // Por cobrar = saldo de los presupuestos aprobados (solo cuenta lo cobrado de
     // verdad, issue #16) + cobros a plazo pendientes que no cuelgan de un presupuesto.
@@ -145,7 +145,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
       _sum: { amount: true },
     }),
     db.event.findMany({
-      where: { organizationId, status: { notIn: ["CANCELLED", "COMPLETED"] }, startsAt: { gte: week.start, lt: week.end } },
+      where: { organizationId, archivedAt: null, status: { notIn: ["CANCELLED", "COMPLETED"] }, startsAt: { gte: week.start, lt: week.end } },
       orderBy: { startsAt: "asc" },
       take: 8,
       select: {

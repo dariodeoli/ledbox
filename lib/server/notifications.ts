@@ -193,7 +193,7 @@ async function coreCandidates(organizationId: string, now: Date): Promise<AdminN
   const [openTasks, openJobs, incompleteEvents] = await Promise.all([
     db.eventTask.findMany({
       where: {
-        event: { organizationId, status: { not: "CANCELLED" } },
+        event: { organizationId, archivedAt: null, status: { not: "CANCELLED" } },
         completedAt: null,
         dueAt: { not: null, lte: soonLimit },
       },
@@ -214,6 +214,7 @@ async function coreCandidates(organizationId: string, now: Date): Promise<AdminN
     db.event.findMany({
       where: {
         organizationId,
+        archivedAt: null,
         status: { notIn: ["CANCELLED", "COMPLETED"] },
         startsAt: { not: null, gte: new Date(now.getTime() - DAY_MS), lte: soonLimit },
         tasks: { some: { completedAt: null } },
