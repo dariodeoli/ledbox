@@ -7,6 +7,7 @@ import { fiscalSummaryOf, grossToNet, shiftMonthKey, taxTotalsOf, type InvoiceTa
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { statementRowFingerprint } from "@/lib/bank-statement";
 import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
+import { catalogTokenHash } from "./catalog-access";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -497,16 +498,23 @@ const SUPPLIERS = [
  * equivalente; el resto usa el marcador de posición del catálogo. Los consumibles no se publican.
  */
 const DEMO_WEB_CATALOG: Record<string, Partial<Prisma.InventoryItemUncheckedCreateInput>> = {
-  demo_inv_led_p3: { visibleOnWeb: true, listPrice: 950_000, imageUrl: "/assets/products/pantalla-led.png" },
-  demo_inv_led_p5: { visibleOnWeb: true, listPrice: 800_000, imageUrl: "/assets/products/pantalla-led.png" },
-  demo_inv_totem: { visibleOnWeb: true, listPrice: 1_800_000, imageUrl: "/assets/products/totem-led.png" },
-  demo_inv_totem_touch: { visibleOnWeb: true, listPrice: 1_200_000, imageUrl: "/assets/products/totem-touch.png" },
-  demo_inv_kiosko: { visibleOnWeb: true, listPrice: 1_100_000, imageUrl: "/assets/products/kiosko-touch.png" },
-  demo_inv_cilindro: { visibleOnWeb: true, listPrice: 1_500_000, imageUrl: "/assets/products/cilindro-led.png" },
-  demo_inv_dispenser: { visibleOnWeb: true, listPrice: 650_000, imageUrl: "/assets/products/dispensador-inteligente.png" },
-  demo_inv_truss: { visibleOnWeb: true, listPrice: 200_000 },
-  demo_inv_panels: { visibleOnWeb: true, listPrice: 150_000 },
+  // Ambos catálogos (cliente final y mayorista), con su precio de lista y su precio mayorista.
+  demo_inv_led_p3: { visibleOnWeb: true, catalogAudience: "BOTH", listPrice: 950_000, wholesalePrice: 800_000, imageUrl: "/assets/products/pantalla-led.png", publicDescription: "Módulo de pantalla LED interior de alta definición, ideal para fondos de escenario y salas." },
+  demo_inv_led_p5: { visibleOnWeb: true, catalogAudience: "BOTH", listPrice: 800_000, wholesalePrice: 680_000, imageUrl: "/assets/products/pantalla-led.png", publicDescription: "Pantalla LED para exteriores, resistente a la luz del día." },
+  demo_inv_kiosko: { visibleOnWeb: true, catalogAudience: "BOTH", listPrice: 1_100_000, wholesalePrice: 920_000, imageUrl: "/assets/products/kiosko-touch.png" },
+  demo_inv_panels: { visibleOnWeb: true, catalogAudience: "BOTH", listPrice: 150_000, wholesalePrice: 110_000 },
+  // Solo cliente final.
+  demo_inv_totem: { visibleOnWeb: true, catalogAudience: "RETAIL", listPrice: 1_800_000, wholesalePrice: 1_500_000, imageUrl: "/assets/products/totem-led.png" },
+  demo_inv_totem_touch: { visibleOnWeb: true, catalogAudience: "RETAIL", listPrice: 1_200_000, imageUrl: "/assets/products/totem-touch.png" },
+  demo_inv_cilindro: { visibleOnWeb: true, catalogAudience: "RETAIL", listPrice: 1_500_000, imageUrl: "/assets/products/cilindro-led.png" },
+  // Solo mayorista: nunca aparece en la tienda pública ni su precio mayorista sale de ahí.
+  demo_inv_dispenser: { visibleOnWeb: true, catalogAudience: "WHOLESALE", listPrice: 650_000, wholesalePrice: 520_000, imageUrl: "/assets/products/dispensador-inteligente.png" },
+  demo_inv_truss: { visibleOnWeb: true, catalogAudience: "WHOLESALE", listPrice: 200_000, wholesalePrice: 150_000 },
 };
+
+/** Cliente mayorista de la demo y su link privado (el token es público a propósito: es una demo). */
+export const DEMO_WHOLESALE_CLIENT_ID = "demo_client_pixel";
+export const DEMO_WHOLESALE_TOKEN = "lbxw_demo-agencia-pixel-mayorista-0001";
 
 type DemoLead = {
   id: string;
@@ -529,6 +537,8 @@ const LEADS: readonly DemoLead[] = [
   { id: "demo_lead_vision", name: "Carla Núñez", company: "Visión Banco", phone: "+595 972 664 330", email: "carla.nunez@visionbanco.demo", reason: "Jornada de sucursales", message: "Jornada regional de sucursales con pantalla principal y acreditación.", status: "CONTACTED", createdDaysAgo: 6, eventDateDays: 33, location: "Encarnación", internalNotes: "Pidió cotización para dos fechas; llamar el lunes." },
   { id: "demo_lead_superseis", name: "Diego Ocampos", company: "Superseis", phone: "+595 991 204 118", email: "diego.ocampos@superseis.demo", reason: "Aniversario de tienda", message: "Aniversario de la sucursal con activación de fin de semana.", status: "WON", createdDaysAgo: 20, eventDateDays: 18, location: "Asunción", internalNotes: "Cerró la activación; facturar a 30 días." },
   { id: "demo_lead_pixel", name: "Sandra Meza", company: "Agencia Punto Creativo", phone: "+595 983 991 450", email: "sandra.meza@punktocreativo.demo", reason: "Congreso interno", message: "Congreso de vendedores con pantalla principal y traducción.", status: "LOST", createdDaysAgo: 16, eventDateDays: 12, location: "San Bernardino", internalNotes: "Eligió otro proveedor por presupuesto." },
+  // Pedido mayorista del catálogo de Agencia Pixel (ya convertido en presupuesto, con precios mayoristas).
+  { id: "demo_lead_pixel_mayorista", name: "Diego Ramírez", company: "Agencia Pixel", phone: "+595 984 665 220", email: "produccion@agenciapixel.demo", reason: "Pedido del catálogo mayorista", message: "Pedido para el evento de un cliente de la agencia.", status: "QUOTED", createdDaysAgo: 4, eventDateDays: 30, location: "Asunción", internalNotes: "Llegó por su link del catálogo mayorista; se armó el presupuesto con precios mayoristas." },
   // Cliente con ficha completa (Tigo): una consulta que terminó en el presupuesto
   // vinculado y otra posterior que coincide solo por el correo del cliente.
   { id: "demo_lead_tigo", name: "Lucía Fernández", company: "Tigo Paraguay", phone: "+595 981 214 500", email: "eventos@tigo.demo", reason: "Activación de lanzamiento", message: "Queremos pantallas y un tótem para la activación de lanzamiento en el shopping.", status: "QUOTED", createdDaysAgo: 26, eventDateDays: 21, location: "Asunción", internalNotes: "Se armó el presupuesto desde esta consulta." },
@@ -1698,6 +1708,22 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       ],
     },
     {
+      id: "demo_budget_mayorista",
+      leadId: "demo_lead_pixel_mayorista",
+      clientId: DEMO_WHOLESALE_CLIENT_ID,
+      title: "Pedido mayorista · Agencia Pixel",
+      status: "DRAFT",
+      discount: 0,
+      validUntil: eventStart(second, -1, 18),
+      notes: "Período: 2 días. Lugar: Asunción. Nació de un pedido del catálogo mayorista (precios mayoristas).",
+      createdAt: at(base, -3, 16, 10),
+      items: [
+        { id: "demo_budget_item_w1", name: "Pantalla LED P3.9 500x500", quantity: 10, days: 2, unitPrice: 800_000, costPrice: 45_000, inventoryId: "demo_inv_led_p3" },
+        { id: "demo_budget_item_w2", name: "Kiosko Touch 32\"", quantity: 2, days: 2, unitPrice: 920_000, costPrice: 110_000, inventoryId: "demo_inv_kiosko" },
+        { id: "demo_budget_item_w3", name: "Bastidor de piso para pantalla", quantity: 6, days: 2, unitPrice: 110_000, costPrice: 18_000, inventoryId: "demo_inv_panels" },
+      ],
+    },
+    {
       id: "demo_budget_cambios",
       event: third,
       title: `Stands y pantallas ${third.name}`,
@@ -1864,7 +1890,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       clientId: budget.event?.clientId ?? budget.clientId ?? "",
       eventId: budget.event?.id ?? null,
       leadId: budget.leadId ?? null,
-      quoteRequestId: budget.id === "demo_budget_pendiente" ? "demo_quote_tigo" : null,
+      quoteRequestId: budget.id === "demo_budget_pendiente" ? "demo_quote_tigo" : budget.id === "demo_budget_mayorista" ? "demo_quote_pixel" : null,
       deliveryAt: budget.deliveryAt ?? null,
       title: budget.title,
       status: budget.status,
@@ -2705,6 +2731,9 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     publicCatalogEnabled: true,
     publicShowPrices: true,
     whatsappPhone: null,
+    storefrontTagline: "Pantallas LED, tótems y equipos para que tu evento se vea y se escuche.",
+    storefrontAccent: "#0e7490",
+    storefrontEmail: "ventas@ledbox.demo",
     createdAt: at(base, -30, 10, 0),
   };
 
@@ -2721,7 +2750,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     message: lead.message,
     location: lead.location,
     status: lead.status,
-    source: "website",
+    source: lead.id === "demo_lead_pixel_mayorista" ? "catalogo-mayorista" : "website",
     consentAt: at(base, -lead.createdDaysAgo, 9, 0),
     createdAt: at(base, -lead.createdDaysAgo, 9, 0),
     eventDate: at(base, lead.eventDateDays, 12, 0),
@@ -2798,12 +2827,37 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       respondBy: plusHours(withinMonth(base, 12, 8, 40), 24),
       createdAt: withinMonth(base, 12, 8, 40),
     },
+    // Pedido MAYORISTA convertido: llegó por el link privado de Agencia Pixel, quedó vinculado a ese cliente
+    // y su presupuesto («Pedido mayorista · Agencia Pixel») usa los precios mayoristas.
+    {
+      id: "demo_quote_pixel",
+      ...org,
+      leadId: "demo_lead_pixel_mayorista",
+      clientId: DEMO_WHOLESALE_CLIENT_ID,
+      priceList: "WHOLESALE",
+      referenceTotal: 21_000_000,
+      currency: "PYG",
+      durationDays: 2,
+      eventDate: at(base, 30, 12, 0),
+      startsAt: dayStart(dayKeyOf(at(base, 30, 12, 0))),
+      endsAt: at(base, 31, 23, 59),
+      location: "Asunción",
+      source: "catalogo",
+      status: "CONVERTED",
+      publicToken: "demo-pedido-mayorista-05",
+      respondBy: plusHours(withinMonth(base, 4, 10, 0), 24),
+      createdAt: withinMonth(base, 4, 10, 0),
+    },
   ];
   const quoteItemsData: Prisma.QuoteItemUncheckedCreateInput[] = [
     { id: "demo_quote_item_1", quoteRequestId: "demo_quote_cerveza", inventoryId: "demo_inv_led_p3", productSlug: "LED-P3-500", productName: "Pantalla LED P3.9 500x500", quantity: 12, duration: 1, billingUnit: "DAILY", unitPrice: 950_000, subtotal: 11_400_000 },
     { id: "demo_quote_item_2", quoteRequestId: "demo_quote_cerveza", inventoryId: "demo_inv_totem", productSlug: "TOT-LED-2X1", productName: "Tótem LED 2x1 m", quantity: 2, duration: 1, billingUnit: "DAILY", unitPrice: 1_800_000, subtotal: 3_600_000 },
     { id: "demo_quote_item_3", quoteRequestId: "demo_quote_tigo", inventoryId: "demo_inv_led_p5", productSlug: "LED-P5-960", productName: "Pantalla LED P5 outdoor 960x960", quantity: 6, duration: 2, billingUnit: "DAILY", unitPrice: 800_000, subtotal: 9_600_000 },
     { id: "demo_quote_item_4", quoteRequestId: "demo_quote_tigo", inventoryId: "demo_inv_truss", productSlug: "TRS-2M", productName: "Estructura de truss 2 m", quantity: 10, duration: 2, billingUnit: "DAILY", unitPrice: 200_000, subtotal: 4_000_000 },
+    // Pedido mayorista: precios mayoristas de la demo.
+    { id: "demo_quote_item_5", quoteRequestId: "demo_quote_pixel", inventoryId: "demo_inv_led_p3", productSlug: "LED-P3-500", productName: "Pantalla LED P3.9 500x500", quantity: 10, duration: 2, billingUnit: "DAILY", unitPrice: 800_000, subtotal: 16_000_000 },
+    { id: "demo_quote_item_6", quoteRequestId: "demo_quote_pixel", inventoryId: "demo_inv_kiosko", productSlug: "KIO-32", productName: "Kiosko Touch 32\"", quantity: 2, duration: 2, billingUnit: "DAILY", unitPrice: 920_000, subtotal: 3_680_000 },
+    { id: "demo_quote_item_7", quoteRequestId: "demo_quote_pixel", inventoryId: "demo_inv_panels", productSlug: "BAS-PISO", productName: "Bastidor de piso para pantalla", quantity: 6, duration: 2, billingUnit: "DAILY", unitPrice: 110_000, subtotal: 1_320_000 },
   ];
 
   // ── Registro fiscal interno (issue #41) ──────────────────────────────────
@@ -3140,6 +3194,10 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       });
       await tx.client.createMany({ data: clientsData });
       await tx.clientLogo.createMany({ data: clientLogosData });
+      // Link privado del catálogo mayorista de Agencia Pixel (solo se guarda el hash, como en producción).
+      await tx.catalogAccessToken.create({
+        data: { id: "demo_catalog_access_pixel", organizationId, clientId: DEMO_WHOLESALE_CLIENT_ID, tokenHash: catalogTokenHash(DEMO_WHOLESALE_TOKEN), createdAt: at(base, -20, 10, 0) },
+      });
       await tx.event.createMany({ data: eventsData });
       await tx.promoter.createMany({ data: promotersData });
       await tx.eventTask.createMany({ data: tasksData });
@@ -3227,6 +3285,7 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.event.deleteMany({ where: { organizationId } });
   await tx.supplier.deleteMany({ where: { organizationId } });
   await tx.clientLogo.deleteMany({ where: { client: { organizationId } } });
+  await tx.catalogAccessToken.deleteMany({ where: { organizationId } });
   await tx.client.deleteMany({ where: { organizationId } });
   // Los componentes de combos restringen el borrado del ítem: primero se sueltan.
   await tx.inventoryComponent.deleteMany({ where: { organizationId } });
