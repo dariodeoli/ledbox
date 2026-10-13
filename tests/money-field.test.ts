@@ -33,7 +33,8 @@ test("el error del campo sigue marcando aria-invalid", () => {
 });
 
 test("el prefijo de la moneda se dibuja dentro del campo", () => {
+  const ui = readFileSync(join(process.cwd(), "node_modules", "owncoding-ui", "src", "components", "ui.jsx"), "utf8");
   assert.match(css, /\.admin-money\s*\{[^}]*position:\s*relative/, "el contenedor del MoneyInput es relativo");
-  assert.match(css, /\.admin-money span\s*\{[^}]*position:\s*absolute/, "el prefijo «Gs» se posiciona dentro del campo");
-  assert.match(css, /\.admin-money input\s*\{[^}]*padding-left/, "el input deja lugar al prefijo");
+  assert.match(ui, /inicio=\{<span className="text-xs font-semibold">\{prefix\}<\/span>\}/, "la librería dibuja «Gs» como adorno dentro del campo");
+  assert.doesNotMatch(css, /\.admin-money span\s*\{/, "el panel no reposiciona el adorno de la librería");
 });

@@ -2,7 +2,13 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  Checkbox as SharedCheckbox,
+  Input as SharedInput,
   MoneyInput,
+  Select as SharedSelect,
+  SegmentedField as SharedSegmented,
+  Switch as SharedSwitch,
+  Textarea as SharedTextarea,
   PhoneField as SharedPhoneField,
   EmailField as SharedEmailField,
   PercentField as SharedPercentField,
@@ -222,9 +228,10 @@ export function TextField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         className={className}
+        estado={success && !error ? "ok" : undefined}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -271,6 +278,10 @@ export type TextAreaFieldProps = {
   id?: string;
   /** Ref del `<textarea>` cuando el llamador inserta texto en el cursor (chips de variables). */
   textareaRef?: React.Ref<HTMLTextAreaElement>;
+  /** La altura sigue al contenido (hasta 12 filas); `false` deja las `rows` fijas. */
+  autoGrow?: boolean;
+  /** Contador «120/500» con aviso al 90 % (usa `maxLength`). */
+  counter?: boolean;
 };
 
 export function TextAreaField({
@@ -291,16 +302,21 @@ export function TextAreaField({
   name,
   id,
   textareaRef,
+  autoGrow = true,
+  counter = false,
 }: TextAreaFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} optional={optional} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <textarea
+      <SharedTextarea
         ref={textareaRef}
         id={label ? fieldId : id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         maxLength={maxLength}
+        autoCrecer={autoGrow}
+        filasMax={12}
+        contador={counter}
         rows={rows}
         required={required}
         placeholder={placeholder}
@@ -451,9 +467,10 @@ export function PercentField({
   const outOfRange = clean !== "" && parsePercent(clean) === null;
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <div className="admin-money admin-money--compact admin-money--suffix">
+      <div className="admin-money admin-money--compact">
         <SharedPercentField
           id={label ? fieldId : id}
+          simbolo
           value={clean}
           onKeyDown={(event) => {
             if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -469,7 +486,6 @@ export function PercentField({
           aria-describedby={describedBy(error, hint, hintId, errorId)}
           title={outOfRange ? FIELD_MESSAGES.percent : undefined}
         />
-        <span aria-hidden="true">%</span>
       </div>
     </FieldChrome>
   );
@@ -514,7 +530,7 @@ export function NumberField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         className={className}
         type="text"
@@ -738,12 +754,13 @@ export function RucField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         type="text"
         inputMode="numeric"
         autoComplete="off"
         spellCheck={false}
+        estado={success && !error ? "ok" : undefined}
         value={rucInput(value, maxLength)}
         maxLength={maxLength}
         onChange={(event) => onChange(rucInput(event.target.value, maxLength))}
@@ -793,7 +810,7 @@ export function SerialField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         type="text"
         value={value}
@@ -854,7 +871,7 @@ function DateLikeField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         className={className}
         type={type}
@@ -965,7 +982,7 @@ export function DayField({
   const message = error ?? rangeError;
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <input
+      <SharedInput
         id={label ? fieldId : id}
         className={className}
         type="text"
@@ -1019,7 +1036,7 @@ export function SelectField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <select
+      <SharedSelect
         id={label ? fieldId : id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1035,7 +1052,7 @@ export function SelectField({
             {option.label}
           </option>
         ))}
-      </select>
+      </SharedSelect>
     </FieldChrome>
   );
 }
@@ -1362,18 +1379,14 @@ export function SwitchField({
   return (
     <FieldChrome label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <label className="admin-switch">
-        <input
+        <SharedSwitch
           id={fieldId}
-          name={name}
-          className="admin-switch-input"
-          type="checkbox"
-          role="switch"
+          {...{ name }}
           checked={checked}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
-          aria-label={label ? undefined : ariaLabel}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.checked)}
+          ariaLabel={label ? undefined : ariaLabel}
         />
-        <span className="admin-switch-track" aria-hidden="true" />
         <span className="admin-switch-state">{checked ? "Sí" : "No"}</span>
       </label>
     </FieldChrome>
@@ -1412,21 +1425,18 @@ export function CheckboxField({
   className?: string;
 }) {
   return (
-    <label className={className ? `admin-check ${className}` : "admin-check"} data-tone={tone} title={title}>
-      <input
+    <span className={className ? `admin-check ${className}` : "admin-check"} data-tone={tone} title={title}>
+      <SharedCheckbox
         id={id}
         name={name}
-        type="checkbox"
         checked={checked}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        aria-label={ariaLabel}
+        onChange={(event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.checked)}
+        ariaLabel={ariaLabel}
+        label={text}
+        className="admin-check-label"
       />
-      <span className="admin-check-box" aria-hidden="true">
-        <AdminIcon name="check" size={11} />
-      </span>
-      {text ? <span className="admin-check-text">{text}</span> : null}
-    </label>
+    </span>
   );
 }
 
@@ -1737,27 +1747,13 @@ export function SegmentedField({
           {ariaLabel}
         </span>
       )}
-      <div
-        className="admin-segmented"
-        role="group"
-        aria-label={label ? undefined : name}
-        aria-labelledby={label ? labelId : undefined}
-        aria-describedby={describedBy(error, hint, hintId, errorId)}
-        aria-invalid={error ? true : undefined}
-      >
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="admin-segmented-item"
-            aria-pressed={value === option.value}
-            disabled={disabled}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <SharedSegmented
+        value={value}
+        onChange={(next: string) => { if (!disabled) onChange(next); }}
+        options={options.map((option): [string, string] => [option.value, option.label])}
+        ariaLabel={name}
+        className={disabled ? "admin-segmented pointer-events-none opacity-50" : "admin-segmented"}
+      />
       {message}
     </div>
   );
