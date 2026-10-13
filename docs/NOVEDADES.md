@@ -462,3 +462,16 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - El detalle se abre en un panel lateral con «Qué falta» arriba y pestañas: Resumen (con el presupuesto y sus etapas), Checklist, Equipos, Personal e Historial. Cada evento tiene su propio link, y las etapas del presupuesto llevan directo a él.
   - Pestaña «Tareas»: las tareas pendientes de todos los eventos, con filtros por vencidas, esta semana y promotora, y avisos de promotora no disponible.
 - En el celular, cada evento se ve como una tarjeta con la fecha destacada, su estado, lo que falta y la próxima acción.
+
+## v2.1.104 — 2026-10-13
+
+- Clientes rediseñado:
+  - Lista con cinco indicadores que filtran: Activos, Con saldo pendiente, Mayoristas con link, Nuevos del mes y Sin actividad hace más de 6 meses.
+  - Segmentos Cliente final y Mayorista, y búsqueda por nombre, RUC, teléfono o correo.
+  - La tabla muestra cliente, tipo, contacto, eventos, contratado, saldo y última actividad. Hay una acción por fila y la fila entera abre la ficha.
+- Ficha del cliente:
+  - La acción principal cambia según el estado: «Cobrar» si tiene saldo vencido, «Seguir presupuesto» si hay uno enviado, y si no, «Nuevo presupuesto».
+  - Franja con contratado, cobrado, saldo, eventos y último evento.
+  - Cada presupuesto y cada evento se abre con un clic.
+  - El catálogo mayorista se muestra solo a mayoristas, o a quien todavía tenga un link activo, para poder revocarlo.
+- Si la cartera supera los 200 clientes, la lista lo avisa para que los indicadores no parezcan el total.
