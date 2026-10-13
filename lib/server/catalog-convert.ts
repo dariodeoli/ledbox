@@ -203,21 +203,31 @@ export async function holdQuoteRequestStock(context: AdminContext, quoteRequestI
   if (!eventId) {
     const limit = await planLimitViolation(context, "events");
     if (limit) return { ok: false, status: 403, error: limit.error };
-    eventId = randomUUID();
-    await db.event.create({
-      data: {
-        id: eventId,
-        organizationId,
-        clientId: budget.clientId,
-        name: budget.title.slice(0, 160),
-        location: budget.quoteRequest?.location ?? undefined,
-        startsAt,
-        endsAt,
-        status: "DRAFT",
-      },
+    // Dos retenciones simultáneas no crean dos eventos: el vínculo es condicional
+    // (solo si el presupuesto sigue sin evento) y el perdedor reutiliza el del ganador.
+    const draftId = randomUUID();
+    const linked = await db.$transaction(async (tx) => {
+      await tx.event.create({
+        data: {
+          id: draftId,
+          organizationId,
+          clientId: budget.clientId,
+          name: budget.title.slice(0, 160),
+          location: budget.quoteRequest?.location ?? undefined,
+          startsAt,
+          endsAt,
+          status: "DRAFT",
+        },
+      });
+      const { count } = await tx.budget.updateMany({ where: { id: budget.id, organizationId, eventId: null }, data: { eventId: draftId } });
+      if (count === 1) return draftId;
+      await tx.event.delete({ where: { id: draftId } });
+      const current = await tx.budget.findFirst({ where: { id: budget.id, organizationId }, select: { eventId: true } });
+      return current?.eventId ?? null;
     });
-    await db.budget.update({ where: { id: budget.id }, data: { eventId } });
-    createdEvent = true;
+    if (!linked) return { ok: false, status: 409, error: "El presupuesto cambió mientras se retenía el stock. Probá de nuevo." };
+    eventId = linked;
+    createdEvent = linked === draftId;
   }
 
   const quantities = new Map<string, number>();
