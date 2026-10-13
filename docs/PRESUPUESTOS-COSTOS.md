@@ -53,3 +53,32 @@ El **portal de firma** (documento del dueño todavía sin definir) no se toca: l
 siendo Aprobar · Solicitar cambios (y Rechazar desde el panel), más Enviar y Descargar PDF en el panel.
 Cuando el dueño defina el circuito de firma, se implementa sobre este mismo presupuesto sin cambiar los
 costos internos (que ya están fuera de la vista del cliente).
+
+## Seña por empresa, depósito de garantía y transporte (alquileres)
+
+**Seña por defecto.** Si la empresa tiene `OrganizationRentalSettings.depositPercent` (Ajustes > Alquileres),
+todo presupuesto nuevo nace con el plan «Seña N %» + «Saldo» (alta manual, «Armar presupuesto» desde el lead,
+API/CLI y conversión de preórdenes). Una sola función lo arma: `defaultDepositPlanRows`
+(`lib/budget-payment-plan.ts`); `newBudgetDefaults` (`lib/budget-security-deposit.ts`) decide qué aplica en el alta.
+El plan es porcentual, así que se recalcula con el total y la suma cierra al guaraní. Un `installmentsJson` explícito
+(o `null` = sin plan) o un `depositPercent` elegido en el formulario se respeta; sin `depositPercent` no hay seña.
+
+**Depósito de garantía.** `Budget.securityDeposit` (Int PYG, opcional), `securityDepositStatus`
+(`PENDING`, `HELD`, `RETURNED`, `KEPT_PARTIAL`, `KEPT`) y `securityDepositRetained`. Default por empresa:
+`OrganizationRentalSettings.securityDepositDefault`. **No suma al total, no se factura y no es un cobro**: nunca
+entra en `lib/budget-commercial.ts`, en los pagos esperados ni en el snapshot de firma (los documentos firmados
+no cambian). Se muestra aparte en el panel (tarjeta y diálogo «Depósito de garantía»), en el portal del cliente
+(monto y estado, sin motivos internos) y en el imprimible.
+
+Estados: `PENDING → HELD → RETURNED | KEPT_PARTIAL | KEPT` (los tres últimos son finales). Cada cambio se valida,
+toma el candado de la fila del presupuesto y se audita (`action: status`, con motivo).
+
+**Punto de entrada para la Fase 4 (InventoryIncident):** `transitionBudgetSecurityDeposit(context, budgetId, { to, retainedAmount?, reason? })`
+en `lib/server/security-deposit.ts`. Con un incidente: `to: "KEPT_PARTIAL"`, `retainedAmount` = costo del incidente (entero PYG,
+menor a la garantía) y `reason: "Incidente <id>"`; sin incidentes: `to: "RETURNED"`. `equipmentReturnByEvent` resume
+la devolución de equipos de un evento (`clean`, `incidents`, `pending`) y el diálogo ofrece «Devolver garantía» o
+«Retener parcial» según ese estado. La acción hoy es manual (`PATCH /api/admin/budgets`, `kind: "security-deposit-status"`,
+`{ budgetId, to, retainedAmount?, reason? }`; el monto con `kind: "security-deposit"`); no depende de la Fase 4.
+
+**Transporte.** Es un ítem libre más del presupuesto («Transporte», con su precio): suma al total y lo ve el
+cliente. El formulario tiene el atajo «Transporte» junto a «Agregar ítem».

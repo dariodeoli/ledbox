@@ -1,3 +1,4 @@
+import { securityDepositPublic } from "@/lib/budget-security-deposit";
 import { resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
@@ -197,6 +198,8 @@ export type PortalBudget = {
   ivaType: string | null;
   /** Garantía ofrecida (issue #65), texto libre del equipo. */
   warranty: string | null;
+  /** Depósito de garantía (aparte del total, no es un cobro); `null` si el presupuesto no lo tiene. */
+  securityDeposit?: import("../budget-security-deposit").SecurityDepositPublic;
   notes: string | null;
   /**
    * Cliente, solo lo que la vista pública muestra. `contactName`/`contactRole`
@@ -333,6 +336,9 @@ type BudgetForPortal = {
   deliveryAt: Date | null;
   ivaType: string | null;
   warranty: string | null;
+  securityDeposit?: number | null;
+  securityDepositStatus?: string | null;
+  securityDepositRetained?: number | null;
   notes: string | null;
   createdAt: Date;
   /** Primera vista del portal (issue #33); `null` si el cliente nunca abrió el link. */
@@ -593,6 +599,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     deliveryAt: iso(budget.deliveryAt),
     ivaType: budget.ivaType,
     warranty: budget.warranty,
+    securityDeposit: securityDepositPublic({ securityDeposit: budget.securityDeposit ?? null, securityDepositStatus: budget.securityDepositStatus ?? null, securityDepositRetained: budget.securityDepositRetained ?? null }),
     notes: budget.notes,
     client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole, logoUrl: budget.client.logo && budget.publicToken ? `/api/portal/budget/${encodeURIComponent(budget.publicToken)}/client-logo?v=${encodeURIComponent(budget.client.logo.updatedAt.toISOString())}` : null },
     event: budget.event

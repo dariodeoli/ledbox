@@ -1633,11 +1633,14 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       terms: string;
       installments: Array<{ label: string; amount: number; dueInDays?: number; dueAt?: Date }>;
     };
+    /** Depósito de garantía (aparte del total): monto, estado y, si se retuvo algo, cuánto. */
+    securityDeposit?: { amount: number; status: "PENDING" | "HELD" | "RETURNED" | "KEPT_PARTIAL" | "KEPT"; retained?: number };
     createdAt: Date;
     items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number; inventoryId?: string }>;
   }> = [
     {
       id: "demo_budget_aprobado",
+      securityDeposit: { amount: 2_000_000, status: "HELD" },
       event: next,
       title: `Producción integral ${next.name}`,
       status: "APPROVED",
@@ -1713,6 +1716,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     },
     {
       id: "demo_budget_cobrado",
+      securityDeposit: { amount: 1_500_000, status: "RETURNED", retained: 0 },
       event: longestPast,
       title: `Cierre de feria ${longestPast.name}`,
       status: "APPROVED",
@@ -1749,6 +1753,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       items: [
         { id: "demo_budget_item_e1", name: "Cilindro LED 1.5 m", quantity: 4, days: 3, unitPrice: 950_000, costPrice: 380_000 },
         { id: "demo_budget_item_e2", name: "Dispensador inteligente", quantity: 1, days: 3, unitPrice: 600_000, costPrice: 240_000 },
+        // Transporte: servicio libre, se suma al total y lo ve el cliente.
+        { id: "demo_budget_item_e3", name: "Transporte", quantity: 1, days: 1, unitPrice: 450_000, costPrice: 300_000 },
       ],
     },
     // Mora (issue #24): presupuesto aprobado con dos cuotas vencidas, una de
@@ -1869,6 +1875,9 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       advanceAmount,
       paymentTerms: budget.plan?.terms ?? null,
       installmentsJson: installments.length > 0 ? (installments as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+      securityDeposit: budget.securityDeposit?.amount ?? null,
+      securityDepositStatus: budget.securityDeposit?.status ?? null,
+      securityDepositRetained: budget.securityDeposit ? (budget.securityDeposit.retained ?? null) : null,
       validUntil: budget.validUntil,
       notes: budget.notes,
       publicToken: budget.token ?? null,
@@ -2674,6 +2683,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     id: "demo_rental_settings",
     organizationId,
     depositPercent: 50,
+    securityDepositDefault: 1_500_000,
     holdTtlMinutes: 2880,
     prepBufferMin: 120,
     transportBufferMin: 60,

@@ -1584,6 +1584,39 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
+          {budget.securityDeposit ? (
+            <section className="portal-card quote-document-section--deposit" aria-labelledby="portal-security-deposit">
+              <div className="portal-card-head">
+                <PortalCardTitle id="portal-security-deposit" icon="wallet">
+                  Depósito de garantía
+                </PortalCardTitle>
+              </div>
+              <dl className="portal-facts portal-facts--pay">
+                <div>
+                  <dt>Garantía</dt>
+                  <dd className="portal-num">{formatMoney(budget.securityDeposit.amount)}</dd>
+                </div>
+                <div>
+                  <dt>Estado</dt>
+                  <dd>{budget.securityDeposit.statusLabel}</dd>
+                </div>
+                {budget.securityDeposit.retained > 0 ? (
+                  <div>
+                    <dt>Retenido</dt>
+                    <dd className="portal-num">{formatMoney(budget.securityDeposit.retained)}</dd>
+                  </div>
+                ) : null}
+                {budget.securityDeposit.status === "RETURNED" || budget.securityDeposit.status === "KEPT_PARTIAL" ? (
+                  <div>
+                    <dt>Devuelto</dt>
+                    <dd className="portal-num">{formatMoney(budget.securityDeposit.returned)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              <p className="portal-help">No forma parte del total del presupuesto ni de las cuotas: se devuelve al cerrar el alquiler si el equipo vuelve sin daños.</p>
+            </section>
+          ) : null}
+
           <PortalQuoteResources budget={budget} token={token} />
 
           {!approved && !revisionPending ? (
