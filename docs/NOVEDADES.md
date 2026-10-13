@@ -342,3 +342,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Panel: los campos son más altos y claros. La etiqueta va arriba y lleva «*» si el dato es obligatorio. Guaraníes, teléfono y porcentaje muestran su prefijo fijo, y un error se ve en rojo debajo del campo con lo que hay que corregir. En el celular los campos miden 44 px.
 - Ventanas de carga: un encabezado con ícono que dice qué pasa al guardar, contenido con su propio scroll y los botones siempre visibles abajo. En el celular ocupan toda la pantalla. Si cerrás con cambios sin guardar, la ventana pregunta antes de descartarlos.
 - Una ventana abierta desde otra, como «Nuevo cliente» dentro de «Precio y condiciones», ya no queda cortada. El teclado recorre solo la ventana de arriba y Esc cierra solo esa.
+
+## v2.1.88 — 2026-10-13
+
+- Alquileres: nueva sección en Ajustes. Cada empresa define su seña, cuánto dura una reserva sin confirmar (48 h por defecto) y los tiempos de preparación, transporte, entrega, devolución y limpieza. Cada producto puede tener sus propios tiempos.
+- La disponibilidad cuenta esos tiempos. Un equipo que vuelve de un evento no queda libre hasta que termina su limpieza.
+- Las unidades se pueden marcar como dañadas o perdidas, y dejan de contar como disponibles. Una reserva que venció sin confirmarse libera su stock sola. Al confirmarla, se vuelve a revisar que haya lugar.
