@@ -307,15 +307,17 @@ test("los consentimientos del portal informan la finalidad y enlazan la polític
  */
 test("el portal aprobado pone el pago primero y los ítems usan la caja del #98 (issue #107)", () => {
   const view = repoFile("app/(portal)/_components/PortalBudgetView.tsx");
-  // Bloque de pago arriba del detalle, solo con el presupuesto aprobado.
-  assert.match(view, /<div className="portal-pay-first" ref=\{payFirstRef\}>/);
-  assert.match(view, /\{payCard\}\s*\n\s*\{paymentsCard\}/);
+  // Bloque de pago arriba del detalle, solo con el presupuesto aprobado: una sola
+  // sección «Pagar» (rediseño 13-10-2026) que ya incluye datos, comprobante y plan.
+  assert.match(view, /const payCard = approved \? \(/);
+  assert.match(view, /ref=\{payFirstRef\}/);
+  assert.ok(view.indexOf("{payCard}") > 0 && view.indexOf("{payCard}") < view.indexOf('aria-labelledby="portal-items"'), "el pago va antes del detalle");
   // Sin aprobar, el plan conserva su lugar en el recorrido de la decisión.
   assert.match(view, /\{approved \? null : paymentsCard\}/);
   // El scroll post-aprobación queda en el bloque de pago.
   assert.match(view, /payFirstRef\.current\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-  // La cuenta de vigencia deja de correr con el presupuesto aprobado.
-  assert.match(view, /\{!approved && budget\.validUntil \? \(/);
+  // La validez deja de correr con el presupuesto aprobado: el encabezado muestra «Aprobado el …».
+  assert.match(view, /portalHeadDates\(\{\s*approved,/);
 
   // Miniatura del ítem: caja fija con `contain` y fallback al ícono.
   assert.match(view, /<PortalItemThumb imageUrl=\{item\.imageUrl\} \/>/);

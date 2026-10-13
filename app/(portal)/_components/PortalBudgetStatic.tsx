@@ -2,7 +2,7 @@ import Link from "next/link";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import type { AdminTimelineEntry } from "@/lib/admin-types";
-import { countdownTone, formatCountdown, formatDate, formatDateTime, timelineKindLabel } from "@/lib/admin-format";
+import { formatDateTime, timelineKindLabel } from "@/lib/admin-format";
 import type { PortalBudget } from "@/lib/server/budget-portal";
 import { PortalCardTitle } from "./PortalCardTitle";
 
@@ -55,37 +55,33 @@ export function PortalHeadTitle({ budget }: { budget: PortalBudget }) {
   );
 }
 
-/** Datos del encabezado: emisión, validez con cuenta regresiva y evento. */
+/**
+ * Datos del evento en el encabezado. Solo se dibuja lo que existe: sin evento
+ * asociado no hay campo (nunca «Indefinido» ni «Sin evento»). Las fechas del
+ * presupuesto (emisión, validez, aprobación) dependen del estado de la visita y
+ * las arma `PortalBudgetView` con `lib/portal-view.ts`.
+ */
 export function PortalHeadFacts({ budget }: { budget: PortalBudget }) {
+  const name = budget.event?.name?.trim();
+  if (!name) return null;
   return (
     <dl className="portal-facts portal-facts--head">
       <div>
-        <dt>Emitido</dt>
-        <dd>{formatDateTime(budget.createdAt)}</dd>
-      </div>
-      <div>
-        <dt>Válido hasta</dt>
-        <dd>
-          {budget.validUntil ? (
-            <>
-              <span className="portal-nowrap">{formatDate(budget.validUntil)}</span>
-              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                {formatCountdown(budget.validUntil, "client")}
-              </span>
-            </>
-          ) : (
-            "Sin fecha de vencimiento"
-          )}
-        </dd>
-      </div>
-      <div>
         <dt>Evento</dt>
-        <dd>{budget.event?.name || "Sin evento asociado"}</dd>
+        <dd>{name}</dd>
       </div>
-      <div>
-        <dt>Inicio del evento</dt>
-        <dd>{budget.event?.startsAt ? formatDateTime(budget.event.startsAt) : "—"}</dd>
-      </div>
+      {budget.event?.startsAt ? (
+        <div>
+          <dt>Inicio del evento</dt>
+          <dd>{formatDateTime(budget.event.startsAt)}</dd>
+        </div>
+      ) : null}
+      {budget.event?.location ? (
+        <div>
+          <dt>Lugar</dt>
+          <dd>{budget.event.location}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }
