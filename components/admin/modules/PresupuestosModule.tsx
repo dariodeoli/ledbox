@@ -780,9 +780,6 @@ export function PresupuestosModule() {
   // cargar y el parámetro desaparece al cerrarlo.
   const vistaParam = searchParams.get("vista")?.trim() ?? "";
   const detalleParam = searchParams.get("detalle")?.trim() ?? "";
-  useEffect(() => {
-    if (detalleParam) setDetailBudgetId(detalleParam);
-  }, [detalleParam]);
   function clearDetailParam() {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -791,8 +788,6 @@ export function PresupuestosModule() {
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }
   // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
-  // Enlace del Resumen: `?detalle=<id>` abre el detalle de ese presupuesto.
-  const detalleParam = searchParams.get("detalle")?.trim() ?? "";
   const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
     if (!newRequested || !writableForLead) return;
