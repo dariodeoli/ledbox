@@ -49,7 +49,7 @@ test("operaciones de alquiler en PostgreSQL: salida y devolución parcial, incid
     ops.returnAssignment({ organizationId: org, assignmentId, at: day(13), condition: "Bueno", actorId: "u1", ...extra });
 
   await t.test("la migración de incidentes aplicada dos veces no falla", () => {
-    const file = new URL("../prisma/migrations/202610150001_inventory_incidents/migration.sql", import.meta.url).pathname;
+    const file = new URL("../prisma/migrations/202610150003_inventory_incidents/migration.sql", import.meta.url).pathname;
     for (let i = 0; i < 2; i++) execFileSync("psql", [url.toString(), "-v", "ON_ERROR_STOP=1", "-q", "-f", file], { stdio: "pipe" });
   });
 
