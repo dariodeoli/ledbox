@@ -92,6 +92,68 @@ test("papelera E2: eventos y productos (archivar, eliminar, definitivo, bloqueos
       assert.equal((result as { reason: string }).reason, "event-missing");
     });
 
+    await t.test("reporte mensual: un evento eliminado con cobro sigue sumando (rotulado) y el producto eliminado sigue en alquileres", async () => {
+      const a = await seedOrg();
+      const { loadMonthlyReportEvents } = await import("../lib/server/report-events");
+      const when = new Date();
+      const ev = await mkEvent(a, { startsAt: when, endsAt: new Date(when.getTime() + 36e5) });
+      const budget = await db.budget.create({ data: { id: randomUUID(), organizationId: a.org, clientId: a.client.id, eventId: ev.id, title: "P", status: "APPROVED", total: 5_000_000, costEstimate: 2_000_000 } as never });
+      assert.ok(budget.id);
+      await ops.archiveEvent(ev.id, a.ctx);
+      await ops.trashEvent(ev.id, null, a.ctx);
+      const rows = await loadMonthlyReportEvents(a.org, new Date(when.getTime() - 864e5), new Date(when.getTime() + 864e5), ["LOST", "CANCELLED"]);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].displayName, "Gala Final (eliminado)");
+      assert.equal(rows[0].budgets.reduce((sum, b) => sum + b.total, 0), 5_000_000);
+      const other = await seedOrg();
+      assert.equal((await loadMonthlyReportEvents(other.org, new Date(when.getTime() - 864e5), new Date(when.getTime() + 864e5), [])).length, 0, "acotado a la empresa");
+    });
+
+    await t.test("carrera: asignar vs eliminar el evento nunca deja una reserva abierta en un evento eliminado", async () => {
+      const a = await seedOrg();
+      for (let i = 0; i < 6; i += 1) {
+        const ev = await mkEvent(a);
+        const item = await mkItem(a.org);
+        await ops.archiveEvent(ev.id, a.ctx);
+        const [assign, trash] = await Promise.allSettled([
+          availability.commitInventoryAssignment({ organizationId: a.org, eventId: ev.id, inventoryId: item.id, quantity: 1, ...range }),
+          ops.trashEvent(ev.id, null, a.ctx),
+        ]);
+        assert.notEqual(trash.status === "rejected" && !(trash.reason instanceof TrashError), true, "solo errores de negocio");
+        assert.notEqual(assign.status, "rejected");
+        const deleted = (await dbWithDeleted.event.findUniqueOrThrow({ where: { id: ev.id } })).deletedAt;
+        const open = await db.eventInventory.count({ where: { eventId: ev.id, releasedAt: null, checkedIn: false } });
+        assert.ok(!(deleted && open > 0), `iteración ${i}: evento eliminado con ${open} reserva(s) abierta(s)`);
+      }
+    });
+
+    await t.test("combo: asignar a un evento eliminado da event-missing y la carrera combo vs eliminar no deja reserva abierta", async () => {
+      const a = await seedOrg();
+      const comp = await mkItem(a.org);
+      const saved = await combos.saveCombo({ organizationId: a.org, data: { name: "Combo Carrera", category: "Combos", sku: null }, components: [{ componentId: comp.id, quantity: 1 }] });
+      assert.ok(saved.ok);
+      const comboId = saved.ok ? saved.combo.id : "";
+      const gone = await mkEvent(a);
+      await ops.archiveEvent(gone.id, a.ctx);
+      await ops.trashEvent(gone.id, null, a.ctx);
+      const res = await availability.commitInventoryAssignment({ organizationId: a.org, eventId: gone.id, inventoryId: comboId, quantity: 1, ...range });
+      assert.equal(res.ok, false);
+      assert.equal((res as { reason: string }).reason, "event-missing");
+      for (let i = 0; i < 6; i += 1) {
+        const ev = await mkEvent(a);
+        await ops.archiveEvent(ev.id, a.ctx);
+        const [assign, trash] = await Promise.allSettled([
+          availability.commitInventoryAssignment({ organizationId: a.org, eventId: ev.id, inventoryId: comboId, quantity: 1, ...range }),
+          ops.trashEvent(ev.id, null, a.ctx),
+        ]);
+        assert.notEqual(assign.status, "rejected");
+        assert.ok(trash.status === "fulfilled" || trash.reason instanceof TrashError, "solo errores de negocio");
+        const deleted = (await dbWithDeleted.event.findUniqueOrThrow({ where: { id: ev.id } })).deletedAt;
+        const open = await db.eventInventory.count({ where: { eventId: ev.id, releasedAt: null, checkedIn: false } });
+        assert.ok(!(deleted && open > 0), `iteración ${i}: evento eliminado con ${open} reserva(s) abierta(s)`);
+      }
+    });
+
     await t.test("evento: restaurar vuelve a archivado, con auditoría; otra empresa recibe 404", async () => {
       const a = await seedOrg();
       const b = await seedOrg();

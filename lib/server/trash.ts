@@ -181,7 +181,7 @@ export async function restore(model: TrashModel, id: string, context: AuditConte
 // ── Bloqueos del borrado definitivo ──────────────────────────────────────────
 
 /** Tabla de cada entidad para el `SELECT … FOR UPDATE` (nombres de modelo, sin @@map). */
-const TABLES: Record<TrashModel, string> = {
+const TABLES = {
   Event: '"Event"',
   InventoryItem: '"InventoryItem"',
   Client: '"Client"',
@@ -189,7 +189,7 @@ const TABLES: Record<TrashModel, string> = {
   Supplier: '"Supplier"',
   Promoter: '"Promoter"',
   Budget: '"Budget"',
-};
+} as const satisfies Record<TrashModel, string>;
 
 function pick(counts: Record<string, number>, kinds: Record<string, string>): Blocker[] {
   return Object.entries(kinds).flatMap(([key, kind]) => (counts[key] > 0 ? [{ kind, count: counts[key] }] : []));
@@ -204,7 +204,7 @@ function pick(counts: Record<string, number>, kinds: Record<string, string>): Bl
 export async function blockersFor(model: TrashModel, id: string, organizationId: string, tx: Tx, options?: { lock?: boolean }): Promise<Blocker[]> {
   if (!isTrashModel(model)) throw new TypeError(`Entidad sin papelera: ${String(model)}`);
   // `lock: false` es para listar (solo lectura): no toma FOR UPDATE.
-  const locked = await tx.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM ${TABLES[model]} WHERE "id" = $1 AND "organizationId" = $2${options?.lock === false ? "" : " FOR UPDATE"}`, id, organizationId);
+  const locked = await tx.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM ${TABLES[model as keyof typeof TABLES]} WHERE "id" = $1 AND "organizationId" = $2${options?.lock === false ? "" : " FOR UPDATE"}`, id, organizationId);
   if (locked.length === 0) throw new TrashError(`${LABELS[model]} no existe.`, 404);
   const where = { id, organizationId, ...anyState };
   const count = async (rows: Promise<{ _count: Record<string, number> } | null>) => (await rows)?._count ?? {};

@@ -14,7 +14,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { loadOrganizationLogos } from "@/lib/server/branding";
 import { getRentalReport } from "@/lib/server/rental-report";
 import { ReporteView } from "../../_components/ReporteView";
-import { live } from "@/lib/server/trash-filter";
+import { loadMonthlyReportEvents } from "@/lib/server/report-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,15 +60,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
   const organizationId = auth.context.organizationId;
 
   const [events, collections, supplierPayments, supplierPending, rentals] = await Promise.all([
-    db.event.findMany({
-      where: { organizationId, startsAt: { gte: start, lt: end } },
-      orderBy: { startsAt: "asc" },
-      include: {
-        client: true,
-        budgets: { where: { ...live, status: { notIn: [...LOST_BUDGET_STATUSES] } } },
-        supplierJobs: { select: { id: true, total: true } },
-      },
-    }),
+    loadMonthlyReportEvents(organizationId, start, end, LOST_BUDGET_STATUSES),
     db.clientPayment.findMany({
       where: { organizationId, paidAt: { gte: start, lt: end } },
       orderBy: { paidAt: "asc" },
@@ -102,7 +94,7 @@ export default async function ReporteMensualPage({ searchParams }: { searchParam
     return {
       id: event.id,
       date: event.startsAt ? formatDate(event.startsAt) : "A confirmar",
-      name: event.name,
+      name: event.displayName,
       client: event.client.company || event.client.name,
       location: event.location,
       sale,
