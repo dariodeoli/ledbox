@@ -45,6 +45,8 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/ajustes/alquileres": ["OWNER", "ADMIN"],
   "/ajustes/tienda": ["OWNER", "ADMIN"],
   "/ajustes/usuarios": ["OWNER", "ADMIN"],
+  // Papelera (docs/PAPELERA.md): `trash.manage` en el API, solo OWNER y ADMIN.
+  "/ajustes/eliminados": ["OWNER", "ADMIN"],
   "/estado/sistema": ["OWNER", "ADMIN"],
   "/estado/auditoria": ["OWNER", "ADMIN"],
 };
@@ -223,6 +225,11 @@ export function canWriteClients(role: AdminRole | null | undefined): boolean {
  */
 export function canWriteCarga(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN" || role === "OPERATIONS";
+}
+
+/** Ajustes → Eliminados (`trash.manage`): ver, restaurar, borrar definitivo y anonimizar. */
+export function canManageTrash(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN";
 }
 
 export function canManageUsers(role: AdminRole | null | undefined): boolean {

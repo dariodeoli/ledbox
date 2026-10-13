@@ -1982,6 +1982,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--resumen-avisos { --resumen-avisos-cols: 5rem minmax(8rem, 1.8fr) 5.5rem 6rem; --admin-cols: var(--resumen-avisos-cols); --admin-table-min: 26rem; }
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(7rem, 1.6fr) minmax(6.5rem, 1.2fr) 6rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 20.5rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
+/* Ajustes → Eliminados (papelera): tipo, nombre, quién, fecha, motivo, bloqueos y acciones. */
+.admin-table--eliminados { --trash-cols: 7rem minmax(10rem, 1.6fr) minmax(8rem, 1fr) 9.5rem minmax(8rem, 1.2fr) minmax(10rem, 1.6fr) 18rem; --admin-cols: var(--trash-cols); --admin-table-min: 65rem; }
+.admin-trash-type { display: inline-flex; align-items: center; gap: 6px; }
+/* Aviso de bloqueos del borrado: un renglón por motivo, el mismo en diálogos, fichas y tarjetas. */
+.admin-trash-blockers { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--a-danger); border-radius: 8px; background: var(--a-danger-surface); color: var(--a-danger-text); }
+.admin-trash-blockers ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
 /* Correo (issue #30): fecha, destinatario con su actor, tipo, asunto, estado y
    motivo del fallo. Entra sin scroll horizontal en desktop; en mobile se desplaza. */
 .admin-table--correo { --correo-cols: minmax(9.5rem, 1.5fr) minmax(9rem, 1.4fr) 6.5rem minmax(9rem, 1.5fr) 5.75rem minmax(8rem, 1.4fr); --admin-cols: var(--correo-cols); --admin-table-min: 51rem; }

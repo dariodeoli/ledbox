@@ -77,7 +77,9 @@ test("eventos ofrece lista, tarjetas y calendario canónicos con entrada por URL
   // La entrada por URL se conserva junto al selector.
   assert.match(source, /useSearchParams\(\)/, "el calendario tiene que leer ?vista= de la URL");
   assert.match(source, /calendarRequested/, "falta la detección de ?vista=calendario");
-  assert.match(source, /<CalendarioModule hideKpis events=\{operations.data \?\? \[\]\}/, "el calendario reutiliza la ficha del recurso real");
+  // El calendario sale del mismo recurso real, sin los eventos archivados (papelera).
+  assert.match(source, /const allEvents = useMemo\(\(\) => operations\.data \?\? \[\], \[operations\.data\]\)/, "el calendario reutiliza la ficha del recurso real");
+  assert.match(source, /<CalendarioModule hideKpis events=\{events\}/, "el calendario muestra solo los eventos activos del recurso real");
   // Selector fijo: el filtro de estado ya no depende de la vista (no salta al alternar).
   assert.doesNotMatch(source, /view === "list"/, "el filtro de estado no puede quedar solo en lista");
   // Paridad de acciones entre la fila y la tarjeta: una sola función (la siguiente acción + «•••»).
