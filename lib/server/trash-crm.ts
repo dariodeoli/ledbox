@@ -6,6 +6,7 @@ import { anonymize, archive, blockedError, purgeBlockers, restore, TrashError, t
 import { namesMatch, readPurgeReason, type PurgeInput } from "./trash-ops";
 import type { AdminCapability } from "./permissions";
 import { live } from "./trash-filter";
+import { formatBlockers } from "@/lib/trash-shared";
 
 /**
  * Papelera, etapa 3 (docs/PAPELERA.md): Cliente, Oportunidad, Proveedor, Promotora y
@@ -107,20 +108,8 @@ export async function unarchiveCrm(model: CrmModel, id: string, context: AuditCo
   });
 }
 
-const BLOCKER_TEXT: Record<string, string> = {
-  events: "eventos vivos",
-  budgets: "presupuestos vivos",
-  pendingJobs: "trabajos pendientes",
-  futureTasks: "tareas en eventos futuros",
-  signatureRequests: "firmas",
-  payments: "cobros",
-  paymentProofs: "comprobantes",
-  invoices: "facturas",
-  confirmedExpectedPayments: "pagos esperados confirmados",
-};
-
 function guardError(blockers: Blocker[]) {
-  return new TrashError(`No se puede eliminar: tiene ${blockers.map((b) => `${b.count} ${BLOCKER_TEXT[b.kind] ?? b.kind}`).join(", ")}.`, 409, blockers);
+  return new TrashError(`No se puede eliminar. ${formatBlockers(blockers).join(". ")}.`, 409, blockers);
 }
 
 async function trashGuard(model: CrmModel, id: string, organizationId: string, tx: Tx) {

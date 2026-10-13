@@ -6,7 +6,7 @@ import ts from "typescript";
 import { AUDIT_ACTIONS } from "../lib/admin-types";
 import { ADMIN_ROLES, roleCan } from "../lib/server/permissions";
 import { FILTERED_OPERATIONS, live, mentionsDeletedAt, TRASH_MODELS, withLiveFilter } from "../lib/server/trash-filter";
-import { blockersFor, TrashError } from "../lib/server/trash";
+import { blockedError, blockersFor, blockersMessage, TrashError } from "../lib/server/trash";
 
 const root = join(import.meta.dirname, "..");
 
@@ -196,4 +196,15 @@ test("papelera E2 fix: el reporte de dinero incluye eliminados, el lock del even
   const trash = read("lib/server/trash.ts");
   assert.match(trash, /const TABLES = \{/);
   assert.match(trash, /as const satisfies Record<TrashModel, string>/);
+});
+
+test("el 409 de bloqueo habla en castellano: «Tiene N cobros», sin claves internas", () => {
+  const message = blockersMessage([{ kind: "payments", count: 2 }, { kind: "invoices", count: 1 }]);
+  assert.match(message, /Tiene 2 cobros/);
+  assert.match(message, /Tiene 1 factura\b/);
+  assert.match(message, /anonimizarlo/);
+  assert.doesNotMatch(message, /payments|invoices/);
+  const error = blockedError([{ kind: "payments", count: 2 }]);
+  assert.equal(error.status, 409);
+  assert.deepEqual(error.blockers, [{ kind: "payments", count: 2 }]);
 });
