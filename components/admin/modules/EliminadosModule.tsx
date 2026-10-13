@@ -2,16 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { kpiState } from "@/components/admin/kpi-state";
-import { useAdminResource } from "@/lib/admin-api";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, formatNumber } from "@/lib/admin-format";
 import { canManageTrash } from "@/lib/admin-policy";
 import {
   TRASH_ENTITIES,
   TRASH_NO_ONE,
+  TRASH_PURGE_DAY_OPTIONS,
   canOfferAnonymize,
   filterTrashItems,
   formatBlockers,
   isTrashEntityType,
+  purgeStatusText,
   type TrashEntityType,
   type TrashItem,
 } from "@/lib/trash-shared";
@@ -19,7 +21,7 @@ import { useAdminSession } from "../AdminShell";
 import { useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AdminIcon } from "../AdminIcons";
-import { DayField } from "../AdminFields";
+import { DayField, SelectField } from "../AdminFields";
 import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminEmpty, AdminKpi, AdminKpis, AdminLoadingRows, AdminNote, AdminRow, AdminSelect, AdminTable, AdminToolbar } from "../AdminUI";
 import { TrashBlockersNote, TrashDialog, runTrashAction, type TrashDialogMode } from "../TrashDialogs";
 
@@ -44,7 +46,11 @@ const typeLabel = (type: string) => (isTrashEntityType(type) ? TRASH_ENTITIES[ty
 
 function EliminadosView() {
   const compact = useAdminNarrowViewport();
-  const trash = useAdminResource("/api/admin/trash", (payload) => (payload as unknown as { items?: TrashItem[] }).items ?? []);
+  const trash = useAdminResource("/api/admin/trash", (payload) => {
+    const body = payload as unknown as { items?: TrashItem[]; purgeDays?: number | null };
+    return { items: body.items ?? [], purgeDays: body.purgeDays ?? null };
+  });
+  const [savingPurge, setSavingPurge] = useState(false);
   const [type, setType] = useState("ALL");
   const [by, setBy] = useState("ALL");
   const [from, setFrom] = useState("");
@@ -53,7 +59,8 @@ function EliminadosView() {
   const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  const all = useMemo(() => trash.data ?? [], [trash.data]);
+  const all = useMemo(() => trash.data?.items ?? [], [trash.data]);
+  const purgeDays = trash.data?.purgeDays ?? null;
   const rows = useMemo(() => filterTrashItems(all, { type, by, from, to }), [all, type, by, from, to]);
   const filtersActive = type !== "ALL" || by !== "ALL" || Boolean(from) || Boolean(to);
 
@@ -75,6 +82,20 @@ function EliminadosView() {
     setBy("ALL");
     setFrom("");
     setTo("");
+  }
+
+  async function savePurgeDays(value: string) {
+    if (savingPurge) return;
+    setSavingPurge(true);
+    setMessage(null);
+    const result = await adminSend("/api/admin/settings/rental", { trashPurgeDays: value === "" ? null : Number(value) }, "PATCH");
+    setSavingPurge(false);
+    if (!result.ok) {
+      setMessage({ tone: "error", text: result.error });
+      return;
+    }
+    setMessage({ tone: "ok", text: value === "" ? "El vaciado automático quedó apagado." : `Lo eliminado se vaciará automáticamente a los ${value} días.` });
+    trash.reload();
   }
 
   async function restore(item: TrashItem) {
@@ -150,6 +171,7 @@ function EliminadosView() {
       { label: "Fecha", value: formatDateTime(item.deletedAt) },
       { label: "Motivo", value: item.reason ?? "—" },
       { label: "Bloqueos", value: item.blockers.length ? <TrashBlockersNote blockers={item.blockers} /> : "Sin bloqueos" },
+      ...(purgeStatusText(item) ? [{ label: "Vaciado", value: purgeStatusText(item) }] : []),
     ],
     footer: actions(item),
   }));
@@ -162,6 +184,14 @@ function EliminadosView() {
       </AdminKpis>
 
       <AdminToolbar>
+        <SelectField
+          label="Vaciar automáticamente"
+          help="Al abrir esta pantalla se borra de forma definitiva lo eliminado hace más de ese tiempo. Lo que tiene historial contable se conserva."
+          value={purgeDays === null ? "" : String(purgeDays)}
+          onChange={(value) => void savePurgeDays(value)}
+          disabled={savingPurge || trash.loading}
+          options={[{ value: "", label: "Nunca" }, ...TRASH_PURGE_DAY_OPTIONS.map((days) => ({ value: String(days), label: `${days} días` }))]}
+        />
         <AdminSelect value={type} onChange={setType} label="Filtrar por tipo" options={typeOptions} />
         <AdminSelect value={by} onChange={setBy} label="Filtrar por quién lo eliminó" options={byOptions} />
         <div className="admin-field--filter">
@@ -207,6 +237,7 @@ function EliminadosView() {
               { label: "Fecha" },
               { label: "Motivo" },
               { label: "Bloqueos" },
+              { label: "Vaciado" },
               { label: "Acciones", end: true },
             ]}
           >
@@ -227,6 +258,9 @@ function EliminadosView() {
                 </AdminCell>
                 <AdminCell title={item.reason ?? "Sin motivo"}>{item.reason ?? "—"}</AdminCell>
                 <AdminCell title={blockersText(item)}>{blockersCell(item)}</AdminCell>
+                <AdminCell title={purgeStatusText(item) ?? "Sin vaciado automático"}>
+                  {item.retained ? <AdminBadge tone="neutral">{purgeStatusText(item)}</AdminBadge> : <span className="admin-nowrap">{purgeStatusText(item) ?? "—"}</span>}
+                </AdminCell>
                 <AdminCell end>{actions(item)}</AdminCell>
               </AdminRow>
             ))}

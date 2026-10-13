@@ -45,6 +45,11 @@ export async function PATCH(request: Request) {
   const parsed = parseRentalSettingsPatch(body);
   if (!parsed.ok) return jsonError(parsed.error, 400);
 
+  if (parsed.data.trashPurgeDays !== undefined) {
+    const trashAuth = await requireAdminContext("trash.manage");
+    if (!trashAuth.ok) return trashAuth.response;
+  }
+
   const before = await getRentalSettings(organizationId);
   const settings = await saveRentalSettings(organizationId, parsed.data);
   const changes = auditChanges({ ...before }, { ...settings }, RENTAL_SETTINGS_FIELDS);
@@ -54,7 +59,9 @@ export async function PATCH(request: Request) {
       action: "update",
       entity: "Organization",
       entityId: organizationId,
-      summary: "Actualizó los ajustes de alquiler de la empresa",
+      summary: changes.trashPurgeDays
+        ? `Cambió el vaciado automático de la papelera: ${changes.trashPurgeDays.to ? `a ${changes.trashPurgeDays.to} días` : "desactivado"}`
+        : "Actualizó los ajustes de alquiler de la empresa",
       detail: { changes },
     });
   }

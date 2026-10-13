@@ -2581,6 +2581,8 @@ export type AdminRentalSettings = {
   storefrontTagline: string | null;
   storefrontAccent: string | null;
   storefrontEmail: string | null;
+  /** Papelera: días hasta el vaciado automático de lo eliminado; `null` = nunca (docs/PAPELERA.md). */
+  trashPurgeDays: number | null;
 };
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */

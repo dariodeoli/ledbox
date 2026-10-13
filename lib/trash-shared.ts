@@ -80,6 +80,10 @@ export type TrashItem = {
   reason: string | null;
   anonymized: boolean;
   blockers: TrashBlocker[];
+  /** Días que faltan para el vaciado automático (0 = en la próxima apertura); `null` si no corre o no aplica. */
+  purgeInDays?: number | null;
+  /** Vaciado automático activo y esta fila tiene bloqueos: se conserva por su historial contable. */
+  retained?: boolean;
 };
 
 export type TrashBlocker = { kind: string; count: number };
@@ -229,4 +233,41 @@ export function filterTrashItems(items: readonly TrashItem[], filters: TrashFilt
     if (filters.to && day > filters.to) return false;
     return true;
   });
+}
+
+
+// ── Vaciado automático (etapa 5) ─────────────────────────────────────────────
+
+/** Opciones de «Vaciar automáticamente»; `null` = nunca (valor por defecto). */
+export const TRASH_PURGE_DAY_OPTIONS = [30, 60, 90, 180] as const;
+
+export function isTrashPurgeDays(value: unknown): value is (typeof TRASH_PURGE_DAY_OPTIONS)[number] {
+  return typeof value === "number" && (TRASH_PURGE_DAY_OPTIONS as readonly number[]).includes(value);
+}
+
+const DAY_MS = 86_400_000;
+
+/** Fecha límite: lo eliminado antes de esto vence con una purga a `purgeDays` días. */
+export function trashPurgeCutoff(purgeDays: number, now: Date = new Date()): Date {
+  return new Date(now.getTime() - purgeDays * DAY_MS);
+}
+
+/**
+ * Días que faltan para el vaciado automático de algo eliminado en `deletedAt` (0 si ya venció).
+ * `null` si la purga está apagada o la fecha no es válida.
+ */
+export function daysUntilPurge(deletedAt: string | Date, purgeDays: number | null | undefined, now: Date = new Date()): number | null {
+  if (!purgeDays || purgeDays < 1) return null;
+  const deleted = new Date(deletedAt).getTime();
+  if (!Number.isFinite(deleted)) return null;
+  return Math.max(0, Math.ceil((deleted + purgeDays * DAY_MS - now.getTime()) / DAY_MS));
+}
+
+/** Texto de la columna «Vaciado» de Eliminados. */
+export function purgeStatusText(item: Pick<TrashItem, "purgeInDays" | "retained" | "anonymized">): string | null {
+  if (item.anonymized) return null;
+  if (item.retained) return "Conservado (contable)";
+  if (item.purgeInDays === null || item.purgeInDays === undefined) return null;
+  if (item.purgeInDays === 0) return "Se borra hoy";
+  return item.purgeInDays === 1 ? "Se borra en 1 día" : `Se borra en ${item.purgeInDays} días`;
 }
