@@ -385,3 +385,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Presupuestos: cada presupuesto nuevo arranca con la seña configurada por la empresa en Ajustes → Alquileres (por ejemplo «Seña 50 %» y «Saldo»), y se puede cambiar. Los presupuestos que ya existían no cambian.
 - Depósito de garantía: se puede pedir una garantía por presupuesto, con un valor por defecto de la empresa. No suma al total ni a los cobros. Su estado (pendiente, retenida, devuelta, retenida en parte o retenida completa) se ve en el panel, en el portal del cliente y en el impreso, y cada cambio queda registrado.
 - Transporte: el botón «Transporte» agrega ese ítem al presupuesto en un clic.
+
+## v2.1.95 — 2026-10-13
+
+- Eventos: «Despachar» registra qué salió, cuánto, quién lo sacó y cuándo, y se puede despachar por partes. «Registrar devolución» admite devoluciones parciales: el evento muestra «Faltan N por devolver» y permite marcar equipos dañados o faltantes.
+- Incidentes: cada daño o faltante abre un incidente vinculado a la reserva y a la unidad. La unidad queda fuera del stock hasta que se repara (vuelve a estar disponible) o se da de baja. Desde Inventario → Incidentes se pasa a reparación, se resuelve o se da de baja, y se registra el costo de la reparación.
+- Lo devuelto no vuelve solo al stock: queda «en limpieza o revisión» durante el tiempo configurado.
+- Un evento no se puede cerrar con equipos sin devolver o faltantes sin resolver. Para eventos anteriores a esta versión hay un cierre forzado con nota obligatoria, que queda registrado.
+- Calendario: muestra las entregas y devoluciones de equipos con sus horarios previstos.
