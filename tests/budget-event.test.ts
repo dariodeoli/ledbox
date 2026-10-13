@@ -137,6 +137,10 @@ test("la ficha del cliente es una página propia y la ventana ya no existe", () 
   assert.match(ficha, /\/presupuestos\?nuevo=1&cliente=/);
   assert.match(ficha, /<AdminWhatsappLink/, "WhatsApp con el helper existente");
   const api = repoFile("app/api/admin/clients/[id]/route.ts");
-  assert.match(api, /db\.lead\.findMany\(\{\s*where: \{ organizationId \}/, "los leads salen acotados por empresa");
-  assert.match(api, /leadBelongsToClient/);
+  assert.match(api, /leadsForClient\(db, organizationId,/, "los leads salen acotados por empresa");
+  const leadLib = readFileSync("lib/server/lead-client.ts", "utf8");
+  const forClient = leadLib.slice(leadLib.indexOf("export async function leadsForClient"), leadLib.indexOf("export type ResolvedLeadClient"));
+  assert.match(forClient, /where: \{ organizationId(,| \})/, "toda consulta de leads lleva organizationId");
+  assert.doesNotMatch(forClient, /where: \{ (?!organizationId)/);
+  assert.match(forClient, /leadBelongsToClient/);
 });
