@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { closureBlockMessage, eventClosureBlockers } from "@/lib/server/inventory-operations";
 import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -141,10 +142,42 @@ export async function PATCH(request: Request) {
   const changes = auditChanges(event, proposed, EVENT_AUDIT_FIELDS);
   if (!changes) return Response.json({ event, unchanged: true });
 
-  const updated = await db.event.update({
-    where: { id: event.id },
-    data: parsed.data,
+  // Cerrar el evento exige haber cerrado la operación de inventario: sin equipos
+  // pendientes de devolver ni faltantes abiertos sin decisión (alquileres fase 4).
+  // El chequeo y el cambio de estado van en la misma transacción, con FOR UPDATE sobre
+  // el evento, para que no se cierre mientras otra operación lo está modificando.
+  // Datos anteriores a esta versión (salida sin devolución registrada) se pueden cerrar
+  // igual con `forceClose` y una nota obligatoria, que queda en la auditoría.
+  const closing = parsed.data.status === "COMPLETED" && event.status !== "COMPLETED";
+  const forceClose = body.forceClose === true;
+  const forceNote = typeof body.forceCloseNote === "string" ? body.forceCloseNote.trim() : "";
+  if (closing && forceClose && forceNote.length < 5) return jsonError("Para cerrar igual escribí el motivo (mínimo 5 caracteres).", 400);
+  if (forceNote.length > 400) return jsonError("El motivo no puede superar 400 caracteres.", 400);
+  let blockedMessage: string | null = null;
+  let forcedOver: string | null = null;
+  const updated = await db.$transaction(async (tx) => {
+    if (closing) {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} AND "organizationId" = ${auth.context.organizationId} FOR UPDATE`;
+      const message = closureBlockMessage(await eventClosureBlockers(auth.context.organizationId, event.id, tx));
+      if (message && !forceClose) {
+        blockedMessage = message;
+        return null;
+      }
+      forcedOver = message;
+    }
+    return tx.event.update({ where: { id: event.id }, data: parsed.data });
   });
+  if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409);
+  if (forcedOver) {
+    await recordAudit({
+      context: auth.context,
+      action: "status",
+      entity: "Event",
+      entityId: event.id,
+      summary: `Cerró igual el evento «${event.name}» con operación de inventario pendiente`,
+      detail: { fields: { forceClose: true, reason: forceNote, pendiente: forcedOver } },
+    });
+  }
   if (changes) {
     await recordAudit({
       context: auth.context,

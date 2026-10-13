@@ -41,8 +41,10 @@ export const MAINTENANCE_UNITS_SELECT = {
 } satisfies Prisma.InventoryItemCountOutputTypeSelect;
 
 /** Unidades en mantenimiento de un ítem con `_count` (0 si no vino el conteo). */
-export function maintenanceUnits(item: { _count?: { units?: number } | null }): number {
-  return item._count?.units ?? 0;
+export function maintenanceUnits(item: { _count?: { units?: number } | null; incidentHold: number }): number {
+  // `incidentHold` = unidades sin código retenidas por incidentes abiertos (daño o
+  // faltante por cantidad): se descuentan igual que una unidad en mantenimiento.
+  return (item._count?.units ?? 0) + Math.max(0, item.incidentHold);
 }
 
 export const EVENT_RANGE_SELECT = {
@@ -70,6 +72,8 @@ export type AssignmentRecord = {
   startsAt: Date | null;
   endsAt: Date | null;
   event: EventRangeRef;
+  /** Devolución real: si fue después del fin del rango, la limpieza cuenta desde ahí. */
+  checkedInAt?: Date | null;
 };
 
 /** Ítem mínimo para calcular disponibilidad (no hace falta la fila completa). */
@@ -328,7 +332,10 @@ export function buildAvailability(
   const requested = extendedRentalRange(startsAt, endsAt, buffers);
   const blockedRange = (row: AssignmentRecord) => {
     const { start, end } = assignmentRange(row);
-    return extendedRentalRange(start, end, buffers);
+    // Devuelto después de lo previsto: el equipo vuelve recién ahí y la limpieza o
+    // revisión corre desde la devolución real, no desde el fin del evento.
+    const realEnd = row.checkedInAt && end && row.checkedInAt.getTime() > end.getTime() ? row.checkedInAt : end;
+    return extendedRentalRange(start, realEnd, buffers);
   };
   const conflicts = rows
     .filter((row) => {
@@ -563,7 +570,7 @@ export async function commitInventoryAssignment(options: {
 
       const previous = await tx.eventInventory.findUnique({
         where: { eventId_inventoryId: { eventId: event.id, inventoryId: item.id } },
-        select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true, releasedAt: true, comboQuantity: true },
+        select: { id: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true, releasedAt: true, comboQuantity: true, checkoutQuantity: true },
       });
       // La parte que vino de combos no se pisa desde una edición suelta.
       const previousCounted = Boolean(previous && assignmentCountsAt(previous, now));
@@ -572,6 +579,13 @@ export async function commitInventoryAssignment(options: {
           ok: false,
           reason: "conflict",
           message: `${previous.comboQuantity} unidad${previous.comboQuantity === 1 ? "" : "es"} de «${item.name}» vienen de combos de este evento: la cantidad no puede ser menor; liberá el combo para quitarlas.`,
+        } as const;
+      }
+      if (previousCounted && previous && options.quantity < previous.checkoutQuantity) {
+        return {
+          ok: false,
+          reason: "conflict",
+          message: `Ya salieron ${previous.checkoutQuantity} unidad${previous.checkoutQuantity === 1 ? "" : "es"} de «${item.name}»: la cantidad no puede ser menor.`,
         } as const;
       }
       const effective = {
@@ -942,6 +956,7 @@ type LinkedItem = {
     category: string;
     quantity: number;
     status: InventoryStatus;
+    incidentHold: number;
     _count: { units: number; components: number };
   };
 };
@@ -1035,6 +1050,7 @@ export async function reserveBudgetInventory(options: {
                 category: true,
                 quantity: true,
                 status: true,
+                incidentHold: true,
                 _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } },
               },
             },
@@ -1133,6 +1149,7 @@ export async function reserveBudgetInventory(options: {
                 category: true,
                 quantity: true,
                 status: true,
+                incidentHold: true,
                 _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } },
               },
             });

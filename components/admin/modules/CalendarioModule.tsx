@@ -145,6 +145,9 @@ function calendarRange(anchor: string, view: CalendarView) {
 function itemTagLabel(item: AdminCalendarItem): string | null {
   if (!item.tag) return null;
   if (item.kind === "task") return taskTypeLabel(item.tag);
+  if (item.kind === "inventory_out" || item.kind === "inventory_in") {
+    return item.tag === "DONE" ? "Registrada" : item.tag === "PARTIAL" ? "Parcial · faltan unidades" : "Prevista";
+  }
   if (item.kind === "supplier_due" || item.kind === "supplier_delivery" || item.kind === "supplier_payment") {
     return jobStatusLabel(item.tag);
   }
@@ -255,6 +258,7 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
   const calendar = useAdminResource(`/api/admin/calendar?from=${range.from}&to=${range.to}`, (payload) => ({
     items: payload.items ?? [],
     alerts: payload.alerts ?? [],
+    truncated: payload.truncated === true,
   }));
 
   const items = useMemo(() => calendar.data?.items ?? [], [calendar.data]);
@@ -326,6 +330,11 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
           </AdminButton>
         </div>
         <span className="admin-cal-range">{periodLabel}</span>
+        {calendar.data?.truncated ? (
+          <span className="admin-cal-range" role="status">
+            Hay más movimientos: acotá el rango.
+          </span>
+        ) : null}
         <AdminSelect
           value={view}
           onChange={(value) => {

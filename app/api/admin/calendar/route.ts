@@ -13,6 +13,9 @@ import {
   nextDayKey,
   placeLabel,
 } from "@/lib/server/notifications";
+import { assignmentRange, loadRentalSettings, resolveRentalBuffers } from "@/lib/server/inventory-availability";
+import { dispatchedQuantity, pendingReturnQuantity } from "@/lib/server/inventory-operations";
+import { CALENDAR_MOVEMENTS_LIMIT, plannedMovementVisible, truncateMovements } from "@/lib/calendar-movements";
 import type { AdminCalendarItem, AdminCalendarItemKind } from "@/lib/admin-types";
 
 export const runtime = "nodejs";
@@ -55,6 +58,8 @@ const KIND_ORDER: Record<AdminCalendarItemKind, number> = {
   collection: 7,
   collection_due: 8,
   supplier_payment: 9,
+  inventory_out: 10,
+  inventory_in: 11,
 };
 
 // ── Normalización ───────────────────────────────────────────────────────────
@@ -116,7 +121,11 @@ export async function GET(request: Request) {
   const to = dayStart(nextDayKey(toKey)); // límite exclusivo
   const now = new Date();
 
-  const [events, tasks, payments, pendingCollections, jobs] = await Promise.all([
+  // Holgura para ubicar entregas previstas: la entrega sale antes del montaje por los colchones.
+  const slack = 3 * DAY_MS;
+  const slackFrom = new Date(from.getTime() - slack);
+  const slackTo = new Date(to.getTime() + slack);
+  const [events, tasks, payments, pendingCollections, jobs, movements, rentalSettings] = await Promise.all([
     db.event.findMany({
       where: {
         organizationId,
@@ -191,6 +200,41 @@ export async function GET(request: Request) {
         event: { select: { id: true, name: true } },
       },
     }),
+    // Entregas (despacho) y devoluciones de inventario: reales (checkedOutAt/checkedInAt)
+    // y previstas (rango de la asignación con los tiempos de preparación y limpieza).
+    db.eventInventory.findMany({
+      where: {
+        releasedAt: null,
+        quantity: { gt: 0 },
+        event: { organizationId, status: { not: "CANCELLED" } },
+        inventory: { components: { none: {} } },
+        OR: [
+          { checkedOutAt: { gte: from, lt: to } },
+          { checkedInAt: { gte: from, lt: to } },
+          { startsAt: { gte: slackFrom, lt: slackTo } },
+          { endsAt: { gte: slackFrom, lt: slackTo } },
+          { startsAt: null, event: { OR: [{ setupAt: { gte: slackFrom, lt: slackTo } }, { startsAt: { gte: slackFrom, lt: slackTo } }, { strikeAt: { gte: slackFrom, lt: slackTo } }, { endsAt: { gte: slackFrom, lt: slackTo } }] } },
+        ],
+      },
+      take: CALENDAR_MOVEMENTS_LIMIT + 1,
+      select: {
+        id: true,
+        eventId: true,
+        quantity: true,
+        startsAt: true,
+        endsAt: true,
+        checkedOut: true,
+        checkedOutAt: true,
+        checkedIn: true,
+        checkedInAt: true,
+        checkoutQuantity: true,
+        returnedQuantity: true,
+        missingQuantity: true,
+        inventory: { select: { bufferBeforeMin: true, bufferAfterMin: true } },
+        event: { select: { id: true, name: true, location: true, city: true, setupAt: true, startsAt: true, endsAt: true, strikeAt: true, status: true, client: { select: { name: true, company: true } } } },
+      },
+    }),
+    loadRentalSettings(organizationId),
   ]);
 
   const items: AdminCalendarItem[] = [];
@@ -319,6 +363,58 @@ export async function GET(request: Request) {
     });
   }
 
+  // Movimientos de inventario agrupados por evento, tipo, estado y día.
+  type Group = { kind: "inventory_out" | "inventory_in"; at: Date; state: "DONE" | "PLANNED" | "PARTIAL"; event: CalendarEvent; lines: number; units: number };
+  const groups = new Map<string, Group>();
+  const addMovement = (kind: Group["kind"], at: Date | null, state: Group["state"], event: CalendarEvent, units: number) => {
+    if (!at || at < from || at >= to || units <= 0) return;
+    const key = `${kind}:${event.id}:${state}:${dayKeyOf(at)}`;
+    const group = groups.get(key);
+    if (group) {
+      group.lines += 1;
+      group.units += units;
+      if (at < group.at) group.at = at;
+    } else groups.set(key, { kind, at, state, event, lines: 1, units });
+  };
+  const { rows: movementRows, truncated: movementsTruncated } = truncateMovements(movements);
+  for (const row of movementRows) {
+    const buffers = resolveRentalBuffers(rentalSettings, row.inventory);
+    const range = assignmentRange({ startsAt: row.startsAt, endsAt: row.endsAt, event: row.event });
+    const sent = dispatchedQuantity(row);
+    const closed = Boolean(row.checkedIn || row.checkedInAt);
+    if (sent > 0) addMovement("inventory_out", row.checkedOutAt, "DONE", row.event, sent);
+    const eventEnd = row.event.strikeAt ?? row.event.endsAt ?? row.event.startsAt;
+    const plannedVisible = plannedMovementVisible({ eventStatus: row.event.status, sent, eventEnd, now });
+    if (!closed && plannedVisible && row.quantity - sent > 0 && range.start) {
+      addMovement("inventory_out", new Date(range.start.getTime() - buffers.beforeMin * 60_000), "PLANNED", row.event, row.quantity - sent);
+    }
+    if (closed) addMovement("inventory_in", row.checkedInAt, "DONE", row.event, row.returnedQuantity || Math.max(0, sent - row.missingQuantity));
+    else if (plannedVisible) {
+      const pending = sent > 0 ? pendingReturnQuantity(row) : row.quantity;
+      addMovement("inventory_in", range.end, sent > 0 && row.returnedQuantity > 0 ? "PARTIAL" : "PLANNED", row.event, pending);
+    }
+  }
+  for (const [key, group] of groups) {
+    const late = group.state !== "DONE" && group.at.getTime() < now.getTime();
+    items.push({
+      id: key,
+      kind: group.kind,
+      date: dayKeyOf(group.at),
+      at: group.at.toISOString(),
+      endAt: null,
+      endDate: null,
+      title: group.event.name,
+      subtitle: joinParts([
+        `${group.lines} ítem${group.lines === 1 ? "" : "s"} · ${group.units} u.`,
+        group.event.client.company || group.event.client.name,
+      ]),
+      href: "/eventos",
+      tone: late ? "danger" : group.state === "DONE" ? "ok" : group.state === "PARTIAL" ? "warn" : "info",
+      tag: group.state,
+      amount: null,
+    });
+  }
+
   items.sort((a, b) => (a.at === b.at ? KIND_ORDER[a.kind] - KIND_ORDER[b.kind] : a.at.localeCompare(b.at)));
 
   // ── Alertas (relativas a hoy, sin depender del rango consultado) ──────────
@@ -327,5 +423,5 @@ export async function GET(request: Request) {
   // incompleto, vencidos o dentro de los próximos 7 días.
   const alerts = await calendarAlerts(organizationId, now);
 
-  return Response.json({ items, alerts, range: { from: fromKey, to: toKey } });
+  return Response.json({ items, alerts, range: { from: fromKey, to: toKey }, truncated: movementsTruncated });
 }

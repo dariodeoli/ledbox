@@ -16,7 +16,6 @@ import {
   inventoryAssignmentState,
   isOverdue,
   isUpcomingWithin,
-  ITEM_CONDITIONS,
   promoterAvailabilityDetail,
   promoterAvailabilityLabel,
   promoterAvailabilityTone,
@@ -79,6 +78,8 @@ import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
 import { useOfflineQueue } from "../AdminOffline";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
+import { InventoryMovementDialog, assignmentDispatched, assignmentPending } from "./InventoryMovementDialog";
+import { InventoryIncidentsPanel } from "./InventoryIncidents";
 
 /** Fila del panel de eventos (issue #68): cliente mínimo y operación completa. */
 type EventRow = AdminEventPanelRow;
@@ -106,7 +107,6 @@ const EVENTOS_VIEWS = ["list", "grid", "calendar"] as const;
 const EMPTY_EVENT_FORM = { ...EMPTY_EVENT_QUICK, clientId: "" };
 const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
 const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
-const EMPTY_MOVEMENT_FORM = { at: "", condition: ITEM_CONDITIONS[0] as string, damaged: "0", missing: "0", notes: "" };
 
 type MovementRequest = { mode: "checkout" | "checkin"; assignment: AdminEventAssignment };
 
@@ -269,9 +269,7 @@ export function EventosModule() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState("");
   const [movement, setMovement] = useState<MovementRequest | null>(null);
-  const [movementForm, setMovementForm] = useState(EMPTY_MOVEMENT_FORM);
-  const [movementBusy, setMovementBusy] = useState(false);
-  const [movementError, setMovementError] = useState("");
+  const [incidentsKey, setIncidentsKey] = useState(0);
   /** Cronología real del evento (issue #33). */
   const [timelineEvent, setTimelineEvent] = useState<EventRow | null>(null);
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del evento. */
@@ -664,68 +662,6 @@ export function EventosModule() {
 
   function openMovement(mode: "checkout" | "checkin", assignment: AdminEventAssignment) {
     setMovement({ mode, assignment });
-    setMovementError("");
-    setMovementForm({
-      ...EMPTY_MOVEMENT_FORM,
-      at: inputDateTime(new Date()),
-      condition: ITEM_CONDITIONS[0],
-    });
-  }
-
-  async function submitMovement(formEvent: React.FormEvent<HTMLFormElement>) {
-    formEvent.preventDefault();
-    if (!movement) return;
-    const damagedQuantity = Number(movementForm.damaged) || 0;
-    const missingQuantity = Number(movementForm.missing) || 0;
-    if (movement.mode === "checkin" && damagedQuantity + missingQuantity > movement.assignment.quantity) {
-      setMovementError(`Dañadas y faltantes no pueden superar las ${movement.assignment.quantity} unidades asignadas.`);
-      return;
-    }
-    setMovementBusy(true);
-    setMovementError("");
-    const checkout = movement.mode === "checkout";
-    const damages = damageSummary(damagedQuantity, missingQuantity);
-    // Mismo contrato que el panel online; sin conexión el provider lo guarda en la cola local.
-    const result = await fieldAction({
-      kind: checkout ? "inventory-checkout" : "inventory-checkin",
-      path: "/api/admin/inventory",
-      body: checkout
-        ? {
-            kind: "checkout",
-            id: movement.assignment.id,
-            at: movementForm.at || undefined,
-            conditionOut: movementForm.condition,
-          }
-        : {
-            kind: "checkin",
-            id: movement.assignment.id,
-            at: movementForm.at || undefined,
-            conditionIn: movementForm.condition,
-            damagedQuantity,
-            missingQuantity,
-            damageNotes: movementForm.notes || undefined,
-          },
-      summary: `${checkout ? "Salida" : "Devolución"} de «${movement.assignment.inventory.name}» (${formatNumber(
-        movement.assignment.quantity,
-      )} u.)${!checkout && damages ? ` · ${damages}` : ""}`,
-      detail: `Evento: ${equipmentEvent?.name ?? "sin evento"}`,
-    });
-    setMovementBusy(false);
-    if (!result.ok) {
-      setMovementError(result.error);
-      return;
-    }
-    const label = checkout ? "Salida" : "Devolución";
-    setAssignNotice(
-      result.queued
-        ? `Sin conexión: la ${label.toLowerCase()} quedó guardada en este equipo y se sube al volver la señal.`
-        : `${label} registrada: ${movement.assignment.inventory.name} (${formatNumber(movement.assignment.quantity)} u.).`,
-    );
-    setMovement(null);
-    if (!result.queued) {
-      operations.reload();
-      inventoryResource.reload();
-    }
   }
 
   async function removeAssignment(assignment: AdminEventAssignment) {
@@ -1070,57 +1006,21 @@ export function EventosModule() {
             {equipmentError ? <AdminNote tone="error">{equipmentError}</AdminNote> : null}
 
             {movement ? (
-              <AdminFormPanel
-                title={
-                  movement.mode === "checkout"
-                    ? `Registrar salida · ${movement.assignment.inventory.name}`
-                    : `Registrar devolución · ${movement.assignment.inventory.name}`
-                }
-                submitLabel={movement.mode === "checkout" ? "Registrar salida" : "Registrar devolución"}
-                onSubmit={submitMovement}
-                onCancel={() => setMovement(null)}
-                busy={movementBusy}
-                status={movementError}
-              >
-                <DateTimeField
-                  label={movement.mode === "checkout" ? "Fecha y hora de salida" : "Fecha y hora de devolución"}
-                  hint={`${formatNumber(movement.assignment.quantity)} unidades asignadas`}
-                  required
-                  value={movementForm.at}
-                  onChange={(value) => setMovementForm({ ...movementForm, at: value })}
-                />
-                <SelectField
-                  label={movement.mode === "checkout" ? "Estado al retirar" : "Estado al devolver"}
-                  value={movementForm.condition}
-                  onChange={(value) => setMovementForm({ ...movementForm, condition: value })}
-                  options={ITEM_CONDITIONS.map((condition) => ({ value: condition, label: condition }))}
-                />
-                {movement.mode === "checkin" ? (
-                  <>
-                    <NumberField
-                      label="Unidades dañadas"
-                      maxLength={6}
-                      value={movementForm.damaged}
-                      onChange={(value) => setMovementForm({ ...movementForm, damaged: value })}
-                    />
-                    <NumberField
-                      label="Unidades faltantes"
-                      maxLength={6}
-                      value={movementForm.missing}
-                      onChange={(value) => setMovementForm({ ...movementForm, missing: value })}
-                    />
-                    <TextAreaField
-                      label="Notas"
-                      hint="Detalle de daños o faltantes (opcional)"
-                      wide
-                      rows={2}
-                      maxLength={400}
-                      value={movementForm.notes}
-                      onChange={(value) => setMovementForm({ ...movementForm, notes: value })}
-                    />
-                  </>
-                ) : null}
-              </AdminFormPanel>
+              <InventoryMovementDialog
+                mode={movement.mode}
+                assignment={movement.assignment}
+                eventName={equipmentEvent?.name ?? "sin evento"}
+                onClose={() => setMovement(null)}
+                onDone={(message, queued) => {
+                  setAssignNotice(message);
+                  setMovement(null);
+                  if (!queued) {
+                    operations.reload();
+                    inventoryResource.reload();
+                    setIncidentsKey((key) => key + 1);
+                  }
+                }}
+              />
             ) : null}
 
             <AdminDataState
@@ -1163,6 +1063,11 @@ export function EventosModule() {
                   const countdown = inventoryAssignmentCountdown(assignment);
                   const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut || queuedOut);
                   const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn || queuedBack);
+                  // Un combo no sale ni vuelve como unidad: sus movimientos son los de sus componentes.
+                  const isCombo = (assignment.inventory._count?.components ?? 0) > 0;
+                  const pendingBack = isOut && !isBack ? assignmentPending(assignment) : 0;
+                  const toDispatch = assignment.quantity - assignmentDispatched(assignment);
+                  const cleaning = assignment.cleaningUntil ? new Date(assignment.cleaningUntil) : null;
                   const startsAt = assignment.startsAt ?? equipmentEvent.setupAt ?? equipmentEvent.startsAt;
                   const endsAt = assignment.endsAt ?? equipmentEvent.strikeAt ?? equipmentEvent.endsAt ?? startsAt;
                   return (
@@ -1170,6 +1075,7 @@ export function EventosModule() {
                       <AdminCell title={assignment.inventory.name}>
                         <strong>{assignment.inventory.name}</strong>
                         {assignment.inventory.sku ? <span className="admin-code"> · {assignment.inventory.sku}</span> : null}
+                        {isCombo ? <> <AdminBadge tone="info" title="Los movimientos se registran sobre sus componentes">Combo</AdminBadge></> : null}
                       </AdminCell>
                       <AdminCell end title={`${formatNumber(assignment.quantity)} unidades`}>
                         {formatNumber(assignment.quantity)}
@@ -1197,6 +1103,11 @@ export function EventosModule() {
                       </AdminCell>
                       <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
                         <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
+                        {cleaning && cleaning.getTime() > Date.now() ? (
+                          <AdminBadge tone="warn" title={`En limpieza o revisión hasta ${stamp(assignment.cleaningUntil ?? null)}`}>
+                            En limpieza o revisión
+                          </AdminBadge>
+                        ) : null}
                         {countdown ? (
                           <AdminCountdown
                             value={countdown.at}
@@ -1213,16 +1124,28 @@ export function EventosModule() {
                       </AdminCell>
                       <AdminCell end className="admin-cell--actions">
                         <span className="admin-actions">
+                          {writable && !isBack && !isCombo && toDispatch > 0 ? (
+                            <AdminButton
+                              icon="arrow-right"
+                              title={`Despachar: ${assignment.inventory.name}`}
+                              aria-label={`Despachar: ${assignment.inventory.name}`}
+                              onClick={() => openMovement("checkout", assignment)}
+                            >
+                              Despachar
+                            </AdminButton>
+                          ) : null}
+                          {writable && isOut && !isBack && !isCombo && pendingBack > 0 ? (
+                            <AdminButton
+                              icon="checkin"
+                              title={`Registrar devolución: ${assignment.inventory.name}`}
+                              aria-label={`Registrar devolución: ${assignment.inventory.name}`}
+                              onClick={() => openMovement("checkin", assignment)}
+                            >
+                              Registrar devolución
+                            </AdminButton>
+                          ) : null}
                           {writable && !isOut && !isBack ? (
                             <>
-                              <AdminButton
-                                icon="arrow-right"
-                                title={`Registrar salida: ${assignment.inventory.name}`}
-                                aria-label={`Registrar salida: ${assignment.inventory.name}`}
-                                onClick={() => openMovement("checkout", assignment)}
-                              >
-                                Salida
-                              </AdminButton>
                               <AdminButton
                                 icon="edit"
                                 title={`Editar asignación: ${assignment.inventory.name}`}
@@ -1238,18 +1161,10 @@ export function EventosModule() {
                                 onClick={() => void removeAssignment(assignment)}
                               />
                             </>
-                          ) : writable && isOut && !isBack ? (
-                            <AdminButton
-                              icon="checkin"
-                              title={`Registrar devolución: ${assignment.inventory.name}`}
-                              aria-label={`Registrar devolución: ${assignment.inventory.name}`}
-                              onClick={() => openMovement("checkin", assignment)}
-                            >
-                              Devolución
-                            </AdminButton>
-                          ) : (
+                          ) : null}
+                          {!(writable && !isBack && ((!isCombo && toDispatch > 0) || (isOut && !isCombo && pendingBack > 0) || !isOut)) ? (
                             <span className="admin-muted">—</span>
-                          )}
+                          ) : null}
                         </span>
                       </AdminCell>
                     </AdminRow>
@@ -1257,6 +1172,17 @@ export function EventosModule() {
                 })}
               </AdminTable>
             </AdminDataState>
+
+            <h3 className="admin-subtitle">Incidentes de inventario</h3>
+            <InventoryIncidentsPanel
+              eventId={equipmentEvent.id}
+              writable={writable}
+              reloadKey={incidentsKey}
+              onChanged={() => {
+                inventoryResource.reload();
+                operations.reload();
+              }}
+            />
           </>
         )}
       </AdminPanel>

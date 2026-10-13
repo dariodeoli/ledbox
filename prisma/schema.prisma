@@ -161,6 +161,7 @@ model Organization {
   supplierJobs      SupplierJob[]
   inventoryItems    InventoryItem[]
   inventoryUnits    InventoryUnit[]
+  inventoryIncidents InventoryIncident[]
   inventoryComponents InventoryComponent[]
   rentalSettings    OrganizationRentalSettings?
   promoters         Promoter[]
@@ -747,6 +748,7 @@ model Event {
   client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   budgets        Budget[]
   assignments    EventInventory[]
+  incidents      InventoryIncident[]
   tasks          EventTask[]
   supplierJobs   SupplierJob[]
   expenses       Expense[]
@@ -1710,6 +1712,10 @@ model InventoryItem {
   budgetItems        BudgetItem[]
   quoteItems         QuoteItem[]
   units              InventoryUnit[]
+  incidents          InventoryIncident[]
+  /// Unidades retenidas por incidentes abiertos sin unidad con código (daño o faltante por
+  /// cantidad). Se mantiene bajo el lock del ítem y se descuenta de la capacidad.
+  incidentHold       Int              @default(0)
   /// Tiempo de colchón antes/después del evento para este producto (minutos).
   /// NULL hereda el de la empresa (`OrganizationRentalSettings`).
   bufferBeforeMin    Int?
@@ -1737,8 +1743,59 @@ model InventoryUnit {
   updatedAt      DateTime            @updatedAt
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventory      InventoryItem       @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  incidents      InventoryIncident[]
 
   @@unique([organizationId, code])
+  @@index([inventoryId, status])
+}
+
+enum InventoryIncidentKind {
+  DAMAGE
+  MISSING
+  REPAIR
+  CLEANING
+}
+
+enum InventoryIncidentStatus {
+  OPEN
+  IN_REPAIR
+  RESOLVED
+  WRITTEN_OFF
+}
+
+/// Incidente de inventario (alquileres fase 4): daño, faltante, reparación o limpieza
+/// de un ítem o de una unidad con código, ligado a la reserva y al historial. Mientras
+/// está OPEN o IN_REPAIR retiene capacidad: la unidad queda DAMAGED/LOST/MAINTENANCE
+/// o, si el ítem no tiene unidades, `InventoryItem.incidentHold` descuenta la cantidad.
+model InventoryIncident {
+  id             String                  @id
+  organizationId String
+  inventoryId    String
+  assignmentId   String?
+  eventId        String?
+  unitId         String?
+  /// true = retenido por cantidad (suma a InventoryItem.incidentHold). Solo estos tocan el contador.
+  heldByQuantity Boolean                 @default(false)
+  kind           InventoryIncidentKind
+  quantity       Int
+  status         InventoryIncidentStatus @default(OPEN)
+  /// Costo de reparación o reposición en guaraníes enteros.
+  cost           Int?
+  notes          String?
+  openedAt       DateTime                @default(now())
+  resolvedAt     DateTime?
+  openedById     String?
+  resolvedById   String?
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inventory      InventoryItem           @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  assignment     EventInventory?         @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  event          Event?                  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  unit           InventoryUnit?          @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([eventId])
+  @@index([organizationId, status])
   @@index([inventoryId, status])
 }
 
@@ -1818,6 +1875,12 @@ model EventInventory {
   /// Asignación liberada: no compromete stock.
   releasedAt      DateTime?
   returnedQuantity Int          @default(0)
+  /// Unidades despachadas (acumulado de salidas parciales). 0 = nada salió todavía.
+  checkoutQuantity Int          @default(0)
+  checkedOutById  String?
+  checkoutNote    String?
+  checkedInById   String?
+  incidents       InventoryIncident[]
   /// Unidades de esta fila que vienen de combos comprometidos en el mismo evento
   /// (el resto es asignación suelta). En la fila del propio combo queda en 0.
   comboQuantity   Int           @default(0)
