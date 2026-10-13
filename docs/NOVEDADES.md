@@ -3,15 +3,6 @@
 Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 (`ht`/`hd`) agregan su bloque acá antes de publicar.
 
-## Pendiente de publicar (integrador; no sube la versión)
-
-- Al aprobarse un presupuesto (portal del cliente, aprobación manual del panel,
-  comparativas y firma de alternativas) el evento se crea solo, ya confirmado, y
-  reserva el inventario. Si el evento ya existía en borrador, se confirma. Si no se
-  puede crear (por ejemplo, límite de eventos del plan), el presupuesto queda
-  aprobado igual, el motivo queda en la auditoría y el aviso con «Crear evento»
-  sigue disponible como respaldo. Desde el portal, el actor auditado es el cliente.
-
 ## v2.1.18 — 2026-09-22
 
 - El menú quedó ordenado por áreas (General · Operación · Comercial · Finanzas ·
@@ -501,3 +492,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Eventos: el indicador «Con pendientes · 14 días» cuenta solo los eventos en curso o que empiezan en las próximas dos semanas, para que muestre lo que hay que atender ahora.
 - Clientes: «Cobrar» en la ficha abre Por cobrar ya filtrado por ese cliente, con la opción «Quitar filtro».
+
+## v2.1.107 — 2026-10-13
+
+- Presupuestos: cuando el cliente aprueba (en el portal, al firmar una alternativa o al elegir en una comparativa) o se aprueba a mano en el panel, el evento se crea solo, ya confirmado, y se reservan los equipos. Si ya existía un evento en borrador, se confirma.
+- Si el evento no se puede crear (por ejemplo, por el límite de eventos del plan), el presupuesto queda aprobado igual, el motivo queda registrado y sigue disponible el botón «Crear evento». Si la reserva de equipos falla, el evento queda creado y la reserva figura como pendiente.
