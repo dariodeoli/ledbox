@@ -138,6 +138,42 @@ test("las altas de evento e inventario y los diálogos de Finanzas y Usuarios us
   }
 });
 
+test("tercera tanda: Clientes, Proveedores, Promotoras, Finanzas y Usuarios son AdminDialog con secciones, pie y dirty", () => {
+  const mod = (file: string) => readFileSync(join(root, "components", "admin", "modules", file), "utf8");
+  for (const file of ["ClientesModule.tsx", "ProveedoresModule.tsx", "PromotorasModule.tsx", "FinanzasModule.tsx", "UsuariosModule.tsx"]) {
+    const source = mod(file);
+    assert.doesNotMatch(source, /AdminFormPanel/, `${file}: no debe quedar AdminFormPanel`);
+    assert.match(source, /<AdminDialog\b[\s\S]*description=/, `${file}: falta description`);
+    assert.match(source, /<AdminDialogSection\b/, `${file}: faltan secciones`);
+    assert.match(source, /dirty=\{/, `${file}: falta dirty`);
+    assert.match(source, /footer=\{\(\{ requestClose \}\)/, `${file}: Cancelar debe pasar por requestClose`);
+    assert.match(source, /form=\{\w*[Ff]ormId\}/, `${file}: el submit del pie apunta al formulario (Enter envía)`);
+  }
+  // Despacho y devolución de equipo (Fase 4) no se tocan en esta tanda.
+  assert.match(mod("EventosModule.tsx"), /<AdminFormPanel/);
+});
+
+test("invitar usuario enfoca el correo; revocar no enfoca el botón destructivo; EmailField y MoneyField aceptan autoFocus", () => {
+  const users = readFileSync(join(root, "components", "admin", "modules", "UsuariosModule.tsx"), "utf8");
+  assert.match(users, /<EmailField\s+label="Correo"\s+required\s+autoFocus\s+value=\{invite\.email\}/);
+  const revoke = users.slice(users.indexOf("function RevokeInviteDialog"), users.indexOf("function InvitationsPanel"));
+  assert.doesNotMatch(revoke, /autoFocus/, "el foco inicial de Revocar es el respaldo del diálogo (la X), nunca el destructivo");
+  const fields = readFileSync(join(root, "components", "admin", "AdminFields.tsx"), "utf8");
+  for (const name of ["EmailField", "MoneyField"]) {
+    const part = fields.slice(fields.indexOf(`export function ${name}(`));
+    assert.match(part.slice(0, 1800), /autoFocus\?: boolean;/, `${name}: falta el prop autoFocus`);
+    assert.match(part.slice(0, 3500), /autoFocus=\{autoFocus\}/, `${name}: no pasa autoFocus al input`);
+  }
+});
+
+test("móvil (#159): el perfil del menú conserva nombre y rol y la barra inferior queda bajo las ventanas", () => {
+  const css = readFileSync(join(root, "app", "globals.css"), "utf8");
+  assert.match(css, /\.admin-user:not\(\.admin-user--sidebar\) \.admin-user-info \{ display: none; \}/);
+  assert.doesNotMatch(css, /^  \.admin-user-info \{ display: none; \}/m, "la regla móvil no puede ocultar el perfil del drawer");
+  const z = (selector: RegExp) => Number(css.match(selector)?.[1]);
+  assert.ok(z(/\.admin-dialog-overlay \{[^}]*z-index: (\d+)/) > z(/\.admin-bottomnav \{ position: fixed;[^}]*z-index: (\d+)/), "las ventanas van sobre la barra inferior");
+});
+
 test("contraste AA de los tokens de campos y ventanas, en oscuro y claro", () => {
   const dark = tokens(".admin-root {\n  color-scheme: dark;", '.admin-root[data-theme="light"]');
   const light = tokens('.admin-root[data-theme="light"] {\n  color-scheme: light;', ".admin-root :focus-visible");

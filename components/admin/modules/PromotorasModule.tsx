@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   formatCalendarDayShort,
   formatDate,
@@ -23,7 +23,8 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminFormPanel,
+  AdminDialog,
+  AdminDialogSection,
   AdminIconLink,
   AdminKpi,
   AdminNote,
@@ -78,6 +79,17 @@ export function PromotorasModule() {
   const [availabilityForm, setAvailabilityForm] = useState({ availability: "AVAILABLE", note: "", until: "" });
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityError, setAvailabilityError] = useState("");
+  const formId = useId();
+  const availabilityFormId = useId();
+  const createDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_FORM);
+  const availabilityDirty =
+    editing !== null &&
+    JSON.stringify(availabilityForm) !==
+      JSON.stringify({
+        availability: editing.availability || "AVAILABLE",
+        note: editing.availabilityNote ?? "",
+        until: editing.unavailableUntil ? editing.unavailableUntil.slice(0, 10) : "",
+      });
 
   const writable = canWriteOperations(role);
   const promoters = useMemo(() => resources.data?.promoters ?? [], [resources.data]);
@@ -104,6 +116,7 @@ export function PromotorasModule() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     // Avisos es-PY del front con las reglas del kit (issue #131); el API revalida.
     if (!personNameValid(form.name)) {
       setFormError(FIELD_MESSAGES.name);
@@ -146,7 +159,7 @@ export function PromotorasModule() {
 
   async function submitAvailability(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || availabilityBusy) return;
     setAvailabilityBusy(true);
     setAvailabilityError("");
     const result = await adminSend("/api/admin/resources", {
@@ -219,83 +232,120 @@ export function PromotorasModule() {
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
 
       {writable && showForm ? (
-        <AdminFormPanel
+        <AdminDialog
           title="Nueva promotora"
-          submitLabel="Cargar promotora"
-          onSubmit={submit}
-          onCancel={() => setShowForm(false)}
-          busy={busy}
-          status={formError}
+          icon="promoters"
+          description="Queda en el equipo disponible para asignarla a tareas de eventos."
+          dirty={createDirty}
+          onClose={() => setShowForm(false)}
+          footer={({ requestClose }) => (
+            <>
+              {formError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{formError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={formId} busy={busy}>
+                Cargar promotora
+              </AdminButton>
+            </>
+          )}
         >
-          <TextField
-            label="Nombre"
-            required
-            maxLength={120}
-            value={form.name}
-            onChange={(value) => setForm({ ...form, name: value })}
-            placeholder="Ej.: Lucía Benítez"
-          />
-          <PhoneField
-            label="Teléfono"
-            hint="Con código de país"
-            value={form.phone}
-            onChange={(value) => setForm({ ...form, phone: value })}
-          />
-          {/* Correo en el alta (issue #131): el modelo lo tiene y la auditoría lo registra. */}
-          <EmailField
-            label="Correo"
-            hint="Opcional"
-            value={form.email}
-            onChange={(value) => setForm({ ...form, email: value })}
-            placeholder="promotora@correo.com"
-            error={form.email && !emailValid(form.email) ? FIELD_MESSAGES.email : null}
-          />
-          <TextField
-            label="Especialidades"
-            hint="Separadas por coma"
-            maxLength={160}
-            value={form.specialties}
-            onChange={(value) => setForm({ ...form, specialties: value })}
-            placeholder="Ej.: Promoción, degustación"
-          />
-        </AdminFormPanel>
+          <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Datos">
+              <TextField
+                label="Nombre"
+                required
+                autoFocus
+                maxLength={120}
+                value={form.name}
+                onChange={(value) => setForm({ ...form, name: value })}
+                placeholder="Ej.: Lucía Benítez"
+              />
+              <PhoneField
+                label="Teléfono"
+                hint="Con código de país"
+                value={form.phone}
+                onChange={(value) => setForm({ ...form, phone: value })}
+              />
+              {/* Correo en el alta (issue #131): el modelo lo tiene y la auditoría lo registra. */}
+              <EmailField
+                label="Correo"
+                hint="Opcional"
+                value={form.email}
+                onChange={(value) => setForm({ ...form, email: value })}
+                placeholder="promotora@correo.com"
+                error={form.email && !emailValid(form.email) ? FIELD_MESSAGES.email : null}
+              />
+              <TextField
+                label="Especialidades"
+                hint="Separadas por coma"
+                maxLength={160}
+                value={form.specialties}
+                onChange={(value) => setForm({ ...form, specialties: value })}
+                placeholder="Ej.: Promoción, degustación"
+              />
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {writable && editing ? (
-        <AdminFormPanel
+        <AdminDialog
           title={`Disponibilidad · ${editing.name}`}
-          submitLabel="Guardar disponibilidad"
-          onSubmit={submitAvailability}
-          onCancel={() => setEditing(null)}
-          busy={availabilityBusy}
-          status={availabilityError}
+          icon="promoters"
+          description="Se ve al asignarla a una tarea del evento. No bloquea la asignación."
+          dirty={availabilityDirty}
+          onClose={() => setEditing(null)}
+          footer={({ requestClose }) => (
+            <>
+              {availabilityError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{availabilityError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={availabilityBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={availabilityFormId} busy={availabilityBusy}>
+                Guardar disponibilidad
+              </AdminButton>
+            </>
+          )}
         >
-          <SelectField
-            label="Disponibilidad"
-            required
-            value={availabilityForm.availability}
-            onChange={(value) => setAvailabilityForm({ ...availabilityForm, availability: value })}
-            options={AVAILABILITY_OPTIONS}
-            hint="No bloquea la asignación: el panel avisa al asignarla a una tarea."
-          />
-          <DateField
-            label="No disponible hasta"
-            hint="Opcional; solo para «No disponible»"
-            disabled={availabilityForm.availability !== "UNAVAILABLE"}
-            value={availabilityForm.until}
-            onChange={(value) => setAvailabilityForm({ ...availabilityForm, until: value })}
-          />
-          <TextAreaField
-            label="Motivo"
-            hint="Se ve al asignarla a una tarea del evento"
-            wide
-            rows={2}
-            maxLength={MAX_AVAILABILITY_NOTE}
-            value={availabilityForm.note}
-            onChange={(value) => setAvailabilityForm({ ...availabilityForm, note: value })}
-            placeholder="Ej.: De viaje hasta fin de mes; confirmar con la agencia."
-          />
-        </AdminFormPanel>
+          <form id={availabilityFormId} className="admin-form" onSubmit={(event) => void submitAvailability(event)} aria-busy={availabilityBusy || undefined}>
+            <AdminDialogSection title="Disponibilidad">
+              <SelectField
+                label="Disponibilidad"
+                required
+                value={availabilityForm.availability}
+                onChange={(value) => setAvailabilityForm({ ...availabilityForm, availability: value })}
+                options={AVAILABILITY_OPTIONS}
+                hint="No bloquea la asignación: el panel avisa al asignarla a una tarea."
+              />
+              <DateField
+                label="No disponible hasta"
+                hint="Opcional; solo para «No disponible»"
+                disabled={availabilityForm.availability !== "UNAVAILABLE"}
+                value={availabilityForm.until}
+                onChange={(value) => setAvailabilityForm({ ...availabilityForm, until: value })}
+              />
+              <TextAreaField
+                label="Motivo"
+                hint="Se ve al asignarla a una tarea del evento"
+                wide
+                rows={2}
+                maxLength={MAX_AVAILABILITY_NOTE}
+                value={availabilityForm.note}
+                onChange={(value) => setAvailabilityForm({ ...availabilityForm, note: value })}
+                placeholder="Ej.: De viaje hasta fin de mes; confirmar con la agencia."
+              />
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       <AdminDataState

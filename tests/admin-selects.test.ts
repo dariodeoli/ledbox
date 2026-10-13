@@ -34,7 +34,7 @@ test("las entidades que crecen se eligen con búsqueda (Combobox)", () => {
     ["FinanzasModule.tsx", "Presupuesto"],
     ["FinanzasModule.tsx", "Cuenta de tesorería"],
     ["FinanzasModule.tsx", "Cuenta destino"],
-    ["FinanzasModule.tsx", "Proyecto del gasto"],
+    ["FinanzasModule.tsx", "Proyecto"],
     ["FacturacionModule.tsx", "Presupuesto aprobado"],
     ["FacturacionModule.tsx", "Cliente"],
     ["FacturacionModule.tsx", "Proveedor del directorio"],
@@ -50,7 +50,7 @@ test("las entidades que crecen se eligen con búsqueda (Combobox)", () => {
 test("los filtros estáticos siguen siendo SelectField", () => {
   const estaticos: Array<[string, string]> = [
     ["FinanzasModule.tsx", "Método"],
-    ["FinanzasModule.tsx", "Categoría del gasto"],
+    ["FinanzasModule.tsx", "Categoría"],
     ["FinanzasModule.tsx", "Días de plazo"],
     ["FinanzasModule.tsx", "Movimiento"],
     ["FinanzasModule.tsx", "Tipo"],

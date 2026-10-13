@@ -544,8 +544,15 @@ contrastes de texto ≥ 4,5 y de borde ≥ 3 desde `globals.css`.
   cierra sin confirmar. Alta y edición de evento y de ítem de inventario también
   son ventanas (`wide` en inventario, secciones `AdminDialogSection`). Leads
   mantiene el detalle como panel de lectura y solo la edición del seguimiento
-  (estado y notas) es una ventana. `AdminFormPanel` sigue en uso en otros módulos
-  (Clientes, Proveedores, Promotoras, gastos, movimientos de equipo).
+  (estado y notas) es una ventana. Tercera tanda: Clientes (alta y edición, también
+  `?editar=<id>`), Proveedores (proveedor, trabajo y estado del trabajo),
+  Promotoras (alta y disponibilidad), Finanzas (cobro, cuenta, movimiento y
+  gasto con «Guardar y cargar otro») y Usuarios (alta y edición) son
+  `AdminDialog` con secciones, `footer` con `requestClose` y `dirty`. Solo queda
+  `AdminFormPanel` en el registro de salida/devolución de equipo de Eventos
+  (despacho, Fase 4); cuando ese flujo pase a ventana se borra con su CSS.
+  Móvil (#159): el perfil del menú lateral conserva nombre y rol y la barra
+  inferior (z 22) queda debajo de las ventanas (z 60).
 - Adoptados con `description`, `footer` y `dirty`: Nuevo cliente
   (`ClientQuickForm`), Crear evento (`BudgetQuickCreate`) y Precio y condiciones
   (`BudgetPricingDialog`).

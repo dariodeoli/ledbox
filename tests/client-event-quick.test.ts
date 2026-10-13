@@ -31,7 +31,10 @@ test("Clientes usa el alta mínima compartida y pliega el resto", () => {
   assert.match(module, /<ClientQuickFields/, "el alta tiene que usar el formulario mínimo compartido");
   assert.match(module, /autoFocus=\{!editingId\}/, "el Nombre va con foco al crear");
   assert.match(module, /moreOpen=\{Boolean\(editingId\)\}/, "al editar, «Más datos» se muestra abierto");
-  assert.match(module, /onEscape=\{closeForm\}/, "Escape cancela el formulario");
+  // El alta/edición vive en AdminDialog: Esc, la X y el clic afuera cierran por
+  // `onClose` (con confirmación si hay cambios sin guardar).
+  assert.match(module, /<AdminDialog[\s\S]{0,1200}dirty=\{formDirty\}[\s\S]{0,80}onClose=\{closeForm\}/, "Escape cancela el formulario y pide confirmar si hay cambios");
+  assert.match(module, /requestClose/, "Cancelar pasa por la misma confirmación que Esc");
   assert.match(module, /clientQuickErrors\(form\)/, "los avisos de campos salen de la regla única");
   assert.match(module, /<TextAreaField/, "las notas siguen dentro de «Más datos»");
 });

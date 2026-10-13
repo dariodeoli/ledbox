@@ -78,7 +78,8 @@ import {
   AdminDataState,
   AdminEmpty,
   AdminDialog,
-  AdminFormPanel,
+  AdminDialogSection,
+  AdminDisclosure,
   AdminKpi,
   AdminModuleContext,
   AdminNote,
@@ -1256,7 +1257,6 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const [movementBusy, setMovementBusy] = useState(false);
   const [movementError, setMovementError] = useState("");
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [expenseMore, setExpenseMore] = useState(false);
   const [expenseForm, setExpenseForm] = useState<ExpenseForm>({
     amount: "",
     description: "",
@@ -1295,6 +1295,30 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const activeAccounts = useMemo(() => accounts.filter((account) => account.active), [accounts]);
   /** Cuenta por defecto de todo lo que sale o entra: la primera activa. */
   const defaultAccountId = activeAccounts[0]?.id ?? "";
+  const paymentFormId = useId();
+  const accountFormId = useId();
+  const movementFormId = useId();
+  const expenseFormId = useId();
+  const accountBaseline = (() => {
+    const row = accountForm.id ? accounts.find((account) => account.id === accountForm.id) : null;
+    return row
+      ? {
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          bank: row.bank ?? "",
+          number: row.number ?? "",
+          alias: row.alias ?? "",
+          openingBalance: row.openingBalance ? String(row.openingBalance) : "",
+          sortOrder: row.sortOrder ? String(row.sortOrder) : "",
+          active: row.active,
+        }
+      : EMPTY_ACCOUNT_FORM;
+  })();
+  const accountDirty = JSON.stringify(accountForm) !== JSON.stringify(accountBaseline);
+  const movementDirty = movementForm.direction !== "IN" || Boolean(movementForm.amount || movementForm.notes || movementForm.counterAccountId);
+  // Cuenta, categoría, proyecto y fecha se conservan a propósito entre cargas.
+  const expenseDirty = Boolean(expenseForm.amount || expenseForm.description || expenseForm.receipt || expenseForm.notes);
   const summary = treasury.data?.summary ?? EMPTY_TREASURY_SUMMARY;
   const movements = useMemo(() => treasury.data?.movements ?? [], [treasury.data]);
   const expenseRows = useMemo(() => expenses.data?.rows ?? [], [expenses.data]);
@@ -1688,6 +1712,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setFormError("");
     setNotice(null);
@@ -2015,6 +2040,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   /** Guarda una cuenta de tesorería: alta o edición, con auditoría del API. */
   async function saveAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (accountBusy) return;
     const name = accountForm.name.trim();
     setAccountBusy(true);
     setAccountError("");
@@ -2092,6 +2118,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   /** Movimiento manual: entrada, salida o transferencia entre cuentas. */
   async function saveMovement(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (movementBusy) return;
     setMovementBusy(true);
     setMovementError("");
     setNotice(null);
@@ -2128,6 +2155,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
   /** Carga rápida del gasto: guarda y cierra, o guarda y deja lista la próxima. */
   async function saveExpense(intent: "close" | "another") {
+    if (expenseBusy) return;
     setExpenseBusy(true);
     setExpenseError("");
     setNotice(null);
@@ -2430,14 +2458,31 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       ) : null}
 
       {section === "por-cobrar" && writable && showForm ? (
-        <AdminFormPanel
+        <AdminDialog
           title="Nuevo cobro de cliente"
-          submitLabel={term ? "Registrar cobro a plazo" : "Registrar cobro"}
-          onSubmit={submit}
-          onCancel={() => setShowForm(false)}
-          busy={busy}
-          status={formError}
+          icon="finance"
+          size="wide"
+          description="Registra lo cobrado, o lo que queda por cobrar a plazo, y lo asocia al cliente y al presupuesto."
+          dirty={JSON.stringify(form) !== JSON.stringify(EMPTY_PAYMENT_FORM)}
+          onClose={() => setShowForm(false)}
+          footer={({ requestClose }) => (
+            <>
+              {formError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{formError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={paymentFormId} busy={busy}>
+                {term ? "Registrar cobro a plazo" : "Registrar cobro"}
+              </AdminButton>
+            </>
+          )}
         >
+          <form id={paymentFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Origen">
           <Combobox
             label="Cliente"
             required
@@ -2490,6 +2535,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               }
             />
           )}
+            </AdminDialogSection>
+            <AdminDialogSection title="Importe y condiciones">
           <MoneyField
             label="Monto"
             hint="En guaraníes"
@@ -2594,7 +2641,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               ) : null}
             </>
           )}
-        </AdminFormPanel>
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {section === "por-confirmar" ? (
@@ -3645,21 +3694,38 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           </p>
 
           {writable && showAccountForm ? (
-            <AdminFormPanel
+            <AdminDialog
               title={accountForm.id ? `Editar cuenta · ${accountForm.name}` : "Nueva cuenta de tesorería"}
-              submitLabel={accountForm.id ? "Guardar cuenta" : "Crear cuenta"}
-              onSubmit={saveAccount}
-              onCancel={() => {
-                setShowAccountForm(false);
-                setAccountForm(EMPTY_ACCOUNT_FORM);
-                setAccountError("");
-              }}
-              busy={accountBusy}
-              status={accountError}
+              icon="wallet"
+              description="Efectivo, banco o cheques. El saldo inicial es lo que ya había en la cuenta."
+              dirty={accountDirty}
+              onClose={() => {
+              setShowAccountForm(false);
+              setAccountForm(EMPTY_ACCOUNT_FORM);
+              setAccountError("");
+            }}
+              footer={({ requestClose }) => (
+            <>
+              {accountError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{accountError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={accountBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={accountFormId} busy={accountBusy}>
+                {accountForm.id ? "Guardar cuenta" : "Crear cuenta"}
+              </AdminButton>
+            </>
+          )}
             >
+              <form id={accountFormId} className="admin-form" onSubmit={(event) => void saveAccount(event)} aria-busy={accountBusy || undefined}>
+                <AdminDialogSection title="Cuenta">
               <TextField
                 label="Nombre"
                 required
+                autoFocus
                 maxLength={120}
                 value={accountForm.name}
                 onChange={(value) => setAccountForm({ ...accountForm, name: value })}
@@ -3689,6 +3755,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   </datalist>
                 </>
               ) : null}
+                </AdminDialogSection>
+                <AdminDialogSection title="Datos y saldo">
               <TextField
                 label="Número de cuenta"
                 hint="Para transferir; se muestra junto a la cuenta al cobrar"
@@ -3726,7 +3794,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 checked={accountForm.active}
                 onChange={(checked) => setAccountForm({ ...accountForm, active: checked })}
               />
-            </AdminFormPanel>
+                </AdminDialogSection>
+              </form>
+            </AdminDialog>
           ) : null}
 
           <AdminDataState
@@ -3891,17 +3961,33 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           }
         >
           {writable && showMovementForm ? (
-            <AdminFormPanel
+            <AdminDialog
               title="Nuevo movimiento de tesorería"
-              submitLabel="Registrar movimiento"
-              onSubmit={saveMovement}
-              onCancel={() => {
+              icon="refresh"
+              description="Entrada, salida o transferencia entre cuentas; mueve el saldo de las cuentas elegidas."
+              dirty={movementDirty}
+              onClose={() => {
                 setShowMovementForm(false);
                 setMovementError("");
               }}
-              busy={movementBusy}
-              status={movementError}
+              footer={({ requestClose }) => (
+            <>
+              {movementError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{movementError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={movementBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={movementFormId} busy={movementBusy}>
+                Registrar movimiento
+              </AdminButton>
+            </>
+          )}
             >
+              <form id={movementFormId} className="admin-form" onSubmit={(event) => void saveMovement(event)} aria-busy={movementBusy || undefined}>
+                <AdminDialogSection title="Cuentas">
               <SelectField
                 label="Movimiento"
                 value={movementForm.direction}
@@ -3929,6 +4015,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   options={accountOptions.filter((option) => option.value !== (movementForm.accountId || defaultAccountId))}
                 />
               ) : null}
+                </AdminDialogSection>
+                <AdminDialogSection title="Importe">
               <MoneyField
                 label="Monto"
                 hint="En guaraníes"
@@ -3950,7 +4038,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 onChange={(value) => setMovementForm({ ...movementForm, notes: value })}
                 placeholder="Detalle del movimiento"
               />
-            </AdminFormPanel>
+                </AdminDialogSection>
+              </form>
+            </AdminDialog>
           ) : null}
 
           <AdminDataState
@@ -4113,121 +4203,132 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           </div>
 
           {writable && showExpenseForm ? (
-            <form
-              className="admin-inline-form admin-inline-form--gastos"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void saveExpense("close");
-              }}
-              aria-busy={expenseBusy || undefined}
-            >
-              <span className="admin-gasto-money">
-                <MoneyField
-                  id={EXPENSE_AMOUNT_ID}
-                  ariaLabel="Monto del gasto"
-                  required
-                  value={expenseForm.amount}
-                  onChange={(value) => setExpenseForm({ ...expenseForm, amount: value })}
-                  placeholder="Monto"
-                />
-              </span>
-              <span className="admin-gasto-identity">
-                <TextField
-                  ariaLabel="Descripción del gasto"
-                  title="Descripción del gasto"
-                  required
-                  maxLength={200}
-                  value={expenseForm.description}
-                  onChange={(value) => setExpenseForm({ ...expenseForm, description: value })}
-                  placeholder="Descripción"
-                />
-              </span>
-              <SelectField
-                ariaLabel="Categoría del gasto"
-                required
-                value={expenseForm.category}
-                onChange={(value) => setExpenseForm({ ...expenseForm, category: value })}
-                options={CATEGORY_OPTIONS}
-              />
-              <Combobox
-                ariaLabel="Cuenta del gasto"
-                value={expenseForm.accountId || defaultAccountId}
-                onChange={(value) => setExpenseForm({ ...expenseForm, accountId: value })}
-                placeholder="Cuenta…"
-                options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
-              />
-              <Combobox
-                ariaLabel="Proyecto del gasto"
-                value={expenseForm.eventId}
-                onChange={(value) => setExpenseForm({ ...expenseForm, eventId: value })}
-                placeholder="Proyecto…"
-                options={projectOptions}
-              />
-              <AdminButton
-                icon={expenseMore ? "close" : "plus"}
-                onClick={() => setExpenseMore((open) => !open)}
-                title={expenseMore ? "Ocultar los campos opcionales" : "Mostrar fecha, proveedor, método, comprobante y notas"}
-                aria-expanded={expenseMore}
-              >
-                {expenseMore ? "Menos" : "Más opciones"}
-              </AdminButton>
-              {expenseMore ? (
+            <AdminDialog
+              title="Nuevo gasto"
+              icon="receipt"
+              description="Carga el gasto y genera su egreso en la cuenta elegida. «Guardar y cargar otro» conserva cuenta, categoría y proyecto."
+              dirty={expenseDirty}
+              onClose={() => setShowExpenseForm(false)}
+              footer={({ requestClose }) => (
                 <>
+                  {expenseError ? (
+                    <div className="admin-dialog-footer-note">
+                      <AdminNote tone="error">{expenseError}</AdminNote>
+                    </div>
+                  ) : null}
+                  <AdminButton icon="close" type="button" onClick={requestClose} disabled={expenseBusy}>
+                    Cancelar
+                  </AdminButton>
+                  <AdminButton
+                    type="button"
+                    icon="plus"
+                    disabled={expenseBusy}
+                    onClick={() => {
+                      // Mismas reglas del envío normal (campos requeridos) antes de guardar.
+                      const formNode = document.getElementById(expenseFormId);
+                      if (formNode instanceof HTMLFormElement && !formNode.reportValidity()) return;
+                      void saveExpense("another");
+                    }}
+                    title="Guarda el gasto y deja el formulario listo para cargar otro"
+                  >
+                    Guardar y cargar otro
+                  </AdminButton>
+                  <AdminButton type="submit" variant="primary" icon="check" form={expenseFormId} busy={expenseBusy}>
+                    Guardar
+                  </AdminButton>
+                </>
+              )}
+            >
+              <form
+                id={expenseFormId}
+                className="admin-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveExpense("close");
+                }}
+                aria-busy={expenseBusy || undefined}
+              >
+                <AdminDialogSection title="Gasto">
+                  <MoneyField
+                    id={EXPENSE_AMOUNT_ID}
+                    label="Monto"
+                    hint="En guaraníes"
+                    required
+                    autoFocus
+                    value={expenseForm.amount}
+                    onChange={(value) => setExpenseForm({ ...expenseForm, amount: value })}
+                    placeholder="Monto"
+                  />
+                  <TextField
+                    label="Descripción"
+                    required
+                    maxLength={200}
+                    value={expenseForm.description}
+                    onChange={(value) => setExpenseForm({ ...expenseForm, description: value })}
+                    placeholder="Descripción"
+                  />
+                  <SelectField
+                    label="Categoría"
+                    required
+                    value={expenseForm.category}
+                    onChange={(value) => setExpenseForm({ ...expenseForm, category: value })}
+                    options={CATEGORY_OPTIONS}
+                  />
+                  <Combobox
+                    label="Cuenta"
+                    value={expenseForm.accountId || defaultAccountId}
+                    onChange={(value) => setExpenseForm({ ...expenseForm, accountId: value })}
+                    placeholder="Cuenta…"
+                    options={accountOptions.length > 0 ? accountOptions : [{ value: "", label: "Sin cuentas de tesorería" }]}
+                  />
+                  <Combobox
+                    label="Proyecto"
+                    value={expenseForm.eventId}
+                    onChange={(value) => setExpenseForm({ ...expenseForm, eventId: value })}
+                    placeholder="Proyecto…"
+                    options={projectOptions}
+                  />
+                </AdminDialogSection>
+                <AdminDisclosure title="Más opciones" hint="fecha, proveedor, método, comprobante y notas">
                   <DateField
-                    ariaLabel="Fecha del gasto"
-                    title="Fecha del gasto (por defecto, hoy)"
+                    label="Fecha"
+                    hint="Por defecto, hoy"
                     value={expenseForm.date}
                     onChange={(value) => setExpenseForm({ ...expenseForm, date: value })}
                   />
                   <Combobox
-                    ariaLabel="Proveedor del gasto"
+                    label="Proveedor"
                     value={expenseForm.supplierId}
                     onChange={(value) => setExpenseForm({ ...expenseForm, supplierId: value })}
                     placeholder="Proveedor…"
                     options={supplierOptions}
                   />
                   <SelectField
-                    ariaLabel="Método de pago del gasto"
+                    label="Método de pago"
                     value={expenseForm.method}
                     onChange={(value) => setExpenseForm({ ...expenseForm, method: value })}
                     options={METHOD_SELECT_OPTIONS}
                   />
                   <TextField
-                    ariaLabel="Comprobante del gasto"
-                    title="Número o referencia del comprobante (opcional)"
+                    label="Comprobante"
+                    hint="Número o referencia (opcional)"
                     maxLength={120}
                     value={expenseForm.receipt}
                     onChange={(value) => setExpenseForm({ ...expenseForm, receipt: value })}
                     placeholder="Comprobante"
                   />
                   <TextField
-                    ariaLabel="Notas del gasto"
-                    title="Notas (opcional)"
+                    label="Notas"
+                    hint="Opcional"
                     maxLength={1000}
                     value={expenseForm.notes}
                     onChange={(value) => setExpenseForm({ ...expenseForm, notes: value })}
                     placeholder="Notas"
                   />
-                </>
-              ) : null}
-              <span className="admin-form-actions">
-                <AdminButton type="submit" icon="check" busy={expenseBusy} disabled={expenseBusy}>
-                  Guardar
-                </AdminButton>
-                <AdminButton
-                  type="button"
-                  icon="plus"
-                  disabled={expenseBusy}
-                  onClick={() => void saveExpense("another")}
-                  title="Guarda el gasto y deja el formulario listo para cargar otro"
-                >
-                  Guardar y cargar otro
-                </AdminButton>
-              </span>
-            </form>
+                </AdminDisclosure>
+              </form>
+            </AdminDialog>
           ) : null}
-
-          {writable && showExpenseForm && expenseError ? <AdminNote tone="error">{expenseError}</AdminNote> : null}
 
           <AdminDataState
             loading={expenses.loading}
