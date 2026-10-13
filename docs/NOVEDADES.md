@@ -408,3 +408,14 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Catálogo público: cada producto puede tener una «Descripción para el catálogo», separada de las notas internas, que nunca se muestran. Hay un tope diario de pedidos por empresa contra abusos.
 - Clientes: la ficha muestra todos los leads del cliente, sin el límite anterior de 1.000.
 - Mejoras internas: el límite de eventos del plan se respeta aunque se creen dos a la vez, y los cambios de la garantía quedan registrados en la misma operación.
+
+## v2.1.98 — 2026-10-13
+
+- Reporte mensual: nueva sección «Alquileres», también en el CSV:
+  - Ocupación por producto, con los más y los menos usados.
+  - Conversión de los pedidos del catálogo.
+  - Cancelaciones.
+  - Daños y faltantes, con el costo de reparación; lo que no tiene costo cargado figura «sin dato», nunca 0.
+  - Señas cobradas y pendientes, y garantías por estado.
+  - Rentabilidad estimada por producto, con su criterio escrito en pantalla.
+- Si un mes tiene más movimientos de los que entran, el reporte lo avisa. Si la sección de alquileres no se puede calcular, el resto del reporte se muestra igual.
