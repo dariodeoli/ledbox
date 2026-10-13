@@ -101,6 +101,19 @@ test("alquileres 2b en PostgreSQL: tiempos, unidades dañadas, retenciones y aju
       assert.equal((await db.eventInventory.findFirst({ where: { eventId: a.id } }))?.budgetId, "bud_1");
     });
 
+    await t.test("editar una retención vencida la vuelve firme y cuenta en lo comprometido", async () => {
+      const { org, item, event } = await seed(1);
+      const [a, b] = await Promise.all([event("A"), event("B")]);
+      const held = await commit(org, a.id, item.id, 1, [day(10), day(13)], { hold: true });
+      assert.ok(held.ok);
+      const id = held.ok ? held.assignment.id : "";
+      await db.eventInventory.update({ where: { id }, data: { holdExpiresAt: new Date(Date.now() - 60_000) } });
+      const edited = await commit(org, a.id, item.id, 1, [day(10), day(13)]);
+      assert.ok(edited.ok && edited.assignment.holdExpiresAt === null, "queda firme");
+      assert.equal((await db.eventInventory.findUnique({ where: { id } }))?.holdExpiresAt, null);
+      assert.equal(reasonOf(await commit(org, b.id, item.id, 1)), "insufficient", "cuenta en lo comprometido");
+    });
+
     await t.test("el vencimiento de la retención sale de los ajustes de la empresa", async () => {
       const { org, item, event } = await seed(2, { holdTtlMinutes: 60 });
       const a = await event("A");

@@ -545,7 +545,7 @@ async function reservationCandidates(organizationId: string): Promise<AdminNotif
           startsAt: true,
           strikeAt: true,
           endsAt: true,
-          assignments: { select: { inventoryId: true, quantity: true } },
+          assignments: { select: { inventoryId: true, quantity: true, releasedAt: true, holdExpiresAt: true } },
         },
       },
       items: { where: { inventoryId: { not: null } }, select: { name: true, quantity: true, inventoryId: true } },
@@ -584,7 +584,12 @@ async function reservationCandidates(organizationId: string): Promise<AdminNotif
     }
 
     const reserved = new Map<string, number>();
+    const nowAt = new Date();
     for (const assignment of event.assignments) {
+      // Misma regla que assignmentCountsAt (lib/server/inventory-availability.ts),
+      // inline para no arrastrar Prisma a este módulo: liberadas y retenciones vencidas no cuentan.
+      if (assignment.releasedAt) continue;
+      if (assignment.holdExpiresAt && assignment.holdExpiresAt.getTime() <= nowAt.getTime()) continue;
       reserved.set(assignment.inventoryId, (reserved.get(assignment.inventoryId) ?? 0) + assignment.quantity);
     }
     const missing = [...requested.entries()].flatMap(([inventoryId, wanted]) => {

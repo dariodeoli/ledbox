@@ -501,12 +501,14 @@ export async function commitInventoryAssignment(options: {
       const settings = await loadRentalSettings(options.organizationId, tx);
       const holdTtlMinutes = settings?.holdTtlMinutes ?? DEFAULT_HOLD_TTL_MINUTES;
       const holdExpiresAt = new Date(now.getTime() + holdTtlMinutes * 60_000);
-      // Una retención vencida que se vuelve a comprometer con `hold` undefined se
-      // vuelve firme: lo que se acaba de validar es una asignación, no una retención.
+      // Con `hold` undefined sobre una retención ya vencida (<= ahora), el stock se
+      // validó bajo el lock como compromiso firme: se escribe `holdExpiresAt: null`.
+      // Una retención vigente con `hold` undefined conserva su vencimiento.
+      const previousHoldExpired = Boolean(previous?.holdExpiresAt && previous.holdExpiresAt.getTime() <= now.getTime());
       const holdData =
         options.hold === true
           ? { holdExpiresAt: previous && previous.holdExpiresAt === null ? null : holdExpiresAt }
-          : options.hold === false || !previous
+          : options.hold === false || !previous || previousHoldExpired
             ? { holdExpiresAt: null }
             : {};
       const budgetData = options.budgetId !== undefined ? { budgetId: options.budgetId } : {};

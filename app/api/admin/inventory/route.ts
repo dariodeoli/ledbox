@@ -29,6 +29,7 @@ import {
   EVENT_RANGE_SELECT,
   MAINTENANCE_UNITS_SELECT,
   assignmentCountsAt,
+  committedAssignmentWhere,
   assignmentIsActiveNow,
   assignmentRange,
   availabilityForRange,
@@ -293,6 +294,19 @@ export async function GET(request: Request) {
   const rangeEnd = parseDate(url.searchParams.get("endsAt"));
   const range = rangeStart && rangeEnd && rangeEnd.getTime() >= rangeStart.getTime() ? { start: rangeStart, end: rangeEnd } : null;
 
+  // La vista por rango solo cuenta lo comprometido de verdad (eventos cancelados
+  // no cuentan); el listado sigue mostrando todas las filas con su estado.
+  const committedIds = range && assignments.length
+    ? new Set(
+        (
+          await db.eventInventory.findMany({
+            where: { id: { in: assignments.map((row) => row.id) }, ...committedAssignmentWhere(organizationId) },
+            select: { id: true },
+          })
+        ).map((row) => row.id),
+      )
+    : null;
+
   const now = new Date();
   const rentalSettings = range ? await loadRentalSettings(organizationId) : null;
   const inventory = items.map((item) => {
@@ -305,7 +319,7 @@ export async function GET(request: Request) {
     const maintenanceNow = maintenanceUnits(item);
     const usable = Math.max(0, item.quantity - maintenanceNow);
     const rangeAvailability = range
-      ? buildAvailability({ ...item, maintenance: maintenanceNow, buffers: resolveRentalBuffers(rentalSettings, item) }, rows.filter((row) => assignmentCountsAt(row, now)), range.start, range.end)
+      ? buildAvailability({ ...item, maintenance: maintenanceNow, buffers: resolveRentalBuffers(rentalSettings, item) }, rows.filter((row) => committedIds?.has(row.id) && assignmentCountsAt(row, now)), range.start, range.end)
       : null;
     return {
       ...row,
