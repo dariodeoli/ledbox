@@ -62,6 +62,7 @@ import {
 } from "../AdminUI";
 import { AttachmentInput, Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { adminApiGet, adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
+import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AdminIcon } from "../AdminIcons";
@@ -447,6 +448,7 @@ export function InventarioModule() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [incidentsOpen, setIncidentsOpen] = useState(false);
   const [comboDialog, setComboDialog] = useState<{ item: AdminInventoryItemRow | null } | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -1097,6 +1099,9 @@ export function InventarioModule() {
             Nuevo ítem
           </AdminButton>
         ) : null}
+        <AdminButton icon="alert" onClick={() => setIncidentsOpen(true)} title="Daños, faltantes y reparaciones de inventario">
+          Incidentes
+        </AdminButton>
         {writable ? (
           <AdminButton icon="inventory" onClick={() => setComboDialog({ item: null })} title="Armar un combo con productos que ya tenés cargados">
             Nuevo combo
@@ -1108,6 +1113,8 @@ export function InventarioModule() {
       {statusError ? <AdminNote tone="error">{statusError}</AdminNote> : null}
       {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
+
+      {incidentsOpen ? <InventoryIncidentsDialog writable={writable} onClose={() => setIncidentsOpen(false)} onChanged={() => resources.reload()} /> : null}
 
       {writable && comboDialog ? (
         <ComboDialog
