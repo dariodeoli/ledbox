@@ -33,6 +33,7 @@ export const ADMIN_ROUTES = [
   "/ajustes",
   "/ajustes/empresa",
   "/ajustes/correo",
+  "/ajustes/alquileres",
   "/ajustes/plan",
   "/ajustes/usuarios",
   "/estado",
