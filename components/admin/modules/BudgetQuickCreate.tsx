@@ -67,8 +67,8 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
     description="Queda elegido en el presupuesto. Los datos de operación son opcionales."
     dirty={dirty}
     onClose={onClose}
-    footer={<>
-      <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>Cancelar</AdminButton>
+    footer={({ requestClose }) => <>
+      <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>Cancelar</AdminButton>
       <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>Crear evento</AdminButton>
     </>}
   >

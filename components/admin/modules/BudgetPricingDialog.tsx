@@ -321,10 +321,10 @@ export function BudgetPricingDialog({
       description={`${clientDisplayName(budget.client)} · Presupuesto Nº ${budgetReference(budget.id)}. El cliente ve el precio final y estas condiciones; los costos internos y el margen quedan solo en el panel.`}
       dirty={dirty}
       onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}
-      footer={<>
+      footer={({ requestClose }) => <>
         <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</a>
         <span className="admin-dialog-spacer" />
-        <AdminButton type="button" onClick={onClose}>
+        <AdminButton type="button" onClick={requestClose}>
           Cancelar
         </AdminButton>
         <AdminButton type="submit" form={formId} variant="primary" disabled={busy || closed || !clientId || !title.trim() || Boolean(itemsError) || !planResult.ok || priced.length === 0} aria-busy={busy || undefined}>

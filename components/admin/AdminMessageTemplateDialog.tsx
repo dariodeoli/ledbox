@@ -118,7 +118,27 @@ export function MessageTemplateSendDialog({
   const selected = templates.find((template) => template.id === templateId);
 
   return (
-    <AdminDialog title={`Enviar por WhatsApp · ${target.label}`} size="wide" icon="mail" onClose={onClose}>
+    <AdminDialog title={`Enviar por WhatsApp · ${target.label}`} size="wide" icon="mail" onClose={onClose} footer={<>
+      <span className="admin-dialog-spacer" />
+      <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
+      {href ? (
+        <a
+          className="admin-btn admin-btn--primary"
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          title={`Enviar por WhatsApp a ${target.label}`}
+          onClick={register}
+        >
+          <WhatsappIcon size={15} />
+          <span>Enviar por WhatsApp</span>
+        </a>
+      ) : (
+        <AdminButton variant="primary" iconNode={<WhatsappIcon size={15} />} disabled>
+          Enviar por WhatsApp
+        </AdminButton>
+      )}
+    </>}>
       <p className="admin-dialog-text">
         Elegí una plantilla: el mensaje se completa con los datos reales de {target.label} y se abre en WhatsApp listo para
         enviar.
@@ -144,7 +164,7 @@ export function MessageTemplateSendDialog({
       )}
 
       {templates.length === 0 && !templatesResource.loading ? (
-        <div className="admin-dialog-foot">
+        <div className="admin-dialog-actions">
           <Link className="admin-linkbtn" href="/plantillas">
             Ir a Plantillas
           </Link>
@@ -170,27 +190,6 @@ export function MessageTemplateSendDialog({
         </AdminNote>
       ) : null}
 
-      <div className="admin-dialog-foot">
-        <span className="admin-dialog-spacer" />
-        <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
-        {href ? (
-          <a
-            className="admin-btn admin-btn--primary"
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            title={`Enviar por WhatsApp a ${target.label}`}
-            onClick={register}
-          >
-            <WhatsappIcon size={15} />
-            <span>Enviar por WhatsApp</span>
-          </a>
-        ) : (
-          <AdminButton variant="primary" iconNode={<WhatsappIcon size={15} />} disabled>
-            Enviar por WhatsApp
-          </AdminButton>
-        )}
-      </div>
     </AdminDialog>
   );
 }

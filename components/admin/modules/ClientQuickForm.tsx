@@ -365,16 +365,16 @@ export function ClientQuickDialog({
       description="Alta mínima: queda elegido en el evento. El resto se completa en Clientes."
       dirty={dirty}
       onClose={onClose}
-      footer={
+      footer={({ requestClose }) => (
         <>
-          <AdminButton icon="close" type="button" onClick={onClose} disabled={busy}>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>
           <AdminButton variant="primary" icon="check" type="submit" form={formId} busy={busy}>
             Crear cliente
           </AdminButton>
         </>
-      }
+      )}
     >
       <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)}>
         <ClientQuickFields

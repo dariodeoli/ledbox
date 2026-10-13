@@ -543,7 +543,7 @@ export function PhoneField({
   error,
   wide,
   required,
-  placeholder = "+595 981 000 000",
+  placeholder = "981 000 000",
   disabled,
   defaultCountry = DEFAULT_PHONE_COUNTRY,
   name,

@@ -129,15 +129,17 @@ function ChecklistToggle({
       : `Guardada en este equipo ${formatSince(queued.createdAt)}: se sube al volver la señal.`
     : `${done ? "Volver a pendiente" : "Marcar como cumplida"}: ${task.title}${task.dueAt ? ` · vence ${formatDate(task.dueAt)}` : ""}`;
 
+  const stateText = queued ? (queuedFailed ? "Falló" : "Sin subir") : done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente";
+
   return (
     <CheckboxField
       checked={done}
       disabled={busy}
       onChange={() => void toggle()}
-      ariaLabel={`${done ? "Marcar pendiente" : "Marcar cumplida"}: ${task.title}`}
+      ariaLabel={`${stateText}: ${done ? "Marcar pendiente" : "Marcar cumplida"}: ${task.title}`}
       tone={queued ? (queuedFailed ? "danger" : "warn") : done ? "ok" : undefined}
       title={title}
-      text={queued ? (queuedFailed ? "Falló" : "Sin subir") : done ? "Listo" : isDueSoon(task.dueAt, 3) ? "Vence pronto" : "Pendiente"}
+      text={stateText}
     />
   );
 }

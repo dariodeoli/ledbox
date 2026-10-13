@@ -608,6 +608,8 @@ export function AdminDisclosure({
  * - `footer`: pie fijo, siempre visible, con la acción principal a la derecha.
  *   Los diálogos que arman su pie con `.admin-dialog-foot` dentro de los hijos
  *   conservan su contrato: el estilo del pie fijo se les aplica igual.
+ * - `footer` también acepta una función `({ requestClose })`: «Cancelar» debe usar
+ *   `requestClose` para pasar por la misma confirmación que la X y Esc.
  * - `dirty`: con cambios sin guardar, cerrar (X, Esc o clic afuera) pide
  *   confirmación dentro del mismo diálogo.
  */
@@ -629,7 +631,7 @@ export function AdminDialog({
   /** Subtítulo de una línea: qué pasa al guardar. */
   description?: string;
   /** Pie fijo del diálogo (acción principal a la derecha). */
-  footer?: React.ReactNode;
+  footer?: React.ReactNode | ((api: { requestClose: () => void }) => React.ReactNode);
   /** Hay cambios sin guardar: cerrar pide confirmación. */
   dirty?: boolean;
   children: React.ReactNode;
@@ -769,7 +771,7 @@ export function AdminDialog({
             </div>
           </div>
         ) : footer ? (
-          <footer className="admin-dialog-footer">{footer}</footer>
+          <footer className="admin-dialog-footer">{typeof footer === "function" ? footer({ requestClose }) : footer}</footer>
         ) : null}
       </section>
     </div>

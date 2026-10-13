@@ -1722,7 +1722,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-head .admin-dialog-title { display: block; margin: 0; color: var(--a-text-strong); font: 600 16px/1.25 var(--font-display); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .admin-dialog-description { margin: 0; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.4; }
 .admin-dialog-close { flex: 0 0 auto; width: 30px; height: 30px; }
-.admin-dialog-body { display: grid; flex: 1 1 auto; align-content: start; gap: 12px; min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
+.admin-dialog-body { scroll-padding-bottom: 88px; display: grid; flex: 1 1 auto; align-content: start; gap: 12px; min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
 /* Pie fijo: el nuevo (`footer`) y el de los hijos existentes (`.admin-dialog-foot`)
    se ven igual y quedan pegados abajo del cuerpo con scroll. */
 .admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-line); background: var(--a-dialog-bg); }
@@ -2054,8 +2054,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-table-row span { min-width: 0; color: var(--a-muted-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-dialog-num { text-align: right; font-variant-numeric: tabular-nums; }
 .admin-dialog-counter { display: inline-flex; align-items: center; gap: 4px; }
-.admin-dialog-counter input { width: 3.4rem; min-height: 30px; padding: 4px 8px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
-.admin-dialog-counter input:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-dialog-counter .admin-check { color: var(--a-text); font-size: 12.5px; }
+.admin-dialog-counter .admin-check-text { font-weight: 400; letter-spacing: normal; }
+.admin-dialog-counter input:not([type=checkbox]) { width: 3.4rem; min-height: 30px; padding: 4px 8px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
+.admin-dialog-counter input:not([type=checkbox]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 
 /* ── Comprobantes de pago (issue #17) ──
    Visor del panel: cada comprobante se sirve con sesión desde
@@ -3964,7 +3966,7 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-root .btn-led:hover { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
 .admin-submit { min-height: 44px; }
 .admin-btn--only-icon, .admin-actions .admin-btn, .admin-actions .admin-iconbtn { border-radius: 999px; }
-.admin-search input, .admin-dialog-counter input { border-radius: var(--a-radius); }
+.admin-search input, .admin-dialog-counter input:not([type=checkbox]) { border-radius: var(--a-radius); }
 .admin-switch-track { border-radius: 999px; }
 
 /* ── Navegación ── */
