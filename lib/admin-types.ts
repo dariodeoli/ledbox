@@ -1571,6 +1571,9 @@ export type AdminInventoryRow = {
   quantity: number;
   replacementCost: number;
   dailyCost: number;
+  /** Tiempo antes/después del evento en minutos; `null` hereda el de la empresa. */
+  bufferBeforeMin?: number | null;
+  bufferAfterMin?: number | null;
   /** Precios de venta en Gs (issues #90 y #110), 0 = sin cargar. Cada frente
    *  tiene su precio normal y su regla «desde X días»; el mínimo es el piso. */
   listPrice: number;
@@ -1657,7 +1660,7 @@ export type AdminInventorySubstitute = {
 };
 
 /** Estados de una unidad física (issue #112). */
-export const INVENTORY_UNIT_STATUSES = ["AVAILABLE", "MAINTENANCE", "RETIRED"] as const;
+export const INVENTORY_UNIT_STATUSES = ["AVAILABLE", "MAINTENANCE", "RETIRED", "DAMAGED", "LOST"] as const;
 export type InventoryUnitStatusValue = (typeof INVENTORY_UNIT_STATUSES)[number];
 
 /** Unidad física del ítem, tal como la sirve `/api/admin/inventory` (issue #112). */
@@ -2300,8 +2303,23 @@ export type AdminMonthlyReport = {
   supplierPending: AdminMonthlyReportSupplierPendingRow[];
 };
 
+/** Ajustes de alquiler de la empresa (`GET /api/admin/settings/rental`); tiempos en minutos. */
+export type AdminRentalSettings = {
+  depositPercent: number | null;
+  holdTtlMinutes: number;
+  deliveryBufferMin: number;
+  returnBufferMin: number;
+  prepBufferMin: number;
+  transportBufferMin: number;
+  cleaningBufferMin: number;
+  publicCatalogEnabled: boolean;
+  publicShowPrices: boolean;
+  whatsappPhone: string | null;
+};
+
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
+  settings?: AdminRentalSettings;
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
   notifications?: AdminNotification[];

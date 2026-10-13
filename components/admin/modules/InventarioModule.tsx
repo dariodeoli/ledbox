@@ -87,10 +87,14 @@ const STATUS_OPTIONS = [
 
 const STATUS_PICK_OPTIONS = STATUS_OPTIONS.filter((option) => option.value !== "ALL");
 
-/** Estados de una unidad física (issue #112): disponible, en mantenimiento o retirada. */
-const UNIT_STATUS_PICK_OPTIONS = STATUS_PICK_OPTIONS.filter(
-  (option) => option.value === "AVAILABLE" || option.value === "MAINTENANCE" || option.value === "RETIRED",
-);
+/** Estados de una unidad física: disponible, en mantenimiento, retirada, dañada o perdida. */
+const UNIT_STATUS_PICK_OPTIONS = [
+  ...STATUS_PICK_OPTIONS.filter(
+    (option) => option.value === "AVAILABLE" || option.value === "MAINTENANCE" || option.value === "RETIRED",
+  ),
+  { value: "DAMAGED", label: "Dañada" },
+  { value: "LOST", label: "Perdida" },
+];
 
 /** Vistas del inventario (issue #57): lista densa y cuadrícula de tarjetas. */
 const INVENTARIO_VIEWS = ["list", "grid"] as const;
@@ -136,8 +140,15 @@ const EMPTY_EDIT = {
   notes: "",
   visibleOnWeb: false,
   imageUrl: "",
+  /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
+  bufferBeforeHours: "",
+  bufferAfterHours: "",
   ...EMPTY_PRICES,
 };
+
+/** Minutos guardados → horas del campo (vacío = hereda; no entero se redondea hacia arriba solo para mostrar). */
+const bufferHoursText = (minutes: number | null | undefined) =>
+  typeof minutes === "number" ? String(Math.ceil(minutes / 60)) : "";
 
 type InventoryEditForm = typeof EMPTY_EDIT;
 
@@ -152,6 +163,8 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     dailyCost: item.dailyCost > 0 ? String(item.dailyCost) : "",
     notes: item.notes ?? "",
     visibleOnWeb: item.visibleOnWeb,
+    bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
+    bufferAfterHours: bufferHoursText(item.bufferAfterMin),
     // La caja de la URL manual no precarga la ruta de la foto subida: son cosas
     // distintas (la subida se cambia o se quita con sus botones).
     imageUrl: item.imageUploaded ? "" : item.imageUrl ?? "",
@@ -815,6 +828,13 @@ export function InventarioModule() {
       notes: editForm.notes,
       visibleOnWeb: editForm.visibleOnWeb,
       imageUrl: image,
+      // Solo se mandan los tiempos que la persona cambió (no se pisa un valor en minutos no enteros).
+      ...(editForm.bufferBeforeHours !== editFormFromItem(editItem).bufferBeforeHours
+        ? { bufferBeforeMin: editForm.bufferBeforeHours === "" ? null : Number(editForm.bufferBeforeHours) * 60 }
+        : {}),
+      ...(editForm.bufferAfterHours !== editFormFromItem(editItem).bufferAfterHours
+        ? { bufferAfterMin: editForm.bufferAfterHours === "" ? null : Number(editForm.bufferAfterHours) * 60 }
+        : {}),
     });
     if (!itemResult.ok) {
       setEditBusy(false);
@@ -1334,6 +1354,27 @@ export function InventarioModule() {
               value={editForm.dailyCost}
               onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
               hint="Costo interno por día de uso."
+            />
+          </div>
+
+          {/* Tiempos de preparación (alquileres): opcionales, heredan los de la empresa. */}
+          <div className="admin-form-group">
+            <span className="admin-form-group-title">Tiempos del producto</span>
+            <NumberField
+              label="Tiempo antes (horas)"
+              value={editForm.bufferBeforeHours}
+              onChange={(value) => setEditForm({ ...editForm, bufferBeforeHours: value })}
+              maxLength={3}
+              hint="Preparación, transporte y entrega antes del evento. Vacío = el tiempo de la empresa."
+              disabled={editBusy}
+            />
+            <NumberField
+              label="Tiempo después (horas)"
+              value={editForm.bufferAfterHours}
+              onChange={(value) => setEditForm({ ...editForm, bufferAfterHours: value })}
+              maxLength={3}
+              hint="Devolución, transporte y limpieza después del evento. Vacío = el tiempo de la empresa."
+              disabled={editBusy}
             />
           </div>
 

@@ -809,6 +809,8 @@ const EVENT_SELECT = {
     select: {
       id: true,
       quantity: true,
+      releasedAt: true,
+      holdExpiresAt: true,
       startsAt: true,
       endsAt: true,
       checkedOutAt: true,
@@ -824,6 +826,22 @@ const EVENT_SELECT = {
 } as const;
 
 type EventRow = Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>;
+
+/** Título de la reserva según su estado real: liberada, retenida vigente, retención vencida o firme. */
+function assignmentReserveTitle(
+  assignment: { quantity: number; releasedAt: Date | null; holdExpiresAt: Date | null },
+  name: string,
+  now: Date,
+): string {
+  const units = `${name} (${formatNumber(assignment.quantity)} u.)`;
+  if (assignment.releasedAt) return `Equipo liberado: ${units}`;
+  if (assignment.holdExpiresAt) {
+    return assignment.holdExpiresAt.getTime() > now.getTime()
+      ? `Equipo retenido hasta ${formatDate(assignment.holdExpiresAt)}: ${units}`
+      : `Retención vencida: ${units}`;
+  }
+  return `Equipo reservado: ${units}`;
+}
 
 /** Rango comprometido de una asignación, en una línea. */
 function assignmentRange(start: Date | null, end: Date | null): string {
@@ -982,7 +1000,7 @@ function eventDrafts(event: EventRow, audits: AuditRow[], audience: TimelineAudi
         id: `reserve:${assignment.id}`,
         at: created.createdAt,
         kind: "inventory",
-        title: `Equipo reservado: ${name} (${formatNumber(assignment.quantity)} u.)`,
+        title: assignmentReserveTitle(assignment, name, new Date()),
         detail: [
           assignment.inventory.sku,
           assignmentRange(assignment.startsAt ?? event.setupAt, assignment.endsAt ?? event.strikeAt),
