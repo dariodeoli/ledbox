@@ -38,6 +38,23 @@ export function findMatchingClient<T extends ClientCandidate>(candidates: readon
   );
 }
 
+/**
+ * ¿Este lead pertenece a este cliente? Sí si dio origen a uno de sus
+ * presupuestos o si coincide por email (sin mayúsculas) o por teléfono (clave
+ * nacional), con la misma regla del dedup al convertir un lead en cliente.
+ */
+export function leadBelongsToClient(
+  lead: { id: string; email: string; phone: string },
+  client: { emails: ReadonlyArray<string | null | undefined>; phones: ReadonlyArray<string | null | undefined> },
+  budgetLeadIds: ReadonlySet<string>,
+): boolean {
+  if (budgetLeadIds.has(lead.id)) return true;
+  const email = lead.email.trim().toLowerCase();
+  if (email && client.emails.some((value) => value?.trim().toLowerCase() === email)) return true;
+  const phone = phoneKey(lead.phone);
+  return phone.length > 0 && client.phones.some((value) => phoneKey(value) === phone);
+}
+
 export type ResolvedLeadClient = {
   client: { id: string; name: string; company: string | null };
   created: boolean;

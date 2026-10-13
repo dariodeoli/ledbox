@@ -667,6 +667,7 @@ export type AdminClientMetrics = {
 /** Presupuesto de la ficha: lo que el cliente contrató o cotizó, con su cobro real. */
 export type AdminClientBudgetRow = {
   id: string;
+  leadId: string | null;
   title: string;
   status: string;
   total: number;
@@ -689,6 +690,7 @@ export type AdminClientEventRow = {
   startsAt: string | null;
   endsAt: string | null;
   status: string;
+  createdAt: string;
   tasks: Array<Pick<AdminEventTask, "id" | "title" | "type" | "dueAt" | "completedAt">>;
 };
 
@@ -704,6 +706,21 @@ export type AdminClientDetail = {
   budgets: AdminClientBudgetRow[];
   events: AdminClientEventRow[];
   payments: AdminClientPaymentRow[];
+  /** Leads del cliente: origen de un presupuesto o coincidencia por email/teléfono. */
+  leads: AdminClientLeadRow[];
+};
+
+export type AdminClientLeadRow = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  company: string | null;
+  reason: string | null;
+  eventDate: string | null;
+  source: string;
+  status: string;
+  createdAt: string;
 };
 
 // ── Tesorería por cuentas y gastos (issue #27) ──────────────────────────────
