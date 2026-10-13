@@ -487,3 +487,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
   - Secciones: resumen, disponibilidad (con las reservas y retenciones de las próximas 4 semanas), unidades, precios, tienda web, combos, incidentes e historial.
   - Cada producto tiene su propio link.
 - Al elegir varios productos aparece la edición en lote.
+
+## v2.1.106 — 2026-10-13
+
+- Eventos: el indicador «Con pendientes · 14 días» cuenta solo los eventos en curso o que empiezan en las próximas dos semanas, para que muestre lo que hay que atender ahora.
+- Clientes: «Cobrar» en la ficha abre Por cobrar ya filtrado por ese cliente, con la opción «Quitar filtro».
