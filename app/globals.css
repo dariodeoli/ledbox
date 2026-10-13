@@ -1552,6 +1552,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    campos en la misma grilla del panel; el formulario largo queda navegable. */
 .admin-form-group { display: grid; min-width: 0; grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 8px; }
 .admin-form-group-title { grid-column: 1 / -1; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-combo-group { margin: 0; padding: 0; border: 0; }
+.admin-combo-row { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 8rem auto; align-items: end; gap: 8px; }
+.admin-combo-row > button { min-width: 44px; min-height: 44px; }
+@media (max-width: 560px) {
+  .admin-combo-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-combo-row > :first-child { grid-column: 1 / -1; }
+}
 .admin-form-group--wide { grid-template-columns: minmax(0, 1fr); }
 .admin-form-group--image { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
 /* Alta de inventario (issue #109): los datos del ítem van finos (cantidad

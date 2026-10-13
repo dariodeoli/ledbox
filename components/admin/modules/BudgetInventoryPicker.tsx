@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { matchesQuery } from "@/lib/admin-policy";
 import { formatNumber, inventoryStatusLabel } from "@/lib/admin-format";
+import { comboCapacityLabel } from "@/lib/inventory-combos";
 import type { AdminInventoryItemRow, AdminInventoryLink } from "@/lib/admin-types";
 import { useAdminResource } from "@/lib/admin-api";
 import { AdminButton, AdminNote } from "../AdminUI";
@@ -74,8 +75,12 @@ export function InventoryLinkPicker({
             <strong>{selected.name}</strong>
             <small className="admin-cell-sub">
               {" "}
-              · {selected.category} · {formatNumber(selected.quantity)} unidades
-              {selectedFree !== null ? ` · ${formatNumber(selectedFree)} libres ${range ? "en el rango" : "ahora"}` : ""}
+              · {selected.category}{selectedRow?.combo ? " · combo" : ` · ${formatNumber(selected.quantity)} unidades`}
+              {selectedFree !== null
+                ? selectedRow?.combo
+                  ? ` · ${comboCapacityLabel(selectedFree).toLowerCase()} ${range ? "en el rango" : "ahora"}`
+                  : ` · ${formatNumber(selectedFree)} libres ${range ? "en el rango" : "ahora"}`
+                : ""}
             </small>
           </span>
           <AdminButton
@@ -104,12 +109,14 @@ export function InventoryLinkPicker({
             <AdminImageBox imageUrl={item.imageUrl} size={40} />
             <span className="admin-link-name" title={`${item.name}${item.sku ? ` · ${item.sku}` : ""} · ${item.category}`}>
               <strong>{item.name}</strong>
-              <small className="admin-cell-sub"> · {item.category}{item.sku ? ` · ${item.sku}` : ""}</small>
+              <small className="admin-cell-sub"> · {item.combo ? "Combo · " : ""}{item.category}{item.sku ? ` · ${item.sku}` : ""}</small>
             </span>
             <span className="admin-link-free" data-tone={blocked || available === 0 ? "warn" : undefined}>
               {blocked
                 ? inventoryStatusLabel(item.status)
-                : `${formatNumber(available)} libres ${range ? "en el rango" : "ahora"}`}
+                : item.combo
+                  ? `${comboCapacityLabel(available)} ${range ? "en el rango" : "ahora"}`
+                  : `${formatNumber(available)} libres ${range ? "en el rango" : "ahora"}`}
             </span>
             <AdminButton
               icon="check"
