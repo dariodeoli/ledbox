@@ -17,6 +17,7 @@ import {
   maintenanceUnits,
   resolveRentalBuffers,
   MAINTENANCE_UNITS_SELECT,
+  UNAVAILABLE_UNIT_STATUSES,
   type AssignmentRecord,
   type RentalBuffers,
 } from "./inventory-availability";
@@ -178,15 +179,16 @@ function overlapPrefilter(period: { start: Date; end: Date }, marginMin: number)
 
 /**
  * Filas de ocupación de los productos alquilables en `period` (misma regla del
- * motor). `unusedTake` limita cuántos productos sin uso se incluyen; sin él entran
- * todos, que es lo que necesita un porcentaje global honesto (Resumen).
+ * motor). `unusedMode` es cuántos productos sin uso se listan (reporte mensual) o
+ * `"aggregate"`: no se traen filas, solo los días disponibles de los sin uso por
+ * `aggregate`/`count` en la base (cantidad − unidades en mantenimiento − retenidas) × días.
  */
 async function loadOccupancyRows(
   organizationId: string,
   period: Pick<ReportPeriod, "start" | "end" | "days">,
   now: Date,
-  unusedTake?: number,
-): Promise<{ rows: AdminRentalOccupancyRow[]; usedCount: number; unusedCount: number; truncated: boolean }> {
+  unusedMode: number | "aggregate",
+): Promise<{ rows: AdminRentalOccupancyRow[]; usedCount: number; unusedCount: number; unusedAvailableDays: number; truncated: boolean }> {
   const [settings, overrides] = await Promise.all([
     loadRentalSettings(organizationId),
     db.inventoryItem.aggregate({ where: { organizationId }, _max: { bufferBeforeMin: true, bufferAfterMin: true } }),
@@ -224,12 +226,14 @@ async function loadOccupancyRows(
   } satisfies Prisma.InventoryItemSelect;
   const [used, unused, unusedCount] = await Promise.all([
     usedIds.length ? db.inventoryItem.findMany({ where: { ...rentableItemWhere(organizationId), id: { in: usedIds } }, select: itemSelect }) : Promise.resolve([]),
-    db.inventoryItem.findMany({
-      where: { ...rentableItemWhere(organizationId), id: { notIn: usedIds } },
-      orderBy: { name: "asc" },
-      take: unusedTake,
-      select: itemSelect,
-    }),
+    unusedMode === "aggregate"
+      ? Promise.resolve([])
+      : db.inventoryItem.findMany({
+          where: { ...rentableItemWhere(organizationId), id: { notIn: usedIds } },
+          orderBy: { name: "asc" },
+          take: unusedMode,
+          select: itemSelect,
+        }),
     db.inventoryItem.count({ where: { ...rentableItemWhere(organizationId), id: { notIn: usedIds } } }),
   ]);
 
@@ -248,7 +252,17 @@ async function loadOccupancyRows(
     );
     if (row) rows.push(row);
   }
-  return { rows, usedCount: used.length, unusedCount, truncated };
+  let unusedAvailableDays = 0;
+  if (unusedMode === "aggregate" && unusedCount > 0) {
+    const unusedWhere = { ...rentableItemWhere(organizationId), id: { notIn: usedIds } };
+    const [sums, unavailableUnits] = await Promise.all([
+      db.inventoryItem.aggregate({ where: unusedWhere, _sum: { quantity: true, incidentHold: true } }),
+      db.inventoryUnit.count({ where: { organizationId, status: { in: [...UNAVAILABLE_UNIT_STATUSES] }, inventory: unusedWhere } }),
+    ]);
+    const usable = Math.max(0, (sums._sum.quantity ?? 0) - (sums._sum.incidentHold ?? 0) - unavailableUnits);
+    unusedAvailableDays = usable * period.days;
+  }
+  return { rows, usedCount: used.length, unusedCount, unusedAvailableDays, truncated };
 }
 
 async function occupancySection(organizationId: string, period: ReportPeriod, now: Date): Promise<AdminRentalReport["occupancy"]> {
@@ -269,14 +283,14 @@ export async function getOccupancyWindow(
   topLimit = 5,
 ): Promise<{ percent: number | null; committedDays: number; availableDays: number; items: number; top: AdminRentalOccupancyRow[]; truncated: boolean }> {
   const days = Math.max(1, Math.round((window.end.getTime() - window.start.getTime()) / DAY_MS));
-  const { rows, truncated } = await loadOccupancyRows(organizationId, { start: window.start, end: window.end, days }, now);
+  const { rows, unusedCount, unusedAvailableDays, truncated } = await loadOccupancyRows(organizationId, { start: window.start, end: window.end, days }, now, "aggregate");
   const committedDays = round1(rows.reduce((sum, row) => sum + row.committedDays, 0));
-  const availableDays = round1(rows.reduce((sum, row) => sum + row.availableDays, 0));
+  const availableDays = round1(rows.reduce((sum, row) => sum + row.availableDays, 0) + unusedAvailableDays);
   return {
     percent: percentOf(committedDays, availableDays, true),
     committedDays,
     availableDays,
-    items: rows.length,
+    items: rows.length + unusedCount,
     top: rankOccupancy(rows, topLimit).top,
     truncated,
   };

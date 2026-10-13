@@ -123,3 +123,16 @@ test("escalas: marcas lindas desde 0 que cubren el máximo, y ejes en millones",
   assert.equal(formatAxisMoney(15_000_000), "15 M");
   assert.equal(formatAxisCount(1234), new Intl.NumberFormat("es-PY").format(1234));
 });
+
+test("accesibilidad: el SVG de los gráficos es decorativo y siempre hay tabla o lista equivalente", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  const bars = read("components/admin/charts/ChartBars.tsx");
+  assert.match(bars, /aria-hidden="true"/);
+  assert.match(bars, /<table className="sr-only">[\s\S]*<caption>/, "la tabla va fuera del condicional del ancho: existe aunque el SVG no se dibuje");
+  const list = read("components/admin/charts/ChartBarList.tsx");
+  assert.match(list, /<ul className="admin-barlist" aria-label/);
+  assert.match(list, /admin-barlist-label[\s\S]*admin-barlist-value/, "la barra SVG acompaña texto real");
+  // Los 6 bloques dibujan solo con ChartBars (tabla) o ChartBarList (lista) y texto; ninguno usa <svg> suelto.
+  assert.doesNotMatch(read("components/admin/modules/ResumenBoard.tsx"), /<svg/);
+});

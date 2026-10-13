@@ -219,7 +219,7 @@ export function AgingBlock({ resource }: { resource: Resource }) {
                   title: `${bucket.label}: ${formatMoney(bucket.amount)} en ${bucket.count} cobros. Ver la lista filtrada`,
                 }))}
               />
-              <p className="admin-board-note">«Al día» incluye los cobros sin vencimiento. Los días cuentan desde el vencimiento.</p>
+              <p className="admin-board-note">Antigüedad sobre cobros a plazo; la previsibilidad es sobre cuotas del plan. «Al día» incluye los cobros sin vencimiento; los días cuentan desde el vencimiento.</p>
             </>
           );
         }}

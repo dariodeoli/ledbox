@@ -848,9 +848,6 @@ export function PresupuestosModule() {
   const [signatureBudget, setSignatureBudget] = useState<AdminBudgetRow | null>(null);
   // Evento del presupuesto aprobado: detalle abierto y acción en curso (una sola a la vez).
   const [detailBudgetId, setDetailBudgetId] = useState<string | null>(null);
-  useEffect(() => {
-    if (detalleParam) setDetailBudgetId(detalleParam);
-  }, [detalleParam]);
   const [eventBusyId, setEventBusyId] = useState<string | null>(null);
   const eventInFlight = useRef(false);
   const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);
@@ -911,6 +908,15 @@ export function PresupuestosModule() {
   const formRange = useMemo(() => eventAvailabilityRange(formEvent), [formEvent]);
 
   const budgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
+  // `?detalle=<id>`: abre el detalle si el presupuesto es de esta empresa; si no existe
+  // (otra empresa, borrado) se ignora. En ambos casos se limpia de la URL.
+  useEffect(() => {
+    if (!detalleParam || budgetsResource.loading || !budgetsResource.data) return;
+    if (budgetRows.some((budget) => budget.id === detalleParam)) setDetailBudgetId(detalleParam);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("detalle");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [detalleParam, budgetsResource.loading, budgetsResource.data, budgetRows]);
   const requestRows = useMemo(() => budgetsResource.data?.requests ?? [], [budgetsResource.data]);
   const pendingRequests = useMemo(() => requestRows.filter((request) => request.status === "pending"), [requestRows]);
 
