@@ -528,8 +528,13 @@ export function AdminDisclosure({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Un error adentro nunca queda escondido: si un campo plegado queda inválido, se abre.
+  useEffect(() => {
+    if (!open && bodyRef.current?.querySelector('[aria-invalid="true"]')) setOpen(true);
+  });
   return (
-    <div className="admin-disclosure" data-open={open ? "true" : undefined}>
+    <div className="admin-disclosure" data-open={open ? "true" : undefined} onInvalidCapture={() => setOpen(true)}>
       <button
         type="button"
         className="admin-disclosure-toggle"
@@ -541,7 +546,7 @@ export function AdminDisclosure({
         <span>{title}</span>
         {hint ? <small>{hint}</small> : null}
       </button>
-      <div className="admin-disclosure-body" id={bodyId} hidden={!open}>
+      <div className="admin-disclosure-body" id={bodyId} hidden={!open} ref={bodyRef}>
         {children}
       </div>
     </div>

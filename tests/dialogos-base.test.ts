@@ -111,3 +111,9 @@ test("no queda confirm() nativo en el panel", () => {
     assert.doesNotMatch(code, /(?<![\w.])(?:window\.)?confirm\(/, `${file}: usa AdminConfirmDialog, no confirm()`);
   }
 });
+
+test("sección plegable: un campo inválido adentro la abre sola", () => {
+  const ui = readFileSync(join(process.cwd(), "components/admin/AdminUI.tsx"), "utf8");
+  assert.match(ui, /onInvalidCapture=\{\(\) => setOpen\(true\)\}/);
+  assert.match(ui, /querySelector\('\[aria-invalid="true"\]'\)\) setOpen\(true\)/);
+});
