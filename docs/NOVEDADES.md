@@ -497,3 +497,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Presupuestos: cuando el cliente aprueba (en el portal, al firmar una alternativa o al elegir en una comparativa) o se aprueba a mano en el panel, el evento se crea solo, ya confirmado, y se reservan los equipos. Si ya existía un evento en borrador, se confirma.
 - Si el evento no se puede crear (por ejemplo, por el límite de eventos del plan), el presupuesto queda aprobado igual, el motivo queda registrado y sigue disponible el botón «Crear evento». Si la reserva de equipos falla, el evento queda creado y la reserva figura como pendiente.
+
+## v2.1.108 — 2026-10-13
+
+- Panel al día con owncoding-ui v0.68.3: los formularios usan los campos de la librería compartida (36 px en escritorio, 44 px en el celular, fondo opaco y foco más claro), igual que en el resto de las apps.
+- Logos de bancos del catálogo en Finanzas, en los datos de pago del presupuesto y en el portal del cliente; un banco que no está en el catálogo se muestra con su nombre.
+- Pie del panel en una sola fila, avatares con paleta sobria y filas del menú de 44 px en el celular.
