@@ -302,9 +302,7 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
           {client.type === "RESELLER" ? (
             <ClientCatalogAccess clientId={client.id} clientName={name} phone={contactPhone} canEdit={canEdit} />
           ) : (
-            <AdminPanel title="Catálogo mayorista" icon="inventory">
-              <p className="admin-note">El link del catálogo mayorista es solo para clientes mayoristas. Si {name} compra por mayor, cambiá su tipo desde «Editar».</p>
-            </AdminPanel>
+            <NonWholesaleCatalog clientId={client.id} name={name} phone={contactPhone} canEdit={canEdit} />
           )}
 
           <AdminPanel title="Últimos movimientos" icon="clock">
@@ -324,6 +322,31 @@ function ClientFicha({ detail }: { detail: AdminClientDetail }) {
         </aside>
       </div>
     </>
+  );
+}
+
+/**
+ * Cliente que no es mayorista: se explica por qué no hay catálogo, salvo que
+ * conserve un link activo (creado antes de cambiar su tipo). Ese link sigue
+ * abriendo el catálogo, así que se muestra el panel completo para poder revocarlo.
+ */
+function NonWholesaleCatalog({ clientId, name, phone, canEdit }: { clientId: string; name: string; phone: string | null; canEdit: boolean }) {
+  const status = useAdminResource<boolean>(
+    `/api/admin/clients/${clientId}/catalog-access`,
+    (payload) => Boolean((payload as unknown as { access?: { active?: unknown } }).access?.active),
+  );
+  if (status.data) {
+    return (
+      <>
+        <AdminNote tone="warn">Este cliente ya no es mayorista pero tiene un link activo: revocalo si no corresponde.</AdminNote>
+        <ClientCatalogAccess clientId={clientId} clientName={name} phone={phone} canEdit={canEdit} />
+      </>
+    );
+  }
+  return (
+    <AdminPanel title="Catálogo mayorista" icon="inventory">
+      <p className="admin-note">El link del catálogo mayorista es solo para clientes mayoristas. Si {name} compra por mayor, cambiá su tipo desde «Editar».</p>
+    </AdminPanel>
   );
 }
 

@@ -233,7 +233,12 @@ export function ClientesModule() {
   // La lista trae las métricas reales de cada cliente (issue #34): deuda
   // vencida, monto contratado y última actividad salen del mismo payload, sin
   // una segunda llamada a finanzas.
-  const clients = useAdminResource("/api/admin/clients", (payload) => payload.clients ?? []);
+  const clientsResource = useAdminResource("/api/admin/clients", (payload) => ({
+    list: payload.clients ?? [],
+    truncated: payload.truncated === true,
+  }));
+  const clients = { ...clientsResource, data: clientsResource.data?.list ?? null };
+  const truncated = clientsResource.data?.truncated === true;
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<ClientSegment>("ALL");
   const [kpi, setKpi] = useState<ClientKpiKey | null>(null);
@@ -585,6 +590,11 @@ export function ClientesModule() {
           active={kpi === "DORMANT"}
         />
       </AdminKpis>
+      {truncated ? (
+        <AdminNote tone="warn">
+          Mostrando los primeros 200 clientes: los indicadores no incluyen el resto. Afiná con la búsqueda.
+        </AdminNote>
+      ) : null}
 
       <AdminToolbar>
         <SearchField

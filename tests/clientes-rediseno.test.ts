@@ -108,6 +108,14 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   assert.match(ficha, /\/eventos\?evento=\$\{encodeURIComponent\(event\.id\)\}/, "cada evento abre su ficha");
   for (const label of ["Contratado", "Cobrado", "Saldo", "Eventos", "Último evento"]) assert.ok(ficha.includes(`label="${label}"`), label);
   assert.match(ficha, /client\.type === "RESELLER" \? \(\s*<ClientCatalogAccess/, "el catálogo mayorista se ofrece a los mayoristas");
+  const legacy = ficha.slice(ficha.indexOf("function NonWholesaleCatalog"), ficha.indexOf("function BudgetsTab"));
+  assert.match(legacy, /if \(status\.data\)[\s\S]*<ClientCatalogAccess/, "un no mayorista con link activo puede revocarlo");
+  assert.ok(legacy.includes("Este cliente ya no es mayorista pero tiene un link activo: revocalo si no corresponde."));
+  assert.match(ficha, /id=\{`ficha-tab-\$\{item\.key\}`\}[\s\S]{0,120}aria-controls="ficha-panel"/, "cada pestaña con su id y aria-controls");
+  const route = repoFile("app/api/admin/clients/route.ts");
+  assert.match(route, /take: CLIENT_LIST_LIMIT \+ 1/);
+  assert.match(route, /Response\.json\(\{ clients: rows, truncated \}\)/);
+  assert.ok(repoFile("components/admin/modules/ClientesModule.tsx").includes("Mostrando los primeros 200 clientes: los indicadores no incluyen el resto. Afiná con la búsqueda."));
   assert.match(ficha, /canWriteClients\(role\)/);
   const css = repoFile("app/globals.css");
   assert.match(css, /\.admin-kpis\.admin-kpis--ficha \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/, "la franja de la ficha son cinco indicadores en una fila");

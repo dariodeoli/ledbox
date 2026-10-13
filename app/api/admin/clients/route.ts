@@ -7,6 +7,9 @@ import { clientMetrics, factsByClient, type ClientMetricFacts } from "./metrics"
 import { parseClientFields } from "./client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
 
+/** Tope de la lista; si hay más, la respuesta trae `truncated: true`. */
+const CLIENT_LIST_LIMIT = 200;
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -40,12 +43,16 @@ export async function GET(request: Request) {
     });
     return Response.json({ clients });
   }
-  const clients = await db.client.findMany({
+  // Se pide uno de más para saber, sin contar, si la lista quedó truncada.
+  const fetched = await db.client.findMany({
     where: { organizationId },
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: CLIENT_LIST_LIMIT + 1,
     include: { _count: { select: { events: true, budgets: true } }, logo: { select: { updatedAt: true } } },
   });
+
+  const truncated = fetched.length > CLIENT_LIST_LIMIT;
+  const clients = fetched.slice(0, CLIENT_LIST_LIMIT);
 
   // Solo los hechos de los clientes listados: nada de otra empresa y nada de
   // un cliente que no viaja en la respuesta.
@@ -91,7 +98,7 @@ export async function GET(request: Request) {
     };
   });
 
-  return Response.json({ clients: rows });
+  return Response.json({ clients: rows, truncated });
 }
 
 /** Campos que se auditan al crear un cliente (sin el binario del logo). */
