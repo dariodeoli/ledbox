@@ -29,7 +29,7 @@ test("depósito de garantía en PostgreSQL", { skip: !process.env.TEST_DATABASE_
 
   try {
     await t.test("la migración aplicada dos veces no falla", () => {
-      const file = new URL("../prisma/migrations/202610150001_budget_security_deposit/migration.sql", import.meta.url).pathname;
+      const file = new URL("../prisma/migrations/202610150002_budget_security_deposit/migration.sql", import.meta.url).pathname;
       for (let i = 0; i < 2; i++) execFileSync("psql", [url.toString(), "-v", "ON_ERROR_STOP=1", "-q", "-f", file], { stdio: "pipe" });
     });
 

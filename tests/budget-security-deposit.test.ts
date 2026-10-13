@@ -97,7 +97,7 @@ test("la garantía no entra en la firma, en el total ni en los cobros", () => {
 });
 
 test("la migración es aditiva e idempotente", () => {
-  const sql = read("prisma/migrations/202610150001_budget_security_deposit/migration.sql");
+  const sql = read("prisma/migrations/202610150002_budget_security_deposit/migration.sql");
   assert.doesNotMatch(sql, /DROP |NOT NULL|DELETE |UPDATE /i);
   for (const line of sql.split("\n").filter((l) => /ADD COLUMN/.test(l))) assert.match(line, /IF NOT EXISTS/);
   assert.equal((sql.match(/ADD CONSTRAINT/g) ?? []).length, (sql.match(/duplicate_object/g) ?? []).length);
