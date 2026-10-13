@@ -52,7 +52,7 @@ test("create-event: el tope del plan se repite dentro de la transacción, despu�
   const create = src.indexOf("tx.event.create", tx);
   assert.ok(tx > 0 && lock > tx && locked > lock && create > locked);
   assert.match(src, /error instanceof PlanLimitError/);
-  assert.match(read("lib/server/plan-limits.ts"), /FROM "Organization" WHERE "id" = \$\{context\.organizationId\} FOR UPDATE/);
+  assert.match(read("lib/server/plan-limits.ts"), /FROM "Organization" WHERE "id" = \$\{context\.organizationId\} FOR NO KEY UPDATE/);
 });
 
 test("catálogo público: la preorden responde 429 al superar el tope diario por empresa, además del rate-limit por IP", () => {

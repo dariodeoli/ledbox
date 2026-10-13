@@ -207,6 +207,6 @@ export async function lockedEventLimitViolation(
   tx: Prisma.TransactionClient,
   context: Pick<AdminContext, "organizationId" | "organization">,
 ): Promise<PlanLimitViolation | null> {
-  await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id" = ${context.organizationId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT "id" FROM "Organization" WHERE "id" = ${context.organizationId} FOR NO KEY UPDATE`;
   return planLimitViolation(context, "events", tx);
 }
