@@ -63,6 +63,7 @@ const COMPONENT_ITEM_SELECT = {
   status: true,
   bufferBeforeMin: true,
   bufferAfterMin: true,
+  incidentHold: true,
   _count: { select: MAINTENANCE_UNITS_SELECT },
 } satisfies Prisma.InventoryItemSelect;
 

@@ -3,7 +3,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
-import { commitInventoryAssignment, insufficientMessage, isComboAssignment } from "@/lib/server/inventory-availability";
+import { commitInventoryAssignment, insufficientMessage, isComboAssignment, loadRentalSettings, resolveRentalBuffers } from "@/lib/server/inventory-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +12,23 @@ export const dynamic = "force-dynamic";
 const promoterSelect = {
   promoter: { select: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true } },
 } as const;
+
+/**
+ * Suma `cleaningUntil` a cada asignación devuelta: mientras dura el colchón de
+ * limpieza/revisión del ítem, lo devuelto no vuelve a lo libre. `null` si no aplica.
+ */
+async function withCleaning<E extends { assignments: Array<{ checkedInAt: Date | null; inventory: { bufferBeforeMin: number | null; bufferAfterMin: number | null } }> }>(organizationId: string, events: E[]) {
+  const settings = await loadRentalSettings(organizationId);
+  const now = Date.now();
+  return events.map((event) => ({
+    ...event,
+    assignments: event.assignments.map((assignment) => {
+      const after = resolveRentalBuffers(settings, assignment.inventory).afterMin;
+      const until = assignment.checkedInAt && after > 0 ? new Date(assignment.checkedInAt.getTime() + after * 60_000) : null;
+      return { ...assignment, cleaningUntil: until && until.getTime() > now ? until : null };
+    }),
+  }));
+}
 
 /**
  * Eventos del panel con su operación (checklist y equipos).
@@ -55,10 +72,10 @@ export async function GET(request: Request) {
       include: {
         client: { select: { id: true, name: true, company: true, tradeName: true, legalName: true, phone: true } },
         tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
-        assignments: { include: { inventory: true } },
+        assignments: { include: { inventory: { include: { _count: { select: { components: true } } } } } },
       },
     });
-    return Response.json({ events });
+    return Response.json({ events: await withCleaning(organizationId, events) });
   }
 
   const events = await db.event.findMany({
@@ -68,10 +85,10 @@ export async function GET(request: Request) {
     include: {
       client: true,
       tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
-      assignments: { include: { inventory: true } },
+      assignments: { include: { inventory: { include: { _count: { select: { components: true } } } } } },
     },
   });
-  return Response.json({ events });
+  return Response.json({ events: await withCleaning(organizationId, events) });
 }
 
 export async function POST(request: Request) {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { closureBlockMessage, eventClosureBlockers } from "@/lib/server/inventory-operations";
 import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -140,6 +141,13 @@ export async function PATCH(request: Request) {
   if (invalidDates) return jsonError(invalidDates, 400);
   const changes = auditChanges(event, proposed, EVENT_AUDIT_FIELDS);
   if (!changes) return Response.json({ event, unchanged: true });
+
+  // Cerrar el evento exige haber cerrado la operación de inventario: sin equipos
+  // pendientes de devolver ni faltantes abiertos sin decisión (alquileres fase 4).
+  if (parsed.data.status === "COMPLETED" && event.status !== "COMPLETED") {
+    const blocked = closureBlockMessage(await eventClosureBlockers(auth.context.organizationId, event.id));
+    if (blocked) return jsonError(blocked, 409);
+  }
 
   const updated = await db.event.update({
     where: { id: event.id },

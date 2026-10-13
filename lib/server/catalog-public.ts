@@ -88,6 +88,7 @@ type CatalogRow = {
   listFromPrice: number;
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
+  incidentHold: number;
   _count: { units: number };
 };
 
@@ -112,6 +113,7 @@ async function loadVisibleRows(organizationId: string, ids?: readonly string[]):
       listFromPrice: true,
       bufferBeforeMin: true,
       bufferAfterMin: true,
+      incidentHold: true,
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
   });

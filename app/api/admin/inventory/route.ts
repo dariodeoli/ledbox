@@ -49,6 +49,7 @@ import {
   parseDate,
   rangeLabel,
 } from "@/lib/server/inventory-availability";
+import { dispatchAssignment, returnAssignment } from "@/lib/server/inventory-operations";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
 export const runtime = "nodejs";
@@ -254,6 +255,7 @@ export async function GET(request: Request) {
         kind: true,
         status: true,
         quantity: true,
+        incidentHold: true,
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
     });
@@ -759,38 +761,32 @@ export async function POST(request: Request) {
     const conditionOut = typeof body.conditionOut === "string" ? body.conditionOut.trim() : "";
     if (!conditionOut) return jsonError("Indicá el estado del equipo al retirar.", 400);
     if (conditionOut.length > 160) return jsonError("El estado al retirar no puede superar 160 caracteres.", 400);
-    const existing = await db.eventInventory.findFirst({
-      where: { id, event: { organizationId } },
-      select: {
-        id: true,
-        checkedOut: true,
-        checkedOutAt: true,
-        conditionOut: true,
-        inventory: { select: { name: true } },
-        event: { select: { name: true } },
-      },
-    });
-    if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
-    if (existing.checkedOutAt || existing.checkedOut) return jsonError("La salida ya está registrada para esta asignación.", 409);
-    if (await isComboAssignment({ organizationId, assignmentId: existing.id })) {
+    const note = typeof body.note === "string" ? body.note.trim() : "";
+    if (note.length > 400) return jsonError("La nota de la salida no puede superar 400 caracteres.", 400);
+    const quantity = body.quantity === undefined || body.quantity === "" ? undefined : Number(body.quantity);
+    if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) return jsonError("La cantidad a despachar debe ser un entero mayor a cero.", 400);
+    if (await isComboAssignment({ organizationId, assignmentId: id })) {
       return jsonError("Un combo no sale ni vuelve como unidad: registrá el movimiento de cada componente.", 409);
     }
-    const at = parseDate(body.at) ?? new Date();
-    const assignment = await db.eventInventory.update({
-      where: { id: existing.id },
-      data: { checkedOut: true, checkedOutAt: at, conditionOut },
+    const result = await dispatchAssignment({
+      organizationId,
+      assignmentId: id,
+      ...(quantity !== undefined ? { quantity } : {}),
+      at: parseDate(body.at) ?? new Date(),
+      condition: conditionOut,
+      note,
+      actorId: auth.context.user.id,
     });
-    const changes = auditChanges(existing, assignment, ["checkedOut", "checkedOutAt", "conditionOut"]);
-    if (changes) {
-      await recordAudit({
-        context: auth.context,
-        action: "checkout",
-        entity: "EventInventory",
-        entityId: assignment.id,
-        summary: `Registró la salida de «${existing.inventory.name}» para «${existing.event.name}»`,
-        detail: { changes },
-      });
-    }
+    if (!result.ok) return jsonError(result.error, result.status);
+    const { assignment, before } = result;
+    await recordAudit({
+      context: auth.context,
+      action: "checkout",
+      entity: "EventInventory",
+      entityId: assignment.id,
+      summary: `Despachó ${result.quantity} unidad${result.quantity === 1 ? "" : "es"} de «${before.inventory.name}» para «${before.event.name}»${result.remaining > 0 ? ` (faltan despachar ${result.remaining})` : ""}`,
+      detail: { fields: { quantity: result.quantity, checkoutQuantity: assignment.checkoutQuantity, conditionOut, note: note || null } },
+    });
     return Response.json({ assignment });
   }
 
@@ -805,57 +801,49 @@ export async function POST(request: Request) {
     if (!Number.isInteger(damagedQuantity) || damagedQuantity < 0 || !Number.isInteger(missingQuantity) || missingQuantity < 0) {
       return jsonError("Dañadas y faltantes deben ser enteros mayores o iguales a cero.", 400);
     }
+    const returnQuantity = body.quantity === undefined || body.quantity === "" ? undefined : Number(body.quantity);
+    if (returnQuantity !== undefined && (!Number.isInteger(returnQuantity) || returnQuantity < 0)) {
+      return jsonError("Las unidades devueltas deben ser un entero mayor o igual a cero.", 400);
+    }
     const damageNotes = typeof body.damageNotes === "string" ? body.damageNotes.trim() : "";
     if (damageNotes.length > 400) return jsonError("Las notas de daños no pueden superar 400 caracteres.", 400);
-
-    const existing = await db.eventInventory.findFirst({
-      where: { id, event: { organizationId } },
-      select: {
-        id: true,
-        quantity: true,
-        checkedOut: true,
-        checkedOutAt: true,
-        checkedIn: true,
-        checkedInAt: true,
-        conditionIn: true,
-        damagedQuantity: true,
-        missingQuantity: true,
-        damageNotes: true,
-        inventory: { select: { name: true } },
-        event: { select: { name: true } },
-      },
-    });
-    if (!existing) return jsonError("La asignación no existe en esta empresa.", 404);
-    if (await isComboAssignment({ organizationId, assignmentId: existing.id })) {
+    const unitIds = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+    if (await isComboAssignment({ organizationId, assignmentId: id })) {
       return jsonError("Un combo no sale ni vuelve como unidad: registrá el movimiento de cada componente.", 409);
     }
-    if (!existing.checkedOutAt && !existing.checkedOut) return jsonError("Registrá primero la salida del equipo.", 409);
-    if (existing.checkedInAt || existing.checkedIn) return jsonError("La devolución ya está registrada para esta asignación.", 409);
-    if (damagedQuantity + missingQuantity > existing.quantity) {
-      return jsonError(`Dañadas y faltantes no pueden superar las ${existing.quantity} unidades asignadas.`, 400);
-    }
-    const at = parseDate(body.at) ?? new Date();
-    const assignment = await db.eventInventory.update({
-      where: { id: existing.id },
-      data: { checkedIn: true, checkedInAt: at, conditionIn, damagedQuantity, missingQuantity, damageNotes: damageNotes || null },
+    const result = await returnAssignment({
+      organizationId,
+      assignmentId: id,
+      ...(returnQuantity !== undefined ? { quantity: returnQuantity } : {}),
+      damaged: damagedQuantity,
+      missing: missingQuantity,
+      damagedUnitIds: unitIds(body.damagedUnitIds),
+      missingUnitIds: unitIds(body.missingUnitIds),
+      at: parseDate(body.at) ?? new Date(),
+      condition: conditionIn,
+      notes: damageNotes,
+      actorId: auth.context.user.id,
     });
-    const changes = auditChanges(
-      existing,
-      assignment,
-      ["checkedIn", "checkedInAt", "conditionIn", "damagedQuantity", "missingQuantity", "damageNotes"],
-    );
-    if (changes) {
-      const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
-      await recordAudit({
-        context: auth.context,
-        action: "checkin",
-        entity: "EventInventory",
-        entityId: assignment.id,
-        summary: `Registró la devolución de «${existing.inventory.name}» de «${existing.event.name}»${damages ? ` (${damages})` : ""}`,
-        detail: { changes },
-      });
-    }
-    return Response.json({ assignment });
+    if (!result.ok) return jsonError(result.error, result.status);
+    const { assignment, before } = result;
+    const damages = damageSummary(result.damaged, result.missing);
+    await recordAudit({
+      context: auth.context,
+      action: "checkin",
+      entity: "EventInventory",
+      entityId: assignment.id,
+      summary: `Registró la devolución de ${result.returned} unidad${result.returned === 1 ? "" : "es"} de «${before.inventory.name}» de «${before.event.name}»${damages ? ` (${damages})` : ""}${result.pending > 0 ? `, faltan ${result.pending} por devolver` : ""}`,
+      detail: {
+        fields: {
+          returned: result.returned,
+          damaged: result.damaged,
+          missing: result.missing,
+          pending: result.pending,
+          incidents: result.incidents.map((incident) => incident.id),
+        },
+      },
+    });
+    return Response.json({ assignment, incidents: result.incidents, pending: result.pending, closed: result.closed });
   }
 
   if (kind === "hold-confirm" || kind === "assignment-release") {

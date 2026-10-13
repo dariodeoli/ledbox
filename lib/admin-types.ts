@@ -246,11 +246,35 @@ export type AdminEventAssignmentMovement = {
   damagedQuantity: number;
   missingQuantity: number;
   damageNotes: string | null;
+  /** Salida/devolución parcial (alquileres fase 4): unidades despachadas y devueltas. */
+  checkoutQuantity?: number;
+  returnedQuantity?: number;
+  /** Fin del colchón de limpieza/revisión tras la devolución; `null` si no aplica. */
+  cleaningUntil?: string | null;
 };
 
 export type AdminEventAssignment = AdminEventAssignmentMovement & {
   eventId: string;
+  /** `_count.components` > 0: es un combo; sus movimientos se hacen sobre los componentes. */
+  inventory: { id: string; name: string; sku: string | null; _count?: { components: number } };
+};
+
+export type AdminInventoryIncident = {
+  id: string;
+  inventoryId: string;
+  assignmentId: string | null;
+  eventId: string | null;
+  unitId: string | null;
+  kind: "DAMAGE" | "MISSING" | "REPAIR" | "CLEANING";
+  quantity: number;
+  status: "OPEN" | "IN_REPAIR" | "RESOLVED" | "WRITTEN_OFF";
+  cost: number | null;
+  notes: string | null;
+  openedAt: string;
+  resolvedAt: string | null;
   inventory: { id: string; name: string; sku: string | null };
+  unit: { id: string; code: string; status: string } | null;
+  event: { id: string; name: string } | null;
 };
 
 export type AdminEventRow = {
@@ -2053,6 +2077,8 @@ export const AUDIT_ENTITIES = [
   "InventoryItem",
   // Unidad física del ítem (issue #112): alta, edición y retiro.
   "InventoryUnit",
+  // Incidente de inventario (alquileres fase 4): daño, faltante, reparación o limpieza.
+  "InventoryIncident",
   "EventInventory",
   "EventTask",
   "Promoter",
@@ -2164,6 +2190,8 @@ export type AdminCalendarItemKind =
   | "supplier_due"
   | "supplier_delivery"
   | "supplier_payment"
+  | "inventory_out"
+  | "inventory_in"
   | "task";
 
 export type AdminCalendarItem = {
