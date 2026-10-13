@@ -336,3 +336,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Inventario: ya no se puede asignar el mismo equipo dos veces. Si dos personas asignan a la vez el último stock, entra una sola y la otra ve cuánto queda libre. Las tareas operativas de cada evento pasan por el mismo control y la reserva al aprobar un presupuesto ocurre de una sola vez.
 - Los eventos cancelados y los presupuestos perdidos liberan su stock. Un equipo que salió y todavía no volvió sigue ocupado hasta su devolución.
 - Leads: nuevo botón «Armar presupuesto». Abre el presupuesto con el cliente, el título y las notas del pedido ya cargados; si el cliente no existe se crea al guardar, sin duplicar por correo o teléfono. El lead pasa a «Cotizado» y cada presupuesto muestra de qué lead viene.
+
+## v2.1.87 — 2026-10-13
+
+- Panel: los campos son más altos y claros. La etiqueta va arriba y lleva «*» si el dato es obligatorio. Guaraníes, teléfono y porcentaje muestran su prefijo fijo, y un error se ve en rojo debajo del campo con lo que hay que corregir. En el celular los campos miden 44 px.
+- Ventanas de carga: un encabezado con ícono que dice qué pasa al guardar, contenido con su propio scroll y los botones siempre visibles abajo. En el celular ocupan toda la pantalla. Si cerrás con cambios sin guardar, la ventana pregunta antes de descartarlos.
+- Una ventana abierta desde otra, como «Nuevo cliente» dentro de «Precio y condiciones», ya no queda cortada. El teclado recorre solo la ventana de arriba y Esc cierra solo esa.
