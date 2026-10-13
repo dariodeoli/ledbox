@@ -273,6 +273,15 @@ export function EventosModule() {
   const [timelineEvent, setTimelineEvent] = useState<EventRow | null>(null);
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del evento. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
+  /** Cierre del evento (alquileres fase 4): estado, bloqueo 409 y cierre forzado con nota. */
+  const [closeBusyId, setCloseBusyId] = useState("");
+  const [closeError, setCloseError] = useState("");
+  const [closeBlock, setCloseBlock] = useState<{ event: EventRow; message: string } | null>(null);
+  const [forceOpen, setForceOpen] = useState(false);
+  const [forceNote, setForceNote] = useState("");
+  const [forceBusy, setForceBusy] = useState(false);
+  const [forceError, setForceError] = useState("");
+  const forceFormId = useId();
 
   const writable = canWriteOperations(role);
   const checklistWritable = canWriteOperations(role);
@@ -311,9 +320,58 @@ export function EventosModule() {
   }, [searched, status]);
 
   /** Acciones de un evento: las mismas en la fila y en la tarjeta (issue #119). */
+  async function closeEvent(event: EventRow) {
+    if (closeBusyId) return;
+    setCloseError("");
+    setCloseBusyId(event.id);
+    const result = await adminSend("/api/admin/events", { id: event.id, status: "COMPLETED" }, "PATCH");
+    setCloseBusyId("");
+    if (result.ok) {
+      operations.reload();
+      return;
+    }
+    if (result.code === "closure_blocked") {
+      setCloseBlock({ event, message: result.error });
+      return;
+    }
+    setCloseError(result.error);
+  }
+
+  async function submitForceClose(formEvent: React.FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    if (!closeBlock || forceBusy) return;
+    const note = forceNote.trim();
+    if (note.length < 5 || note.length > 400) {
+      setForceError("Escribí el motivo del cierre (entre 5 y 400 caracteres).");
+      return;
+    }
+    setForceError("");
+    setForceBusy(true);
+    const result = await adminSend("/api/admin/events", { id: closeBlock.event.id, status: "COMPLETED", forceClose: true, forceCloseNote: note }, "PATCH");
+    setForceBusy(false);
+    if (!result.ok) {
+      setForceError(result.error);
+      return;
+    }
+    setForceOpen(false);
+    setCloseBlock(null);
+    setForceNote("");
+    operations.reload();
+  }
+
   function eventActions(event: EventRow) {
+    const closable = writable && event.status !== "COMPLETED" && event.status !== "CANCELLED";
     return (
       <span className="admin-actions">
+        {closable ? (
+          <AdminButton
+            icon="check"
+            title={`Finalizar el evento: ${event.name}`}
+            aria-label={`Finalizar el evento: ${event.name}`}
+            busy={closeBusyId === event.id}
+            onClick={() => void closeEvent(event)}
+          />
+        ) : null}
         {writable ? <AdminButton icon="edit" title={`Editar evento: ${event.name}`} aria-label={`Editar evento: ${event.name}`} onClick={() => openEventEdit(event)} /> : null}
         <AdminButton
           icon="audit"
@@ -738,6 +796,76 @@ export function EventosModule() {
           </AdminButton>
         ) : null}
       </AdminToolbar>
+
+      {closeError ? <AdminNote tone="error">{closeError}</AdminNote> : null}
+
+      {writable && closeBlock ? (
+        <AdminDialog
+          title="No se puede cerrar el evento"
+          icon="events"
+          description={`«${closeBlock.event.name}» tiene pendientes de inventario.`}
+          onClose={() => setCloseBlock(null)}
+          footer={({ requestClose }) => (
+            <>
+              <AdminButton icon="close" type="button" onClick={requestClose}>
+                Volver
+              </AdminButton>
+              <AdminButton
+                variant="primary"
+                icon="check"
+                type="button"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setForceNote("");
+                  setForceError("");
+                  setForceOpen(true);
+                }}
+              >
+                Cerrar igual
+              </AdminButton>
+            </>
+          )}
+        >
+          <AdminNote tone="warn">{closeBlock.message}</AdminNote>
+          <p className="admin-muted">Lo recomendado es registrar las devoluciones o resolver los faltantes. Si son datos anteriores, podés cerrar igual dejando el motivo.</p>
+        </AdminDialog>
+      ) : null}
+
+      {writable && closeBlock && forceOpen ? (
+        <AdminDialog
+          title="Cerrar igual"
+          icon="events"
+          description={`El motivo queda en la auditoría de «${closeBlock.event.name}».`}
+          dirty={forceNote.trim().length > 0}
+          onClose={() => setForceOpen(false)}
+          footer={({ requestClose }) => (
+            <>
+              {forceError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{forceError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={forceBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton variant="primary" icon="check" type="submit" form={forceFormId} busy={forceBusy}>
+                Cerrar el evento
+              </AdminButton>
+            </>
+          )}
+        >
+          <form id={forceFormId} className="admin-form" onSubmit={(formEvent) => void submitForceClose(formEvent)} aria-busy={forceBusy || undefined}>
+            <TextAreaField
+              label="Motivo del cierre"
+              required
+              value={forceNote}
+              onChange={setForceNote}
+              maxLength={400}
+              hint="Entre 5 y 400 caracteres."
+            />
+          </form>
+        </AdminDialog>
+      ) : null}
 
       {writable && showForm ? (
         <AdminDialog

@@ -167,7 +167,7 @@ export async function PATCH(request: Request) {
     }
     return tx.event.update({ where: { id: event.id }, data: parsed.data });
   });
-  if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409);
+  if (!updated) return jsonError(blockedMessage ?? "No se pudo cerrar el evento.", 409, "closure_blocked");
   if (forcedOver) {
     await recordAudit({
       context: auth.context,
