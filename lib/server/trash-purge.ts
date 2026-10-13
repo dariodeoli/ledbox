@@ -14,8 +14,12 @@ import { trashPurgeCutoff } from "../trash-shared";
 
 /** Tope de borrados por pasada: la request que abre la papelera no se cuelga. */
 export const PURGE_BATCH_LIMIT = 50;
-/** Tope de candidatos revisados por pasada (los bloqueados no cuentan como borrados). */
-export const PURGE_SCAN_LIMIT = 150;
+/** Presupuesto de tiempo de un barrido (la apertura de la papelera no espera más). */
+export const PURGE_TIME_BUDGET_MS = 3_000;
+/** Candidatos que se leen por tipo y por vuelta del reparto round-robin. */
+export const PURGE_PAGE_SIZE = 10;
+/** No más de un barrido por empresa cada 10 minutos (evita reintentar siempre los mismos bloqueados). */
+export const PURGE_COOLDOWN_MS = 10 * 60_000;
 
 export const SYSTEM_PURGE_USER = { id: "system", name: "Sistema", email: "", role: "OWNER" as const };
 
@@ -23,31 +27,39 @@ export const autoPurgeReason = (days: number) => `Vaciado automático a ${days} 
 
 export type PurgeSweepResult = { skipped: boolean; purged: number; retained: number; failed: number };
 
-type Candidate = { type: TrashModel; id: string; name: string };
+type Candidate = { type: TrashModel; id: string; name: string; deletedAt: Date };
+type Cursor = { at: Date; id: string } | null;
 
-async function loadCandidates(organizationId: string, cutoff: Date, take: number): Promise<Candidate[]> {
-  const where = { organizationId, deletedAt: { lt: cutoff }, anonymizedAt: null } as const;
-  const orderBy = { deletedAt: "asc" } as const;
-  const named = { id: true, name: true } as const;
-  const [events, items, clients, leads, suppliers, promoters, budgets] = await Promise.all([
-    dbWithDeleted.event.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.inventoryItem.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.client.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.lead.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.supplier.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.promoter.findMany({ where, select: named, orderBy, take }),
-    dbWithDeleted.budget.findMany({ where, select: { id: true, title: true, deletedAt: true }, orderBy, take }),
-  ]);
-  const tag = (type: TrashModel) => (row: { id: string; name: string }): Candidate => ({ type, id: row.id, name: row.name });
-  return [
-    ...events.map(tag("Event")),
-    ...items.map(tag("InventoryItem")),
-    ...clients.map(tag("Client")),
-    ...leads.map(tag("Lead")),
-    ...suppliers.map(tag("Supplier")),
-    ...promoters.map(tag("Promoter")),
-    ...budgets.map((row) => ({ type: "Budget" as const, id: row.id, name: row.title })),
-  ];
+type Page = (where: object, take: number) => Promise<Candidate[]>;
+
+const orderBy = [{ deletedAt: "asc" }, { id: "asc" }] as const;
+
+function named(type: TrashModel, find: (args: object) => Promise<{ id: string; name: string; deletedAt: Date | null }[]>): Page {
+  return async (where, take) =>
+    (await find({ where, select: { id: true, name: true, deletedAt: true }, orderBy, take })).map((row) => ({ type, id: row.id, name: row.name, deletedAt: row.deletedAt! }));
+}
+
+const PAGERS: Page[] = [
+  named("Event", (a) => dbWithDeleted.event.findMany(a as never) as never),
+  named("InventoryItem", (a) => dbWithDeleted.inventoryItem.findMany(a as never) as never),
+  named("Client", (a) => dbWithDeleted.client.findMany(a as never) as never),
+  named("Lead", (a) => dbWithDeleted.lead.findMany(a as never) as never),
+  named("Supplier", (a) => dbWithDeleted.supplier.findMany(a as never) as never),
+  named("Promoter", (a) => dbWithDeleted.promoter.findMany(a as never) as never),
+  async (where, take) =>
+    (await dbWithDeleted.budget.findMany({ where, select: { id: true, title: true, deletedAt: true }, orderBy: [...orderBy], take })).map((row) => ({
+      type: "Budget" as const,
+      id: row.id,
+      name: row.title,
+      deletedAt: row.deletedAt!,
+    })),
+];
+
+/** Página siguiente de vencidos de un tipo, después del cursor `(deletedAt, id)`. */
+function nextPage(pager: Page, organizationId: string, cutoff: Date, cursor: Cursor): Promise<Candidate[]> {
+  const base = { organizationId, deletedAt: { lt: cutoff }, anonymizedAt: null };
+  const where = cursor ? { ...base, AND: [{ OR: [{ deletedAt: { gt: cursor.at } }, { deletedAt: cursor.at, id: { gt: cursor.id } }] }] } : base;
+  return pager(where, PURGE_PAGE_SIZE);
 }
 
 async function purgeOne(candidate: Candidate, days: number, context: AuditContext): Promise<void> {
@@ -58,47 +70,75 @@ async function purgeOne(candidate: Candidate, days: number, context: AuditContex
   throw new TrashError("Tipo desconocido.", 404);
 }
 
-/**
- * Vacía lo eliminado hace más de `days` días en la empresa. Un solo barrido a la vez por empresa:
- * con el candado asesor tomado por otra request, esta sigue sin purgar (`skipped`).
- * Nunca lanza por un registro: lo bloqueado se cuenta como conservado y cualquier otro error se registra.
- */
-export async function purgeExpiredTrash(organizationId: string, days: number | null | undefined, now: Date = new Date()): Promise<PurgeSweepResult> {
+/** Barrido acotado: reparte entre los 7 tipos (round-robin con cursor) y corta por borrados o por tiempo. */
+async function sweep(organizationId: string, days: number, now: Date): Promise<PurgeSweepResult> {
   const result: PurgeSweepResult = { skipped: false, purged: 0, retained: 0, failed: 0 };
-  if (!days || days < 1) return { ...result, skipped: true };
   const context: AuditContext = { organizationId, user: SYSTEM_PURGE_USER };
   const cutoff = trashPurgeCutoff(days, now);
+  const deadline = Date.now() + PURGE_TIME_BUDGET_MS;
+  const cursors: Cursor[] = PAGERS.map(() => null);
+  const done = PAGERS.map(() => false);
+  const over = () => result.purged >= PURGE_BATCH_LIMIT || Date.now() >= deadline;
   try {
-    await dbWithDeleted.$transaction(
-      async (tx) => {
-        const lock = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(hashtext(${organizationId})) AS locked`;
-        if (!lock[0]?.locked) {
-          result.skipped = true;
-          return;
-        }
-        const candidates = await loadCandidates(organizationId, cutoff, PURGE_SCAN_LIMIT);
-        let scanned = 0;
-        for (const candidate of candidates) {
-          if (result.purged >= PURGE_BATCH_LIMIT || scanned >= PURGE_SCAN_LIMIT) break;
-          scanned += 1;
+    while (!over() && done.some((flag) => !flag)) {
+      for (let i = 0; i < PAGERS.length && !over(); i += 1) {
+        if (done[i]) continue;
+        const page = await nextPage(PAGERS[i], organizationId, cutoff, cursors[i]);
+        if (page.length < PURGE_PAGE_SIZE) done[i] = true;
+        for (const candidate of page) {
+          if (over()) break;
+          cursors[i] = { at: candidate.deletedAt, id: candidate.id };
           try {
             await purgeOne(candidate, days, context);
             result.purged += 1;
           } catch (error) {
+            // 409: bloqueado (contable) o tomado por otro barrido → se conserva y se sigue. 404: ya lo borró otro.
             if (error instanceof TrashError && error.status === 409) result.retained += 1;
-            else if (error instanceof TrashError && error.status === 404) continue; // otra request ya lo borró
-            else {
+            else if (!(error instanceof TrashError && error.status === 404)) {
               result.failed += 1;
               console.error(`[trash-purge] No se pudo vaciar ${candidate.type}:${candidate.id}:`, error instanceof Error ? error.message : error);
             }
           }
         }
-      },
-      { timeout: 60_000, maxWait: 5_000 },
-    );
+      }
+    }
   } catch (error) {
     console.error(`[trash-purge] Falló el vaciado de la empresa ${organizationId}:`, error instanceof Error ? error.message : error);
     result.failed += 1;
   }
   return result;
+}
+
+// Por proceso: un barrido en vuelo por empresa (las llamadas simultáneas lo comparten) y un enfriamiento.
+const inFlight = new Map<string, Promise<PurgeSweepResult>>();
+const lastSweep = new Map<string, number>();
+
+export type PurgeOptions = { now?: Date; cooldownMs?: number; shared?: boolean };
+
+/**
+ * Vacía lo eliminado hace más de `days` días en la empresa. Sin transacción larga: cada borrado
+ * revalida bloqueos con el `FOR UPDATE` de su fila (otro barrido que la tenga primero da 404/409 y se
+ * ignora). Dedupe por proceso (`inFlight`) y como máximo un barrido cada 10 min por empresa.
+ * Nunca lanza por un registro; `shared: false` (pruebas) desactiva el dedupe y el enfriamiento.
+ */
+export function purgeExpiredTrash(organizationId: string, days: number | null | undefined, options: PurgeOptions = {}): Promise<PurgeSweepResult> {
+  const skipped: PurgeSweepResult = { skipped: true, purged: 0, retained: 0, failed: 0 };
+  if (!days || days < 1) return Promise.resolve(skipped);
+  const now = options.now ?? new Date();
+  if (options.shared === false) return sweep(organizationId, days, now);
+  const running = inFlight.get(organizationId);
+  if (running) return running;
+  const cooldown = options.cooldownMs ?? PURGE_COOLDOWN_MS;
+  const last = lastSweep.get(organizationId);
+  if (last !== undefined && Date.now() - last < cooldown) return Promise.resolve(skipped);
+  lastSweep.set(organizationId, Date.now());
+  const promise = sweep(organizationId, days, now).finally(() => inFlight.delete(organizationId));
+  inFlight.set(organizationId, promise);
+  return promise;
+}
+
+/** Solo pruebas: olvida enfriamientos y barridos en vuelo. */
+export function resetPurgeState(): void {
+  inFlight.clear();
+  lastSweep.clear();
 }

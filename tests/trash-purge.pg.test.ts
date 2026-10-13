@@ -36,7 +36,7 @@ test("papelera E5: vaciado automático perezoso en PostgreSQL", { skip: !process
       const expiredClient = await mkClient(org, "Cliente Viejo", old());
       const expiredItem = await mkItem(org, "Pantalla Vieja", old());
       const recent = await mkClient(org, "Cliente Nuevo", fresh());
-      const result = await purge.purgeExpiredTrash(org, 90);
+      const result = await purge.purgeExpiredTrash(org, 90, { shared: false });
       assert.deepEqual(result, { skipped: false, purged: 2, retained: 0, failed: 0 });
       assert.equal(await exists("client", expiredClient.id), false);
       assert.equal(await exists("inventoryItem", expiredItem.id), false);
@@ -56,7 +56,7 @@ test("papelera E5: vaciado automático perezoso en PostgreSQL", { skip: !process
       const budget = await dbWithDeleted.budget.create({ data: { id: randomUUID(), organizationId: org, clientId: blocked.id, title: "Pres", status: "APPROVED" } });
       await db.clientPayment.create({ data: { id: randomUUID(), organizationId: org, clientId: blocked.id, budgetId: budget.id, amount: 100_000 } });
       const free = await mkClient(org, "Cliente Libre", old());
-      const result = await purge.purgeExpiredTrash(org, 30);
+      const result = await purge.purgeExpiredTrash(org, 30, { shared: false });
       assert.equal(result.purged, 1);
       assert.equal(result.retained, 1);
       assert.equal(await exists("client", blocked.id), true, "el cliente con cobros sigue");
@@ -74,7 +74,7 @@ test("papelera E5: vaciado automático perezoso en PostgreSQL", { skip: !process
       const b = await seedOrg();
       const mine = await mkClient(a, "Mío", old());
       const theirs = await mkClient(b, "Ajeno", old());
-      await purge.purgeExpiredTrash(a, 30);
+      await purge.purgeExpiredTrash(a, 30, { shared: false });
       assert.equal(await exists("client", mine.id), false);
       assert.equal(await exists("client", theirs.id), true);
     });
@@ -107,14 +107,48 @@ test("papelera E5: vaciado automático perezoso en PostgreSQL", { skip: !process
       assert.equal((await settings.getRentalSettings(org)).trashPurgeDays, null);
     });
 
-    await t.test("dos llamadas concurrentes no se pisan: una purga y la otra sigue sin purgar o no encuentra nada", async () => {
+    await t.test("dos barridos simultáneos sin dedupe no se pisan: 6 borrados, 6 auditorías, sin fallas", async () => {
       const org = await seedOrg();
       const ids = await Promise.all(Array.from({ length: 6 }, (_, i) => mkClient(org, `Viejo ${i}`, old())));
-      const [r1, r2] = await Promise.all([purge.purgeExpiredTrash(org, 30), purge.purgeExpiredTrash(org, 30)]);
+      const [r1, r2] = await Promise.all([purge.purgeExpiredTrash(org, 30, { shared: false }), purge.purgeExpiredTrash(org, 30, { shared: false })]);
       assert.equal(r1.failed + r2.failed, 0);
       assert.equal(r1.purged + r2.purged, 6, "cada registro se borra exactamente una vez");
       for (const row of ids) assert.equal(await exists("client", row.id), false);
       assert.equal(await db.auditLog.count({ where: { organizationId: org, action: "purge" } }), 6, "una auditoría por borrado");
+    });
+
+    await t.test("con dedupe por proceso: llamadas simultáneas comparten el barrido y el enfriamiento evita repetirlo", async () => {
+      purge.resetPurgeState();
+      const org = await seedOrg();
+      for (let i = 0; i < 6; i += 1) await mkClient(org, `Viejo ${i}`, old());
+      const [r1, r2] = await Promise.all([purge.purgeExpiredTrash(org, 30), purge.purgeExpiredTrash(org, 30)]);
+      assert.strictEqual(r1, r2, "misma promesa compartida");
+      assert.equal(r1.purged, 6);
+      assert.equal(await db.auditLog.count({ where: { organizationId: org, action: "purge" } }), 6);
+      await mkClient(org, "Otro viejo", old());
+      assert.equal((await purge.purgeExpiredTrash(org, 30)).skipped, true, "en enfriamiento");
+      assert.equal((await purge.purgeExpiredTrash(org, 30, { cooldownMs: 0 })).purged, 1);
+    });
+
+    await t.test("más de 150 eventos viejos bloqueados no ahogan a los demás tipos", async () => {
+      const org = await seedOrg();
+      const owner = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "Titular", email: "c@test.dev", phone: "0981" } });
+      const when = new Date(Date.now() - 200 * 864e5); // más viejos que el resto: ocupan el principio
+      const events = Array.from({ length: 160 }, () => randomUUID());
+      await dbWithDeleted.event.createMany({
+        data: events.map((id, i) => ({ id, organizationId: org, clientId: owner.id, name: `Evento ${i}`, status: "COMPLETED" as const, startsAt: when, endsAt: when, ...dead(when) })),
+      });
+      const budgets = events.map(() => randomUUID());
+      await db.budget.createMany({ data: events.map((eventId, i) => ({ id: budgets[i], organizationId: org, clientId: owner.id, eventId, title: `P${i}`, status: "APPROVED" as const })) });
+      await db.clientPayment.createMany({ data: events.map((_, i) => ({ id: randomUUID(), organizationId: org, clientId: owner.id, budgetId: budgets[i], amount: 1000 })) });
+      const item = await mkItem(org, "Producto vencido", old());
+      const lead = await dbWithDeleted.lead.create({ data: { id: randomUUID(), organizationId: org, name: "Lead vencido", phone: "1", email: "l@t.dev", consentAt: new Date(), ...dead(old()) } });
+      const result = await purge.purgeExpiredTrash(org, 30, { shared: false });
+      assert.equal(result.purged, 2);
+      assert.ok(result.retained >= 1);
+      assert.equal(await exists("inventoryItem", item.id), false);
+      assert.equal(await dbWithDeleted.lead.count({ where: { id: lead.id } }), 0);
+      assert.equal(await dbWithDeleted.event.count({ where: { organizationId: org } }), 160, "los eventos con cobros siguen");
     });
 
     await t.test("respeta el tope por pasada", async () => {
@@ -123,9 +157,9 @@ test("papelera E5: vaciado automático perezoso en PostgreSQL", { skip: !process
       await dbWithDeleted.client.createMany({
         data: Array.from({ length: total }, (_, i) => ({ id: randomUUID(), organizationId: org, name: `Viejo ${i}`, email: "c@test.dev", phone: "0981", ...dead(old()) })),
       });
-      const first = await purge.purgeExpiredTrash(org, 30);
+      const first = await purge.purgeExpiredTrash(org, 30, { shared: false });
       assert.equal(first.purged, purge.PURGE_BATCH_LIMIT);
-      const second = await purge.purgeExpiredTrash(org, 30);
+      const second = await purge.purgeExpiredTrash(org, 30, { shared: false });
       assert.equal(second.purged, 3);
     });
   } finally {
