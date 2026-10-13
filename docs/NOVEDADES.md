@@ -515,3 +515,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Papelera: en Ajustes → Eliminados elegís «Vaciar automáticamente» (Nunca, 30, 60, 90 o 180 días; por defecto Nunca). Cada fila dice «Se borra en N días»; lo que tiene cobros, facturas o reservas queda «Conservado (contable)» y nunca se borra solo. Cada borrado automático queda en la auditoría como «Sistema».
 - Ajustes de la prueba en pantalla: el menú «•••» ya no queda recortado en Leads, Proveedores y Promotoras; en Eliminados las acciones entran sin desplazar; el motivo de una acción deshabilitada se lee debajo de la opción (también en el celular); los avisos de bloqueo hablan en castellano («Tiene 2 cobros»).
+
+## v2.1.111 — 2026-10-13
+
+- Ventanas de edición rediseñadas en todo el panel (productos, clientes, eventos, leads, proveedores, promotoras, inventario, cobros, facturación, presupuestos, usuarios y ajustes): campos ordenados por secciones con lo más usado primero y «Más opciones» plegable; título arriba y Guardar/Cancelar siempre visibles abajo; el error aparece justo arriba de los botones; «Guardando…» mientras guarda; si cerrás con cambios sin guardar, pregunta antes. Una sección plegada se abre sola si tiene un campo con error.
+- En el celular cada ventana ocupa la pantalla completa, sin desplazarse hacia los costados y con los botones encima del teclado.
+- Las confirmaciones (borrar compra, cerrar mes, revocar invitación, clave o link, quitar logo o foto) se piden dentro de la misma ventana.
+- Portal del cliente más claro: arriba «Qué tenés que hacer ahora» con una sola acción; una única sección «Pagar» (cuánto falta, datos del banco con copiar y subida del comprobante); un solo estado; un presupuesto aprobado ya no dice «venció»; sin «Evento: Indefinido» ni «Vía: Panel»; la cuenta interna de tesorería ya no aparece como destino de la transferencia («A coordinar» si no hay banco cargado). En el celular, tarjetas y botón de la acción principal fijo abajo.
