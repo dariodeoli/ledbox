@@ -18,3 +18,15 @@ test("eventos: el 409 de cierre trae código y la UI ofrece «Cerrar igual» con
   assert.match(ui, /\{writable && closeBlock \?/);
   assert.match(ui, /const closable = writable &&/);
 });
+
+test("incidentes: «Unidad sin identificar» solo para retenidos por cantidad en ítems con unidades", async () => {
+  const { isUnidentifiedUnitIncident, UNIDENTIFIED_UNIT_LABEL } = await import("../lib/inventory-incident-label");
+  assert.equal(UNIDENTIFIED_UNIT_LABEL, "Unidad sin identificar");
+  assert.equal(isUnidentifiedUnitIncident({ heldByQuantity: true, unitId: null, inventory: { _count: { units: 3 } } }), true);
+  assert.equal(isUnidentifiedUnitIncident({ heldByQuantity: true, unitId: null, inventory: { _count: { units: 0 } } }), false);
+  assert.equal(isUnidentifiedUnitIncident({ heldByQuantity: false, unitId: null, inventory: { _count: { units: 3 } } }), false);
+  assert.equal(isUnidentifiedUnitIncident({ heldByQuantity: true, unitId: "u1", inventory: { _count: { units: 3 } } }), false);
+  assert.equal(isUnidentifiedUnitIncident({ heldByQuantity: true, unitId: null, inventory: {} }), false);
+  assert.match(read("components/admin/modules/InventoryIncidents.tsx"), /isUnidentifiedUnitIncident\(incident\)/);
+  assert.match(read("app/api/admin/inventory/incidents/route.ts"), /_count: \{ select: \{ units: true \} \}/);
+});

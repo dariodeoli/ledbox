@@ -272,7 +272,9 @@ export type AdminInventoryIncident = {
   notes: string | null;
   openedAt: string;
   resolvedAt: string | null;
-  inventory: { id: string; name: string; sku: string | null };
+  /** Retenido por cantidad: en ítems con unidades es una «unidad sin identificar». */
+  heldByQuantity?: boolean;
+  inventory: { id: string; name: string; sku: string | null; _count?: { units: number } };
   unit: { id: string; code: string; status: string } | null;
   event: { id: string; name: string } | null;
 };

@@ -6,6 +6,7 @@ import type { AdminTone } from "@/lib/admin-format";
 import type { AdminInventoryIncident } from "@/lib/admin-types";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { MoneyField, TextAreaField } from "../AdminFields";
+import { UNIDENTIFIED_UNIT_LABEL, isUnidentifiedUnitIncident } from "@/lib/inventory-incident-label";
 import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminDialog, AdminDialogSection, AdminNote, AdminRow, AdminSelect, AdminTable } from "../AdminUI";
 
 const KIND_LABEL: Record<AdminInventoryIncident["kind"], string> = {
@@ -163,6 +164,12 @@ export function InventoryIncidentsPanel({
                 <AdminCell title={label}>
                   <strong>{incident.inventory.name}</strong>
                   {incident.unit ? <span className="admin-code"> · {incident.unit.code}</span> : null}
+                  {isUnidentifiedUnitIncident(incident) ? (
+                    <>
+                      {" "}
+                      <AdminBadge tone="warn" title="El incidente se registró por cantidad: falta identificar qué unidad es.">{UNIDENTIFIED_UNIT_LABEL}</AdminBadge>
+                    </>
+                  ) : null}
                 </AdminCell>
                 <AdminCell>{KIND_LABEL[incident.kind]}</AdminCell>
                 <AdminCell end>{formatNumber(incident.quantity)}</AdminCell>
