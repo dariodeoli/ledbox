@@ -28,6 +28,7 @@ import {
   AdminDialog,
   AdminEmpty,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -223,12 +224,12 @@ export function PlantillasModule() {
   return (
     <div className="admin-module-page">
       <AjustesTabs active="plantillas" />
-      <section className="admin-kpis" aria-label="Indicadores de plantillas">
+      <AdminKpis loading={templatesResource.data == null} label="Indicadores de plantillas">
         <AdminKpi label="Plantillas" icon="mail" value={formatNumber(totals.total)} note="de mensajes de WhatsApp" />
         <AdminKpi label="Activas" icon="check" value={formatNumber(totals.active)} note="disponibles para enviar" tone="ok" />
         <AdminKpi label="Inactivas" icon="eye-off" value={formatNumber(totals.inactive)} note="ocultas en los módulos" />
         <AdminKpi label="Categorías" icon="overview" value={formatNumber(totals.categories)} note={`de ${formatNumber(MESSAGE_TEMPLATE_CATEGORIES.length)}`} tone="accent" />
-      </section>
+      </AdminKpis>
 
       <nav className="admin-subtabs" aria-label="Categorías de plantillas">
         {MESSAGE_TEMPLATE_CATEGORIES.map((value) => (

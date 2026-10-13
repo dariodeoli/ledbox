@@ -82,6 +82,7 @@ import {
   AdminDisclosure,
   AdminEmpty,
   AdminKpi,
+  AdminKpis,
   AdminModuleContext,
   AdminNote,
   AdminPanel,
@@ -1601,7 +1602,7 @@ export function PresupuestosModule() {
         hint="Vigencia, margen, portal del cliente y próximos pasos comerciales."
         meta={`${formatNumber(rows.length)} visibles`}
       />
-      <section className="admin-kpis" aria-label="Indicadores de presupuestos">
+      <AdminKpis loading={budgetsResource.data == null} label="Indicadores de presupuestos">
         <AdminKpi
           label="Vigentes" icon="budgets"
           value={formatNumber(kpis.inPlay)}
@@ -1621,7 +1622,7 @@ export function PresupuestosModule() {
           tone={kpis.approvedThisMonth > 0 ? "ok" : undefined}
         />
         <AdminKpi label="Monto en juego" icon="finance" value={formatMoney(kpis.amount)} note="Σ de los vigentes" />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField

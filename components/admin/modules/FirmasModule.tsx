@@ -26,6 +26,7 @@ import {
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminRow,
   AdminSelect,
@@ -220,7 +221,7 @@ export function FirmasModule() {
   return (
     <div className="admin-module-page">
       <PresupuestosTabs active="firmas" />
-      <section className="admin-kpis" aria-label="Indicadores de firmas">
+      <AdminKpis loading={resource.data == null} label="Indicadores de firmas">
         <AdminKpi label="En curso" icon="pen" value={formatNumber(kpis.active)} note="esperando la firma del cliente" />
         <AdminKpi
           label="Por vencer"
@@ -237,7 +238,7 @@ export function FirmasModule() {
           note="sin firmar a tiempo"
           tone={kpis.expired > 0 ? "danger" : undefined}
         />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField

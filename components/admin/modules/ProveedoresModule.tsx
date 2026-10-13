@@ -41,6 +41,7 @@ import {
   AdminDialogSection,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -587,7 +588,7 @@ export function ProveedoresModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de proveedores">
+      <AdminKpis loading={suppliersResource.data == null || jobsResource.data == null} label="Indicadores de proveedores">
         <AdminKpi label="Proveedores" icon="suppliers" value={formatNumber(totals.activeSuppliers)} note={`activos de ${formatNumber(suppliers.length)}`} />
         <AdminKpi label="Trabajos abiertos" icon="suppliers" value={formatNumber(totals.open)} note="sin pagar ni cancelar" tone="accent" />
         <AdminKpi label="Saldo por pagar" icon="finance" value={formatMoney(totals.payable)} note="trabajos abiertos" tone={totals.payable > 0 ? "warn" : "ok"} />
@@ -597,7 +598,7 @@ export function ProveedoresModule() {
           note="con fecha prevista pasada"
           tone={totals.overdue > 0 ? "warn" : "ok"}
         />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar proveedores y trabajos" placeholder="Buscar por proveedor, trabajo, evento o rubro…" />

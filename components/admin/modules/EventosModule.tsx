@@ -49,6 +49,7 @@ import {
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminModuleContext,
   AdminNote,
   AdminPanel,
@@ -742,7 +743,7 @@ export function EventosModule() {
         meta={`${formatNumber(events.length)} eventos`}
       />
       {activeView === "calendar" ? null : (
-      <section className="admin-kpis" aria-label="Indicadores de eventos">
+      <AdminKpis loading={operations.data == null} label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
         <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
         <AdminKpi label="En curso" icon="checkin" value={formatNumber(inProgress)} note="operación activa" />
@@ -762,7 +763,7 @@ export function EventosModule() {
           note="próximos sin tareas cumplidas"
           tone={atRiskEvents.length > 0 ? "danger" : "ok"}
         />
-      </section>
+      </AdminKpis>
       )}
 
       <AdminToolbar>

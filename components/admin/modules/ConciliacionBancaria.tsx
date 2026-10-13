@@ -47,6 +47,7 @@ import {
   AdminDialog,
   AdminEmpty,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -276,7 +277,7 @@ export function ConciliacionBancaria({
         />
       ) : (
         <>
-          <section className="admin-kpis admin-kpis--conciliacion" aria-label="Indicadores de conciliación bancaria">
+          <AdminKpis loading={bank.data == null} className="admin-kpis--conciliacion" label="Indicadores de conciliación bancaria">
             <AdminKpi
               label="Pendientes" icon="alert"
               value={formatNumber(summary.pending.count)}
@@ -295,7 +296,7 @@ export function ConciliacionBancaria({
               note="extracto − movimientos de la cuenta"
               tone={summary.rows > 0 || summary.bookNet !== 0 ? differenceTone : undefined}
             />
-          </section>
+          </AdminKpis>
           <p className="admin-note admin-treasury-formula">
             <span>
               La diferencia es el neto del extracto del período (créditos − débitos, sin las filas rechazadas) menos el

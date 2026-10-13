@@ -21,6 +21,7 @@ import {
   AdminDialog,
   AdminDialogSection,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminPlanLimitNote,
@@ -278,12 +279,12 @@ export function UsuariosModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de usuarios">
+      <AdminKpis loading={users.data == null} label="Indicadores de usuarios">
         <AdminKpi label="Usuarios" icon="users" value={formatNumber(list.length)} note="con acceso al panel" />
         <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="pueden ingresar" tone="ok" />
         <AdminKpi label="Administradores" icon="users" value={formatNumber(totals.admins)} note="propietarios y admins" tone="accent" />
         <AdminKpi label="Consulta" icon="eye" value={formatNumber(totals.viewers)} note="solo lectura" />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar usuarios" placeholder="Buscar por nombre, correo o rol…" />

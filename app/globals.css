@@ -1441,6 +1441,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-kpi { flex-wrap: wrap; }
   .admin-kpi-label { flex-basis: 100%; }
 }
+/* Estado de carga honesto: esqueleto en lugar de un «0» inventado. */
+.admin-kpi-value--loading { display: inline-flex; align-items: center; min-height: 22px; }
+.admin-kpi-skeleton { display: inline-block; width: 44px; height: 14px; border-radius: 6px; background: linear-gradient(90deg, var(--a-line) 25%, var(--a-accent-soft) 50%, var(--a-line) 75%); background-size: 200% 100%; animation: admin-kpi-shimmer 1.2s linear infinite; }
+@keyframes admin-kpi-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .admin-kpi-skeleton { animation: none; } }
 .admin-kpi[data-tone="accent"] .admin-kpi-value { color: var(--a-accent); }
 .admin-kpi[data-tone="ok"] .admin-kpi-value { color: var(--a-ok); }
 .admin-kpi[data-tone="warn"] .admin-kpi-value { color: var(--a-warn); }

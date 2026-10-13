@@ -32,6 +32,7 @@ import {
   AdminIconLink,
   AdminImageUpload,
   AdminKpi,
+  AdminKpis,
   AdminModuleContext,
   AdminNote,
   AdminRow,
@@ -502,7 +503,7 @@ export function ClientesModule() {
         hint="Cartera, responsables y actividad comercial en una vista operativa."
         meta={`${formatNumber(rows.length)} visibles`}
       />
-      <section className="admin-kpis" aria-label="Indicadores de clientes">
+      <AdminKpis loading={clients.data == null} label="Indicadores de clientes">
         <AdminKpi label="Clientes" icon="clients" value={formatNumber(totals.total)} note="en cartera" />
         <AdminKpi label="Activos" icon="check" value={formatNumber(totals.active)} note="habilitados" tone="ok" />
         <AdminKpi
@@ -518,7 +519,7 @@ export function ClientesModule() {
           tone={totals.overdueAmount > 0 ? "danger" : undefined}
         />
         <AdminKpi label="Revendedores" icon="clients" value={formatNumber(totals.resellers)} note="mayoristas" tone="accent" />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField

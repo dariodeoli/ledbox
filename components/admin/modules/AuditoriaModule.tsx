@@ -24,6 +24,7 @@ import {
   AdminDataState,
   AdminEmpty,
   AdminKpi,
+  AdminKpis,
   AdminLoadingRows,
   AdminRow,
   AdminSelect,
@@ -225,7 +226,7 @@ function AuditoriaView() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Indicadores de auditoría">
+      <AdminKpis loading={audit.data == null} label="Indicadores de auditoría">
         <AdminKpi label="Registros" icon="audit" value={formatNumber(total)} note={filtersActive ? "según los filtros" : "histórico completo"} tone="accent" />
         <AdminKpi label="Página" icon="overview" value={`${formatNumber(currentPage)} / ${formatNumber(pageCount)}`} note={`${formatNumber(currentPageSize)} por página`} />
         <AdminKpi label="Actores" icon="users" value={formatNumber(actors.length)} note="con actividad registrada" tone="ok" />
@@ -234,7 +235,7 @@ function AuditoriaView() {
           value={newest ? formatDate(newest) : "—"}
           note={newest ? `${formatTime(newest)} · página actual` : "sin movimientos"}
         />
-      </section>
+      </AdminKpis>
 
       <AdminToolbar>
         <SearchField

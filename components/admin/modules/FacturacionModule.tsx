@@ -57,6 +57,7 @@ import {
   AdminEmpty,
   AdminIconLink,
   AdminKpi,
+  AdminKpis,
   AdminNote,
   AdminPanel,
   AdminRow,
@@ -562,7 +563,7 @@ export function FacturacionModule() {
 
   return (
     <div className="admin-module-page">
-      <section className="admin-kpis" aria-label="Resumen fiscal del período">
+      <AdminKpis loading={fiscal.data == null} label="Resumen fiscal del período">
         <AdminKpi label="Ventas del mes" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas · ${monthKeyLabel(month)}`} />
         <AdminKpi label="IVA a pagar" icon="finance" value={formatMoney(summary.balance)} note={`débito ${formatMoney(summary.debitIva)} − crédito ${formatMoney(summary.creditIva)}`} tone={summary.balance > 0 ? "warn" : undefined} />
         <AdminKpi label="Compras del mes" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
@@ -572,7 +573,7 @@ export function FacturacionModule() {
           note={periodClosed ? `${period?.closedByName ?? "—"} · ${formatDateTime(period?.closedAt)}` : "se factura y se editan comprobantes"}
           tone={periodClosed ? "ok" : "warn"}
         />
-      </section>
+      </AdminKpis>
 
       <nav className="admin-subtabs" aria-label="Secciones de facturación">
         {FISCAL_TABS.map((item) => (
@@ -1276,14 +1277,14 @@ export function FacturacionModule() {
                   : null
             }
           >
-            <section className="admin-kpis" aria-label="Resumen del cierre">
+            <AdminKpis loading={fiscal.data == null} label="Resumen del cierre">
               <AdminKpi label="Ventas" icon="receipt" value={formatMoney(summary.sales.total)} note={`${formatNumber(summary.sales.count)} facturas`} />
               <AdminKpi label="Compras" icon="suppliers" value={formatMoney(summary.purchases.total)} note={`${formatNumber(summary.purchases.count)} comprobantes`} />
               <AdminKpi label="IVA débito" icon="finance" value={formatMoney(summary.debitIva)} note="de las ventas" />
               <AdminKpi label="IVA crédito" icon="finance" value={formatMoney(summary.creditIva)} note="de las compras" />
               <AdminKpi label="Saldo de IVA" icon="finance" value={formatMoney(summary.balance)} note={summary.balance >= 0 ? "a pagar" : "saldo a favor"} tone={summary.balance > 0 ? "warn" : undefined} />
               <AdminKpi label="Resultado" icon="finance" value={formatMoney(summary.result)} note="ventas − compras" />
-            </section>
+            </AdminKpis>
             {periodClosed ? (
               <>
                 <p className="admin-note">

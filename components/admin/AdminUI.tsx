@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button as SharedButton } from "owncoding-ui";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { PIN_MAX_DIGITS, PIN_MIN_DIGITS, pinInput, pinValid } from "@/lib/field-rules";
 import type { AdminIconName, AdminTimelineEntry, AdminTimelineKind } from "@/lib/admin-types";
 import {
@@ -963,9 +963,54 @@ export function AdminModuleContext({
   );
 }
 
-export function AdminKpi({ label, value, note, tone, icon }: { label: string; value: string; note?: string; tone?: AdminTone; icon?: AdminIconName }) {
+const AdminKpiLoadingContext = createContext(false);
+
+/**
+ * Grilla de indicadores. Con `loading` todos los AdminKpi hijos muestran un
+ * esqueleto en lugar de un «0» inventado hasta que llegan los datos reales
+ * (regla «estados honestos»). Un 0 ya cargado se sigue mostrando como 0.
+ */
+export function AdminKpis({
+  loading = false,
+  className,
+  label,
+  children,
+}: {
+  loading?: boolean;
+  className?: string;
+  label?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="admin-kpi" data-tone={tone}>
+    <AdminKpiLoadingContext.Provider value={loading}>
+      <section className={className ? `admin-kpis ${className}` : "admin-kpis"} aria-label={label} aria-busy={loading || undefined}>
+        {children}
+      </section>
+    </AdminKpiLoadingContext.Provider>
+  );
+}
+
+export function AdminKpi({
+  label,
+  value,
+  note,
+  tone,
+  icon,
+  loading,
+}: {
+  label: string;
+  /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
+  value: string | null | undefined;
+  note?: string;
+  tone?: AdminTone;
+  icon?: AdminIconName;
+  loading?: boolean;
+}) {
+  const groupLoading = useContext(AdminKpiLoadingContext);
+  const pending = loading ?? groupLoading ?? false;
+  const empty = pending || value == null;
+  return (
+    <div className="admin-kpi" data-tone={empty ? undefined : tone} data-loading={empty ? "true" : undefined}>
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -975,9 +1020,15 @@ export function AdminKpi({ label, value, note, tone, icon }: { label: string; va
         {/* El texto va en su propio nodo para poder truncarlo sin perder el ícono. */}
         <span className="admin-kpi-label-text" title={label}>{label}</span>
       </span>
-      {/* El `title` deja leer completo lo que el compacto trunca (issue #113). */}
-      <strong className="admin-kpi-value" title={value}>{value}</strong>
-      {note ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
+      {empty ? (
+        <strong className="admin-kpi-value admin-kpi-value--loading" role="status" aria-label="Cargando">
+          <span className="admin-kpi-skeleton" aria-hidden="true" />
+        </strong>
+      ) : (
+        /* El `title` deja leer completo lo que el compacto trunca (issue #113). */
+        <strong className="admin-kpi-value" title={value}>{value}</strong>
+      )}
+      {note && !empty ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
     </div>
   );
 }

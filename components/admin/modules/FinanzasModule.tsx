@@ -81,6 +81,7 @@ import {
   AdminDialogSection,
   AdminDisclosure,
   AdminKpi,
+  AdminKpis,
   AdminModuleContext,
   AdminNote,
   AdminPanel,
@@ -2354,7 +2355,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               </Link>
             </span>
           </AdminToolbar>
-          <section className="admin-kpis" aria-label="Indicadores de finanzas">
+          <AdminKpis loading={finance.data == null || expected.data == null} label="Indicadores de finanzas">
             <AdminKpi
               label="Cobrado a clientes" icon="finance"
               value={formatMoney(totals.collected)}
@@ -2384,7 +2385,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               note={`${formatNumber(jobs.length)} trabajos de proveedor`}
               tone="warn"
             />
-          </section>
+          </AdminKpis>
           <AdminPanel title="Secciones" icon="overview" meta="Elegí dónde trabajar">
             <AdminCardGrid label="Secciones de Finanzas" cards={resumenCards} />
           </AdminPanel>
@@ -3670,7 +3671,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             ) : null
           }
         >
-          <section className="admin-kpis admin-kpis--treasury" aria-label="Disponible de tesorería">
+          <AdminKpis loading={treasury.data == null} className="admin-kpis--treasury" label="Disponible de tesorería">
             <AdminKpi
               label="Disponible en efectivo" icon="wallet"
               value={formatMoney(summary.cash)}
@@ -3693,7 +3694,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               value={formatMoney(summary.total)}
               note={`${formatNumber(summary.activeAccounts)} activas de ${formatNumber(summary.accounts)}`}
             />
-          </section>
+          </AdminKpis>
           <p className="admin-note admin-treasury-formula">
             <AdminIcon name="info" size={14} />
             <span>
