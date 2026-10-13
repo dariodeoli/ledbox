@@ -354,3 +354,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Presupuestos: cuando el cliente aprueba, el presupuesto avisa «Falta crear el evento» y ofrece el botón «Crear evento». El evento se crea con el cliente, el nombre y la fecha del presupuesto, ya confirmado, y los equipos quedan reservados. Si el evento existía como borrador, el botón lo confirma.
 - Cada presupuesto muestra sus etapas: Lead → Presupuesto → Aprobado → Evento → Cobrado, con un link a cada una.
 - Clientes: la ficha pasa a ser una página propia, con presupuestos, eventos, cobros, leads, historial y datos en pestañas, más el resumen de plata y contacto al costado. Tiene accesos directos a WhatsApp, Editar y Nuevo presupuesto.
+
+## v2.1.90 — 2026-10-13
+
+- Menú nuevo, ordenado como una venta: Inicio · Ventas (Leads → Presupuestos → Eventos) · Clientes · Operación · Plata · Ajustes. Cada etapa de Ventas muestra cuántos pendientes tiene. Firmas pasa a ser una pestaña de Presupuestos y Plantillas una de Ajustes. En el celular, la barra inferior es Inicio, Leads, Presupuestos, Eventos y Más.
+- El Resumen pasa a tener cuatro bloques: «Para hacer hoy», con hasta cinco acciones ordenadas por urgencia y un botón cada una; «Embudo del mes»; «Plata», con por cobrar, en mora y cobrado este mes; y «Esta semana». Los montos se ven completos, sin cortes.
+- Leads: alta manual desde «Nuevo lead», con la confirmación de que el contacto pidió ser llamado.
+- Demo: la bienvenida aparece una sola vez y queda una franja fina con «Recorrido guiado» y «Salir».
