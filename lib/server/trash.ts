@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AuditEntity } from "@/lib/admin-types";
 import { db, dbWithDeleted } from "./db";
 import { recordAudit, type AuditContext } from "./audit";
+import { formatBlockers } from "@/lib/trash-shared";
 import { isTrashModel, live, TRASH_MODELS, type TrashModel } from "./trash-filter";
 
 /**
@@ -332,8 +333,7 @@ export async function purgeBlockers(model: TrashModel, id: string, organizationI
 
 /** Mensaje concreto del 409 de bloqueo. */
 export function blockersMessage(blockers: Blocker[]): string {
-  const parts = blockers.map((b) => `${b.count} ${b.kind}`);
-  return `No se puede borrar definitivamente: tiene ${parts.join(", ")}. Podés anonimizarlo para conservar el historial contable.`;
+  return `No se puede borrar definitivamente. ${formatBlockers(blockers).join(". ")}. Podés anonimizarlo para conservar el historial contable.`;
 }
 
 export function blockedError(blockers: Blocker[]): TrashError {

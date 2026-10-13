@@ -236,7 +236,7 @@ export function AdminActionsMenu({
               <button
                 key={item.label}
                 type="button"
-                className="admin-menu-item"
+                className={`admin-menu-item${item.disabled && item.title && item.title !== item.label ? " admin-menu-item--reason" : ""}`}
                 role="menuitem"
                 title={item.title ?? item.label}
                 disabled={item.disabled}
@@ -247,7 +247,15 @@ export function AdminActionsMenu({
                 }}
               >
                 <AdminIcon name={item.icon} size={14} />
-                <span>{item.label}</span>
+                {/* Lo deshabilitado explica el motivo a la vista: el `title` no se ve al tocar. */}
+                {item.disabled && item.title && item.title !== item.label ? (
+                  <span className="admin-menu-text">
+                    <span className="admin-menu-label">{item.label}</span>
+                    <small className="admin-menu-reason">{item.title}</small>
+                  </span>
+                ) : (
+                  <span>{item.label}</span>
+                )}
               </button>
             ),
           )}

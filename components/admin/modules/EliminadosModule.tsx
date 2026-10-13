@@ -219,7 +219,7 @@ function EliminadosView() {
         empty={all.length === 0}
         emptyTitle="La papelera está vacía"
         emptyIcon="trash"
-        emptyHint="Lo que elimines desde Eventos o Inventario aparece acá, donde se puede restaurar."
+        emptyHint="Lo que elimines (eventos, inventario, clientes, leads, proveedores, promotoras o presupuestos) aparece acá, donde se puede restaurar."
         rows={5}
       >
         {rows.length === 0 ? (

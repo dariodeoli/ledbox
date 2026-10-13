@@ -1383,6 +1383,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-menu-item:hover:not(:disabled) { background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-menu-item:disabled { opacity: .5; cursor: not-allowed; }
 .admin-menu-item .admin-icon { flex: 0 0 auto; }
+.admin-menu-item--reason { align-items: flex-start; }
+.admin-menu-item--reason:disabled { opacity: 1; }
+.admin-menu-item--reason:disabled > .admin-icon, .admin-menu-item--reason:disabled .admin-menu-label { opacity: .5; }
+.admin-menu-text { display: grid; gap: 2px; min-width: 0; }
+.admin-menu-reason { color: var(--a-muted-2); font: 500 11.5px/1.35 var(--font-body); white-space: normal; }
+/* El «•••» de las filas con acciones es táctil como sus vecinos (44 px) en mobile. */
+@media (max-width: 720px) { .admin-actions > .admin-iconbtn, .admin-actions > .admin-btn--only-icon { min-width: 44px; min-height: 44px; } }
 .admin-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .admin-btn:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -1968,10 +1975,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
    pendiente y con qué eventos choca. */
 .admin-table--presupuestos-reserva { --presupuestos-reserva-cols: minmax(9rem, 1.3fr) minmax(9rem, 1.3fr) 5rem 6rem 7.5rem minmax(13rem, 2fr); --admin-cols: var(--presupuestos-reserva-cols); --admin-table-min: 55.5rem; }
-.admin-table--proveedores { --proveedores-cols: minmax(7rem, 1.2fr) minmax(6.5rem, 1.1fr) 5.75rem 5.5rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem 6.5rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 54rem; }
+.admin-table--proveedores { --proveedores-cols: minmax(7rem, 1.2fr) minmax(6.5rem, 1.1fr) 5.75rem 5.5rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem 10rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 57.5rem; }
 .admin-table--trabajos { --trabajos-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 64rem; }
-.admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 6.5rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 52rem; }
-.admin-table--leads { --leads-cols: 4.75rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem minmax(6.5rem, 1.2fr) minmax(5.5rem, 1fr) 5.75rem 5.5rem 7.5rem; --admin-cols: var(--leads-cols); --admin-table-min: 59rem; }
+.admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 10rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 55.5rem; }
+.admin-table--leads { --leads-cols: 4.75rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem minmax(6.5rem, 1.2fr) minmax(5.5rem, 1fr) 5.75rem 5.5rem 10rem; --admin-cols: var(--leads-cols); --admin-table-min: 61.5rem; }
 .admin-table--leads-productos { --leads-productos-cols: minmax(11rem, 1.6fr) 5.5rem 7rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39rem; }
 .admin-table--usuarios { --usuarios-cols: minmax(10rem, 1.2fr) minmax(12rem, 1.4fr) 8.5rem 6.5rem 7.5rem 5.5rem; --admin-cols: var(--usuarios-cols); --admin-table-min: 53rem; }
 .admin-table--checklist { --checklist-cols: 7rem minmax(9rem, 1.6fr) minmax(6rem, 1fr) 5rem 7rem; --admin-cols: var(--checklist-cols); --admin-table-min: 36rem; }
@@ -1983,7 +1990,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(7rem, 1.6fr) minmax(6.5rem, 1.2fr) 6rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 20.5rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 /* Ajustes → Eliminados (papelera): tipo, nombre, quién, fecha, motivo, bloqueos y acciones. */
-.admin-table--eliminados { --trash-cols: 7rem minmax(10rem, 1.6fr) minmax(8rem, 1fr) 9.5rem minmax(8rem, 1.2fr) minmax(10rem, 1.6fr) 9.5rem 18rem; --admin-cols: var(--trash-cols); --admin-table-min: 75rem; }
+.admin-table--eliminados { --trash-cols: 6.5rem minmax(8rem, 1.4fr) minmax(6rem, 0.9fr) 9rem minmax(4.5rem, 0.7fr) minmax(7.5rem, 1.3fr) 8.5rem 17.25rem; --admin-cols: var(--trash-cols); --admin-table-min: 64rem; }
 .admin-trash-type { display: inline-flex; align-items: center; gap: 6px; }
 /* Aviso de bloqueos del borrado: un renglón por motivo, el mismo en diálogos, fichas y tarjetas. */
 .admin-trash-blockers { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--a-danger); border-radius: 8px; background: var(--a-danger-surface); color: var(--a-danger-text); }
@@ -4303,7 +4310,7 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-quote-product-row > .admin-btn { grid-area: action; }
 .admin-quote-resource, .portal-quote-resource { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; overflow-wrap: anywhere; }
 .admin-quote-create-item { grid-column: 1 / -1; display: grid; gap: 12px; padding-block: 12px; border-top: 1px solid var(--a-line); }
-.admin-menu-pop { max-width: calc(100vw - 16px); max-height: min(70vh, calc(100dvh - 16px)); z-index: 80; }
+.admin-menu-pop { max-width: min(18rem, calc(100vw - 16px)); max-height: min(70vh, calc(100dvh - 16px)); z-index: 80; }
 .admin-menu-item { min-height: 44px; }
 @media (max-width: 600px) { .admin-quote-product-row { grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "photo name action" ". free free"; } }
 

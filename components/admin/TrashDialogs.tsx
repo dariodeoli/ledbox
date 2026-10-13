@@ -238,7 +238,7 @@ export function useTrashFlow(type: TrashEntityType, options: { onChanged: () => 
       setFeedback({ tone: "error", text: result.error });
       return;
     }
-    setFeedback({ tone: "ok", text: restore ? `«${name}» desarchivado.` : `«${name}» archivado. Lo ves con el filtro «Archivados».` });
+    setFeedback({ tone: "ok", text: restore ? `«${name}» desarchivado.` : `«${name}» archivado. Lo ves con el filtro de archivados.` });
     options.onChanged();
   }
 
