@@ -198,6 +198,24 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
   return { ok: true, data };
 }
 
+/** Reserva viva: sin liberar y con fin (propio o del evento) desde hoy en adelante, o sin fin. */
+function liveAssignmentWhere(startOfToday: Date): Prisma.EventInventoryWhereInput {
+  return {
+    releasedAt: null,
+    OR: [
+      { endsAt: { gte: startOfToday } },
+      {
+        endsAt: null,
+        OR: [
+          { event: { endsAt: { gte: startOfToday } } },
+          { event: { endsAt: null, startsAt: { gte: startOfToday } } },
+          { event: { endsAt: null, startsAt: null } },
+        ],
+      },
+    ],
+  };
+}
+
 export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
@@ -325,10 +343,20 @@ export async function GET(request: Request) {
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
   });
+  // `?vivas=1` (ficha y línea de tiempo): solo reservas sin liberar cuyo fin no
+  // pasó, de la más próxima a la más lejana, para que el tope de 1000 no deje
+  // afuera las próximas. Sin el parámetro el comportamiento no cambia.
+  const soloVivas = url.searchParams.get("vivas") === "1";
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
   const assignments = items.length
     ? await db.eventInventory.findMany({
-        where: { inventoryId: { in: items.map((item) => item.id) }, event: { organizationId } },
-        orderBy: [{ startsAt: "desc" }, { id: "asc" }],
+        where: {
+          inventoryId: { in: items.map((item) => item.id) },
+          event: { organizationId },
+          ...(soloVivas ? liveAssignmentWhere(startOfToday) : {}),
+        },
+        orderBy: soloVivas ? [{ startsAt: { sort: "asc", nulls: "last" } }, { id: "asc" }] : [{ startsAt: "desc" }, { id: "asc" }],
         take: 1000,
         include: { event: { select: EVENT_RANGE_SELECT } },
       })

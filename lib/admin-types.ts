@@ -1672,6 +1672,10 @@ export type AdminInventoryCombo = {
 
 /** Asignación de inventario a un evento, tal como la sirve `/api/admin/inventory`. */
 export type AdminInventoryAssignmentRow = AdminEventAssignmentMovement & {
+  /** Retención vigente que vence en esta fecha; `null` = reserva firme. */
+  holdExpiresAt?: string | null;
+  /** Reserva liberada (ya no compromete stock). */
+  releasedAt?: string | null;
   eventId: string;
   event: { id: string; name: string; startsAt: string | null; endsAt: string | null; status: string };
 };
@@ -1736,6 +1740,18 @@ export type AdminInventorySubstitute = {
   committed: number;
   available: number;
   conflicts: number;
+};
+
+/** Ocupación del inventario alquilable en la semana (`GET /api/admin/inventory/occupancy`). */
+export type AdminInventoryOccupancy = {
+  /** Porcentaje de días-unidad comprometidos; `null` si no hay capacidad alquilable. */
+  percent: number | null;
+  committedDays: number;
+  availableDays: number;
+  items: number;
+  truncated: boolean;
+  windowStart: string;
+  windowEnd: string;
 };
 
 /** Estados de una unidad física (issue #112). */
@@ -2592,6 +2608,7 @@ export type AdminApiResponse = {
   suppliers?: AdminSupplierRow[];
   inventory?: Array<AdminInventoryRow | AdminInventoryItemRow>;
   availability?: AdminInventoryAvailability;
+  occupancy?: AdminInventoryOccupancy;
   substitutes?: AdminInventorySubstitute[];
   /** Aviso no bloqueante de los precios de venta (issue #90): mayorista o mínimo por encima de la lista. */
   warning?: string;

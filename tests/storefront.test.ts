@@ -14,6 +14,7 @@ import { parseRentalSettingsPatch } from "../lib/server/rental-settings";
 import { catalogTokenHash, catalogTokenValue, isCatalogTokenShape } from "../lib/server/catalog-access";
 import { contrastRatio, normalizeHex, parseStorefrontAccent, storefrontTheme, STORE_MIN_CONTRAST, STORE_SURFACE_DARK } from "../lib/storefront-theme";
 import { featuredCategories } from "../components/catalog-public/StoreFront";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
 
@@ -141,7 +142,7 @@ test("migraciones de la tienda: aditivas, idempotentes y posteriores a 202610150
 });
 
 test("el inventario cambia el switch por el campo segmentado en el alta, la edición y la edición en lote", () => {
-  const module = read("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.equal((module.match(/<SegmentedField\s+label="Visibilidad en la tienda"/g) ?? []).length, 2, "alta y edición");
   assert.equal(/label="Visible en la web"/.test(module), false, "ya no queda el switch viejo");
   assert.match(module, /options=\{\[\.\.\.CATALOG_AUDIENCE_OPTIONS\]\}/);

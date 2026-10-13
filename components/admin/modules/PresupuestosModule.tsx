@@ -788,6 +788,7 @@ export function PresupuestosModule() {
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }
   // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
+  // Enlace del Resumen: `?detalle=<id>` abre el detalle de ese presupuesto.
   const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
     if (!newRequested || !writableForLead) return;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 /**
  * Cajas de imagen uniformes del inventario (issue #98): lista, tarjetas y
@@ -30,16 +31,16 @@ test("el módulo usa la caja fija compartida en lista, tarjetas y detalle", () =
   assert.match(box, /style=\{\{ width: size, height: size \}\}/, "la caja tiene que ser fija e igual para todos");
   assert.match(box, /onError=\{\(\) => setFailed\(true\)\}/, "falta el fallback al ícono");
   assert.match(box, /<AdminIcon name=\{icon\}/, "sin imagen (o si falla) dibuja el ícono");
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /function InventoryThumb\(\{ item, size = 26 \}/, "falta la caja base de 26 px");
   assert.match(module, /<AdminImageBox imageUrl=\{item\.imageUrl\} size=\{size\} \/>/, "la miniatura delega en la caja compartida");
-  assert.match(module, /<InventoryThumb item=\{item\} size=\{32\} \/>/, "las tarjetas usan una caja de 32 px");
-  assert.match(module, /<InventoryThumb item=\{selected\} size=\{72\} \/>/, "el detalle usa una caja de 72 px");
-  assert.match(module, /className="admin-item-figure"/, "falta la figura del detalle");
+  assert.match(module, /identity\(item, 36\)/, "las filas usan una caja de 36 px");
+  assert.match(module, /identity\(item, 48\)/, "las tarjetas usan una caja de 48 px");
+  assert.match(module, /<InventoryThumb item=\{item\} size=\{96\} \/>/, "la ficha usa una caja de 96 px");
 });
 
 test("la vista previa del alta usa la misma caja y valida la URL antes de mostrarla", () => {
-  const module = repoFile("components/admin/modules/InventarioModule.tsx");
+  const module = inventoryModuleSource();
   assert.match(module, /admin-image-preview/, "la vista previa usa la caja canónica de imagen");
   assert.match(
     module,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -78,7 +79,7 @@ test("descripción pública: tope de 600, campo opcional en la edición, catálo
   assert.match(api, /body\.publicDescription/);
   assert.match(api, /FIELD_LIMITS\.publicDescription/);
   assert.match(api, /"publicDescription",\n  "visibleOnWeb"/);
-  const ui = read("components/admin/modules/InventarioModule.tsx");
+  const ui = inventoryModuleSource();
   assert.match(ui, /label="Descripción para el catálogo"\n\s+optional/);
   assert.match(ui, /maxLength=\{FIELD_LIMITS\.publicDescription\}/);
   assert.match(read("components/catalog-public/CatalogBrowser.tsx"), /item\.description \?/);

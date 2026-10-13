@@ -1941,7 +1941,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: minmax(8.5rem, 1.4fr) 5.5rem 5.75rem 4rem 4rem minmax(5rem, .9fr) minmax(8.5rem, 1.6fr) 5.75rem 5.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 58.5rem; }
+.admin-table--inventario { --inventario-cols: 2.25rem minmax(10.5rem, 3fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) 7rem minmax(6rem, .8fr) minmax(6rem, .8fr) 6.25rem 6.75rem; --admin-cols: var(--inventario-cols); --admin-table-min: 57rem; }
 /* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
 .admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
@@ -2643,10 +2643,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    cambia de alto según la foto. Si la URL falla, cae al ícono (nunca rota). */
 .admin-item-thumb { position: relative; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden; border: 1px solid var(--a-line); border-radius: 6px; background: var(--a-panel-2); color: var(--a-muted); }
 .admin-item-thumb img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
-.admin-item-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; vertical-align: middle; }
 .admin-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-item-figure { display: flex; align-items: center; gap: 12px; margin: 10px 12px 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
-.admin-item-figure figcaption { min-width: 0; color: var(--a-muted); font-size: 12px; }
 /* Precios de venta del ítem (issue #90): lista, mayorista y mínimo en fichas
    del mismo ancho, con los números tabulares y sin decimales (PYG). */
 .admin-item-prices { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px; margin: 10px 12px 0; }
@@ -2655,10 +2652,107 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-item-prices dd { margin: 0; overflow: hidden; color: var(--a-text-strong); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 /* Regla «desde X días» de cada frente, debajo del precio normal (issue #110). */
 .admin-item-prices small { overflow: hidden; color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-/* Unidades físicas del ítem (issue #112): bloque del detalle con su tabla. */
-.admin-unit-block { display: grid; gap: 8px; margin: 10px 12px 0; }
+/* Unidades físicas del ítem (issue #112): encabezado del bloque de la ficha, con su resumen y acciones. */
 .admin-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .admin-table--inventario-unidades { --inventario-unidades-cols: minmax(7rem, 1fr) 10.5rem 7rem 5.5rem; --admin-cols: var(--inventario-unidades-cols); --admin-table-min: 31.5rem; }
+
+/* ── Inventario rediseñado: acciones, indicadores que filtran, lista con foto, tarjetas y ficha ── */
+.admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.admin-inv-actions .admin-btn { min-height: 38px; }
+.admin-inv-actions-end { margin-left: auto; }
+/* Cinco indicadores: etiqueta completa arriba y valor con su nota debajo. */
+.admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); }
+.admin-kpis--inventario .admin-kpi { flex-wrap: wrap; }
+.admin-kpis--inventario .admin-kpi-label { flex-basis: 100%; }
+.admin-kpis--inventario .admin-kpi-note { white-space: normal; }
+.admin-kpis--inventario .admin-kpi-label-text { overflow: visible; white-space: normal; line-height: 1.25; }
+/* Indicador que filtra: un botón con la misma caja que el KPI estático. */
+/* Producto: foto chica + nombre y SKU en dos líneas; todo el bloque abre la ficha. */
+.admin-inv-product { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.admin-inv-product-text { display: grid; min-width: 0; line-height: 1.25; }
+.admin-inv-product-text strong { overflow: hidden; color: var(--a-text-strong); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-inv-product-text small { overflow: hidden; color: var(--a-muted); text-overflow: ellipsis; white-space: nowrap; }
+.admin-inv-product:hover strong { color: var(--a-accent); text-decoration: underline; }
+.admin-cards-title .admin-inv-product { width: 100%; }
+.admin-cards-title .admin-inv-product-text strong { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* Stock libre / total con barra mini; el tono sale del stock real. */
+.admin-meter { display: grid; gap: 3px; min-width: 4.5rem; }
+.admin-meter-figures { color: var(--a-text-strong); font-variant-numeric: tabular-nums; font-size: 13px; }
+.admin-meter-figures small { color: var(--a-muted); font-size: 11px; }
+.admin-meter-track { display: block; height: 4px; overflow: hidden; border-radius: 999px; background: var(--a-line); }
+.admin-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--a-ok); }
+.admin-meter[data-tone="warn"] .admin-meter-fill { background: var(--a-warn); }
+.admin-meter[data-tone="danger"] .admin-meter-fill { background: var(--a-danger); }
+.admin-meter[data-tone="warn"] .admin-meter-figures strong { color: var(--a-warn-text); }
+.admin-meter[data-tone="danger"] .admin-meter-figures strong { color: var(--a-danger-text); }
+.admin-meter--large { min-width: 8rem; gap: 5px; }
+.admin-meter--large .admin-meter-figures strong { font-size: 22px; }
+.admin-meter--large .admin-meter-track { height: 6px; }
+/* Casilla de selección de fila (selección múltiple para la edición en lote). */
+.admin-rowcheck { display: inline-grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.admin-rowcheck:disabled { cursor: not-allowed; opacity: .5; }
+.admin-rowcheck-box { display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--a-line-control); border-radius: 6px; background: var(--a-bg-2); color: transparent; }
+.admin-rowcheck[aria-checked="true"] .admin-rowcheck-box { border-color: var(--a-ok); background: var(--a-ok); color: var(--a-ink); }
+.admin-cell--check { padding-inline: 0; }
+/* Barra de selección: queda pegada abajo y, en celular, por encima de la barra inferior. */
+.admin-bulkbar { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--a-accent); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-shadow-card); }
+.admin-bulkbar-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* Ficha del producto: navegación de secciones, resumen, línea de tiempo y vínculos. */
+.admin-dialog-stack { display: grid; gap: 10px; min-width: 0; }
+.admin-dialog-section { scroll-margin-top: 56px; }
+.admin-ficha-nav { position: sticky; top: -16px; z-index: 2; display: flex; gap: 6px; margin: -16px -16px 0; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--a-line); background: var(--a-dialog-bg); scrollbar-width: none; }
+.admin-ficha-nav::-webkit-scrollbar { display: none; }
+.admin-ficha-nav .admin-subtab { flex: 0 0 auto; min-height: 34px; cursor: pointer; }
+.admin-ficha-hero { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+.admin-ficha-hero-main { display: grid; flex: 1 1 18rem; gap: 12px; min-width: 0; }
+.admin-ficha-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.admin-ficha-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 8px; margin: 0; }
+.admin-ficha-stats > div { display: grid; gap: 2px; min-width: 0; padding: 8px 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-ficha-stats dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-ficha-stats dd { margin: 0; color: var(--a-text-strong); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-ficha-range { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.admin-ficha-description { margin: 0; color: var(--a-text); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.admin-ficha-links, .admin-ficha-audit { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-ficha-links li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.admin-ficha-links small, .admin-ficha-audit small { color: var(--a-muted); }
+.admin-ficha-audit li { display: grid; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--a-line); font-size: 12.5px; }
+.admin-dialog-stack .admin-item-prices, .admin-dialog-stack .admin-unit-head { margin: 0; }
+.admin-unit-summary { color: var(--a-muted-2); font-size: 12.5px; }
+.admin-timeline { display: grid; gap: 8px; }
+.admin-timeline-scale { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); color: var(--a-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.admin-timeline-track { position: relative; overflow: hidden; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: linear-gradient(90deg, transparent calc(25% - 1px), var(--a-line) calc(25% - 1px) 25%, transparent 25% calc(50% - 1px), var(--a-line) calc(50% - 1px) 50%, transparent 50% calc(75% - 1px), var(--a-line) calc(75% - 1px) 75%, transparent 75%), var(--a-panel-2); }
+.admin-timeline-bar { position: absolute; box-sizing: border-box; height: 22px; padding: 0 6px; overflow: hidden; border-radius: 6px; background: var(--a-accent); color: var(--a-nav-ink); font: 600 11px/22px var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
+.admin-timeline-bar[data-kind="hold"] { border: 1px dashed var(--a-warn); background: var(--a-warn-surface); color: var(--a-warn-text); line-height: 20px; }
+.admin-timeline-bar[data-kind="out"] { border: 1px solid var(--a-ok); background: var(--a-ok-surface); color: var(--a-ok-text); line-height: 20px; }
+.admin-timeline-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.admin-timeline-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 12.5px; }
+.admin-timeline-what { display: grid; min-width: 0; line-height: 1.25; }
+.admin-timeline-what strong { overflow: hidden; color: var(--a-text-strong); text-overflow: ellipsis; white-space: nowrap; }
+.admin-timeline-what small, .admin-timeline-when { color: var(--a-muted-2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.admin-timeline-dot { width: 10px; height: 10px; border-radius: 3px; background: var(--a-accent); }
+.admin-timeline-dot[data-kind="hold"] { border: 1px dashed var(--a-warn); background: var(--a-warn-surface); }
+.admin-timeline-dot[data-kind="out"] { border: 1px solid var(--a-ok); background: var(--a-ok-surface); }
+/* Tarjetas del inventario: datos en dos columnas con la etiqueta arriba (foto, stock, estado, tienda y precio). */
+.admin-inv-cards .admin-cards-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.admin-inv-cards .admin-cards-field { flex-direction: column; align-items: flex-start; gap: 2px; }
+.admin-inv-cards .admin-cards-field dd { width: 100%; max-width: 100%; text-align: left; }
+.admin-inv-cards .admin-meter { min-width: 0; width: 100%; }
+@media (max-width: 720px) {
+  .admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-kpis--inventario .admin-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .admin-inv-actions .admin-btn:first-child { flex: 1 1 100%; }
+  .admin-bulkbar { bottom: calc(var(--a-bottomnav, 72px) + 8px); }
+  .admin-inv-actions .admin-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+  .admin-inv-actions-end { flex: 1 1 100%; margin-left: 0; }
+  .admin-cards .admin-btn, .admin-cards .admin-iconbtn, .admin-bulkbar .admin-btn { min-height: 44px; }
+  .admin-cards .admin-iconbtn { min-width: 44px; }
+  .admin-cards .admin-rowcheck { width: 44px; height: 44px; }
+  .admin-cards .admin-actions { flex-wrap: wrap; }
+  .admin-cards .admin-filter--cell { height: 44px; max-width: 100%; }
+  .admin-ficha-nav .admin-subtab, .admin-inv-tabs .admin-subtab { min-height: 44px; }
+  .admin-timeline-list li { grid-template-columns: auto minmax(0, 1fr); }
+  .admin-timeline-when { grid-column: 2; white-space: normal; }
+}
 
 /* ── Plan de la empresa (issue #42) ──
    Plan vigente, consumo del mes con barra y comparación del catálogo en tarjetas

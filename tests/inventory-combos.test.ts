@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { comboCapacity, comboCapacityLabel, readComboComponents } from "../lib/inventory-combos";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -52,5 +53,5 @@ test("la pantalla usa los campos compartidos y el diálogo del panel", () => {
   assert.match(dialog, /from "\.\.\/AdminFields"/);
   assert.doesNotMatch(dialog, /<input\b/);
   assert.match(dialog, /comboCapacityLabel\(preview\.capacity\)/);
-  assert.match(read("components/admin/modules/InventarioModule.tsx"), /Nuevo combo/);
+  assert.match(inventoryModuleSource(), /Nuevo combo/);
 });

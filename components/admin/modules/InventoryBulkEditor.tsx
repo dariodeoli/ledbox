@@ -1,20 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
 import { adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS } from "@/lib/catalog-audience";
 import { MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
-import { AdminButton, AdminDisclosure, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminDialog, AdminDisclosure, AdminNote } from "../AdminUI";
 
 type Draft = { mode: string; value: string };
 
-export function InventoryBulkEditor({ target, selection, onSaved, onClear }: {
+export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClose }: {
   target: "items" | "units";
   selection: { id: string; label: string }[];
   onSaved: () => void;
+  /** Vacía la selección (y cierra la ventana). */
   onClear: () => void;
+  /** Cierra la ventana sin tocar la selección. */
+  onClose: () => void;
 }) {
+  const formId = useId();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,10 +47,23 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear }: {
     setNotice(`${result.data.updated} registros guardados. Solo se modificó la selección indicada. ${(result.data.warnings ?? []).join(" ")}`.trim());
     setDrafts({}); onSaved();
   }
-  return <AdminPanel title={`Edición masiva · ${target === "items" ? "productos" : "unidades"}`} icon="edit">
+  const dirty = Object.values(drafts).some(draft => draft.mode !== "keep");
+  return <AdminDialog
+    title={`Edición en lote · ${target === "items" ? "productos" : "unidades"}`}
+    icon="edit"
+    size="wide"
+    description={`Se aplica solo a los ${selection.length} seleccionados; el resto no cambia.`}
+    dirty={dirty}
+    onClose={onClose}
+    footer={({ requestClose }) => <>
+      <AdminButton type="button" onClick={onClear} disabled={busy}>Quitar selección</AdminButton>
+      <AdminButton type="button" onClick={requestClose} disabled={busy}>Cerrar</AdminButton>
+      <AdminButton type="submit" form={formId} variant="primary" icon="check" busy={busy} disabled={!selection.length || selection.length > 100}>Aplicar a {selection.length} seleccionados</AdminButton>
+    </>}
+  >
     <p className="admin-note">Selección explícita ({selection.length}): {selection.map(row => row.label).join(" · ")}</p>
     <AdminNote>No cambiar conserva cada valor. Vaciar borra textos opcionales o deja un importe/umbral en 0. El lote se guarda completo: ante un error no se aplica ningún cambio. Los códigos, nombres y cantidades derivadas se editan individualmente.</AdminNote>
-    <form className="admin-form" onSubmit={event => void submit(event)}>
+    <form id={formId} className="admin-form" onSubmit={event => void submit(event)}>
       {fields.map(field => {
         const draft = drafts[field.key] ?? { mode: "keep", value: "" };
         const help = INVENTORY_FIELD_HELP[target === "units" && field.key === "status" ? "unitStatus" : field.key];
@@ -64,7 +81,6 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear }: {
       })}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
-      <div className="admin-form-actions"><AdminButton type="button" onClick={onClear} disabled={busy}>Quitar selección</AdminButton><AdminButton type="submit" variant="primary" busy={busy} disabled={!selection.length || selection.length > 100}>Aplicar a {selection.length} seleccionados</AdminButton></div>
     </form>
-  </AdminPanel>;
+  </AdminDialog>;
 }

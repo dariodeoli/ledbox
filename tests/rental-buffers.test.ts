@@ -11,6 +11,7 @@ import {
 } from "../lib/server/inventory-availability";
 import { parseRentalSettingsPatch, RENTAL_SETTINGS_DEFAULTS, toRentalSettingsView } from "../lib/server/rental-settings";
 import { inventoryStatusLabel } from "../lib/admin-format";
+import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const repoFile = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const at = (hour: number, day = 10) => new Date(Date.UTC(2031, 0, day, hour));
@@ -98,7 +99,7 @@ test("DAMAGED y LOST se descuentan como mantenimiento y tienen texto es-PY", () 
   assert.match(source, /status: \{ in: \[\.\.\.UNAVAILABLE_UNIT_STATUSES\] \}/);
   assert.equal(inventoryStatusLabel("DAMAGED"), "Dañada");
   assert.equal(inventoryStatusLabel("LOST"), "Perdida");
-  assert.match(repoFile("components/admin/modules/InventarioModule.tsx"), /\{ value: "DAMAGED", label: "Dañada" \},\s*\{ value: "LOST", label: "Perdida" \}/);
+  assert.match(inventoryModuleSource(), /\{ value: "DAMAGED", label: "Dañada" \},\s*\{ value: "LOST", label: "Perdida" \}/);
   const schema = repoFile("prisma/schema.prisma");
   assert.match(schema, /enum InventoryUnitStatus \{[^}]*DAMAGED[^}]*LOST[^}]*\}/);
 });

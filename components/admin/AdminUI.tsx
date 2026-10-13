@@ -735,11 +735,23 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
  * Sección de un diálogo: título chico en mayúsculas y grilla de dos columnas en
  * escritorio (una en celular). Un campo `wide` ocupa el ancho completo.
  */
-export function AdminDialogSection({ title, children }: { title?: string; children: React.ReactNode }) {
+export function AdminDialogSection({
+  title,
+  id,
+  stack,
+  children,
+}: {
+  title?: string;
+  /** Ancla de la sección (navegación dentro de una ficha). */
+  id?: string;
+  /** Contenido en una sola columna de bloques (fichas) en lugar de la grilla de dos columnas de los formularios. */
+  stack?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="admin-dialog-section">
+    <section className="admin-dialog-section" id={id}>
       {title ? <h3 className="admin-dialog-section-title">{title}</h3> : null}
-      <div className="admin-dialog-grid">{children}</div>
+      <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"}>{children}</div>
     </section>
   );
 }
