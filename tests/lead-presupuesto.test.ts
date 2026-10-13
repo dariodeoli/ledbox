@@ -117,7 +117,8 @@ test("UI: «Armar presupuesto» solo con permiso de presupuestos y sin datos per
   assert.match(leads, /\/presupuestos\?nuevo=1&lead=\$\{encodeURIComponent\(selected\.id\)\}/);
   const presupuestos = repoFile("components/admin/modules/PresupuestosModule.tsx");
   assert.match(presupuestos, /lead-draft\?leadId=/);
-  assert.match(presupuestos, /Viene del lead del/);
+  // El enlace al lead de origen vive en el detalle del presupuesto (panel lateral).
+  assert.match(repoFile("components/admin/modules/BudgetDetailDialog.tsx"), /Viene del lead del/);
   assert.match(leads, /Presupuesto \{budgetReference\(budget\.id\)\}/);
 });
 

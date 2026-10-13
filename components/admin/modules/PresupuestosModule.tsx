@@ -1,21 +1,18 @@
 "use client";
 import { BudgetComparisons } from "./BudgetComparisons";
-import { BudgetDetailDialog } from "./BudgetDetailDialog";
-import { BudgetEventNotice } from "../BudgetEventNotice";
+import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
+import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
 import { budgetEventPrompt } from "@/lib/budget-event";
-import { budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "../AdminAvatar";
 import { clientLogoUrl } from "@/lib/admin-types";
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PresupuestosTabs } from "./PresupuestosTabs";
 import { AdminMailPreview } from "../AdminMailPreview";
 import type { MailPreview } from "@/lib/mail-preview";
 import {
   budgetApprovalLabel,
-  budgetApprovalMethodLabel,
   budgetApprovalTone,
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
@@ -30,21 +27,16 @@ import {
   formatMoney,
   formatNumber,
   formatTime,
-  inventoryStatusLabel,
   paymentProofMimeLabel,
   statusTone,
-  whatsappHref,
   type AdminTone,
 } from "@/lib/admin-format";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
-import { internalCostOf } from "@/lib/budget-costs";
 import { InventoryLinkPicker } from "./BudgetInventoryPicker";
 import { counterofferExclusion } from "@/lib/quote-selection";
-import { quoteProductPrice } from "@/lib/quote-sharing";
 import { BudgetPricingDialog } from "./BudgetPricingDialog";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
-import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody, securityDepositTone } from "./BudgetSecurityDeposit";
-import { SECURITY_DEPOSIT_LABEL, isSecurityDepositStatus } from "@/lib/budget-security-deposit";
+import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody } from "./BudgetSecurityDeposit";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
 import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
@@ -62,7 +54,6 @@ import {
   type AdminBudgetReservation,
   type AdminBudgetRow,
   type AdminClientOption,
-  type AdminInventoryItemRow,
   type AdminInventoryLink,
   type AdminPaymentDetails,
 } from "@/lib/admin-types";
@@ -79,7 +70,6 @@ import {
   AdminCountdown,
   AdminDataState,
   AdminDialog,
-  AdminDisclosure,
   AdminEmpty,
   AdminKpi,
   AdminKpis,
@@ -90,7 +80,6 @@ import {
   AdminTable,
   AdminTimelineDialog,
   AdminToolbar,
-  AdminWhatsappTemplateButton,
   type AdminMenuItem,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
@@ -98,7 +87,6 @@ import { SignatureDialog } from "./SignatureDialog";
 import {
   CheckboxField,
   Combobox,
-  DateField,
   EmailField,
   MoneyField,
   NumberField,
@@ -111,10 +99,9 @@ import {
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
-import { currentMonthKey, monthKeyLabel, monthOf } from "@/lib/fiscal";
 
-const STATUS_OPTIONS = [
-  { value: "ALL", label: "Todos los estados" },
+/** Tablero kanban: una columna por estado comercial (set de estados, sin máquina). */
+const BOARD_COLUMNS: AdminBoardColumn[] = [
   { value: "DRAFT", label: "Borrador" },
   { value: "SENT", label: "Enviado" },
   { value: "NEGOTIATING", label: "En negociación" },
@@ -123,8 +110,44 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelado" },
 ];
 
-/** Tablero kanban: una columna por estado comercial (set de estados, sin máquina). */
-const BOARD_COLUMNS: AdminBoardColumn[] = STATUS_OPTIONS.slice(1).map((option) => ({ value: option.value, label: option.label }));
+/** KPIs por etapa: cada uno filtra la lista al tocarlo. */
+const STAGE_KPIS: Array<{ stage: BudgetPipelineStage; icon: "budgets" | "mail" | "alert" | "check" | "close"; tone?: AdminTone }> = [
+  { stage: "draft", icon: "budgets" },
+  { stage: "sent", icon: "mail", tone: "accent" },
+  { stage: "approved_pending_event", icon: "alert", tone: "warn" },
+  { stage: "approved", icon: "check", tone: "ok" },
+  { stage: "lost", icon: "close" },
+];
+
+const FILTER_LABEL: Record<BudgetPipelineFilter, string> = {
+  all: "Todos",
+  approved_any: "Aprobados",
+  ...PIPELINE_STAGE_LABEL,
+};
+
+/** `?estado=` de los enlaces del Resumen → filtro de etapa. */
+const ESTADO_PARAM_FILTER: Record<string, BudgetPipelineFilter> = {
+  DRAFT: "draft",
+  SENT: "sent",
+  NEGOTIATING: "sent",
+  APPROVED: "approved_any",
+  LOST: "lost",
+  CANCELLED: "lost",
+};
+
+/** Entrada de las reglas de etapa y acción principal para un presupuesto de la lista. */
+function pipelineInput(budget: AdminBudgetRow): BudgetPipelineInput {
+  return {
+    status: budget.status,
+    approvedAt: budget.approvedAt,
+    event: budget.event,
+    total: budget.total,
+    advanceAmount: budget.advanceAmount,
+    revisionRequested: budgetApprovalState(budget) === "CAMBIOS_SOLICITADOS",
+    expectedPayments: budget.expectedPayments,
+    collected: collectedAmount(budget.payments),
+  };
+}
 
 /** ¿El presupuesto sigue en juego? Mismo criterio del resumen: ni perdido ni cancelado. */
 function budgetInPlay(budget: AdminBudgetRow): boolean {
@@ -282,41 +305,6 @@ function RequestComparison({ request }: { request: AdminBudgetRequestRow }) {
     );
   }
   return <p className="admin-dialog-text">{request.payload.comment || request.note || "Pedido de cambios"}</p>;
-}
-
-/**
- * Próximo paso comercial (issue #143): la acción que sigue según el estado y la
- * aprobación del portal, en una línea. Prioridad visual de la lista y las
- * tarjetas móviles: monto, vencimiento, cliente y próximo paso.
- */
-function budgetNextStep(budget: AdminBudgetRow): { label: string; hint: string } {
-  if (budgetApprovalState(budget) === "CAMBIOS_SOLICITADOS") {
-    return { label: "Responder cambios", hint: "El cliente pidió ajustes desde el portal" };
-  }
-  const days = daysUntilDue(budget.validUntil);
-  if (budget.status === "DRAFT") return { label: "Enviar al cliente", hint: "Falta compartir la propuesta" };
-  if (budget.status === "SENT") {
-    if (days !== null && days < 0) return { label: "Reactivar vigencia", hint: "La validez venció sin respuesta" };
-    if (days !== null && days <= 7) return { label: "Recordar vencimiento", hint: "La validez termina esta semana" };
-    return { label: "Esperar respuesta", hint: "Enviado y pendiente del cliente" };
-  }
-  if (budget.status === "NEGOTIATING") return { label: "Acordar condiciones", hint: "Hay una negociación abierta" };
-  if (budget.status === "APPROVED") {
-    const step = budgetCollectionStep({ ...budget, collected: collectedAmount(budget.payments) });
-    return { label: step.label, hint: step.kind === "complete" ? "Sin saldo por cobrar" : step.kind === "review" ? "El comprobante todavía no es un cobro confirmado" : `Pendiente ${formatMoney(step.amount)} según saldo y plan de pagos` };
-  }
-  if (budget.status === "LOST") return { label: "Reactivar o cerrar", hint: "Perdido: definir si se reintenta" };
-  return { label: "Archivado", hint: "Cancelado: sin acción pendiente" };
-}
-
-/** Resumen del plan de pagos para la columna del presupuesto. */
-function planSummary(budget: AdminBudgetRow): string {
-  const installments = Array.isArray(budget.installmentsJson) ? budget.installmentsJson : [];
-  const parts: string[] = [];
-  if (budget.advanceAmount > 0) parts.push(`anticipo ${formatMoney(budget.advanceAmount)}`);
-  if (installments.length > 0) parts.push(`${formatNumber(installments.length)} cuota${installments.length === 1 ? "" : "s"}`);
-  if (budget.paymentTerms) parts.push(budget.paymentTerms);
-  return parts.length > 0 ? parts.join(" · ") : "Sin plan de pagos";
 }
 
 // ── Reserva automática al aprobar (issue #18) ────────────────────────────────
@@ -746,7 +734,8 @@ export function PresupuestosModule() {
   }));
 
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("ALL");
+  const [stageFilter, setStageFilter] = useState<BudgetPipelineFilter>("all");
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [createItems, setCreateItems] = useState<BudgetItemDraft[]>([]);
@@ -783,8 +772,24 @@ export function PresupuestosModule() {
   // Enlaces del Resumen: `?estado=APPROVED` abre la lista ya filtrada.
   const estadoParam = (searchParams.get("estado") ?? "").trim().toUpperCase();
   useEffect(() => {
-    if (STATUS_OPTIONS.some((option) => option.value === estadoParam)) setStatus(estadoParam);
+    const mapped = ESTADO_PARAM_FILTER[estadoParam];
+    if (mapped) setStageFilter(mapped);
   }, [estadoParam]);
+  // Pestaña «Solicitudes del portal» (`?vista=solicitudes`) y detalle por enlace
+  // (`?detalle=<id>`, lo usan los links del Inicio): el panel lateral se abre al
+  // cargar y el parámetro desaparece al cerrarlo.
+  const vistaParam = searchParams.get("vista")?.trim() ?? "";
+  const detalleParam = searchParams.get("detalle")?.trim() ?? "";
+  useEffect(() => {
+    if (detalleParam) setDetailBudgetId(detalleParam);
+  }, [detalleParam]);
+  function clearDetailParam() {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("detalle")) return;
+    url.searchParams.delete("detalle");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
   // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
   const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
@@ -909,37 +914,30 @@ export function PresupuestosModule() {
 
   const budgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
   const requestRows = useMemo(() => budgetsResource.data?.requests ?? [], [budgetsResource.data]);
+  const showRequests = vistaParam === "solicitudes" && requestRows.length > 0;
   const pendingRequests = useMemo(() => requestRows.filter((request) => request.status === "pending"), [requestRows]);
 
   const rows = useMemo(() => {
     return budgetRows
-      .filter((budget) => (status === "ALL" ? true : budget.status === status))
-      .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]))
+      .filter((budget) => matchesPipelineFilter(budgetPipelineStage(budget), stageFilter))
+      .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name, budgetReference(budget.id)]))
       .sort(compareBudgetUrgency);
-  }, [budgetRows, query, status]);
+  }, [budgetRows, query, stageFilter]);
 
-  /** Conteo por estado para las pestañas/filtros de estado (issue #143). */
-  const statusCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const budget of budgetRows) counts.set(budget.status, (counts.get(budget.status) ?? 0) + 1);
-    return counts;
+  /** Cantidad y monto por etapa para los KPIs-filtro. */
+  const stageTotals = useMemo(() => {
+    const totals = new Map<BudgetPipelineStage, { count: number; amount: number }>();
+    for (const budget of budgetRows) {
+      const stage = budgetPipelineStage(budget);
+      const current = totals.get(stage) ?? { count: 0, amount: 0 };
+      totals.set(stage, { count: current.count + 1, amount: current.amount + budget.total });
+    }
+    return totals;
   }, [budgetRows]);
 
-  // Tablero (issue #26): el estado vive en las columnas, así que la búsqueda se
-  // aplica sin el filtro de estado y el orden por urgencia fija cada columna.
-  // Con un estado elegido (filtros encima del Kanban, issue #143) solo esa
-  // columna conserva tarjetas.
-  const searched = useMemo(
-    () =>
-      budgetRows
-        .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name]))
-        .sort(compareBudgetUrgency),
-    [budgetRows, query],
-  );
-  const boardRows = useMemo(
-    () => (status === "ALL" ? searched : searched.filter((budget) => budget.status === status)),
-    [searched, status],
-  );
+  // Tablero (issue #26): el estado vive en las columnas; el filtro por etapa de
+  // los KPIs recorta las tarjetas y el orden por urgencia fija cada columna.
+  const boardRows = rows;
 
   const moveBudget = useCallback(async (budget: AdminBudgetRow, nextStatus: string) => {
     setBoardError("");
@@ -948,208 +946,183 @@ export function PresupuestosModule() {
   }, []);
   const board = useAdminBoardMove({ rows: boardRows, move: moveBudget, onError: setBoardError });
 
-  const boardCards = useMemo<AdminBoardCardData[]>(
-    () =>
-      board.rows.map((budget) => {
-        const paid = collectedAmount(budget.payments);
-        const balance = budget.total - paid;
-        const approvalState = budgetApprovalState(budget);
-        const next = budgetNextStep(budget);
-        return {
-          id: budget.id,
-          status: budget.status,
-          title: budget.title,
-          subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
-          amount: budget.total,
-          amountNote: balance > 0 ? `saldo ${formatMoney(balance)}` : "cobrado",
-          date: budget.validUntil,
-          dateTitle: `Validez de la oferta: ${budget.title}`,
-          badges: [
-            {
-              label: budgetApprovalLabel(approvalState),
-              tone: budgetApprovalTone(approvalState),
-              title: portalSummary(budget),
-            },
-            { label: next.label, tone: "neutral", title: next.hint },
-            ...(budgetEventPrompt(budget) ? [{ label: budgetEventPrompt(budget) === "create" ? "Falta crear el evento" : "Evento en borrador", tone: "warn" as const, title: "Abrí el detalle del presupuesto para crear o confirmar el evento" }] : []),
-          ],
-          detail: `${next.label} · ${formatNumber(budget.items.length)} ítem${budget.items.length === 1 ? "" : "s"} · cobrado ${formatMoney(paid)}`,
-          actions: (
-            <>
-              {writable ? (
-                <AdminButton
-                  icon="mail"
-                  title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
-                  aria-label={`Enviar por correo: ${budget.title}`}
-                  onClick={() => openSend(budget)}
-                />
-              ) : null}
-              <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
-            </>
-          ),
-        };
-      }),
-    [board.rows, writable],
-  );
+  /** Siguiente acción lógica del presupuesto según su etapa y los permisos del rol. */
+  function primaryOf(budget: AdminBudgetRow): BudgetPrimaryAction | null {
+    return budgetPrimaryAction(pipelineInput(budget), { write: writable, createEvent: canCreateEvent });
+  }
+
+  function runPrimary(budget: AdminBudgetRow, action: BudgetPrimaryAction) {
+    switch (action.kind) {
+      case "send": return openSend(budget);
+      case "approve": return openApproval(budget, "approve");
+      case "edit": return setPricing(budget);
+      case "create_event": return void createEventFor(budget);
+      case "confirm_event": return void confirmEventFor(budget);
+      case "collect":
+      case "review_proof": return router.push("/finanzas");
+    }
+  }
+
+  /** La única acción visible de la fila o tarjeta, más el menú «•••» con todo lo demás. */
+  function rowActions(budget: AdminBudgetRow, menuOnly = false) {
+    const primary = menuOnly ? null : primaryOf(budget);
+    return (
+      <span className="admin-actions">
+        {primary ? (
+          <AdminButton
+            className="admin-btn--row"
+            busy={eventBusyId === budget.id && (primary.kind === "create_event" || primary.kind === "confirm_event")}
+            title={`${primary.label}: ${budget.title}`}
+            aria-label={`${primary.label}: ${budget.title}`}
+            onClick={() => runPrimary(budget, primary)}
+          >
+            {primary.label}
+          </AdminButton>
+        ) : null}
+        <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
+      </span>
+    );
+  }
+
+  /** Abre el portal del cliente en otra pestaña (genera el link si hace falta). */
+  function viewAsClient(budget: AdminBudgetRow) {
+    if (budget.publicToken) window.open(portalBudgetUrl(budget.publicToken), "_blank", "noopener,noreferrer");
+    else if (writable) void issueClientLink(budget, "view");
+    else setNotice("Este presupuesto todavía no tiene link público.");
+  }
+
+  function copyClientLink(budget: AdminBudgetRow) {
+    if (budget.publicToken) void copyPortalLink(budget);
+    else if (writable) void issueClientLink(budget, "copy");
+    else setNotice("Este presupuesto todavía no tiene link público.");
+  }
+
+  function openWhatsapp(budget: AdminBudgetRow) {
+    setTemplateTarget({ kind: "budget", id: budget.id, label: `${budget.title} · ${clientDisplayName(budget.client)}`, phone: budget.client.phone });
+  }
+
+  const boardCards: AdminBoardCardData[] = board.rows.map((budget) => {
+    const paid = collectedAmount(budget.payments);
+    const balance = budget.total - paid;
+    const approvalState = budgetApprovalState(budget);
+    const stage = budgetPipelineStage(budget);
+    return {
+      id: budget.id,
+      status: budget.status,
+      title: budget.title,
+      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      amount: budget.total,
+      amountNote: balance > 0 ? `saldo ${formatMoney(balance)}` : "cobrado",
+      date: budget.validUntil,
+      dateTitle: `Validez de la oferta: ${budget.title}`,
+      badges: [
+        { label: PIPELINE_STAGE_LABEL[stage], tone: statusTone(budget.status) },
+        ...(approvalState === "CAMBIOS_SOLICITADOS" ? [{ label: budgetApprovalLabel(approvalState), tone: budgetApprovalTone(approvalState), title: portalSummary(budget) }] : []),
+      ],
+      detail: `PRES-${budgetReference(budget.id)} · ${formatNumber(budget.items.length)} ítem${budget.items.length === 1 ? "" : "s"} · cobrado ${formatMoney(paid)}`,
+      // Las columnas del tablero son angostas: acá solo el menú «•••» (la acción
+      // lógica está arriba de todo en él y en el detalle).
+      actions: rowActions(budget, true),
+    };
+  });
 
   /**
-   * Acciones unificadas del presupuesto (issue #143): impresión, firma y portal
-   * viven en un solo menú «⋯» para no llenar la fila/tarjeta de íconos.
+   * Todas las acciones del presupuesto en un solo menú «•••». La acción lógica
+   * siguiente también vive en el botón de la fila, pero acá no se pierde nada.
    */
   function budgetMenuItems(budget: AdminBudgetRow): AdminMenuItem[] {
+    const prompt = budgetEventPrompt(budget);
+    const proofs = (proofsByBudget[budget.id] ?? []).length;
     return [
-      { label: "Detalle y etapas", icon: "eye" as const, onClick: () => setDetailBudgetId(budget.id), title: `Detalle del presupuesto: ${budget.title}` },
+      { label: "Ver detalle", icon: "eye" as const, onClick: () => openDetail(budget.id), title: `Detalle del presupuesto: ${budget.title}` },
+      ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget), title: `Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}` }] : []),
+      ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
+      ...(prompt && canCreateEvent ? [prompt === "create" ? { label: "Crear evento", icon: "events" as const, onClick: () => void createEventFor(budget) } : { label: "Confirmar evento", icon: "check" as const, onClick: () => void confirmEventFor(budget) }] : []),
+      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: "/finanzas", title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
       ...(writable ? [
-        ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
         { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
         { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
         { label: budget.securityDeposit ? "Depósito de garantía" : "Definir garantía", icon: "wallet" as const, onClick: () => setDepositBudget(budget) },
         { label: "Inventario", icon: "inventory" as const, onClick: () => setLinksBudget(budget) },
+        ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
         ...(!budget.approvedAt && budgetInPlay(budget) ? [{ label: "Aprobar manualmente", icon: "check" as const, onClick: () => openApproval(budget, "approve") }, { label: "Pedir cambios", icon: "alert" as const, onClick: () => openApproval(budget, "request_revision") }] : []),
       ] : []),
-      { label: "Cronología", icon: "audit", onClick: () => setTimelineBudget(budget) },
-      {
-        label: "Imprimir",
-        icon: "print",
-        href: `/imprimir/presupuesto/${budget.id}`,
-        external: true,
-        title: `Imprimir presupuesto: ${budget.title}`,
-      },
-      {
-        label: "Firma del cliente",
-        icon: "pen",
-        onClick: () => setSignatureBudget(budget),
-        title: `Firma del cliente: ${budget.title}`,
-      },
-      {
-        label: budget.publicToken ? "Portal del cliente" : "Generar link del portal",
-        icon: "globe",
-        onClick: () => openPortal(budget),
-        title: `${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}`,
-      },
-      ...(budget.publicToken
-        ? [
-            {
-              label: "Ver como cliente",
-              icon: "eye" as const,
-              href: portalBudgetUrl(budget.publicToken),
-              external: true,
-            },
-            {
-              label: "Copiar enlace del cliente",
-              icon: "copy" as const,
-              onClick: () => void copyPortalLink(budget),
-              title: `Copiar el link del portal: ${budget.title}`,
-            },
-          ]
-        : writable ? [{ label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => void issueClientLink(budget, "copy") }, { label: "Ver como cliente", icon: "eye" as const, onClick: () => void issueClientLink(budget, "view") }] : []),
+      { label: budget.publicToken ? "Portal del cliente" : "Generar link del portal", icon: "globe" as const, onClick: () => openPortal(budget), title: `${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}` },
+      ...(budget.publicToken || writable ? [
+        { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget), title: `Copiar el link del portal: ${budget.title}` },
+        { label: "Ver como cliente", icon: "eye" as const, onClick: () => viewAsClient(budget) },
+      ] : []),
+      { label: "Firma del cliente", icon: "pen" as const, onClick: () => setSignatureBudget(budget), title: `Firma del cliente: ${budget.title}` },
+      ...(proofs > 0 ? [{ label: `Comprobantes del portal (${proofs})`, icon: "upload" as const, onClick: () => setProofDialog(budget) }] : []),
+      { label: "Imprimir / PDF", icon: "print" as const, href: `/imprimir/presupuesto/${budget.id}`, external: true, title: `Imprimir presupuesto: ${budget.title}` },
+      { label: "Cronología", icon: "audit" as const, onClick: () => setTimelineBudget(budget) },
     ];
   }
 
-  /** Tarjetas del ancho compacto (issue #143): monto, vencimiento, cliente y próximo paso. */
-  const budgetCards = useMemo<AdminCardData[]>(
-    () =>
-      rows.map((budget) => {
-        const paid = collectedAmount(budget.payments);
-        const balance = budget.total - paid;
-        const approvalState = budgetApprovalState(budget);
-        const next = budgetNextStep(budget);
-        return {
-          id: budget.id,
-          title: budget.title,
-          titleTooltip: `${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`,
-          subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
-          badges: [
-            { label: budgetStatusLabel(budget.status), tone: statusTone(budget.status) },
-            { label: budgetApprovalLabel(approvalState), tone: budgetApprovalTone(approvalState), title: portalSummary(budget) },
-            { label: next.label, tone: "neutral", title: next.hint },
-          ],
-          fields: [
-            ...(budget.lead
-              ? [{
-                  label: "Origen",
-                  value: <Link className="admin-empty-link" href={`/leads?lead=${encodeURIComponent(budget.lead.id)}`}>Viene del lead del {formatDateShort(budget.lead.createdAt)}</Link>,
-                  title: `Presupuesto armado desde el lead del ${formatDate(budget.lead.createdAt)}`,
-                }]
-              : []),
-            { label: "Cliente", value: <span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={28} /><span>{clientDisplayName(budget.client)}</span></span> },
-            { label: "Total", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
-            {
-              label: "Vence",
-              value: budget.validUntil ? (
-                <>
-                  <span className="admin-nowrap">{formatDateShort(budget.validUntil)}</span>{" "}
-                  <AdminCountdown
-                    value={budget.validUntil}
-                    className="admin-countdown--inline"
-                    title={`Validez de la oferta: ${budget.title}`}
-                  />
-                </>
-              ) : (
-                "—"
-              ),
-              title: budget.validUntil ? `Vence el ${formatDate(budget.validUntil)}` : "Sin vencimiento",
-            },
-            {
-              label: "Saldo",
-              value: formatMoney(balance),
-              title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}`,
-            },
-            ...(budget.securityDeposit && isSecurityDepositStatus(budget.securityDepositStatus)
-              ? [{
-                  label: "Garantía",
-                  value: <><span className="admin-nowrap">{formatMoney(budget.securityDeposit)}</span> <AdminBadge tone={securityDepositTone(budget.securityDepositStatus)}>{SECURITY_DEPOSIT_LABEL[budget.securityDepositStatus]}</AdminBadge></>,
-                  title: `Depósito de garantía aparte del total: ${formatMoney(budget.securityDeposit)} · ${SECURITY_DEPOSIT_LABEL[budget.securityDepositStatus]}`,
-                }]
-              : []),
-            {
-              label: "Ítems",
-              value: formatNumber(budget.items.length),
-              title: `${formatNumber(budget.items.length)} ítem${budget.items.length === 1 ? "" : "s"}`,
-            },
-          ],
-          footer: (
-            <>
-              {eventNotice(budget)}
-              <span className="admin-actions">
-                {writable ? (
-                  <AdminButton
-                    icon="mail"
-                    title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
-                    aria-label={`Enviar por correo: ${budget.title}`}
-                    onClick={() => openSend(budget)}
-                  />
-                ) : null}
-                <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
-              </span>
-            </>
-          ),
-        };
-      }),
-    [rows, writable, eventBusyId, canCreateEvent],
-  );
-
-  // KPIs del módulo (spec 22-09-2026): vigentes, por vencer en 7 días, los
-  // aprobados del mes y el monto que sigue en juego. El detalle por presupuesto
-  // (cobrado, saldo, margen) vive en las columnas de la lista y en Finanzas.
-  const kpis = useMemo(() => {
-    const inPlay = budgetRows.filter(budgetInPlay);
-    const expiring = inPlay.filter((budget) => {
-      const days = daysUntilDue(budget.validUntil);
-      return days !== null && days >= 0 && days <= 7;
-    });
-    const month = currentMonthKey();
-    const approvedThisMonth = budgetRows.filter(
-      (budget) => budget.approvedAt && monthOf(new Date(budget.approvedAt)) === month,
-    );
+  /** Tarjetas del ancho compacto: etapa, monto, saldo, vencimiento y la siguiente acción. */
+  const budgetCards: AdminCardData[] = rows.map((budget) => {
+    const paid = collectedAmount(budget.payments);
+    const balance = budget.total - paid;
+    const approvalState = budgetApprovalState(budget);
     return {
-      inPlay: inPlay.length,
-      expiring: expiring.length,
-      approvedThisMonth: approvedThisMonth.length,
-      amount: inPlay.reduce((sum, budget) => sum + budget.total, 0),
-      monthLabel: monthKeyLabel(month),
+      id: budget.id,
+      title: <button type="button" className="admin-quote-title-btn" onClick={() => openDetail(budget.id)}><strong className="admin-quote-title">{budget.title}</strong></button>,
+      titleTooltip: `PRES-${budgetReference(budget.id)} · ${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`,
+      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      badges: [
+        { label: PIPELINE_STAGE_LABEL[budgetPipelineStage(budget)], tone: statusTone(budget.status) },
+        ...(approvalState === "CAMBIOS_SOLICITADOS" ? [{ label: budgetApprovalLabel(approvalState), tone: budgetApprovalTone(approvalState), title: portalSummary(budget) }] : []),
+      ],
+      fields: [
+        { label: "Monto", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
+        { label: budget.advanceAmount > 0 && paid < budget.advanceAmount ? "Seña" : "Saldo", value: formatMoney(budget.advanceAmount > 0 && paid < budget.advanceAmount ? budget.advanceAmount - paid : balance), title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)} · saldo ${formatMoney(balance)}` },
+        {
+          label: "Vence",
+          value: budget.validUntil ? (
+            <>
+              <span className="admin-nowrap">{formatDateShort(budget.validUntil)}</span>{" "}
+              <AdminCountdown value={budget.validUntil} className="admin-countdown--inline" title={`Validez de la oferta: ${budget.title}`} />
+            </>
+          ) : "—",
+          title: budget.validUntil ? `Vence el ${formatDate(budget.validUntil)}` : "Sin vencimiento",
+        },
+      ],
+      footer: rowActions(budget),
     };
-  }, [budgetRows]);
+  });
+
+  /** Acciones del panel de detalle: cada una abre la ventana existente de esa edición. */
+  function detailActionsOf(budget: AdminBudgetRow): BudgetDetailActions {
+    const primary = primaryOf(budget);
+    return {
+      onPrimary: primary ? () => runPrimary(budget, primary) : undefined,
+      onSend: writable ? () => openSend(budget) : undefined,
+      onEdit: writable ? () => setPricing(budget) : undefined,
+      onPlan: writable ? () => openPlan(budget) : undefined,
+      onDeposit: writable ? () => setDepositBudget(budget) : undefined,
+      onInventory: writable ? () => setLinksBudget(budget) : undefined,
+      onEventName: writable && canCreateEvent && budget.event ? () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } : undefined,
+      onApprove: writable && !budget.approvedAt && budgetInPlay(budget) ? () => openApproval(budget, "approve") : undefined,
+      onRequestChanges: writable && !budget.approvedAt && budgetInPlay(budget) ? () => openApproval(budget, "request_revision") : undefined,
+      onWhatsapp: writable && budget.client.phone ? () => openWhatsapp(budget) : undefined,
+      onProofs: () => setProofDialog(budget),
+      onCreateEvent: () => void createEventFor(budget),
+      onConfirmEvent: () => void confirmEventFor(budget),
+      onPortal: () => openPortal(budget),
+      onCopyLink: () => copyClientLink(budget),
+      onViewClient: () => viewAsClient(budget),
+      onSignature: () => setSignatureBudget(budget),
+    };
+  }
+
+  function openDetail(id: string) {
+    setDetailBudgetId(id);
+  }
+
+  function closeDetail() {
+    setDetailBudgetId(null);
+    clearDetailParam();
+  }
 
   // Comprobantes del portal (issue #17): una sola consulta de metadatos por
   // carga de presupuestos; el visor los agrupa por presupuesto.
@@ -1453,22 +1426,6 @@ export function PresupuestosModule() {
     }
   }
 
-  /** Aviso del evento pendiente de un presupuesto aprobado (tabla, tarjetas y detalle). */
-  function eventNotice(budget: AdminBudgetRow) {
-    const prompt = budgetEventPrompt(budget);
-    if (!prompt) return null;
-    return (
-      <BudgetEventNotice
-        prompt={prompt}
-        title={budget.title}
-        canAct={canCreateEvent}
-        busy={eventBusyId === budget.id}
-        onCreate={() => void createEventFor(budget)}
-        onConfirm={() => void confirmEventFor(budget)}
-      />
-    );
-  }
-
   async function submitApproval() {
     if (!approval) return;
     const noteError = budgetApprovalNoteError(approval.decision, note);
@@ -1597,32 +1554,43 @@ export function PresupuestosModule() {
 
   return (
     <div className="admin-module-page">
-      <PresupuestosTabs active="presupuestos" />
+      <PresupuestosTabs active={showRequests ? "solicitudes" : "presupuestos"} requests={requestRows.length} pendingRequests={pendingRequests.length} />
       <AdminModuleContext
         breadcrumb="Ventas / Presupuestos"
-        hint="Vigencia, margen, portal del cliente y próximos pasos comerciales."
-        meta={`${formatNumber(rows.length)} visibles`}
+        hint={showRequests ? "Pedidos de cambios y rebajas que llegaron desde el portal del cliente." : "Qué enviar, qué aprobar y qué cobrar, según la etapa de cada presupuesto."}
+        meta={showRequests ? `${formatNumber(pendingRequests.length)} pendientes` : `${formatNumber(rows.length)} visibles`}
+        action={writable && !showRequests ? (
+          <AdminButton
+            variant="primary"
+            icon="plus"
+            onClick={() => {
+              setFormError("");
+              setShowForm((open) => !open);
+            }}
+            aria-expanded={showForm}
+          >
+            Nuevo presupuesto
+          </AdminButton>
+        ) : undefined}
       />
-      <AdminKpis state={kpiState(budgetsResource)} label="Indicadores de presupuestos">
-        <AdminKpi
-          label="Vigentes" icon="budgets"
-          value={formatNumber(kpis.inPlay)}
-          note="ni perdidos ni cancelados"
-          tone={kpis.inPlay > 0 ? "accent" : undefined}
-        />
-        <AdminKpi
-          label="Por vencer (7 días)" icon="clock"
-          value={formatNumber(kpis.expiring)}
-          note="validez que termina esta semana"
-          tone={kpis.expiring > 0 ? "warn" : undefined}
-        />
-        <AdminKpi
-          label="Aprobados del mes" icon="check"
-          value={formatNumber(kpis.approvedThisMonth)}
-          note={kpis.monthLabel}
-          tone={kpis.approvedThisMonth > 0 ? "ok" : undefined}
-        />
-        <AdminKpi label="Monto en juego" icon="finance" value={formatMoney(kpis.amount)} note="Σ de los vigentes" />
+      {showRequests ? null : (
+        <>
+      <AdminKpis className="admin-kpis--stages" state={kpiState(budgetsResource)} label="Etapas de los presupuestos (tocá una para filtrar la lista)">
+        {STAGE_KPIS.map(({ stage, icon, tone }) => {
+          const total = stageTotals.get(stage) ?? { count: 0, amount: 0 };
+          return (
+            <AdminKpi
+              key={stage}
+              label={PIPELINE_STAGE_LABEL[stage]}
+              icon={icon}
+              value={formatNumber(total.count)}
+              note={total.count > 0 ? formatMoney(total.amount) : "sin presupuestos"}
+              tone={total.count > 0 ? tone : undefined}
+              active={stageFilter === stage}
+              onSelect={() => setStageFilter((current) => (current === stage ? "all" : stage))}
+            />
+          );
+        })}
       </AdminKpis>
 
       <AdminToolbar>
@@ -1630,7 +1598,7 @@ export function PresupuestosModule() {
           value={query}
           onChange={setQuery}
           label="Buscar presupuestos"
-          placeholder="Buscar por título, cliente o evento…"
+          placeholder="Buscar por número, título, cliente o evento…"
         />
         {narrow ? null : <AdminViewSwitch view={view} onChange={setView} label="Vista de presupuestos" />}
         {writable ? <BudgetComparisons quotes={budgetRows} /> : null}
@@ -1644,25 +1612,20 @@ export function PresupuestosModule() {
             Datos de pago
           </AdminButton>
         ) : null}
-        {writable ? (
-          <AdminButton
-            variant="primary"
-            icon="plus"
-            onClick={() => {
-              setFormError("");
-              setShowForm((open) => !open);
-            }}
-            aria-expanded={showForm}
-          >
-            Nuevo presupuesto
-          </AdminButton>
-        ) : null}
       </AdminToolbar>
+      {stageFilter !== "all" ? (
+        <p className="admin-filter-note" role="status">
+          Mostrando: <strong>{FILTER_LABEL[stageFilter]}</strong> ({formatNumber(rows.length)})
+          <button type="button" className="admin-empty-link" onClick={() => setStageFilter("all")}>Quitar filtro</button>
+        </p>
+      ) : null}
+        </>
+      )}
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
-      {writable && showForm ? (
+      {writable && showForm && !showRequests ? (
         <form className="admin-form-panel" onSubmit={submit} aria-busy={busy}>
           <h2 className="admin-form-title">Nuevo presupuesto</h2>
           {leadLoading ? <AdminNote>Cargando los datos del lead…</AdminNote> : null}
@@ -1742,7 +1705,7 @@ export function PresupuestosModule() {
         </form>
       ) : null}
 
-      {requestRows.length > 0 ? (
+      {showRequests ? (
         <AdminPanel
           title="Solicitudes del portal" icon="globe"
           meta={
@@ -1827,34 +1790,7 @@ export function PresupuestosModule() {
         </AdminPanel>
       ) : null}
 
-      {/* Filtros/pestañas de estado (issue #143): encima del tablero y de la
-          lista; en ancho compacto son las pestañas que reemplazan al Kanban. */}
-      <nav className="admin-subtabs" aria-label="Filtrar presupuestos por estado">
-        <button
-          type="button"
-          className="admin-subtab"
-          data-active={status === "ALL" ? "true" : undefined}
-          aria-pressed={status === "ALL"}
-          onClick={() => setStatus("ALL")}
-        >
-          Todos
-          <span className="admin-subtab-count">{formatNumber(budgetRows.length)}</span>
-        </button>
-        {STATUS_OPTIONS.slice(1).map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="admin-subtab"
-            data-active={status === option.value ? "true" : undefined}
-            aria-pressed={status === option.value}
-            onClick={() => setStatus(option.value)}
-          >
-            {option.label}
-            <span className="admin-subtab-count">{formatNumber(statusCounts.get(option.value) ?? 0)}</span>
-          </button>
-        ))}
-      </nav>
-
+      {showRequests ? null : (
       <AdminDataState
         loading={budgetsResource.loading}
         error={budgetsResource.error}
@@ -1890,106 +1826,53 @@ export function PresupuestosModule() {
             view="presupuestos"
             label="Presupuestos"
             columns={[
-              { label: "Presupuesto" },
+              { label: "N°" },
               { label: "Cliente" },
-              { label: "Total", end: true },
+              { label: "Evento o título" },
+              { label: "Monto", end: true },
+              { label: "Seña / saldo", end: true },
+              { label: "Etapa" },
               { label: "Vence" },
-              { label: "Estado / próximo paso" },
-              { label: "Ítems", end: true },
-              { label: "Cobrado", end: true },
-              { label: "Saldo", end: true },
-              { label: "Margen", end: true },
-              { label: "Portal" },
-              { label: "Acciones", end: true },
+              { label: "Acción", end: true },
             ]}
           >
             {rows.map((budget) => {
               const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
-              // Margen sobre el costo interno completo (issue #65): materiales +
-              // mano de obra + costo de los ítems, no solo el estimado por ítem.
-              const internalCost = internalCostOf({
-                materialCost: budget.materialCost ?? 0,
-                laborCost: budget.laborCost ?? 0,
-                items: budget.items,
-              });
-              const margin = budget.total - internalCost.total;
+              const advanceDue = Math.max(0, budget.advanceAmount - paid);
               const approvalState = budgetApprovalState(budget);
-              const approved = approvalState === "APROBADO_DIGITAL" || approvalState === "APROBADO_MANUAL";
-              const open = budget.status !== "LOST" && budget.status !== "CANCELLED";
-              const linked = budget.items.filter((item) => item.inventoryId);
-              const linkedCount = linked.length;
-              const linkedNames = linked
-                .map((item) => `${item.name} → ${item.inventory?.name ?? "inventario eliminado"}`)
-                .join(", ");
-              const budgetProofs = proofsByBudget[budget.id] ?? [];
-              const proofLabel = `${formatNumber(budgetProofs.length)} comprobante${budgetProofs.length === 1 ? "" : "s"} del portal`;
-              const next = budgetNextStep(budget);
+              const stage = budgetPipelineStage(budget);
               return (
                 <AdminRow key={budget.id}>
-                  <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
-                    <button type="button" className="admin-quote-title-btn" title={`Ver el detalle y las etapas de ${budget.title}`} onClick={() => setDetailBudgetId(budget.id)}>
-                      <strong className="admin-quote-title">{budget.title}</strong>
-                    </button>
-                    {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
-                    {budgetEventPrompt(budget) ? <span className="admin-cell-event-alert">{eventNotice(budget)}</span> : null}
-                    {budget.lead ? (
-                      <small className="admin-cell-sub" style={{ display: "block" }}>
-                        <Link href={`/leads?lead=${encodeURIComponent(budget.lead.id)}`} title="Abrir el lead de origen">
-                          Viene del lead del {formatDateShort(budget.lead.createdAt)}
-                        </Link>
-                      </small>
-                    ) : null}
+                  <AdminCell title={`Presupuesto PRES-${budgetReference(budget.id)}`}>
+                    <span className="admin-nowrap admin-quote-ref">{budgetReference(budget.id)}</span>
                   </AdminCell>
                   <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
+                  <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
+                    <button type="button" className="admin-quote-title-btn" title={`Ver el detalle de ${budget.title}`} onClick={() => openDetail(budget.id)}>
+                      <strong className="admin-quote-title">{budget.event?.name ?? budget.title}</strong>
+                    </button>
+                    {budget.event ? <small className="admin-cell-sub"> · {budget.title}</small> : null}
+                  </AdminCell>
                   <AdminCell end title={formatMoney(budget.total)}>
-                    {formatMoney(budget.total)}
+                    <strong>{formatMoney(budget.total)}</strong>
+                  </AdminCell>
+                  <AdminCell end title={`Saldo ${formatMoney(balance)} de ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}${budget.advanceAmount > 0 ? ` · seña ${formatMoney(budget.advanceAmount)}` : ""}`}>
+                    {balance === 0 && budget.total > 0 ? "Cobrado" : (
+                      <>
+                        <small className="admin-cell-sub">{advanceDue > 0 ? "seña " : "saldo "}</small>
+                        {formatMoney(advanceDue > 0 ? advanceDue : balance)}
+                      </>
+                    )}
+                  </AdminCell>
+                  <AdminCell title={`${PIPELINE_STAGE_LABEL[stage]} · ${budgetStatusLabel(budget.status)}${approvalState === "CAMBIOS_SOLICITADOS" ? " · el cliente pidió cambios" : ""}`}>
+                    <AdminBadge tone={approvalState === "CAMBIOS_SOLICITADOS" ? budgetApprovalTone(approvalState) : statusTone(budget.status)}>{approvalState === "CAMBIOS_SOLICITADOS" ? "Pidió cambios" : PIPELINE_STAGE_LABEL[stage]}</AdminBadge>
                   </AdminCell>
                   <AdminCell title={budget.validUntil ? `Vence el ${formatDateShort(budget.validUntil)}` : "Sin vencimiento"}>
-                    <span className="admin-nowrap">{budget.validUntil ? formatDateShort(budget.validUntil) : "—"}</span>
-                    <AdminCountdown
-                      value={budget.validUntil}
-                      className="admin-countdown--inline"
-                      title={`Validez de la oferta: ${budget.title}`}
-                    />
-                  </AdminCell>
-                  <AdminCell title={`${budgetStatusLabel(budget.status)} · Próximo paso: ${next.label} — ${next.hint}`}>
-                    <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
-                    <small className="admin-cell-sub" title={next.hint}> · {next.label}</small>
-                  </AdminCell>
-                  <AdminCell
-                    end
-                    title={`${budget.items.length} ítem${budget.items.length === 1 ? "" : "s"}${
-                      linkedCount > 0
-                        ? ` · vinculados al inventario: ${linkedNames}`
-                        : " · ninguno vinculado al inventario (no reservan stock)"
-                    }`}
-                  >
-                    {formatNumber(budget.items.length)}
-                    {linkedCount > 0 ? <small className="admin-cell-sub"> · {formatNumber(linkedCount)} vinc.</small> : null}
-                  </AdminCell>
-                  <AdminCell end title={formatMoney(paid)}>
-                    {formatMoney(paid)}
-                  </AdminCell>
-                  <AdminCell end title={formatMoney(balance)}>
-                    <strong>{formatMoney(balance)}</strong>
-                  </AdminCell>
-                  <AdminCell end title={`${formatMoney(margin)} de margen sobre un costo interno de ${formatMoney(internalCost.total)} (materiales ${formatMoney(internalCost.materials)} · mano de obra ${formatMoney(internalCost.labor)} · ítems ${formatMoney(internalCost.items)})`}>
-                    {formatMoney(margin)}
-                  </AdminCell>
-                  <AdminCell title={portalSummary(budget)}>
-                    <AdminBadge tone={budgetApprovalTone(approvalState)}>{budgetApprovalLabel(approvalState)}</AdminBadge>
-                    <small className="admin-cell-sub">
-                      {" "}· {budget.publicToken ? "Link activo" : "Sin link"}
-                      {budgetProofs.length > 0 ? ` · ${proofLabel}` : ""}
-                    </small>
+                    {budget.validUntil ? <span className="admin-nowrap">{formatDateShort(budget.validUntil)}</span> : "—"}
                   </AdminCell>
                   <AdminCell end className="admin-cell--actions">
-                    <span className="admin-actions">
-                      {writable ? <AdminButton icon="mail" title={`Enviar por correo: ${budget.title}`} aria-label={`Enviar por correo: ${budget.title}`} onClick={() => openSend(budget)} /> : null}
-                      {writable ? <AdminButton icon="edit" title={`Editar presupuesto: ${budget.title}`} aria-label={`Editar presupuesto: ${budget.title}`} onClick={() => setPricing(budget)} /> : null}
-                      <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
-                    </span>
+                    {rowActions(budget)}
                   </AdminCell>
                 </AdminRow>
               );
@@ -1997,6 +1880,7 @@ export function PresupuestosModule() {
           </AdminTable>
         )}
       </AdminDataState>
+      )}
 
       {portalBudget ? (
         <AdminDialog title={`Portal del cliente · ${portalBudget.title}`} icon="globe" onClose={() => setPortalBudget(null)}>
@@ -2587,9 +2471,10 @@ export function PresupuestosModule() {
             budget={detailBudget}
             canAct={canCreateEvent}
             busy={eventBusyId === detailBudget.id}
-            onCreateEvent={() => void createEventFor(detailBudget)}
-            onConfirmEvent={() => void confirmEventFor(detailBudget)}
-            onClose={() => setDetailBudgetId(null)}
+            primary={primaryOf(detailBudget)}
+            proofCount={(proofsByBudget[detailBudget.id] ?? []).length}
+            actions={detailActionsOf(detailBudget)}
+            onClose={closeDetail}
           />
         ) : null;
       })() : null}
