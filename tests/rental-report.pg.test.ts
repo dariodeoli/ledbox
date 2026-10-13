@@ -261,7 +261,7 @@ test("reporte de alquileres en PostgreSQL: los totales cuadran con SQL de contro
   await t.test("una empresa sin datos no inventa nada: ceros solo donde se cuenta, null donde falta el dato", async () => {
     const empty = await org("vacía");
     const report = await getRentalReport(empty.id, MONTH, NOW);
-    assert.deepEqual(report.occupancy, { rankedItems: 0, top: [], least: [] });
+    assert.deepEqual(report.occupancy, { rankedItems: 0, top: [], least: [], truncated: false });
     assert.deepEqual(report.catalog, { received: 0, converted: 0, declined: 0, expired: 0, open: 0, conversionRate: null });
     assert.equal(report.incidents.total, 0);
     assert.equal(report.incidents.knownCost, null);
