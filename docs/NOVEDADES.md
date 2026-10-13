@@ -361,3 +361,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - El Resumen pasa a tener cuatro bloques: «Para hacer hoy», con hasta cinco acciones ordenadas por urgencia y un botón cada una; «Embudo del mes»; «Plata», con por cobrar, en mora y cobrado este mes; y «Esta semana». Los montos se ven completos, sin cortes.
 - Leads: alta manual desde «Nuevo lead», con la confirmación de que el contacto pidió ser llamado.
 - Demo: la bienvenida aparece una sola vez y queda una franja fina con «Recorrido guiado» y «Salir».
+
+## v2.1.91 — 2026-10-13
+
+- Catálogo público por empresa: cada empresa puede publicar su catálogo de alquiler en /catalogo/<empresa>, con fotos, categorías, búsqueda y precio de referencia (o «Consultar»). Para las fechas elegidas muestra si un producto está disponible, sin dar el stock exacto. Se activa en Ajustes → Alquileres.
+- Pedido sin cuenta: el cliente elige productos, fechas, lugar y contacto, y envía su pedido. La pantalla aclara que todavía NO es una reserva confirmada y hasta cuándo se le responde. Ofrece un link de WhatsApp con el resumen y otro para seguir el pedido.
+- En Leads, cada pedido del catálogo muestra su estado y sus productos. «Convertir en presupuesto» lo arma sin volver a cargar nada, con la seña configurada por la empresa. «Retener stock» aparta los equipos durante el tiempo configurado.
