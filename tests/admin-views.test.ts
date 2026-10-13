@@ -65,12 +65,13 @@ test("eventos ofrece lista, tarjetas y calendario canónicos con entrada por URL
   assert.match(source, /<CalendarioModule hideKpis events=\{operations.data \?\? \[\]\}/, "el calendario reutiliza la ficha del recurso real");
   // Selector fijo: el filtro de estado ya no depende de la vista (no salta al alternar).
   assert.doesNotMatch(source, /view === "list"/, "el filtro de estado no puede quedar solo en lista");
-  // Paridad de acciones entre la fila y la tarjeta (las mismas de siempre).
-  assert.equal((source.match(/eventActions\(event\)/g) ?? []).length, 2, "acciones en fila y tarjeta");
+  // Paridad de acciones entre la fila y la tarjeta: una sola función (la siguiente acción + «•••»).
+  assert.equal((source.match(/rowActions\(item\)/g) ?? []).length, 1, "acciones en la fila");
+  assert.match(source, /renderActions=\{rowActions\}/, "las tarjetas usan las mismas acciones que la fila");
   // Búsqueda y filtro compartidos por las dos vistas (mismo `rows`): la
   // cuadrícula y el ancho compacto comparten las tarjetas (issue #139).
-  assert.match(source, /const eventCards: AdminCardData\[\] = rows\.map\(/, "las tarjetas tienen que salir de las filas filtradas");
-  assert.match(source, /cardView \? \(\n\s*<AdminCardGrid label="Eventos" cards=\{eventCards\} \/>/, "la cuadrícula tiene que usar las filas filtradas");
+  assert.match(source, /<EventCards items=\{rows\}/, "las tarjetas tienen que salir de las filas filtradas");
+  assert.match(source, /cardView \? \(\n\s*<EventCards items=\{rows\}/, "la cuadrícula tiene que usar las filas filtradas");
 });
 
 /**

@@ -1,86 +1,75 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  damageSummary,
   daysUntilDue,
   eventStatusLabel,
-  checklistProgress,
   formatDateShort,
   formatDateTime,
   formatNumber,
-  formatSince,
   formatTime,
-  inventoryAssignmentCountdown,
-  inventoryAssignmentState,
-  isOverdue,
-  isUpcomingWithin,
-  promoterAvailabilityDetail,
-  promoterAvailabilityLabel,
-  promoterAvailabilityTone,
-  statusTone,
   whatsappHref,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import {
-  promoterIsAvailable,
+  type AdminBudgetRow,
   type AdminClientOption,
   type AdminEventAssignment,
   type AdminEventPanelRow,
-  type AdminInventoryAvailability,
   type AdminInventoryOption,
   type AdminPromoterOption,
 } from "@/lib/admin-types";
+import {
+  assignmentControls,
+  depositState,
+  eventReadiness,
+  isEventClosed,
+  matchesFocus,
+  startsWithinDays,
+  type EventBudgetPrep,
+  type EventBudgetSummary,
+  type EventDetailTab,
+  type EventFocus,
+  type TaskScope,
+  pendingTaskEntries,
+  taskInScope,
+} from "@/lib/event-readiness";
 import { useAdminSession } from "../AdminShell";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport, type AdminModuleView } from "../AdminBoard";
-import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { CalendarioModule } from "./CalendarioModule";
+import { EventosTareas } from "./EventosTareas";
 import {
-  AdminBadge,
+  AdminActionsMenu,
   AdminButton,
   AdminCell,
   AdminCountdown,
   AdminDataState,
   AdminDialog,
   AdminDialogSection,
-  AdminDisclosure,
   AdminEmpty,
-  AdminIconLink,
   AdminKpi,
   AdminKpis,
   AdminModuleContext,
   AdminNote,
-  AdminPanel,
   AdminPlanLimitNote,
   AdminRow,
   AdminSelect,
   AdminTable,
-  AdminTimelineDialog,
   AdminToolbar,
-  AdminWhatsappTemplateButton,
+  type AdminMenuItem,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { ClientQuickDialog } from "./ClientQuickForm";
 import { EMPTY_EVENT_QUICK, EventQuickFields, eventQuickError, eventQuickPayload } from "./EventQuickForm";
-import {
-  Combobox,
-  DateField,
-  DateTimeField,
-  NumberField,
-  SearchField,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from "../AdminFields";
+import { Combobox, SearchField, TextAreaField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
-import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
-import { queuedActionForAssignment, type OfflineAction } from "@/lib/offline-queue";
+import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { useOfflineQueue } from "../AdminOffline";
-import { ChecklistTable, type ChecklistEntry } from "./Checklist";
-import { InventoryMovementDialog, assignmentDispatched, assignmentPending } from "./InventoryMovementDialog";
-import { InventoryIncidentsPanel } from "./InventoryIncidents";
+import { InventoryMovementDialog } from "./InventoryMovementDialog";
+import { EventCards, EventStateBadges, NextActionButton, PrepChips, itemTone, type EventItem } from "./EventoLista";
+import { EventoFicha, inputDateTime, queuedKind } from "./EventoFicha";
 
 /** Fila del panel de eventos (issue #68): cliente mínimo y operación completa. */
 type EventRow = AdminEventPanelRow;
@@ -94,62 +83,23 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelado" },
 ];
 
-const TASK_TYPE_OPTIONS = [
-  { value: "SETUP", label: "Montaje" },
-  { value: "EVENT", label: "Evento" },
-  { value: "STRIKE", label: "Desmontaje" },
-  { value: "PAYMENT", label: "Pago" },
-  { value: "COLLECTION", label: "Cobro" },
-];
-
 /** El selector y la URL comparten las vistas canónicas de Eventos. */
 const EVENTOS_VIEWS = ["list", "grid", "calendar"] as const;
 
+const FOCUS_LABEL: Record<EventFocus, string> = {
+  next7: "Próximos 7 días",
+  live: "En curso",
+  gaps: "Con faltantes o checklist incompleto",
+  close: "Por cerrar",
+};
+
 const EMPTY_EVENT_FORM = { ...EMPTY_EVENT_QUICK, clientId: "" };
-const EMPTY_TASK_FORM = { eventId: "", title: "", type: "EVENT", dueAt: "", promoterId: "" };
-const EMPTY_ASSIGN_FORM = { inventoryId: "", quantity: "1", startsAt: "", endsAt: "" };
 
-type MovementRequest = { mode: "checkout" | "checkin"; assignment: AdminEventAssignment };
-
-/** Valor para `datetime-local` en hora local del navegador (es-PY, 24 h). */
-function inputDateTime(value: string | Date | null | undefined): string {
-  if (!value) return "";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function stamp(value: string | null): string {
-  return value ? `${formatDateShort(value)} · ${formatTime(value)}` : "—";
-}
-
-/** Rango asignado en una línea: `09-oct. 08:00 → 12-oct. 20:00` (fin abierto si falta). */
-function rangeStamp(start: string | null, end: string | null): string {
-  if (!start && !end) return "Sin fechas";
-  if (start && !end) return `${formatDateShort(start)} ${formatTime(start)} → sin fin`;
-  if (!start && end) return `sin inicio → ${formatDateShort(end)} ${formatTime(end)}`;
-  return `${formatDateShort(start)} ${formatTime(start)} → ${formatDateShort(end)} ${formatTime(end)}`;
-}
-
-const BLOCKED_INVENTORY_STATUSES = ["MAINTENANCE", "RETIRED"];
-
-/** Motivo honesto del marcador de una acción de campo en cola (issue #23). */
-function movementQueueTitle(action: OfflineAction): string {
-  return action.status === "failed"
-    ? `No se pudo subir: ${action.error ?? "sin motivo informado"}. Reintentá desde el indicador de sincronización.`
-    : `Guardada en este equipo ${formatSince(action.createdAt)}: se sube al volver la señal.`;
-}
-
-/** Evento próximo (ventana de aviso de 7 días) sin tareas cumplidas: riesgo. */
-function isUpcomingEvent(event: EventRow): boolean {
-  if (event.status === "CANCELLED" || event.status === "COMPLETED") return false;
-  return isUpcomingWithin(event.startsAt);
-}
+type MovementRequest = { mode: "checkout" | "checkin"; assignment: AdminEventAssignment; eventName: string };
 
 /**
  * Urgencia operativa del evento, el orden por defecto de la lista y de las
- * columnas del tablero (día de Asunción, como el resto de las fechas):
+ * tarjetas (día de Asunción, como el resto de las fechas):
  *
  * 0 · en juego con checklist abierto: en curso, arrancando hoy o mañana, o
  *     próximo sin ninguna tarea cumplida (lo que hay que resolver ya).
@@ -158,46 +108,29 @@ function isUpcomingEvent(event: EventRow): boolean {
  * 3 · el resto de lo que viene.
  * 4 · ya pasado o cancelado (del más reciente al más viejo).
  */
-function eventUrgency(event: EventRow): number {
-  if (event.status === "CANCELLED" || event.status === "COMPLETED") return 4;
-  const pending = event.tasks.some((task) => !task.completedAt);
-  const start = event.startsAt ? new Date(event.startsAt).getTime() : null;
-  const end = event.endsAt ? new Date(event.endsAt).getTime() : null;
-  const now = Date.now();
-  const live = event.status === "IN_PROGRESS" || (start !== null && start <= now && (end === null || end >= now));
+function eventUrgency(item: EventItem): number {
+  const { event, readiness } = item;
+  if (readiness.phase === "closed") return 4;
+  const pending = readiness.tasks.pending > 0;
   const days = daysUntilDue(event.startsAt);
   const imminent = days !== null && days >= 0 && days <= 1;
-  if (live || imminent) return pending ? 0 : 1;
-  if (pending && isUpcomingEvent(event)) return 2;
+  if (readiness.phase === "live" || imminent) return pending ? 0 : 1;
+  if (pending && startsWithinDays(event)) return 2;
   return 3;
 }
 
-function compareEventUrgency(a: EventRow, b: EventRow): number {
+function compareEventUrgency(a: EventItem, b: EventItem): number {
   const rank = eventUrgency(a) - eventUrgency(b);
   if (rank !== 0) return rank;
-  const timeA = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
-  const timeB = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
+  const timeA = a.event.startsAt ? new Date(a.event.startsAt).getTime() : Number.POSITIVE_INFINITY;
+  const timeB = b.event.startsAt ? new Date(b.event.startsAt).getTime() : Number.POSITIVE_INFINITY;
   // Lo pasado se lee al revés: primero lo más reciente.
   return eventUrgency(a) >= 4 ? timeB - timeA : timeA - timeB;
 }
 
-/** Opciones de promotora para el checklist: el estado real viaja en la etiqueta. */
-function promoterOptions(promoters: AdminPromoterOption[]): Array<{ value: string; label: string }> {
-  return [
-    { value: "", label: "Sin promotora (equipo)" },
-    ...promoters.map((promoter) => ({
-      value: promoter.id,
-      label:
-        promoter.availability === "AVAILABLE"
-          ? promoter.name
-          : `${promoter.name} · ${promoterAvailabilityLabel(promoter.availability)}`,
-    })),
-  ];
-}
-
 export function EventosModule() {
   const { role } = useAdminSession();
-  const { actions: queuedActions, fieldAction } = useOfflineQueue();
+  const { actions: queuedActions } = useOfflineQueue();
   const operations = useAdminResource(
     "/api/admin/event-ops?fields=panel",
     (payload) => (payload as { events?: AdminEventPanelRow[] }).events ?? [],
@@ -217,9 +150,15 @@ export function EventosModule() {
     "/api/admin/resources?only=promoters&fields=selector",
     (payload) => (payload as { promoters?: AdminPromoterOption[] }).promoters ?? [],
   );
+  // Seña por evento: lectura liviana agregada en la base (sin bajar todos los presupuestos).
+  const readinessResource = useAdminResource(
+    "/api/admin/events/readiness",
+    (payload) => (payload as { readiness?: EventBudgetSummary[] }).readiness ?? [],
+  );
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [focus, setFocus] = useState<EventFocus | null>(null);
   // Vistas recordadas por usuario; la URL explícita prevalece al entrar.
   const [view, setView] = useAdminModuleView("eventos", EVENTOS_VIEWS);
   const searchParams = useSearchParams();
@@ -233,6 +172,21 @@ export function EventosModule() {
   useEffect(() => {
     setCalendarOpen(calendarRequested);
   }, [calendarRequested]);
+  // Vista transversal «Tareas» (`?vista=tareas`): pestaña propia, no entra en el selector de vista.
+  const tasksRequested = (searchParams.get("vista") ?? "").trim().toLowerCase() === "tareas";
+  const [section, setSection] = useState<"eventos" | "tareas">(tasksRequested ? "tareas" : "eventos");
+  const [taskScope, setTaskScope] = useState<TaskScope>("pending");
+  useEffect(() => {
+    setSection(tasksRequested ? "tareas" : "eventos");
+  }, [tasksRequested]);
+  function changeSection(next: "eventos" | "tareas") {
+    setSection(next);
+    if (next === "tareas") setCalendarOpen(false);
+    const url = new URL(window.location.href);
+    if (next === "tareas") url.searchParams.set("vista", "tareas");
+    else if (url.searchParams.get("vista") === "tareas") url.searchParams.delete("vista");
+    window.history.replaceState(null, "", url.toString());
+  }
   const activeView: AdminModuleView = calendarOpen ? "calendar" : view;
   // En ancho compacto la lista también se lee como tarjetas (issue #139): es la
   // única forma de que el nombre del evento entre en 390 sin scroll horizontal.
@@ -242,37 +196,32 @@ export function EventosModule() {
     setCalendarOpen(next === "calendar");
     setView(next);
   }
-  const [taskFilter, setTaskFilter] = useState("PENDING");
+
   const [showForm, setShowForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_EVENT_FORM);
   const eventFormId = useId();
-  const [taskForm, setTaskForm] = useState(EMPTY_TASK_FORM);
   const [busy, setBusy] = useState(false);
-  const [taskBusy, setTaskBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [formLimit, setFormLimit] = useState("");
   const [formNotice, setFormNotice] = useState("");
   /** «+ Nuevo cliente» del evento (issue #106, patrón de #88); `null` = cerrado. */
   const [newClientName, setNewClientName] = useState<string | null>(null);
-  const [taskError, setTaskError] = useState("");
-  const [taskNotice, setTaskNotice] = useState("");
-  const [checklistError, setChecklistError] = useState("");
 
-  const [equipmentEventId, setEquipmentEventId] = useState("");
-  const [assignForm, setAssignForm] = useState(EMPTY_ASSIGN_FORM);
-  const [assignEditingId, setAssignEditingId] = useState("");
-  const [assignBusy, setAssignBusy] = useState(false);
-  const [assignError, setAssignError] = useState("");
-  const [assignNotice, setAssignNotice] = useState("");
-  const [equipmentError, setEquipmentError] = useState("");
-  const [availability, setAvailability] = useState<AdminInventoryAvailability | null>(null);
-  const [availabilityLoading, setAvailabilityLoading] = useState(false);
-  const [availabilityError, setAvailabilityError] = useState("");
+  /** Detalle del evento (panel lateral) y su pestaña; `?evento=<id>` lo abre por link. */
+  const eventoParam = (searchParams.get("evento") ?? "").trim();
+  const [fichaId, setFichaId] = useState<string | null>(eventoParam || null);
+  const [fichaTab, setFichaTab] = useState<EventDetailTab>("resumen");
+  const [linkNote, setLinkNote] = useState("");
+  useEffect(() => {
+    if (!eventoParam) return;
+    setFichaId(eventoParam);
+    setFichaTab("resumen");
+  }, [eventoParam]);
+
   const [movement, setMovement] = useState<MovementRequest | null>(null);
+  const [flash, setFlash] = useState("");
   const [incidentsKey, setIncidentsKey] = useState(0);
-  /** Cronología real del evento (issue #33). */
-  const [timelineEvent, setTimelineEvent] = useState<EventRow | null>(null);
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del evento. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
   /** Cierre del evento (alquileres fase 4): estado, bloqueo 409 y cierre forzado con nota. */
@@ -286,7 +235,6 @@ export function EventosModule() {
   const forceFormId = useId();
 
   const writable = canWriteOperations(role);
-  const checklistWritable = canWriteOperations(role);
   const events = useMemo(() => operations.data ?? [], [operations.data]);
   const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) ?? null : null;
   const eventFormDirty = JSON.stringify(form) !== JSON.stringify(editingEvent ? eventFormFrom(editingEvent) : EMPTY_EVENT_FORM);
@@ -294,34 +242,99 @@ export function EventosModule() {
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
   const clientChoices = useMemo(
     () =>
-      clientOptions.map((client) => {
-        return {
-          value: client.id,
-          label: clientDisplayName(client),
-          description: clientLegalName(client) ?? undefined,
-        };
-      }),
+      clientOptions.map((client) => ({
+        value: client.id,
+        label: clientDisplayName(client),
+        description: clientLegalName(client) ?? undefined,
+      })),
     [clientOptions],
   );
   const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
   const promoters = useMemo(() => promotersResource.data ?? [], [promotersResource.data]);
-  const equipmentEvent = useMemo(() => events.find((event) => event.id === equipmentEventId) ?? null, [events, equipmentEventId]);
-  const assignments = equipmentEvent?.assignments ?? [];
-  const assignedUnits = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
 
-  /** Búsqueda compartida por lista y cuadrícula; el filtro de estado aplica a las dos. */
-  const searched = useMemo(
-    () => events.filter((event) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status])),
-    [events, query],
+  // Seña por evento: sin dato (cargando o error) queda «—», nunca «sin presupuesto».
+  const budgetsKnown = !readinessResource.loading && !readinessResource.error && readinessResource.data !== null;
+  const budgetByEvent = useMemo(() => {
+    const map = new Map<string, EventBudgetSummary>();
+    for (const row of readinessResource.data ?? []) if (row.hasBudget) map.set(row.eventId, row);
+    return map;
+  }, [readinessResource.data]);
+  // El detalle completo (etapas) solo se pide al abrir la ficha; si el presupuesto no entra en esa lista, no se dibujan las etapas.
+  const fullBudgets = useAdminResource(
+    "/api/admin/budgets",
+    (payload) => (payload as { budgets?: AdminBudgetRow[] }).budgets ?? [],
+    { enabled: Boolean(fichaId) },
   );
 
-  const rows = useMemo(() => {
-    return searched
-      .filter((event) => (status === "ALL" ? true : event.status === status))
-      .sort(compareEventUrgency);
-  }, [searched, status]);
+  const queued = useCallback((assignmentId: string) => queuedKind(queuedActions, assignmentId), [queuedActions]);
 
-  /** Acciones de un evento: las mismas en la fila y en la tarjeta (issue #119). */
+  const items = useMemo<EventItem[]>(
+    () =>
+      events.map((event) => {
+        const budget = budgetByEvent.get(event.id) ?? null;
+        const prep: EventBudgetPrep | null = budget ? { advanceAmount: budget.advanceAmount, collected: budget.collected } : null;
+        return { event, readiness: eventReadiness(event, { deposit: depositState(prep, budgetsKnown), queued }) };
+      }),
+    [events, budgetByEvent, budgetsKnown, queued],
+  );
+
+  /** Búsqueda compartida por lista y tarjetas; el estado y el indicador tocado aplican a las dos. */
+  const rows = useMemo(
+    () =>
+      items
+        .filter(({ event }) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status]))
+        .filter(({ event }) => (status === "ALL" ? true : event.status === status))
+        .filter((item) => (focus ? matchesFocus(item.event, focus, item.readiness) : true))
+        .sort(compareEventUrgency),
+    [items, query, status, focus],
+  );
+
+  const taskEntries = useMemo(() => pendingTaskEntries(events), [events]);
+  const overdueTaskCount = useMemo(() => taskEntries.filter(({ task }) => taskInScope(task, "overdue")).length, [taskEntries]);
+
+  const counts = useMemo(() => {
+    const total = (key: EventFocus) => items.filter((item) => matchesFocus(item.event, key, item.readiness)).length;
+    return { next7: total("next7"), live: total("live"), gaps: total("gaps"), close: total("close") };
+  }, [items]);
+
+  const ficha = fichaId ? items.find((item) => item.event.id === fichaId) ?? null : null;
+  // Un `?evento=` que no es de esta empresa (o ya no existe) se avisa, no abre nada.
+  useEffect(() => {
+    if (!fichaId || operations.data === null || operations.loading) return;
+    if (items.some((item) => item.event.id === fichaId)) return;
+    setFichaId(null);
+    setLinkNote("No encontramos ese evento en esta empresa.");
+    syncUrl(null);
+  }, [fichaId, items, operations.data, operations.loading]);
+
+  function syncUrl(id: string | null) {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("evento", id);
+    else url.searchParams.delete("evento");
+    window.history.replaceState(null, "", url.toString());
+  }
+
+  function openFicha(eventId: string, tab: EventDetailTab = "resumen") {
+    setFlash("");
+    setLinkNote("");
+    setCloseError("");
+    setFichaTab(tab);
+    setFichaId(eventId);
+    syncUrl(eventId);
+  }
+
+  function closeFicha() {
+    setFichaId(null);
+    syncUrl(null);
+  }
+
+  function toggleFocus(next: EventFocus) {
+    setFocus((current) => (current === next ? null : next));
+    // El calendario y las tareas no filtran eventos: tocar un indicador lleva a la lista.
+    if (section === "tareas") changeSection("eventos");
+    if (activeView === "calendar") changeView("list");
+  }
+
   async function closeEvent(event: EventRow) {
     if (closeBusyId) return;
     setCloseError("");
@@ -361,201 +374,14 @@ export function EventosModule() {
     operations.reload();
   }
 
-  function eventActions(event: EventRow) {
-    const closable = writable && event.status !== "COMPLETED" && event.status !== "CANCELLED";
-    return (
-      <span className="admin-actions">
-        {closable ? (
-          <AdminButton
-            icon="check"
-            title={`Finalizar el evento: ${event.name}`}
-            aria-label={`Finalizar el evento: ${event.name}`}
-            busy={closeBusyId === event.id}
-            onClick={() => void closeEvent(event)}
-          />
-        ) : null}
-        {writable ? <AdminButton icon="edit" title={`Editar evento: ${event.name}`} aria-label={`Editar evento: ${event.name}`} onClick={() => openEventEdit(event)} /> : null}
-        <AdminButton
-          icon="audit"
-          title={`Ver la cronología: ${event.name}`}
-          aria-label={`Ver la cronología: ${event.name}`}
-          onClick={() => setTimelineEvent(event)}
-        />
-        <AdminIconLink
-          href={`/imprimir/evento/${event.id}`}
-          icon="print"
-          label={`Imprimir orden de trabajo: ${event.name}`}
-          external
-        />
-        {writable && whatsappHref(event.client.phone) ? (
-          <AdminWhatsappTemplateButton
-            title={`Enviar por WhatsApp con plantilla a ${clientDisplayName(event.client)}`}
-            onClick={() =>
-              setTemplateTarget({
-                kind: "event",
-                id: event.id,
-                label: clientDisplayName(event.client),
-                phone: event.client.phone,
-              })
-            }
-          />
-        ) : null}
-      </span>
-    );
+  function startNewEvent() {
+    setFormError("");
+    setFormLimit("");
+    setEditingEventId(null);
+    setForm(EMPTY_EVENT_FORM);
+    setFormNotice("");
+    setShowForm(true);
   }
-
-  /**
-   * Tarjetas del evento (issues #119 y #139): las comparten la cuadrícula y la
-   * lista en ancho compacto, así el nombre va primero también en 390 y la
-   * tarjeta muestra cliente, fecha/lugar, urgencia, avance y equipos.
-   */
-  const eventCards: AdminCardData[] = rows.map((event) => {
-    const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
-    const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
-    const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
-    const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
-    return {
-      id: event.id,
-      title: event.name,
-      titleTooltip: `${event.name} · ${eventStatusLabel(event.status)}`,
-      subtitle: clientDisplayName(event.client),
-      badges: [{ label: eventStatusLabel(event.status), tone: statusTone(event.status) }],
-      fields: [
-        {
-          label: "Fecha",
-          value: event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar",
-          title: event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar",
-        },
-        {
-          label: "Falta",
-          value:
-            event.status === "IN_PROGRESS" ? (
-              <AdminBadge tone="warn">En curso</AdminBadge>
-            ) : closed || !event.startsAt ? (
-              "—"
-            ) : (
-              <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
-            ),
-          title:
-            event.status === "IN_PROGRESS"
-              ? `En curso: ${event.name}`
-              : event.startsAt
-                ? `Inicio: ${formatDateTime(event.startsAt)}`
-                : "Fecha a confirmar",
-        },
-        {
-          label: "Lugar",
-          value: [event.location, event.city].filter(Boolean).join(" · ") || "—",
-          title: [event.location, event.city].filter(Boolean).join(" · ") || "Sin lugar definido",
-        },
-        {
-          label: "Equipos",
-          value: formatNumber(units),
-          title: equipmentNames || "Sin equipos asignados",
-        },
-        {
-          label: "Checklist",
-          value: event.tasks.length > 0 ? (
-            <AdminBadge tone={progress.tone} title={progress.title}>{progress.label}</AdminBadge>
-          ) : (
-            "—"
-          ),
-          title: progress.title,
-        },
-      ],
-      footer: eventActions(event),
-    };
-  });
-
-  const checklistEntries = useMemo<ChecklistEntry[]>(() => {
-    const all = events.flatMap((event) => event.tasks.map((task) => ({ task, eventName: event.name })));
-    const filtered = taskFilter === "ALL" ? all : all.filter(({ task }) => !task.completedAt);
-    return filtered.sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999")).slice(0, 50);
-  }, [events, taskFilter]);
-
-  const upcoming = useMemo(
-    () =>
-      events.filter(
-        (event) => event.startsAt && new Date(event.startsAt).getTime() >= Date.now() && event.status !== "CANCELLED",
-      ).length,
-    [events],
-  );
-  const inProgress = useMemo(() => events.filter((event) => event.status === "IN_PROGRESS").length, [events]);
-  const pendingTasks = useMemo(
-    () => events.flatMap((event) => event.tasks).filter((task) => !task.completedAt).length,
-    [events],
-  );
-  /** Tareas pendientes con vencimiento pasado: el checklist real, no el ideal. */
-  const overdueTasks = useMemo(
-    () => events.flatMap((event) => event.tasks).filter((task) => !task.completedAt && isOverdue(task.dueAt)).length,
-    [events],
-  );
-  /** Eventos próximos con checklist cargado y 0 tareas cumplidas (riesgo operativo). */
-  const atRiskEvents = useMemo(
-    () =>
-      events.filter(
-        (event) =>
-          isUpcomingEvent(event) && event.tasks.length > 0 && event.tasks.every((task) => !task.completedAt),
-      ),
-    [events],
-  );
-  /** Tareas con promotora no disponible o a definir: se avisan, no se bloquean. */
-  const promoterConflicts = useMemo(
-    () =>
-      events
-        .flatMap((event) => event.tasks.map((task) => ({ task, event })))
-        .filter(({ task }) => task.promoter && !promoterIsAvailable(task.promoter))
-        .sort((a, b) => (a.task.dueAt ?? "9999").localeCompare(b.task.dueAt ?? "9999")),
-    [events],
-  );
-
-  const selectedPromoter = useMemo(
-    () => promoters.find((promoter) => promoter.id === taskForm.promoterId) ?? null,
-    [promoters, taskForm.promoterId],
-  );
-
-  const requestedQuantity = Number(assignForm.quantity) || 0;
-  const availabilityBlocked = Boolean(availability?.blocked);
-  const exceedsAvailability = Boolean(availability && requestedQuantity > availability.available);
-  // La propia asignación del evento no se cuenta como conflicto: el alta es upsert
-  // por (evento, ítem) y el API excluye esa fila al validar.
-  const existingAssignmentId =
-    assignments.find((assignment) => assignment.inventory.id === assignForm.inventoryId)?.id ?? "";
-
-  // Disponibilidad del ítem en el rango elegido: la calcula el API y la UI solo la muestra.
-  useEffect(() => {
-    if (!equipmentEvent || !assignForm.inventoryId || !assignForm.startsAt || !assignForm.endsAt) {
-      setAvailability(null);
-      setAvailabilityError("");
-      setAvailabilityLoading(false);
-      return;
-    }
-    const params = new URLSearchParams({
-      inventoryId: assignForm.inventoryId,
-      startsAt: assignForm.startsAt,
-      endsAt: assignForm.endsAt,
-    });
-    if (existingAssignmentId) params.set("excludeId", existingAssignmentId);
-    const controller = new AbortController();
-    setAvailabilityLoading(true);
-    setAvailabilityError("");
-    void adminApiGet<{ availability?: AdminInventoryAvailability }>(`/api/admin/inventory?${params.toString()}`, {
-      fresh: true,
-      signal: controller.signal,
-      fallbackError: "No pudimos calcular la disponibilidad.",
-    })
-      .then((result) => {
-        if (!result.ok) {
-          if (result.aborted) return;
-          setAvailability(null);
-          setAvailabilityError(result.error);
-          return;
-        }
-        setAvailability(result.data.availability ?? null);
-      })
-      .finally(() => setAvailabilityLoading(false));
-    return () => controller.abort();
-  }, [equipmentEvent, assignForm.inventoryId, assignForm.startsAt, assignForm.endsAt, existingAssignmentId]);
 
   async function submitEvent(formEvent: React.FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
@@ -625,146 +451,123 @@ export function EventosModule() {
     clients.reload();
   }
 
-  async function submitTask(formEvent: React.FormEvent<HTMLFormElement>) {
-    formEvent.preventDefault();
-    setTaskBusy(true);
-    setTaskError("");
-    setTaskNotice("");
-    const promoter = promoters.find((candidate) => candidate.id === taskForm.promoterId) ?? null;
-    const result = await adminSend("/api/admin/event-ops", {
-      kind: "task",
-      eventId: taskForm.eventId,
-      title: taskForm.title,
-      type: taskForm.type,
-      dueAt: taskForm.dueAt || undefined,
-      promoterId: taskForm.promoterId || undefined,
-    });
-    setTaskBusy(false);
-    if (!result.ok) {
-      setTaskError(result.error);
+
+  /** La siguiente acción lógica del evento: abre el movimiento, el detalle o cierra. */
+  function runNext(item: EventItem) {
+    const next = item.readiness.next;
+    if (!next || !writable) return;
+    if (next.key === "finalize") {
+      void closeEvent(item.event);
       return;
     }
-    setTaskNotice(
-      promoter && !promoterIsAvailable(promoter)
-        ? `Tarea creada con «${promoter.name}» (${promoterAvailabilityLabel(promoter.availability).toLowerCase()}${
-            promoterAvailabilityDetail(promoter) ? `: ${promoterAvailabilityDetail(promoter)}` : ""
-          }). Revisá la asignación o cubrila con otra persona.`
-        : "",
+    if (next.key === "dispatch" || next.key === "return") {
+      const candidates = item.event.assignments.filter((assignment) => {
+        const controls = assignmentControls(assignment, queued(assignment.id));
+        return next.key === "dispatch" ? controls.canDispatch : controls.canReturn;
+      });
+      // Con un único equipo pendiente el movimiento se abre directo; con varios, en la pestaña Equipos.
+      if (candidates.length === 1) {
+        setFlash("");
+        setMovement({ mode: next.key === "dispatch" ? "checkout" : "checkin", assignment: candidates[0], eventName: item.event.name });
+        return;
+      }
+    }
+    openFicha(item.event.id, next.tab);
+  }
+
+  /** «•••» de la fila, la tarjeta y la ficha: lo secundario, con los mismos permisos de siempre. */
+  function menuItemsFor(item: EventItem, inFicha: boolean): AdminMenuItem[] {
+    const { event, readiness } = item;
+    const closable = writable && !isEventClosed(event);
+    const entries: AdminMenuItem[] = [];
+    if (!inFicha) entries.push({ label: "Abrir detalle", icon: "eye", onClick: () => openFicha(event.id) });
+    if (writable) entries.push({ label: "Editar evento", icon: "edit", onClick: () => openEventEdit(event) });
+    if (!inFicha) entries.push({ label: "Ver cronología", icon: "audit", onClick: () => openFicha(event.id, "historial") });
+    entries.push({ label: "Imprimir orden de trabajo", icon: "print", href: `/imprimir/evento/${event.id}`, external: true });
+    if (writable && whatsappHref(event.client.phone)) {
+      entries.push({
+        label: "Enviar por WhatsApp con plantilla",
+        icon: "mail",
+        title: `Enviar por WhatsApp con plantilla a ${clientDisplayName(event.client)}`,
+        onClick: () =>
+          setTemplateTarget({ kind: "event", id: event.id, label: clientDisplayName(event.client), phone: event.client.phone }),
+      });
+    }
+    if (closable && readiness.next?.key !== "finalize") {
+      entries.push({ label: "Finalizar evento", icon: "check", title: `Finalizar el evento: ${event.name}`, onClick: () => void closeEvent(event) });
+    }
+    return entries;
+  }
+
+  /** Pie de una fila o tarjeta: una sola acción visible (la siguiente) y «•••». */
+  function rowActions(item: EventItem) {
+    return (
+      <span className="admin-actions admin-events-actions">
+        {writable ? <NextActionButton item={item} onRun={runNext} busy={closeBusyId === item.event.id} /> : null}
+        <AdminActionsMenu label={`Más acciones del evento ${item.event.name}`} items={menuItemsFor(item, false)} />
+      </span>
     );
-    setTaskForm(EMPTY_TASK_FORM);
-    operations.reload();
   }
 
-  function selectEquipmentEvent(eventId: string) {
-    const event = events.find((item) => item.id === eventId) ?? null;
-    setEquipmentEventId(eventId);
-    setAssignEditingId("");
-    setAssignError("");
-    setAssignNotice("");
-    setEquipmentError("");
-    setMovement(null);
-    setAssignForm({
-      ...EMPTY_ASSIGN_FORM,
-      startsAt: inputDateTime(event?.setupAt ?? event?.startsAt),
-      endsAt: inputDateTime(event?.strikeAt ?? event?.endsAt ?? event?.startsAt),
-    });
-  }
-
-  function resetAssignForm() {
-    setAssignEditingId("");
-    setAssignError("");
-    setAssignForm({
-      ...EMPTY_ASSIGN_FORM,
-      startsAt: inputDateTime(equipmentEvent?.setupAt ?? equipmentEvent?.startsAt),
-      endsAt: inputDateTime(equipmentEvent?.strikeAt ?? equipmentEvent?.endsAt ?? equipmentEvent?.startsAt),
-    });
-  }
-
-  function startEditAssignment(assignment: AdminEventAssignment) {
-    setAssignEditingId(assignment.id);
-    setAssignError("");
-    setAssignNotice("");
-    setMovement(null);
-    setAssignForm({
-      inventoryId: assignment.inventory.id,
-      quantity: String(assignment.quantity),
-      startsAt: inputDateTime(assignment.startsAt),
-      endsAt: inputDateTime(assignment.endsAt),
-    });
-  }
-
-  async function submitAssignment(formEvent: React.FormEvent<HTMLFormElement>) {
-    formEvent.preventDefault();
-    if (!equipmentEvent) return;
-    setAssignBusy(true);
-    setAssignError("");
-    setAssignNotice("");
-    const result = await adminSend("/api/admin/inventory", {
-      kind: "assignment",
-      eventId: equipmentEvent.id,
-      inventoryId: assignForm.inventoryId,
-      quantity: Number(assignForm.quantity) || 1,
-      startsAt: assignForm.startsAt || undefined,
-      endsAt: assignForm.endsAt || undefined,
-    });
-    setAssignBusy(false);
-    if (!result.ok) {
-      setAssignError(result.error);
-      return;
-    }
-    setAssignNotice(assignEditingId ? "Asignación actualizada." : "Equipo asignado al evento.");
-    setAssignForm({ ...EMPTY_ASSIGN_FORM, startsAt: assignForm.startsAt, endsAt: assignForm.endsAt });
-    setAssignEditingId("");
-    operations.reload();
-    inventoryResource.reload();
-  }
-
-  function openMovement(mode: "checkout" | "checkin", assignment: AdminEventAssignment) {
-    setMovement({ mode, assignment });
-  }
-
-  async function removeAssignment(assignment: AdminEventAssignment) {
-    setEquipmentError("");
-    setAssignNotice("");
-    const result = await adminSend("/api/admin/inventory", { kind: "assignment-delete", id: assignment.id });
-    if (!result.ok) {
-      setEquipmentError(result.error);
-      return;
-    }
-    setAssignNotice(`Asignación quitada: ${assignment.inventory.name}.`);
-    operations.reload();
-    inventoryResource.reload();
-  }
+  const kpiFor = (key: EventFocus) => ({
+    onSelect: () => toggleFocus(key),
+    active: focus === key,
+    actionLabel: `Filtrar por ${FOCUS_LABEL[key].toLowerCase()}`,
+  });
 
   return (
     <div className="admin-module-page">
       <AdminModuleContext
         breadcrumb="Ventas / Eventos"
-        hint="Agenda, checklist de campo y equipos asignados por evento."
+        hint="Qué falta de cada evento: checklist, equipos, seña y personal."
         meta={`${formatNumber(events.length)} eventos`}
       />
-      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos">
-        <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
-        <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
-        <AdminKpi label="En curso" icon="checkin" value={formatNumber(inProgress)} note="operación activa" />
+      <AdminKpis state={kpiState(operations)} label="Indicadores de eventos" className="admin-kpis--2up admin-kpis--eventos">
+        <AdminKpi label="Próximos 7 días" icon="calendar" value={formatNumber(counts.next7)} note="por empezar" tone="accent" {...kpiFor("next7")} />
+        <AdminKpi label="En curso" icon="checkin" value={formatNumber(counts.live)} note="operación activa" {...kpiFor("live")} />
         <AdminKpi
-          label="Tareas pendientes" icon="audit"
-          value={formatNumber(pendingTasks)}
-          note={
-            overdueTasks > 0
-              ? `${formatNumber(overdueTasks)} vencida${overdueTasks === 1 ? "" : "s"}`
-              : "checklist operativo"
-          }
-          tone={overdueTasks > 0 ? "warn" : "ok"}
+          label="Faltantes o checklist incompleto"
+          icon="alert"
+          value={formatNumber(counts.gaps)}
+          note="abiertos con pendientes"
+          tone={counts.gaps > 0 ? "warn" : "ok"}
+          {...kpiFor("gaps")}
         />
         <AdminKpi
-          label="Checklist en riesgo" icon="alert"
-          value={formatNumber(atRiskEvents.length)}
-          note="próximos sin tareas cumplidas"
-          tone={atRiskEvents.length > 0 ? "danger" : "ok"}
+          label="Por cerrar"
+          icon="audit"
+          value={formatNumber(counts.close)}
+          note="pasaron sin finalizar"
+          tone={counts.close > 0 ? "danger" : "ok"}
+          {...kpiFor("close")}
+        />
+        <AdminKpi
+          label="Tareas vencidas"
+          icon="clock"
+          value={formatNumber(overdueTaskCount)}
+          note="de eventos abiertos"
+          tone={overdueTaskCount > 0 ? "danger" : "ok"}
+          onSelect={() => {
+            const off = section === "tareas" && taskScope === "overdue";
+            setTaskScope(off ? "pending" : "overdue");
+            changeSection("tareas");
+          }}
+          active={section === "tareas" && taskScope === "overdue"}
+          actionLabel="Ver las tareas vencidas"
         />
       </AdminKpis>
 
+      <nav className="admin-subtabs admin-eventos-sections" aria-label="Secciones de Eventos">
+        <button type="button" className="admin-subtab" data-active={section === "eventos" ? "true" : undefined} aria-pressed={section === "eventos"} onClick={() => changeSection("eventos")}>
+          Eventos
+        </button>
+        <button type="button" className="admin-subtab" data-active={section === "tareas" ? "true" : undefined} aria-pressed={section === "tareas"} onClick={() => changeSection("tareas")}>
+          Tareas
+          {operations.data ? <span className="admin-subtab-count">{formatNumber(taskEntries.length)}</span> : null}
+        </button>
+      </nav>
+
+      {section === "tareas" ? null : (
       <AdminToolbar>
         {/* Primero en la barra: el conmutador queda FIJO en las tres vistas (en calendario no hay búsqueda ni filtro). */}
         {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
@@ -780,25 +583,27 @@ export function EventosModule() {
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         )}
         {writable ? (
-          <AdminButton
-            variant="primary"
-            icon="plus"
-            onClick={() => {
-              setFormError("");
-              setFormLimit("");
-              setEditingEventId(null);
-              setForm(EMPTY_EVENT_FORM);
-              setFormNotice("");
-              setShowForm(true);
-            }}
-            aria-haspopup="dialog"
-          >
+          <AdminButton variant="primary" icon="plus" onClick={startNewEvent} aria-haspopup="dialog">
             Nuevo evento
           </AdminButton>
         ) : null}
       </AdminToolbar>
+      )}
 
-      {closeError ? <AdminNote tone="error">{closeError}</AdminNote> : null}
+      {focus && activeView !== "calendar" && section === "eventos" ? (
+        <div className="admin-focus-bar" role="status">
+          <span>
+            Mostrando: <strong>{FOCUS_LABEL[focus]}</strong> · {formatNumber(rows.length)} evento{rows.length === 1 ? "" : "s"}
+          </span>
+          <AdminButton icon="close" type="button" onClick={() => setFocus(null)}>
+            Quitar filtro
+          </AdminButton>
+        </div>
+      ) : null}
+
+      {closeError && !ficha ? <AdminNote tone="error">{closeError}</AdminNote> : null}
+      {linkNote ? <AdminNote tone="warn">{linkNote}</AdminNote> : null}
+      {flash && !ficha ? <AdminNote tone="ok">{flash}</AdminNote> : null}
 
       {writable && closeBlock ? (
         <AdminDialog
@@ -929,13 +734,23 @@ export function EventosModule() {
         </AdminDialog>
       ) : null}
 
-      {activeView === "calendar" ? (
+      {section === "tareas" ? (
+        <EventosTareas
+          events={events}
+          loading={operations.loading}
+          error={operations.error}
+          onRetry={operations.reload}
+          writable={writable}
+          scope={taskScope}
+          onScope={setTaskScope}
+          onOpenEvent={(id) => openFicha(id)}
+        />
+      ) : activeView === "calendar" ? (
         /* Una sola vista de calendario, también accesible por la URL histórica. */
         <div className="admin-events-calendar">
           <CalendarioModule hideKpis events={operations.data ?? []} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
-      <>
       <AdminDataState
         loading={operations.loading}
         error={operations.error}
@@ -943,511 +758,113 @@ export function EventosModule() {
         empty={events.length === 0}
         emptyTitle="Todavía no hay eventos" emptyIcon="events"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
-        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => { setFormError(""); setFormLimit(""); setShowForm(true); }}>Crear evento →</button> : undefined}
+        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={startNewEvent}>Crear evento →</button> : undefined}
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
         ) : cardView ? (
-          <AdminCardGrid label="Eventos" cards={eventCards} />
+          <EventCards items={rows} onOpen={(item) => openFicha(item.event.id)} renderActions={rowActions} />
         ) : (
-          <>
-            <AdminTable
-              view="eventos"
-              label="Eventos"
-              columns={[
-                { label: "Fecha" },
-                { label: "Falta" },
-                { label: "Evento" },
-                { label: "Cliente" },
-                { label: "Lugar" },
-                { label: "Equipos", end: true },
-                { label: "Checklist", end: true },
-                { label: "Estado" },
-                { label: "Acciones", end: true },
-              ]}
-            >
-              {rows.map((event) => {
-                const units = event.assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
-                const progress = checklistProgress(event.tasks, { risk: isUpcomingEvent(event) });
-                const equipmentNames = event.assignments.map((assignment) => assignment.inventory.name).join(", ");
-                const closed = event.status === "COMPLETED" || event.status === "CANCELLED";
-                return (
-                  <AdminRow key={event.id}>
-                    <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
-                      {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
-                    </AdminCell>
-                    <AdminCell
-                      title={
-                        event.status === "IN_PROGRESS"
-                          ? `En curso: ${event.name}`
-                          : event.startsAt
-                            ? `Inicio: ${formatDateTime(event.startsAt)}`
-                            : "Fecha a confirmar"
-                      }
-                    >
-                      {event.status === "IN_PROGRESS" ? (
-                        <AdminBadge tone="warn">En curso</AdminBadge>
-                      ) : closed || !event.startsAt ? (
-                        <span className="admin-muted">—</span>
-                      ) : (
-                        <AdminCountdown value={event.startsAt} title={`Cuánto falta para el inicio: ${event.name}`} />
-                      )}
-                    </AdminCell>
-                    <AdminCell title={event.name}>
-                      <strong>{event.name}</strong>
-                    </AdminCell>
-                    <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
-                    <AdminCell title={[event.location, event.city].filter(Boolean).join(" · ") || "Sin lugar definido"}>
-                      {event.location || event.city || "—"}
-                      {event.location && event.city ? <small className="admin-cell-sub"> · {event.city}</small> : null}
-                    </AdminCell>
-                    <AdminCell end title={equipmentNames || "Sin equipos asignados"}>
-                      {formatNumber(units)}
-                    </AdminCell>
-                    <AdminCell end title={progress.title}>
-                      {event.tasks.length === 0 ? (
-                        <span className="admin-muted">—</span>
-                      ) : (
-                        <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
-                      )}
-                    </AdminCell>
-                    <AdminCell>
-                      <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
-                    </AdminCell>
-                    <AdminCell end className="admin-cell--actions">
-                      {eventActions(event)}
-                    </AdminCell>
-                  </AdminRow>
-                );
-              })}
-            </AdminTable>
-          </>
+          <AdminTable
+            view="eventos"
+            label="Eventos"
+            columns={[
+              { label: "Fecha y hora" },
+              { label: "Evento" },
+              { label: "Cliente" },
+              { label: "Lugar" },
+              { label: "Preparación" },
+              { label: "Estado" },
+              { label: "Siguiente paso", end: true },
+            ]}
+          >
+            {rows.map((item) => {
+              const { event, readiness } = item;
+              const where = [event.location, event.city].filter(Boolean).join(" · ");
+              return (
+                <AdminRow key={event.id} tone={itemTone(item)}>
+                  <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
+                    <strong>{event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}</strong>
+                    {readiness.phase === "closed" || readiness.phase === "ended" || event.status === "IN_PROGRESS" || !event.startsAt ? null : (
+                      <AdminCountdown value={event.startsAt} short className="admin-countdown--inline" title={`Cuánto falta para el inicio: ${event.name}`} />
+                    )}
+                  </AdminCell>
+                  <AdminCell title={event.name}>
+                    <button type="button" className="admin-link-btn" onClick={() => openFicha(event.id)} aria-haspopup="dialog" aria-label={`Abrir el evento ${event.name}`}>
+                      {event.name}
+                    </button>
+                  </AdminCell>
+                  <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
+                  <AdminCell title={where || "Sin lugar definido"}>{where || "—"}</AdminCell>
+                  <AdminCell>
+                    <PrepChips item={item} />
+                  </AdminCell>
+                  <AdminCell title={readiness.gaps.map((gap) => gap.label).join(" · ") || eventStatusLabel(event.status)}>
+                    <EventStateBadges item={item} />
+                  </AdminCell>
+                  <AdminCell end className="admin-cell--actions">
+                    {rowActions(item)}
+                  </AdminCell>
+                </AdminRow>
+              );
+            })}
+          </AdminTable>
         )}
       </AdminDataState>
+      )}
 
-      <AdminPanel
-        title="Equipos asignados" icon="inventory"
-        meta={
-          equipmentEvent
-            ? `${formatNumber(assignedUnits)} unidades · ${formatNumber(assignments.length)} asignaciones`
-            : "elegí un evento"
-        }
-        action={
-          <AdminSelect
-            value={equipmentEventId}
-            onChange={selectEquipmentEvent}
-            label="Evento para asignar equipos"
-            options={[{ value: "", label: "Elegí un evento…" }, ...events.map((event) => ({ value: event.id, label: event.name }))]}
-          />
-        }
-      >
-        {!equipmentEvent ? (
-          <AdminEmpty
-            icon="inventory"
-            title="Elegí un evento"
-            hint="Seleccioná el evento para ver sus equipos, asignar con fechas y registrar salida o devolución."
-          />
-        ) : (
-          <>
-            {writable ? (
-              <form className="admin-inline-form" onSubmit={submitAssignment}>
-                <AdminSelect
-                  className=""
-                  required
-                  value={assignForm.inventoryId}
-                  onChange={(value) => setAssignForm({ ...assignForm, inventoryId: value })}
-                  label="Ítem de inventario"
-                  title="Ítem de inventario"
-                  disabled={Boolean(assignEditingId)}
-                  options={[
-                    { value: "", label: "Ítem de inventario…" },
-                    ...inventoryItems.map((item) => ({
-                      value: item.id,
-                      label: `${item.name}${item.sku ? ` · ${item.sku}` : ""} · ${formatNumber(item.availability.availableNow)} libres`,
-                    })),
-                  ]}
-                />
-                <NumberField
-                  ariaLabel="Cantidad de unidades"
-                  title="Cantidad de unidades"
-                  className="admin-qty-input"
-                  required
-                  value={assignForm.quantity}
-                  onChange={(value) => setAssignForm({ ...assignForm, quantity: value })}
-                />
-                <DateTimeField
-                  ariaLabel="Inicio del rango asignado"
-                  title="Inicio del rango asignado"
-                  required
-                  value={assignForm.startsAt}
-                  onChange={(value) => setAssignForm({ ...assignForm, startsAt: value })}
-                />
-                <DateTimeField
-                  ariaLabel="Fin del rango asignado"
-                  title="Fin del rango asignado"
-                  required
-                  value={assignForm.endsAt}
-                  onChange={(value) => setAssignForm({ ...assignForm, endsAt: value })}
-                />
-                <AdminButton
-                  type="submit"
-                  icon={assignEditingId ? "check" : "plus"}
-                  busy={assignBusy}
-                  disabled={availabilityBlocked || exceedsAvailability}
-                >
-                  {assignEditingId ? "Guardar" : "Asignar"}
-                </AdminButton>
-                {assignEditingId ? (
-                  <AdminButton icon="close" type="button" onClick={resetAssignForm} disabled={assignBusy}>
-                    Cancelar
-                  </AdminButton>
-                ) : null}
-              </form>
-            ) : null}
+      {ficha ? (
+        <EventoFicha
+          item={ficha}
+          tab={fichaTab}
+          onTab={setFichaTab}
+          onClose={closeFicha}
+          writable={writable}
+          budget={budgetByEvent.get(ficha.event.id) ?? null}
+          stageBudget={fullBudgets.data?.find((row) => row.id === budgetByEvent.get(ficha.event.id)?.budgetId) ?? null}
+          budgetState={readinessResource.loading ? "loading" : readinessResource.error ? "error" : "ready"}
+          promoters={promoters}
+          inventoryItems={inventoryItems}
+          queuedActions={queuedActions}
+          flash={flash}
+          incidentsKey={incidentsKey}
+          closeBusy={closeBusyId === ficha.event.id}
+          closeError={closeError}
+          menuItems={menuItemsFor(ficha, true)}
+          onRunNext={runNext}
+          onMovement={(mode, assignment) => {
+            setFlash("");
+            setMovement({ mode, assignment, eventName: ficha.event.name });
+          }}
+          onReload={operations.reload}
+          onReloadInventory={inventoryResource.reload}
+          onIncidentsChanged={() => {
+            inventoryResource.reload();
+            operations.reload();
+          }}
+        />
+      ) : null}
 
-            {writable ? (
-              assignForm.inventoryId && assignForm.startsAt && assignForm.endsAt ? (
-                availabilityLoading ? (
-                  <AdminNote>Calculando disponibilidad…</AdminNote>
-                ) : availabilityError ? (
-                  <AdminNote tone="error">{availabilityError}</AdminNote>
-                ) : availability ? (
-                  <AdminNote tone={availabilityBlocked || exceedsAvailability ? "error" : undefined}>
-                    {availabilityBlocked
-                      ? `«${availability.name}» está ${availability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
-                      : `${formatNumber(availability.available)} de ${formatNumber(availability.total)} unidades disponibles en el rango.`}
-                    {availability.conflicts.length > 0
-                      ? ` Ocupadas: ${availability.conflicts
-                          .map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`)
-                          .join(", ")}.`
-                      : ""}
-                    {exceedsAvailability ? ` Pediste ${formatNumber(requestedQuantity)}.` : ""}
-                  </AdminNote>
-                ) : null
-              ) : (
-                <AdminNote>Elegí el ítem y el rango de fechas para ver la disponibilidad.</AdminNote>
-              )
-            ) : null}
-
-            {assignError ? <AdminNote tone="error">{assignError}</AdminNote> : null}
-            {assignNotice ? <AdminNote tone="ok">{assignNotice}</AdminNote> : null}
-            {equipmentError ? <AdminNote tone="error">{equipmentError}</AdminNote> : null}
-
-            {movement ? (
-              <InventoryMovementDialog
-                mode={movement.mode}
-                assignment={movement.assignment}
-                eventName={equipmentEvent?.name ?? "sin evento"}
-                onClose={() => setMovement(null)}
-                onDone={(message, queued) => {
-                  setAssignNotice(message);
-                  setMovement(null);
-                  if (!queued) {
-                    operations.reload();
-                    inventoryResource.reload();
-                    setIncidentsKey((key) => key + 1);
-                  }
-                }}
-              />
-            ) : null}
-
-            <AdminDataState
-              loading={operations.loading}
-              error={operations.error}
-              onRetry={operations.reload}
-              empty={assignments.length === 0}
-              emptyTitle="Sin equipos asignados" emptyIcon="inventory"
-              emptyHint="Asigná equipos con cantidad y rango de fechas: el sistema valida la disponibilidad real."
-              rows={4}
-            >
-              <AdminTable
-                view="evento-equipos"
-                label={`Equipos asignados a ${equipmentEvent.name}`}
-                columns={[
-                  { label: "Artículo" },
-                  { label: "Cantidad", end: true },
-                  { label: "Rango" },
-                  { label: "Salida" },
-                  { label: "Devolución" },
-                  { label: "Estado" },
-                  { label: "Daños" },
-                  { label: "Acciones", end: true },
-                ]}
-              >
-                {assignments.map((assignment) => {
-                  // Acción de campo en cola (issue #23): el estado mostrado refleja la
-                  // intención local y el badge "Sin subir" avisa que falta confirmación.
-                  const queuedMovement = queuedActionForAssignment(queuedActions, assignment.id);
-                  const queuedOut = queuedMovement?.kind === "inventory-checkout" ? queuedMovement : null;
-                  const queuedBack = queuedMovement?.kind === "inventory-checkin" ? queuedMovement : null;
-                  const state = inventoryAssignmentState(
-                    queuedMovement
-                      ? queuedOut
-                        ? { ...assignment, checkedOut: true, checkedOutAt: assignment.checkedOutAt ?? queuedMovement.createdAt }
-                        : { ...assignment, checkedIn: true, checkedInAt: assignment.checkedInAt ?? queuedMovement.createdAt }
-                      : assignment,
-                  );
-                  const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
-                  const countdown = inventoryAssignmentCountdown(assignment);
-                  const isOut = Boolean(assignment.checkedOutAt || assignment.checkedOut || queuedOut);
-                  const isBack = Boolean(assignment.checkedInAt || assignment.checkedIn || queuedBack);
-                  // Un combo no sale ni vuelve como unidad: sus movimientos son los de sus componentes.
-                  const isCombo = (assignment.inventory._count?.components ?? 0) > 0;
-                  const pendingBack = isOut && !isBack ? assignmentPending(assignment) : 0;
-                  const toDispatch = assignment.quantity - assignmentDispatched(assignment);
-                  const cleaning = assignment.cleaningUntil ? new Date(assignment.cleaningUntil) : null;
-                  const startsAt = assignment.startsAt ?? equipmentEvent.setupAt ?? equipmentEvent.startsAt;
-                  const endsAt = assignment.endsAt ?? equipmentEvent.strikeAt ?? equipmentEvent.endsAt ?? startsAt;
-                  return (
-                    <AdminRow key={assignment.id}>
-                      <AdminCell title={assignment.inventory.name}>
-                        <strong>{assignment.inventory.name}</strong>
-                        {assignment.inventory.sku ? <span className="admin-code"> · {assignment.inventory.sku}</span> : null}
-                        {isCombo ? <> <AdminBadge tone="info" title="Los movimientos se registran sobre sus componentes">Combo</AdminBadge></> : null}
-                      </AdminCell>
-                      <AdminCell end title={`${formatNumber(assignment.quantity)} unidades`}>
-                        {formatNumber(assignment.quantity)}
-                      </AdminCell>
-                      <AdminCell title={startsAt && endsAt ? rangeStamp(startsAt, endsAt) : "Sin fechas"}>
-                        {rangeStamp(startsAt, endsAt)}
-                      </AdminCell>
-                      <AdminCell title={queuedOut ? movementQueueTitle(queuedOut) : assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>
-                        {queuedOut ? (
-                          <AdminBadge tone={queuedOut.status === "failed" ? "danger" : "warn"} title={movementQueueTitle(queuedOut)}>
-                            {queuedOut.status === "failed" ? "Falló" : "Sin subir"}
-                          </AdminBadge>
-                        ) : (
-                          stamp(assignment.checkedOutAt)
-                        )}
-                      </AdminCell>
-                      <AdminCell title={queuedBack ? movementQueueTitle(queuedBack) : assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>
-                        {queuedBack ? (
-                          <AdminBadge tone={queuedBack.status === "failed" ? "danger" : "warn"} title={movementQueueTitle(queuedBack)}>
-                            {queuedBack.status === "failed" ? "Falló" : "Sin subir"}
-                          </AdminBadge>
-                        ) : (
-                          stamp(assignment.checkedInAt)
-                        )}
-                      </AdminCell>
-                      <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
-                        <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
-                        {cleaning && cleaning.getTime() > Date.now() ? (
-                          <AdminBadge tone="warn" title={`En limpieza o revisión hasta ${stamp(assignment.cleaningUntil ?? null)}`}>
-                            En limpieza o revisión
-                          </AdminBadge>
-                        ) : null}
-                        {countdown ? (
-                          <AdminCountdown
-                            value={countdown.at}
-                            short
-                            className="admin-countdown--inline"
-                            title={`${countdown.title}: ${assignment.inventory.name}`}
-                          />
-                        ) : null}
-                      </AdminCell>
-                      <AdminCell
-                        title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}
-                      >
-                        {damages ?? "—"}
-                      </AdminCell>
-                      <AdminCell end className="admin-cell--actions">
-                        <span className="admin-actions">
-                          {writable && !isBack && !isCombo && toDispatch > 0 ? (
-                            <AdminButton
-                              icon="arrow-right"
-                              title={`Despachar: ${assignment.inventory.name}`}
-                              aria-label={`Despachar: ${assignment.inventory.name}`}
-                              onClick={() => openMovement("checkout", assignment)}
-                            >
-                              Despachar
-                            </AdminButton>
-                          ) : null}
-                          {writable && isOut && !isBack && !isCombo && pendingBack > 0 ? (
-                            <AdminButton
-                              icon="checkin"
-                              title={`Registrar devolución: ${assignment.inventory.name}`}
-                              aria-label={`Registrar devolución: ${assignment.inventory.name}`}
-                              onClick={() => openMovement("checkin", assignment)}
-                            >
-                              Registrar devolución
-                            </AdminButton>
-                          ) : null}
-                          {writable && !isOut && !isBack ? (
-                            <>
-                              <AdminButton
-                                icon="edit"
-                                title={`Editar asignación: ${assignment.inventory.name}`}
-                                aria-label={`Editar asignación: ${assignment.inventory.name}`}
-                                onClick={() => startEditAssignment(assignment)}
-                              >
-                                Editar
-                              </AdminButton>
-                              <AdminButton
-                                icon="close"
-                                title={`Quitar asignación: ${assignment.inventory.name}`}
-                                aria-label={`Quitar asignación: ${assignment.inventory.name}`}
-                                onClick={() => void removeAssignment(assignment)}
-                              />
-                            </>
-                          ) : null}
-                          {!(writable && !isBack && ((!isCombo && toDispatch > 0) || (isOut && !isCombo && pendingBack > 0) || !isOut)) ? (
-                            <span className="admin-muted">—</span>
-                          ) : null}
-                        </span>
-                      </AdminCell>
-                    </AdminRow>
-                  );
-                })}
-              </AdminTable>
-            </AdminDataState>
-
-            <h3 className="admin-subtitle">Incidentes de inventario</h3>
-            <InventoryIncidentsPanel
-              eventId={equipmentEvent.id}
-              writable={writable}
-              reloadKey={incidentsKey}
-              onChanged={() => {
-                inventoryResource.reload();
-                operations.reload();
-              }}
-            />
-          </>
-        )}
-      </AdminPanel>
-
-      <AdminPanel
-        title="Checklist operativo" icon="audit"
-        meta={`${formatNumber(pendingTasks)} pendientes`}
-        action={
-          <AdminSelect
-            value={taskFilter}
-            onChange={setTaskFilter}
-            label="Filtrar tareas"
-            options={[
-              { value: "PENDING", label: "Solo pendientes" },
-              { value: "ALL", label: "Todas las tareas" },
-            ]}
-          />
-        }
-      >
-        {checklistWritable ? (
-          <form className="admin-inline-form" onSubmit={submitTask}>
-            <AdminSelect
-              className=""
-              required
-              value={taskForm.eventId}
-              onChange={(value) => setTaskForm({ ...taskForm, eventId: value })}
-              label="Evento de la tarea"
-              options={[{ value: "", label: "Evento…" }, ...events.map((event) => ({ value: event.id, label: event.name }))]}
-            />
-            <TextField
-              ariaLabel="Título de la tarea"
-              required
-              maxLength={120}
-              value={taskForm.title}
-              onChange={(value) => setTaskForm({ ...taskForm, title: value })}
-              placeholder="Nueva tarea operativa"
-            />
-            <AdminSelect
-              className=""
-              value={taskForm.type}
-              onChange={(value) => setTaskForm({ ...taskForm, type: value })}
-              label="Tipo de tarea"
-              options={TASK_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-            />
-            <AdminSelect
-              className=""
-              value={taskForm.promoterId}
-              onChange={(value) => setTaskForm({ ...taskForm, promoterId: value })}
-              label="Promotora de la tarea"
-              title="Promotora asignada (opcional)"
-              options={promoterOptions(promoters)}
-            />
-            <DateField
-              ariaLabel="Vencimiento de la tarea"
-              title="Vencimiento (opcional)"
-              value={taskForm.dueAt}
-              onChange={(value) => setTaskForm({ ...taskForm, dueAt: value })}
-            />
-            <AdminButton type="submit" icon="plus" busy={taskBusy}>
-              Agregar tarea
-            </AdminButton>
-          </form>
-        ) : null}
-
-        {selectedPromoter && !promoterIsAvailable(selectedPromoter) ? (
-          <AdminNote>
-            <AdminBadge tone={promoterAvailabilityTone(selectedPromoter.availability)}>
-              {promoterAvailabilityLabel(selectedPromoter.availability)}
-            </AdminBadge>
-            <span>
-              <strong>{selectedPromoter.name}</strong>
-              {promoterAvailabilityDetail(selectedPromoter) ? `: ${promoterAvailabilityDetail(selectedPromoter)}.` : "."} Podés
-              asignarla igual: la tarea queda y el conflicto se ve en el checklist.
-            </span>
-          </AdminNote>
-        ) : null}
-
-        {promoterConflicts.length > 0 ? (
-          <>
-            {promoterConflicts.slice(0, 3).map(({ task, event }) => (
-              <AdminNote key={task.id}>
-                <AdminBadge tone={promoterAvailabilityTone(task.promoter?.availability)}>
-                  {promoterAvailabilityLabel(task.promoter?.availability)}
-                </AdminBadge>
-                <span>
-                  <strong>{task.promoter?.name}</strong> está asignada a «{task.title}» ({event.name}) —{" "}
-                  {promoterAvailabilityDetail(task.promoter) || "sin detalle cargado"}. Revisá la asignación o cubrila con otra
-                  persona.
-                </span>
-              </AdminNote>
-            ))}
-            {promoterConflicts.length > 3 ? (
-              <AdminNote>
-                Hay {formatNumber(promoterConflicts.length - 3)} asignación{promoterConflicts.length - 3 === 1 ? "" : "es"} más
-                con la promotora no disponible.
-              </AdminNote>
-            ) : null}
-          </>
-        ) : null}
-
-        {taskError ? <AdminNote tone="error">{taskError}</AdminNote> : null}
-        {taskNotice ? <AdminNote tone="ok">{taskNotice}</AdminNote> : null}
-        {checklistError ? <AdminNote tone="error">{checklistError}</AdminNote> : null}
-
-        <AdminDataState
-          loading={operations.loading}
-          error={operations.error}
-          onRetry={operations.reload}
-          empty={checklistEntries.length === 0}
-          emptyTitle={taskFilter === "PENDING" ? "Checklist al día" : "Sin tareas cargadas"}
-          emptyIcon={taskFilter === "PENDING" ? "check" : "audit"}
-          emptyHint="Las tareas base se generan al crear un evento y se pueden sumar a mano."
-          rows={4}
-        >
-          <ChecklistTable
-            entries={checklistEntries}
-            canToggle={checklistWritable}
-            onChanged={() => operations.reload()}
-            onError={setChecklistError}
-            emptyHint="No hay tareas en este filtro."
-          />
-        </AdminDataState>
-
-        {checklistEntries.length === 50 ? <AdminNote>Mostrando las primeras 50 tareas del filtro.</AdminNote> : null}
-      </AdminPanel>
-
-      {timelineEvent ? (
-        <AdminTimelineDialog
-          title={`Cronología · ${timelineEvent.name}`}
-          path={`/api/admin/timeline?eventId=${encodeURIComponent(timelineEvent.id)}`}
-          onClose={() => setTimelineEvent(null)}
+      {movement ? (
+        <InventoryMovementDialog
+          mode={movement.mode}
+          assignment={movement.assignment}
+          eventName={movement.eventName}
+          onClose={() => setMovement(null)}
+          onDone={(message, wasQueued) => {
+            setFlash(message);
+            setMovement(null);
+            if (!wasQueued) {
+              operations.reload();
+              inventoryResource.reload();
+              setIncidentsKey((key) => key + 1);
+            }
+          }}
         />
       ) : null}
 
       {templateTarget ? (
         <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
-
       ) : null}
       {/* Alta rápida de cliente desde el evento (issue #106): el mismo
           formulario mínimo del módulo Clientes; al crear queda elegido. */}
@@ -1458,8 +875,6 @@ export function EventosModule() {
           onCreated={selectCreatedClient}
         />
       ) : null}
-      </>
-      )}
     </div>
   );
 }

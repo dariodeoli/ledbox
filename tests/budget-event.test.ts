@@ -43,7 +43,7 @@ test("las etapas siguen Lead → Presupuesto → Aprobado → Evento → Cobrado
   assert.equal(approved.find((stage) => stage.key === "event")?.href, undefined, "sin evento no hay link");
   const withEvent = budgetStages({ ...base, status: "APPROVED", event: { id: "e1", name: "Expo" }, collected: 400_000 });
   assert.equal(withEvent.find((stage) => stage.key === "event")?.state, "done");
-  assert.equal(withEvent.find((stage) => stage.key === "event")?.href, "/eventos");
+  assert.equal(withEvent.find((stage) => stage.key === "event")?.href, "/eventos?evento=e1", "la etapa Evento abre la ficha de ese evento");
   assert.equal(withEvent.find((stage) => stage.key === "paid")?.state, "current");
   const paid = budgetStages({ ...base, status: "APPROVED", event: { id: "e1", name: "Expo" }, collected: 1_000_000 });
   assert.equal(paid.find((stage) => stage.key === "paid")?.state, "done");

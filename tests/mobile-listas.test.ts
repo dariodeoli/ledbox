@@ -20,18 +20,27 @@ test("el kit expone el ancho compacto con el corte del shell", () => {
   assert.match(board, /media\.addEventListener\("change", update\)/, "el ancho se sigue en vivo");
 });
 
-test("eventos: tarjetas en ancho compacto con el nombre primero", () => {
+test("eventos: tarjetas en ancho compacto con la fecha destacada, el estado, la preparación y la siguiente acción", () => {
   const module = repoFile("components/admin/modules/EventosModule.tsx");
+  const cards = repoFile("components/admin/modules/EventoLista.tsx");
   assert.match(module, /const narrow = useAdminNarrowViewport\(\);/);
   assert.match(module, /const cardView = narrow \|\| activeView === "grid";/);
-  assert.match(module, /cardView \? \(\n\s*<AdminCardGrid label="Eventos" cards=\{eventCards\} \/>/);
-  // La tarjeta arranca por el nombre y suma cliente, fecha/lugar, urgencia,
-  // avance y equipos (el nombre era lo que desaparecía en móvil).
-  assert.match(module, /const eventCards: AdminCardData\[\] = rows\.map\([\s\S]{0,700}title: event\.name/);
-  assert.match(module, /subtitle: clientDisplayName\(event\.client\)/);
-  for (const label of ["Fecha", "Falta", "Lugar", "Equipos", "Checklist"]) {
-    assert.ok(module.includes(`label: "${label}"`), `falta «${label}» en la tarjeta del evento`);
-  }
+  assert.match(module, /cardView \? \(\n\s*<EventCards items=\{rows\} onOpen=\{\(item\) => openFicha\(item\.event\.id\)\} renderActions=\{rowActions\} \/>/);
+  // La tarjeta arranca por la fecha destacada y el nombre, y suma cliente, lugar,
+  // estado, preparación, lo que falta y la siguiente acción (el nombre era lo que
+  // desaparecía en móvil).
+  assert.match(cards, /admin-events-card-date[\s\S]{0,1200}admin-events-card-name/, "la fecha va destacada junto al nombre");
+  assert.match(cards, /clientDisplayName\(event\.client\)/, "el cliente entra a la tarjeta");
+  assert.match(cards, /<EventStateBadges item=\{item\} \/>/, "el estado va en la tarjeta");
+  assert.match(cards, /<PrepChips item=\{item\} \/>/, "la preparación va en la tarjeta");
+  assert.match(cards, /readiness\.gaps\[0\]/, "lo primero que falta se lee en la tarjeta");
+  assert.match(cards, /renderActions\(item\)/, "el pie lleva la siguiente acción y «•••»");
+  // El checklist y los equipos siguen en la tarjeta, ahora como chips de preparación
+  // (checklist cumplido/total y equipos despachados/total), con su texto completo accesible.
+  assert.match(cards, /export function PrepChips/, "los chips de preparación existen");
+  assert.match(cards, /Checklist: \$\{tasks\.done\} de \$\{tasks\.total\} tareas cumplidas/, "el chip de checklist dice cuántas tareas se cumplieron");
+  assert.match(cards, /Equipos despachados: \$\{equipment\.dispatched\} de \$\{equipment\.units\}/, "el chip de equipos dice cuántos salieron");
+  assert.match(cards, /<AdminIcon name="audit" size=\{12\} \/>[\s\S]{0,320}<AdminIcon name="inventory" size=\{12\} \/>/, "checklist y equipos son chips distintos");
   // El conmutador no se dibuja en ancho compacto (lista y cuadrícula serían iguales).
   assert.match(module, /<div className="admin-cal-view-switch">\s*<AdminViewSwitch/, "el calendario se alcanza también desde el selector móvil");
 });

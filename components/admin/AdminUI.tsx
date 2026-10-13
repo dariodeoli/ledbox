@@ -854,7 +854,8 @@ export function AdminTimeline({
  * los dibuja con el timeline compartido. Cualquier rol con membresía lee
  * (VIEWER incluido); el aislamiento por empresa lo resuelve el API.
  */
-export function AdminTimelineDialog({ title, path, onClose }: { title: string; path: string; onClose: () => void }) {
+/** Cronología real que se pide sola: la usa el diálogo y la pestaña Historial de la ficha del evento. */
+export function AdminTimelineLoader({ path }: { path: string }) {
   const [entries, setEntries] = useState<AdminTimelineEntry[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -880,15 +881,21 @@ export function AdminTimelineDialog({ title, path, onClose }: { title: string; p
   }, [path, attempt]);
 
   return (
+    <AdminTimeline
+      entries={entries ?? []}
+      loading={entries === null && !error}
+      error={error}
+      onRetry={() => setAttempt((current) => current + 1)}
+      emptyTitle="Todavía no hay hitos registrados"
+      emptyHint="Los hitos aparecen solos cuando el presupuesto o el evento tienen movimientos reales."
+    />
+  );
+}
+
+export function AdminTimelineDialog({ title, path, onClose }: { title: string; path: string; onClose: () => void }) {
+  return (
     <AdminDialog title={title} size="wide" icon="clock" onClose={onClose}>
-      <AdminTimeline
-        entries={entries ?? []}
-        loading={entries === null && !error}
-        error={error}
-        onRetry={() => setAttempt((current) => current + 1)}
-        emptyTitle="Todavía no hay hitos registrados"
-        emptyHint="Los hitos aparecen solos cuando el presupuesto o el evento tienen movimientos reales."
-      />
+      <AdminTimelineLoader path={path} />
       <div className="admin-dialog-foot">
         <span className="admin-dialog-spacer" />
         <AdminButton icon="close" onClick={onClose}>Cerrar</AdminButton>
@@ -1009,6 +1016,7 @@ export function AdminKpi({
   state,
   onSelect,
   active,
+  actionLabel,
 }: {
   label: string;
   /** Con `onSelect` el indicador es un botón-filtro (`active` = filtro vigente). */
@@ -1023,6 +1031,8 @@ export function AdminKpi({
   loading?: boolean;
   /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
   state?: KpiState;
+  /** Nombre accesible del botón-filtro («Filtrar por próximos 7 días»); por defecto, el rótulo + valor. */
+  actionLabel?: string;
 }) {
   const groupState = useContext(AdminKpiStateContext);
   const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
@@ -1032,7 +1042,15 @@ export function AdminKpi({
   return (
     <Wrapper
       className={onSelect ? "admin-kpi admin-kpi--filter" : "admin-kpi"}
-      {...(onSelect ? { type: "button" as const, onClick: onSelect, "aria-pressed": Boolean(active), "data-active": active ? "true" : undefined } : {})}
+      {...(onSelect
+        ? {
+            type: "button" as const,
+            onClick: onSelect,
+            "aria-pressed": Boolean(active),
+            "aria-label": actionLabel ? `${actionLabel}${shown && value != null ? `: ${value}` : ""}` : undefined,
+            "data-active": active ? "true" : undefined,
+          }
+        : {})}
       data-tone={shown ? tone : undefined}
       data-loading={current === "loading" ? "true" : undefined}
       data-state={current}
