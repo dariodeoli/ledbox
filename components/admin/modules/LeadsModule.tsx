@@ -710,6 +710,7 @@ export function LeadsModule() {
                       <div className="admin-detail-quote-status" data-testid="catalog-order">
                         <p>
                           <AdminBadge tone={QUOTE_TONE[quote.status ?? "NEW"] ?? "neutral"}>{quoteRequestStatusLabel(quote.status)}</AdminBadge>
+                          {quote.priceList === "WHOLESALE" ? <AdminBadge tone="accent" title="Pedido del catálogo mayorista: vinculado al cliente del link y con precios mayoristas">Mayorista</AdminBadge> : null}
                           {quote.startsAt && quote.endsAt ? (
                             <span className="admin-cell-sub"> · del {formatDate(quote.startsAt)} al {formatDate(quote.endsAt)}</span>
                           ) : null}
