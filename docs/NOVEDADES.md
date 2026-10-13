@@ -373,3 +373,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Inventario: combos. Un combo se arma con productos existentes, por ejemplo «Kit pantalla LED 3×2» = 6 módulos + procesador + 2 truss, y no lleva stock propio. La pantalla muestra «Se pueden armar N» y cuál es el componente que limita.
 - Un combo y sus componentes sueltos comparten el mismo stock: reservar un combo descuenta sus piezas y nunca se reserva de más, aunque se pida al mismo tiempo. Cancelar o liberar un combo devuelve exactamente sus piezas.
 - Un componente se puede reemplazar por otro de la misma categoría, con control de stock, y el cambio queda registrado. Un combo no puede contener otro combo.
+
+## v2.1.93 — 2026-10-13
+
+- Eventos e Inventario: las altas y ediciones se hacen en la ventana de carga nueva, con secciones, botones siempre visibles abajo y aviso si cerrás con cambios sin guardar. En el celular ocupan toda la pantalla.
+- Leads: el detalle queda como vista de lectura y el seguimiento (estado y notas) se edita en su propia ventana.
+- Finanzas y Usuarios: recordatorios, confirmar pagos, dividir saldo, marcar cobrado, trazabilidad, invitar y revocar usan la misma ventana que el resto del panel.
