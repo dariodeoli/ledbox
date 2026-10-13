@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDateTime, formatNumber, invitationStatusLabel, invitationStatusTone, mailStatusLabel, statusTone } from "@/lib/admin-format";
 import type { AdminTeamInvitation } from "@/lib/admin-types";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
@@ -19,7 +19,7 @@ import {
   AdminDataState,
   AdminEmpty,
   AdminDialog,
-  AdminFormPanel,
+  AdminDialogSection,
   AdminKpi,
   AdminNote,
   AdminPanel,
@@ -50,22 +50,6 @@ const EMPTY_FORM = { name: "", email: "", password: "", role: "VIEWER" };
 const EMPTY_EDIT = { name: "", email: "" };
 
 const EMPTY_INVITE = { email: "", role: "VIEWER" };
-
-/** AdminFormPanel exposes busy but no validity prop. Keep its shared layout;
- * synchronize only this instance's native submit button before paint. The
- * submit handlers independently guard validity, permission and busy state.
- */
-function useUserFormSubmitValidity(error: string | null, busy: boolean) {
-  const ref = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const button = ref.current?.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (button) {
-      button.disabled = busy || error !== null;
-      button.title = error ?? "";
-    }
-  });
-  return ref;
-}
 
 /**
  * Equipo / Usuarios (issue #22): además de crear, cambiar el rol y
@@ -101,8 +85,10 @@ export function UsuariosModule() {
   const writable = canManageUsers(role);
   const createValidity = userFormValidity(form, "create");
   const editValidity = userFormValidity(editForm, "edit");
-  const createFormRef = useUserFormSubmitValidity(createValidity.error, busy);
-  const editFormRef = useUserFormSubmitValidity(editValidity.error, editBusy || (editing !== null && !canEditUser(editing)));
+  const createFormId = useId();
+  const editFormId = useId();
+  const createDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_FORM);
+  const editDirty = editing !== null && (editForm.name !== editing.name || editForm.email !== editing.email);
   const compact = useAdminNarrowViewport();
   const list = useMemo(() => users.data ?? [], [users.data]);
   const rows = useMemo(
@@ -324,82 +310,128 @@ export function UsuariosModule() {
       {writable ? <InvitationsPanel /> : null}
 
       {writable && showForm ? (
-        <div ref={createFormRef}>
-        <AdminFormPanel
+        <AdminDialog
           title="Nuevo usuario"
-          submitLabel="Crear usuario"
-          onSubmit={submit}
-          onCancel={() => setShowForm(false)}
-          busy={busy}
-          status={createValidity.error ?? formError}
-          statusNote={!createValidity.error && formLimit ? <AdminPlanLimitNote message={formLimit} /> : null}
+          icon="users"
+          description="Crea el acceso al panel con una contraseña inicial y el rol elegido."
+          dirty={createDirty}
+          onClose={() => setShowForm(false)}
+          footer={({ requestClose }) => (
+            <>
+              {createValidity.error || formError || formLimit ? (
+                <div className="admin-dialog-footer-note">
+                  {createValidity.error ? (
+                    <AdminNote tone="error">{createValidity.error}</AdminNote>
+                  ) : formError ? (
+                    <AdminNote tone="error">{formError}</AdminNote>
+                  ) : (
+                    <AdminPlanLimitNote message={formLimit} />
+                  )}
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={createFormId} busy={busy} disabled={createValidity.error !== null}>
+                Crear usuario
+              </AdminButton>
+            </>
+          )}
         >
-          <TextField
-            label="Nombre"
-            required
-            maxLength={120}
-            value={form.name}
-            onChange={(value) => { setForm({ ...form, name: value }); setFormError(""); }}
-            placeholder="Ej.: Ana Martínez"
-          />
-          <EmailField
-            label="Correo"
-            required
-            value={form.email}
-            onChange={(value) => { setForm({ ...form, email: value }); setFormError(""); }}
-            placeholder="ana@ledbox.online"
-          />
-          <PasswordField
-            label="Contraseña inicial"
-            hint="Mínimo 12 caracteres"
-            required
-            minLength={12}
-            value={form.password}
-            onChange={(value) => { setForm({ ...form, password: value }); setFormError(""); }}
-            autoComplete="new-password"
-          />
-          <SelectField
-            label="Rol"
-            value={form.role}
-            onChange={(value) => setForm({ ...form, role: value })}
-            options={ROLE_SELECT_OPTIONS}
-          />
-        </AdminFormPanel>
-        </div>
+          <form id={createFormId} className="admin-form" onSubmit={submit} aria-busy={busy || undefined}>
+            <AdminDialogSection title="Acceso">
+              <TextField
+                label="Nombre"
+                required
+                autoFocus
+                maxLength={120}
+                value={form.name}
+                onChange={(value) => { setForm({ ...form, name: value }); setFormError(""); }}
+                placeholder="Ej.: Ana Martínez"
+              />
+              <EmailField
+                label="Correo"
+                required
+                value={form.email}
+                onChange={(value) => { setForm({ ...form, email: value }); setFormError(""); }}
+                placeholder="ana@ledbox.online"
+              />
+              <PasswordField
+                label="Contraseña inicial"
+                hint="Mínimo 12 caracteres"
+                required
+                minLength={12}
+                value={form.password}
+                onChange={(value) => { setForm({ ...form, password: value }); setFormError(""); }}
+                autoComplete="new-password"
+              />
+              <SelectField
+                label="Rol"
+                value={form.role}
+                onChange={(value) => setForm({ ...form, role: value })}
+                options={ROLE_SELECT_OPTIONS}
+              />
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       {editing ? (
-        <div ref={editFormRef}>
-        <AdminFormPanel
+        <AdminDialog
           title={`Editar usuario · ${editing.name}`}
-          submitLabel="Guardar cambios"
-          onSubmit={submitEdit}
-          onCancel={() => setEditing(null)}
-          busy={editBusy}
-          status={editValidity.error ?? editError}
+          icon="users"
+          description="Nombre y correo de acceso. Si el correo cambia, se cierran sus sesiones abiertas."
+          dirty={editDirty}
+          onClose={() => setEditing(null)}
+          footer={({ requestClose }) => (
+            <>
+              {editValidity.error || editError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{editValidity.error ?? editError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={editBusy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton
+                type="submit"
+                variant="primary"
+                icon="check"
+                form={editFormId}
+                busy={editBusy}
+                disabled={editValidity.error !== null || !canEditUser(editing)}
+              >
+                Guardar cambios
+              </AdminButton>
+            </>
+          )}
         >
-          <TextField
-            label="Nombre"
-            required
-            maxLength={120}
-            value={editForm.name}
-            onChange={(value) => {
-              setEditForm({ ...editForm, name: value });
-              setEditError("");
-            }}
-          />
-          <EmailField
-            label="Correo"
-            required
-            value={editForm.email}
-            onChange={(value) => {
-              setEditForm({ ...editForm, email: value });
-              setEditError("");
-            }}
-            hint="Si cambia, se cierran sus sesiones abiertas y entra con el correo nuevo."
-          />
-        </AdminFormPanel>
-        </div>
+          <form id={editFormId} className="admin-form" onSubmit={submitEdit} aria-busy={editBusy || undefined}>
+            <AdminDialogSection title="Acceso">
+              <TextField
+                label="Nombre"
+                required
+                autoFocus
+                maxLength={120}
+                value={editForm.name}
+                onChange={(value) => {
+                  setEditForm({ ...editForm, name: value });
+                  setEditError("");
+                }}
+              />
+              <EmailField
+                label="Correo"
+                required
+                value={editForm.email}
+                onChange={(value) => {
+                  setEditForm({ ...editForm, email: value });
+                  setEditError("");
+                }}
+                hint="Si cambia, se cierran sus sesiones abiertas y entra con el correo nuevo."
+              />
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       <AdminDataState
@@ -569,6 +601,7 @@ function InviteDialog({
         <EmailField
           label="Correo"
           required
+          autoFocus
           value={invite.email}
           onChange={(value) => {
             setInvite({ ...invite, email: value });

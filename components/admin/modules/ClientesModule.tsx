@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   clientTypeLabel,
@@ -27,7 +27,8 @@ import {
   AdminCell,
   AdminDataState,
   AdminEmpty,
-  AdminFormPanel,
+  AdminDialog,
+  AdminDialogSection,
   AdminIconLink,
   AdminImageUpload,
   AdminKpi,
@@ -230,6 +231,7 @@ export function ClientesModule() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
+  const clientFormId = useId();
   const [view, setView] = useAdminModuleView("clientes", CLIENTES_VIEWS);
   // En ancho compacto la lista también se lee como tarjetas (issue #139): la
   // tabla no entra en 390 sin cortar contacto, deuda y última actividad.
@@ -487,6 +489,11 @@ export function ClientesModule() {
   }
 
   const previewName = clientDisplayName(form) || "Cliente";
+  const baselineForm = useMemo(() => {
+    const row = editingId ? (clients.data ?? []).find((client) => client.id === editingId) : null;
+    return row ? formFromClient(row) : EMPTY_FORM;
+  }, [editingId, clients.data]);
+  const formDirty = JSON.stringify(form) !== JSON.stringify(baselineForm) || Boolean(pendingLogo) || logoRemoved;
 
   return (
     <div className="admin-module-page">
@@ -547,63 +554,85 @@ export function ClientesModule() {
       {status ? <AdminNote tone="ok">{status}</AdminNote> : null}
 
       {writable && showForm ? (
-        <AdminFormPanel
+        <AdminDialog
           title={editingId ? `Editar cliente · ${clientDisplayName(form) || "sin nombre"}` : "Nuevo cliente"}
-          submitLabel={editingId ? "Guardar cambios" : "Registrar cliente"}
-          onSubmit={submit}
-          onCancel={closeForm}
-          onEscape={closeForm}
-          busy={busy}
-          status={formError}
+          icon="clients"
+          size="wide"
+          description={
+            editingId
+              ? "Datos de contacto, fiscales, notas y logo del cliente."
+              : "Alta rápida: alcanza con el nombre. El resto se puede completar después."
+          }
+          dirty={formDirty}
+          onClose={closeForm}
+          footer={({ requestClose }) => (
+            <>
+              {formError ? (
+                <div className="admin-dialog-footer-note">
+                  <AdminNote tone="error">{formError}</AdminNote>
+                </div>
+              ) : null}
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" variant="primary" icon="check" form={clientFormId} busy={busy}>
+                {editingId ? "Guardar cambios" : "Registrar cliente"}
+              </AdminButton>
+            </>
+          )}
         >
-          {/* Alta rápida (issue #106): Nombre con foco + teléfono/correo; el
-              resto vive en «Más datos» y no se pierde al plegarlo. */}
-          <ClientQuickFields
-            key={editingId ?? "nuevo"}
-            values={form}
-            onChange={(patch) => setForm({ ...form, ...patch })}
-            errors={fieldErrors}
-            autoFocus={!editingId}
-            moreOpen={Boolean(editingId)}
-          >
-            <div className="admin-form-group admin-form-group--wide">
-              <span className="admin-form-group-title">Notas</span>
-              <TextAreaField
-                label="Notas internas"
-                maxLength={FIELD_LIMITS.notes}
-                rows={3}
-                wide
-                value={form.notes}
-                onChange={(value) => setForm({ ...form, notes: value })}
-                placeholder="Acuerdos, condiciones de facturación, contactos alternos…"
-              />
-            </div>
+          <form id={clientFormId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
+            {/* Alta rápida (issue #106): Nombre con foco + teléfono/correo; el
+                resto vive en «Más datos» y no se pierde al plegarlo. */}
+            <AdminDialogSection>
+              <ClientQuickFields
+                key={editingId ?? "nuevo"}
+                values={form}
+                onChange={(patch) => setForm({ ...form, ...patch })}
+                errors={fieldErrors}
+                autoFocus={!editingId}
+                moreOpen={Boolean(editingId)}
+              >
+                <div className="admin-form-group admin-form-group--wide">
+                  <span className="admin-form-group-title">Notas</span>
+                  <TextAreaField
+                    label="Notas internas"
+                    maxLength={FIELD_LIMITS.notes}
+                    rows={3}
+                    wide
+                    value={form.notes}
+                    onChange={(value) => setForm({ ...form, notes: value })}
+                    placeholder="Acuerdos, condiciones de facturación, contactos alternos…"
+                  />
+                </div>
 
-            <div className="admin-form-group admin-form-group--image admin-client-logo">
-              <span className="admin-form-group-title">Logo</span>
-              <AdminImageUpload
-                label="Logo del cliente"
-                mode="logo"
-                hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
-                preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
-                busy={busy}
-                onPrepared={(image) => {
-                  setPendingLogo(image);
-                  setLogoRemoved(false);
-                }}
-                onRemove={
-                  hasLogo
-                    ? () => {
-                        setPendingLogo(null);
-                        setLogoRemoved(true);
-                      }
-                    : undefined
-                }
-                removeLabel="Quitar logo"
-              />
-            </div>
-          </ClientQuickFields>
-        </AdminFormPanel>
+                <div className="admin-form-group admin-form-group--image admin-client-logo">
+                  <span className="admin-form-group-title">Logo</span>
+                  <AdminImageUpload
+                    label="Logo del cliente"
+                    mode="logo"
+                    hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
+                    preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
+                    busy={busy}
+                    onPrepared={(image) => {
+                      setPendingLogo(image);
+                      setLogoRemoved(false);
+                    }}
+                    onRemove={
+                      hasLogo
+                        ? () => {
+                            setPendingLogo(null);
+                            setLogoRemoved(true);
+                          }
+                        : undefined
+                    }
+                    removeLabel="Quitar logo"
+                  />
+                </div>
+              </ClientQuickFields>
+            </AdminDialogSection>
+          </form>
+        </AdminDialog>
       ) : null}
 
       <AdminDataState
