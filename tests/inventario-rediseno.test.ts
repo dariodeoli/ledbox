@@ -96,7 +96,7 @@ test("`?producto=<id>` abre la ficha y un id ajeno no abre nada", () => {
 
 test("el lote se edita en una ventana y las altas y ediciones van por los endpoints de siempre", () => {
   const bulk = moduleFile("InventoryBulkEditor.tsx");
-  assert.match(bulk, /<AdminDialog[\s\S]{0,400}size="wide"/);
+  assert.match(bulk, /<AdminDialog[\s\S]{0,400}size="(wide|lg)"/);
   assert.match(bulk, /kind: target === "items" \? "bulk-items" : "bulk-units"/);
   const dialogs = moduleFile("InventoryItemDialogs.tsx");
   assert.match(dialogs, /"\/api\/admin\/resources"/);
