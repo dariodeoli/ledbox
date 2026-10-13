@@ -1,6 +1,6 @@
 "use client";
 import { clientDisplayName } from "@/lib/client-identity";
-import { budgetCollectionStep } from "@/lib/budget-collection-step";
+import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "@/components/admin/AdminAvatar";
 import { resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 
@@ -10,13 +10,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import {
-  budgetApprovalLabel,
-  budgetApprovalMethodLabel,
-  budgetApprovalTone,
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
   budgetChangeStatusTone,
-  budgetStatusLabel,
   countdownTone,
   formatBytes,
   formatCountdown,
@@ -26,7 +22,6 @@ import {
   formatNumber,
   invoiceTaxTypeLabel,
   paymentProofMimeLabel,
-  statusTone,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
 import { BankLogo } from "@/components/admin/BankLogo";
@@ -49,13 +44,32 @@ import {
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 import { privacyPolicyUrl } from "@/lib/public-config";
 import { PortalCardTitle } from "./PortalCardTitle";
-import { PortalPending, type PortalPendingItem } from "./PortalPending";
+import { PortalNextStep } from "./PortalNextStep";
+import type { AdminTone } from "@/lib/admin-format";
+import type { AdminIconName } from "@/lib/admin-types";
+import {
+  portalApprovalByline,
+  portalBudgetClosed,
+  portalExpired,
+  portalHeadDates,
+  portalStage,
+  portalStatusChip,
+  portalTransferDestination,
+} from "@/lib/portal-view";
 
 /**
- * Vista pública del presupuesto (issue #12) rediseñada: el cliente la lee de
- * arriba abajo —encabezado, estado, ítems ajustables, totales, una **acción
- * principal única**, plan de pagos, datos para transferir, comprobante,
- * pedidos, cronología y ayuda— con un resumen pegajoso en escritorio.
+ * Vista pública del presupuesto (issue #12), rediseñada el 13-10-2026 para que
+ * sea «más entendible». El cliente la lee de arriba abajo: encabezado (empresa,
+ * nº, título y UN estado), «Qué tenés que hacer ahora» con la única acción
+ * pendiente, «Pagar» (una sola sección: cuánto falta, datos bancarios,
+ * comprobante y plan), detalle, condiciones, decisión, documentos, cronología
+ * plegada y contacto. En escritorio, columna de lectura de ~720 px más una
+ * columna lateral pegajosa con total, saldo y acción; en celular, la acción
+ * principal queda fija abajo mientras haya algo pendiente.
+ *
+ * Qué ve el cliente en cada estado lo deciden las reglas puras de
+ * `lib/portal-view.ts` (etapa, estado único, fechas sin contradicciones, destino
+ * de la transferencia); acá solo se dibujan. Nada de lo que se expone cambia.
  *
  * La acción principal resuelve según lo que hizo el cliente (issue #14):
  *
@@ -68,9 +82,9 @@ import { PortalPending, type PortalPendingItem } from "./PortalPending";
  *   que no se resuelve con cantidades (`revision`) y espera la respuesta del
  *   equipo por el mismo link.
  *
- * Autorizado el presupuesto desaparecen los editores y los pedidos: la página
- * queda en solo lectura (estado, plan, datos de pago, comprobante, cronología y
- * la impresión del navegador). Lo mismo vale para una petición ya enviada.
+ * Autorizado el presupuesto desaparecen los editores y los pedidos nuevos: la
+ * página queda en solo lectura (estado, pago, cronología y la impresión del
+ * navegador). Lo mismo vale para una petición ya enviada.
  *
  * El nombre de quien autoriza viene **prellenado con el responsable cargado en
  * la empresa del cliente** (`Client.contactName`/`contactRole`, issue #36) y
@@ -364,7 +378,7 @@ export function PortalBudgetView({
   demoBanner?: ReactNode;
   /** Encabezado del documento (servidor): referencia, título y metadatos. */
   headTitle?: ReactNode;
-  /** Datos del encabezado (servidor): emisión, validez y evento. */
+  /** Datos del evento (servidor); sin evento asociado no se dibuja nada. */
   headFacts?: ReactNode;
   /** Cronología del cliente (servidor): solo lectura, sin hidratación. */
   timeline?: ReactNode;
@@ -417,12 +431,12 @@ export function PortalBudgetView({
   const approvedRef = useRef<HTMLElement | null>(null);
   const revisionRef = useRef<HTMLElement | null>(null);
   const actionRef = useRef<HTMLElement | null>(null);
-  const proofRef = useRef<HTMLElement | null>(null);
+  const proofRef = useRef<HTMLDivElement | null>(null);
   /** Bloque de pago post-aprobación (issue #107): destino del scroll al confirmar. */
-  const payFirstRef = useRef<HTMLDivElement | null>(null);
+  const payFirstRef = useRef<HTMLElement | null>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
   const discountInputRef = useRef<HTMLInputElement | null>(null);
-  const [actionBelowViewport, setActionBelowViewport] = useState(false);
+  const [targetOffscreen, setTargetOffscreen] = useState(false);
   const [footerVisible, setFooterVisible] = useState(false);
 
   const approved = Boolean(budget.approval.approvedAt) || Boolean(justApproved);
@@ -432,33 +446,6 @@ export function PortalBudgetView({
   const waitingRequest = !approved && !revisionPending && (pendingRequests.length > 0 || Boolean(justRequested));
   /** El cliente todavía no envió nada: puede ajustar, autorizar o pedir. */
   const canEdit = !approved && !revisionPending && !pendingRequests.some((request) => request.kind !== "items") && (!justRequested || justRequested.kind === "items");
-
-  useEffect(() => {
-    if (!canEdit) {
-      setActionBelowViewport(false);
-      setFooterVisible(false);
-      return;
-    }
-    const action = actionRef.current;
-    if (!action) return;
-    const footer = document.querySelector<HTMLElement>(".app-footer--portal");
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const rect = entry.boundingClientRect;
-          const visible = rect.bottom > 0 && rect.top < window.innerHeight;
-          if (entry.target === action) {
-            setActionBelowViewport(!visible && rect.top >= window.innerHeight);
-          }
-          if (entry.target === footer) setFooterVisible(visible);
-        }
-      },
-      { threshold: 0 },
-    );
-    observer.observe(action);
-    if (footer) observer.observe(footer);
-    return () => observer.disconnect();
-  }, [canEdit]);
 
   // El foco acompaña el cambio de estado para que un lector de pantalla anuncie
   // el resultado de la acción (el bloque nuevo entra al tabulado). Al autorizar,
@@ -522,14 +509,6 @@ export function PortalBudgetView({
   const approvalMethod = budget.approval.method ?? (justApproved ? "digital" : null);
   const revisionAt = budget.approval.revisionRequestedAt ?? (justRequested?.kind === "change" ? justRequested.at : null);
   const revisionText = justRequested?.kind === "change" ? justRequested.note : budget.approval.revisionNote;
-  const approvalState = approved
-    ? approvalMethod === "manual"
-      ? "APROBADO_MANUAL"
-      : "APROBADO_DIGITAL"
-    : revisionPending
-      ? "CAMBIOS_SOLICITADOS"
-      : "PENDIENTE";
-
   const draftChanges = useMemo(() => changedItems(budget, draft), [budget, draft]);
   /** Solo el cliente que todavía decide ajusta cantidades: aprobado o en revisión se lee. */
   const itemsChanged = !approved && draftChanges.length > 0;
@@ -579,82 +558,121 @@ export function PortalBudgetView({
   const mark = bankMark(budget.paymentDetails?.bank);
   const lastRequest = pendingRequests[0] ?? null;
 
-  /**
-   * Pendientes del cliente (25-09-2026): lo que falta hacer sale del estado
-   * real —decisión, pedido en revisión, transferencia, comprobante y vigencia—,
-   * nunca de un dato inventado. Vacío = no hay nada pendiente.
-   */
-  const pendingItems: PortalPendingItem[] = [];
-  if (!approved && canEdit) {
-    pendingItems.push({
-      id: "decide",
-      icon: "check",
-      tone: "accent",
-      title: "Falta tu decisión",
-      detail: `Autorizá el presupuesto por ${formatMoney(actionTotal)} o pedí una rebaja o un cambio.`,
-      href: "#portal-action",
-      action: "Decidir",
-    });
-  }
-  if (waitingRequest || revisionPending) {
-    pendingItems.push({
-      id: "review",
-      icon: "clock",
-      tone: "info",
-      title: "Tu pedido está en revisión",
-      detail: "El equipo de LedBox te responde por este mismo link; mientras tanto podés autorizar el presupuesto tal como está.",
-      href: budget.requests.length > 0 ? "#portal-requests" : undefined,
-      action: budget.requests.length > 0 ? "Ver pedido" : undefined,
-    });
-  }
-  if (!approved && budget.validUntil) {
-    const tone = countdownTone(budget.validUntil);
-    pendingItems.push({
-      id: "validity",
-      icon: "calendar",
-      tone: tone === "danger" ? "danger" : tone === "warn" ? "warn" : "neutral",
-      title: "La oferta tiene fecha de vencimiento",
-      detail: `Válida hasta ${formatDate(budget.validUntil)} · ${formatCountdown(budget.validUntil, "client")}.`,
-    });
-  }
-  if (approved) {
-    if (collectionStep.kind === "complete") pendingItems.push({ id: "collected", icon: "check", tone: "ok", title: collectionStep.label, detail: "No hay saldo pendiente de transferencia." });
-    const inReview = budget.expectedPayments.filter((expected) => expected.status === "PROOF");
-    if (transferNow) {
-      pendingItems.push({
-        id: "transfer",
-        icon: "bank",
-        tone: "accent",
-        title: `Transferí ${transferNow.label}`,
-        detail: `${formatMoney(transferNow.amount)} · los datos bancarios están en esta misma página.`,
-        href: "#portal-payment-data",
-        action: "Ver datos",
-      });
+  // ── Qué ve el cliente según el estado real (lib/portal-view.ts) ─────────────
+  /** Perdido o cancelado y sin aprobar: nada para decidir ni pagar. */
+  const closed = !approved && portalBudgetClosed(budget.status);
+  const expired = portalExpired(budget.validUntil, approved, budget.status);
+  const stage = portalStage({
+    approved,
+    status: budget.status,
+    waiting: waitingRequest || revisionPending,
+    collection: collectionStep.kind,
+    hasTransfer: Boolean(transferNow),
+  });
+  const statusChip = portalStatusChip({ approved, status: budget.status, revisionPending, waitingRequest, expired });
+  const headDates = portalHeadDates({
+    approved,
+    approvedAt,
+    status: budget.status,
+    createdAt: budget.createdAt,
+    validUntil: budget.validUntil,
+  });
+  const destination = portalTransferDestination(budget.paymentDetails);
+  /** La decisión (autorizar, rebaja o cambio) solo existe mientras el presupuesto está en juego. */
+  const decisionVisible = !approved && !revisionPending && !closed;
+  /** Saldo real del presupuesto: total menos lo cobrado (un comprobante en revisión no resta). */
+  const balance = budgetBalance({ total: budget.total, collected: budget.collectedAmount ?? 0 });
+  /** Sección a la que lleva la acción principal fija en celular; sin pendiente, no hay barra. */
+  const stickyKind: "authorize" | "pay" | null = stage === "authorize" && decisionVisible ? "authorize" : stage === "pay" ? "pay" : null;
+
+  useEffect(() => {
+    if (!stickyKind) {
+      setTargetOffscreen(false);
+      setFooterVisible(false);
+      return;
     }
-    if (inReview.length > 0) {
-      pendingItems.push({
-        id: "proof-review",
-        icon: "clock",
-        tone: "info",
-        title:
-          inReview.length === 1
-            ? `Comprobante en revisión: ${inReview[0]?.label ?? "pago"}`
-            : `${formatNumber(inReview.length)} comprobantes en revisión`,
-        detail: "El equipo de LedBox confirma el cobro; no hace falta hacer nada más.",
-      });
+    const target = stickyKind === "pay" ? payFirstRef.current : actionRef.current;
+    if (!target) return;
+    const footer = document.querySelector<HTMLElement>(".app-footer--portal");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const rect = entry.boundingClientRect;
+          const visible = rect.bottom > 0 && rect.top < window.innerHeight;
+          if (entry.target === target) setTargetOffscreen(!visible);
+          if (entry.target === footer) setFooterVisible(visible);
+        }
+      },
+      { threshold: 0 },
+    );
+    observer.observe(target);
+    if (footer) observer.observe(footer);
+    return () => observer.disconnect();
+  }, [stickyKind]);
+
+  /** Conceptos con comprobante enviado y todavía sin confirmar por el equipo. */
+  const proofsInReview = budget.expectedPayments.filter((expected) => expected.status === "PROOF");
+
+  /** La única cosa pendiente del cliente, en palabras simples. */
+  const nextStep: { icon: AdminIconName; tone: AdminTone; title: string; detail: string; cta?: { label: string; href: string } } = (() => {
+    switch (stage) {
+      case "authorize":
+        return {
+          icon: "check",
+          tone: expired ? "danger" : "accent",
+          title: itemsChanged ? "Enviá tu selección para revisión" : `Autorizá el presupuesto por ${formatMoney(actionTotal)}`,
+          detail: expired
+            ? `Esta oferta venció el ${formatDate(budget.validUntil)}. Pedí un cambio para que el equipo la actualice, o autorizala tal como está.`
+            : "Revisá el detalle y autorizalo, o pedí una rebaja o un cambio. El equipo te responde por este mismo link.",
+          cta: { label: "Ir a la decisión", href: "#portal-action" },
+        };
+      case "waiting":
+        return {
+          icon: "clock",
+          tone: "info",
+          title: "Tu pedido está en revisión",
+          detail: revisionPending
+            ? "No tenés que hacer nada más por ahora: el equipo de LedBox te responde por este mismo link con una versión nueva."
+            : "No tenés que hacer nada más por ahora: el equipo de LedBox te responde por este link. Mientras tanto podés autorizar el presupuesto tal como está.",
+        };
+      case "closed":
+        return {
+          icon: "info",
+          tone: "neutral",
+          title: budget.status === "CANCELLED" ? "Este presupuesto fue cancelado" : "Este presupuesto ya no está vigente",
+          detail: "No hay nada para hacer acá. Si querés retomarlo, escribinos respondiendo el correo con el que te lo enviamos.",
+        };
+      case "pay":
+        return {
+          icon: "bank",
+          tone: "accent",
+          title: `Transferí ${formatMoney(transferNow?.amount ?? balance)}`,
+          detail: `${transferNow?.label ?? "Pago"} · después subí el comprobante. Abajo están los datos para transferir.${proofsInReview.length > 0 ? ` ${proofsInReview.length === 1 ? `Tu comprobante de ${proofsInReview[0]?.label}` : `Tus ${formatNumber(proofsInReview.length)} comprobantes`} sigue en revisión.` : ""}`,
+          cta: { label: "Ver cómo pagar", href: "#portal-pay" },
+        };
+      case "review":
+        return {
+          icon: "clock",
+          tone: "info",
+          title: "Tu comprobante está en revisión",
+          detail: "El equipo de LedBox confirma el cobro. No tenés que hacer nada más por ahora.",
+        };
+      case "coordinate":
+        return {
+          icon: "info",
+          tone: "info",
+          title: "El equipo de LedBox coordina el pago con vos",
+          detail: `Todavía queda un saldo de ${formatMoney(balance)}, pero no hay un concepto abierto para transferir. Si tenés dudas, escribinos.`,
+        };
+      default:
+        return {
+          icon: "check",
+          tone: "ok",
+          title: "No tenés nada pendiente",
+          detail: "El cobro registrado cubre el total del presupuesto. Si algo cambia, te avisamos por el correo con el que te lo enviamos.",
+        };
     }
-    if (collectionStep.kind === "payment" && budget.proofUpload.allowed && openExpected.length > 0) {
-      pendingItems.push({
-        id: "proof",
-        icon: "upload",
-        tone: "accent",
-        title: "Enviá el comprobante de tu transferencia",
-        detail: "JPG, PNG, WebP o PDF de hasta 2 MB; queda vinculado al pago que elijas.",
-        href: "#portal-proof",
-        action: "Subir",
-      });
-    }
-  }
+  })();
 
   /** Avance real del plan de cobros: confirmados sobre el total vigente. */
   const paymentProgress = (() => {
@@ -980,457 +998,477 @@ export function PortalBudgetView({
           : "Contanos qué necesitás modificar para preparar una nueva versión.",
   }));
 
-  /**
-   * Bloques del pago (issue #107): con el presupuesto aprobado van primero
-   * —datos para transferir, plan real y comprobante—, para que el cliente sepa
-   * cómo pagar sin buscarlo. Sin aprobar, cada bloque conserva su lugar en el
-   * recorrido de la decisión.
-   */
-  const paymentsCard = (
-    <section className="portal-card quote-document-section--payments" aria-labelledby="portal-payments" data-plan-preview={itemsChanged ? "provisional" : "current"}>
-      <div className="portal-card-head">
-        <PortalCardTitle id="portal-payments" icon="wallet">
-          {approved ? "Plan de pagos" : "Plan de pagos propuesto"}
-        </PortalCardTitle>
-        <p className="portal-card-lead">
-          {itemsChanged ? "Vista previa provisional de tu selección. No está aceptada: la oferta y los cobros registrados no cambian hasta que el equipo resuelva la solicitud." : approved && collectionStep.kind === "complete" ? "El total ya está cobrado. Estos son los conceptos registrados del plan; no representan una nueva solicitud de transferencia." : budget.expectedPayments.length > 0
-            ? "Cada concepto del plan con su estado real; el equipo confirma el cobro cuando llega la transferencia."
-            : "Cada cuota con su vencimiento; los datos para transferir se muestran cuando el presupuesto esté autorizado."}
-        </p>
-      </div>
+  // ── Pagos ───────────────────────────────────────────────────────────────────
+  /** Cuántos conceptos tiene el plan: el pliegue solo existe si hay más de uno. */
+  const planCount = budget.expectedPayments.length > 0 ? budget.expectedPayments.length : (paymentPlan.advanceAmount > 0 ? 1 : 0) + paymentPlan.installments.length;
 
-      {provisionalPlanError ? <p className="portal-error" role="alert">La selección requiere revisar las condiciones de pago: {provisionalPlanError} La oferta vigente no se modificó.</p> : !itemsChanged && budget.expectedPayments.length > 0 ? (
-        <div className="portal-table-wrap">
-          <table className="portal-table portal-table--plan portal-table--expected">
-            <caption className="portal-table-caption">Tus pagos</caption>
-            <thead>
-              <tr>
-                <th scope="col">Concepto</th>
-                <th scope="col" className="portal-num">
-                  Monto
-                </th>
-                <th scope="col">Vencimiento</th>
-                <th scope="col">Estado</th>
-                <th scope="col">Cuenta destino</th>
-              </tr>
-            </thead>
-            <tbody>
-              {budget.expectedPayments.map((expected) => {
-                const state = EXPECTED_STATUS[expected.status];
-                const isDueNow = dueNowExpected?.id === expected.id;
-                return (
-                  <tr key={expected.id} data-status={expected.status}>
-                    <td className="portal-item-cell">
-                      <strong className="portal-item-name">{expected.label}</strong>
-                      {isDueNow ? <small className="portal-item-note">A transferir ahora</small> : null}
-                      {expected.status === "PARTIAL" ? (
-                        <small className="portal-expected-note">
-                          Pagaste {formatMoney(expected.paidAmount)} · saldo {formatMoney(expected.remaining)}
-                        </small>
-                      ) : null}
-                      {(expected.status === "AWAITING" || expected.status === "PARTIAL") && expected.reviewNote ? (
-                        <small className="portal-expected-note">Observación: {expected.reviewNote}</small>
-                      ) : null}
-                    </td>
-                    <td
-                      className="portal-num"
-                      data-label="Monto"
-                      title={expected.status === "PARTIAL" ? `Total del concepto: ${formatMoney(expected.amount)} · pagado ${formatMoney(expected.paidAmount)}` : undefined}
-                    >
-                      {expected.status === "PARTIAL" ? formatMoney(expected.remaining) : formatMoney(expected.amount)}
-                    </td>
-                    <td data-label="Vencimiento">
-                      {dueLabel(expected.dueAt)}
-                      {expected.dueAt && expected.status !== "CONFIRMED" ? (
-                        <span className="portal-countdown" data-tone={countdownTone(expected.dueAt)}>
-                          {formatCountdown(expected.dueAt, "client")}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td data-label="Estado">
-                      <span className="portal-chip" data-tone={state.tone}>
-                        {state.label}
-                      </span>
-                      {expected.status === "CONFIRMED" && expected.confirmedAt ? (
-                        <small className="portal-expected-note">
-                          el {formatDateTime(expected.confirmedAt)}
-                          {expected.confirmedByName ? ` · por ${expected.confirmedByName}` : ""}
-                        </small>
-                      ) : null}
-                      {expected.status === "PROOF" ? (
-                        <small className="portal-expected-note">El equipo de LedBox lo revisa: no hace falta hacer nada más.</small>
-                      ) : null}
-                      {expected.status === "CANCELLED" ? (
-                        <small className="portal-expected-note">Ya no forma parte del plan de pagos.</small>
-                      ) : null}
-                    </td>
-                    <td data-label="Cuenta destino">{expected.accountName ?? "Te la confirmamos al transferir"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : paymentPlan.installments.length > 0 ? (
-        <div className="portal-table-wrap">
-          <table className="portal-table portal-table--plan">
-            <caption className="portal-table-caption">{itemsChanged ? "Cuotas provisionales · pendientes de revisión" : "Cuotas del plan"}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Cuota</th>
-                <th scope="col" className="portal-num">
-                  Monto
-                </th>
-                <th scope="col">Vencimiento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentPlan.advanceAmount > 0 ? (
-                <tr>
-                  <td>Anticipo{approved ? " (a transferir ahora)" : " (con la autorización)"}</td>
-                  <td className="portal-num" data-label="Monto">{formatMoney(paymentPlan.advanceAmount)}</td>
-                  <td data-label="Vencimiento">Con la autorización</td>
-                </tr>
+  /** Plan real del presupuesto aprobado: cada concepto con su estado, sin cuentas internas. */
+  const expectedList = (
+    <ul className="portal-plan-list" aria-label="Tus pagos">
+      {budget.expectedPayments.map((expected) => {
+        const state = EXPECTED_STATUS[expected.status];
+        const isDueNow = dueNowExpected?.id === expected.id;
+        return (
+          <li key={expected.id} className="portal-plan-row" data-status={expected.status}>
+            <span className="portal-plan-main">
+              <strong className="portal-item-name">{expected.label}</strong>
+              {isDueNow ? <small className="portal-item-note">A transferir ahora</small> : null}
+              {expected.status === "PARTIAL" ? (
+                <small className="portal-expected-note">
+                  Pagaste {formatMoney(expected.paidAmount)} · saldo {formatMoney(expected.remaining)}
+                </small>
               ) : null}
-              {paymentPlan.installments.map((installment, index) => (
-                <tr key={`${installment.label}-${index}`}>
-                  <td>
-                    {installment.label}
-                    {!itemsChanged && paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
-                  </td>
-                  <td className="portal-num" data-label="Monto">{formatMoney(installment.amount)}</td>
-                  <td data-label="Vencimiento">
-                    {installment.dueAt ? dueLabel(installment.dueAt) : installment.moment || "A coordinar"}
-                    {installment.dueAt ? (
-                      <span className="portal-countdown" data-tone={countdownTone(installment.dueAt)}>
-                        {formatCountdown(installment.dueAt, "client")}
-                      </span>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="portal-empty">{itemsChanged ? "Pago único provisional" : "El presupuesto se paga en un solo pago"}: {formatMoney(actionTotal)}.</p>
-      )}
+              {(expected.status === "AWAITING" || expected.status === "PARTIAL") && expected.reviewNote ? (
+                <small className="portal-expected-note">Observación: {expected.reviewNote}</small>
+              ) : null}
+              {expected.status === "CONFIRMED" && expected.confirmedAt ? (
+                <small className="portal-expected-note">Confirmado el {formatDateTime(expected.confirmedAt)}</small>
+              ) : null}
+              {expected.status === "CANCELLED" ? <small className="portal-expected-note">Ya no forma parte del plan.</small> : null}
+            </span>
+            <span
+              className="portal-plan-amount portal-num"
+              title={expected.status === "PARTIAL" ? `Total del concepto: ${formatMoney(expected.amount)} · pagado ${formatMoney(expected.paidAmount)}` : undefined}
+            >
+              {expected.status === "PARTIAL" ? formatMoney(expected.remaining) : formatMoney(expected.amount)}
+            </span>
+            <span className="portal-plan-due">
+              {dueLabel(expected.dueAt)}
+              {expected.dueAt && expected.status !== "CONFIRMED" && expected.status !== "CANCELLED" ? (
+                <span className="portal-countdown" data-tone={countdownTone(expected.dueAt)}>
+                  {formatCountdown(expected.dueAt, "client")}
+                </span>
+              ) : null}
+            </span>
+            <span className="portal-chip portal-plan-state" data-tone={state.tone}>
+              {state.label}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 
+  /** Cuotas del plan acordado (o provisional, con los ajustes del cliente) cuando no hay pagos esperados. */
+  const installmentsTable = (
+    <div className="portal-table-wrap">
+      <table className="portal-table portal-table--plan">
+        <caption className="portal-table-caption">{itemsChanged ? "Cuotas provisionales · pendientes de revisión" : "Cuotas del plan"}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Cuota</th>
+            <th scope="col" className="portal-num">
+              Monto
+            </th>
+            <th scope="col">Vencimiento</th>
+          </tr>
+        </thead>
+        <tbody>
+          {paymentPlan.advanceAmount > 0 ? (
+            <tr>
+              <td>Anticipo{approved ? " (a transferir ahora)" : " (con la autorización)"}</td>
+              <td className="portal-num" data-label="Monto">{formatMoney(paymentPlan.advanceAmount)}</td>
+              <td data-label="Vencimiento">Con la autorización</td>
+            </tr>
+          ) : null}
+          {paymentPlan.installments.map((installment, index) => (
+            <tr key={`${installment.label}-${index}`}>
+              <td>
+                {installment.label}
+                {!itemsChanged && paymentPlan.advanceAmount === 0 && index === 0 ? " (a transferir ahora)" : ""}
+              </td>
+              <td className="portal-num" data-label="Monto">{formatMoney(installment.amount)}</td>
+              <td data-label="Vencimiento">
+                {installment.dueAt ? dueLabel(installment.dueAt) : installment.moment || "A coordinar"}
+                {installment.dueAt ? (
+                  <span className="portal-countdown" data-tone={countdownTone(installment.dueAt)}>
+                    {formatCountdown(installment.dueAt, "client")}
+                  </span>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const planContent = provisionalPlanError ? (
+    <p className="portal-error" role="alert">La selección requiere revisar las condiciones de pago: {provisionalPlanError} La oferta vigente no se modificó.</p>
+  ) : !itemsChanged && budget.expectedPayments.length > 0 ? (
+    expectedList
+  ) : paymentPlan.installments.length > 0 ? (
+    installmentsTable
+  ) : (
+    <p className="portal-empty">{itemsChanged ? "Pago único provisional" : "Se paga en un solo pago"}: {formatMoney(actionTotal)}.</p>
+  );
+
+  const planNotes = (
+    <>
       {!provisionalPlanError && paymentPlan.pending > 0 && (!approved || collectionStep.kind !== "complete") ? (
         <p className="portal-help">
           Saldo sin cuota agendada: <span className="portal-num">{formatMoney(paymentPlan.pending)}</span>
         </p>
       ) : null}
       {paymentPlan.terms ? <div><h3 className="quote-document-subtitle">Condiciones de pago</h3><p className="quote-document-copy">{paymentPlan.terms}</p></div> : null}
-      {!approved ? (
-        <p className="portal-help">
-          Los datos bancarios de {budget.organization} se muestran cuando autorices el presupuesto.
+    </>
+  );
+
+  /** Sin aprobar: el plan propuesto queda con las condiciones. Aprobado: vive dentro de «Pagar». */
+  const paymentsCard = closed ? null : (
+    <section className="portal-card quote-document-section--payments" aria-labelledby="portal-payments" data-plan-preview={itemsChanged ? "provisional" : "current"}>
+      <div className="portal-card-head">
+        <PortalCardTitle id="portal-payments" icon="wallet">
+          Plan de pagos propuesto
+        </PortalCardTitle>
+        <p className="portal-card-lead">
+          {itemsChanged
+            ? "Vista previa de tu selección: no está aceptada hasta que el equipo la revise."
+            : "Los datos bancarios de " + budget.organization + " aparecen cuando autorices el presupuesto."}
         </p>
-      ) : null}
+      </div>
+      {planContent}
+      {planNotes}
     </section>
   );
 
-  const payCard = approved ? (
-    <section className="portal-card portal-card--pay" aria-labelledby="portal-payment-data">
-      <div className="portal-card-head">
-        <PortalCardTitle id="portal-payment-data" icon="bank">
-          Datos para transferir
-        </PortalCardTitle>
-      </div>
-      {transferNow ? (
-        <div className="portal-pay-now">
-          <div>
-            <span className="portal-pay-label">{transferNow.label}</span>
-            <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
-          </div>
-          <span className="portal-pay-total portal-num">Total del presupuesto: {formatMoney(budget.total)}</span>
-        </div>
-      ) : collectionStep.kind === "complete" ? (
-        <p className="portal-help">El cobro registrado cubre el total de este presupuesto: no queda saldo por transferir.</p>
-      ) : collectionStep.kind === "review" ? (
-        <p className="portal-help">Tu comprobante está en revisión; todavía no es un cobro confirmado. Esperá la respuesta del equipo.</p>
-      ) : budget.expectedPayments.length > 0 ? (
-        <p className="portal-help">No hay conceptos abiertos para transferir. Consultá al equipo por el saldo registrado.</p>
-      ) : null}
-
-      {budget.paymentDetails ? (
-        <div className="portal-pay-grid">
-          <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
-            <BankLogo bank={budget.paymentDetails.bank} size="h-8" />
-            <span className="portal-bank-name">{mark?.label ?? (budget.paymentDetails.bank?.trim() || "Datos de pago")}</span>
-          </div>
-          <dl className="portal-facts portal-facts--pay">
-            <div>
-              <dt>Titular</dt>
-              <dd>{budget.paymentDetails.holder || "—"}</dd>
-            </div>
-            <div>
-              <dt>RUC</dt>
-              <dd>{budget.paymentDetails.ruc || "—"}</dd>
-            </div>
-            <div>
-              <dt>Cuenta</dt>
-              <dd>{budget.paymentDetails.account || "—"}</dd>
-            </div>
-            <div>
-              <dt>Alias</dt>
-              <dd>{budget.paymentDetails.alias || "—"}</dd>
-            </div>
-          </dl>
-          <div className="portal-form-actions portal-print-hide">
-            <button type="button" className="portal-btn portal-btn--ghost" onClick={() => void copyPaymentDetails()}>
-              {copied ? "Datos copiados" : "Copiar datos de pago"}
-            </button>
-          </div>
-          <p className="portal-help" aria-live="polite">
-            {copied
-              ? "Los datos quedaron en el portapapeles para pegarlos donde los necesites."
-              : collectionStep.kind === "complete" ? "Estos datos quedan como referencia; el presupuesto no tiene saldo por transferir."
-              : collectionStep.kind === "review" ? "El equipo revisa tu comprobante; no se te pide otra transferencia."
-              : "Transferí el monto indicado y enviá el comprobante al equipo de LedBox."}
-          </p>
-        </div>
-      ) : (
-        <p className="portal-help">
-          El equipo de LedBox todavía no cargó los datos bancarios de esta empresa. Escribinos y te los pasamos para
-          completar el pago.
-        </p>
-      )}
-    </section>
+  /** Comprobantes ya enviados, con el estado real de cada uno. */
+  const proofsList = budget.proofs.length > 0 ? (
+    <div className="portal-pay-block" aria-labelledby="portal-proofs">
+      <h3 className="quote-document-subtitle" id="portal-proofs">Comprobantes enviados</h3>
+      <ul className="portal-proofs">
+        {budget.proofs.map((proof) => (
+          <li key={proof.id} className="portal-proof">
+            <span className="portal-chip" data-tone={PROOF_STATUS[proof.status].tone}>
+              {PROOF_STATUS[proof.status].label}
+            </span>
+            <span className="portal-proof-main">
+              <strong className="portal-proof-when">{formatDateTime(proof.createdAt)}</strong>
+              <span className="portal-proof-meta">
+                {paymentProofMimeLabel(proof.mime)} · {formatBytes(proof.size)} · {proof.uploadedByName}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {proofUploadHint(budget) ? <p className="portal-help">{proofUploadHint(budget)}</p> : null}
+    </div>
   ) : null;
 
-  const proofCard = collectionStep.kind !== "complete" && budget.proofUpload.allowed ? (
-    <section className="portal-card portal-print-hide" aria-labelledby="portal-proof" ref={proofRef} tabIndex={-1}>
+  const proofFormVisible = collectionStep.kind !== "complete" && budget.proofUpload.allowed;
+
+  /**
+   * «Pagar» (una sola sección, aprobado): 1) cuánto falta y para qué concepto,
+   * 2) datos bancarios con copiar, 3) subir el comprobante, 4) el plan de pagos
+   * (plegable solo si tiene más de un concepto). Antes se repetía en cinco bloques.
+   */
+  const payCard = approved ? (
+    <section className="portal-card portal-card--pay" id="portal-pay" aria-labelledby="portal-pay-title" ref={payFirstRef} tabIndex={-1}>
       <div className="portal-card-head">
-        <PortalCardTitle id="portal-proof" icon="upload">
-          Enviar comprobante
+        <PortalCardTitle id="portal-pay-title" icon="bank">
+          {stage === "settled" ? "Pagos" : "Pagar"}
         </PortalCardTitle>
-        <p className="portal-card-lead">
-          Transferí el monto indicado y adjuntá el comprobante: JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago
-          estás comprobando para que quede vinculado a ese concepto; el equipo de LedBox lo revisa desde el panel.
-        </p>
       </div>
-      <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
-        {openExpected.length > 0 ? (
-          <label className="portal-field" htmlFor="portal-proof-concept">
-            <span className="portal-field-label">¿Qué pago estás comprobando?</span>
-            <select
-              id="portal-proof-concept"
-              name="proof-concept"
-              value={proofExpectedId}
-              onChange={(event) => {
-                setProofExpectedId(event.target.value);
-                setProofSent(false);
-              }}
-              required
-            >
-              <option value="">Elegí el concepto…</option>
-              {openExpected.map((expected) => (
-                <option key={expected.id} value={expected.id}>
-                  {expected.label} · {formatMoney(expected.amount)}
-                  {expected.status === "PROOF" ? " (en revisión)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <div className="portal-form-row">
-          <label className="portal-field" htmlFor="portal-proof-name">
-            <span className="portal-field-label">Nombre y apellido</span>
-            <input
-              id="portal-proof-name"
-              name="proof-name"
-              value={proofName}
-              onChange={(event) => {
-                setProofName(event.target.value);
-                setProofSent(false);
-              }}
-              maxLength={120}
-              autoComplete="name"
-              required
-              aria-describedby="portal-proof-name-hint"
-            />
-            <span className="portal-help" id="portal-proof-name-hint">
-              {contactName
-                ? `Prellenado con el responsable de ${clientLabel}${contactRole ? ` · ${contactRole}` : ""}.`
-                : `Escribí quién hizo la transferencia en nombre de ${clientLabel}.`}
-            </span>
-          </label>
-          <label className="portal-field" htmlFor="portal-proof-file">
-            <span className="portal-field-label">Comprobante</span>
-            <input
-              ref={proofInputRef}
-              id="portal-proof-file"
-              name="proof-file"
-              type="file"
-              accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
-              onChange={(event) => {
-                setProofFile(event.target.files?.[0] ?? null);
-                setProofError("");
-                setProofSent(false);
-              }}
-              aria-describedby="portal-proof-hint"
-              required
-            />
-          </label>
+
+      {/* 1 · Cuánto falta y para qué concepto */}
+      {stage === "pay" && transferNow ? (
+        <div className="portal-pay-now">
+          <div>
+            <span className="portal-pay-label">Falta transferir · {transferNow.label}</span>
+            <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
+          </div>
+          <span className="portal-pay-total portal-num">
+            {balance !== transferNow.amount ? `Saldo del presupuesto: ${formatMoney(balance)} · ` : ""}Total: {formatMoney(budget.total)}
+          </span>
         </div>
-        <p className="portal-help" id="portal-proof-hint">
-          El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
-        </p>
-        {proofError ? (
-          <p className="portal-error" role="alert">
-            {proofError}
+      ) : stage === "settled" ? (
+        <p className="portal-help">El cobro registrado cubre el total del presupuesto ({formatMoney(budget.total)}): no queda saldo por transferir.</p>
+      ) : stage === "review" ? (
+        <p className="portal-help">Tu comprobante está en revisión: todavía no es un cobro confirmado. El equipo de LedBox te responde; no se te pide otra transferencia.</p>
+      ) : (
+        <p className="portal-help">No hay un concepto abierto para transferir. Consultá al equipo por el saldo de {formatMoney(balance)}.</p>
+      )}
+
+      {/* 2 · Datos bancarios con copiar */}
+      {stage === "pay" ? (
+        destination.kind === "bank" ? (
+          <div className="portal-pay-block">
+            <h3 className="quote-document-subtitle">Datos bancarios</h3>
+            <div className="portal-bank" title={`Banco: ${destination.details.bank ?? "—"}`}>
+              <BankLogo bank={destination.details.bank} size="h-8" />
+              <span className="portal-bank-name">{mark?.label ?? (destination.details.bank?.trim() || "Datos de pago")}</span>
+            </div>
+            <dl className="portal-facts portal-facts--pay">
+              {destination.details.holder ? (
+                <div>
+                  <dt>Titular</dt>
+                  <dd>{destination.details.holder}</dd>
+                </div>
+              ) : null}
+              {destination.details.ruc ? (
+                <div>
+                  <dt>RUC</dt>
+                  <dd>{destination.details.ruc}</dd>
+                </div>
+              ) : null}
+              {destination.details.account ? (
+                <div>
+                  <dt>Cuenta</dt>
+                  <dd>{destination.details.account}</dd>
+                </div>
+              ) : null}
+              {destination.details.alias ? (
+                <div>
+                  <dt>Alias</dt>
+                  <dd>{destination.details.alias}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <div className="portal-form-actions portal-print-hide">
+              <button type="button" className="portal-btn portal-btn--ghost" onClick={() => void copyPaymentDetails()}>
+                {copied ? "Datos copiados" : "Copiar datos de pago"}
+              </button>
+            </div>
+            <p className="portal-help" aria-live="polite">
+              {copied ? "Quedaron en el portapapeles para pegarlos en tu banca." : "Transferí el monto indicado y subí el comprobante."}
+            </p>
+          </div>
+        ) : (
+          <div className="portal-pay-block">
+            <h3 className="quote-document-subtitle">Datos bancarios</h3>
+            <p className="portal-help">{destination.message}</p>
+          </div>
+        )
+      ) : null}
+
+      {/* 3 · Subir comprobante */}
+      {proofFormVisible ? (
+        <div className="portal-pay-block portal-print-hide" ref={proofRef} tabIndex={-1}>
+          <h3 className="quote-document-subtitle" id="portal-proof">Subir comprobante</h3>
+          <p className="portal-help">JPG, PNG, WebP o PDF, hasta 2 MB. Indicá qué pago estás comprobando; el equipo de LedBox lo revisa desde el panel.</p>
+        <form className="portal-form" onSubmit={(event) => void submitProof(event)}>
+          {openExpected.length > 0 ? (
+            <label className="portal-field" htmlFor="portal-proof-concept">
+              <span className="portal-field-label">¿Qué pago estás comprobando?</span>
+              <select
+                id="portal-proof-concept"
+                name="proof-concept"
+                value={proofExpectedId}
+                onChange={(event) => {
+                  setProofExpectedId(event.target.value);
+                  setProofSent(false);
+                }}
+                required
+              >
+                <option value="">Elegí el concepto…</option>
+                {openExpected.map((expected) => (
+                  <option key={expected.id} value={expected.id}>
+                    {expected.label} · {formatMoney(expected.amount)}
+                    {expected.status === "PROOF" ? " (en revisión)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="portal-form-row">
+            <label className="portal-field" htmlFor="portal-proof-name">
+              <span className="portal-field-label">Nombre y apellido</span>
+              <input
+                id="portal-proof-name"
+                name="proof-name"
+                value={proofName}
+                onChange={(event) => {
+                  setProofName(event.target.value);
+                  setProofSent(false);
+                }}
+                maxLength={120}
+                autoComplete="name"
+                required
+                aria-describedby="portal-proof-name-hint"
+              />
+              <span className="portal-help" id="portal-proof-name-hint">
+                {contactName
+                  ? `Prellenado con el responsable de ${clientLabel}${contactRole ? ` · ${contactRole}` : ""}.`
+                  : `Escribí quién hizo la transferencia en nombre de ${clientLabel}.`}
+              </span>
+            </label>
+            <label className="portal-field" htmlFor="portal-proof-file">
+              <span className="portal-field-label">Comprobante</span>
+              <input
+                ref={proofInputRef}
+                id="portal-proof-file"
+                name="proof-file"
+                type="file"
+                accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
+                onChange={(event) => {
+                  setProofFile(event.target.files?.[0] ?? null);
+                  setProofError("");
+                  setProofSent(false);
+                }}
+                aria-describedby="portal-proof-hint"
+                required
+              />
+            </label>
+          </div>
+          <p className="portal-help" id="portal-proof-hint">
+            El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
           </p>
-        ) : null}
-        {proofSent ? (
-          <p className="portal-ok" role="status">
-            Recibimos tu comprobante. El equipo lo revisa y marca el cobro; vas a ver el estado en el plan de pagos.
-          </p>
-        ) : null}
-        <button className="portal-btn portal-btn--primary" type="submit" disabled={proofBusy} aria-busy={proofBusy || undefined}>
-          {proofBusy ? "Subiendo comprobante…" : "Enviar comprobante"}
-        </button>
-      </form>
+          {proofError ? (
+            <p className="portal-error" role="alert">
+              {proofError}
+            </p>
+          ) : null}
+          {proofSent ? (
+            <p className="portal-ok" role="status">
+              Recibimos tu comprobante. El equipo lo revisa y marca el cobro; vas a ver el estado en el plan de pagos.
+            </p>
+          ) : null}
+          <button className="portal-btn portal-btn--primary" type="submit" disabled={proofBusy} aria-busy={proofBusy || undefined}>
+            {proofBusy ? "Subiendo comprobante…" : "Enviar comprobante"}
+          </button>
+        </form>
+        </div>
+      ) : null}
+
+      {/* 4 · Plan de pagos */}
+      {planCount > 1 ? (
+        <details className="portal-disclosure portal-disclosure--inner portal-plan-fold">
+          <summary>
+            <span>Plan de pagos · {formatNumber(planCount)} conceptos</span>
+          </summary>
+          <div className="portal-disclosure-body">
+            {planContent}
+            {planNotes}
+          </div>
+        </details>
+      ) : (
+        <div className="portal-pay-block">
+          <h3 className="quote-document-subtitle">Plan de pagos</h3>
+          {planContent}
+          {planNotes}
+        </div>
+      )}
+
+      {proofsList}
     </section>
   ) : null;
 
   return (
-    <article className={`portal-budget${canEdit ? " portal-budget--can-edit" : ""}`}>
+    <article className={`portal-budget${stickyKind ? " portal-budget--sticky" : ""}`} data-stage={stage}>
       {demoBanner}
-
-      <header className="portal-budget-head">
-        <div className="portal-budget-head-top">
-          {headTitle}
-          <div className="portal-budget-chips">
-            <span className="portal-chip" data-tone={statusTone(budget.status)}>
-              {budgetStatusLabel(budget.status)}
-            </span>
-            <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
-              {budgetApprovalLabel(approvalState)}
-            </span>
-            {pendingRequests.length > 0 && !approved ? (
-              <span className="portal-chip" data-tone="warn">
-                {formatNumber(pendingRequests.length)} {pendingRequests.length === 1 ? "pedido en revisión" : "pedidos en revisión"}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <p className="admin-identity"><AdminAvatar name={clientLabel} src={budget.client.logoUrl} className="admin-avatar--logo" size={32} /><span>{clientLabel}</span></p>
-        {headFacts}
-      </header>
-
-      {approved ? (
-        <section className="portal-banner portal-banner--ok portal-success" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
-          <h2 className="portal-banner-title" id="portal-approved">
-            <AdminIcon name="check" size={16} />
-            <span>{justApproved?.already ? "Este presupuesto ya estaba autorizado" : "¡Listo! Presupuesto autorizado"}</span>
-          </h2>
-          <p>
-            {justApproved?.already
-              ? "Registramos tu visita: la autorización original queda tal cual, sin cambios."
-              : "Quedó registrada tu autorización. Estos son los próximos pasos:"}
-          </p>
-          <ol className="portal-success-steps">
-            <li>
-              <strong>El equipo de LedBox te contacta</strong> para coordinar el evento, los equipos y el montaje.
-            </li>
-            {transferNow ? (
-              <li>
-                <strong>
-                  Transferí {transferNow.label.toLowerCase()} ({formatMoney(transferNow.amount)})
-                </strong>{" "}
-                y subí el comprobante desde esta misma página.
-              </li>
-            ) : null}
-            <li>
-              <strong>Descargá el presupuesto autorizado</strong> y guardalo para tus registros.
-            </li>
-          </ol>
-          <dl className="portal-facts portal-facts--inline">
-            <div>
-              <dt>Autorizó</dt>
-              <dd>{approvedByName ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>Fecha y hora</dt>
-              <dd>{approvedAt ? formatDateTime(approvedAt) : "—"}</dd>
-            </div>
-            <div>
-              <dt>Vía</dt>
-              <dd>{budgetApprovalMethodLabel(approvalMethod)}</dd>
-            </div>
-          </dl>
-          {budget.approval.note ? <p className="portal-banner-note">Comentario: {budget.approval.note}</p> : null}
-          {pendingRequests.length > 0 ? (
-            <p className="portal-banner-note">
-              Enviaste {pendingRequests.map((request) => requestIntent(request)).join(" y ")} con la autorización: el equipo lo
-              revisa y te confirma por este link. El presupuesto queda autorizado con los montos vigentes mientras tanto.
-            </p>
-          ) : null}
-          <div className="portal-banner-actions portal-print-hide">
-            <button type="button" className="portal-btn portal-btn--primary" onClick={() => window.print()}>
-              Descargar el presupuesto (PDF)
-            </button>
-          </div>
-        </section>
-      ) : revisionPending ? (
-        <section className="portal-banner portal-banner--warn" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-revision">
-          <h2 className="portal-banner-title" id="portal-revision">
-            <AdminIcon name="edit" size={16} />
-            <span>Pediste cambios</span>
-          </h2>
-          <p>
-            Recibimos tu pedido{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}. El equipo de LedBox lo revisa y te
-            responde por este mismo link con una versión nueva; no hace falta que hagas nada más por ahora.
-          </p>
-          {revisionText ? <blockquote className="portal-banner-quote">{revisionText}</blockquote> : null}
-        </section>
-      ) : waitingRequest ? (
-        <section className="portal-banner portal-banner--info" ref={revisionRef} tabIndex={-1} aria-labelledby="portal-waiting">
-          <h2 className="portal-banner-title" id="portal-waiting">
-            <AdminIcon name="clock" size={16} />
-            <span>Tu pedido está en revisión</span>
-          </h2>
-          <p>
-            Ya nos llegó {lastRequest ? requestIntent(lastRequest) : justRequested?.kind === "discount" ? "la rebaja" : "el ajuste"} y
-            el equipo te responde por este link. Mientras esperás, podés autorizar abajo el presupuesto tal como está: la
-            respuesta del equipo llega igual y no perdés tu lugar.
-          </p>
-          {lastRequest ? (
-            <p className="portal-banner-note">
-              Enviado el {formatDateTime(lastRequest.createdAt)}
-              {lastRequest.note ? `: «${lastRequest.note}»` : "."}
-            </p>
-          ) : justRequested ? (
-            <p className="portal-banner-note">
-              Enviado el {formatDateTime(justRequested.at)}
-              {justRequested.note ? `: «${justRequested.note}»` : "."}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <PortalPending items={pendingItems} progress={paymentProgress} />
 
       <div className="portal-budget-grid">
         <div className="portal-budget-main">
-          {/* Aprobado (issue #107): primero pago y plan; el scroll automático apunta acá. */}
-          {approved ? (
-            <div className="portal-pay-first" ref={payFirstRef}>
-              {payCard}
-              {paymentsCard}
-              {proofCard}
+          {/* 1 · Encabezado: empresa, nº y título, un solo estado */}
+          <header className="portal-budget-head">
+            <div className="portal-budget-head-top">
+              {headTitle}
+              <div className="portal-budget-chips">
+                <span className="portal-chip" data-tone={statusChip.tone}>
+                  {statusChip.label}
+                </span>
+              </div>
             </div>
+            <p className="admin-identity"><AdminAvatar name={clientLabel} src={budget.client.logoUrl} className="admin-avatar--logo" size={32} /><span>{clientLabel}</span></p>
+            {headDates.length > 0 || approved ? (
+              <p className="portal-budget-dates">
+                {headDates.map((row) => (
+                  <span key={row.key} className="portal-budget-date">
+                    {row.label} <strong className="portal-nowrap">{row.value}</strong>
+                    {row.note ? (
+                      <span className="portal-countdown" data-tone={row.tone ?? "neutral"}>
+                        {row.note}
+                      </span>
+                    ) : null}
+                  </span>
+                ))}
+                {approved ? <span className="portal-budget-date">{portalApprovalByline({ method: approvalMethod, name: approvedByName })}</span> : null}
+              </p>
+            ) : null}
+            {headFacts}
+          </header>
+
+          {/* Confirmación inmediata de la autorización: próximos pasos y descarga */}
+          {justApproved ? (
+            <section className="portal-banner portal-banner--ok portal-success" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
+              <h2 className="portal-banner-title" id="portal-approved">
+                <AdminIcon name="check" size={16} />
+                <span>{justApproved.already ? "Este presupuesto ya estaba autorizado" : "¡Listo! Presupuesto autorizado"}</span>
+              </h2>
+              <p>
+                {justApproved.already
+                  ? "Registramos tu visita: la autorización original queda tal cual, sin cambios."
+                  : "Quedó registrada tu autorización. Estos son los próximos pasos:"}
+              </p>
+              <ol className="portal-success-steps">
+                <li>
+                  <strong>El equipo de LedBox te contacta</strong> para coordinar el evento, los equipos y el montaje.
+                </li>
+                {transferNow ? (
+                  <li>
+                    <strong>
+                      Transferí {transferNow.label.toLowerCase()} ({formatMoney(transferNow.amount)})
+                    </strong>{" "}
+                    y subí el comprobante desde esta misma página.
+                  </li>
+                ) : null}
+                <li>
+                  <strong>Descargá el presupuesto autorizado</strong> y guardalo para tus registros.
+                </li>
+              </ol>
+              {budget.approval.note ? <p className="portal-banner-note">Comentario: {budget.approval.note}</p> : null}
+              {pendingRequests.length > 0 ? (
+                <p className="portal-banner-note">
+                  Enviaste {pendingRequests.map((request) => requestIntent(request)).join(" y ")} con la autorización: el equipo lo
+                  revisa y te confirma por este link. El presupuesto queda autorizado con los montos vigentes mientras tanto.
+                </p>
+              ) : null}
+              <div className="portal-banner-actions portal-print-hide">
+                <button type="button" className="portal-btn portal-btn--primary" onClick={() => window.print()}>
+                  Descargar el presupuesto (PDF)
+                </button>
+              </div>
+            </section>
           ) : null}
+
+          {/* 2 · Qué tenés que hacer ahora */}
+          <PortalNextStep
+            icon={nextStep.icon}
+            tone={nextStep.tone}
+            title={nextStep.title}
+            detail={nextStep.detail}
+            cta={nextStep.cta}
+            progress={approved ? paymentProgress : null}
+            innerRef={revisionRef}
+          />
+
+          {revisionPending && revisionText ? (
+            <section className="portal-card" aria-labelledby="portal-revision">
+              <PortalCardTitle id="portal-revision" icon="edit">
+                Lo que pediste{revisionAt ? ` el ${formatDateTime(revisionAt)}` : ""}
+              </PortalCardTitle>
+              <blockquote className="portal-banner-quote">{revisionText}</blockquote>
+            </section>
+          ) : null}
+          {waitingRequest && (lastRequest || justRequested) ? (
+            <p className="portal-help portal-print-hide">
+              Enviado el {formatDateTime(lastRequest?.createdAt ?? justRequested?.at ?? "")}
+              {(lastRequest?.note ?? justRequested?.note) ? `: «${lastRequest?.note ?? justRequested?.note}»` : "."}
+            </p>
+          ) : null}
+
+          {/* 3 · Pagar (solo aprobado) */}
+          {payCard}
+
+          {/* 4 · Detalle del presupuesto */}
           <section className="portal-card" aria-labelledby="portal-items">
             <div className="portal-card-head">
               <PortalCardTitle id="portal-items" icon="budgets">
-                {canEdit ? "Ajustá tu presupuesto" : "Detalle del presupuesto"}
+                Detalle del presupuesto
               </PortalCardTitle>
               {canEdit && budget.items.length > 0 ? (
                 <p className="portal-card-lead">
-                  Cambiá cantidades y días: el precio unitario queda fijo y el total se actualiza en vivo. Si dejás todo
-                  igual, autorizás lo que te enviamos.
+                  Podés cambiar cantidades y días; el total se actualiza al instante.
                 </p>
               ) : null}
             </div>
@@ -1521,12 +1559,9 @@ export function PortalBudgetView({
               <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
               <span className="portal-num">{formatMoney(summaryTotal)}</span>
             </div>
-            <p className="portal-total-formula">
-              Precio unitario × cantidad × días = subtotal · subtotal − descuento = total
-            </p>
             </div>
             <p className="portal-help">
-              Montos en guaraníes (PYG), sin decimales. {canEdit && itemsChanged ? "Los ajustes se revisan con tu autorización: el equipo aplica el precio unitario vigente." : ""}
+              Montos en guaraníes (PYG).{canEdit && itemsChanged ? " Tus ajustes los revisa el equipo antes de aprobar." : ""}
             </p>
             {canEdit && itemsChanged ? (
               <div className="portal-form-actions">
@@ -1537,6 +1572,7 @@ export function PortalBudgetView({
             ) : null}
           </section>
 
+          {/* 5 · Condiciones */}
           {budget.notes ? (
             <section className="portal-card quote-document-section--observations" aria-labelledby="portal-observations">
               <PortalCardTitle id="portal-observations" icon="edit">Observaciones</PortalCardTitle>
@@ -1544,7 +1580,7 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
-          {budget.deliveryAt || budget.ivaType || budget.warranty || budget.validUntil ? (
+          {budget.deliveryAt || budget.ivaType || budget.warranty ? (
             <section className="portal-card quote-document-section--conditions" aria-labelledby="portal-terms">
               <div className="portal-card-head">
                 <PortalCardTitle id="portal-terms" icon="plan">
@@ -1564,13 +1600,7 @@ export function PortalBudgetView({
                     <dd>{invoiceTaxTypeLabel(budget.ivaType)}</dd>
                   </div>
                 ) : null}
-                {budget.validUntil ? (
-                  <div>
-                    <dt>Válida hasta</dt>
-                    <dd>{formatDate(budget.validUntil)}</dd>
-                  </div>
-                ) : null}
-              </dl>
+                </dl>
               {budget.warranty ? (
                 <p className="portal-note">
                   <strong>Garantía:</strong> {budget.warranty}
@@ -1612,16 +1642,16 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
-          <PortalQuoteResources budget={budget} token={token} />
+          {approved ? null : paymentsCard}
 
-          {!approved && !revisionPending ? (
+          {/* Decisión: autorizar, pedir rebaja o cambio */}
+          {decisionVisible ? (
         <section className="portal-card portal-card--action" aria-labelledby="portal-action" ref={actionRef}>
           <div className="portal-card-head">
                 <div className="portal-action-heading">
                   <PortalCardTitle id="portal-action" icon="check">
                     Tu decisión
                   </PortalCardTitle>
-                  <span className="portal-action-step">Paso 2 de 3</span>
                 </div>
                 <p className="portal-card-lead">
                   {canEdit
@@ -1629,12 +1659,6 @@ export function PortalBudgetView({
                     : "Mientras revisamos tu pedido podés autorizar el presupuesto tal como está; no perdés la respuesta del equipo."}
                 </p>
               </div>
-
-              <ol className="portal-decision-progress" aria-label="Progreso de tu decisión">
-                <li data-active="true"><span>1</span> Revisar</li>
-                <li data-active={actionMode !== "authorize" || consent ? "true" : undefined}><span>2</span> Elegir</li>
-                <li data-active={sending ? "true" : undefined}><span>3</span> Confirmar</li>
-              </ol>
 
               <form className="portal-form" onSubmit={(event) => void runAction(event)}>
                 {canEdit ? (
@@ -1832,9 +1856,17 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
-          {approved ? null : paymentsCard}
-
-          {approved ? null : proofCard}
+          {/* 6 · Documentos */}
+          <PortalQuoteResources budget={budget} token={token}>
+            {approved ? (
+              <div className="portal-quote-resource portal-print-hide">
+                <strong>Presupuesto autorizado</strong>
+                <button type="button" className="portal-btn portal-btn--ghost" onClick={() => window.print()}>
+                  Descargar el presupuesto (PDF)
+                </button>
+              </div>
+            ) : null}
+          </PortalQuoteResources>
 
           <section className="portal-card quote-document-section--issuer" aria-labelledby="portal-issuer">
             <PortalCardTitle id="portal-issuer" icon="building">Emitido por</PortalCardTitle>
@@ -1842,30 +1874,7 @@ export function PortalBudgetView({
             <p className="portal-help">La firma electrónica, cuando corresponda, se realiza en un proceso separado.</p>
           </section>
 
-
-          {budget.proofs.length > 0 ? (
-            <section className="portal-card" aria-labelledby="portal-proofs">
-              <PortalCardTitle id="portal-proofs" icon="receipt">
-                Tus comprobantes
-              </PortalCardTitle>
-              <ul className="portal-proofs">
-                {budget.proofs.map((proof) => (
-                  <li key={proof.id} className="portal-proof">
-                    <span className="portal-chip" data-tone={PROOF_STATUS[proof.status].tone}>
-                      {PROOF_STATUS[proof.status].label}
-                    </span>
-                    <span className="portal-proof-main">
-                      <strong className="portal-proof-when">{formatDateTime(proof.createdAt)}</strong>
-                      <span className="portal-proof-meta">
-                        {paymentProofMimeLabel(proof.mime)} · {formatBytes(proof.size)} · {proof.uploadedByName}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {proofUploadHint(budget) ? <p className="portal-help">{proofUploadHint(budget)}</p> : null}
-            </section>
-          ) : null}
+          {approved || !proofsList ? null : <section className="portal-card">{proofsList}</section>}
 
           {budget.requests.length > 0 ? (
             <section className="portal-card" aria-labelledby="portal-requests">
@@ -1900,110 +1909,57 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
+          {/* 7 · Cronología (plegada) */}
           {timeline}
 
+          {/* 8 · Contacto */}
           <section className="portal-card portal-help-card" aria-labelledby="portal-help">
             <PortalCardTitle id="portal-help" icon="info">
-              ¿Necesitás algo más?
+              Contacto
             </PortalCardTitle>
             <p className="portal-card-lead">
               Escribinos respondiendo el correo con el que te enviamos este presupuesto y citá el Nº {budget.reference}: el
               equipo de LedBox te contesta por el mismo canal.
             </p>
-            <ul className="portal-help-list">
-              {!approved ? (
-                <li>
-                  <strong>Autorizar o pedir un cambio:</strong> desde el bloque de decisión de esta página, con el nombre de
-                  quien decide.
-                </li>
-              ) : null}
-              {pendingRequests.length > 0 ? (
-                <li>
-                  <strong>Tus pedidos:</strong> el equipo de LedBox los revisa y te responde por este mismo link.
-                </li>
-              ) : null}
-              <li>
-                <strong>Pagos:</strong> el plan y los datos para transferir están en esta misma página.
-                {budget.proofUpload.allowed ? " El comprobante se sube desde acá." : ""}
-              </li>
-              <li>
-                <strong>Responsable registrado:</strong> {contactName ? `${contactName}${contactRole ? ` · ${contactRole}` : ""}` : "todavía no cargamos un responsable para tu empresa."}
-              </li>
-            </ul>
+            {contactName ? (
+              <p className="portal-help">
+                Responsable registrado de {clientLabel}: {contactName}
+                {contactRole ? ` · ${contactRole}` : ""}.
+              </p>
+            ) : null}
           </section>
         </div>
 
+        {/* Escritorio: total, saldo y acción principal siempre a la vista */}
         <aside className="portal-budget-aside" aria-labelledby="portal-summary">
           <div className="portal-card portal-summary">
             <PortalCardTitle id="portal-summary" icon="overview">
-              Resumen
+              Tu presupuesto
             </PortalCardTitle>
-            <p className="portal-summary-client admin-identity"><AdminAvatar name={clientLabel} src={budget.client.logoUrl} className="admin-avatar--logo" size={28} /><span>{clientLabel}</span></p>
-            <div className="portal-budget-chips">
-              <span className="portal-chip" data-tone={budgetApprovalTone(approvalState)}>
-                {budgetApprovalLabel(approvalState)}
-              </span>
-              {/* Con el presupuesto aprobado la vigencia dejó de correr: se
-                  esconde la cuenta (issue #107), el dato queda en el resumen. */}
-              {!approved && budget.validUntil ? (
-                <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                  {formatCountdown(budget.validUntil, "client")}
-                </span>
-              ) : null}
-            </div>
             <div className="portal-totals portal-totals--aside">
               <div className="portal-total-row portal-total-row--strong">
                 <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
                 <span className="portal-num">{formatMoney(summaryTotal)}</span>
               </div>
+              {approved && (budget.collectedAmount ?? 0) > 0 ? (
+                <div className="portal-total-row">
+                  <span>Cobrado</span>
+                  <span className="portal-num">{formatMoney(budget.collectedAmount ?? 0)}</span>
+                </div>
+              ) : null}
+              {approved ? (
+                <div className="portal-total-row">
+                  <span>Saldo</span>
+                  <span className="portal-num">{formatMoney(balance)}</span>
+                </div>
+              ) : null}
             </div>
-            <details className="portal-disclosure portal-disclosure--inner">
-              <summary>
-                <span>Detalle del resumen</span>
-              </summary>
-              <div className="portal-disclosure-body">
-                <dl className="portal-facts portal-facts--aside">
-                  <div>
-                    <dt>Ítems</dt>
-                    <dd>{formatNumber(budget.items.length)} en el detalle</dd>
-                  </div>
-                  <div>
-                    <dt>Evento</dt>
-                    <dd>{budget.event?.name || "Sin evento asociado"}</dd>
-                  </div>
-                  <div>
-                    <dt>Lugar</dt>
-                    <dd>{budget.event?.location || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt>Válido hasta</dt>
-                    <dd>{budget.validUntil ? formatDate(budget.validUntil) : "Sin fecha de vencimiento"}</dd>
-                  </div>
-                </dl>
-                {budget.discount > 0 || (!approved && budget.subtotal !== summaryTotal) ? (
-                  <div className="portal-totals portal-totals--aside">
-                    <div className="portal-total-row">
-                      <span>Subtotal</span>
-                      <span className="portal-num">{formatMoney(itemsChanged ? proposedSubtotal : budget.subtotal)}</span>
-                    </div>
-                    {budget.discount > 0 ? (
-                      <div className="portal-total-row">
-                        <span>Descuento</span>
-                        <span className="portal-num">− {formatMoney(budget.discount)}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </details>
-            {approved && transferNow ? (
-              <div className="portal-pay-now portal-pay-now--aside">
-                <span className="portal-pay-label">{transferNow.label}</span>
-                <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
-                <span className="portal-help">Transferí este monto y subí el comprobante.</span>
-              </div>
+            {stage === "authorize" && budget.validUntil ? (
+              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                {formatCountdown(budget.validUntil, "client")}
+              </span>
             ) : null}
-            {!approved && !revisionPending ? (
+            {stickyKind === "authorize" ? (
               <button
                 type="button"
                 className="portal-btn portal-btn--primary portal-btn--block portal-print-hide"
@@ -2012,16 +1968,24 @@ export function PortalBudgetView({
               >
                 Ir a la decisión
               </button>
-            ) : null}
+            ) : stickyKind === "pay" ? (
+              <a className="portal-btn portal-btn--primary portal-btn--block portal-print-hide" href="#portal-pay">
+                Ver cómo pagar
+              </a>
+            ) : (
+              <p className="portal-help">{nextStep.title}.</p>
+            )}
           </div>
         </aside>
       </div>
-      {canEdit && actionBelowViewport && !footerVisible ? (
-        <div className="portal-mobile-sticky" role="region" aria-label="Decisión y total">
+
+      {/* Celular: la acción principal queda fija abajo mientras haya algo pendiente */}
+      {stickyKind && targetOffscreen && !footerVisible ? (
+        <div className="portal-mobile-sticky" role="region" aria-label={stickyKind === "pay" ? "Pago pendiente" : "Decisión y total"}>
           <div className="portal-mobile-sticky-total">
-            <span>{itemsChanged ? "Total con tus cambios" : "Total actual"}</span>
-            <strong className="portal-num">{formatMoney(actionTotal)}</strong>
-            {budget.validUntil ? (
+            <span>{stickyKind === "pay" ? "Falta transferir" : itemsChanged ? "Total con tus cambios" : "Total actual"}</span>
+            <strong className="portal-num">{formatMoney(stickyKind === "pay" ? transferNow?.amount ?? balance : actionTotal)}</strong>
+            {stickyKind === "authorize" && budget.validUntil ? (
               <small className="portal-mobile-sticky-due" data-tone={countdownTone(budget.validUntil)}>
                 {formatCountdown(budget.validUntil, "client")}
               </small>
@@ -2030,10 +1994,10 @@ export function PortalBudgetView({
           <button
             type="button"
             className="portal-btn portal-btn--primary portal-mobile-sticky-action"
-            onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            aria-controls="portal-action"
+            onClick={() => (stickyKind === "pay" ? payFirstRef : actionRef).current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            aria-controls={stickyKind === "pay" ? "portal-pay" : "portal-action"}
           >
-            Ver decisión
+            {stickyKind === "pay" ? "Cómo pagar" : "Ver decisión"}
           </button>
         </div>
       ) : null}
