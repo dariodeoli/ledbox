@@ -443,3 +443,13 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Cada producto elige dónde se muestra: Oculto, Cliente final, Mayorista o Ambos. El cliente final ve el precio de lista (o «Consultar»).
 - Catálogo mayorista: desde la ficha del cliente, «Compartir catálogo mayorista» genera un link privado con precios mayoristas. El link se puede revocar y no aparece en buscadores. El pedido llega al panel ya vinculado a ese cliente y el presupuesto usa los precios mayoristas.
 - Los links anteriores /catalogo/<empresa> siguen funcionando y llevan a la tienda.
+
+## v2.1.102 — 2026-10-13
+
+- Presupuestos rediseñados:
+  - Arriba, cinco indicadores por etapa con cantidad y monto: Borrador, Enviado, Aprobado sin evento, Aprobado y Perdido. Al tocar uno se filtra la lista.
+  - La lista entra completa en pantalla: número, cliente, evento, monto, seña o saldo, etapa y vencimiento. Cada fila muestra una sola acción, la que toca ahora (Enviar, Aprobar, Responder, Crear evento o Cobrar seña), y el resto queda en «•••».
+  - El detalle se abre en un panel lateral con todo en un solo lugar: etapas, cliente y evento, condiciones (seña, plan de pagos y garantía), ítems, portal y firma, e historial.
+  - Pestañas: Presupuestos · Firmas · Solicitudes del portal.
+  - Vuelven a estar disponibles «WhatsApp con plantilla» y «Comprobantes del portal».
+- En el celular, cada presupuesto se ve como una tarjeta con su etapa, el monto y la próxima acción.
