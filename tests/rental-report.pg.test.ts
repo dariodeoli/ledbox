@@ -127,7 +127,9 @@ test("reporte de alquileres en PostgreSQL: los totales cuadran con SQL de contro
   await guarantee(A, guaranteeEvent.id, "RETURNED", 1_500_000, 0);
   await guarantee(A, guaranteeEvent.id, "KEPT_PARTIAL", 1_000_000, 400_001);
   await guarantee(A, guaranteeEvent.id, "KEPT", 700_000, 700_000);
-  await guarantee(A, guaranteeEvent.id, "PENDING", 300_000, null);
+  await guarantee(A, guaranteeEvent.id, "PENDING", 300_000, null, { status: "SENT" });
+  // Pendiente sobre un borrador: todavía no se pidió, no cuenta.
+  await guarantee(A, guaranteeEvent.id, "PENDING", 9_999_999, null, { status: "DRAFT" });
   await budget(A, { eventId: guaranteeEvent.id }); // sin garantía
   const febEvent = await ev(A, "Garantía de febrero", { startsAt: new Date(Date.UTC(2033, 1, 14)), endsAt: new Date(Date.UTC(2033, 1, 15)) });
   await guarantee(A, febEvent.id, "KEPT", 5_555_555, 5_555_555);
@@ -230,7 +232,7 @@ test("reporte de alquileres en PostgreSQL: los totales cuadran con SQL de contro
     assert.deepEqual(g("KEPT"), { status: "KEPT", count: 1, amount: 700_000, retained: 700_000, returned: 0 });
     assert.deepEqual(g("RETURNED"), { status: "RETURNED", count: 1, amount: 1_500_000, retained: 0, returned: 1_500_000 });
     assert.equal(g("HELD")?.amount, 2_000_000);
-    assert.equal(g("PENDING")?.amount, 300_000);
+    assert.equal(g("PENDING")?.amount, 300_000, "la pendiente de un borrador no suma");
     assert.equal(A_REPORT.deposits.guarantees.reduce((s, r) => s + r.count, 0), 5);
     // Empresa B: sus montos no se suman a A.
     assert.equal(B_REPORT.deposits.advances.collected, 4_000_000);
