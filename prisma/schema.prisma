@@ -140,6 +140,7 @@ model Organization {
   adminMemberships  AdminMembership[]
   adminSessions     AdminSession[]
   apiTokens         ApiToken[]
+  catalogAccessTokens CatalogAccessToken[]
   logos             OrganizationLogo[]
   leads             Lead[]
   quotes            QuoteRequest[]
@@ -476,6 +477,9 @@ model QuoteRequest {
   client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   /// Plazo prometido para responder; nace con el pedido, nunca se inventa después.
   respondBy      DateTime?
+  /// Lista de precios aplicada al pedido: RETAIL (cliente final) o WHOLESALE
+  /// (catálogo mayorista). El presupuesto convertido usa la misma lista.
+  priceList      String        @default("RETAIL")
   /// Presupuesto en que se convirtió (único: convertir dos veces no es posible).
   budget         Budget?
 
@@ -689,6 +693,7 @@ model Client {
   updatedAt      DateTime        @updatedAt
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   events         Event[]
+  catalogAccessTokens CatalogAccessToken[]
   budgets        Budget[]
   payments       ClientPayment[]
   logo           ClientLogo?
@@ -1681,6 +1686,10 @@ model InventoryItem {
   /// «Visible en la web» (issue #111): la landing es estática hoy; el flag queda
   /// listo para el catálogo dinámico. Por defecto, nada se publica solo.
   visibleOnWeb       Boolean          @default(false)
+  /// Alcance en la tienda web de la empresa: HIDDEN, RETAIL (cliente final),
+  /// WHOLESALE (mayorista) o BOTH. `visibleOnWeb` se mantiene sincronizado
+  /// (= alcance distinto de HIDDEN). NULL = fila vieja: rige `visibleOnWeb`.
+  catalogAudience    String?
   /// Cantidad = unidades activas (issue #112): se sincroniza con `units`
   /// (las retiradas no cuentan) para no romper los contratos existentes.
   quantity           Int              @default(1)
@@ -1845,9 +1854,31 @@ model OrganizationRentalSettings {
   publicCatalogEnabled Boolean      @default(false)
   publicShowPrices     Boolean      @default(true)
   whatsappPhone        String?
+  /// Tienda web de la empresa: frase de la portada, color de marca (`#rrggbb`)
+  /// y correo de contacto. Todo opcional; sin valor no se muestra ni se inventa.
+  storefrontTagline    String?
+  storefrontAccent     String?
+  storefrontEmail      String?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// Link privado del catálogo mayorista de un cliente: identifica al cliente sin
+/// cuenta. Solo vive el hash SHA-256 del token (se muestra una sola vez al
+/// generarlo); se revoca desde la ficha del cliente.
+model CatalogAccessToken {
+  id             String       @id
+  organizationId String
+  clientId       String
+  tokenHash      String       @unique
+  createdAt      DateTime     @default(now())
+  revokedAt      DateTime?
+  lastUsedAt     DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, revokedAt])
 }
 
 model EventInventory {

@@ -1,3 +1,4 @@
+import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
 import type { InventoryKind, InventoryStatus, Prisma } from "@prisma/client";
@@ -95,6 +96,7 @@ const INVENTORY_ITEM_FIELDS = [
   "notes",
   "publicDescription",
   "visibleOnWeb",
+  "catalogAudience",
   "imageUrl",
   "bufferBeforeMin",
   "bufferAfterMin",
@@ -110,6 +112,7 @@ type InventoryItemUpdate = Partial<{
   notes: string | null;
   publicDescription: string | null;
   visibleOnWeb: boolean;
+  catalogAudience: CatalogAudience;
   imageUrl: string | null;
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
@@ -167,9 +170,12 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
     }
     data.publicDescription = description || null;
   }
-  if (body.visibleOnWeb !== undefined) {
-    if (typeof body.visibleOnWeb !== "boolean") return { ok: false, error: "La visibilidad web tiene que ser sí o no." };
-    data.visibleOnWeb = body.visibleOnWeb;
+  // Alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos); `visibleOnWeb` queda sincronizado.
+  const audience = readAudienceInput(body);
+  if (!audience.ok) return { ok: false, error: audience.error };
+  if (audience.audience !== undefined) {
+    data.catalogAudience = audience.audience;
+    data.visibleOnWeb = visibleOnWebFor(audience.audience);
   }
   for (const field of ["bufferBeforeMin", "bufferAfterMin"] as const) {
     if (body[field] === undefined) continue;
@@ -500,6 +506,7 @@ export async function POST(request: Request) {
         notes: true,
         publicDescription: true,
         visibleOnWeb: true,
+        catalogAudience: true,
         imageUrl: true,
         bufferBeforeMin: true,
         bufferAfterMin: true,

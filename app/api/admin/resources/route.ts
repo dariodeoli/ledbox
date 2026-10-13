@@ -1,3 +1,4 @@
+import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -215,7 +216,7 @@ export async function POST(request: Request) {
             imageUrl,
             kind: body.inventoryKind === "CONSUMABLE" ? "CONSUMABLE" : body.inventoryKind === "DISPOSABLE" ? "DISPOSABLE" : "REUSABLE",
             quantity,
-            visibleOnWeb: body.visibleOnWeb === true,
+            ...newItemAudience(body),
             listPrice: prices.values.listPrice ?? 0,
             listFromDays: prices.values.listFromDays ?? 0,
             listFromPrice: prices.values.listFromPrice ?? 0,
@@ -254,6 +255,7 @@ export async function POST(request: Request) {
           "quantity",
           "status",
           "visibleOnWeb",
+          "catalogAudience",
           "sku",
           "imageUrl",
           "listPrice",
@@ -340,4 +342,11 @@ export async function POST(request: Request) {
   }
 
   return jsonError("Operación desconocida.", 400);
+}
+
+/** Alcance del producto nuevo: el pedido (o el booleano viejo) y, sin nada, oculto. Nada se publica solo. */
+function newItemAudience(body: Record<string, unknown>): { catalogAudience: string; visibleOnWeb: boolean } {
+  const input = readAudienceInput(body);
+  const audience = input.ok && input.audience ? input.audience : "HIDDEN";
+  return { catalogAudience: audience, visibleOnWeb: visibleOnWebFor(audience) };
 }

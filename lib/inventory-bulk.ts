@@ -1,10 +1,12 @@
+import { isCatalogAudience } from "./catalog-audience";
+
 /** Explicaciones de contrato consumidas por la ayuda canónica de PANEL. */
 export const INVENTORY_FIELD_HELP: Record<string, string> = {
   name: "Nombre visible que identifica el producto; no cambia los códigos de sus unidades.",
   category: "Agrupa productos y permite buscar sustitutos de la misma categoría.",
   inventoryKind: "Clasifica el producto como reutilizable, consumible o descartable.",
   status: "Estado operativo del producto; mantenimiento y retirado bloquean disponibilidad. No es archivo organizacional.",
-  visibleOnWeb: "Marca la visibilidad para el catálogo público; no modifica precios ni disponibilidad.",
+  catalogAudience: "Quién ve el producto en la tienda web de la empresa: nadie (Oculto), cliente final, mayoristas con su link privado o ambos. No modifica precios ni disponibilidad.",
   publicDescription: "Texto opcional que muestra el catálogo público debajo del nombre. Las notas internas nunca se publican.",
   notes: "Notas internas opcionales. En unidades no hay fechas, taller ni presupuesto de reparación estructurados.",
   imageUrl: "Imagen manual del producto. Vaciar la URL conserva la foto subida como alternativa, si existe.",
@@ -27,7 +29,7 @@ export const ITEM_BULK_FIELDS = [
   { key: "category", label: "Categoría", type: "text", clear: false },
   { key: "inventoryKind", label: "Tipo", type: "kind", clear: false },
   { key: "status", label: "Estado", type: "status", clear: false },
-  { key: "visibleOnWeb", label: "Visible en la web", type: "boolean", clear: false },
+  { key: "catalogAudience", label: "Visibilidad en la tienda", type: "audience", clear: false },
   { key: "notes", label: "Notas internas", type: "notes", clear: true },
   { key: "imageUrl", label: "URL manual de imagen", type: "text", clear: true },
   { key: "dailyCost", label: "Costo diario interno", type: "money", clear: true },
@@ -65,7 +67,7 @@ export function readBulkChanges(target: "items" | "units", value: unknown): Reco
       if (!field.clear) return null;
       result[key] = field.type === "money" || field.type === "days" ? 0 : "";
     } else {
-      if (field.type === "boolean") { if (typeof raw !== "boolean") return null; }
+      if (field.type === "audience") { if (!isCatalogAudience(raw)) return null; }
       else if (field.type === "money" || field.type === "days") { if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > (field.type === "days" ? 3650 : 2147483647)) return null; }
       else if (typeof raw !== "string" || !raw.trim() || raw.length > (key === "category" ? 80 : key === "notes" ? (target === "units" ? 400 : 2000) : 2000)) return null;
       result[key] = raw;
