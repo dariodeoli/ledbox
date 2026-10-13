@@ -17,7 +17,8 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
-import { canWriteBudgets, canWriteClients, matchesQuery } from "@/lib/admin-policy";
+import { canWriteBudgets, canWriteClients, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, quoteRequestStatusLabel } from "@/lib/catalog-public";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -39,7 +40,7 @@ import {
   AdminWhatsappLink,
   type AdminMenuItem,
 } from "../AdminUI";
-import { SearchField, SelectField, TextAreaField } from "../AdminFields";
+import { CheckboxField, SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 
@@ -93,6 +94,22 @@ function leadItemCount(lead: AdminLeadRow): number {
   return lead.quoteRequests.reduce((sum, quote) => sum + quote.items.length, 0);
 }
 
+const QUOTE_TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "danger" | "info"> = {
+  NEW: "accent",
+  REVIEWING: "info",
+  QUOTED: "warn",
+  CONVERTED: "ok",
+  DECLINED: "danger",
+  EXPIRED: "neutral",
+};
+
+type ConvertResult = {
+  budget: { id: string; title: string; total: number };
+  deposit: { percent: number | null; amount: number };
+  unpricedLines: number;
+  hold: { ok: true; held: number; hours: number } | { ok: false; error: string } | null;
+};
+
 type LeadMutation = { lead: AdminLeadRow; client: { id: string; name: string; company: string | null } | null; clientCreated: boolean };
 
 export function LeadsModule() {
@@ -106,6 +123,9 @@ export function LeadsModule() {
   const [draftNotes, setDraftNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState(false);
+  /** Pedido del catálogo que se está convirtiendo o al que se le retiene stock. */
+  const [quoteBusy, setQuoteBusy] = useState("");
+  const [holdOnConvert, setHoldOnConvert] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [notice, setNotice] = useState("");
   const [boardError, setBoardError] = useState("");
@@ -115,6 +135,7 @@ export function LeadsModule() {
 
   const writable = canWriteClients(role);
   const budgetWritable = canWriteBudgets(role);
+  const holdWritable = canWriteOperations(role);
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadParam = searchParams.get("lead")?.trim() ?? "";
@@ -335,6 +356,54 @@ export function LeadsModule() {
         ? `Cliente «${label}» creado desde el lead; quedó en estado Ganado.`
         : `El cliente «${label}» ya existía: se reutilizó sin duplicar y el lead quedó Ganado.`,
     );
+    leads.reload();
+  }
+
+  async function convertQuote(quoteId: string) {
+    setQuoteBusy(quoteId);
+    setDetailError("");
+    setNotice("");
+    const result = await adminSend<ConvertResult>(`/api/admin/quote-requests/${encodeURIComponent(quoteId)}/convert`, { hold: holdOnConvert && holdWritable }, "POST");
+    setQuoteBusy("");
+    if (!result.ok) {
+      setDetailError(result.error);
+      leads.reload();
+      return;
+    }
+    const { budget, deposit, hold, unpricedLines } = result.data;
+    const parts = [
+      `Creamos el presupuesto «${budget.title}» (${formatMoney(budget.total)}) en borrador.`,
+      deposit.percent ? `Seña del ${deposit.percent} %: ${formatMoney(deposit.amount)}.` : "La empresa no tiene política de seña: sin seña.",
+      unpricedLines > 0 ? `${unpricedLines} ${unpricedLines === 1 ? "línea quedó" : "líneas quedaron"} sin precio: completalas antes de enviar.` : "",
+      hold ? (hold.ok ? `Retuvimos el stock por ${hold.hours} h.` : `No pudimos retener el stock: ${hold.error}`) : "",
+    ];
+    setNotice(parts.filter(Boolean).join(" "));
+    leads.reload();
+  }
+
+  async function holdQuote(quoteId: string) {
+    setQuoteBusy(quoteId);
+    setDetailError("");
+    setNotice("");
+    const result = await adminSend<{ held: number; hours: number }>(`/api/admin/quote-requests/${encodeURIComponent(quoteId)}/hold`, {}, "POST");
+    setQuoteBusy("");
+    if (!result.ok) {
+      setDetailError(result.error);
+      return;
+    }
+    setNotice(`Retuvimos el stock por ${result.data.hours} h (${result.data.held} artículos). Si no se confirma, se libera solo.`);
+    leads.reload();
+  }
+
+  async function setQuoteStatus(quoteId: string, next: string) {
+    setQuoteBusy(quoteId);
+    setDetailError("");
+    const result = await adminSend<{ quoteRequest: { id: string; status: string } }>(`/api/admin/quote-requests/${encodeURIComponent(quoteId)}`, { status: next }, "PATCH");
+    setQuoteBusy("");
+    if (!result.ok) {
+      setDetailError(result.error);
+      return;
+    }
     leads.reload();
   }
 
@@ -588,6 +657,48 @@ export function LeadsModule() {
                     <p className="admin-detail-quote-meta">
                       Pedido del {formatDate(quote.createdAt)} · {leadSourceLabel(quote.source)} · {formatNumber(quote.items.length)} ítems
                     </p>
+                    {quote.source === "catalogo" ? (
+                      <div className="admin-detail-quote-status" data-testid="catalog-order">
+                        <p>
+                          <AdminBadge tone={QUOTE_TONE[quote.status ?? "NEW"] ?? "neutral"}>{quoteRequestStatusLabel(quote.status)}</AdminBadge>
+                          {quote.startsAt && quote.endsAt ? (
+                            <span className="admin-cell-sub"> · del {formatDate(quote.startsAt)} al {formatDate(quote.endsAt)}</span>
+                          ) : null}
+                          {quote.respondBy && (quote.status === "NEW" || quote.status === "REVIEWING") ? (
+                            <span className="admin-cell-sub"> · responder antes del {formatDateTime(quote.respondBy)}</span>
+                          ) : null}
+                        </p>
+                        <p className="admin-muted">Es una preorden: no reserva stock hasta que se convierta y se retenga o apruebe.</p>
+                        {quote.budget ? (
+                          <p>
+                            <Link href="/presupuestos" title="Abrir Presupuestos">Presupuesto {budgetReference(quote.budget.id)}</Link> creado desde este pedido.
+                          </p>
+                        ) : null}
+                        {budgetWritable && !quote.budget && isQuoteRequestStatus(quote.status) && CONVERTIBLE_STATUSES.includes(quote.status) ? (
+                          <div className="admin-detail-actions">
+                            {holdWritable ? (
+                              <CheckboxField checked={holdOnConvert} onChange={setHoldOnConvert} text="Retener el stock mientras se cotiza (según la vigencia de Ajustes > Alquileres)" />
+                            ) : null}
+                            <AdminButton type="button" variant="primary" icon="budgets" busy={quoteBusy === quote.id} disabled={Boolean(quoteBusy)} onClick={() => void convertQuote(quote.id)}>
+                              Convertir en presupuesto
+                            </AdminButton>
+                            {writable && quote.status === "NEW" ? (
+                              <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => void setQuoteStatus(quote.id, "REVIEWING")}>Marcar en revisión</AdminButton>
+                            ) : null}
+                            {writable && quote.status !== "DECLINED" ? (
+                              <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => void setQuoteStatus(quote.id, "DECLINED")}>Declinar</AdminButton>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {quote.budget && holdWritable ? (
+                          <div className="admin-detail-actions">
+                            <AdminButton type="button" icon="calendar" busy={quoteBusy === quote.id} disabled={Boolean(quoteBusy)} onClick={() => void holdQuote(quote.id)}>
+                              Retener stock
+                            </AdminButton>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {quote.items.length === 0 ? (
                       <p className="admin-muted">El pedido no incluye productos.</p>
                     ) : (

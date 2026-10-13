@@ -21,7 +21,7 @@ const MAX_INTERNAL_NOTES = 2000;
  * presupuestos que nacieron de él (Lead → Presupuesto).
  */
 const LEAD_INCLUDE = {
-  quoteRequests: { include: { items: true } },
+  quoteRequests: { orderBy: { createdAt: "desc" }, include: { items: true, budget: { select: { id: true } } } },
   budgets: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" } },
 } satisfies Prisma.LeadInclude;
 

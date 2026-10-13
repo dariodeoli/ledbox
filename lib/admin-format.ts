@@ -272,6 +272,7 @@ const LEAD_STATUS: Record<string, string> = {
 /** Origen del lead; los valores desconocidos se muestran tal cual llegan. */
 const LEAD_SOURCE: Record<string, string> = {
   website: "Sitio web",
+  catalogo: "Catálogo público",
 };
 
 const BILLING_UNIT: Record<string, string> = {

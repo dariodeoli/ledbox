@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { publicConfig } from "@/lib/public-config";
 import type { AdminRentalSettings as RentalSettingsView } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
 import { NumberField, PhoneField, SwitchField } from "../AdminFields";
@@ -53,7 +54,8 @@ const HOUR_FIELDS = [
 ] as const;
 
 export function AlquileresSettings() {
-  const { demo } = useAdminSession();
+  const { demo, organization } = useAdminSession();
+  const catalogUrl = organization?.slug ? `${publicConfig.siteUrl}/catalogo/${organization.slug}` : null;
   const resource = useAdminResource("/api/admin/settings/rental", (payload) => (payload.settings ?? null) as RentalSettingsView | null);
   const initial = useMemo(() => (resource.data ? toForm(resource.data) : null), [resource.data]);
   const [form, setForm] = useState<Form | null>(null);
@@ -141,6 +143,22 @@ export function AlquileresSettings() {
             </AdminPanel>
 
             <AdminPanel title="Catálogo público" icon="globe">
+              {catalogUrl ? (
+                <p className="admin-field-hint" data-testid="catalog-link">
+                  {initial?.publicCatalogEnabled ? (
+                    <>
+                      Link público de tu catálogo:{" "}
+                      <a href={catalogUrl} target="_blank" rel="noopener noreferrer">
+                        {catalogUrl}
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      Tu catálogo está apagado: el link <strong>{catalogUrl}</strong> responde «no encontrado» hasta que lo enciendas y guardes.
+                    </>
+                  )}
+                </p>
+              ) : null}
               <div className="admin-settings-grid">
                 <SwitchField
                   label="Catálogo público encendido"

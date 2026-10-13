@@ -463,9 +463,23 @@ model QuoteRequest {
   items          QuoteItem[]
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  /// Pedido del catálogo público (fase 3): NEW, REVIEWING, QUOTED, CONVERTED, DECLINED
+  /// o EXPIRED (validado en el código). Los pedidos viejos del sitio quedan en NEW.
+  status         String        @default("NEW")
+  startsAt       DateTime?
+  endsAt         DateTime?
+  /// Token del seguimiento público `/pedido/<token>` (solo lectura).
+  publicToken    String?       @unique
+  clientId       String?
+  client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Plazo prometido para responder; nace con el pedido, nunca se inventa después.
+  respondBy      DateTime?
+  /// Presupuesto en que se convirtió (único: convertir dos veces no es posible).
+  budget         Budget?
 
   @@index([leadId, createdAt])
   @@index([organizationId, createdAt])
+  @@index([organizationId, status])
 }
 
 model QuoteItem {
@@ -479,9 +493,13 @@ model QuoteItem {
   unitPrice      Int?
   subtotal       Int?
   notes          String?
+  /// Artículo del inventario de la empresa (catálogo público); NULL en pedidos viejos.
+  inventoryId    String?
+  inventory      InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
   quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
 
   @@index([quoteRequestId])
+  @@index([inventoryId])
 }
 
 model RateLimitBucket {
@@ -673,6 +691,7 @@ model Client {
   payments       ClientPayment[]
   logo           ClientLogo?
   invoices       Invoice[]
+  quoteRequests  QuoteRequest[]
 
   @@index([type, active])
   @@index([createdAt])
@@ -744,6 +763,9 @@ model Budget {
   eventId              String?
   /// Lead del que nació el presupuesto (Lead → Presupuesto); se limpia si se borra el lead.
   leadId               String?
+  /// Pedido del catálogo público del que nació (único: se convierte una sola vez).
+  quoteRequestId       String?               @unique
+  quoteRequest         QuoteRequest?         @relation(fields: [quoteRequestId], references: [id], onDelete: SetNull)
   title                String
   status               CommercialStatus      @default(DRAFT)
   subtotal             Int                   @default(0)
@@ -1676,6 +1698,7 @@ model InventoryItem {
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments        EventInventory[]
   budgetItems        BudgetItem[]
+  quoteItems         QuoteItem[]
   units              InventoryUnit[]
   /// Tiempo de colchón antes/después del evento para este producto (minutos).
   /// NULL hereda el de la empresa (`OrganizationRentalSettings`).

@@ -50,5 +50,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const portal = host === new URL(publicConfig.clientUrl).hostname || /^\/(p|firma|comparar)\//.test(pathname) || pathname === "/portal";
   const product = profile.kind === "eventos" || pathname === "/producto" || pathname.startsWith("/producto/");
   const app = profile.kind === "app" || profile.kind === "admin" || host === new URL(publicConfig.demoUrl).hostname || isAdminRoute(pathname);
-  return <html lang="es"><body>{children}{portal ? <AppFooter variant="portal" /> : product ? <AppFooter variant="product" /> : app ? <AppFooter variant="app" /> : <PublicFooter />}</body></html>;
+  // Catálogo y seguimiento de pedido (alquileres fase 3): pertenecen a la empresa dueña, sin el pie de LedBox.
+  const companyPublic = /^\/(catalogo|pedido)\//.test(pathname);
+  return <html lang="es"><body>{children}{companyPublic ? null : portal ? <AppFooter variant="portal" /> : product ? <AppFooter variant="product" /> : app ? <AppFooter variant="app" /> : <PublicFooter />}</body></html>;
 }
