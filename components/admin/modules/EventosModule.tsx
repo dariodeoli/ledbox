@@ -742,7 +742,6 @@ export function EventosModule() {
         hint="Agenda, checklist de campo y equipos asignados por evento."
         meta={`${formatNumber(events.length)} eventos`}
       />
-      {activeView === "calendar" ? null : (
       <AdminKpis loading={operations.data == null} label="Indicadores de eventos">
         <AdminKpi label="Eventos" icon="events" value={formatNumber(events.length)} note="cargados" />
         <AdminKpi label="Próximos" icon="calendar" value={formatNumber(upcoming)} note="con fecha futura" tone="accent" />
@@ -764,9 +763,13 @@ export function EventosModule() {
           tone={atRiskEvents.length > 0 ? "danger" : "ok"}
         />
       </AdminKpis>
-      )}
 
       <AdminToolbar>
+        {/* Primero en la barra: el conmutador queda FIJO en las tres vistas (en calendario no hay búsqueda ni filtro). */}
+        {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
+        <div className="admin-cal-view-switch">
+          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
+        </div>
         {activeView === "calendar" ? null : (
           <SearchField value={query} onChange={setQuery} label="Buscar eventos" placeholder="Buscar por evento, cliente o lugar…" />
         )}
@@ -775,10 +778,6 @@ export function EventosModule() {
         {activeView === "calendar" ? null : (
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         )}
-        {/* Calendario también debe ser alcanzable en móvil, aunque lista use tarjetas. */}
-        <div className="admin-cal-view-switch">
-          <AdminViewSwitch view={calendarOpen ? "calendar" : view} onChange={changeView} views={EVENTOS_VIEWS} labels={{ grid: "Tarjetas" }} label="Vista de eventos" />
-        </div>
         {writable ? (
           <AdminButton
             variant="primary"
