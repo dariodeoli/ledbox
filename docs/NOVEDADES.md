@@ -367,3 +367,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Catálogo público por empresa: cada empresa puede publicar su catálogo de alquiler en /catalogo/<empresa>, con fotos, categorías, búsqueda y precio de referencia (o «Consultar»). Para las fechas elegidas muestra si un producto está disponible, sin dar el stock exacto. Se activa en Ajustes → Alquileres.
 - Pedido sin cuenta: el cliente elige productos, fechas, lugar y contacto, y envía su pedido. La pantalla aclara que todavía NO es una reserva confirmada y hasta cuándo se le responde. Ofrece un link de WhatsApp con el resumen y otro para seguir el pedido.
 - En Leads, cada pedido del catálogo muestra su estado y sus productos. «Convertir en presupuesto» lo arma sin volver a cargar nada, con la seña configurada por la empresa. «Retener stock» aparta los equipos durante el tiempo configurado.
+
+## v2.1.92 — 2026-10-13
+
+- Inventario: combos. Un combo se arma con productos existentes, por ejemplo «Kit pantalla LED 3×2» = 6 módulos + procesador + 2 truss, y no lleva stock propio. La pantalla muestra «Se pueden armar N» y cuál es el componente que limita.
+- Un combo y sus componentes sueltos comparten el mismo stock: reservar un combo descuenta sus piezas y nunca se reserva de más, aunque se pida al mismo tiempo. Cancelar o liberar un combo devuelve exactamente sus piezas.
+- Un componente se puede reemplazar por otro de la misma categoría, con control de stock, y el cambio queda registrado. Un combo no puede contener otro combo.
