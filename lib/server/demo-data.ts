@@ -473,6 +473,23 @@ const SUPPLIERS = [
   { id: "demo_supplier_electricidad", name: "Electricidad Meza", company: "Meza Servicios Eléctricos", phone: "+595 985 330 774", email: "contacto@electricidadmeza.com.py", category: "ELECTRICITY", paymentTerms: "Contado", notes: "Tableros, generadores y puesta a tierra." },
 ] satisfies Array<{ id: string } & Omit<Prisma.SupplierUncheckedCreateInput, "id" | "organizationId">>;
 
+/**
+ * Catálogo público de la demo (alquileres fase 3): 9 artículos visibles con precio de
+ * venta de referencia por día. Las fotos son las de `/assets/products` cuando hay una
+ * equivalente; el resto usa el marcador de posición del catálogo. Los consumibles no se publican.
+ */
+const DEMO_WEB_CATALOG: Record<string, Partial<Prisma.InventoryItemUncheckedCreateInput>> = {
+  demo_inv_led_p3: { visibleOnWeb: true, listPrice: 950_000, imageUrl: "/assets/products/pantalla-led.png" },
+  demo_inv_led_p5: { visibleOnWeb: true, listPrice: 800_000, imageUrl: "/assets/products/pantalla-led.png" },
+  demo_inv_totem: { visibleOnWeb: true, listPrice: 1_800_000, imageUrl: "/assets/products/totem-led.png" },
+  demo_inv_totem_touch: { visibleOnWeb: true, listPrice: 1_200_000, imageUrl: "/assets/products/totem-touch.png" },
+  demo_inv_kiosko: { visibleOnWeb: true, listPrice: 1_100_000, imageUrl: "/assets/products/kiosko-touch.png" },
+  demo_inv_cilindro: { visibleOnWeb: true, listPrice: 1_500_000, imageUrl: "/assets/products/cilindro-led.png" },
+  demo_inv_dispenser: { visibleOnWeb: true, listPrice: 650_000, imageUrl: "/assets/products/dispensador-inteligente.png" },
+  demo_inv_truss: { visibleOnWeb: true, listPrice: 200_000 },
+  demo_inv_panels: { visibleOnWeb: true, listPrice: 150_000 },
+};
+
 type DemoLead = {
   id: string;
   name: string;
@@ -1821,6 +1838,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       clientId: budget.event?.clientId ?? budget.clientId ?? "",
       eventId: budget.event?.id ?? null,
       leadId: budget.leadId ?? null,
+      quoteRequestId: budget.id === "demo_budget_pendiente" ? "demo_quote_tigo" : null,
       deliveryAt: budget.deliveryAt ?? null,
       title: budget.title,
       status: budget.status,
@@ -2559,6 +2577,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const inventoryData: Prisma.InventoryItemUncheckedCreateInput[] = INVENTORY.map((item) => ({
     ...item,
     ...org,
+    ...(DEMO_WEB_CATALOG[item.id] ?? {}),
     createdAt: at(base, -150, 9, 0),
   }));
   // ── Unidades físicas (issue #112): cada equipo con su código, su costo y una
@@ -2615,7 +2634,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     deliveryBufferMin: 60,
     returnBufferMin: 60,
     cleaningBufferMin: 120,
-    publicCatalogEnabled: false,
+    publicCatalogEnabled: true,
     publicShowPrices: true,
     whatsappPhone: null,
     createdAt: at(base, -30, 10, 0),
@@ -2640,21 +2659,50 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     eventDate: at(base, lead.eventDateDays, 12, 0),
     internalNotes: lead.internalNotes,
   }));
-  const quoteData: Prisma.QuoteRequestUncheckedCreateInput = {
-    id: "demo_quote_cerveza",
-    ...org,
-    leadId: "demo_lead_cerveza",
-    referenceTotal: 15_000_000,
-    currency: "PYG",
-    durationDays: 1,
-    eventDate: at(base, 40, 12, 0),
-    location: "Asunción",
-    source: "website",
-    createdAt: at(base, -1, 9, 12),
-  };
+  const quotesData: Prisma.QuoteRequestUncheckedCreateInput[] = [
+    // Preorden NUEVA del catálogo público: sin presupuesto y sin stock comprometido.
+    {
+      id: "demo_quote_cerveza",
+      ...org,
+      leadId: "demo_lead_cerveza",
+      referenceTotal: 15_000_000,
+      currency: "PYG",
+      durationDays: 1,
+      eventDate: at(base, 40, 12, 0),
+      startsAt: dayStart(dayKeyOf(at(base, 40, 12, 0))),
+      endsAt: at(base, 40, 23, 59),
+      location: "Asunción",
+      source: "catalogo",
+      status: "NEW",
+      publicToken: "demo-pedido-nuevo-0001",
+      respondBy: at(base, 1, 12, 0),
+      createdAt: at(base, -1, 9, 12),
+    },
+    // Preorden CONVERTIDA: dio origen al presupuesto «Alquiler de pantallas».
+    {
+      id: "demo_quote_tigo",
+      ...org,
+      leadId: "demo_lead_tigo",
+      clientId: "demo_client_tigo",
+      referenceTotal: 12_800_000,
+      currency: "PYG",
+      durationDays: 2,
+      eventDate: at(base, 21, 12, 0),
+      startsAt: dayStart(dayKeyOf(at(base, 21, 12, 0))),
+      endsAt: at(base, 22, 23, 59),
+      location: "Asunción",
+      source: "catalogo",
+      status: "CONVERTED",
+      publicToken: "demo-pedido-convertido-02",
+      respondBy: at(base, -25, 12, 0),
+      createdAt: at(base, -26, 9, 30),
+    },
+  ];
   const quoteItemsData: Prisma.QuoteItemUncheckedCreateInput[] = [
-    { id: "demo_quote_item_1", quoteRequestId: "demo_quote_cerveza", productSlug: "pantalla-led-p3-500", productName: "Pantalla LED P3.9 500x500", quantity: 12, duration: 1, billingUnit: "DAILY", unitPrice: 950_000, subtotal: 11_400_000 },
-    { id: "demo_quote_item_2", quoteRequestId: "demo_quote_cerveza", productSlug: "totem-led-2x1", productName: "Tótem LED 2x1 m", quantity: 2, duration: 1, billingUnit: "DAILY", unitPrice: 1_800_000, subtotal: 3_600_000 },
+    { id: "demo_quote_item_1", quoteRequestId: "demo_quote_cerveza", inventoryId: "demo_inv_led_p3", productSlug: "LED-P3-500", productName: "Pantalla LED P3.9 500x500", quantity: 12, duration: 1, billingUnit: "DAILY", unitPrice: 950_000, subtotal: 11_400_000 },
+    { id: "demo_quote_item_2", quoteRequestId: "demo_quote_cerveza", inventoryId: "demo_inv_totem", productSlug: "TOT-LED-2X1", productName: "Tótem LED 2x1 m", quantity: 2, duration: 1, billingUnit: "DAILY", unitPrice: 1_800_000, subtotal: 3_600_000 },
+    { id: "demo_quote_item_3", quoteRequestId: "demo_quote_tigo", inventoryId: "demo_inv_led_p5", productSlug: "LED-P5-960", productName: "Pantalla LED P5 outdoor 960x960", quantity: 6, duration: 2, billingUnit: "DAILY", unitPrice: 800_000, subtotal: 9_600_000 },
+    { id: "demo_quote_item_4", quoteRequestId: "demo_quote_tigo", inventoryId: "demo_inv_truss", productSlug: "TRS-2M", productName: "Estructura de truss 2 m", quantity: 10, duration: 2, billingUnit: "DAILY", unitPrice: 200_000, subtotal: 4_000_000 },
   ];
 
   // ── Registro fiscal interno (issue #41) ──────────────────────────────────
@@ -2998,6 +3046,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.supplierJob.createMany({ data: jobsData });
       // Los leads van antes: algunos presupuestos nacen de un lead (Budget.leadId).
       await tx.lead.createMany({ data: leadsData });
+      // Los pedidos del catálogo van antes que los presupuestos (Budget.quoteRequestId); sus ítems, tras el inventario.
+      await tx.quoteRequest.createMany({ data: quotesData });
       await tx.budget.createMany({ data: budgetsData });
       await tx.budgetItem.createMany({ data: budgetItemsData });
       // Las cuentas van antes que los cobros y los gastos: todos las referencian.
@@ -3031,7 +3081,6 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
       await tx.eventInventory.createMany({ data: assignmentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
-      await tx.quoteRequest.create({ data: quoteData });
       await tx.quoteItem.createMany({ data: quoteItemsData });
       await tx.auditLog.createMany({ data: auditData });
     },

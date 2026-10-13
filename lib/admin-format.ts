@@ -290,6 +290,7 @@ const LEAD_SOURCE: Record<string, string> = {
   "manual-referido": "Referido",
   "manual-evento": "Evento",
   "manual-otro": "Carga manual",
+  catalogo: "Catálogo público",
 };
 
 const BILLING_UNIT: Record<string, string> = {

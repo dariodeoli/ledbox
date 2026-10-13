@@ -1389,6 +1389,8 @@ export type AdminLeadItem = {
   unitPrice: number | null;
   subtotal: number | null;
   notes: string | null;
+  /** Artículo del inventario (pedidos del catálogo público); nulo en pedidos viejos. */
+  inventoryId?: string | null;
 };
 
 export type AdminLeadQuote = {
@@ -1401,6 +1403,13 @@ export type AdminLeadQuote = {
   source: string;
   createdAt: string;
   items: AdminLeadItem[];
+  /** Pedido del catálogo público (fase 3): NEW, REVIEWING, QUOTED, CONVERTED, DECLINED o EXPIRED. */
+  status?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  respondBy?: string | null;
+  /** Presupuesto en que se convirtió. */
+  budget?: { id: string } | null;
 };
 
 export type AdminLeadRow = {
