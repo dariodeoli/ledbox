@@ -617,7 +617,14 @@ export async function commitInventoryAssignment(options: {
       const previousHoldExpired = Boolean(previous?.holdExpiresAt && previous.holdExpiresAt.getTime() <= now.getTime());
       const holdData =
         options.hold === true
-          ? { holdExpiresAt: previous && previous.holdExpiresAt === null ? null : holdExpiresAt }
+          ? {
+              // Una retención suelta nunca acorta la de un combo vivo que comparte la fila.
+              holdExpiresAt: previous && previous.holdExpiresAt === null
+                ? null
+                : previous?.holdExpiresAt && (previous.comboQuantity ?? 0) > 0 && previous.holdExpiresAt > holdExpiresAt
+                  ? previous.holdExpiresAt
+                  : holdExpiresAt,
+            }
           : options.hold === false || !previous || previousHoldExpired
             ? { holdExpiresAt: null }
             : {};
