@@ -4,7 +4,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { clientMetrics } from "../metrics";
-import { leadBelongsToClient } from "@/lib/server/lead-client";
+import { leadsForClient } from "@/lib/server/lead-client";
 import { parseClientFields } from "../client-fields";
 import { clientRucPatch } from "@/lib/server/ruc-confirmation";
 
@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!client) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
   const { logo, ...clientRow } = client;
 
-  const [budgets, events, payments, orgLeads] = await Promise.all([
+  const [budgets, events, payments] = await Promise.all([
     db.budget.findMany({
       where: { organizationId, clientId: client.id },
       orderBy: { createdAt: "desc" },
@@ -91,13 +91,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         budget: { select: { id: true, title: true } },
       },
     }),
-    // Leads de la empresa activa: se filtran abajo con la regla de lead-client.
-    db.lead.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 1000,
-      select: { id: true, name: true, phone: true, email: true, company: true, reason: true, eventDate: true, source: true, status: true, createdAt: true },
-    }),
   ]);
 
   // Leads del cliente: los que dieron origen a uno de sus presupuestos o
@@ -107,7 +100,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     emails: [client.email, client.contactEmail, client.billingEmail],
     phones: [client.phone, client.contactPhone, client.whatsapp],
   };
-  const leads = orgLeads.filter((lead) => leadBelongsToClient(lead, identity, budgetLeadIds));
+  const leads = await leadsForClient(db, organizationId, identity, budgetLeadIds);
 
   // Cobrado y vencido por presupuesto: mismos cobros que alimentan las métricas
   // del cliente, imputados a su presupuesto cuando lo tienen.
