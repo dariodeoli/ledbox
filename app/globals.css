@@ -28,7 +28,12 @@
   --c-bad-text: 180 35 48;
 }
 .admin-shared-phone, .admin-shared-autocomplete { min-width: 0; width: 100%; }
-.admin-shared-phone button[role="combobox"] { font-size: 12px; background: var(--a-bg-2); color: var(--a-text); border-color: var(--a-line-control); max-width: 100%; height: auto; min-height: 44px; }
+.admin-shared-phone button[role="combobox"] { font-size: 12px; background: color-mix(in srgb, var(--a-text) 7%, var(--a-field-bg)); color: var(--a-muted-2); border-color: var(--a-line-control); max-width: 100%; height: auto; min-height: var(--a-field-h); border-radius: var(--a-field-radius) 0 0 var(--a-field-radius); }
+/* +595 y el número son un solo campo: segmento fijo, separador y borde compartido. */
+.admin-shared-phone > div { flex-wrap: nowrap; gap: 0; }
+.admin-shared-phone > div > div { width: auto; flex: 0 0 auto; }
+.admin-field .admin-shared-phone input[type="tel"] { margin-left: -1px; border-radius: 0 var(--a-field-radius) var(--a-field-radius) 0; }
+.admin-field .admin-shared-phone input[type="tel"]:focus { position: relative; z-index: 1; }
 .admin-shared-phone input[type="tel"] { min-width: min(100%, 8.5rem); width: 0; flex: 1 1 0; }
 .admin-shared-phone { flex-wrap: wrap; }
 .admin-shared-autocomplete input { width: 100%; }
@@ -954,6 +959,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-danger-text: #ffa4b3;
   --a-radius: 14px;
   --a-radius-lg: 20px;
+  /* Campos y ventanas (rediseño 13-10-2026): fondo un tono más oscuro que el
+     panel, radio de 9 px y halo de foco de 3 px. */
+  --a-field-bg: rgba(4, 5, 14, .55);
+  --a-field-radius: 9px;
+  --a-field-h: 40px;
+  --a-focus-halo: rgba(90, 217, 255, .30);
+  --a-danger-halo: rgba(255, 125, 146, .26);
+  --a-ok-halo: rgba(82, 227, 155, .20);
+  --a-dialog-backdrop: rgba(2, 4, 12, .74);
+  --a-dialog-bg: #12121d;
   --a-sidebar: 224px;
   --a-topbar: 54px;
   --a-row: 46px;
@@ -1023,6 +1038,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-danger-text: #a82640;
   --a-radius: 18px;
   --a-radius-lg: 26px;
+  --a-field-bg: #ffffff;
+  --a-focus-halo: rgba(11, 111, 143, .24);
+  --a-danger-halo: rgba(189, 44, 71, .20);
+  --a-ok-halo: rgba(11, 122, 75, .18);
+  --a-dialog-backdrop: rgba(28, 34, 74, .38);
+  --a-dialog-bg: #ffffff;
   --a-shadow: 0 34px 66px -46px rgba(76, 61, 186, .55);
   --a-shadow-card: 0 26px 50px -40px rgba(76, 61, 186, .5), 0 2px 8px -4px rgba(76, 61, 186, .16);
   --a-blur: blur(18px) saturate(1.2);
@@ -1043,6 +1064,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     radial-gradient(60rem 46rem at 8% 102%, rgba(167, 243, 208, .42), transparent 58%),
     linear-gradient(180deg, #f2f4ff, #f6f8ff 42%, #f6f8ff);
 }
+@media (max-width: 720px) { .admin-root { --a-field-h: 44px; } }
 .admin-root :focus-visible { outline: 2px solid var(--a-accent); outline-offset: 3px; }
 .admin-root :focus:not(:focus-visible) { outline: none; }
 .admin-icon { flex: 0 0 auto; }
@@ -1074,10 +1096,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    control. Con eso, en una misma fila de la grilla los controles arrancan a la
    misma altura aunque cambien label, hint o error. */
 .admin-field { display: grid; align-content: start; gap: 8px; min-width: 0; }
-.admin-field-label, .admin-field label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.admin-field-hint { color: var(--a-muted); font-size: 11px; }
+.admin-field-label, .admin-field label:not(.admin-switch):not(.admin-check) { color: var(--a-muted-2); font-size: 12px; font-weight: 600; letter-spacing: 0; line-height: 1.3; text-transform: none; }
+.admin-field-req { color: var(--a-accent); font-weight: 700; }
+.admin-field-optional { margin-left: auto; color: var(--a-muted); font-size: 11px; font-weight: 400; }
+.admin-field-hint { color: var(--a-muted); font-size: 11.5px; line-height: 1.4; }
 .admin-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.admin-field-heading label { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.admin-field-heading label { color: var(--a-muted-2); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .admin-field-heading a, .admin-back-link { color: var(--a-accent); font-size: 11px; text-decoration: none; }
 .admin-field-heading a:hover, .admin-back-link:hover { text-decoration: underline; }
 .admin-field-heading:has(.admin-field-help) { justify-content: flex-start; gap: 4px; }
@@ -1087,22 +1111,30 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field-help > button:hover { color: var(--a-accent); }
 .admin-field-help > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
 .admin-field-help-text { display: block; white-space: normal; overflow-wrap: anywhere; font: 400 13px/1.5 var(--font-body, system-ui); letter-spacing: normal; text-transform: none; }
-.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: 36px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s; }
-.admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: var(--a-field-h); padding: 9px 12px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s, opacity .15s; }
+.admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-focus-halo); }
 .admin-field input::placeholder, .admin-field textarea::placeholder { color: var(--a-muted); opacity: 1; }
-.admin-field input[aria-invalid="true"] { border-color: var(--a-danger); }
-.admin-field select[aria-invalid="true"], .admin-field textarea[aria-invalid="true"] { border-color: var(--a-danger); }
+/* Válido (por ejemplo, RUC encontrado): borde verde suave y mensaje verde. */
+.admin-field[data-state="valid"] input, .admin-field[data-state="valid"] select, .admin-field[data-state="valid"] textarea { border-color: color-mix(in srgb, var(--a-ok) 75%, transparent); box-shadow: 0 0 0 3px var(--a-ok-halo); }
+/* Error: borde rojo + halo; va después del foco para que gane aunque tenga el cursor. */
+.admin-field input[aria-invalid="true"], .admin-field select[aria-invalid="true"], .admin-field textarea[aria-invalid="true"] { border-color: var(--a-danger); box-shadow: 0 0 0 3px var(--a-danger-halo); }
+.admin-field input:disabled, .admin-field select:disabled, .admin-field textarea:disabled,
+.admin-field input[readonly], .admin-field textarea[readonly] { opacity: .55; cursor: not-allowed; }
 /* MoneyInput de owncoding-ui (issue #99): el componente trae su estructura
    (contenedor relativo + prefijo + input) con clases utilitarias de Tailwind
    que este panel no carga, así que el kit le da el aspecto del panel: el
    prefijo «Gs» adentro del campo y el alto/foco que ya define `.admin-field`. */
 .admin-money { position: relative; min-width: 0; }
-.admin-money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--a-muted); font-size: 12px; font-weight: 600; }
-.admin-money input { padding-left: 34px; }
+.admin-money span { position: absolute; top: 1px; bottom: 1px; left: 1px; display: grid; place-items: center; width: 40px; border-right: 1px solid var(--a-line-2); border-radius: calc(var(--a-field-radius) - 1px) 0 0 calc(var(--a-field-radius) - 1px); background: color-mix(in srgb, var(--a-text) 7%, transparent); pointer-events: none; color: var(--a-muted-2); font-size: 12px; font-weight: 600; }
+.admin-money input { padding-left: 52px; }
+/* «%» va detrás del número, con el mismo segmento fijo y separador que «Gs». */
+.admin-money--suffix span { right: 1px; left: auto; border-right: 0; border-left: 1px solid var(--a-line-2); border-radius: 0 calc(var(--a-field-radius) - 1px) calc(var(--a-field-radius) - 1px) 0; }
+.admin-money--suffix input { padding-right: 52px; padding-left: 12px; }
 .admin-money--compact { width: 100%; max-width: 14rem; }
 @media (max-width: 760px) { .admin-money--compact { max-width: none; } }
 .admin-field--wide { grid-column: 1 / -1; }
-.admin-field-error { color: var(--a-danger); font-size: 11px; }
+.admin-field-error { color: var(--a-danger-text); font-size: 11.5px; font-weight: 500; line-height: 1.4; }
+.admin-field-success { color: var(--a-ok-text); font-size: 11.5px; font-weight: 500; line-height: 1.4; }
 /* ── Combobox (issue #88) ──
    Catálogo con búsqueda del kit de campos: el input filtra y sugiere; el
    listado flotante muestra las coincidencias (empresa/nombre del cliente,
@@ -1652,10 +1684,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-pin-pad-del { color: var(--a-muted-2); }
 
 /* Preferencia segmentada 2–5 opciones (auto-bloqueo, issue #21). */
-.admin-segmented { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-segmented { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); }
 .admin-segmented-item { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.admin-segmented-item { padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .04em; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
-.admin-segmented-item:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
+.admin-segmented-item { flex: 1 1 auto; min-height: calc(var(--a-field-h) - 8px); padding: 0 12px; border: 1px solid transparent; border-radius: calc(var(--a-field-radius) - 3px); background: transparent; color: var(--a-muted-2); font: 600 12.5px var(--font-body); cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.admin-segmented-item:hover:not(:disabled) { color: var(--a-accent); }
 .admin-segmented-item[aria-pressed="true"] { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent-strong); }
 .admin-segmented-item:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -1668,16 +1700,54 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-pin-slot[data-min-boundary="true"] { margin-left: 8px; }
 }
 
-/* ── Diálogo del panel (issue #12) ──
-   Primer diálogo del panel: overlay a pantalla completa y panel centrado.
-   Contrato mínimo: rol dialog, foco al abrir, cierre con Escape y clic afuera. */
-.admin-dialog-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(2, 6, 8, .72); backdrop-filter: blur(3px); overflow-y: auto; }
-.admin-dialog { display: grid; gap: 12px; width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
-.admin-dialog--wide { width: min(680px, 100%); }
-/* Ficha 360 del cliente (issue #34): más ancho para las listas de hechos. */
+/* ── Diálogo del panel (issue #12, rediseño 13-10-2026) ──
+   Overlay a pantalla completa y hoja centrada: encabezado (ícono en cuadro de
+   36 px, título, subtítulo opcional y cerrar), cuerpo con scroll propio y pie
+   fijo. Default 560 px, wide 720 px y ficha = panel lateral derecho de alto
+   completo (máx. 1040 px). A ≤720 px las tres son una hoja a pantalla completa.
+   Los diálogos armados a mano (`.admin-dialog` sin `--sheet`) conservan el
+   scroll del contenedor y toman el mismo encabezado. */
+.admin-dialog-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: var(--a-dialog-backdrop); backdrop-filter: blur(3px); overflow-y: auto; }
+.admin-dialog-overlay--ficha { place-items: stretch end; padding: 0; overflow: hidden; }
+.admin-dialog { display: grid; gap: 12px; width: min(560px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 12px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-panel); box-shadow: var(--a-shadow); }
+.admin-dialog--wide { width: min(720px, 100%); }
+/* Ficha 360 del cliente (issue #34): panel lateral con ancho para las listas de hechos. */
 .admin-dialog--ficha { width: min(1040px, 100%); }
+.admin-dialog.admin-dialog--sheet { background: var(--a-dialog-bg); display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.admin-dialog-overlay--ficha .admin-dialog--sheet { height: 100vh; height: 100dvh; max-height: none; border-width: 0 0 0 1px; border-radius: var(--a-radius-lg) 0 0 var(--a-radius-lg); }
 .admin-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.admin-dialog-title { display: inline-flex; align-items: center; gap: 8px; color: var(--a-text-strong); font: 700 12.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-dialog--sheet .admin-dialog-head { flex: 0 0 auto; align-items: flex-start; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--a-line); }
+.admin-dialog-icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-dialog-heading { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; align-self: center; }
+.admin-dialog-head .admin-dialog-title { display: block; margin: 0; color: var(--a-text-strong); font: 600 16px/1.25 var(--font-display); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+.admin-dialog-description { margin: 0; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.4; }
+.admin-dialog-close { flex: 0 0 auto; width: 30px; height: 30px; }
+.admin-dialog-body { display: grid; flex: 1 1 auto; align-content: start; gap: 12px; min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
+/* Pie fijo: el nuevo (`footer`) y el de los hijos existentes (`.admin-dialog-foot`)
+   se ven igual y quedan pegados abajo del cuerpo con scroll. */
+.admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-line); background: var(--a-dialog-bg); }
+.admin-dialog-footer { flex: 0 0 auto; }
+.admin-dialog-body .admin-dialog-foot { position: sticky; bottom: 0; margin: 4px -16px -16px; }
+.admin-dialog-confirm { z-index: 1; display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-danger); background: var(--a-danger-surface); }
+.admin-dialog-confirm-text { display: grid; gap: 2px; color: var(--a-danger-text); font-size: 12.5px; }
+.admin-dialog-confirm-text strong { font-size: 13px; }
+.admin-btn--danger { border-color: var(--a-danger); color: var(--a-danger-text); }
+.admin-btn--danger:hover:not(:disabled) { background: var(--a-danger-surface); }
+.admin-dialog-section { display: grid; gap: 8px; min-width: 0; }
+.admin-dialog-section + .admin-dialog-section { padding-top: 12px; border-top: 1px solid var(--a-line); }
+.admin-dialog-section-title { margin: 0; color: var(--a-muted); font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-dialog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; min-width: 0; }
+@media (max-width: 720px) {
+  .admin-dialog-overlay, .admin-dialog-overlay--ficha { place-items: stretch; padding: 0; overflow: hidden; }
+  .admin-dialog-overlay .admin-dialog { width: 100%; max-height: none; border-width: 0; border-radius: 0; }
+  .admin-dialog-overlay .admin-dialog--sheet { height: 100vh; height: 100dvh; }
+  .admin-dialog-overlay .admin-dialog:not(.admin-dialog--sheet) { height: 100vh; height: 100dvh; }
+  .admin-dialog-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-dialog-close { width: 44px; height: 44px; margin: -7px -7px 0 0; }
+  .admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .admin-dialog-footer > .admin-btn, .admin-dialog-body .admin-dialog-foot > .admin-btn { flex: 1 1 auto; justify-content: center; }
+  .admin-dialog-footer > .admin-dialog-spacer { display: none; }
+}
 .admin-dialog-text { color: var(--a-muted-2); font-size: 12.5px; line-height: 1.55; }
 .admin-dialog-code { color: var(--a-text-strong); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; font-weight: 700; letter-spacing: .08em; text-align: center; }
 .admin-dialog-qr { display: grid; place-items: center; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: #fff; }
@@ -2162,10 +2232,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-check input:focus-visible + .admin-check-box { outline: 2px solid var(--a-accent); outline-offset: 2px; }
 .admin-check input:disabled + .admin-check-box { opacity: .5; }
 .admin-check-text { font-weight: 600; letter-spacing: .04em; }
-.admin-check[data-done="true"] { color: var(--a-ok); }
+.admin-check[data-tone="ok"] { color: var(--a-ok); }
 /* Acción de campo en cola (issue #23): el texto dice el estado real de subida. */
-.admin-check[data-queue="queued"] { color: var(--a-warn); }
-.admin-check[data-queue="failed"] { color: var(--a-danger); }
+.admin-check[data-tone="warn"] { color: var(--a-warn); }
+.admin-check[data-tone="danger"] { color: var(--a-danger); }
 
 /* ── Calendario operativo ──
    Grilla mensual en desktop y lista por día en mobile/semana: misma información,
@@ -3790,6 +3860,8 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
    Con `.admin-palette` adentro, el diálogo se ancla a una altura de paleta y
    scrollea solo la lista de resultados (el buscador y las teclas quedan fijos). */
 .admin-dialog:has(.admin-palette) { height: min(560px, calc(100vh - 32px)); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.admin-dialog:has(.admin-palette) .admin-dialog-body { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.admin-dialog:has(.admin-palette) .admin-palette { height: 100%; }
 .admin-palette { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; min-height: 0; }
 .admin-palette-search { display: flex; align-items: center; gap: 8px; }
 .admin-palette-search .admin-search { flex: 1 1 auto; width: 100%; max-width: none; }
@@ -3868,7 +3940,6 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-sidebar-head { border-bottom: var(--a-sidebar-line); }
 .admin-sidebar-foot { border-top: var(--a-sidebar-line); }
 .admin-dialog { backdrop-filter: var(--a-blur); }
-.admin-dialog-overlay { background: color-mix(in srgb, var(--a-bg) 72%, transparent); }
 .admin-notif-panel { backdrop-filter: var(--a-blur); }
 
 /* ── Tipografía y jerarquía ── */
@@ -3879,6 +3950,7 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-title { font: 600 clamp(32px, 7vw, 46px)/.98 var(--font-display); letter-spacing: -.02em; text-transform: none; }
 .admin-title span { background: var(--a-grad-ink); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .admin-panel-title, .admin-dialog-title, .admin-cards-title, .admin-notif-head strong { font-family: var(--font-display); letter-spacing: .07em; }
+.admin-dialog-head .admin-dialog-title { letter-spacing: 0; }
 .admin-kpi-label { letter-spacing: .08em; }
 
 /* ── Controles: píldoras, degradado y campos tipo hueco ── */
@@ -3892,9 +3964,7 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-root .btn-led:hover { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
 .admin-submit { min-height: 44px; }
 .admin-btn--only-icon, .admin-actions .admin-btn, .admin-actions .admin-iconbtn { border-radius: 999px; }
-.admin-field input, .admin-field select, .admin-field textarea,
 .admin-search input, .admin-dialog-counter input { border-radius: var(--a-radius); }
-.admin-field input, .admin-field select, .admin-field textarea { background: var(--a-bg-2); box-shadow: inset 0 2px 5px color-mix(in srgb, var(--a-bg) 35%, transparent); }
 .admin-switch-track { border-radius: 999px; }
 
 /* ── Navegación ── */
@@ -4226,6 +4296,8 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
   .budget-item-row > :nth-child(7) { grid-column: 6; grid-row: 1; justify-self: end; }
   .budget-item-row .admin-field-label { position: static; width: auto; height: auto; clip-path: none; overflow: visible; font-size: 10px; }
   .budget-item-row input { min-height: 44px; padding-left: 6px; padding-right: 6px; }
+  .budget-item-row .admin-money span { width: 32px; }
+  .budget-item-row .admin-money input { padding-left: 38px; }
   .portal-table--items thead { display: none; }
   .portal-table--items tbody tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; padding: 12px; }
   .portal-table--items td.portal-item-cell { grid-column: 1 / -1; }
