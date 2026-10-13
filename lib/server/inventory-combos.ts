@@ -18,6 +18,7 @@ import {
   loadRentalSettings,
   parseComboSubstitutions,
   lockInventoryItems,
+  lockLiveEvent,
   maintenanceUnits,
   resolveRentalBuffers,
   type AssignmentRecord,
@@ -153,6 +154,9 @@ export async function commitComboInTx(tx: Tx, options: ComboCommitOptions, locke
   const state = locked
     ? await readComboState(tx, organizationId, event.id, options.inventoryId)
     : await lockComboState(tx, organizationId, event.id, options.inventoryId);
+  // Lock autoritativo del evento, siempre después de los ítems (mismo orden que la ruta simple).
+  // La lectura de arriba es solo una validación previa sin lock.
+  if (!(await lockLiveEvent(tx, organizationId, event.id))) return { ok: false, reason: "event-missing" };
   if (!state) return { ok: false, reason: "item-missing" };
   const { combo, definition } = state;
   if (BLOCKED_INVENTORY_STATUSES.includes(combo.status)) {
