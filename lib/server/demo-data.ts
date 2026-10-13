@@ -481,7 +481,7 @@ type DemoLead = {
   email: string;
   reason: string;
   message: string;
-  status: "NEW" | "CONTACTED" | "WON" | "LOST";
+  status: "NEW" | "CONTACTED" | "QUOTED" | "WON" | "LOST";
   createdDaysAgo: number;
   eventDateDays: number;
   location: string;
@@ -489,11 +489,15 @@ type DemoLead = {
 };
 
 const LEADS: readonly DemoLead[] = [
-  { id: "demo_lead_cerveza", name: "Patricia Giménez", company: "Cervecería Paraguaya", phone: "+595 981 300 700", email: "pgimenez@cervezaparaguaya.demo", reason: "Evento de fin de año", message: "Necesitamos pantallas para el evento de fin de año y una pantalla de bienvenida.", status: "NEW", createdDaysAgo: 1, eventDateDays: 40, location: "Asunción", internalNotes: null },
-  { id: "demo_lead_constructora", name: "Roberto Ayala", company: "Constructora Ayala", phone: "+595 984 112 233", email: "rayala@constructoraayala.demo", reason: "Lanzamiento de proyecto", message: "Lanzamos un barrio nuevo; queremos pantalla exterior y sonido.", status: "NEW", createdDaysAgo: 2, eventDateDays: 25, location: "Luque", internalNotes: null },
-  { id: "demo_lead_vision", name: "Carla Núñez", company: "Visión Banco", phone: "+595 972 664 812", email: "carla.nunez@visionbanco.demo", reason: "Jornada de sucursales", message: "Jornada regional de sucursales con pantalla principal y acreditación.", status: "CONTACTED", createdDaysAgo: 6, eventDateDays: 33, location: "Encarnación", internalNotes: "Pidió cotización para dos fechas; llamar el lunes." },
-  { id: "demo_lead_superseis", name: "Diego Ocampos", company: "Superseis", phone: "+595 991 204 118", email: "diego.ocampos@superseis.demo", reason: "Aniversario de tienda", message: "Aniversario de la sucursal con activación de fin de semana.", status: "WON", createdDaysAgo: 20, eventDateDays: -4, location: "Asunción", internalNotes: "Cerró la activación; facturar a 30 días." },
-  { id: "demo_lead_pixel", name: "Sandra Meza", company: "Agencia Punto Creativo", phone: "+595 983 991 004", email: "sandra.meza@punktocreativo.demo", reason: "Congreso interno", message: "Congreso de vendedores con pantalla principal y traducción.", status: "LOST", createdDaysAgo: 16, eventDateDays: 12, location: "San Bernardino", internalNotes: "Eligió otro proveedor por presupuesto." },
+  { id: "demo_lead_cerveza", name: "Patricia Giménez", company: "Cervecería Paraguaya", phone: "+595 984 220 700", email: "pgimenez@cervezaparaguaya.demo", reason: "Evento de fin de año", message: "Necesitamos pantallas para el evento de fin de año y una pantalla de bienvenida.", status: "NEW", createdDaysAgo: 1, eventDateDays: 40, location: "Asunción", internalNotes: null },
+  { id: "demo_lead_constructora", name: "Roberto Ayala", company: "Constructora Ayala", phone: "+595 984 112 905", email: "rayala@constructoraayala.demo", reason: "Lanzamiento de proyecto", message: "Lanzamos un barrio nuevo; queremos pantalla exterior y sonido.", status: "NEW", createdDaysAgo: 2, eventDateDays: 25, location: "Luque", internalNotes: null },
+  { id: "demo_lead_vision", name: "Carla Núñez", company: "Visión Banco", phone: "+595 972 664 330", email: "carla.nunez@visionbanco.demo", reason: "Jornada de sucursales", message: "Jornada regional de sucursales con pantalla principal y acreditación.", status: "CONTACTED", createdDaysAgo: 6, eventDateDays: 33, location: "Encarnación", internalNotes: "Pidió cotización para dos fechas; llamar el lunes." },
+  { id: "demo_lead_superseis", name: "Diego Ocampos", company: "Superseis", phone: "+595 991 204 118", email: "diego.ocampos@superseis.demo", reason: "Aniversario de tienda", message: "Aniversario de la sucursal con activación de fin de semana.", status: "WON", createdDaysAgo: 20, eventDateDays: 18, location: "Asunción", internalNotes: "Cerró la activación; facturar a 30 días." },
+  { id: "demo_lead_pixel", name: "Sandra Meza", company: "Agencia Punto Creativo", phone: "+595 983 991 450", email: "sandra.meza@punktocreativo.demo", reason: "Congreso interno", message: "Congreso de vendedores con pantalla principal y traducción.", status: "LOST", createdDaysAgo: 16, eventDateDays: 12, location: "San Bernardino", internalNotes: "Eligió otro proveedor por presupuesto." },
+  // Cliente con ficha completa (Tigo): una consulta que terminó en el presupuesto
+  // vinculado y otra posterior que coincide solo por el correo del cliente.
+  { id: "demo_lead_tigo", name: "Lucía Fernández", company: "Tigo Paraguay", phone: "+595 981 214 500", email: "eventos@tigo.demo", reason: "Activación de lanzamiento", message: "Queremos pantallas y un tótem para la activación de lanzamiento en el shopping.", status: "QUOTED", createdDaysAgo: 26, eventDateDays: 21, location: "Asunción", internalNotes: "Se armó el presupuesto desde esta consulta." },
+  { id: "demo_lead_tigo_expo", name: "Lucía Fernández", company: "Tigo Paraguay", phone: "+595 981 214 511", email: "eventos@tigo.demo", reason: "Pabellón para la próxima expo", message: "Vamos a repetir el pabellón de la Expo; ¿pueden pasarnos una nueva cotización?", status: "NEW", createdDaysAgo: 2, eventDateDays: 75, location: "Mariano Roque Alonso", internalNotes: null },
   // Sin respuesta hace semanas (issue #24): un lead que nunca se contactó.
   { id: "demo_lead_sin_respuesta", name: "Marcelo Aquino", company: "Frigorífico Concepción", phone: "+595 983 664 220", email: "maquino@frigorifico.concepcion.demo", reason: "Feria regional", message: "Necesitamos pantallas para una feria regional en Concepción; ¿tienen disponibilidad en octubre?", status: "NEW", createdDaysAgo: 24, eventDateDays: 32, location: "Concepción", internalNotes: "Entró por el sitio hace semanas y nadie lo contactó todavía." },
 ];
@@ -1010,14 +1014,15 @@ const DATASET_MINS = {
   promoterPhotos: PROMOTERS.length,
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
-  budgets: 7,
+  budgets: 8,
+  leads: LEADS.length,
   audits: 34,
   treasuryAccounts: TREASURY_ACCOUNTS.length,
   treasuryMovements: 16,
   bankStatements: 1,
   bankStatementRows: 6,
   expenses: EXPENSES.length,
-  expectedPayments: 8,
+  expectedPayments: 10,
   invitations: INVITATIONS.length,
   mailLogs: MAIL_LOGS.length,
   messageTemplates: DEMO_MESSAGE_TEMPLATES.length,
@@ -1149,7 +1154,8 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, bankStatements, bankStatementRows, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars, invoices, purchases, fiscalPeriods] = await Promise.all([
+  const [leads, clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, bankStatements, bankStatementRows, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars, invoices, purchases, fiscalPeriods] = await Promise.all([
+    db.lead.count({ where: { organizationId: organization.id } }),
     db.client.count({ where: { organizationId: organization.id } }),
     db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
     db.promoter.count({ where: { organizationId: organization.id, photoUrl: { not: null } } }),
@@ -1180,6 +1186,7 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     db.fiscalPeriod.count({ where: { organizationId: organization.id } }),
   ]);
   const complete =
+    leads >= DATASET_MINS.leads &&
     clients >= DATASET_MINS.clients &&
     clientLogos >= DATASET_MINS.clientLogos &&
     promoterPhotos >= DATASET_MINS.promoterPhotos &&
@@ -1566,7 +1573,12 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   // ── Presupuestos por rol (aprobado por portal, pendiente con link+QR, cambios pedidos) ──
   const budgetSeeds: Array<{
     id: string;
-    event: BuiltEvent;
+    /** Evento del presupuesto; sin él hace falta `clientId` (aprobado a la espera de crear el evento). */
+    event?: BuiltEvent;
+    clientId?: string;
+    /** Lead del que nació el presupuesto. */
+    leadId?: string;
+    deliveryAt?: Date;
     title: string;
     status: "APPROVED" | "SENT" | "NEGOTIATING" | "DRAFT" | "LOST";
     discount: number;
@@ -1626,6 +1638,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     },
     {
       id: "demo_budget_pendiente",
+      leadId: "demo_lead_tigo",
       event: second,
       title: `Alquiler de pantallas ${second.name}`,
       status: "SENT",
@@ -1734,6 +1747,38 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
         { id: "demo_budget_item_f2", name: "Operación técnica", quantity: 1, days: 2, unitPrice: 700_000, costPrice: 280_000 },
       ],
     },
+    // Aprobado sin evento: el cliente aceptó desde el portal y falta «Crear
+    // evento». Nació del lead de Superseis, así la barra de etapas arranca en Lead.
+    {
+      id: "demo_budget_sin_evento",
+      clientId: "demo_client_superseis",
+      leadId: "demo_lead_superseis",
+      title: "Activación aniversario Superseis",
+      status: "APPROVED",
+      discount: 0,
+      validUntil: at(base, 6, 18),
+      deliveryAt: at(base, 18, 10),
+      notes: "Activación de fin de semana en la sucursal; montaje el viernes a la tarde.",
+      plan: {
+        advance: 2_456_000,
+        terms: "Anticipo del 40% para reservar la fecha; saldo contra entrega.",
+        installments: [{ label: "Saldo", amount: 3_684_000, dueInDays: 25 }],
+      },
+      approval: {
+        at: pastInstant(withinMonth(base, 2, 11, 15), now),
+        byName: "Diego Ocampos",
+        method: "digital",
+        ip: "190.10.20.31",
+        userAgent: "Mozilla/5.0 (Linux; Android 14; LedBox Demo)",
+        note: "Aprobado; coordinamos el montaje con la gerencia de la sucursal.",
+      },
+      createdAt: at(base, -12, 10, 20),
+      items: [
+        { id: "demo_budget_item_h1", name: "Pantalla LED P3.9 500x500", quantity: 4, days: 2, unitPrice: 450_000, costPrice: 180_000 },
+        { id: "demo_budget_item_h2", name: "Tótem LED 2x1 m", quantity: 1, days: 2, unitPrice: 750_000, costPrice: 300_000 },
+        { id: "demo_budget_item_h3", name: "Operación técnica", quantity: 1, days: 2, unitPrice: 520_000, costPrice: 210_000 },
+      ],
+    },
     // Perdido (issue #24): el evento cancelado dejó el presupuesto sin cerrar.
     {
       id: "demo_budget_perdido",
@@ -1773,8 +1818,10 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     budgetsData.push({
       id: budget.id,
       ...org,
-      clientId: budget.event.clientId,
-      eventId: budget.event.id,
+      clientId: budget.event?.clientId ?? budget.clientId ?? "",
+      eventId: budget.event?.id ?? null,
+      leadId: budget.leadId ?? null,
+      deliveryAt: budget.deliveryAt ?? null,
       title: budget.title,
       status: budget.status,
       subtotal,
@@ -2217,6 +2264,36 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     },
   ];
   const expectedPaymentsData: Prisma.ExpectedPaymentUncheckedCreateInput[] = [
+    {
+      id: "demo_expected_sin_evento_advance",
+      ...org,
+      budgetId: "demo_budget_sin_evento",
+      concept: "advance",
+      slot: "advance",
+      installmentNumber: null,
+      label: "Anticipo",
+      amount: 2_456_000,
+      dueAt: at(base, 3, 0, 0),
+      status: "AWAITING",
+      expectedAccountId: "demo_treasury_ueno",
+      notes: "Anticipo del presupuesto aprobado; todavía sin transferencia.",
+      createdAt: at(base, -2, 11, 20),
+    },
+    {
+      id: "demo_expected_sin_evento_saldo",
+      ...org,
+      budgetId: "demo_budget_sin_evento",
+      concept: "balance",
+      slot: "balance",
+      installmentNumber: null,
+      label: "Saldo",
+      amount: 3_684_000,
+      dueAt: at(base, 25, 0, 0),
+      status: "AWAITING",
+      expectedAccountId: "demo_treasury_ueno",
+      notes: "Saldo contra entrega.",
+      createdAt: at(base, -2, 11, 20),
+    },
     {
       id: "demo_expected_aprobado_advance",
       ...org,
@@ -2919,6 +2996,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.eventTask.createMany({ data: tasksData });
       await tx.supplier.createMany({ data: suppliersData });
       await tx.supplierJob.createMany({ data: jobsData });
+      // Los leads van antes: algunos presupuestos nacen de un lead (Budget.leadId).
+      await tx.lead.createMany({ data: leadsData });
       await tx.budget.createMany({ data: budgetsData });
       await tx.budgetItem.createMany({ data: budgetItemsData });
       // Las cuentas van antes que los cobros y los gastos: todos las referencian.
@@ -2952,7 +3031,6 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
       await tx.eventInventory.createMany({ data: assignmentsData });
       await tx.budgetChangeRequest.createMany({ data: changeRequestsData });
-      await tx.lead.createMany({ data: leadsData });
       await tx.quoteRequest.create({ data: quoteData });
       await tx.quoteItem.createMany({ data: quoteItemsData });
       await tx.auditLog.createMany({ data: auditData });

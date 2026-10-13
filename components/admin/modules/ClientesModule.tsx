@@ -1,40 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  budgetStatusLabel,
-  checklistProgress,
   clientTypeLabel,
-  clientWhatsappMessage,
-  eventStatusLabel,
-  formatCountdown,
   formatDate,
   formatDateShort,
-  formatDateTime,
   formatMoney,
-  formatMonths,
   formatNumber,
-  formatTime,
   instagramHref,
   instagramLabel,
-  isOverdue,
-  isUpcomingWithin,
-  paymentStatusLabel,
-  paymentStatusTone,
-  statusTone,
   websiteHref,
   whatsappHref,
 } from "@/lib/admin-format";
 import { canWriteClients, matchesQuery } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { clientLogoUrl } from "@/lib/admin-types";
-import type {
-  AdminClientBudgetRow,
-  AdminClientDetail,
-  AdminClientEventRow,
-  AdminClientPaymentRow,
-  AdminClientRow,
-} from "@/lib/admin-types";
+import type { AdminClientRow } from "@/lib/admin-types";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { AdminIcon } from "../AdminIcons";
 import { useAdminSession } from "../AdminShell";
@@ -44,7 +26,6 @@ import {
   AdminButton,
   AdminCell,
   AdminDataState,
-  AdminDialog,
   AdminEmpty,
   AdminFormPanel,
   AdminIconLink,
@@ -52,7 +33,6 @@ import {
   AdminKpi,
   AdminModuleContext,
   AdminNote,
-  AdminPanel,
   AdminRow,
   AdminSelect,
   AdminTable,
@@ -65,8 +45,6 @@ import { SearchField, TextAreaField } from "../AdminFields";
 import { ClientQuickFields, EMPTY_CLIENT_QUICK, clientQuickPayload, clientQuickErrors, clientQuickFirstError } from "./ClientQuickForm";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { FIELD_LIMITS } from "@/lib/field-rules";
-import { ClientFiscalSnapshot } from "./ClientFiscalFields";
-import { locationLinkValid } from "./OperationQuickRules";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 
@@ -169,71 +147,11 @@ function sortClients(list: AdminClientRow[], order: string): AdminClientRow[] {
   return rows.sort((a, b) => activityTime(b) - activityTime(a) || compareByName(a, b));
 }
 
-/** Fecha y estado real de un cobro para la ficha: cobrado, pendiente o vencido. */
-function paymentWhen(payment: AdminClientPaymentRow): { label: string; title: string; overdue: boolean } {
-  if (payment.status === "RECEIVED") {
-    const at = payment.collectedAt ?? payment.paidAt;
-    return {
-      label: at ? formatDateShort(at) : "—",
-      title: at ? `Cobrado el ${formatDate(at)}` : "Cobro sin fecha de cobro",
-      overdue: false,
-    };
-  }
-  if (payment.status === "PENDING") {
-    return payment.dueAt
-      ? {
-          label: formatDateShort(payment.dueAt),
-          title: `Vence el ${formatDate(payment.dueAt)} · ${formatCountdown(payment.dueAt)}`,
-          overdue: isOverdue(payment.dueAt),
-        }
-      : { label: "Sin fecha", title: "Cobro pendiente sin vencimiento cargado", overdue: false };
-  }
-  return { label: formatDateShort(payment.createdAt), title: `Anulado · registrado el ${formatDate(payment.createdAt)}`, overdue: false };
-}
-
-/** A qué se imputa un cobro: presupuesto, factura, referencia o nada. */
-function paymentConcept(payment: AdminClientPaymentRow): { label: string; title: string } {
-  const detail = [payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : null, payment.reference].filter(Boolean).join(" · ");
-  if (payment.budget) return { label: payment.budget.title, title: detail || payment.budget.title };
-  if (payment.invoiceNumber) return { label: `Factura ${payment.invoiceNumber}`, title: detail };
-  if (payment.reference) return { label: payment.reference, title: "Cobro sin presupuesto asociado" };
-  return { label: "Sin presupuesto", title: "Cobro sin presupuesto asociado" };
-}
-
-/** Agenda primero (arranca antes) y después el historial, del más nuevo al más viejo. */
-function sortClientEvents(events: AdminClientEventRow[]): AdminClientEventRow[] {
-  const now = Date.now();
-  return [...events].sort((a, b) => {
-    const aTime = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
-    const bTime = b.startsAt ? new Date(b.startsAt).getTime() : Number.POSITIVE_INFINITY;
-    const aUpcoming = aTime >= now;
-    const bUpcoming = bTime >= now;
-    if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-    return aUpcoming ? aTime - bTime : bTime - aTime;
-  });
-}
-
-/** Estado del cobro en la ficha: el vencido se muestra como tal, sin inventar estados. */
-function paymentFact(payment: AdminClientPaymentRow): { label: string; tone: ReturnType<typeof paymentStatusTone>; title: string } {
-  if (paymentWhen(payment).overdue) {
-    return {
-      label: "Vencido",
-      tone: "danger",
-      title: `Cobro pendiente con vencimiento el ${formatDate(payment.dueAt)}`,
-    };
-  }
-  return {
-    label: paymentStatusLabel(payment.status),
-    tone: paymentStatusTone(payment.status),
-    title: payment.status === "PENDING" && payment.dueAt ? `Vence el ${formatDate(payment.dueAt)}` : "Estado real del cobro",
-  };
-}
-
 /**
  * Identidad del cliente (issue #36): logo subido servido con sesión o el
  * monograma de iniciales del avatar único del panel. Nunca un `<img>` a mano.
  */
-function ClientLogo({
+export function ClientLogo({
   client,
   size = 22,
   title,
@@ -260,7 +178,7 @@ function ClientLogo({
  * dibuja ni se reemplaza por otro— y el WhatsApp usa el número propio si
  * difiere del teléfono general.
  */
-function ClientLinks({
+export function ClientLinks({
   client,
   name,
   message,
@@ -312,7 +230,6 @@ export function ClientesModule() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [status, setStatus] = useState("");
-  const [detail, setDetail] = useState<AdminClientRow | null>(null);
   const [view, setView] = useAdminModuleView("clientes", CLIENTES_VIEWS);
   // En ancho compacto la lista también se lee como tarjetas (issue #139): la
   // tabla no entra en 390 sin cortar contacto, deuda y última actividad.
@@ -416,12 +333,7 @@ export function ClientesModule() {
       ],
       footer: (
         <span className="admin-actions">
-          <AdminButton
-            icon="eye"
-            title={`Ver la ficha de ${name}`}
-            aria-label={`Ver la ficha de ${name}`}
-            onClick={() => setDetail(client)}
-          />
+          <AdminIconLink href={`/clientes/${client.id}`} icon="eye" label={`Ver la ficha de ${name}`} />
           <ClientLinks client={client} name={name} compact skipWhatsapp={writable} />
           {writable && whatsappHref(client.whatsapp || client.phone) ? (
             <AdminWhatsappTemplateButton
@@ -488,9 +400,21 @@ export function ClientesModule() {
     setLogoRemoved(false);
     setFormError("");
     setStatus("");
-    setDetail(null);
     setShowForm(true);
   }
+
+  // «Editar» desde la ficha (/clientes/[id]) vuelve acá con `?editar=<id>`: se
+  // abre el mismo formulario de edición, una sola vez por cliente.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const editParam = searchParams.get("editar")?.trim() ?? "";
+  useEffect(() => {
+    if (!editParam || !writable || !clients.data) return;
+    const target = clients.data.find((client) => client.id === editParam);
+    if (target) openEdit(target);
+    router.replace("/clientes");
+    // openEdit solo escribe estado local: basta reevaluar cuando llegan los clientes.
+  }, [editParam, writable, clients.data]);
 
   function closeForm() {
     setShowForm(false);
@@ -804,12 +728,7 @@ export function ClientesModule() {
                     {/* La fila se queda con la ficha (issue #139): los links de
                         contacto salen de la grilla y viven en el detalle. */}
                     <span className="admin-actions">
-                      <AdminButton
-                        icon="eye"
-                        title={`Ver la ficha de ${name}`}
-                        aria-label={`Ver la ficha de ${name}`}
-                        onClick={() => setDetail(client)}
-                      />
+                      <AdminIconLink href={`/clientes/${client.id}`} icon="eye" label={`Ver la ficha de ${name}`} />
                     </span>
                   </AdminCell>
                 </AdminRow>
@@ -819,377 +738,11 @@ export function ClientesModule() {
         )}
       </AdminDataState>
 
-      {detail ? (
-        <ClientDetailDialog
-          client={detail}
-          writable={writable}
-          onEdit={openEdit}
-          onClose={() => setDetail(null)}
-        />
-      ) : null}
 
       {templateTarget ? (
         <MessageTemplateSendDialog target={templateTarget} onClose={() => setTemplateTarget(null)} />
 
       ) : null}
     </div>
-  );
-}
-
-/**
- * Ficha 360 del cliente (issue #34): métricas reales, presupuestos, eventos y
- * cobros del cliente abierto. Es solo lectura (VIEWER incluido): el API resuelve
- * la empresa activa y los datos salen tal cual de la base. La identidad, la
- * persona encargada y los links directos llegan del issue #36.
- *
- * La cronología del issue #33 se enchufa en el bloque «Historial», junto a las
- * listas, cuando el integrador una `lib/server/timeline.ts`.
- */
-function ClientDetailDialog({
-  client,
-  writable,
-  onEdit,
-  onClose,
-}: {
-  client: AdminClientRow;
-  writable: boolean;
-  onEdit: (client: AdminClientRow) => void;
-  onClose: () => void;
-}) {
-  const name = clientDisplayName(client);
-  const detail = useAdminResource(`/api/admin/clients/${client.id}`, (payload) => payload.clientDetail ?? null);
-
-  return (
-    <AdminDialog title={`Ficha del cliente · ${name}`} size="ficha" icon="clients" onClose={onClose}>
-      <AdminDataState
-        loading={detail.loading}
-        error={detail.error}
-        onRetry={detail.reload}
-        rows={6}
-        empty={!detail.data}
-        emptyTitle="Sin datos del cliente" emptyIcon="clients"
-        emptyHint="No pudimos leer la ficha de este cliente."
-      >
-        {detail.data ? <ClientDetailBody detail={detail.data} writable={writable} onEdit={onEdit} /> : null}
-      </AdminDataState>
-    </AdminDialog>
-  );
-}
-
-function ClientDetailBody({
-  detail,
-  writable,
-  onEdit,
-}: {
-  detail: AdminClientDetail;
-  writable: boolean;
-  onEdit: (client: AdminClientRow) => void;
-}) {
-  const { client, metrics } = detail;
-  const name = clientDisplayName(client);
-  const budgets = detail.budgets;
-  const events = useMemo(() => sortClientEvents(detail.events), [detail.events]);
-  const payments = detail.payments;
-  const contact = client.contactName || client.contactRole || client.contactPhone || client.contactEmail;
-
-  return (
-    <>
-      <header className="admin-client-head">
-        <div className="admin-client-id">
-          <ClientLogo client={client} size={64} />
-          <div className="admin-client-id-text">
-            <div className="admin-client-title">
-              <strong className="admin-client-name">{name}</strong>
-              <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
-              <AdminBadge tone={client.active ? "ok" : "neutral"}>{client.active ? "Activo" : "Inactivo"}</AdminBadge>
-            </div>
-            {/* Identidad fiscal explícita; el nombre histórico no es un contacto inferido. */}
-            {clientLegalName(client) ? <span className="admin-client-person">Razón social: {clientLegalName(client)}</span> : null}
-          </div>
-          <span className="admin-actions admin-client-links">
-            {writable ? (
-              <AdminButton
-                icon="edit"
-                title={`Editar ${name}`}
-                aria-label={`Editar ${name}`}
-                onClick={() => onEdit(detail.client)}
-              />
-            ) : null}
-            <ClientLinks client={client} name={name} message={clientWhatsappMessage(client.contactName || name)} />
-          </span>
-        </div>
-
-        {contact ? (
-          <div className="admin-client-person-card">
-            <span className="admin-client-contact-label">Encargado</span>
-            {client.contactName ? <strong>{client.contactName}</strong> : null}
-            {client.contactRole ? <span className="admin-cell-sub">{client.contactRole}</span> : null}
-            {client.contactPhone ? <span className="admin-nowrap">{client.contactPhone}</span> : null}
-            {client.contactEmail ? (
-              <AdminIconLink href={`mailto:${client.contactEmail}`} icon="mail" label={`Enviar correo a ${client.contactName ?? name}`} />
-            ) : null}
-          </div>
-        ) : null}
-
-        <p className="admin-client-contact">
-          <span className="admin-nowrap">
-            RUC <span className="admin-code">{client.ruc || "—"}</span>
-          </span>
-          <span className="admin-nowrap">{client.phone || "Sin teléfono"}</span>
-          <span>{client.email || "Sin correo"}</span>
-          <span className="admin-actions">
-            {client.email ? <AdminIconLink href={`mailto:${client.email}`} icon="mail" label={`Enviar correo general a ${name}`} /> : null}
-          </span>
-        </p>
-        {client.notes ? <p className="admin-dialog-text">{client.notes}</p> : null}
-      </header>
-
-      <dl className="admin-dialog-facts" aria-label="Identidad y ubicación del cliente">
-        <div><dt>Nombre histórico</dt><dd>{client.name}</dd></div>
-        {client.company ? <div><dt>Empresa histórica</dt><dd>{client.company}</dd></div> : null}
-        {client.billingEmail ? <div><dt>Correo de facturación</dt><dd>{client.billingEmail}</dd></div> : null}
-        {(client.city || client.department) ? <div><dt>Localidad</dt><dd>{[client.city, client.department].filter(Boolean).join(" · ")}</dd></div> : null}
-        {client.address ? <div><dt>Dirección</dt><dd>{client.address}</dd></div> : null}
-        {client.addressReference ? <div><dt>Referencia</dt><dd>{client.addressReference}</dd></div> : null}
-        {client.locationUrl && locationLinkValid(client.locationUrl) ? <div><dt>Ubicación</dt><dd><AdminIconLink href={client.locationUrl} icon="globe" label="Abrir ubicación del cliente" external /></dd></div> : null}
-      </dl>
-      <ClientFiscalSnapshot snapshot={client.rucSnapshot ?? null} />
-      {client.contacts?.length ? <AdminPanel title="Contactos por función" icon="clients">
-        <dl className="admin-dialog-facts">{client.contacts.map((person, index) => <div key={index}>
-          <dt>{person.role || "Contacto"}</dt><dd>{person.name}{person.phone ? ` · ${person.phone}` : ""}{person.email ? ` · ${person.email}` : ""}</dd>
-        </div>)}</dl>
-      </AdminPanel> : null}
-
-      <section className="admin-kpis" aria-label={`Métricas de ${name}`}>
-        <AdminKpi label="Contratos" icon="budgets" value={formatNumber(metrics.contracts)} note="presupuestos aprobados" tone={metrics.contracts > 0 ? "ok" : undefined} />
-        <AdminKpi label="Total contratado" icon="budgets" value={formatMoney(metrics.contracted)} note="Σ contratos aprobados" />
-        <AdminKpi label="Total cobrado" icon="finance" value={formatMoney(metrics.collected)} note="cobros recibidos" tone={metrics.collected > 0 ? "ok" : undefined} />
-        <AdminKpi
-          label="Saldo pendiente" icon="finance"
-          value={formatMoney(metrics.balance)}
-          // Honestidad del dato: si lo cobrado supera lo contratado (por ejemplo,
-          // una seña sobre una cotización todavía sin aprobar), no se dibuja un
-          // saldo negativo: se avisa que el cobro superó lo contratado.
-          note={metrics.collected > metrics.contracted ? "cobrado supera lo contratado" : "contratado − cobrado"}
-          tone={metrics.balance > 0 ? "warn" : undefined}
-        />
-        <AdminKpi
-          label="Mora" icon="alert"
-          value={formatMoney(metrics.overdue)}
-          note={
-            metrics.overdueCount > 0
-              ? `${formatNumber(metrics.overdueCount)} cobro${metrics.overdueCount === 1 ? "" : "s"} vencido${metrics.overdueCount === 1 ? "" : "s"}`
-              : "sin cobros vencidos"
-          }
-          tone={metrics.overdue > 0 ? "danger" : undefined}
-        />
-        <AdminKpi
-          label="Frecuencia" icon="calendar"
-          value={formatMonths(metrics.averageMonths)}
-          note={
-            metrics.frequencySamples > 0
-              ? `${formatNumber(metrics.frequencySamples)} intervalo${metrics.frequencySamples === 1 ? "" : "s"} entre contratos`
-              : "necesita 2 contratos"
-          }
-        />
-        <AdminKpi
-          label="Última contratación" icon="clock"
-          value={formatDate(metrics.lastContractAt)}
-          note={metrics.lastContractAt ? formatCountdown(metrics.lastContractAt, "short") : "sin contratos"}
-        />
-        <AdminKpi
-          label="Ticket promedio" icon="finance"
-          value={metrics.averageTicket === null ? "—" : formatMoney(metrics.averageTicket)}
-          note="por contrato"
-        />
-        <AdminKpi
-          label="Próxima actividad" icon="calendar"
-          value={metrics.nextEventAt ? formatDate(metrics.nextEventAt) : "—"}
-          note={metrics.nextEventName ?? "sin eventos por venir"}
-          tone={metrics.nextEventAt ? "accent" : undefined}
-        />
-        <AdminKpi label="Eventos" icon="events" value={formatNumber(metrics.events)} note={`${formatNumber(metrics.upcomingEvents)} en agenda`} />
-        <AdminKpi
-          label="Presupuestos" icon="budgets"
-          value={formatNumber(metrics.budgets)}
-          note={`${formatNumber(metrics.contracts)} aprobado${metrics.contracts === 1 ? "" : "s"} · ${formatNumber(metrics.lost)} perdido${metrics.lost === 1 ? "" : "s"}`}
-        />
-      </section>
-
-      {/* Historial del cliente: los hechos reales que explican las métricas. La
-          cronología (issue #33) se suma acá, sin otro estado que la ficha. */}
-      <section className="admin-client-history" aria-label={`Historial de ${name}`}>
-        <h3 className="admin-panel-title">
-          <span className="admin-panel-icon" aria-hidden="true">
-            <AdminIcon name="clock" size={13} />
-          </span>
-          Historial
-        </h3>
-
-        <AdminPanel
-          title="Presupuestos" icon="budgets"
-          meta={`${formatNumber(budgets.length)} · ${formatNumber(metrics.contracts)} aprobado${metrics.contracts === 1 ? "" : "s"}`}
-        >
-          {budgets.length === 0 ? (
-            <AdminEmpty icon="budgets" title="Sin presupuestos" hint="Este cliente todavía no tiene presupuestos cargados." />
-          ) : (
-            <AdminTable
-              view="cliente-presupuestos"
-              label={`Presupuestos de ${name}`}
-              columns={[
-                { label: "Fecha" },
-                { label: "Presupuesto" },
-                { label: "Estado" },
-                { label: "Total", end: true },
-                { label: "Cobrado", end: true },
-              ]}
-            >
-              {budgets.map((budget) => (
-                <AdminRow key={budget.id}>
-                  <BudgetDateCell budget={budget} />
-                  <AdminCell title={budget.event ? `${budget.title} · ${budget.event.name}` : budget.title}>
-                    <strong>{budget.title}</strong>
-                  </AdminCell>
-                  <BudgetStatusCell budget={budget} />
-                  <AdminCell end title={`Total del presupuesto: ${formatMoney(budget.total)}`}>
-                    {formatMoney(budget.total)}
-                  </AdminCell>
-                  <AdminCell
-                    end
-                    title={
-                      budget.collected > 0 || budget.overdue > 0
-                        ? `Cobrado ${formatMoney(budget.collected)}${budget.overdue > 0 ? ` · vencido ${formatMoney(budget.overdue)}` : ""}`
-                        : "Sin cobros imputados"
-                    }
-                  >
-                    {budget.collected > 0 ? (
-                      <span className="admin-nowrap">{formatMoney(budget.collected)}</span>
-                    ) : (
-                      <span className="admin-muted">—</span>
-                    )}
-                  </AdminCell>
-                </AdminRow>
-              ))}
-            </AdminTable>
-          )}
-        </AdminPanel>
-
-        <AdminPanel title="Eventos" icon="events" meta={`${formatNumber(events.length)} · ${formatNumber(metrics.upcomingEvents)} en agenda`}>
-          {events.length === 0 ? (
-            <AdminEmpty icon="events" title="Sin eventos" hint="Este cliente todavía no tiene eventos cargados." />
-          ) : (
-            <AdminTable
-              view="cliente-eventos"
-              label={`Eventos de ${name}`}
-              columns={[
-                { label: "Fecha" },
-                { label: "Evento" },
-                { label: "Estado" },
-                { label: "Checklist", end: true },
-              ]}
-            >
-              {events.map((event) => {
-                const progress = checklistProgress(event.tasks, { risk: isUpcomingWithin(event.startsAt) });
-                return (
-                  <AdminRow key={event.id}>
-                    <AdminCell title={event.startsAt ? formatDateTime(event.startsAt) : "Fecha a confirmar"}>
-                      {event.startsAt ? `${formatDateShort(event.startsAt)} · ${formatTime(event.startsAt)}` : "A confirmar"}
-                    </AdminCell>
-                    <AdminCell title={event.location || "Sin lugar definido"}>
-                      <strong>{event.name}</strong>
-                    </AdminCell>
-                    <AdminCell>
-                      <AdminBadge tone={statusTone(event.status)}>{eventStatusLabel(event.status)}</AdminBadge>
-                    </AdminCell>
-                    <AdminCell end title={progress.title}>
-                      {event.tasks.length === 0 ? (
-                        <span className="admin-muted">—</span>
-                      ) : (
-                        <AdminBadge tone={progress.tone}>{progress.label}</AdminBadge>
-                      )}
-                    </AdminCell>
-                  </AdminRow>
-                );
-              })}
-            </AdminTable>
-          )}
-        </AdminPanel>
-
-        <AdminPanel
-          title="Cobros" icon="finance"
-          meta={`${formatNumber(payments.length)} · ${formatMoney(metrics.collected)} cobrado${metrics.overdue > 0 ? ` · ${formatMoney(metrics.overdue)} vencido` : ""}`}
-        >
-          {payments.length === 0 ? (
-            <AdminEmpty icon="finance" title="Sin cobros" hint="Este cliente todavía no tiene cobros registrados." />
-          ) : (
-            <AdminTable
-              view="cliente-pagos"
-              label={`Cobros de ${name}`}
-              columns={[
-                { label: "Fecha" },
-                { label: "Concepto" },
-                { label: "Método" },
-                { label: "Monto", end: true },
-                { label: "Estado" },
-              ]}
-            >
-              {payments.map((payment) => {
-                const when = paymentWhen(payment);
-                const concept = paymentConcept(payment);
-                const fact = paymentFact(payment);
-                return (
-                  <AdminRow key={payment.id}>
-                    <AdminCell title={when.title}>
-                      {when.overdue ? (
-                        <span className="admin-nowrap" data-tone="danger">
-                          {when.label}
-                        </span>
-                      ) : (
-                        when.label
-                      )}
-                    </AdminCell>
-                    <AdminCell title={concept.title}>
-                      {payment.budget ? <strong>{concept.label}</strong> : concept.label}
-                    </AdminCell>
-                    <AdminCell title={payment.chequeDate ? `Cheque del ${formatDate(payment.chequeDate)}` : payment.method || "Sin método"}>
-                      {payment.method || "—"}
-                    </AdminCell>
-                    <AdminCell end title={formatMoney(payment.amount)}>
-                      <strong>{formatMoney(payment.amount)}</strong>
-                    </AdminCell>
-                    <AdminCell>
-                      <AdminBadge tone={fact.tone} title={fact.title}>
-                        {fact.label}
-                      </AdminBadge>
-                    </AdminCell>
-                  </AdminRow>
-                );
-              })}
-            </AdminTable>
-          )}
-        </AdminPanel>
-      </section>
-    </>
-  );
-}
-
-function BudgetDateCell({ budget }: { budget: AdminClientBudgetRow }) {
-  return (
-    <AdminCell title={`Alta del presupuesto: ${formatDate(budget.createdAt)}`}>
-      {formatDateShort(budget.createdAt)}
-    </AdminCell>
-  );
-}
-
-function BudgetStatusCell({ budget }: { budget: AdminClientBudgetRow }) {
-  const approval = budget.approvedAt
-    ? `Aprobado el ${formatDateTime(budget.approvedAt)} · ${budget.approvalMethod === "manual" ? "panel" : "portal del cliente"}`
-    : budget.validUntil
-      ? `Válido hasta el ${formatDate(budget.validUntil)}`
-      : "Sin aprobación ni vencimiento cargado";
-  return (
-    <AdminCell title={approval}>
-      <AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge>
-    </AdminCell>
   );
 }
