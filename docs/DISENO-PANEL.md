@@ -539,9 +539,13 @@ contrastes de texto ≥ 4,5 y de borde ≥ 3 desde `globals.css`.
   vuelta al disparador, `aria-modal`, y Esc/Tab solo del diálogo de arriba. El
   diálogo se monta dentro de `.admin-root` (portal): uno abierto desde otro ya no
   queda recortado por la hoja de abajo.
-- Los siete diálogos armados a mano (`Finanzas`, `Usuarios`) conservan su
-  estructura y toman el encabezado y el ancho nuevos; pasarlos a `AdminDialog` y
-  convertir los `AdminFormPanel` inline queda para otra tanda.
+- Los siete diálogos armados a mano (`Finanzas`, `Usuarios`) pasaron a
+  `AdminDialog` con `footer` (y `dirty` donde hay datos cargados); Esc ya no los
+  cierra sin confirmar. Alta y edición de evento y de ítem de inventario también
+  son ventanas (`wide` en inventario, secciones `AdminDialogSection`). Leads
+  mantiene el detalle como panel de lectura y solo la edición del seguimiento
+  (estado y notas) es una ventana. `AdminFormPanel` sigue en uso en otros módulos
+  (Clientes, Proveedores, Promotoras, gastos, movimientos de equipo).
 - Adoptados con `description`, `footer` y `dirty`: Nuevo cliente
   (`ClientQuickForm`), Crear evento (`BudgetQuickCreate`) y Precio y condiciones
   (`BudgetPricingDialog`).
