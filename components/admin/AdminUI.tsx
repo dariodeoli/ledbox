@@ -732,11 +732,23 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
  * Sección de un diálogo: título chico en mayúsculas y grilla de dos columnas en
  * escritorio (una en celular). Un campo `wide` ocupa el ancho completo.
  */
-export function AdminDialogSection({ title, children }: { title?: string; children: React.ReactNode }) {
+export function AdminDialogSection({
+  title,
+  id,
+  stack,
+  children,
+}: {
+  title?: string;
+  /** Ancla de la sección (navegación dentro de una ficha). */
+  id?: string;
+  /** Contenido en una sola columna de bloques (fichas) en lugar de la grilla de dos columnas de los formularios. */
+  stack?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="admin-dialog-section">
+    <section className="admin-dialog-section" id={id}>
       {title ? <h3 className="admin-dialog-section-title">{title}</h3> : null}
-      <div className="admin-dialog-grid">{children}</div>
+      <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"}>{children}</div>
     </section>
   );
 }
@@ -1000,6 +1012,9 @@ export function AdminKpi({
   icon,
   loading,
   state,
+  onClick,
+  active,
+  actionLabel,
 }: {
   label: string;
   /** `undefined`/`null` = todavía sin dato: se muestra el esqueleto, nunca un 0. */
@@ -1011,13 +1026,19 @@ export function AdminKpi({
   loading?: boolean;
   /** Estado propio (grillas con varios recursos: cada KPI espera el suyo). */
   state?: KpiState;
+  /** Con acción, el indicador es un botón que filtra la pantalla al tocarlo. */
+  onClick?: () => void;
+  /** El filtro que dispara este indicador está aplicado. */
+  active?: boolean;
+  /** Qué hace al tocarlo (nombre accesible y `title`). */
+  actionLabel?: string;
 }) {
   const groupState = useContext(AdminKpiStateContext);
   const effective: KpiState = loading === true ? "loading" : loading === false ? "ready" : state ?? groupState;
   const current: KpiState = effective === "ready" && value == null ? "loading" : effective;
   const shown = current === "ready";
-  return (
-    <div className="admin-kpi" data-tone={shown ? tone : undefined} data-loading={current === "loading" ? "true" : undefined} data-state={current}>
+  const inner = (
+    <>
       <span className="admin-kpi-label">
         {icon ? (
           <span className="admin-kpi-icon" aria-hidden="true">
@@ -1041,6 +1062,27 @@ export function AdminKpi({
         <strong className="admin-kpi-value" title={value ?? undefined}>{value}</strong>
       )}
       {note && shown ? <span className="admin-kpi-note" title={note}>{note}</span> : null}
+    </>
+  );
+  const attrs = { "data-tone": shown ? tone : undefined, "data-loading": current === "loading" ? "true" : undefined, "data-state": current };
+  if (onClick && shown) {
+    return (
+      <button
+        type="button"
+        className="admin-kpi admin-kpi--action"
+        {...attrs}
+        aria-pressed={active ?? false}
+        data-active={active ? "true" : undefined}
+        title={actionLabel ?? `Filtrar por ${label}`}
+        onClick={onClick}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div className="admin-kpi" {...attrs}>
+      {inner}
     </div>
   );
 }
