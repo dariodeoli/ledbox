@@ -386,3 +386,25 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     items: quote.items.map((item) => ({ name: item.productName, quantity: item.quantity })),
   };
 }
+
+/** Tope diario de preórdenes del catálogo por empresa (además del rate-limit por IP). */
+export const PREORDER_DAILY_LIMIT = 200;
+
+/**
+ * ¿La empresa ya recibió el tope de preórdenes hoy (día de Asunción)? Cuenta los pedidos
+ * reales del catálogo guardados; `retryAfter` son los segundos hasta el próximo día.
+ * Es un tope blando: dos pedidos simultáneos justo en el límite pueden pasarlo por poco.
+ */
+export async function preorderDailyLimit(
+  organizationId: string,
+  options: { now?: Date; limit?: number; client?: Pick<typeof db, "quoteRequest"> } = {},
+): Promise<{ reached: boolean; used: number; limit: number; retryAfter: number }> {
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? PREORDER_DAILY_LIMIT;
+  const today = dayKeyOf(now);
+  const used = await (options.client ?? db).quoteRequest.count({
+    where: { organizationId, source: "catalogo", createdAt: { gte: dayStart(today) } },
+  });
+  const retryAfter = Math.max(60, Math.ceil((dayStart(nextDayKey(today)).getTime() - now.getTime()) / 1000));
+  return { reached: used >= limit, used, limit, retryAfter };
+}

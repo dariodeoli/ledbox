@@ -54,3 +54,12 @@ test("create-event: el tope del plan se repite dentro de la transacción, despu�
   assert.match(src, /error instanceof PlanLimitError/);
   assert.match(read("lib/server/plan-limits.ts"), /FROM "Organization" WHERE "id" = \$\{context\.organizationId\} FOR UPDATE/);
 });
+
+test("catálogo público: la preorden responde 429 al superar el tope diario por empresa, además del rate-limit por IP", () => {
+  const src = read("app/api/catalog/[orgSlug]/preorder/route.ts");
+  assert.match(src, /rateLimit\(`catalog:preorder:/);
+  assert.match(src, /preorderDailyLimit\(context\.organization\.id\)/);
+  assert.match(src, /status: 429/);
+  assert.match(src, /"Retry-After"/);
+  assert.ok(src.indexOf("preorderDailyLimit(") > src.indexOf("context.demo"));
+});

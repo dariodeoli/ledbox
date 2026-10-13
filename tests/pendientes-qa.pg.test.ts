@@ -71,7 +71,29 @@ test("pendientes QA en PostgreSQL", { skip: !process.env.TEST_DATABASE_URL }, as
       const none = await leadsForClient(db, a.org, { emails: [], phones: [] }, new Set());
       assert.equal(none.length, 0);
     });
+
+    await t.test("tope diario de preórdenes: cuenta solo la empresa y el día de hoy", async () => {
+      const { preorderDailyLimit, PREORDER_DAILY_LIMIT } = await import("../lib/server/catalog-public");
+      assert.equal(PREORDER_DAILY_LIMIT, 200);
+      const a = await seedOrg(null);
+      const b = await seedOrg(null);
+      const make = (org: string, over: Record<string, unknown> = {}) =>
+        db.quoteRequest.create({ data: { id: randomUUID(), organizationId: org, source: "catalogo", status: "NEW", ...over } });
+      await make(a.org);
+      await make(a.org);
+      await make(a.org, { createdAt: new Date(Date.now() - 3 * 86_400_000) });
+      await make(a.org, { source: "website" });
+      await make(b.org);
+      const under = await preorderDailyLimit(a.org, { limit: 3 });
+      assert.equal(under.used, 2);
+      assert.equal(under.reached, false);
+      const hit = await preorderDailyLimit(a.org, { limit: 2 });
+      assert.equal(hit.reached, true);
+      assert.ok(hit.retryAfter >= 60 && hit.retryAfter <= 86_400);
+      assert.equal((await preorderDailyLimit(b.org, { limit: 2 })).reached, false);
+    });
   } finally {
+    await db.quoteRequest.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.lead.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.event.deleteMany({ where: { organizationId: { in: orgs } } });
     await db.client.deleteMany({ where: { organizationId: { in: orgs } } });
