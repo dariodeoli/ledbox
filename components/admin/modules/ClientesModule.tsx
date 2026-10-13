@@ -273,7 +273,9 @@ export function ClientesModule() {
   const trash = useTrashFlow("Client", { onChanged: clientsResource.reload });
 
   const rows = useMemo(() => {
-    const list = (filter === "ARCHIVED" ? archivedClients : clients.data ?? [])
+    // La plata no se archiva: con saldo o deuda vencida también se listan los archivados.
+    const owing = kpi === "BALANCE" || filter === "OVERDUE";
+    const list = (filter === "ARCHIVED" ? archivedClients : owing ? allClients ?? [] : clients.data ?? [])
       .filter((client) => (segment === "ALL" ? true : client.type === segment))
       .filter((client) => (kpi ? matchesKpi(client, kpi) : true))
       .filter((client) => {
@@ -297,7 +299,7 @@ export function ClientesModule() {
         ]),
       );
     return sortClients(list, order);
-  }, [clients.data, archivedClients, query, segment, kpi, filter, order]);
+  }, [clients.data, allClients, archivedClients, query, segment, kpi, filter, order]);
 
   /**
    * Acciones de la fila y de la tarjeta (rediseño): una sola visible —cobrar
@@ -399,7 +401,12 @@ export function ClientesModule() {
     };
   });
 
-  const totals = useMemo(() => portfolioKpis(clients.data ?? []), [clients.data]);
+  const totals = useMemo(() => {
+    const active = portfolioKpis(clients.data ?? []);
+    // Saldos sobre toda la cartera: un cliente archivado que debe sigue contando.
+    const all = portfolioKpis(allClients ?? []);
+    return { ...active, withBalance: all.withBalance, balanceAmount: all.balanceAmount };
+  }, [clients.data, allClients]);
   const segmentCounts = useMemo(() => {
     const list = clients.data ?? [];
     return { ALL: list.length, FINAL: list.filter((c) => c.type === "FINAL").length, RESELLER: list.filter((c) => c.type === "RESELLER").length };

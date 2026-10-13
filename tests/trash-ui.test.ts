@@ -241,3 +241,9 @@ test("lo archivado no cuenta en dashboard, resumen, calendario ni contadores del
     assert.match(read("components", "admin", "modules", file), /event\.archivedAt \|\|/, `${file}: el archivado muestra «en N d»`);
   }
 });
+
+test("clientes: los saldos cuentan también a los archivados (la plata no se archiva)", () => {
+  const source = readFileSync(join(process.cwd(), "components/admin/modules/ClientesModule.tsx"), "utf8");
+  assert.match(source, /withBalance: all\.withBalance, balanceAmount: all\.balanceAmount/);
+  assert.match(source, /owing \? allClients/);
+});
