@@ -217,6 +217,9 @@ export function eventReadiness(
 }
 
 /** Filtros de los indicadores de la cabecera: cada uno filtra la lista al tocarlo. */
+/** Ventana (días) del indicador «Con pendientes». */
+export const GAPS_WINDOW_DAYS = 14;
+
 export type EventFocus = "next7" | "live" | "gaps" | "close";
 
 export function matchesFocus(event: ReadinessEvent, focus: EventFocus, readiness: EventReadiness): boolean {
@@ -227,7 +230,8 @@ export function matchesFocus(event: ReadinessEvent, focus: EventFocus, readiness
     case "live":
       return readiness.phase === "live";
     case "gaps":
-      return readiness.gaps.length > 0;
+      // Solo lo accionable: abiertos que empiezan en los próximos 14 días o ya están en curso.
+      return readiness.gaps.length > 0 && (readiness.phase === "live" || (readiness.phase === "upcoming" && startsWithinDays(event, GAPS_WINDOW_DAYS)));
     case "close":
       return readiness.phase === "ended";
   }
