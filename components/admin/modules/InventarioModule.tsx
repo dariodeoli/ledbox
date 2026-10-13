@@ -62,7 +62,7 @@ import {
   AdminToolbar,
   type AdminMenuItem,
 } from "../AdminUI";
-import { AttachmentInput, Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { AttachmentInput, Combobox, DateField, MoneyField, NumberField, SearchField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
 import { InventoryIncidentsDialog } from "./InventoryIncidents";
@@ -73,6 +73,7 @@ import { AdminImageBox } from "../AdminImageBox";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { ComboDialog } from "./ComboDialog";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
+import { CATALOG_AUDIENCE_LABEL, CATALOG_AUDIENCE_OPTIONS, effectiveAudience, type CatalogAudience } from "@/lib/catalog-audience";
 import { INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 
 const KIND_OPTIONS = [
@@ -112,8 +113,8 @@ const EMPTY_FORM = {
   sku: "",
   inventoryKind: "REUSABLE",
   quantity: "1",
-  /** «Visible en la web» (issue #111): arranca apagado, nada se publica solo. */
-  visibleOnWeb: false,
+  /** Alcance en la tienda web: arranca oculto, nada se publica solo. */
+  catalogAudience: "HIDDEN" as CatalogAudience,
   imageUrl: "",
   listPrice: "",
   listFromDays: "0",
@@ -145,7 +146,7 @@ const EMPTY_EDIT = {
   dailyCost: "",
   notes: "",
   publicDescription: "",
-  visibleOnWeb: false,
+  catalogAudience: "HIDDEN" as CatalogAudience,
   imageUrl: "",
   /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
   bufferBeforeHours: "",
@@ -170,7 +171,7 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     dailyCost: item.dailyCost > 0 ? String(item.dailyCost) : "",
     notes: item.notes ?? "",
     publicDescription: item.publicDescription ?? "",
-    visibleOnWeb: item.visibleOnWeb,
+    catalogAudience: effectiveAudience(item),
     bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
     bufferAfterHours: bufferHoursText(item.bufferAfterMin),
     // La caja de la URL manual no precarga la ruta de la foto subida: son cosas
@@ -690,7 +691,7 @@ export function InventarioModule() {
       sku: sku || undefined,
       inventoryKind: form.inventoryKind,
       quantity: Number(form.quantity) || 1,
-      visibleOnWeb: form.visibleOnWeb,
+      catalogAudience: form.catalogAudience,
       imageUrl: image,
       listPrice: prices.values.listPrice ?? 0,
       listFromDays: prices.values.listFromDays ?? 0,
@@ -843,7 +844,7 @@ export function InventarioModule() {
       dailyCost: dailyCost ?? 0,
       notes: editForm.notes,
       publicDescription: editForm.publicDescription,
-      visibleOnWeb: editForm.visibleOnWeb,
+      catalogAudience: editForm.catalogAudience,
       imageUrl: image,
       // Solo se mandan los tiempos que la persona cambió (no se pisa un valor en minutos no enteros).
       ...(editForm.bufferBeforeHours !== editFormFromItem(editItem).bufferBeforeHours
@@ -1248,12 +1249,13 @@ export function InventarioModule() {
               error={photoError}
               disabled={busy || photoBusy}
             />
-            <SwitchField
-              label="Visible en la web"
-              help={INVENTORY_FIELD_HELP.visibleOnWeb}
-              checked={form.visibleOnWeb}
-              onChange={(checked) => setForm({ ...form, visibleOnWeb: checked })}
-              hint="Para el catálogo público."
+            <SegmentedField
+              label="Visibilidad en la tienda"
+              help={INVENTORY_FIELD_HELP.catalogAudience}
+              value={form.catalogAudience}
+              onChange={(value) => setForm({ ...form, catalogAudience: value as CatalogAudience })}
+              options={[...CATALOG_AUDIENCE_OPTIONS]}
+              hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
             />
           </AdminDisclosure>
 
@@ -1363,12 +1365,13 @@ export function InventarioModule() {
               onChange={(value) => setEditForm({ ...editForm, status: value })}
               options={STATUS_PICK_OPTIONS}
             />
-            <SwitchField
-              label="Visible en la web"
-              checked={editForm.visibleOnWeb}
-              help={INVENTORY_FIELD_HELP.visibleOnWeb}
-              onChange={(checked) => setEditForm({ ...editForm, visibleOnWeb: checked })}
-              hint="Para el catálogo público."
+            <SegmentedField
+              label="Visibilidad en la tienda"
+              help={INVENTORY_FIELD_HELP.catalogAudience}
+              value={editForm.catalogAudience}
+              onChange={(value) => setEditForm({ ...editForm, catalogAudience: value as CatalogAudience })}
+              options={[...CATALOG_AUDIENCE_OPTIONS]}
+              hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
             />
           </AdminDialogSection>
 
@@ -1777,14 +1780,13 @@ export function InventarioModule() {
               <dd>{priceText(selected.minimumPrice)}</dd>
             </div>
           </dl>
-          {/* «Visible en la web» (issue #111): la landing es estática hoy; el
-              flag queda listo para el catálogo dinámico. */}
+          {/* Alcance en la tienda web de la empresa (Oculto / Cliente final / Mayorista / Ambos). */}
           <p className="admin-note">
             <AdminBadge
-              tone={selected.visibleOnWeb ? "ok" : undefined}
-              title="Cuando el catálogo de la landing sea dinámico, este ítem se publica o no según este estado."
+              tone={effectiveAudience(selected) !== "HIDDEN" ? "ok" : undefined}
+              title="Quién ve este producto en la tienda web de la empresa."
             >
-              {selected.visibleOnWeb ? "Visible en la web" : "No visible en la web"}
+              {effectiveAudience(selected) === "HIDDEN" ? "No visible en la tienda" : `En la tienda · ${CATALOG_AUDIENCE_LABEL[effectiveAudience(selected)]}`}
             </AdminBadge>
           </p>
           {selectedPriceWarning ? <AdminNote tone="warn">{selectedPriceWarning}</AdminNote> : null}

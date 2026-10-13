@@ -1441,6 +1441,10 @@ export type AdminLeadQuote = {
   startsAt?: string | null;
   endsAt?: string | null;
   respondBy?: string | null;
+  /** Lista de precios del pedido: RETAIL (cliente final) o WHOLESALE (catálogo mayorista). */
+  priceList?: string;
+  /** Cliente mayorista vinculado por el link del catálogo (pedidos mayoristas). */
+  clientId?: string | null;
   /** Presupuesto en que se convirtió. */
   budget?: { id: string } | null;
 };
@@ -1627,6 +1631,8 @@ export type AdminInventoryRow = {
   status: string;
   /** «Visible en la web» (issue #111): el catálogo público lo respeta. */
   visibleOnWeb: boolean;
+  /** Alcance en la tienda web: HIDDEN, RETAIL, WHOLESALE o BOTH (`visibleOnWeb` sigue sincronizado). */
+  catalogAudience: "HIDDEN" | "RETAIL" | "WHOLESALE" | "BOTH";
   /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
   publicDescription?: string | null;
   quantity: number;
@@ -2540,6 +2546,10 @@ export type AdminRentalSettings = {
   publicCatalogEnabled: boolean;
   publicShowPrices: boolean;
   whatsappPhone: string | null;
+  /** Tienda web: frase de la portada, color de marca (`#rrggbb`) y correo de contacto. */
+  storefrontTagline: string | null;
+  storefrontAccent: string | null;
+  storefrontEmail: string | null;
 };
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */

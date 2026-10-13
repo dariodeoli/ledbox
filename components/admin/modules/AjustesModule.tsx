@@ -6,6 +6,7 @@ import { AjustesTabs, type AdminAjustesSection } from "./AjustesTabs";
 import { AlquileresSettings } from "./AlquileresSettings";
 import { CorreoModule } from "./CorreoModule";
 import { EmpresaModule } from "./EmpresaModule";
+import { TiendaWebSettings } from "./TiendaWebSettings";
 import { PlanModule } from "./PlanModule";
 import { UsuariosModule } from "./UsuariosModule";
 
@@ -34,6 +35,7 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
       {section === "empresa" && canManage ? <EmpresaModule /> : null}
       {section === "correo" && canManage ? <CorreoModule /> : null}
       {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
+      {section === "tienda" && canManage ? <TiendaWebSettings /> : null}
       {section === "plan" ? <PlanModule /> : null}
       {section === "usuarios" && canManage ? <UsuariosModule /> : null}
     </>

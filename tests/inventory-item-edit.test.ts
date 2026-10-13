@@ -51,7 +51,7 @@ test("el formulario de edición cubre el ítem completo", () => {
     "Categoría",
     "Tipo",
     "Estado",
-    "Visible en la web",
+    "Visibilidad en la tienda",
     "Imagen (URL)",
     "Subir foto",
     "Reposición",
@@ -69,6 +69,7 @@ test("el formulario de edición cubre el ítem completo", () => {
   assert.match(module, /adminSend\(`\/api\/admin\/inventory\/\$\{editItem\.id\}\/image`, \{\}, "DELETE"\)/);
   assert.match(module, /setEditPhotoRemoved/);
   // El alta también trae el toggle y el detalle lo muestra.
-  assert.match(module, /visibleOnWeb: form\.visibleOnWeb/);
-  assert.match(module, /selected\.visibleOnWeb \? "Visible en la web" : "No visible en la web"/);
+  // El alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos) reemplaza al switch «Visible en la web».
+  assert.match(module, /catalogAudience: form\.catalogAudience/);
+  assert.match(module, /effectiveAudience\(selected\) === "HIDDEN" \? "No visible en la tienda"/);
 });

@@ -43,6 +43,7 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/ajustes/empresa": ["OWNER", "ADMIN"],
   "/ajustes/correo": ["OWNER", "ADMIN"],
   "/ajustes/alquileres": ["OWNER", "ADMIN"],
+  "/ajustes/tienda": ["OWNER", "ADMIN"],
   "/ajustes/usuarios": ["OWNER", "ADMIN"],
   "/estado/sistema": ["OWNER", "ADMIN"],
   "/estado/auditoria": ["OWNER", "ADMIN"],
