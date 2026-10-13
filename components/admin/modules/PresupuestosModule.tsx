@@ -43,6 +43,8 @@ import { counterofferExclusion } from "@/lib/quote-selection";
 import { quoteProductPrice } from "@/lib/quote-sharing";
 import { BudgetPricingDialog } from "./BudgetPricingDialog";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
+import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody, securityDepositTone } from "./BudgetSecurityDeposit";
+import { SECURITY_DEPOSIT_LABEL, isSecurityDepositStatus } from "@/lib/budget-security-deposit";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
 import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
 import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
@@ -739,6 +741,7 @@ export function PresupuestosModule() {
   const budgetsResource = useAdminResource("/api/admin/budgets", (payload) => ({
     budgets: payload.budgets ?? [],
     requests: payload.budgetRequests ?? [],
+    rentalDefaults: payload.rentalDefaults ?? { depositPercent: null, securityDepositDefault: null },
   }));
 
   const [query, setQuery] = useState("");
@@ -746,6 +749,9 @@ export function PresupuestosModule() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [createItems, setCreateItems] = useState<BudgetItemDraft[]>([]);
+  /** Seña y garantía del alta: sin tocar rige el default de Ajustes (ver BudgetCreationDeposit). */
+  const [createDeposit, setCreateDeposit] = useState(EMPTY_CREATION_DEPOSIT);
+  const [depositBudget, setDepositBudget] = useState<AdminBudgetRow | null>(null);
   const [eventName, setEventName] = useState("");
   const [eventEdit, setEventEdit] = useState<AdminBudgetRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -996,6 +1002,7 @@ export function PresupuestosModule() {
         ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
         { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
         { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
+        { label: budget.securityDeposit ? "Depósito de garantía" : "Definir garantía", icon: "wallet" as const, onClick: () => setDepositBudget(budget) },
         { label: "Inventario", icon: "inventory" as const, onClick: () => setLinksBudget(budget) },
         ...(!budget.approvedAt && budgetInPlay(budget) ? [{ label: "Aprobar manualmente", icon: "check" as const, onClick: () => openApproval(budget, "approve") }, { label: "Pedir cambios", icon: "alert" as const, onClick: () => openApproval(budget, "request_revision") }] : []),
       ] : []),
@@ -1087,6 +1094,13 @@ export function PresupuestosModule() {
               value: formatMoney(balance),
               title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}`,
             },
+            ...(budget.securityDeposit && isSecurityDepositStatus(budget.securityDepositStatus)
+              ? [{
+                  label: "Garantía",
+                  value: <><span className="admin-nowrap">{formatMoney(budget.securityDeposit)}</span> <AdminBadge tone={securityDepositTone(budget.securityDepositStatus)}>{SECURITY_DEPOSIT_LABEL[budget.securityDepositStatus]}</AdminBadge></>,
+                  title: `Depósito de garantía aparte del total: ${formatMoney(budget.securityDeposit)} · ${SECURITY_DEPOSIT_LABEL[budget.securityDepositStatus]}`,
+                }]
+              : []),
             {
               label: "Ítems",
               value: formatNumber(budget.items.length),
@@ -1193,6 +1207,7 @@ export function PresupuestosModule() {
       notes: leadId && notes.trim() ? notes : undefined,
       eventId: form.eventId || undefined,
       title: form.title,
+      ...creationDepositBody(createDeposit),
       items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes })),
     });
     setBusy(false);
@@ -1202,6 +1217,7 @@ export function PresupuestosModule() {
     }
     setForm(EMPTY_FORM);
     setCreateItems([]);
+    setCreateDeposit(EMPTY_CREATION_DEPOSIT);
     if (leadId) closeLeadDraft();
     setNotice(`Presupuesto «${form.title}» creado como borrador${leadId ? " desde el lead; el lead quedó en Cotizado si todavía no estaba ganado" : ""}. Podés abrir vista previa o enviarlo desde sus acciones.`);
     budgetsResource.reload();
@@ -1716,6 +1732,7 @@ export function PresupuestosModule() {
           ) : null}
           </div>
           <BudgetItemsEditor items={createItems} onChange={setCreateItems} disabled={busy} range={formRange} />
+          <BudgetCreationDeposit state={createDeposit} onChange={setCreateDeposit} defaults={budgetsResource.data?.rentalDefaults ?? { depositPercent: null, securityDepositDefault: null }} subtotal={budgetDraftSubtotal(createItems)} disabled={busy} />
           {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
           <div className="admin-dialog-foot">
             <AdminButton type="button" disabled={busy} onClick={() => { setShowForm(false); if (leadId) closeLeadDraft(); }}>Cancelar</AdminButton>
@@ -2440,6 +2457,14 @@ export function PresupuestosModule() {
       ) : null}
 
       {paymentsOpen ? <PaymentDetailsDialog onClose={() => setPaymentsOpen(false)} /> : null}
+
+      {depositBudget ? (
+        <SecurityDepositDialog
+          budget={depositBudget}
+          onClose={() => setDepositBudget(null)}
+          onSaved={(message) => { setNotice(message); budgetsResource.reload(); }}
+        />
+      ) : null}
 
       {linksBudget ? (
         <ItemLinksDialog

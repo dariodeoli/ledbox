@@ -9,6 +9,9 @@ import { budgetDraftSubtotal, budgetItemError, budgetUsesDays, emptyBudgetItem, 
 import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { formatMoney } from "@/lib/admin-format";
 
+/** Nombre del servicio libre del atajo «+ Transporte» (un ítem más del presupuesto). */
+export const TRANSPORT_ITEM_NAME = "Transporte";
+
 /** One editor for creation and commercial editing. Search is mounted only when requested. */
 export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
   items: BudgetItemDraft[]; onChange: (items: BudgetItemDraft[]) => void; disabled?: boolean;
@@ -57,6 +60,7 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
     </div> : null}
     <div className="admin-dialog-actions">
       <AdminButton type="button" icon="plus" disabled={disabled} onClick={() => setPicker("new")}>Agregar ítem</AdminButton>
+      <AdminButton type="button" icon="plus" disabled={disabled} title="Agrega un servicio libre «Transporte» con su precio: se suma al total y lo ve el cliente" onClick={() => onChange([...items, { ...emptyBudgetItem(), name: TRANSPORT_ITEM_NAME }])}>Transporte</AdminButton>
       <strong className="admin-nowrap" aria-live="polite">Subtotal {formatMoney(budgetDraftSubtotal(items))}</strong>
     </div>
   </div>;

@@ -2,9 +2,12 @@ import { withQuoteApproval, withQuoteCommercialEdit, QuoteComparisonError } from
 import { randomUUID } from "node:crypto";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { budgetItemError } from "@/lib/budget-items";
-import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { budgetMoneyValid, defaultDepositPlanRows, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { newBudgetDefaults, securityDepositPublic } from "@/lib/budget-security-deposit";
+import { getRentalSettings } from "@/lib/server/rental-settings";
+import { SecurityDepositError, equipmentReturnByEvent, setBudgetSecurityDeposit, transitionBudgetSecurityDeposit } from "@/lib/server/security-deposit";
 import { assertBudgetPlanLedger, recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
-import { CommercialStatus, type Prisma } from "@prisma/client";
+import { CommercialStatus, Prisma } from "@prisma/client";
 import { budgetStatusLabel } from "@/lib/admin-format";
 import { INVOICE_TAX_TYPES } from "@/lib/fiscal";
 import type { AdminInvoiceTaxType } from "@/lib/admin-types";
@@ -79,7 +82,8 @@ export async function GET() {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const [budgets, budgetRequests] = await Promise.all([
+  const [rental, budgets, budgetRequests] = await Promise.all([
+    getRentalSettings(organizationId),
     db.budget.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
@@ -120,9 +124,10 @@ export async function GET() {
       },
     }),
   ]);
-  return Response.json({ budgets: budgets.map((budget) => {
+  const returns = await equipmentReturnByEvent(organizationId, [...new Set(budgets.flatMap((budget) => (budget.eventId && budget.securityDeposit ? [budget.eventId] : [])))]);
+  return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault }, budgets: budgets.map((budget) => {
     const { logo, ...client } = budget.client;
-    return { ...budget, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
+    return { ...budget, equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
   }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
@@ -246,6 +251,15 @@ export async function POST(request: Request) {
   const ivaType = ivaField(body.ivaType);
   if (body.ivaType !== undefined && ivaType === undefined) return jsonError("La condición de IVA no es válida.", 400);
   const title = body.title.trim();
+  // Seña por empresa: sin plan en el body, nace «Seña N %» + «Saldo» con el
+  // porcentaje de Ajustes (o el `depositPercent` que eligió la persona). Un
+  // `installmentsJson` explícito (o `null` = sin plan) se respeta tal cual.
+  const rental = await getRentalSettings(organizationId);
+  const defaults = newBudgetDefaults(body, total, rental);
+  if (!defaults.ok) return jsonError(defaults.error, 400);
+  const installments = defaults.installments ? (defaults.installments as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+  // Depósito de garantía: opcional, aparte del total; default de la empresa.
+  const securityDeposit = defaults.securityDeposit;
   // Presupuestos que el lead ya tenía: no bloquean el alta, la UI los avisa.
   const existingBudgets = lead
     ? await db.budget.findMany({ where: { organizationId, leadId: lead.id }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, status: true, createdAt: true } })
@@ -279,6 +293,9 @@ export async function POST(request: Request) {
         ivaType: ivaType ?? undefined,
         warranty: textField(body.warranty, MAX_WARRANTY),
         notes: typeof body.notes === "string" ? body.notes.trim() : undefined,
+        installmentsJson: installments,
+        securityDeposit,
+        securityDepositStatus: securityDeposit ? "PENDING" : null,
         items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
       },
       include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
@@ -325,7 +342,8 @@ export async function POST(request: Request) {
       : `Creó el presupuesto «${budget.title}» del cliente «${budget.client.name}»`,
     detail: {
       fields: {
-        ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "materialCost", "laborCost", "deliveryAt", "validUntil", "ivaType", "eventId", "leadId"]),
+        ...auditPick(budget, ["title", "status", "subtotal", "discount", "total", "costEstimate", "materialCost", "laborCost", "deliveryAt", "validUntil", "ivaType", "eventId", "leadId", "securityDeposit", "securityDepositStatus"]),
+        ...(budget.installmentsJson ? { plan: "Plan de pagos por defecto o definido al crear" } : {}),
         items: budget.items.length,
         ...(budget.items.some((item) => item.inventoryId)
           ? { inventario: budget.items.filter((item) => item.inventory?.name).map((item) => `${item.name} → ${item.inventory?.name}`) }
@@ -443,6 +461,27 @@ async function patchBudget(request: Request) {
       },
     });
     return Response.json({ item: updated });
+  }
+
+  if (body.kind === "security-deposit" || body.kind === "security-deposit-status") {
+    try {
+      if (body.kind === "security-deposit") {
+        const amount = body.securityDeposit === null || body.securityDeposit === 0 ? null : body.securityDeposit;
+        if (amount !== null && typeof amount !== "number") return jsonError("La garantía debe ser un monto entero en guaraníes.", 400);
+        const row = await setBudgetSecurityDeposit(auth.context, budgetId, amount);
+        return Response.json({ securityDeposit: securityDepositPublic(row), budgetId });
+      }
+      const to = typeof body.to === "string" ? body.to.toUpperCase() : "";
+      const row = await transitionBudgetSecurityDeposit(auth.context, budgetId, {
+        to: to as never,
+        retainedAmount: typeof body.retainedAmount === "number" ? body.retainedAmount : undefined,
+        reason: typeof body.reason === "string" ? body.reason : null,
+      });
+      return Response.json({ securityDeposit: securityDepositPublic(row), budgetId });
+    } catch (error) {
+      if (error instanceof SecurityDepositError) return jsonError(error.message, error.status);
+      throw error;
+    }
   }
 
   if (body.kind === "editor") {

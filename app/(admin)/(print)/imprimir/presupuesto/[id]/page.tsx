@@ -27,6 +27,7 @@ import { PrintToolbar } from "../../../_components/PrintToolbar";
 import { AdminImageBox } from "@/components/admin/AdminImageBox";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { budgetUsesDays } from "@/lib/budget-items";
+import { securityDepositPublic } from "@/lib/budget-security-deposit";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 
 export const runtime = "nodejs";
@@ -70,6 +71,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   });
   if (!budget) notFound();
 
+  const securityDeposit = securityDepositPublic(budget);
   const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const balance = budget.total - paid;
   const issuedAt = formatDateTime(budget.createdAt);
@@ -224,6 +226,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
             <PrintField label="IVA" value={budget.ivaType ? invoiceTaxTypeLabel(budget.ivaType) : "—"} />
             <PrintField label="Moneda" value="Guaraníes (PYG), sin decimales" />
             {budget.warranty ? <PrintField label="Garantía" value={budget.warranty} wide /> : null}
+            {securityDeposit ? <PrintField label="Depósito de garantía" value={`${formatMoney(securityDeposit.amount)} · ${securityDeposit.statusLabel} · no forma parte del total`} wide /> : null}
             <PrintField label="Notas" value={budget.notes || "Sin notas adicionales."} wide />
           </div>
         </PrintSection>
