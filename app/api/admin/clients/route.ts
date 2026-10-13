@@ -50,7 +50,7 @@ export async function GET(request: Request) {
   // Solo los hechos de los clientes listados: nada de otra empresa y nada de
   // un cliente que no viaja en la respuesta.
   const clientIds = clients.map((client) => client.id);
-  const [budgets, payments, events] = clientIds.length
+  const [budgets, payments, events, catalogLinks] = clientIds.length
     ? await Promise.all([
         db.budget.findMany({
           where: { organizationId, clientId: { in: clientIds } },
@@ -64,8 +64,14 @@ export async function GET(request: Request) {
           where: { organizationId, clientId: { in: clientIds } },
           select: { clientId: true, name: true, status: true, startsAt: true, endsAt: true, createdAt: true },
         }),
+        // Link mayorista vigente por cliente: agregado en la base, acotado por empresa.
+        db.catalogAccessToken.groupBy({
+          by: ["clientId"],
+          where: { organizationId, clientId: { in: clientIds }, revokedAt: null },
+        }),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
+  const withCatalogLink = new Set(catalogLinks.map((row) => row.clientId));
   const budgetsByClient = factsByClient(budgets);
   const paymentsByClient = factsByClient(payments);
   const eventsByClient = factsByClient(events);
@@ -77,7 +83,12 @@ export async function GET(request: Request) {
       payments: paymentsByClient.get(client.id) ?? [],
       events: eventsByClient.get(client.id) ?? [],
     };
-    return { ...rest, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null, metrics: clientMetrics(facts) };
+    return {
+      ...rest,
+      logoUpdatedAt: logo?.updatedAt.toISOString() ?? null,
+      catalogLinkActive: withCatalogLink.has(client.id),
+      metrics: clientMetrics(facts),
+    };
   });
 
   return Response.json({ clients: rows });

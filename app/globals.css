@@ -1860,12 +1860,27 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 @keyframes admin-skeleton { to { background-position: -200% 0; } }
 
 /* Plantillas de columnas por vista */
-/* Clientes con la ficha 360 (issue #34): contratado y última actividad entran
-   al lugar del RUC (que sigue en el título de la fila, la ficha y la búsqueda).
-   Simplificada en #139: Instagram, web, correo y WhatsApp salen de la grilla
-   (viven en la ficha) y la columna de acciones queda con «Ver la ficha», así la
-   tabla entra sin scroll horizontal en desktop (1440). */
-.admin-table--clientes { --clientes-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.2fr) 5.5rem 5.5rem 2.75rem 2.75rem 5.25rem minmax(4.5rem, .9fr) 4.75rem 4.75rem; --admin-cols: var(--clientes-cols); --admin-table-min: 56rem; }
+/* Clientes (rediseño): tabla esencial —cliente, tipo, contacto, eventos,
+   contratado, saldo, última actividad y una acción visible + «•••»—. La fila
+   entera abre la ficha con un enlace extendido (`.admin-row-link::after`). */
+.admin-table--clientes { --clientes-cols: minmax(10rem, 1.8fr) 5.5rem minmax(8rem, 1.2fr) 3.5rem 6.5rem 6.5rem 5.5rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 56rem; }
+.admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
+.admin-table--clientes .admin-cell--actions { overflow: visible; }
+@media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }
+.admin-table--clientes .admin-cell--actions .admin-btn--row { padding-inline: 10px; letter-spacing: .04em; }
+.admin-row-link { color: inherit; text-decoration: none; }
+.admin-row-link::after { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
+.admin-row-link:hover strong { text-decoration: underline; }
+.admin-row-link:focus-visible { outline: none; }
+.admin-row-link:focus-visible::after { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-cards-item { position: relative; }
+.admin-cards-foot { position: relative; z-index: 1; }
+.admin-segments { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-segments .admin-subtab { min-height: 36px; }
+@media (max-width: 980px) {
+  .admin-segments { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+  .admin-segments .admin-subtab { flex: 0 0 auto; min-height: 44px; }
+}
 .admin-table--eventos { --eventos-cols: 7.5rem 7rem minmax(8.5rem, 1.6fr) minmax(6.5rem, 1.1fr) minmax(5.5rem, 1fr) 4rem 4.5rem 5.75rem 7.5rem; --admin-cols: var(--eventos-cols); --admin-table-min: 61rem; }
 /* Presupuestos (rediseño): una sola plantilla —número, cliente, evento o título,
    monto, seña/saldo, etapa, vencimiento y la acción de la fila—. Filas finas de
@@ -4502,14 +4517,10 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-ficha-main, .admin-ficha-side { display: grid; gap: 12px; min-width: 0; }
 .admin-ficha-main > .admin-subtabs { margin: 0; }
 .admin-ficha-panel { min-width: 0; }
-.admin-ficha-money, .admin-ficha-contact { display: grid; gap: 4px; margin: 0; }
-.admin-ficha-money > div, .admin-ficha-contact > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
-.admin-ficha-money dt, .admin-ficha-contact dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
-.admin-ficha-money dd, .admin-ficha-contact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--a-text); font-size: 13px; text-align: right; }
-.admin-ficha-money dd { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.admin-ficha-money dd[data-tone="ok"] { color: var(--a-ok-text); }
-.admin-ficha-money dd[data-tone="warn"] { color: var(--a-warn-text); }
-.admin-ficha-money dd[data-tone="danger"] { color: var(--a-danger-text); }
+.admin-ficha-contact { display: grid; gap: 4px; margin: 0; }
+.admin-ficha-contact > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.admin-ficha-contact dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.admin-ficha-contact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--a-text); font-size: 13px; text-align: right; }
 .admin-ficha-moves { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
 .admin-ficha-moves li { display: flex; gap: 8px; min-width: 0; }
 .admin-ficha-moves li > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

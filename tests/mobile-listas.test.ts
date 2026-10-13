@@ -41,11 +41,12 @@ test("clientes: tarjetas en ancho compacto con contacto, deuda, última activida
   assert.match(module, /const narrow = useAdminNarrowViewport\(\);/);
   assert.match(module, /const cardView = narrow \|\| view === "grid";/);
   assert.match(module, /cardView \? \(\n\s*<AdminCardGrid label="Clientes" cards=\{clientCards\} \/>/);
-  for (const label of ["Deuda vencida", "Última actividad"]) {
+  for (const label of ["Contratado", "Saldo", "Última actividad"]) {
     assert.ok(module.includes(`label: "${label}"`), `falta «${label}» en la tarjeta del cliente`);
   }
-  assert.match(module, /const primaryContact = client\.contactName/, "el contacto principal entra a la tarjeta");
-  assert.match(module, /label: client\.active \? "Activo" : "Inactivo"/, "el estado va en la tarjeta");
+  assert.match(module, /const primaryContact = clientContactLine\(client\)/, "el contacto principal entra a la tarjeta");
+  assert.match(module, /client\.active \? \[\] : \[\{ label: "Inactivo"/, "el estado inactivo va en la tarjeta");
+  assert.match(module, /footer: rowActions\(client\)/, "la tarjeta comparte las acciones de la fila");
   assert.match(module, /narrow \? null : \(\n\s*<AdminViewSwitch/);
 });
 
@@ -66,17 +67,18 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   assert.equal(row.includes("ClientLinks"), false, "los links salen de la grilla");
   assert.equal(row.includes("AdminWhatsappTemplateButton"), false, "WhatsApp sale de la grilla");
   assert.equal(/mailto:/.test(row), false, "el correo sale de la grilla");
-  assert.match(row, /<AdminIconLink href=\{`\/clientes\/\$\{client\.id\}`\} icon="eye"/, "la fila navega a la ficha como página propia");
-  // El correo sale de la celda de contacto: queda el teléfono y el título completo.
-  assert.match(module, /const contact = client\.contactPhone \|\| client\.phone;/);
+  assert.match(row, /<Link className="admin-row-link" href=\{`\/clientes\/\$\{client\.id\}`\}/, "la fila entera navega a la ficha como página propia");
+  assert.match(row, /\{rowActions\(client\)\}/, "una acción visible y el resto en «•••»");
+  // La celda de contacto muestra al encargado y su teléfono; el título trae el correo.
+  assert.match(module, /const contact = clientContactLine\(client\);/);
   // La ficha los conserva: es el reemplazo real, no una pérdida.
   const detail = repoFile("components/admin/modules/ClienteFichaModule.tsx");
   assert.match(detail, /<ClientLinks client=\{client\} name=\{name\}/, "la ficha mantiene los links");
   assert.match(detail, /mailto:/, "la ficha mantiene el correo");
-  // La plantilla de columnas se acorta: una acción en vez de cinco y menos ancho mínimo.
+  // La plantilla de columnas queda en ocho: cliente, tipo, contacto, eventos, contratado, saldo, actividad y acciones.
   const css = repoFile("app/globals.css");
   const regla = /\.admin-table--clientes \{ --clientes-cols: ([^;]+); --admin-cols: var\(--clientes-cols\); --admin-table-min: ([\d.]+)rem; \}/.exec(css);
   assert.ok(regla, "falta la plantilla de columnas de clientes");
-  assert.equal(regla[1].trim().endsWith("4.75rem"), true, "la columna de acciones tiene que achicarse sin cortar «Acciones»");
-  assert.equal(Number(regla[2]) <= 56, true, "el ancho mínimo tiene que bajar");
+  assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 8, "ocho columnas, sin estado ni presupuestos sueltos");
+  assert.equal(Number(regla[2]) <= 56, true, "el ancho mínimo no crece");
 });
