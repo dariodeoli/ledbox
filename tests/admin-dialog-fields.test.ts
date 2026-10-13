@@ -43,18 +43,30 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-test("campos: 40 px de alto, 44 px en celular y radio de 9 px", () => {
-  assert.match(darkBlock, /--a-field-h:\s*40px/);
+// Fuente única de los campos de la librería (v0.68): estilo y alturas de `CLASES_CAMPO`.
+// El paquete no la exporta por el entry: se lee el archivo publicado.
+const campoLib = readFileSync(join(root, "node_modules", "owncoding-ui", "src", "utils", "campo.js"), "utf8");
+
+test("campos: alto de la librería (44 px en celular, 36 px desde md) y 40 px solo para los controles propios", () => {
+  assert.match(campoLib, /CAMPO_ALTURA = 'h-11 md:h-9'/, "la librería cambió la altura de los campos: revisar el panel");
+  assert.match(darkBlock, /--a-field-h:\s*40px/, "los controles propios (combobox, contraseña, PIN) conservan 40 px");
   assert.match(darkBlock, /--a-field-radius:\s*9px/);
   assert.match(css, /@media \(max-width: 720px\) \{ \.admin-root \{ --a-field-h: 44px; \} \}/);
-  assert.match(rule(".admin-field input, .admin-field select, .admin-field textarea"), /min-height:\s*var\(--a-field-h\)/);
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\)[^{]*\{[^}]*min-height:\s*var\(--a-field-h\)/);
+  assert.doesNotMatch(rule(".admin-field input, .admin-field select, .admin-field textarea"), /min-height|padding|border/, "el aspecto de los campos de la librería no se pisa desde el panel");
 });
 
-test("campos: foco, error, válido y deshabilitado según el diseño aprobado", () => {
-  assert.match(css, /\.admin-field input:focus[^{]*\{[^}]*box-shadow:\s*0 0 0 3px var\(--a-focus-halo\)/, "foco: borde del acento + halo de 3 px");
-  assert.match(css, /\.admin-field input\[aria-invalid="true"\][^{]*\{[^}]*border-color:\s*var\(--a-danger\)[^}]*0 0 0 3px/, "error: borde rojo + halo");
-  assert.match(css, /\.admin-field\[data-state="valid"\] input[^{]*\{[^}]*--a-ok/, "válido: borde verde");
-  assert.match(css, /\.admin-field input:disabled[^{]*\{[^}]*opacity:\s*\.55/, "deshabilitado: opacidad .55");
+test("campos: foco, error, válido y deshabilitado salen de la librería; los controles propios conservan los suyos", () => {
+  // Librería (CAMPO_ESTADOS): anillo de 3 px, inválido por aria-invalid, ok y deshabilitado.
+  assert.match(campoLib, /focus:ring-\[3px\]/, "foco: borde de acento + anillo de 3 px");
+  assert.match(campoLib, /aria-\[invalid=true\]:border-bad/, "error: borde rojo por aria-invalid");
+  assert.match(campoLib, /\[&\[data-oc-estado=ok\]\]:border-ok/, "válido: borde verde por estado=ok");
+  assert.match(campoLib, /disabled:cursor-not-allowed/, "deshabilitado");
+  assert.match(fields, /estado=\{success && !error \? "ok" : undefined\}/, "el éxito del kit pasa a estado=ok de la librería");
+  // Controles propios que todavía no son de la librería.
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\):focus[^{]*\{[^}]*box-shadow:\s*0 0 0 3px var\(--a-focus-halo\)/, "foco: borde del acento + halo de 3 px");
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\)\[aria-invalid="true"\][^{]*\{[^}]*border-color:\s*var\(--a-danger\)[^}]*0 0 0 3px/, "error: borde rojo + halo");
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\):disabled[^{]*\{[^}]*opacity:\s*\.55/, "deshabilitado: opacidad .55");
   assert.match(rule(".admin-field-error"), /var\(--a-danger-text\)/);
   assert.match(rule(".admin-field-success"), /var\(--a-ok-text\)/);
   assert.match(rule(".admin-field-hint"), /font-size:\s*11\.5px/);
@@ -69,11 +81,12 @@ test("campos: etiqueta de 12 px con «*» en el acento y «opcional» a la derec
   assert.match(fields, /aria-hidden="true"> \*/, "el asterisco no se lee dos veces: el input ya es required");
 });
 
-test("campos: Gs, +595 y % comparten el segmento fijo con separador", () => {
-  assert.match(css, /\.admin-money span\s*\{[^}]*border-right:\s*1px solid/);
-  assert.match(css, /\.admin-money--suffix span\s*\{[^}]*border-left:\s*1px solid/);
+test("campos: Gs y % son adornos dentro del campo (librería) y +595 comparte el borde con el número", () => {
+  const ui = readFileSync(join(root, "node_modules", "owncoding-ui", "src", "components", "ui.jsx"), "utf8");
+  assert.match(ui, /inicio=\{<span className="text-xs font-semibold">\{prefix\}<\/span>\}/, "MoneyInput dibuja la moneda como adorno inicio");
+  assert.match(fields, /<SharedPercentField[\s\S]*?simbolo/, "el % es el adorno fin de la librería");
+  assert.doesNotMatch(css, /\.admin-money span\b|\.admin-money--suffix/, "el panel ya no reposiciona los adornos de la librería");
   assert.match(css, /\.admin-shared-phone button\[role="combobox"\]\s*\{[^}]*border-radius:\s*var\(--a-field-radius\) 0 0/);
-  assert.match(fields, /admin-money--suffix/);
 });
 
 test("kit: existe CheckboxField y los dos campos sueltos pasaron al kit", () => {

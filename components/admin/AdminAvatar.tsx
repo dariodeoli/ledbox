@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { colorDeNombre } from "owncoding-ui";
 import { initials } from "@/lib/admin-format";
 import { ADMIN_ROOT_ID } from "@/lib/admin-theme";
 import type { LogoVariant } from "@/lib/admin-types";
@@ -13,6 +14,12 @@ import type { LogoVariant } from "@/lib/admin-types";
  * permitida que pase el llamador (la `photoUrl` de una promotora, con
  * `referrerPolicy="no-referrer"`) → iniciales. Si la imagen falla, cae a las
  * iniciales: nunca queda un cuadro roto.
+ *
+ * Las iniciales de persona usan la paleta **sobria** de owncoding-ui
+ * (`colorDeNombre(nombre, "sobria")`, v0.68: solo azules y grises, nunca los tonos
+ * de ok/error/aviso, con texto ≥ 4,5:1 en claro y oscuro): un cliente no parece
+ * «error» o «éxito» por azar del nombre. Se conserva el DOM propio (`.admin-avatar`
+ * y `.admin-avatar-text`) porque las pruebas de navegador de hidratación dependen de él.
  *
  * El logo de empresa elige la variante por tema en **un solo lugar**: fondo
  * oscuro → `light`; fondo claro → `dark`. En papel siempre va la clara (la hoja
@@ -45,6 +52,7 @@ export function logoVariantForTheme(theme: "dark" | "light"): LogoVariant {
 
 function IdentityFrame({
   src,
+  name,
   fallback,
   size,
   photo,
@@ -52,6 +60,8 @@ function IdentityFrame({
   title,
 }: {
   src: string | null | undefined;
+  /** Nombre real: define el color estable de las iniciales de persona. */
+  name?: string | null;
   fallback: string;
   size: number;
   /** Foto de persona (recorte circular, `cover`) o logo (rectángulo redondeado, `contain`). */
@@ -91,7 +101,7 @@ function IdentityFrame({
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="admin-avatar-text">{fallback}</span>
+        <span className={photo ? `admin-avatar-text ${colorDeNombre(name ?? "", "sobria")}` : "admin-avatar-text"}>{fallback}</span>
       )}
     </span>
   );
@@ -111,7 +121,7 @@ export function AdminAvatar({
   className?: string;
   title?: string;
 }) {
-  return <IdentityFrame src={src} fallback={initials(name)} size={size} photo className={className} title={title} />;
+  return <IdentityFrame src={src} name={name} fallback={initials(name)} size={size} photo className={className} title={title} />;
 }
 
 /** Logo de la empresa: variante clara/oscura según el tema → monograma `LB`. */

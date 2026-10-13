@@ -32,6 +32,7 @@ import {
   type AdminTone,
 } from "@/lib/admin-format";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
+import { BankLogo } from "../BankLogo";
 import { InventoryLinkPicker } from "./BudgetInventoryPicker";
 import { counterofferExclusion } from "@/lib/quote-selection";
 import { BudgetPricingDialog } from "./BudgetPricingDialog";
@@ -553,16 +554,9 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           />
           {mark ? (
             <div className="admin-bank-preview">
-              {mark.asset ? (
-                <img className="admin-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
-              ) : (
-                <span className="admin-bank-mark" style={{ background: mark.color }} aria-hidden="true">
-                  {mark.initials}
-                </span>
-              )}
+              <BankLogo bank={details.bank} variant="horizontal" size="h-8" />
               <span>
                 <strong>{mark.label}</strong>
-                <small className="admin-cell-sub">{mark.asset ? " · logo oficial" : " · monograma hasta que haya logo versionado"}</small>
               </span>
             </div>
           ) : null}

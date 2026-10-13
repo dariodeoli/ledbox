@@ -1,5 +1,6 @@
 
 @import "owncoding-ui/tokens.css";
+@import "./oc-formularios.css";
 @tailwind utilities;
 
 /* Kit compartido #173: los controles heredan la piel del panel. Sin preflight. */
@@ -14,6 +15,21 @@
   --c-fono-text: 0 229 255;
   --c-interactivo: 107 107 130;
   --c-bad-text: 255 150 150;
+  /* Resto de lo que leen los campos y controles de la librería (CLASES_CAMPO,
+     Checkbox, Switch, SegmentedField): sin esto caen al tema claro de :root.
+     Valores salidos de los --a-* del panel; contraste medido en
+     tests/owncoding-forms.test.ts. */
+  --c-paper: 10 10 19;
+  --c-ink-600: 58 58 80;
+  --c-fono-dark: 90 217 255;
+  --c-onbrand: 4 25 29;
+  --c-ok: 82 227 155;
+  --c-ok-text: 125 240 184;
+  --c-bad: 255 125 146;
+  --c-warn-text: 255 200 110;
+  --c-placeholder: 158 161 192;
+  --c-info: 159 184 255;
+  --c-info-text: 159 184 255;
 }
 .admin-root[data-theme="light"] {
   --c-fore: 25 25 42;
@@ -26,9 +42,23 @@
   --c-fono-text: 0 111 131;
   --c-interactivo: 113 124 147;
   --c-bad-text: 180 35 48;
+  --c-paper: 246 248 255;
+  --c-ink-600: 200 208 226;
+  --c-fono-dark: 11 111 143;
+  --c-onbrand: 255 255 255;
+  --c-ok: 11 122 75;
+  --c-ok-text: 11 107 67;
+  --c-bad: 189 44 71;
+  --c-warn-text: 133 77 14;
+  --c-placeholder: 84 90 128;
+  --c-info: 32 89 190;
+  --c-info-text: 32 89 190;
 }
 .admin-shared-phone, .admin-shared-autocomplete { min-width: 0; width: 100%; }
-.admin-shared-phone button[role="combobox"] { font-size: 12px; background: color-mix(in srgb, var(--a-text) 7%, var(--a-field-bg)); color: var(--a-muted-2); border-color: var(--a-line-control); max-width: 100%; height: auto; min-height: var(--a-field-h); border-radius: var(--a-field-radius) 0 0 var(--a-field-radius); }
+/* El +595 usa la altura y los estados de la librería (CountryPhoneSelect, v0.68.1);
+   acá solo queda el segmento fijo que se une al número: radio a la izquierda y un
+   fondo apenas distinto para que se lea como prefijo. */
+.admin-shared-phone button[role="combobox"] { font-size: 12px; max-width: 100%; border-radius: var(--a-field-radius) 0 0 var(--a-field-radius); }
 /* +595 y el número son un solo campo: segmento fijo, separador y borde compartido. */
 .admin-shared-phone > div { flex-wrap: nowrap; gap: 0; }
 .admin-shared-phone > div > div { width: auto; flex: 0 0 auto; }
@@ -40,7 +70,6 @@
 .admin-field [role="listbox"] { color: var(--a-text-strong); }
 @media (max-width: 720px) {
   .admin-field:has(.admin-phone-field-control) { grid-column: 1 / -1; }
-  .admin-field input:not([type="checkbox"]), .admin-field button[role="combobox"] { min-height: 44px; }
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1096,7 +1125,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    control. Con eso, en una misma fila de la grilla los controles arrancan a la
    misma altura aunque cambien label, hint o error. */
 .admin-field { display: grid; align-content: start; gap: 8px; min-width: 0; }
-.admin-field-label, .admin-field label:not(.admin-switch):not(.admin-check) { color: var(--a-muted-2); font-size: 12px; font-weight: 600; letter-spacing: 0; line-height: 1.3; text-transform: none; }
+.admin-field-label, .admin-field label:not(.admin-switch):not(.admin-check):not(.admin-check > label) { color: var(--a-muted-2); font-size: 12px; font-weight: 600; letter-spacing: 0; line-height: 1.3; text-transform: none; }
 .admin-field-req { color: var(--a-accent); font-weight: 700; }
 .admin-field-optional { margin-left: auto; color: var(--a-muted); font-size: 11px; font-weight: 400; }
 .admin-field-hint { color: var(--a-muted); font-size: 11.5px; line-height: 1.4; }
@@ -1111,25 +1140,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field-help > button:hover { color: var(--a-accent); }
 .admin-field-help > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
 .admin-field-help-text { display: block; white-space: normal; overflow-wrap: anywhere; font: 400 13px/1.5 var(--font-body, system-ui); letter-spacing: normal; text-transform: none; }
-.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; min-height: var(--a-field-h); padding: 9px 12px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s, opacity .15s; }
-.admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-focus-halo); }
-.admin-field input::placeholder, .admin-field textarea::placeholder { color: var(--a-muted); opacity: 1; }
-/* Válido (por ejemplo, RUC encontrado): borde verde suave y mensaje verde. */
-.admin-field[data-state="valid"] input, .admin-field[data-state="valid"] select, .admin-field[data-state="valid"] textarea { border-color: color-mix(in srgb, var(--a-ok) 75%, transparent); box-shadow: 0 0 0 3px var(--a-ok-halo); }
+/* Los campos del kit dibujan su aspecto con la fuente única de la librería
+   (`CLASES_CAMPO`/`CAMPO_ESTADOS` de owncoding-ui: reposo, hover, foco, inválido
+   `aria-invalid`, `estado="ok"`, deshabilitado y solo lectura; alto 44 px en
+   celular y 36 px desde `md`). Acá solo queda el contenedor (ancho y
+   `min-width`) y el aspecto de los controles propios que todavía no son de la
+   librería (Combobox, contraseña, PIN, buscador): los que NO llevan
+   `data-oc-control`. */
+.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; }
+.admin-field input:not([data-oc-control]), .admin-field select:not([data-oc-control]), .admin-field textarea:not([data-oc-control]) { min-height: var(--a-field-h); padding: 9px 12px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s, opacity .15s; }
+.admin-field input:not([data-oc-control]):focus, .admin-field select:not([data-oc-control]):focus, .admin-field textarea:not([data-oc-control]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-focus-halo); }
+.admin-field input:not([data-oc-control])::placeholder, .admin-field textarea:not([data-oc-control])::placeholder { color: var(--a-muted); opacity: 1; }
 /* Error: borde rojo + halo; va después del foco para que gane aunque tenga el cursor. */
-.admin-field input[aria-invalid="true"], .admin-field select[aria-invalid="true"], .admin-field textarea[aria-invalid="true"] { border-color: var(--a-danger); box-shadow: 0 0 0 3px var(--a-danger-halo); }
-.admin-field input:disabled, .admin-field select:disabled, .admin-field textarea:disabled,
-.admin-field input[readonly], .admin-field textarea[readonly] { opacity: .55; cursor: not-allowed; }
-/* MoneyInput de owncoding-ui (issue #99): el componente trae su estructura
-   (contenedor relativo + prefijo + input) con clases utilitarias de Tailwind
-   que este panel no carga, así que el kit le da el aspecto del panel: el
-   prefijo «Gs» adentro del campo y el alto/foco que ya define `.admin-field`. */
+.admin-field input:not([data-oc-control])[aria-invalid="true"], .admin-field select:not([data-oc-control])[aria-invalid="true"], .admin-field textarea:not([data-oc-control])[aria-invalid="true"] { border-color: var(--a-danger); box-shadow: 0 0 0 3px var(--a-danger-halo); }
+.admin-field input:not([data-oc-control]):disabled, .admin-field select:not([data-oc-control]):disabled, .admin-field textarea:not([data-oc-control]):disabled,
+.admin-field input:not([data-oc-control])[readonly], .admin-field textarea:not([data-oc-control])[readonly] { opacity: .55; cursor: not-allowed; }
+/* MoneyInput de owncoding-ui (issue #99, v0.68): el componente dibuja el prefijo
+   «Gs» como adorno `inicio` dentro del campo (relleno medido, sin CSS del panel) y
+   el «%» de PercentField como adorno `fin`. Acá solo queda el contenedor. */
 .admin-money { position: relative; min-width: 0; }
-.admin-money span { position: absolute; top: 1px; bottom: 1px; left: 1px; display: grid; place-items: center; width: 40px; border-right: 1px solid var(--a-line-2); border-radius: calc(var(--a-field-radius) - 1px) 0 0 calc(var(--a-field-radius) - 1px); background: color-mix(in srgb, var(--a-text) 7%, transparent); pointer-events: none; color: var(--a-muted-2); font-size: 12px; font-weight: 600; }
-.admin-money input { padding-left: 52px; }
-/* «%» va detrás del número, con el mismo segmento fijo y separador que «Gs». */
-.admin-money--suffix span { right: 1px; left: auto; border-right: 0; border-left: 1px solid var(--a-line-2); border-radius: 0 calc(var(--a-field-radius) - 1px) calc(var(--a-field-radius) - 1px) 0; }
-.admin-money--suffix input { padding-right: 52px; padding-left: 12px; }
 .admin-money--compact { width: 100%; max-width: 14rem; }
 @media (max-width: 760px) { .admin-money--compact { max-width: none; } }
 .admin-field--wide { grid-column: 1 / -1; }
@@ -1163,18 +1192,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-field .admin-password input { padding-right: 32px; }
 .admin-password-toggle { position: absolute; top: 50%; right: 5px; display: grid; place-items: center; width: 26px; height: 26px; transform: translateY(-50%); border: 0; border-radius: 8px; background: transparent; color: var(--a-muted); cursor: pointer; }
 .admin-password-toggle:hover { color: var(--a-accent); }
-.admin-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; }
-/* El control real va oculto (el dibujo es la pista): el selector reforzado evita
-   que `.admin-field input` lo estire y desborde en mobile (issue #111). */
-.admin-switch-input,
-.admin-field input.admin-switch-input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; opacity: 0; }
-.admin-switch-track { position: relative; width: 38px; height: 22px; border: 1px solid var(--a-line-control); border-radius: 999px; background: var(--a-bg-2); transition: background .15s, border-color .15s; }
-.admin-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--a-muted); transition: transform .15s, background .15s; }
-.admin-switch-input:checked + .admin-switch-track { border-color: transparent; background: var(--a-accent); }
-.admin-switch-input:checked + .admin-switch-track::after { transform: translateX(16px); background: #04191d; }
-.admin-switch-input:focus-visible + .admin-switch-track { box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-switch { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; }
 .admin-switch-state { color: var(--a-muted-2); font-size: 12.5px; }
-.admin-card .admin-field input { min-height: 42px; padding: 12px 12px; font-size: 13px; }
+.admin-card .admin-field input:not([data-oc-control]) { min-height: 42px; padding: 12px 12px; font-size: 13px; }
 .admin-google-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin: 16px 0 12px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-weight: 700; text-decoration: none; transition: border-color .15s, color .15s; }
 .admin-google-button:hover, .admin-google-button:focus-visible { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-google-button span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #4285f4; font-weight: 800; }
@@ -1264,6 +1284,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-avatar-img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .admin-avatar--logo .admin-avatar-img { object-fit: contain; }
 .admin-avatar-text { line-height: 1; }
+/* Iniciales de persona con la paleta sobria de la librería: el color cubre el marco. */
+.admin-avatar--photo .admin-avatar-text { display: grid; place-items: center; width: 100%; height: 100%; }
 .admin-identity { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; }
 .admin-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-user-info { display: grid; line-height: 1.15; }
@@ -1691,12 +1713,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-pin-pad-del { color: var(--a-muted-2); }
 
 /* Preferencia segmentada 2–5 opciones (auto-bloqueo, issue #21). */
-.admin-segmented { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); }
-.admin-segmented-item { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.admin-segmented-item { flex: 1 1 auto; min-height: calc(var(--a-field-h) - 8px); padding: 0 12px; border: 1px solid transparent; border-radius: calc(var(--a-field-radius) - 3px); background: transparent; color: var(--a-muted-2); font: 600 12.5px var(--font-body); cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
-.admin-segmented-item:hover:not(:disabled) { color: var(--a-accent); }
-.admin-segmented-item[aria-pressed="true"] { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-accent-strong); }
-.admin-segmented-item:disabled { opacity: .5; cursor: not-allowed; }
 
 @media (max-width: 430px) {
   .admin-lock { place-items: start center; padding: 16px 12px 24px; }
@@ -2108,8 +2124,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 }
 .admin-bank-preview { display: flex; align-items: center; gap: 8px; padding: 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-bank-preview strong { color: var(--a-text-strong); font-size: 13px; }
-.admin-bank-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; color: #fff; font: 800 13px var(--font-body); letter-spacing: .04em; }
-.admin-bank-asset { height: 22px; width: auto; max-width: 150px; object-fit: contain; }
 /* Ficha de datos de un registro: la usan los diálogos del panel y la página de
    aceptación de invitaciones (mismo objeto, un solo estilo). */
 .admin-facts, .admin-dialog-facts { display: grid; gap: 8px; margin: 0; padding: 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
@@ -2124,7 +2138,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-num { text-align: right; font-variant-numeric: tabular-nums; }
 .admin-dialog-counter { display: inline-flex; align-items: center; gap: 4px; }
 .admin-dialog-counter .admin-check { color: var(--a-text); font-size: 12.5px; }
-.admin-dialog-counter .admin-check-text { font-weight: 400; letter-spacing: normal; }
+.admin-dialog-counter .admin-check > label { font-weight: 400; letter-spacing: normal; }
 .admin-dialog-counter input:not([type=checkbox]) { width: 3.4rem; min-height: 30px; padding: 4px 8px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
 .admin-dialog-counter input:not([type=checkbox]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
 
@@ -2168,13 +2182,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 /* ── Tesorería y gastos (issue #27) ──
    Los KPIs de disponible van dentro del panel de tesorería; las cuentas muestran
-   el banco con su marca (`lib/bank-mark.ts`) y la carga rápida de gastos es una
+   el banco con su logo (`components/admin/BankLogo.tsx`) y la carga rápida de gastos es una
    ventana con dos salidas: guardar y guardar/cargar otro. */
 .admin-kpis--treasury { padding: 12px 12px 0; }
 .admin-treasury-formula { margin: 8px 12px 0; }
 .admin-treasury-bank { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.admin-treasury-bank .admin-bank-mark { width: 22px; height: 22px; border-radius: 8px; font-size: 10px; }
-.admin-treasury-bank .admin-bank-asset { height: 16px; max-width: 84px; }
 .admin-treasury-delta[data-tone="in"] { color: var(--a-ok); font-weight: 700; }
 .admin-treasury-delta[data-tone="out"] { color: var(--a-danger); font-weight: 700; }
 .admin-treasury-delta[data-tone="move"] { color: var(--a-info); font-weight: 700; }
@@ -2284,13 +2296,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-audit-pager-info { color: var(--a-muted-2); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ── Checklist operativo ── */
-.admin-check { position: relative; display: inline-flex; align-items: center; gap: 8px; color: var(--a-warn); font-size: 11px; cursor: pointer; }
-.admin-check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.admin-check-box { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: transparent; }
-.admin-check input:checked + .admin-check-box { border-color: var(--a-ok); background: var(--a-ok); color: #04140d; }
-.admin-check input:focus-visible + .admin-check-box { outline: 2px solid var(--a-accent); outline-offset: 2px; }
-.admin-check input:disabled + .admin-check-box { opacity: .5; }
-.admin-check-text { font-weight: 600; letter-spacing: .04em; }
+.admin-check { position: relative; display: inline-flex; align-items: center; color: var(--a-warn); font-size: 11px; }
+/* El tono (cumplido, sin subir, falló) lo hereda el texto del Checkbox de la librería. */
+.admin-check > label { min-height: 0; font-size: inherit; font-weight: 600; letter-spacing: .04em; color: inherit; }
+/* Casilla sin texto: el dibujo mide 18 px y el área táctil llega a 44 px. */
+.admin-check [data-oc-checkbox]::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .admin-check[data-tone="ok"] { color: var(--a-ok); }
 /* Acción de campo en cola (issue #23): el texto dice el estado real de subida. */
 .admin-check[data-tone="warn"] { color: var(--a-warn); }
@@ -3449,8 +3459,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-pay-total { color: var(--muted-2); font-size: 12px; }
 .portal-pay-grid { display: grid; gap: 12px; }
 .portal-bank { display: flex; align-items: center; gap: 10px; }
-.portal-bank-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: #fff; font: 800 14px var(--font-body); letter-spacing: .04em; }
-.portal-bank-asset { height: 26px; width: auto; max-width: 170px; object-fit: contain; }
 .portal-bank-name { font-size: 14px; font-weight: 700; }
 .portal-facts--pay { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 .portal-summary { border-color: var(--border-2); }
@@ -3643,6 +3651,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* #156: un pie global fuera de los layouts de contenido/documentos inmutables. */
 body > .app-footer { --a-muted: #c9cce6; --a-muted-2: #eceefb; --a-line: #35394e; --a-accent: #00e5ff; --muted: var(--a-muted); --led: var(--a-accent); position: relative; z-index: 1; padding: 18px clamp(16px, 4vw, 40px); background: #08080f; line-height: 1.6; min-width: 0; }
 body:has([data-theme="light"]) > .app-footer { --a-muted: #545a80; --a-muted-2: #343a5e; --a-line: #c9cce0; --a-accent: #085a75; background: #f6f8ff; }
+/* Pie del panel = `ProductFooter modelo="panel"` (owncoding-ui v0.68): una fila delgada.
+   El relleno grande de `body > .app-footer` es del pie institucional del portal. */
+body > .app-footer--app { padding-block: 8px; line-height: 20px; }
 .app-footer a { color: var(--a-muted-2); }
 .app-footer > div, .app-footer > nav { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .app-footer > nav { position: static; inset: auto; z-index: auto; height: auto; padding: 0; border: 0; background: none; transition: none; justify-content: center; -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -3993,6 +4004,17 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
   .admin-searchbtn { justify-content: center; width: 34px; padding: 0; }
   .admin-searchbtn-label, .admin-searchbtn-key { display: none; }
 }
+/* Filas táctiles de 44 px (lo que `NavLateral tactil` de owncoding-ui v0.68 resuelve):
+   el menú propio (contadores, etapas y permisos) se queda, y en celular y tablet,
+   donde se toca, sus filas llegan a 44 px. En escritorio con puntero la densidad
+   de 28-32 px es deliberada (docs/DISENO-PANEL.md). */
+@media (max-width: 980px) {
+  .admin-nav-link, .admin-user--sidebar, .admin-company, .admin-nav-toggle, .admin-sidebar-close, .admin-brand { min-height: 44px; }
+  .admin-sidebar-close { min-width: 44px; }
+}
+@media (max-width: 720px) {
+  .admin-bottomnav-item { min-height: 44px; align-content: center; }
+}
 @media (max-width: 420px) {
   .admin-help-btn { width: 28px; height: 28px; }
 }
@@ -4057,7 +4079,6 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-submit { min-height: 44px; }
 .admin-btn--only-icon, .admin-actions .admin-btn, .admin-actions .admin-iconbtn { border-radius: 999px; }
 .admin-search input, .admin-dialog-counter input:not([type=checkbox]) { border-radius: var(--a-radius); }
-.admin-switch-track { border-radius: 999px; }
 
 /* ── Navegación ── */
 .admin-nav-link { border-radius: 999px; }
@@ -4207,8 +4228,6 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-cal-alert[data-level="soon"] { background: color-mix(in srgb, var(--a-warn-surface) 42%, var(--a-panel)); }
 
 /* ── Checklist y recordatorios ── */
-.admin-check input:checked + .admin-check-box { color: var(--a-ink); }
-.admin-check-box { border-radius: 6px; }
 .admin-reminder-item { background: var(--a-row-bg); box-shadow: var(--a-row-shadow); }
 
 /* ── Segmentados (lista/tablero/calendario y pestañas internas) ── */
@@ -4388,8 +4407,6 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
   .budget-item-row > :nth-child(7) { grid-column: 6; grid-row: 1; justify-self: end; }
   .budget-item-row .admin-field-label { position: static; width: auto; height: auto; clip-path: none; overflow: visible; font-size: 10px; }
   .budget-item-row input { min-height: 44px; padding-left: 6px; padding-right: 6px; }
-  .budget-item-row .admin-money span { width: 32px; }
-  .budget-item-row .admin-money input { padding-left: 38px; }
   .portal-table--items thead { display: none; }
   .portal-table--items tbody tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; padding: 12px; }
   .portal-table--items td.portal-item-cell { grid-column: 1 / -1; }

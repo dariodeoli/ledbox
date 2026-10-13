@@ -1,0 +1,146 @@
+/* Espejo de las reglas de campos de `owncoding-ui/base.css` (v0.68.3).
+ *
+ * `base.css` completo es global (html, body, h1-h3, foco, impresión A4) y pisaría
+ * el sitio público y el panel, así que no se importa entero. Esto es solo el
+ * bloque «Campos de formulario» (color/selección/autofill + movimiento de la
+ * segunda ola «pro» + reduced-motion): todas sus reglas cuelgan de atributos
+ * `data-oc-*`/`data-motion`, así que solo alcanzan a los controles de la librería.
+ * `tests/owncoding-forms.test.ts` compara este archivo con el de la librería:
+ * si cambia al subir el pin, se vuelve a copiar (no se edita a mano).
+ */
+@keyframes oc-status-draw { from { stroke-dashoffset: 32; } to { stroke-dashoffset: 0; } }
+/* ── Campos de formulario: color y selección ────────────────────────────────
+   Cursor de marca y selección tenue dentro de los campos de la librería
+   (los que llevan `data-oc-control`; los <input> de la app consumidora quedan
+   intactos). El autofill del
+   navegador pinta su propio fondo (amarillo/azul): se lo tapa con la
+   superficie del campo y se conservan los anillos de foco/error (variables de
+   Tailwind) para no perder el estado. */
+input[data-oc-control], textarea[data-oc-control] {
+  caret-color: rgb(var(--c-fono-dark));
+}
+input[data-oc-control]::selection, textarea[data-oc-control]::selection {
+  background: rgb(var(--c-fono) / .28);
+}
+input[data-oc-control]:-webkit-autofill,
+input[data-oc-control]:-webkit-autofill:hover,
+input[data-oc-control]:-webkit-autofill:focus,
+textarea[data-oc-control]:-webkit-autofill,
+select[data-oc-control]:-webkit-autofill {
+  -webkit-text-fill-color: rgb(var(--c-fore));
+  caret-color: rgb(var(--c-fore));
+  box-shadow: 0 0 0 1000px rgb(var(--c-ink-800)) inset, var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000);
+}
+
+/* ── Campos de formulario: movimiento ───────────────────────────────────────
+   Todo con los tokens --oc-motion-* (docs/MOTION.md). El interruptor es
+   `data-motion="on|off"` del propio control (prop `motion`); con "off" y con
+   prefers-reduced-motion no hay animaciones ni transiciones. Nada de esto
+   retrasa foco, eventos ni envíos. */
+@keyframes oc-campo-sacude {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes oc-campo-mensaje {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes oc-campo-aparece {
+  from { opacity: 0; transform: scale(.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes oc-boton-exito {
+  from { box-shadow: 0 0 0 0 rgb(var(--c-ok) / .5); }
+  to { box-shadow: 0 0 0 8px rgb(var(--c-ok) / 0); }
+}
+[data-oc-sacude][data-motion="on"] {
+  animation: oc-campo-sacude 300ms var(--oc-motion-ease);
+}
+[data-oc-formularios="pro"] [data-motion="on"] .oc-campo-mensaje {
+  animation: oc-campo-mensaje var(--oc-motion-feedback) var(--oc-motion-ease) both;
+}
+[data-oc-formularios="pro"] .oc-campo-aparece[data-motion="on"] {
+  animation: oc-campo-aparece var(--oc-motion-fast) var(--oc-motion-ease) both;
+}
+[data-motion="on"] .oc-campo-ok path {
+  stroke-dasharray: 32;
+  animation: oc-status-draw var(--oc-motion-feedback) var(--oc-motion-ease);
+}
+[data-oc-exito][data-motion="on"] {
+  animation: oc-boton-exito var(--oc-motion-feedback) var(--oc-motion-ease);
+}
+/* Trazo del check de Checkbox: se dibuja al marcar. */
+[data-oc-checkbox][data-motion="on"] .oc-check-trazo {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  transition: stroke-dashoffset var(--oc-motion-feedback) var(--oc-motion-ease) 40ms;
+}
+[data-oc-checkbox][data-motion="on"] input:checked + svg .oc-check-trazo {
+  stroke-dashoffset: 0;
+}
+/* Select (segunda ola, `data-oc-formularios="pro"`): fondo de hover y chevron
+   que gira con foco dentro. Sin el interruptor el Select queda como en la
+   primera ola. */
+[data-oc-formularios="pro"] [data-oc-select] > select:hover:not(:disabled) {
+  background-color: rgb(var(--c-ink-700) / .6);
+}
+[data-oc-formularios="pro"] .oc-select-chevron {
+  transition: transform var(--oc-motion-fast, 160ms) var(--oc-motion-ease, cubic-bezier(.2,.8,.2,1)), color var(--oc-motion-fast, 160ms) var(--oc-motion-ease, cubic-bezier(.2,.8,.2,1));
+}
+[data-oc-formularios="pro"] [data-oc-select]:focus-within .oc-select-chevron {
+  --tw-rotate: 180deg;
+  color: rgb(var(--c-fore));
+}
+/* `motion={false}`: el control y lo suyo (adornos, mensaje, pulgar) queda
+   estático. Los spinners de carga se excluyen: apagar el movimiento no puede
+   dejar un «cargando» congelado. */
+[data-motion="off"]:not([data-oc-formfield], [data-oc-spinner]),
+[data-motion="off"]:not([data-oc-formfield]) *:not([data-oc-spinner]),
+[data-motion="off"]:not([data-oc-formfield])::before,
+[data-motion="off"]:not([data-oc-formfield])::after {
+  animation: none !important;
+  transition: none !important;
+}
+/* `FormField motion={false}` solo alcanza a su etiqueta, su control y su
+   mensaje; el resto de sus descendientes (acciones, contenido libre) conserva
+   su movimiento. */
+[data-oc-formfield][data-motion="off"] :is(label, .oc-campo-mensaje, [data-oc-control], [data-oc-campo], [data-oc-select]),
+[data-oc-formfield][data-motion="off"] :is(label, .oc-campo-mensaje, [data-oc-control], [data-oc-campo], [data-oc-select]) *:not([data-oc-spinner]) {
+  animation: none !important;
+  transition: none !important;
+}
+/* Contraste forzado (Windows): el relleno y el trazo del Checkbox dependen de
+   colores que el sistema reemplaza. Se devuelve el control nativo y se oculta
+   el trazo propio, así la marca (check o raya) la dibuja el navegador. */
+@media (forced-colors: active) {
+  [data-oc-checkbox] input {
+    appearance: auto;
+    forced-color-adjust: auto;
+  }
+  [data-oc-checkbox] > svg {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-oc-sacude],
+  [data-motion] .oc-campo-mensaje,
+  .oc-campo-aparece,
+  .oc-campo-ok path,
+  [data-oc-exito] {
+    animation: none !important;
+  }
+  .oc-check-trazo {
+    stroke-dashoffset: 0 !important;
+    transition: none !important;
+  }
+  [data-oc-segmentado] [data-oc-indicador],
+  [data-oc-switch] *,
+  [data-oc-checkbox] *,
+  [data-oc-campo] *,
+  [data-oc-select] * {
+    transition: none !important;
+  }
+}

@@ -29,6 +29,7 @@ import {
   statusTone,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
+import { BankLogo } from "@/components/admin/BankLogo";
 import {
   applyPortalDemoState,
   emptyPortalDemoState,
@@ -1155,14 +1156,8 @@ export function PortalBudgetView({
       {budget.paymentDetails ? (
         <div className="portal-pay-grid">
           <div className="portal-bank" title={`Banco: ${budget.paymentDetails.bank ?? "—"}`}>
-            {mark?.asset ? (
-              <img className="portal-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
-            ) : (
-              <span className="portal-bank-mark" style={{ background: mark?.color ?? "#0E5A8A" }} aria-hidden="true">
-                {mark?.initials ?? "B"}
-              </span>
-            )}
-            <span className="portal-bank-name">{mark?.label ?? "Datos de pago"}</span>
+            <BankLogo bank={budget.paymentDetails.bank} size="h-8" />
+            <span className="portal-bank-name">{mark?.label ?? (budget.paymentDetails.bank?.trim() || "Datos de pago")}</span>
           </div>
           <dl className="portal-facts portal-facts--pay">
             <div>

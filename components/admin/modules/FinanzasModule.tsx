@@ -37,6 +37,7 @@ import {
 } from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
+import { BankLogo } from "../BankLogo";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
 import { AGING_LABELS, agingKeyOf, lateDaysOf, parseAgingParam } from "@/lib/resumen-board";
 import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
@@ -238,19 +239,13 @@ type PayJobForm = {
   receipt: string;
 };
 
-/** Banco de una cuenta con su marca (`lib/bank-mark.ts`): asset del repo o monograma. */
+/** Banco de una cuenta: logo del catálogo de owncoding-ui (si existe) y el nombre en texto. */
 function BankCell({ bank }: { bank: string | null }) {
   const mark = bankMark(bank);
   if (!mark) return <span className="admin-muted">—</span>;
   return (
     <span className="admin-treasury-bank" title={`Banco: ${mark.label}`}>
-      {mark.asset ? (
-        <img className="admin-bank-asset" src={mark.asset} alt={`Logo de ${mark.label}`} />
-      ) : (
-        <span className="admin-bank-mark" style={{ background: mark.color }} aria-hidden="true">
-          {mark.initials}
-        </span>
-      )}
+      <BankLogo bank={bank} size="h-6" />
       <span>{mark.label}</span>
     </span>
   );

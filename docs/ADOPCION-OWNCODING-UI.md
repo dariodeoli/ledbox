@@ -3,7 +3,7 @@
 Estado y plan del uso de la librería compartida de OwnCoding
 (`github.com/dariodeoli/owncoding-ui`) en esta app.
 
-> **Relevamiento del 30-09-2026 (issues #100 y #103).** Pin actual:
+> **Estado vigente: v0.68.3 (ver §0).** Relevamiento del 30-09-2026 (issues #100 y #103), pin de entonces:
 > **v0.55.0** (subido en la Tanda 0, issue #103); librería publicada: **v0.55.0**.
 > Piloto y capturas comparativas: `docs/PILOTO-OWNCODING-UI.md` y
 > `docs/piloto-owncoding-ui/`.
@@ -13,6 +13,48 @@ Estado y plan del uso de la librería compartida de OwnCoding
 > **En una línea:** la Tanda 0 ya está (pin v0.55.0, sin cambios de código) y
 > siguen dos frentes —utils puros y privacidad—; los objetos grandes esperan al
 > rediseño. El detalle y los issues propuestos están en §5.
+
+## 0. Adopción de v0.68.3 (13-10-2026)
+
+Pin: `github:dariodeoli/owncoding-ui#22f68c037440e71ccce68348adea4460bcc0a82a`
+(commit del tag **v0.68.3**; antes v0.67.1, `9dc9ec4`). Las §1 a §9 de abajo son el
+relevamiento histórico de v0.55.0 y no se reescriben.
+
+### 0.1 Qué se adoptó
+
+| Novedad de la librería | Dónde en LedBox | Resultado |
+| --- | --- | --- |
+| `FormulariosPro` (`data-oc-formularios="pro"`) | `app/(admin)/layout.tsx`: atributo en `.admin-root` + `<FormulariosPro contenedor={false}>` | Activo en todo el panel, diálogos incluidos (se montan dentro de `.admin-root`). El CSS de los campos viene de `app/oc-formularios.css`, espejo del bloque «Campos de formulario» de `base.css` (no se importa `base.css` entero: es global y pisaría el sitio). `tests/owncoding-forms.test.ts` compara el espejo con la librería |
+| Fuente única de campos (`CLASES_CAMPO`/`CAMPO_ESTADOS`, `--c-placeholder`, `estado="ok"`) | `components/admin/AdminFields.tsx`: `TextField`, `NumberField`, `SerialField`, `RucField`, `DateField`/`TimeField`/`DateTimeField`, `DayField` → `Input`; `TextAreaField` → `Textarea`; `SelectField` → `Select`; `SwitchField` → `Switch`; `CheckboxField` → `Checkbox`; `SegmentedField` → `SegmentedField`. `MoneyField`, `PercentField`, `PhoneField`, `EmailField`, `CityField`, `BancoField` ya eran de la librería | La API de `AdminFields` no cambió (los ~40 usos intactos). Se borró de `globals.css` el CSS duplicado de campos (estados foco/error/válido/deshabilitado de los controles de la librería), `.admin-switch-track`, `.admin-segmented*`, `.admin-check-box`, `.admin-money span` y los adornos `Gs`/`%` propios |
+| Adornos `inicio`/`fin`, `estado="ok"` | `Gs` (MoneyInput) y `%` (`PercentField simbolo`) son adornos de la librería; el éxito del kit (`success`) pasa a `estado="ok"` | Sin reposicionar adornos desde el CSS del panel |
+| `Textarea` `autoCrecer` + `contador` | `TextAreaField` suma `autoGrow` (por defecto sí) y `counter` (opt-in) | Las cajas de texto ya no tienen `resize` y crecen con el contenido hasta 12 filas |
+| Checkbox animado, Switch con resorte, SegmentedField con indicador, Select con chevron | Los mismos componentes del kit, ya sobre la librería | Movimiento solo con `FormulariosPro`; `prefers-reduced-motion` y `motion={false}` lo apagan (reglas del espejo) |
+| `CountryPhoneSelect` a la altura compartida (v0.68.1) | `.admin-shared-phone` ya no fuerza `min-height`/colores del +595 | +595 y número miden lo mismo (36 px escritorio, 44 px celular) |
+| `LogoFinanciero` con tamaño óptico parejo (v0.68.3) vía `BancoLogo` | `components/admin/BankLogo.tsx`, usado en Finanzas (cuentas y tesorería), datos de pago del presupuesto y portal del cliente | Logo oficial del catálogo con placa clara sobre oscuro; un banco fuera del catálogo (`soloCatalogo`) no dibuja logo y queda el nombre en texto. Tailwind sigue `data-theme` (`darkMode: ["selector", '[data-theme="dark"]']`) |
+| `ProductFooter modelo="panel"` | `components/app-footer.tsx` (`variant="app"`) | 49 px a 1280 y 69 px a 375 (antes ~100 px). Portal, producto y empresa siguen en `distribuido` |
+| `Avatar paleta="sobria"` | `AdminAvatar`: las iniciales de persona usan `colorDeNombre(nombre, "sobria")` | Azules y grises, nunca tonos de ok/error. El DOM (`.admin-avatar`, `.admin-avatar-text`) se conserva porque las pruebas de navegador de hidratación dependen de él |
+| Filas táctiles de 44 px (`NavLateral tactil`) | `globals.css`: filas del menú, grupos, cierre y barra inferior en ≤980 px / ≤720 px | El menú propio (contadores, etapas, permisos) se queda; en escritorio la densidad de 28-32 px es deliberada |
+| Tokens `--c-*` para los controles | `.admin-root` y `.admin-root[data-theme="light"]`: se suman `paper`, `ink-600`, `fono-dark`, `onbrand`, `ok`, `ok-text`, `bad`, `warn-text`, `info`, `info-text` y `placeholder` | Sin ellos caían al tema claro de `:root`. Contraste de texto ≥ 4,5 y controles ≥ 3 en claro y oscuro, medido en `tests/owncoding-forms.test.ts` |
+
+### 0.2 Qué no se adoptó y por qué
+
+| Novedad | Motivo |
+| --- | --- |
+| `NavLateral` como menú | El menú de `AdminShell` tiene contadores, flujo por etapas y permisos propios (decisión del encargo): solo se adoptaron las filas de 44 px |
+| `SelectorEspacio` | LedBox **no tiene selector de empresa en la interfaz**: el shell muestra solo la empresa activa. El backend ya lo permite (`PATCH /api/admin/session` con `organizationId` y `organizations[]` en la sesión), así que queda como funcionalidad nueva a pedir aparte; cuando se haga, `SelectorEspacio` es la pieza |
+| Correo con `idioma`/`tema` | Los correos transaccionales usan la plantilla propia de `lib/server/mail/**`, no el mail de `owncoding-ui/email`: nada que adoptar sin reemplazar la plantilla |
+| `MedioPagoLogo` / marcas de red | Los medios de cobro de LedBox son genéricos (Efectivo, Transferencia, Tarjeta…), no marcas: no hay dato real para un logo. Se muestra solo el logo del banco |
+| `Avatar` como componente | Se usa su paleta, no el componente, para no romper el contrato de `AdminAvatar` (fotos con hidratación y logos de cliente) |
+| Logo de banco en la hoja imprimible | `PrintBankData` es de servidor y conserva el monograma/asset propio (`lib/bank-mark.ts`) |
+| `CLASES_CAMPO`/`CAMPO_ESTADOS` por import | El paquete no las exporta por el entry; se consumen a través de `Input`/`Select`/`Textarea` |
+| `FormField` (`requerido`, error con ícono) | `AdminFields` conserva su propio chrome (`FieldChrome`: ayuda, «opcional», acción junto al label); migrarlo cambiaría los ~40 usos |
+
+### 0.3 Diferencias visuales inevitables
+
+- Alto de los campos: 36 px en escritorio (antes 40) y 44 px en celular, el de la librería.
+- Fondo de los campos opaco (`ink-800`) en vez del vidrio translúcido del panel.
+- Borde en reposo `interactivo` (≥ 3:1) y foco con anillo de 3 px de `fono-dark`.
+- Los controles propios que no son de la librería (Combobox, contraseña, PIN, buscador) conservan el aspecto anterior (40 px): se migran cuando la librería tenga el equivalente.
 
 ## 1. Estado actual (relevamiento)
 
