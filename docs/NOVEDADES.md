@@ -330,3 +330,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Presupuestos: al seleccionar un producto, la tarifa sugerida respeta el precio mínimo configurado en inventario. Una regla de precio por duración con días o precio en cero queda deshabilitada; un producto sin tarifa configurada conserva cero.
 - La selección explícita copia la tarifa al presupuesto; la edición manual mantiene su comportamiento. Este alcance no incorpora el contrato comercial AL ni modifica documentos firmados. QA y SHA postdeploy permanecen diferidos por orden del dueño.
+
+## v2.1.86 — 2026-10-13
+
+- Inventario: ya no se puede asignar el mismo equipo dos veces. Si dos personas asignan a la vez el último stock, entra una sola y la otra ve cuánto queda libre. Las tareas operativas de cada evento pasan por el mismo control y la reserva al aprobar un presupuesto ocurre de una sola vez.
+- Los eventos cancelados y los presupuestos perdidos liberan su stock. Un equipo que salió y todavía no volvió sigue ocupado hasta su devolución.
+- Leads: nuevo botón «Armar presupuesto». Abre el presupuesto con el cliente, el título y las notas del pedido ya cargados; si el cliente no existe se crea al guardar, sin duplicar por correo o teléfono. El lead pasa a «Cotizado» y cada presupuesto muestra de qué lead viene.
