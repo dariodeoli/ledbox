@@ -26,7 +26,7 @@ test("AdminDialog: tamaños sm / md / lg con alias y pie sticky con error arriba
   assert.match(css, /\.admin-dialog-body \.admin-dialog-foot\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0/, "los pies armados en el cuerpo quedan pegados abajo");
   assert.match(css, /\.admin-dialog--sheet \.admin-dialog-head\s*\{[^}]*flex:\s*0 0 auto/, "el encabezado no se desplaza");
   assert.match(css, /\.admin-dialog-body\s*\{[^}]*overflow-y:\s*auto/, "el cuerpo tiene scroll propio");
-  assert.match(dialog, /error\?: string \| null/);
+  assert.match(dialog, /error\?: React\.ReactNode/);
   assert.match(dialog, /className="admin-dialog-status"/, "el error va entre el cuerpo y el pie");
   assert.ok(dialog.indexOf("admin-dialog-status") > dialog.indexOf("admin-dialog-body") && dialog.indexOf("admin-dialog-status") < dialog.indexOf('className="admin-dialog-footer"'));
 });

@@ -599,7 +599,7 @@ function InviteDialog({
       icon="mail"
       description="Le mandamos el link para sumarse con el rol elegido. Vence en 7 días y queda pendiente hasta que la acepte."
       size="sm"
-      error={inviteValidity.error ?? (localError || (!limitError && error ? error : null))}
+      error={(invite !== EMPTY_INVITE ? inviteValidity.error : null) ?? (localError || (!limitError && error ? error : null))}
       dirty={invite.email !== "" || invite.role !== EMPTY_INVITE.role}
       onClose={onClose}
       footer={({ requestClose }) => (

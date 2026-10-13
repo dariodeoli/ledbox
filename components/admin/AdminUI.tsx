@@ -593,8 +593,8 @@ export function AdminDialog({
   description?: string;
   /** Pie fijo del diálogo (acción principal a la derecha). */
   footer?: React.ReactNode | ((api: { requestClose: () => void }) => React.ReactNode);
-  /** Error de la última acción: va arriba del pie, fuera del scroll del cuerpo. */
-  error?: string | null;
+  /** Error de la última acción: va arriba del pie, fuera del scroll del cuerpo (texto o nodo, p. ej. con un link). */
+  error?: React.ReactNode;
   /** Aviso no bloqueante (por ejemplo, un precio fuera de regla), arriba del pie. */
   warning?: string | null;
   /** Hay cambios sin guardar: cerrar pide confirmación. */
@@ -745,7 +745,7 @@ export function AdminDialog({
         <div className="admin-dialog-body">{children}</div>
         {!confirming && (error || warning) ? (
           <div className="admin-dialog-status">
-            {error ? <AdminNote tone="error">{error}</AdminNote> : <AdminNote tone="warn">{warning}</AdminNote>}
+            {error ? (typeof error === "string" ? <AdminNote tone="error">{error}</AdminNote> : error) : <AdminNote tone="warn">{warning}</AdminNote>}
           </div>
         ) : null}
         {confirming ? (

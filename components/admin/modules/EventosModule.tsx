@@ -58,6 +58,7 @@ import {
   AdminTable,
   AdminToolbar,
   type AdminMenuItem,
+  AdminPlanLimitNote,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { ClientQuickDialog } from "./ClientQuickForm";
@@ -731,7 +732,7 @@ export function EventosModule() {
           description={editingEventId ? "El cliente del evento no se puede cambiar." : "Los datos de operación son opcionales."}
           size="lg"
           dirty={eventFormDirty}
-          error={formError || (formLimit ? `${formLimit} Revisá tu plan en Ajustes → Plan.` : null)}
+          error={formError || (formLimit ? <AdminPlanLimitNote message={formLimit} /> : null)}
           onClose={() => setShowForm(false)}
           footer={({ requestClose }) => (
             <>

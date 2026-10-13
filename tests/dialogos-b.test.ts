@@ -194,7 +194,7 @@ test("invitar usuario: hoja chica con error en la franja y la nota de tope del p
   const start = users.indexOf('title="Invitar por correo"');
   const dialog = users.slice(start, users.indexOf("</AdminDialog>", start));
   assert.match(dialog, /size="sm"/);
-  assert.match(dialog, /error=\{inviteValidity\.error \?\? \(localError \|\| \(!limitError && error \? error : null\)\)\}/);
+  assert.match(dialog, /error=\{\(invite !== EMPTY_INVITE \? inviteValidity\.error : null\) \?\? \(localError \|\| \(!limitError && error \? error : null\)\)\}/);
   assert.match(dialog, /limitError && error \? <AdminPlanLimitNote message=\{error\} \/>/);
   assert.match(dialog, /busyLabel="Enviando…"/);
 });
@@ -203,4 +203,11 @@ test("el monto de los diálogos ocupa la columna completa y usa cifras tabulares
   const css = read("app", "globals.css").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.match(css, /\.admin-dialog \.admin-money > span\s*\{\s*width:\s*100%/);
   assert.match(css, /\.admin-dialog \.admin-money input\s*\{\s*font-variant-numeric:\s*tabular-nums/);
+});
+
+test("invitar: la validación del correo aparece recién después de editar; el límite del plan conserva «Ver planes»", () => {
+  const usuarios = readFileSync(join(process.cwd(), "components/admin/modules/UsuariosModule.tsx"), "utf8");
+  assert.match(usuarios, /invite !== EMPTY_INVITE \? inviteValidity\.error : null/);
+  const eventos = readFileSync(join(process.cwd(), "components/admin/modules/EventosModule.tsx"), "utf8");
+  assert.match(eventos, /formLimit \? <AdminPlanLimitNote message=\{formLimit\} \/>/);
 });
