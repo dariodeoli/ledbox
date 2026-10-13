@@ -1,20 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { jsonError } from "@/lib/server/http";
-import { recordAudit } from "@/lib/server/audit";
-import { lockedEventLimitViolation, planLimitViolation } from "@/lib/server/plan-limits";
+import { planLimitViolation } from "@/lib/server/plan-limits";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
-import { clientDisplayName } from "@/lib/client-identity";
-import { budgetReference } from "@/lib/admin-format";
-import { eventDataFromBudget } from "@/lib/budget-event";
-
-class PlanLimitError extends Error {
-  constructor(readonly violation: { error: string; code: string }) {
-    super(violation.error);
-  }
-}
+import { auditBudgetEvent, createEventForBudget, PlanLimitError } from "@/lib/server/budget-event";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +12,9 @@ export const dynamic = "force-dynamic";
 /**
  * `POST /api/admin/budgets/[id]/create-event`: crea el evento de un presupuesto
  * aprobado que todavía no lo tiene (`events.write`, acotado a la empresa
- * activa). Nunca se crea solo al aprobar: lo dispara el botón «Crear evento».
+ * activa). Es el respaldo manual: al aprobar el evento se crea solo
+ * (`ensureEventForApprovedBudget`); este botón cubre el caso en que esa creación
+ * falló (p. ej. límite del plan). Misma lógica: `createEventForBudget`.
  *
  * En una transacción con `FOR UPDATE` sobre el presupuesto: dos clics
  * simultáneos crean un solo evento (el segundo recibe 409). El evento nace
@@ -45,50 +37,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (limit) return jsonError(limit.error, 403, limit.code);
 
   try {
-    const created = await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${id} AND "organizationId" = ${organizationId} FOR UPDATE`;
-      const budget = await tx.budget.findFirst({
-        where: { id, organizationId },
-        select: { id: true, title: true, status: true, eventId: true, clientId: true, deliveryAt: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
-      });
-      if (!budget) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
-      if (budget.eventId) throw new QuoteComparisonError(409, "El presupuesto ya tiene un evento.");
-      if (budget.status !== "APPROVED") throw new QuoteComparisonError(409, "Solo se crea el evento de un presupuesto aprobado.");
-      // Dos aprobaciones de presupuestos distintos de la misma empresa no se serializan por el
-      // lock del presupuesto: se toma el lock de la empresa y se repite el chequeo del plan
-      // dentro de la transacción, para que ninguna pase del tope mensual.
-      const lockedLimit = await lockedEventLimitViolation(tx, auth.context);
-      if (lockedLimit) throw new PlanLimitError(lockedLimit);
-      const data = eventDataFromBudget(budget);
-      const event = await tx.event.create({
-        data: {
-          id: randomUUID(),
-          organizationId,
-          clientId: budget.clientId,
-          ...data,
-          tasks: {
-            create: [
-              { id: randomUUID(), type: "SETUP", title: "Confirmar montaje y acceso al lugar" },
-              { id: randomUUID(), type: "EVENT", title: "Verificar equipos y operación del evento" },
-              { id: randomUUID(), type: "STRIKE", title: "Coordinar desmontaje y devolución" },
-              { id: randomUUID(), type: "COLLECTION", title: "Confirmar cobro / saldo" },
-            ],
-          },
-        },
-      });
-      await tx.budget.update({ where: { id: budget.id }, data: { eventId: event.id } });
-      return { event, budget };
-    });
-
-    await recordAudit({
-      context: auth.context,
-      action: "create",
-      entity: "Event",
-      entityId: created.event.id,
-      summary: `Creó el evento «${created.event.name}» desde el presupuesto PRES-${budgetReference(created.budget.id)} «${created.budget.title}» del cliente «${clientDisplayName(created.budget.client)}»`,
-      detail: { fields: { budgetId: created.budget.id, status: created.event.status, startsAt: created.event.startsAt?.toISOString() ?? null } },
-    });
-    const reservations = await reserveBudgetInventory({ organizationId, budgetId: created.budget.id, context: auth.context });
+    const created = await db.$transaction((tx) => createEventForBudget(tx, auth.context, id, { confirmDraft: false }));
+    await auditBudgetEvent(auth.context, created, "");
+    const reservations = await reserveBudgetInventory({ organizationId, budgetId: id, context: auth.context });
     return Response.json({ event: created.event, reservations }, { status: 201 });
   } catch (error) {
     if (error instanceof PlanLimitError) return jsonError(error.violation.error, 403, error.violation.code);

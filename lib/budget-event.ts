@@ -2,8 +2,9 @@
  * Presupuesto aprobado → evento. Reglas puras (sin base ni red) compartidas por
  * el endpoint `POST /api/admin/budgets/[id]/create-event` y por el panel.
  *
- * El evento NO se crea solo al aprobar: la decisión del dueño es avisar y dejar
- * un botón principal «Crear evento».
+ * El evento se crea solo al aprobar (`ensureEventForApprovedBudget`, servidor).
+ * El aviso con el botón «Crear evento» queda como respaldo cuando esa creación
+ * falla (p. ej. límite del plan).
  */
 
 export const BUDGET_EVENT_NOTICE = "El cliente aprobó el presupuesto. Falta crear el evento";

@@ -3,6 +3,15 @@
 Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 (`ht`/`hd`) agregan su bloque acá antes de publicar.
 
+## Pendiente de publicar (integrador; no sube la versión)
+
+- Al aprobarse un presupuesto (portal del cliente, aprobación manual del panel,
+  comparativas y firma de alternativas) el evento se crea solo, ya confirmado, y
+  reserva el inventario. Si el evento ya existía en borrador, se confirma. Si no se
+  puede crear (por ejemplo, límite de eventos del plan), el presupuesto queda
+  aprobado igual, el motivo queda en la auditoría y el aviso con «Crear evento»
+  sigue disponible como respaldo. Desde el portal, el actor auditado es el cliente.
+
 ## v2.1.18 — 2026-09-22
 
 - El menú quedó ordenado por áreas (General · Operación · Comercial · Finanzas ·

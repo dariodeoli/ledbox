@@ -1,3 +1,4 @@
+import { ensureEventForApprovedBudget } from "../budget-event";
 import { reserveBudgetInventory } from "../inventory-availability";
 import { syncBudgetExpectedPayments } from "../expected-payments";
 import { guardQuoteApproval, QuoteComparisonError } from "../quote-comparison";
@@ -660,7 +661,11 @@ export async function signSignatureRequest(input: SignatureActionInput): Promise
   const grouped = await db.budget.findUnique({ where: { id: row.budgetId }, select: { comparisonId: true } });
   if (grouped?.comparisonId) {
     const actor = portalAuditContext(row.organizationId, providerResult.signerName, row.recipientEmail);
-    await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor });
+    const auto = await ensureEventForApprovedBudget({ organizationId: row.organizationId, budgetId: row.budgetId, actor });
+    if (!auto.reservations) {
+      try { await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor }); }
+      catch (error) { console.error("[signature] la reserva quedó pendiente", { budgetId: row.budgetId, error }); }
+    }
     await syncBudgetExpectedPayments({ organizationId: row.organizationId, budgetId: row.budgetId, actor, reason: "firma de alternativa" });
   }
   await notifySignatureCompleted(row, providerResult.identifier);

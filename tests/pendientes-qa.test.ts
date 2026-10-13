@@ -46,13 +46,14 @@ test("finanzas: «Pagar» del trabajo de proveedor es un AdminDialog con footer,
 });
 
 test("create-event: el tope del plan se repite dentro de la transacción, después del FOR UPDATE", () => {
-  const src = read("app/api/admin/budgets/[id]/create-event/route.ts");
-  const tx = src.indexOf("db.$transaction");
-  const lock = src.indexOf('FROM "Budget"', tx);
-  const locked = src.indexOf("lockedEventLimitViolation(tx", tx);
-  const create = src.indexOf("tx.event.create", tx);
-  assert.ok(tx > 0 && lock > tx && locked > lock && create > locked);
-  assert.match(src, /error instanceof PlanLimitError/);
+  const route = read("app/api/admin/budgets/[id]/create-event/route.ts");
+  const src = read("lib/server/budget-event.ts");
+  const lock = src.indexOf('FROM "Budget"');
+  const locked = src.indexOf("lockedEventLimitViolation(tx", lock);
+  const create = src.indexOf("tx.event.create", lock);
+  assert.ok(lock > 0 && locked > lock && create > locked);
+  assert.match(route, /db\.\$transaction\(\(tx\) => createEventForBudget\(tx/);
+  assert.match(route, /error instanceof PlanLimitError/);
   assert.match(read("lib/server/plan-limits.ts"), /FROM "Organization" WHERE "id" = \$\{context\.organizationId\} FOR NO KEY UPDATE/);
 });
 

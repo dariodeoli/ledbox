@@ -4,6 +4,7 @@ import { recordAudit } from "@/lib/server/audit";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
+import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 
 export const runtime = "nodejs";
@@ -89,7 +90,14 @@ export async function POST(request: Request) {
         summary: `Aprobó manualmente el presupuesto «${budget.title}» del cliente «${clientLabel}»`,
         detail: { changes: { status: { from: budget.status, to: "APPROVED" }, approvalMethod: { from: null, to: "manual" } } },
       });
-      reservations = await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context });
+      // Evento automático (CONFIRMED) y su reserva; el panel ya validó budgets.write, el evento se crea
+      // como parte de la aprobación. Si falla, la aprobación sigue y queda auditado.
+      const auto = await ensureEventForApprovedBudget({ organizationId, budgetId: budget.id, actor: auth.context, plan: auth.context });
+      reservations = auto.reservations;
+      if (!reservations) {
+        try { reservations = await reserveBudgetInventory({ organizationId, budgetId: budget.id, context: auth.context }); }
+        catch (error) { console.error("[budgets/approval] la reserva quedó pendiente", { budgetId: budget.id, error }); }
+      }
       // Pagos esperados del plan (issue #28): idempotente y sin tocar lo confirmado.
       await syncBudgetExpectedPayments({
         organizationId,
