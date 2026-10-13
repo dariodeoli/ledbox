@@ -25,6 +25,8 @@ const fail = (status: OperationFailure["status"], error: string): OperationFailu
 
 const OPEN_STATUSES: readonly InventoryIncidentStatus[] = ["OPEN", "IN_REPAIR"];
 const MAX_NOTES = 400;
+/** Marca visible de los incidentes por cantidad sobre un ítem que sí tiene unidades con código. */
+export const UNIDENTIFIED_NOTE = "Unidad sin identificar";
 
 type Tx = Prisma.TransactionClient;
 
@@ -165,7 +167,10 @@ async function openIncidents(
     notes: context.notes,
     openedById: context.actorId,
   };
-  if (context.hasUnits) {
+  // Contrato viejo: ítem con unidades y cantidad sin códigos. Se retiene por cantidad y
+  // el incidente queda marcado «unidad sin identificar» hasta que se lo resuelva.
+  const unidentified = context.hasUnits && unitIds.length === 0;
+  if (context.hasUnits && !unidentified) {
     const unitStatus: InventoryUnitStatus = kind === "DAMAGE" ? "DAMAGED" : "LOST";
     const created = [];
     for (const unitId of unitIds) {
@@ -175,7 +180,10 @@ async function openIncidents(
     await syncInventoryQuantity(tx, context.inventoryId);
     return created;
   }
-  const incident = await tx.inventoryIncident.create({ data: { id: randomUUID(), ...base, unitId: null, quantity } });
+  const notes = unidentified ? [UNIDENTIFIED_NOTE, base.notes].filter(Boolean).join(" · ").slice(0, 1200) : base.notes;
+  const incident = await tx.inventoryIncident.create({
+    data: { id: randomUUID(), ...base, notes, unitId: null, quantity, heldByQuantity: true },
+  });
   await tx.inventoryItem.update({ where: { id: context.inventoryId }, data: { incidentHold: { increment: quantity } } });
   return [incident];
 }
@@ -221,8 +229,9 @@ export async function returnAssignment(options: ReturnOptions) {
       const unitCount = await tx.inventoryUnit.count({ where: { inventoryId: row.inventoryId } });
       const hasUnits = unitCount > 0;
       if (hasUnits) {
-        if (damagedUnitIds.length !== damaged) return fail(400, `Elegí las ${damaged} unidades dañadas por su código.`);
-        if (missingUnitIds.length !== missing) return fail(400, `Elegí las ${missing} unidades faltantes por su código.`);
+        // Sin ningún código = contrato viejo (solo cantidades): se acepta y queda «sin identificar».
+        if (damagedUnitIds.length > 0 && damagedUnitIds.length !== damaged) return fail(400, `Elegí las ${damaged} unidades dañadas por su código.`);
+        if (missingUnitIds.length > 0 && missingUnitIds.length !== missing) return fail(400, `Elegí las ${missing} unidades faltantes por su código.`);
         if (damagedUnitIds.some((id) => missingUnitIds.includes(id))) return fail(400, "Una unidad no puede estar dañada y faltante a la vez.");
         const units = await checkUnits(tx, options.organizationId, row.inventoryId, [...damagedUnitIds, ...missingUnitIds]);
         if (units.length !== damagedUnitIds.length + missingUnitIds.length) return fail(404, "Alguna unidad no existe en este ítem.");
@@ -347,6 +356,7 @@ export async function createIncident(options: {
           assignmentId: options.assignmentId ?? null,
           eventId: assignmentEventId,
           unitId: options.unitId ?? null,
+          heldByQuantity: item._count.units === 0,
           kind: options.kind,
           quantity,
           status: "OPEN",
@@ -410,7 +420,11 @@ export async function transitionIncident(options: {
           await tx.inventoryUnit.update({ where: { id: incident.unitId }, data: { status: incident.kind === "MISSING" ? "LOST" : "RETIRED" } });
         }
         await syncInventoryQuantity(tx, incident.inventoryId);
-      } else if (terminal) {
+      } else if (terminal && incident.heldByQuantity) {
+        const itemUnits = await tx.inventoryUnit.count({ where: { inventoryId: incident.inventoryId } });
+        if (options.to === "WRITTEN_OFF" && itemUnits > 0) {
+          return fail(409, "Este incidente no tiene unidad identificada: retirá la unidad desde el inventario y marcalo como resuelto.");
+        }
         const item = await tx.inventoryItem.findUniqueOrThrow({ where: { id: incident.inventoryId }, select: { quantity: true, incidentHold: true } });
         await tx.inventoryItem.update({
           where: { id: incident.inventoryId },

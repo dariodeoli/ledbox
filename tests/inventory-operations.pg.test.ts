@@ -97,8 +97,8 @@ test("operaciones de alquiler en PostgreSQL: salida y devolución parcial, incid
     const { org, assign, unitIds, item, free } = await seed({ units: true });
     const a = await assign(10);
     await dispatch(org, a.id);
-    const noCode = await giveBack(org, a.id, { quantity: 9, missing: 1 });
-    assert.ok(!noCode.ok && noCode.status === 400, "con unidades, el faltante se elige por código");
+    const wrongCount = await giveBack(org, a.id, { quantity: 8, missing: 2, missingUnitIds: [unitIds[3]] });
+    assert.ok(!wrongCount.ok && wrongCount.status === 400, "con unidades, si se eligen códigos tienen que ser todos");
     const result = await giveBack(org, a.id, { quantity: 9, missing: 1, missingUnitIds: [unitIds[3]] });
     assert.ok(result.ok && result.closed);
     assert.equal(result.incidents.length, 1);
@@ -108,6 +108,49 @@ test("operaciones de alquiler en PostgreSQL: salida y devolución parcial, incid
     assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id: unitIds[3] } })).status, "LOST");
     assert.equal(await free(), 9);
     assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).quantity, 10, "perdida pero no retirada");
+  });
+
+  await t.test("contrato viejo: daño y faltante sin códigos en un ítem con unidades se retienen por cantidad", async () => {
+    const { org, assign, item, free } = await seed({ units: true });
+    const a = await assign(10);
+    await dispatch(org, a.id);
+    const result = await giveBack(org, a.id, { quantity: 8, damaged: 1, missing: 2 });
+    assert.ok(result.ok && result.closed, JSON.stringify(result));
+    assert.equal(result.incidents.length, 2);
+    for (const incident of result.incidents) {
+      assert.equal(incident.unitId, null);
+      assert.equal(incident.heldByQuantity, true);
+      assert.match(incident.notes ?? "", /Unidad sin identificar/);
+    }
+    assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).incidentHold, 3);
+    assert.equal(await free(), 7);
+    for (const incident of result.incidents) {
+      assert.ok((await ops.transitionIncident({ organizationId: org, incidentId: incident.id, to: "RESOLVED" })).ok);
+    }
+    assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).incidentHold, 0);
+    assert.equal(await free(), 10);
+  });
+
+  await t.test("un incidente con unidad que pierde su unitId (FK SET NULL) no desbalancea incidentHold", async () => {
+    const { org, assign, item, unitIds, client } = await seed({ units: true });
+    const a = await assign(4);
+    await dispatch(org, a.id);
+    const byQty = await giveBack(org, a.id, { quantity: 3, damaged: 1 });
+    assert.ok(byQty.ok);
+    const other = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "Otro", setupAt: day(10), startsAt: day(11), endsAt: day(12), strikeAt: day(13) } });
+    const b = await db.eventInventory.create({ data: { id: randomUUID(), eventId: other.id, inventoryId: item.id, quantity: 1, checkedOut: true, checkedOutAt: at, checkoutQuantity: 1 } });
+    const withUnit = await giveBack(org, b.id, { quantity: 0, missing: 1, missingUnitIds: [unitIds[5]] });
+    assert.ok(withUnit.ok);
+    assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).incidentHold, 1);
+    // La unidad se borra: el incidente queda con unitId NULL pero NO se retuvo por cantidad.
+    await db.inventoryUnit.delete({ where: { id: unitIds[5] } });
+    const orphan = await db.inventoryIncident.findUniqueOrThrow({ where: { id: withUnit.incidents[0].id } });
+    assert.equal(orphan.unitId, null);
+    assert.equal(orphan.heldByQuantity, false);
+    assert.ok((await ops.transitionIncident({ organizationId: org, incidentId: orphan.id, to: "RESOLVED" })).ok);
+    assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).incidentHold, 1, "el incidente con unidad no baja el contador");
+    assert.ok((await ops.transitionIncident({ organizationId: org, incidentId: byQty.incidents[0].id, to: "RESOLVED" })).ok);
+    assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).incidentHold, 0);
   });
 
   await t.test("un daño por cantidad descuenta mientras esté abierto y vuelve al resolverse", async () => {

@@ -2445,6 +2445,8 @@ export type AdminApiResponse = {
   settings?: AdminRentalSettings;
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
+  /** Calendario: el tope de movimientos de inventario recortó el rango. */
+  truncated?: boolean;
   notifications?: AdminNotification[];
   /** API keys de servicio (issue #69), sin el token plano. */
   tokens?: AdminApiToken[];

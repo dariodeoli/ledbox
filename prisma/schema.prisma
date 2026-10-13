@@ -1768,6 +1768,8 @@ model InventoryIncident {
   assignmentId   String?
   eventId        String?
   unitId         String?
+  /// true = retenido por cantidad (suma a InventoryItem.incidentHold). Solo estos tocan el contador.
+  heldByQuantity Boolean                 @default(false)
   kind           InventoryIncidentKind
   quantity       Int
   status         InventoryIncidentStatus @default(OPEN)

@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/notifications";
 import { assignmentRange, loadRentalSettings, resolveRentalBuffers } from "@/lib/server/inventory-availability";
 import { dispatchedQuantity, pendingReturnQuantity } from "@/lib/server/inventory-operations";
+import { CALENDAR_MOVEMENTS_LIMIT, plannedMovementVisible, truncateMovements } from "@/lib/calendar-movements";
 import type { AdminCalendarItem, AdminCalendarItemKind } from "@/lib/admin-types";
 
 export const runtime = "nodejs";
@@ -215,7 +216,7 @@ export async function GET(request: Request) {
           { startsAt: null, event: { OR: [{ setupAt: { gte: slackFrom, lt: slackTo } }, { startsAt: { gte: slackFrom, lt: slackTo } }, { strikeAt: { gte: slackFrom, lt: slackTo } }, { endsAt: { gte: slackFrom, lt: slackTo } }] } },
         ],
       },
-      take: 600,
+      take: CALENDAR_MOVEMENTS_LIMIT + 1,
       select: {
         id: true,
         eventId: true,
@@ -375,17 +376,20 @@ export async function GET(request: Request) {
       if (at < group.at) group.at = at;
     } else groups.set(key, { kind, at, state, event, lines: 1, units });
   };
-  for (const row of movements) {
+  const { rows: movementRows, truncated: movementsTruncated } = truncateMovements(movements);
+  for (const row of movementRows) {
     const buffers = resolveRentalBuffers(rentalSettings, row.inventory);
     const range = assignmentRange({ startsAt: row.startsAt, endsAt: row.endsAt, event: row.event });
     const sent = dispatchedQuantity(row);
     const closed = Boolean(row.checkedIn || row.checkedInAt);
     if (sent > 0) addMovement("inventory_out", row.checkedOutAt, "DONE", row.event, sent);
-    if (!closed && row.quantity - sent > 0 && range.start) {
+    const eventEnd = row.event.strikeAt ?? row.event.endsAt ?? row.event.startsAt;
+    const plannedVisible = plannedMovementVisible({ eventStatus: row.event.status, sent, eventEnd, now });
+    if (!closed && plannedVisible && row.quantity - sent > 0 && range.start) {
       addMovement("inventory_out", new Date(range.start.getTime() - buffers.beforeMin * 60_000), "PLANNED", row.event, row.quantity - sent);
     }
     if (closed) addMovement("inventory_in", row.checkedInAt, "DONE", row.event, row.returnedQuantity || Math.max(0, sent - row.missingQuantity));
-    else {
+    else if (plannedVisible) {
       const pending = sent > 0 ? pendingReturnQuantity(row) : row.quantity;
       addMovement("inventory_in", range.end, sent > 0 && row.returnedQuantity > 0 ? "PARTIAL" : "PLANNED", row.event, pending);
     }
@@ -419,5 +423,5 @@ export async function GET(request: Request) {
   // incompleto, vencidos o dentro de los próximos 7 días.
   const alerts = await calendarAlerts(organizationId, now);
 
-  return Response.json({ items, alerts, range: { from: fromKey, to: toKey } });
+  return Response.json({ items, alerts, range: { from: fromKey, to: toKey }, truncated: movementsTruncated });
 }

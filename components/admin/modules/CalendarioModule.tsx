@@ -258,6 +258,7 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
   const calendar = useAdminResource(`/api/admin/calendar?from=${range.from}&to=${range.to}`, (payload) => ({
     items: payload.items ?? [],
     alerts: payload.alerts ?? [],
+    truncated: payload.truncated === true,
   }));
 
   const items = useMemo(() => calendar.data?.items ?? [], [calendar.data]);
@@ -329,6 +330,11 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
           </AdminButton>
         </div>
         <span className="admin-cal-range">{periodLabel}</span>
+        {calendar.data?.truncated ? (
+          <span className="admin-cal-range" role="status">
+            Hay más movimientos: acotá el rango.
+          </span>
+        ) : null}
         <AdminSelect
           value={view}
           onChange={(value) => {

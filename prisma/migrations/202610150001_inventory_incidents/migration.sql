@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS "InventoryIncident" (
   "assignmentId" TEXT,
   "eventId" TEXT,
   "unitId" TEXT,
+  "heldByQuantity" BOOLEAN NOT NULL DEFAULT false,
   "kind" "InventoryIncidentKind" NOT NULL,
   "quantity" INTEGER NOT NULL,
   "status" "InventoryIncidentStatus" NOT NULL DEFAULT 'OPEN',
@@ -102,3 +103,5 @@ UPDATE "EventInventory" SET "checkoutQuantity" = "quantity"
   WHERE ("checkedOut" = true OR "checkedOutAt" IS NOT NULL) AND "checkoutQuantity" = 0;
 UPDATE "EventInventory" SET "returnedQuantity" = GREATEST("quantity" - "missingQuantity", 0)
   WHERE ("checkedIn" = true OR "checkedInAt" IS NOT NULL) AND "returnedQuantity" = 0 AND "quantity" > "missingQuantity";
+
+ALTER TABLE "InventoryIncident" ADD COLUMN IF NOT EXISTS "heldByQuantity" BOOLEAN NOT NULL DEFAULT false;
