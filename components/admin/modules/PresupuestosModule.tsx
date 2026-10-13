@@ -1,5 +1,8 @@
 "use client";
 import { BudgetComparisons } from "./BudgetComparisons";
+import { BudgetDetailDialog } from "./BudgetDetailDialog";
+import { BudgetEventNotice } from "../BudgetEventNotice";
+import { budgetEventPrompt } from "@/lib/budget-event";
 import { budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "../AdminAvatar";
 import { clientLogoUrl } from "@/lib/admin-types";
@@ -768,9 +771,12 @@ export function PresupuestosModule() {
   const writableForLead = canWriteFinance(role);
   const leadParam = searchParams.get("lead")?.trim() ?? "";
   const newRequested = searchParams.get("nuevo") === "1";
+  // «Nuevo presupuesto» desde la ficha del cliente: `?nuevo=1&cliente=<id>`.
+  const clientParam = searchParams.get("cliente")?.trim() ?? "";
   useEffect(() => {
     if (!newRequested || !writableForLead) return;
     setShowForm(true);
+    if (clientParam && !leadParam) setForm((current) => ({ ...current, clientId: current.clientId || clientParam }));
     if (!leadParam) return;
     let active = true;
     setLeadId(leadParam);
@@ -792,7 +798,7 @@ export function PresupuestosModule() {
     return () => {
       active = false;
     };
-  }, [newRequested, leadParam, writableForLead]);
+  }, [newRequested, leadParam, clientParam, writableForLead]);
   /** Altas rápidas desde el propio formulario (issue #88): nombre tipeado o null. */
   const [newClientName, setNewClientName] = useState<string | null>(null);
   const [newEventName, setNewEventName] = useState<string | null>(null);
@@ -826,6 +832,10 @@ export function PresupuestosModule() {
   const [timelineBudget, setTimelineBudget] = useState<AdminBudgetRow | null>(null);
   // Portal de firma del cliente (issue #79): solicitudes y auditoría del presupuesto.
   const [signatureBudget, setSignatureBudget] = useState<AdminBudgetRow | null>(null);
+  // Evento del presupuesto aprobado: detalle abierto y acción en curso (una sola a la vez).
+  const [detailBudgetId, setDetailBudgetId] = useState<string | null>(null);
+  const [eventBusyId, setEventBusyId] = useState<string | null>(null);
+  const eventInFlight = useRef(false);
   const [reservationReport, setReservationReport] = useState<{ title: string; reservation: AdminBudgetReservation } | null>(null);
   // Comprobantes de pago (issue #17): metadatos por presupuesto y visor.
   const [proofsByBudget, setProofsByBudget] = useState<Record<string, AdminBudgetPaymentProofRow[]>>({});
@@ -947,6 +957,7 @@ export function PresupuestosModule() {
               title: portalSummary(budget),
             },
             { label: next.label, tone: "neutral", title: next.hint },
+            ...(budgetEventPrompt(budget) ? [{ label: budgetEventPrompt(budget) === "create" ? "Falta crear el evento" : "Evento en borrador", tone: "warn" as const, title: "Abrí el detalle del presupuesto para crear o confirmar el evento" }] : []),
           ],
           detail: `${next.label} · ${formatNumber(budget.items.length)} ítem${budget.items.length === 1 ? "" : "s"} · cobrado ${formatMoney(paid)}`,
           actions: (
@@ -973,6 +984,7 @@ export function PresupuestosModule() {
    */
   function budgetMenuItems(budget: AdminBudgetRow): AdminMenuItem[] {
     return [
+      { label: "Detalle y etapas", icon: "eye" as const, onClick: () => setDetailBudgetId(budget.id), title: `Detalle del presupuesto: ${budget.title}` },
       ...(writable ? [
         ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
         { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
@@ -1075,21 +1087,24 @@ export function PresupuestosModule() {
             },
           ],
           footer: (
-            <span className="admin-actions">
-              {writable ? (
-                <AdminButton
-                  icon="mail"
-                  title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
-                  aria-label={`Enviar por correo: ${budget.title}`}
-                  onClick={() => openSend(budget)}
-                />
-              ) : null}
-              <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
-            </span>
+            <>
+              {eventNotice(budget)}
+              <span className="admin-actions">
+                {writable ? (
+                  <AdminButton
+                    icon="mail"
+                    title={`Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}`}
+                    aria-label={`Enviar por correo: ${budget.title}`}
+                    onClick={() => openSend(budget)}
+                  />
+                ) : null}
+                <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
+              </span>
+            </>
           ),
         };
       }),
-    [rows, writable],
+    [rows, writable, eventBusyId, canCreateEvent],
   );
 
   // KPIs del módulo (spec 22-09-2026): vigentes, por vencer en 7 días, los
@@ -1365,6 +1380,69 @@ export function PresupuestosModule() {
       mailInFlight.current = false;
       setSendBusy(false);
     }
+  }
+
+  /**
+   * «Crear evento» de un presupuesto aprobado sin evento. Single-flight: un
+   * segundo clic no sale; el servidor además serializa con FOR UPDATE.
+   */
+  async function createEventFor(budget: AdminBudgetRow) {
+    if (eventInFlight.current) return;
+    eventInFlight.current = true;
+    setEventBusyId(budget.id);
+    setBoardError("");
+    try {
+      const result = await adminSend<{ event?: { id: string; name: string }; reservations?: AdminBudgetReservation | null }>(`/api/admin/budgets/${budget.id}/create-event`, {});
+      if (!result.ok) {
+        setBoardError(result.error);
+        // Otro clic o usuario pudo crearlo antes: se refresca el listado.
+        budgetsResource.reload();
+        return;
+      }
+      const reservation = result.data.reservations ?? null;
+      setReservationReport(reservation && reservation.outcomes.length > 0 ? { title: budget.title, reservation } : null);
+      setNotice(`Evento «${result.data.event?.name ?? budget.title}» creado desde «${budget.title}».`);
+      budgetsResource.reload();
+    } finally {
+      eventInFlight.current = false;
+      setEventBusyId(null);
+    }
+  }
+
+  /** «Confirmar evento»: pasa a CONFIRMED el evento en borrador de un presupuesto aprobado. */
+  async function confirmEventFor(budget: AdminBudgetRow) {
+    if (eventInFlight.current || !budget.event) return;
+    eventInFlight.current = true;
+    setEventBusyId(budget.id);
+    setBoardError("");
+    try {
+      const result = await adminSend("/api/admin/events", { id: budget.event.id, status: "CONFIRMED" }, "PATCH");
+      if (!result.ok) {
+        setBoardError(result.error);
+        return;
+      }
+      setNotice(`Evento «${budget.event.name}» confirmado.`);
+      budgetsResource.reload();
+    } finally {
+      eventInFlight.current = false;
+      setEventBusyId(null);
+    }
+  }
+
+  /** Aviso del evento pendiente de un presupuesto aprobado (tabla, tarjetas y detalle). */
+  function eventNotice(budget: AdminBudgetRow) {
+    const prompt = budgetEventPrompt(budget);
+    if (!prompt) return null;
+    return (
+      <BudgetEventNotice
+        prompt={prompt}
+        title={budget.title}
+        canAct={canCreateEvent}
+        busy={eventBusyId === budget.id}
+        onCreate={() => void createEventFor(budget)}
+        onConfirm={() => void confirmEventFor(budget)}
+      />
+    );
   }
 
   async function submitApproval() {
@@ -1824,8 +1902,11 @@ export function PresupuestosModule() {
               return (
                 <AdminRow key={budget.id}>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
-                    <strong className="admin-quote-title">{budget.title}</strong>
+                    <button type="button" className="admin-quote-title-btn" title={`Ver el detalle y las etapas de ${budget.title}`} onClick={() => setDetailBudgetId(budget.id)}>
+                      <strong className="admin-quote-title">{budget.title}</strong>
+                    </button>
                     {budget.event ? <small className="admin-cell-sub"> · {budget.event.name}</small> : null}
+                    {budgetEventPrompt(budget) ? <span className="admin-cell-event-alert">{eventNotice(budget)}</span> : null}
                     {budget.lead ? (
                       <small className="admin-cell-sub" style={{ display: "block" }}>
                         <Link href={`/leads?lead=${encodeURIComponent(budget.lead.id)}`} title="Abrir el lead de origen">
@@ -2464,6 +2545,20 @@ export function PresupuestosModule() {
           onCreated={selectCreatedEvent}
         />
       ) : null}
+
+      {detailBudgetId ? (() => {
+        const detailBudget = budgetRows.find((budget) => budget.id === detailBudgetId);
+        return detailBudget ? (
+          <BudgetDetailDialog
+            budget={detailBudget}
+            canAct={canCreateEvent}
+            busy={eventBusyId === detailBudget.id}
+            onCreateEvent={() => void createEventFor(detailBudget)}
+            onConfirmEvent={() => void confirmEventFor(detailBudget)}
+            onClose={() => setDetailBudgetId(null)}
+          />
+        ) : null;
+      })() : null}
 
       {timelineBudget ? (
         <AdminTimelineDialog
