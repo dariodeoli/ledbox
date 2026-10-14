@@ -522,3 +522,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - En el celular cada ventana ocupa la pantalla completa, sin desplazarse hacia los costados y con los botones encima del teclado.
 - Las confirmaciones (borrar compra, cerrar mes, revocar invitación, clave o link, quitar logo o foto) se piden dentro de la misma ventana.
 - Portal del cliente más claro: arriba «Qué tenés que hacer ahora» con una sola acción; una única sección «Pagar» (cuánto falta, datos del banco con copiar y subida del comprobante); un solo estado; un presupuesto aprobado ya no dice «venció»; sin «Evento: Indefinido» ni «Vía: Panel»; la cuenta interna de tesorería ya no aparece como destino de la transferencia («A coordinar» si no hay banco cargado). En el celular, tarjetas y botón de la acción principal fijo abajo.
+
+## v2.1.112 — 2026-10-14
+
+- Papelera: el aviso de bloqueo ya no repite el mensaje en una línea roja.
+- Registrar cobro: al pasar de contado a plazo, «Más opciones» se abre sin parpadear.
+- Promotoras: las inactivas de antes de la papelera aparecen en «Archivadas» (antes no se veían en ningún listado).
+- Build más liviano y controlado: el contexto que recibe Coolify bajó de 32,6 MB a 15,5 MB, y la publicación y la CI frenan si vuelve a pasar 400 MB o entra un archivo de más de 5 MB.
