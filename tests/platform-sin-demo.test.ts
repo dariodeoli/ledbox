@@ -62,3 +62,9 @@ test("lo que se pasa a los componentes no tiene campos de hash ni token", () => 
     assert.doesNotMatch(source, /passwordHash|pinHash|tokenHash|jtiHash|publicToken|apiKey/i, file);
   }
 });
+
+test("components/platform no usa la etiqueta <nav>: globals.css la fija arriba (regla del sitio público)", () => {
+  for (const file of walk(join(root, "components", "platform")).filter((f) => /\.tsx$/.test(f))) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /<\/?nav[\s>]/, relative(root, file));
+  }
+});

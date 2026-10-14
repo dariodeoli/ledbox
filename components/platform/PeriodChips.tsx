@@ -8,7 +8,7 @@ export function PeriodChips({
   active,
 }: Readonly<{ basePath: string; params: Record<string, string | string[] | undefined>; active: PeriodKey }>) {
   return (
-    <nav className="platform-chips" aria-label="Período">
+    <div className="platform-chips" role="navigation" aria-label="Período">
       {PERIOD_KEYS.map((key) => (
         <Link
           key={key}
@@ -21,6 +21,6 @@ export function PeriodChips({
           {PERIOD_LABELS[key]}
         </Link>
       ))}
-    </nav>
+    </div>
   );
 }

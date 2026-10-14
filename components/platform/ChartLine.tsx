@@ -5,9 +5,9 @@
  */
 import { formatAxisCount, niceTicks } from "@/lib/chart-scale";
 
-const W = 640;
-const H = 220;
-const M = { top: 14, right: 12, bottom: 28, left: 40 };
+const W = 520;
+const H = 200;
+const M = { top: 14, right: 22, bottom: 28, left: 40 };
 
 function dayLabel(key: string): string {
   const [, month, day] = key.split("-");
@@ -35,7 +35,8 @@ export function ChartLine({
 }: Readonly<{ days: string[]; values: number[]; prevValues: number[]; prevDays: string[]; caption: string }>) {
   const count = days.length;
   const peak = Math.max(0, ...values, ...prevValues);
-  const ticks = niceTicks(peak, 4);
+  // Conteos: marcas enteras (con picos chicos, una por unidad); sin decimales en el eje.
+  const ticks = peak <= 4 ? Array.from({ length: Math.max(1, Math.ceil(peak)) + 1 }, (_, index) => index) : niceTicks(peak, 4);
   const domainMax = ticks[ticks.length - 1];
   const height = H - M.top - M.bottom;
   const width = W - M.left - M.right;

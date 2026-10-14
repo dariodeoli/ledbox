@@ -38,7 +38,7 @@ export function PlatformShell({
             </span>
           </Link>
         </div>
-        <nav className="admin-sidebar-nav" aria-label="Secciones">
+        <div className="admin-sidebar-nav" role="navigation" aria-label="Secciones">
           <div className="admin-nav-group">
             <p className="admin-nav-label">Plataforma</p>
             <ul className="admin-nav-list platform-nav-list">
@@ -65,7 +65,7 @@ export function PlatformShell({
               ))}
             </ul>
           </div>
-        </nav>
+        </div>
         <div className="admin-sidebar-foot">
           <p className="admin-sidebar-note">Solo lectura · LedBox</p>
         </div>
