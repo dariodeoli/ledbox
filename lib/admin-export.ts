@@ -28,9 +28,23 @@ const CSV_NEWLINE = "\r\n";
 const CSV_BOM = "\ufeff";
 const TIME_ZONE = "America/Asuncion";
 
-function csvCell(value: CsvCell): string {
+/** Número puro (también negativo o con decimales): se deja tal cual, la planilla lo suma. */
+const PLAIN_NUMBER = /^-?\d+(?:[.,]\d+)?$/;
+
+/**
+ * Neutraliza fórmulas (docs/SUPERADMIN.md §5): un texto que empieza con `= + @ \t \r`, o con
+ * `-` seguido de algo que no es un número, se prefija con `'` para que Excel no lo ejecute.
+ * Los números (`typeof number`) y los textos numéricos como «-1500» quedan intactos.
+ */
+function neutralizeFormula(text: string): string {
+  if (/^[=+@\t\r]/.test(text)) return `'${text}`;
+  if (text.startsWith("-") && !PLAIN_NUMBER.test(text)) return `'${text}`;
+  return text;
+}
+
+export function csvCell(value: CsvCell): string {
   if (value === null || value === undefined) return "";
-  const text = String(value);
+  const text = typeof value === "number" ? String(value) : neutralizeFormula(String(value));
   return /[";\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

@@ -134,6 +134,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`${pathname}${search}`, ADMIN_URL), 308);
   }
 
+  // Panel de plataforma (docs/SUPERADMIN.md §2): solo vive en el host de la app. En los
+  // demás hosts (clientes., demo., eventos. y el público) no existe: 307 a «/» del mismo
+  // host, antes de la lógica de cada uno. Solo en producción (en desarrollo todo es
+  // localhost). No está en ADMIN_ROUTES a propósito: el host público lo mandaría a la app.
+  if (
+    process.env.NODE_ENV === "production" &&
+    !onAdminHost &&
+    (pathname === "/superadmin" || pathname.startsWith("/superadmin/"))
+  ) {
+    return NextResponse.redirect(absoluteOnRequestHost(request, "/"), 307);
+  }
+
   if (onProductHost) {
     // Landing de ventas de EventOS (issue #39): la raíz del host la muestra.
     if (pathname === "/") {
