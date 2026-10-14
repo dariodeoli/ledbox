@@ -6,7 +6,8 @@ Antes de hacer nada, leé en este orden:
 2. `docs/EQUIPO-AGENTES.md` — cómo trabaja el equipo de agentes: roles y modelos
    (opus / sonnet / haiku), ciclo de un pedido, worktrees, versiones, publicación,
    Sala de agentes, checks, Postgres de prueba y lecciones aprendidas.
-3. Los subagentes están en `.claude/agents/ledbox-*.md` (se lanzan con Agent y su `subagent_type`).
+3. Memoria: engram, proyecto `ledbox` (auto-detectado; ver `docs/EQUIPO-AGENTES.md` §5b). Empezá con `mem_context`.
+4. Los subagentes están en `.claude/agents/ledbox-*.md` (se lanzan con Agent y su `subagent_type`).
 
 Resumen de lo que no se negocia:
 
