@@ -529,3 +529,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Registrar cobro: al pasar de contado a plazo, «Más opciones» se abre sin parpadear.
 - Promotoras: las inactivas de antes de la papelera aparecen en «Archivadas» (antes no se veían en ningún listado).
 - Build más liviano y controlado: el contexto que recibe Coolify bajó de 32,6 MB a 15,5 MB, y la publicación y la CI frenan si vuelve a pasar 400 MB o entra un archivo de más de 5 MB.
+
+## v2.1.113 — 2026-10-14
+
+- Panel de plataforma `/superadmin` (solo el dueño, en app.ledbox.online): Resumen con empresas, usuarios activos, ingresos, eventos, presupuestos enviados y aprobados, montos y cobros, cada uno contra el período anterior; Actividad por día y por hora (hora de Paraguay); Empresas y Usuarios con búsqueda, filtros, detalle y CSV; Tráfico del sitio, la landing de EventOS y el portal (visitas de hoy contra ayer, tiempo, scroll, rebote, páginas, origen, celular/computadora) y la demo aparte (demos iniciadas, duración, módulos más usados). La demo nunca se mezcla con los números del negocio.
+- Acceso: solo la cuenta del dueño con el correo verificado (entrando con Google o completando un cambio de contraseña); cualquier otra persona vuelve al inicio. Nadie puede asignar el correo del dueño a otra cuenta, y cambiar el correo de una cuenta anula sus links de cambio de contraseña.
+- Métricas propias de visitas sin datos personales: sin IP, sin navegador, sin cookies y respetando «no rastrear».
+- Los CSV del panel neutralizan fórmulas: los textos que empiezan con «=», «+», «@» o «-» salen con un apóstrofo adelante.
