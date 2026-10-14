@@ -76,11 +76,14 @@ export function PageBeacon() {
     let visibleMs = 0;
     let visibleSince = document.visibilityState === "visible" ? Date.now() : 0;
     let maxScroll = scrollPercent();
+    let sent = false; // como máximo la vista inicial y UN envío de duración por vista
 
     const onScroll = () => {
       maxScroll = Math.max(maxScroll, scrollPercent());
     };
     const flush = () => {
+      if (sent) return;
+      sent = true;
       if (visibleSince) {
         visibleMs += Date.now() - visibleSince;
         visibleSince = 0;
@@ -90,7 +93,7 @@ export function PageBeacon() {
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flush();
-      else if (!visibleSince) visibleSince = Date.now();
+      else if (!visibleSince && !sent) visibleSince = Date.now();
     };
 
     send(base);

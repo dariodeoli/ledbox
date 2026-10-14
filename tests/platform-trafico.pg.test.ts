@@ -241,6 +241,36 @@ test("tráfico: beacon, rate limit, agregados por host, demo_start y panel ignor
       assert.equal(demo.startedDelta, "nuevo");
     });
 
+    await t.test("tope global por host y minuto: rotar UA o X-Forwarded-For no evita el límite, y el primer XFF no cambia el hash", async () => {
+      await reset();
+      const now = new Date("2026-10-14T18:00:30Z");
+      let last: Response | null = null;
+      for (let i = 0; i < metrics.GLOBAL_RATE_PER_MINUTE + 10; i += 1) {
+        last = await send(view(), { ip: `${i % 250}.1.1.1, 190.7.7.7`, ua: `${CHROME} rot${i}` }, now);
+      }
+      assert.equal(last!.status, 204);
+      assert.equal(await count(), metrics.GLOBAL_RATE_PER_MINUTE, "pasado el tope global se descarta");
+      // Otro host y otro minuto tienen su propio cupo.
+      await send(view({ host: DEMO }), { ip: "9.9.9.9" }, now);
+      await send(view(), { ip: "9.9.9.9" }, new Date(now.getTime() + 60_000));
+      assert.equal(await count(), metrics.GLOBAL_RATE_PER_MINUTE + 2);
+      // La IP de confianza es la última de XFF: cambiar el primer valor da el mismo visitante.
+      await reset();
+      const a = view();
+      const b = view();
+      await send(a, { ip: "1.1.1.1, 190.8.8.8" });
+      await send(b, { ip: "2.2.2.2, 190.8.8.8" });
+      assert.equal((await rowsOf(a.viewId as string))[0].visitorHash, (await rowsOf(b.viewId as string))[0].visitorHash);
+    });
+
+    await t.test("recordDemoStart es atómico: arranques simultáneos del mismo visitante dejan una sola fila", async () => {
+      await reset();
+      const now = new Date("2026-10-14T15:00:00Z");
+      const results = await Promise.all(Array.from({ length: 12 }, () => metrics.recordDemoStart({ visitorHash: "aaaabbbbccccdddd", now })));
+      assert.equal(results.filter(Boolean).length, 1);
+      assert.equal(Number((await db.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "DemoSession"`)[0].n), 1);
+    });
+
     await t.test("la purga perezosa borra lo de más de 400 días y deja lo reciente", async () => {
       await reset();
       const now = new Date("2026-10-14T18:00:00Z");

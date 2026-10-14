@@ -212,3 +212,12 @@ beacon de cierre.
   Demo, aparte de las del negocio.
 - `trafico-range.ts` es un rango propio y chico; cuando E1a traiga `lib/platform/periods.ts` se puede reemplazar sin
   cambiar los tipos de las consultas.
+- **Abuso del beacon**: además del tope por visitante hay un tope global de 600 por host y minuto
+  (`metrics:view:global:<host>:<minuto>`); rotar UA o `X-Forwarded-For` no lo evita. Un tope global de filas por día
+  no se agregó: `rateLimit()` tiene ventana fija de 15 min y contar filas por request no es barato.
+- **IP del hash**: el último valor de `X-Forwarded-For` (lo agrega el proxy de confianza, Traefik/Coolify; el primero lo
+  escribe el cliente y se puede falsear) y, si no hay, `X-Real-IP`. Si hubiera otro proxy delante de Traefik, el último
+  valor sería ese proxy: verificar en producción que cada visitante da una IP distinta.
+- **Fallo cerrado**: en producción, sin `AUTH_SECRET` ni `JWT_SECRET` no se registra nada (warn en el log).
+- **Paths**: cualquier segmento con `@` o `%` pasa a `:id`, y bajo una raíz que no es una ruta pública ni del panel todo
+  lo que sigue pasa a `:id`.

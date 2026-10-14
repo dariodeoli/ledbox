@@ -244,3 +244,46 @@ test("fuente: las consultas de tráfico están en lib/platform/queries, son de s
   assert.ok(!/\$executeRaw|\.create\(|\.update\(|\.delete\(|INSERT |UPDATE |DELETE /.test(queries));
   assert.ok(!/\$queryRawUnsafe|\$executeRawUnsafe/.test(queries));
 });
+
+test("normalizePath: correos, %, raíces desconocidas y /portal no filtran nada", () => {
+  assert.equal(normalizePath("/contacto/juan@example.com"), "/contacto/:id");
+  assert.equal(normalizePath("/aprobar/abc"), "/aprobar/:id");
+  assert.equal(normalizePath("/aprobar/abc/def"), "/aprobar/:id/:id");
+  assert.equal(normalizePath("/productos/a%40b.com"), "/productos/:id");
+  assert.equal(normalizePath("/eventos/x%20y"), "/eventos/:id");
+  assert.equal(normalizePath("/ajustes/empresa"), "/ajustes/empresa", "rutas conocidas conservan sus nombres");
+  assert.equal(normalizePath("/portal/AB12CD"), "/portal/:token");
+  assert.equal(normalizePath("/juan@x.com"), "/:id");
+});
+
+test("PageBeacon: flush con bandera sent (a lo sumo vista inicial + un envío de duración)", () => {
+  const source = readFileSync(join(root, "components/analytics/PageBeacon.tsx"), "utf8");
+  assert.match(source, /let sent = false/);
+  assert.match(source, /const flush = \(\) => \{\s*if \(sent\) return;\s*sent = true;/);
+  assert.equal((source.match(/send\(/g) ?? []).length, 3, "definición + vista inicial + duración");
+});
+
+test("secreto del hash: en producción sin AUTH_SECRET/JWT_SECRET falla cerrado; la IP es la del proxy de confianza", async () => {
+  const { metricsSecret, trustedIp } = await import("../lib/server/web-metrics");
+  const env = process.env as Record<string, string | undefined>;
+  const saved = { a: env.AUTH_SECRET, j: env.JWT_SECRET, n: env.NODE_ENV };
+  try {
+    delete env.AUTH_SECRET;
+    delete env.JWT_SECRET;
+    env.NODE_ENV = "production";
+    assert.equal(metricsSecret(), null);
+    env.NODE_ENV = "development";
+    assert.ok(metricsSecret());
+    env.NODE_ENV = "production";
+    env.JWT_SECRET = "x".repeat(32);
+    assert.equal(metricsSecret(), "x".repeat(32));
+  } finally {
+    for (const [key, value] of [["AUTH_SECRET", saved.a], ["JWT_SECRET", saved.j], ["NODE_ENV", saved.n]] as const) {
+      if (value === undefined) delete env[key]; else env[key] = value;
+    }
+  }
+  const req = (h: Record<string, string>) => new Request("https://ledbox.online/x", { headers: h });
+  assert.equal(trustedIp(req({ "x-forwarded-for": "6.6.6.6, 190.1.1.1" })), "190.1.1.1", "el primero lo escribe el cliente");
+  assert.equal(trustedIp(req({ "x-real-ip": "190.2.2.2" })), "190.2.2.2");
+  assert.equal(trustedIp(req({})), "unknown");
+});
