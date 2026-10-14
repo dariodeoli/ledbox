@@ -165,3 +165,50 @@ números ya agregados). SQL: `(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Am
   detecta; si falla, agrupar con offset fijo `-03`.
 - «Enviados» depende de que cada envío audite: queda en la nota de fuente.
 - Vuelta atrás: revertir el commit; la migración es aditiva (columnas y tabla quedan sin uso).
+
+## 9. Tráfico (métricas propias)
+Captura propia de visitas y uso de la demo, sin servicios externos. Migración `202610180002_web_metrics`
+(aditiva, `IF NOT EXISTS`). La página «Tráfico» consume `lib/platform/queries/trafico.ts`.
+
+**Qué se mide**
+- Vistas en `ledbox.online`/`www` (se guardan como `ledbox.online`), `eventos.`, `demo.` y `clientes.` (portal, contado aparte);
+  catálogos y tiendas públicas por empresa cuando viven en esos hosts. `app.ledbox.online` (y `admin.`) NO se mide: ya tiene
+  `AdminActivityDay`. `/superadmin` y `/api` tampoco, en ningún host.
+- Por vista (`WebView`): host, path normalizado, dominio del referrer, `mobile`/`desktop`, país (solo si el proxy manda
+  `cf-ipcountry`, `x-vercel-ip-country` o `x-country-code`; si no, nulo), duración visible en segundos (tope 1800), scroll
+  máximo 0–100 %, si es la primera vista de la sesión y un hash diario del visitante.
+- Demo (`DemoSession`): evento `demo_start` en el servidor (`/api/demo/session`, una por visitante cada 30 min; «Reiniciar la
+  demo», bots y DNT no cuentan), duración total y módulos visitados (primer segmento del path). Hay una sola demo: no hay
+  variantes. «Cuál demo se usa más» = módulos más visitados del host de la demo.
+
+**Qué NO se guarda**: IP, user agent, cookies, query string, fragmento, ni tokens/ids (`/p/:token`, `/firma/:token/documento`,
+`/tienda/<slug>/mayorista/:token`, `/pedido/:token`, ids del panel demo → `:id`). El referrer queda en el dominio. El
+visitante es `sha256(sal_del_día + ip + ua)` truncado a 16 hex; la sal es un HMAC del día de Paraguay con el secreto del
+servidor, rota todos los días y no se guarda. Una misma persona en dos días son dos hashes: «visitantes» es la suma de
+visitantes por día, no personas únicas.
+
+**Por qué no hace falta banner**: no hay cookies ni almacenamiento persistente (el id de navegación vive en `sessionStorage`
+y muere con la pestaña), no hay identificador entre días ni dato personal, y se respeta «No rastrear» (`navigator.doNotTrack`
+y header `DNT`: no se manda ni se guarda nada). Es medición propia agregada, sin terceros.
+
+**Cómo funciona**: `components/analytics/PageBeacon.tsx` (cliente, sin librerías) está en el layout raíz salvo en el panel real
+(en la demo sí). Manda la vista al cargar y, al ocultarse la pestaña o `pagehide`, la duración visible y el scroll con
+`sendBeacon`. Solo en producción (o con `NEXT_PUBLIC_WEB_METRICS_DEBUG=1`). `POST /api/metrics/view`: valida estrictamente
+(claves, tipos, tamaños ≤ 2 KB, host en lista cerrada), filtra bots, rate limit por visitante (240 en 15 min), sin CORS (si
+el `Origin` no es el host de la vista se ignora), responde siempre 204 y escribe en `after()`. El `UPSERT` por `viewId` es
+idempotente (duración y scroll toman el máximo) y solo el mismo visitante actualiza su vista.
+
+**Retención**: purga perezosa (≈1 de cada 500 beacons) de lo de más de 400 días, en lotes de 5000.
+
+**Consultas** (`lib/platform/queries/trafico.ts`, agregadas, días de Paraguay, rango de `lib/platform/trafico-range.ts`):
+`getTraficoPorHost` (vistas, visitantes, sesiones, tiempo promedio y mediana, scroll, rebote, vistas del período anterior),
+`getVistasPorDia`, `getTopPaginas`, `getTopReferrers`, `getDispositivos`, `getHoy` (hoy vs. mismo tramo de ayer) y `getDemo`
+(demos iniciadas por día, duración promedio y mediana, módulos por sesión, módulos más usados). Rebote = sesión de una sola
+vista con menos de 10 s (sin duración reportada cuenta como 0). La duración solo existe si el navegador alcanzó a mandar el
+beacon de cierre.
+- **Conversión demo → registro o lead: «sin datos».** La demo no comparte identificador con leads ni registros; no se mide
+  adivinando. `getDemo().conversion` devuelve `{ available: false, reason }`.
+- Las vistas del host de la demo salen en `getTraficoPorHost` marcadas `isDemo`; la página debe mostrarlas en la sección
+  Demo, aparte de las del negocio.
+- `trafico-range.ts` es un rango propio y chico; cuando E1a traiga `lib/platform/periods.ts` se puede reemplazar sin
+  cambiar los tipos de las consultas.
