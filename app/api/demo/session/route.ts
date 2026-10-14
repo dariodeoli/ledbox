@@ -1,6 +1,7 @@
 import { clearSessionCookie, createSession, getAuthenticatedAdmin, revokeCurrentSession, setSessionCookie } from "@/lib/server/auth";
 import { ensureDemoData, isDemoOrganizationId } from "@/lib/server/demo-data";
 import { jsonError } from "@/lib/server/http";
+import { scheduleDemoStart } from "@/lib/server/web-metrics";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
@@ -48,6 +49,8 @@ async function enterDemo(request: Request, nextValue: string | null, options?: {
   const demo = await ensureDemoData(options?.reset ? { reset: true } : undefined);
   const session = await createSession({ id: demo.user.id, email: demo.user.email, role: demo.user.role }, demo.organizationId);
   await setSessionCookie(session.jwt, session.expiresAt);
+  // Evento `demo_start` (docs/SUPERADMIN.md «Tráfico»): «Reiniciar la demo» no es una demo nueva.
+  if (!options?.reset) scheduleDemoStart(request);
   return redirectTo(safeNext(nextValue), 303);
 }
 
