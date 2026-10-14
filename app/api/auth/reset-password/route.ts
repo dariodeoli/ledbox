@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     await db.$transaction(async (tx) => {
       const claimed = await tx.passwordResetToken.updateMany({ where: { id: token.id, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
       if (claimed.count !== 1) throw new Error("RESET_TOKEN_ALREADY_USED");
-      await tx.adminUser.update({ where: { id: token.userId }, data: { passwordHash } });
+      await tx.adminUser.update({ where: { id: token.userId }, data: { passwordHash, emailVerifiedAt: now } });
       await tx.adminSession.updateMany({ where: { userId: token.userId, revokedAt: null }, data: { revokedAt: now } });
     });
   } catch (error) {

@@ -9,6 +9,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
 import { guardUserOwnerChange, UserOwnerGuardError } from "@/lib/server/user-owner-guard";
+import { emailChangePatch, ownerEmailConflict } from "@/lib/platform/access";
 import { emailError, FIELD_MESSAGES, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
@@ -26,6 +27,8 @@ export const dynamic = "force-dynamic";
  * acceso: al cambiarlo se cierran las sesiones abiertas de esa cuenta y vuelve a
  * entrar con el correo nuevo.
  */
+
+const OWNER_EMAIL_RESERVED = "Ese correo está reservado y no se puede usar desde una empresa.";
 
 function isAssignableRole(value: unknown): value is AdminRole {
   return typeof value === "string" && (ASSIGNABLE_ROLES as readonly string[]).includes(value);
@@ -74,6 +77,10 @@ export async function POST(request: Request) {
   if (!personNameValid(name)) return jsonError(FIELD_MESSAGES.name, 400);
   if (emailError(email)) return jsonError(emailError(email) ?? "Correo inválido.", 400);
   if (password.length < 12) return jsonError("La contraseña inicial debe tener al menos 12 caracteres.", 400);
+
+  // El correo del dueño de la plataforma está reservado: no se asigna desde ninguna
+  // empresa (el dueño entra por invitación o por Google; docs/SUPERADMIN.md §2).
+  if (ownerEmailConflict({ currentEmail: null, nextEmail: email })) return jsonError(OWNER_EMAIL_RESERVED, 409);
 
   // Límite del plan (issue #42): crear usuario (o sumar una membresía existente)
   // ocupa un lugar. Vale igual para ambos caminos de abajo.
@@ -148,7 +155,7 @@ export async function PATCH(request: Request) {
   if (isAssignableRole(body.role)) membershipData.role = body.role;
 
   // Datos de la cuenta (issue #22): nombre y correo con las reglas compartidas.
-  const accountData: { name?: string; email?: string } = {};
+  const accountData: { name?: string; email?: string; emailVerifiedAt?: null } = {};
   if (typeof body.name === "string") {
     const name = normalizePersonName(body.name);
     if (!personNameValid(name)) return jsonError(FIELD_MESSAGES.name, 400);
@@ -160,9 +167,12 @@ export async function PATCH(request: Request) {
     const invalid = emailError(email);
     if (invalid) return jsonError(invalid, 400);
     if (email !== membership.user.email) {
+      // Ni se asigna el correo del dueño a otra cuenta ni se cambia el de la cuenta del dueño.
+      if (ownerEmailConflict({ currentEmail: membership.user.email, nextEmail: email })) return jsonError(OWNER_EMAIL_RESERVED, 409);
       const taken = await db.adminUser.findUnique({ where: { email }, select: { id: true } });
       if (taken) return jsonError("Ya existe otro usuario con ese correo.", 409);
-      accountData.email = email;
+      // El correo nuevo no está verificado: el control de la casilla se prueba de nuevo.
+      Object.assign(accountData, emailChangePatch(email));
       emailChanged = true;
     }
   }

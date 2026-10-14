@@ -271,12 +271,16 @@ async function joinTeam(input: JoinTeamInput): Promise<{ userId: string; account
             passwordHash: input.passwordHash,
             role: invitation.role,
             active: true,
+            // El token solo viaja por correo: aceptarlo prueba el control de esa casilla.
+            emailVerifiedAt: now,
           },
         });
         userId = user.id;
         accountCreated = true;
       } else {
         await tx.teamInvitation.update({ where: { id: invitation.id }, data: { acceptedById: userId } });
+        // Cuenta existente: la invitación es al mismo correo de la cuenta (se busca por él).
+        await tx.adminUser.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: now } });
       }
 
       await tx.adminMembership.upsert({
