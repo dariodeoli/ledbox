@@ -107,3 +107,32 @@ test("ningún componente 'use client' llega (directo o en cadena) a la base de d
   }
   assert.deepEqual(offenders, [], `cadenas de cliente a la base:\n${offenders.join("\n")}`);
 });
+
+test("ningún componente 'use client' importa lib/platform/guard ni lib/platform/queries (directo o en cadena)", () => {
+  const sources = [...walk(join(root, "app")), ...walk(join(root, "components"))];
+  const clients = sources.filter((file) => /^\s*["']use client["']/.test(readFileSync(file, "utf8")));
+  const forbidden = /^lib\/platform\/(guard|queries)(\/|\.|$)/;
+  const offenders: string[] = [];
+  for (const entry of clients) {
+    const seen = new Set<string>();
+    const stack: Array<{ file: string; chain: string[] }> = [{ file: entry, chain: [relative(root, entry)] }];
+    while (stack.length) {
+      const { file, chain } = stack.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      if (forbidden.test(relative(root, file))) {
+        offenders.push(chain.join(" → "));
+        continue;
+      }
+      for (const spec of importsOf(readFileSync(file, "utf8"))) {
+        if (/^@\/lib\/platform\/(guard|queries)(\/|$)/.test(spec) || /(^|\/)platform\/(guard|queries)(\/|$)/.test(spec)) {
+          offenders.push([...chain, spec].join(" → "));
+          continue;
+        }
+        const next = resolveLocal(file, spec);
+        if (next && !next.includes("node_modules")) stack.push({ file: next, chain: [...chain, relative(root, next)] });
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `cadenas de cliente al guard o a las consultas de plataforma:\n${offenders.join("\n")}`);
+});
