@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * Controla el tamaño del contexto de build de Docker (Coolify clona el repo y
- * hace `COPY . .`): suma los archivos versionados que `.dockerignore` no excluye
- * y falla si el total pasa el tope o si algún archivo pesa demasiado.
+ * Controla el tamaño del contexto de build: suma los archivos versionados que
+ * `.dockerignore` no excluye y falla si el total pasa el tope o si algún archivo pesa
+ * demasiado. Coolify construye con Railpack (BuildKit) y el `Dockerfile` queda como
+ * alternativa. El tope protege igual el tamaño del repo; que Railpack respete
+ * `.dockerignore` está sin verificar (ver docs/OPERACION.md).
  * Antecedente: en Agendese, evidencias de QA commiteadas (docs/qa, ~19.600
  * .har.gz/.json) llevaron el contexto de 300 MB a 2 GB y el build se cortaba.
  *

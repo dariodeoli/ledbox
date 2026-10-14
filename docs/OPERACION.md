@@ -88,7 +88,7 @@ En el deploy de Coolify conviene fijar `BACKUP_DIR` a un volumen persistente (po
 ### Programación en producción (Coolify)
 
 En producción no hay cron del sistema: son **dos tareas programadas de Coolify** sobre la
-aplicación `ledbox:main`. La configuración vive fuera del repo y es esta:
+aplicación `ledbox-production` (UUID `shgn0g8bfuitauifyf69noeq`, proyecto EventOS → production; se llamaba `ledbox:main` hasta el 14-10-2026). Se construye con **Railpack** (no con el `Dockerfile` del repo). La configuración vive fuera del repo y es esta:
 
 | Tarea | Frecuencia | Comando |
 | --- | --- | --- |
