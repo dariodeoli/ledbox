@@ -85,3 +85,11 @@ test("combinaciones: cualquier condición caída alcanza para negar", () => {
   }
   assert.equal(allowed, 1);
 });
+
+test("cambiar el correo invalida los links de reset abiertos y el PIN bloqueado no cuenta como actividad", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const users = readFileSync("app/api/admin/users/route.ts", "utf8");
+  assert.match(users, /if \(emailChanged\) await tx\.passwordResetToken\.deleteMany\(\{ where: \{ userId: membership\.adminUserId, usedAt: null \} \}\)/);
+  const tenancy = readFileSync("lib/server/tenancy.ts", "utf8");
+  assert.match(tenancy, /if \(!auth\.session\.lockedAt\) trackAdminActivity\(/);
+});
