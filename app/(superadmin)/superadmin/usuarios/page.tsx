@@ -5,7 +5,7 @@ import { PAGE_SIZE, parseTableParams, searchAllowed, withParams, type RawParams 
 import { rateLimit } from "@/lib/server/rate-limit";
 import { adminRoleLabel, formatDate, formatDateTime } from "@/lib/admin-format";
 import { PlatformShell } from "@/components/platform/PlatformShell";
-import { TableControls } from "@/components/platform/TableControls";
+import { FilterForm } from "@/components/platform/FilterForm";
 import { TablePager } from "@/components/platform/TablePager";
 import { SortHeader } from "@/components/platform/SortHeader";
 
@@ -41,7 +41,7 @@ export default async function UsuariosPage({ searchParams }: Readonly<{ searchPa
     <PlatformShell active="usuarios" title="Usuarios">
       <div className="platform-page">
         <div className="platform-toolbar">
-          <TableControls
+          <FilterForm
             basePath={BASE}
             current={strings(params)}
             q={table.q}

@@ -10,13 +10,14 @@ import type { AdminIconName } from "@/lib/admin-types";
  * navegación. En móvil el menú pasa a una franja horizontal arriba (sin JavaScript).
  */
 
-export type PlatformSection = "resumen" | "actividad" | "empresas" | "usuarios";
+export type PlatformSection = "resumen" | "actividad" | "trafico" | "empresas" | "usuarios";
 
 type NavItem = { key: PlatformSection; label: string; href: string; icon: AdminIconName; soon?: boolean };
 
 const NAV: NavItem[] = [
   { key: "resumen", label: "Resumen", href: "/superadmin", icon: "overview" },
   { key: "actividad", label: "Actividad", href: "/superadmin/actividad", icon: "clock" },
+  { key: "trafico", label: "Tráfico", href: "/superadmin/trafico", icon: "globe" },
   { key: "empresas", label: "Empresas", href: "/superadmin/empresas", icon: "building" },
   { key: "usuarios", label: "Usuarios", href: "/superadmin/usuarios", icon: "users" },
 ];

@@ -200,7 +200,7 @@ idempotente (duración y scroll toman el máximo) y solo el mismo visitante actu
 
 **Retención**: purga perezosa (≈1 de cada 500 beacons) de lo de más de 400 días, en lotes de 5000.
 
-**Consultas** (`lib/platform/queries/trafico.ts`, agregadas, días de Paraguay, rango de `lib/platform/trafico-range.ts`):
+**Consultas** (`lib/platform/queries/trafico.ts`, agregadas, días de Paraguay, rango de `lib/platform/periods.ts`):
 `getTraficoPorHost` (vistas, visitantes, sesiones, tiempo promedio y mediana, scroll, rebote, vistas del período anterior),
 `getVistasPorDia`, `getTopPaginas`, `getTopReferrers`, `getDispositivos`, `getHoy` (hoy vs. mismo tramo de ayer) y `getDemo`
 (demos iniciadas por día, duración promedio y mediana, módulos por sesión, módulos más usados). Rebote = sesión de una sola
@@ -210,5 +210,4 @@ beacon de cierre.
   adivinando. `getDemo().conversion` devuelve `{ available: false, reason }`.
 - Las vistas del host de la demo salen en `getTraficoPorHost` marcadas `isDemo`; la página debe mostrarlas en la sección
   Demo, aparte de las del negocio.
-- `trafico-range.ts` es un rango propio y chico; cuando E1a traiga `lib/platform/periods.ts` se puede reemplazar sin
-  cambiar los tipos de las consultas.
+- El rango es el de `lib/platform/periods.ts` (`resolvePeriod`); los deltas son `Delta` (`nuevo` / `igual` / `pct`).

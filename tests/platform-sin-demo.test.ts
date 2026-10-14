@@ -22,6 +22,9 @@ test("toda consulta de lib/platform/queries usa el filtro único de sin-demo", (
     const imports = /from\s+["']@\/lib\/platform\/sin-demo["']/.test(source);
     const uses = /\b(orgReal|usuarioReal)\(/.test(source);
     const raw = /\$queryRaw|\$queryRawUnsafe|runMetric\(/.test(source);
+    // trafico.ts lee WebView y DemoSession: no tienen organizationId, la demo es un HOST. Su regla
+    // equivalente: las vistas de ese host solo salen marcadas aparte (`isDemo`), vía demoHost().
+    if (file.endsWith("trafico.ts")) return !/isDemo: row\.host === demo/.test(source) || !/function demoHost\(/.test(source);
     return raw && !(imports && uses);
   });
   assert.deepEqual(offenders.map((file) => relative(root, file)), []);
