@@ -4,6 +4,7 @@ import "./globals.css";
 import { publicConfig, siteProfileForHost } from "@/lib/public-config";
 import { isAdminRoute } from "@/lib/admin-routes";
 import { AppFooter } from "@/components/app-footer";
+import { PageBeacon } from "@/components/analytics/PageBeacon";
 import { PublicFooter } from "@/components/public/PublicFooter";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -52,5 +53,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const app = profile.kind === "app" || profile.kind === "admin" || host === new URL(publicConfig.demoUrl).hostname || isAdminRoute(pathname);
   // Catálogo y seguimiento de pedido (alquileres fase 3): pertenecen a la empresa dueña, sin el pie de LedBox.
   const companyPublic = /^\/(catalogo|tienda|pedido)\//.test(pathname);
-  return <html lang="es"><body>{children}{companyPublic ? null : portal ? <AppFooter variant="portal" /> : product ? <AppFooter variant="product" /> : app ? <AppFooter variant="app" /> : <PublicFooter />}</body></html>;
+  // Métricas propias de tráfico: todo menos el panel real (ya tiene su registro de actividad); la demo sí.
+  const onDemoHost = host === new URL(publicConfig.demoUrl).hostname;
+  const panelOnly = (profile.kind === "app" || profile.kind === "admin" || isAdminRoute(pathname)) && !onDemoHost;
+  return <html lang="es"><body>{children}{panelOnly ? null : <PageBeacon />}{companyPublic ? null : portal ? <AppFooter variant="portal" /> : product ? <AppFooter variant="product" /> : app ? <AppFooter variant="app" /> : <PublicFooter />}</body></html>;
 }
