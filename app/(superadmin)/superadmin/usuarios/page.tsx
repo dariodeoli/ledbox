@@ -81,7 +81,7 @@ export default async function UsuariosPage({ searchParams }: Readonly<{ searchPa
                         <tr key={row.id} data-selected={table.detail === row.id ? "true" : undefined}>
                           <th scope="row"><Link href={withParams(BASE, params, { detalle: row.id })}>{row.name}</Link></th>
                           <td>{row.email}</td>
-                          <td>{row.companies.map((c) => `${c.org} (${adminRoleLabel(c.role)})`).join(", ") || "—"}</td>
+                          <td className="platform-wrap">{row.companies.map((c) => `${c.org} (${adminRoleLabel(c.role)})`).join(", ") || "—"}</td>
                           <td>{row.active ? "Sí" : "No"}</td>
                           <td>{row.lastLogin ? formatDateTime(row.lastLogin) : "nunca"}</td>
                           <td>{row.lastActive ? formatDateTime(row.lastActive) : "sin datos"}</td>

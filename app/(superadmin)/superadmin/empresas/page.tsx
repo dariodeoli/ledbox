@@ -53,8 +53,8 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
             q={table.q}
             searchLabel="Buscar empresas por nombre o slug"
             filters={[
-              { name: "activa", label: "Estado", value: table.filters.activa ?? "", options: [{ value: "", label: "Todas" }, { value: "si", label: "Activas" }, { value: "no", label: "Inactivas" }] },
-              { name: "plan", label: "Plan", value: table.filters.plan ?? "", options: [{ value: "", label: "Todos los planes" }, ...plans.map((plan) => ({ value: plan.code, label: plan.name }))] },
+              { name: "activa", label: "Estado", value: table.filters.activa ?? "", options: [{ value: "", label: "Estado: todas" }, { value: "si", label: "Activas" }, { value: "no", label: "Inactivas" }] },
+              { name: "plan", label: "Plan", value: table.filters.plan ?? "", options: [{ value: "", label: "Plan: todos" }, ...plans.map((plan) => ({ value: plan.code, label: plan.name }))] },
             ]}
           />
           <p className="platform-hint">

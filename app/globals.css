@@ -4944,7 +4944,7 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Tablas de plataforma: se desplazan dentro de su caja, nunca la página */
 .platform-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .platform-controls .admin-search { flex: 1 1 14rem; max-width: 26rem; height: 44px; }
-.platform-controls .admin-field { min-width: 10rem; }
+.platform-controls > span.relative { flex: 0 1 13rem; min-width: min(100%, 10rem); width: auto !important; }
 .platform-controls-go { min-height: 44px; }
 .platform-notice { padding: 12px 14px; border: 1px solid var(--a-warn); border-radius: var(--a-radius); background: var(--a-warn-surface, transparent); color: var(--a-warn-text, var(--a-text)); font-size: 13px; }
 .platform-split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -4957,13 +4957,15 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .platform-table tbody th small { display: block; color: var(--a-muted); font-weight: 400; }
 .platform-table tbody th a { color: var(--a-accent); }
 .platform-table tr[data-selected="true"] { background: var(--a-accent-soft); }
-.platform-table td { color: var(--a-text); }
+.platform-table td { color: var(--a-text); white-space: nowrap; }
+.platform-table td.platform-wrap { white-space: normal; min-width: 14rem; }
 .platform-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .platform-sort { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-decoration: none; }
 .platform-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--a-muted-2); font-size: 12px; }
 .platform-pager-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .platform-chip--off { opacity: .55; cursor: not-allowed; }
 .platform-detail { display: grid; gap: 10px; align-content: start; padding: 14px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel); min-width: 0; }
+.platform-detail > .platform-chip { justify-self: start; }
 .platform-detail h2 { color: var(--a-text-strong); font-size: 16px; overflow-wrap: anywhere; }
 .platform-detail h3 { color: var(--a-muted-2); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .platform-facts { display: grid; gap: 6px; }
