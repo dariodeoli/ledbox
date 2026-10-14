@@ -13,6 +13,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "test:rules": "node --import tsx --test tests/*.test.ts && node scripts/check-fields.mjs && npm run test:automation",
     "test:automation": "node --test tests/automation.test.mjs",
+    "check:contexto": "node scripts/verificar-contexto-build.mjs",
     "check:fields": "node scripts/check-fields.mjs",
     "release:prepare": "npm run typecheck && npm run test:rules && npm run build",
     "release:check": "node scripts/orquestador.mjs prepare",

@@ -4,3 +4,33 @@ node_modules
 .env
 .env.*
 !.env.example
+
+# Contexto de build: solo lo que `npm run build` y el runtime usan.
+# Lo controla `scripts/verificar-contexto-build.mjs` (tope 400 MB, 5 MB por archivo)
+# y `tests/contexto-build.test.ts`. Nada de app/, components/, lib/ ni scripts del
+# build lee estas carpetas (verificado con rg; solo aparecen en comentarios).
+docs/
+design/
+tests/
+e2e/
+coverage/
+playwright-report/
+test-results/
+.claude/
+.atl/
+.github/
+qa/
+**/qa-evidencias/
+**/*.har
+**/*.har.gz
+**/*.zip
+**/*.webm
+**/*.mp4
+**/*.trace
+**/screenshots/
+**/capturas/
+# Sitio estático viejo: Next sirve todo desde public/.
+assets/
+index.html
+*.md
+!README.md

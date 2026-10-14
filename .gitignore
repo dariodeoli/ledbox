@@ -10,3 +10,14 @@ npm-debug.log*
 # Respaldos de la base (scripts/backup.mjs): los dumps y su estado no van al repo.
 backups/
 *.sql.gz
+
+# Evidencias de QA y reportes de pruebas: nunca al repo (en Agendese llevaron el
+# contexto de build de 300 MB a 2 GB). Guardarlas como artefactos de CI o en qa-local/.
+qa-local/
+docs/qa/
+playwright-report/
+test-results/
+coverage/
+*.har
+*.har.gz
+*.trace

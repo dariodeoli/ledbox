@@ -99,7 +99,7 @@ async function checks(cwd, sha, config, signal, runner) {
   let complete = false;
   const scripts = readJson(join(cwd, "package.json")).scripts ?? {};
   const embeddedAutomation = scripts["test:automation"] === "node --test tests/automation.test.mjs" && /&&\s*npm run test:automation\s*$/.test(scripts["test:rules"] ?? "");
-  const plan = [["npm ci", "npm", ["ci"]], ["prisma generate", "npx", ["prisma", "generate"]], ...(existsSync(join(cwd, "prisma/schema.prisma")) ? [["prisma validate", "npx", ["prisma", "validate"]]] : []), ["typecheck", "npm", ["run", "typecheck"]], ["test:rules", "npm", ["run", "test:rules"]], ...(!embeddedAutomation ? [["test:automation", "node", ["--test", "tests/automation.test.mjs"]]] : []), ["build", "npm", ["run", "build"]]];
+  const plan = [["npm ci", "npm", ["ci"]], ["prisma generate", "npx", ["prisma", "generate"]], ...(existsSync(join(cwd, "prisma/schema.prisma")) ? [["prisma validate", "npx", ["prisma", "validate"]]] : []), ["typecheck", "npm", ["run", "typecheck"]], ["test:rules", "npm", ["run", "test:rules"]], ...(!embeddedAutomation ? [["test:automation", "node", ["--test", "tests/automation.test.mjs"]]] : []), ["contexto de build", "node", ["scripts/verificar-contexto-build.mjs"]], ["build", "npm", ["run", "build"]]];
   const window = { sha, cwd, commands: plan.map(([, executable, args]) => [executable, ...args]) };
   const grant = config.authorizeWindow ? config.authorizeWindow(window) : requireHeavyWindow(config, window);
   config.windowStart = { sha, leaseID: grant.leaseID, at: Date.now() };

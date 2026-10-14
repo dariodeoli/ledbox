@@ -21,4 +21,5 @@ jobs:
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run test:rules
+      - run: npm run check:contexto
       - run: npm run build
