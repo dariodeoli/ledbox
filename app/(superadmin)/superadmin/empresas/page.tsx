@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/server/rate-limit";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/admin-format";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { PeriodChips } from "@/components/platform/PeriodChips";
-import { TableControls } from "@/components/platform/TableControls";
+import { FilterForm } from "@/components/platform/FilterForm";
 import { TablePager } from "@/components/platform/TablePager";
 import { SortHeader } from "@/components/platform/SortHeader";
 
@@ -47,7 +47,7 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
       <div className="platform-page">
         <div className="platform-toolbar">
           <PeriodChips basePath={BASE} params={params} active={range.key} />
-          <TableControls
+          <FilterForm
             basePath={BASE}
             current={current}
             q={table.q}

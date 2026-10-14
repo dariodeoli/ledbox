@@ -15,7 +15,9 @@ import {
   visitorHash,
 } from "../lib/platform/trafico-core";
 import { shouldSendMetrics } from "../lib/analytics/should-send";
-import { addDays, deltaPct, paraguayMidnight, traficoRange } from "../lib/platform/trafico-range";
+import { businessViews, formatDuration, formatPct, parseSite, splitHosts, type SiteHosts } from "../lib/platform/trafico-view";
+import type { HostRow } from "../lib/platform/queries/trafico";
+import { asuncionMidnight, computeDelta, resolvePeriod } from "../lib/platform/periods";
 
 const root = process.cwd();
 const HOSTS = hostKindMap({
@@ -172,23 +174,26 @@ test("DNT, entorno y flag de pruebas", () => {
 
 test("rango de Paraguay: medianoche local, anterior de igual duración, delta «nuevo»", () => {
   const now = new Date("2026-10-14T02:30:00Z"); // 13-10 23:30 en Paraguay
-  const hoy = traficoRange("hoy", now);
-  assert.equal(hoy.from.toISOString(), "2026-10-13T03:00:00.000Z");
-  assert.equal(hoy.to.toISOString(), "2026-10-14T03:00:00.000Z");
+  const hoy = resolvePeriod("hoy", now);
+  assert.equal(hoy.start.toISOString(), "2026-10-13T03:00:00.000Z");
+  assert.equal(hoy.end.toISOString(), "2026-10-14T03:00:00.000Z");
   assert.deepEqual(hoy.days, ["2026-10-13"]);
-  const semana = traficoRange("7d", new Date("2026-10-14T15:00:00Z"));
+  const semana = resolvePeriod("7d", new Date("2026-10-14T15:00:00Z"));
   assert.equal(semana.days.length, 7);
   assert.equal(semana.prevDays.length, 7);
-  assert.equal(semana.prevTo.getTime(), semana.from.getTime());
-  assert.equal(semana.to.getTime() - semana.from.getTime(), semana.from.getTime() - semana.prevFrom.getTime());
-  const anterior = traficoRange("mes-anterior", new Date("2026-10-14T15:00:00Z"));
+  assert.equal(semana.prevEnd.getTime(), semana.start.getTime());
+  assert.equal(semana.end.getTime() - semana.start.getTime(), semana.start.getTime() - semana.prevStart.getTime());
+  const anterior = resolvePeriod("mes-anterior", new Date("2026-10-14T15:00:00Z"));
   assert.equal(anterior.days[0], "2026-09-01");
   assert.equal(anterior.days.at(-1), "2026-09-30");
-  assert.equal(addDays("2026-02-28", 1), "2026-03-01");
-  assert.equal(paraguayMidnight("2026-10-14").toISOString(), "2026-10-14T03:00:00.000Z");
-  assert.equal(deltaPct(5, 0), "nuevo");
-  assert.equal(deltaPct(0, 0), null);
-  assert.equal(deltaPct(150, 100), 50);
+  assert.equal(asuncionMidnight("2026-10-14").toISOString(), "2026-10-14T03:00:00.000Z");
+  assert.deepEqual(computeDelta(5, 0), { kind: "nuevo" });
+  assert.deepEqual(computeDelta(0, 0), { kind: "igual" });
+  assert.deepEqual(computeDelta(150, 100), { kind: "pct", pct: 50, direction: "up" });
+});
+
+test("no queda el rango propio de tráfico: todo usa lib/platform/periods.ts", () => {
+  assert.equal(existsSync(join(root, "lib", "platform", "trafico-range.ts")), false);
 });
 
 function walk(dir: string, files: string[] = []) {
@@ -243,4 +248,68 @@ test("fuente: las consultas de tráfico están en lib/platform/queries, son de s
   const queries = readFileSync(join(root, "lib/platform/queries/trafico.ts"), "utf8");
   assert.ok(!/\$executeRaw|\.create\(|\.update\(|\.delete\(|INSERT |UPDATE |DELETE /.test(queries));
   assert.ok(!/\$queryRawUnsafe|\$executeRawUnsafe/.test(queries));
+});
+
+const HOST_NAMES: SiteHosts = { sitio: "ledbox.online", eventos: "eventos.ledbox.online", portal: "clientes.ledbox.online", demo: "demo.ledbox.online" };
+const row = (host: string, views: number, over: Partial<HostRow> = {}): HostRow => ({
+  host, isDemo: host === HOST_NAMES.demo, views, viewsPrev: 0, viewsDelta: { kind: "nuevo" }, visitors: views, sessions: views,
+  avgSec: null, medianSec: null, avgScrollPct: null, bounceRate: null, ...over,
+});
+
+test("splitHosts: la demo va aparte y nunca suma a un sitio ni al total del negocio", () => {
+  const rows = [row("demo.ledbox.online", 500), row("ledbox.online", 40), row("clientes.ledbox.online", 7)];
+  const { sites, demo } = splitHosts(rows, HOST_NAMES);
+  assert.deepEqual(sites.map((s) => [s.label, s.row?.views ?? null]), [["Sitio ledbox.online", 40], ["Landing EventOS", null], ["Portal de clientes", 7]]);
+  assert.equal(demo?.views, 500);
+  assert.equal(businessViews(rows, HOST_NAMES.demo), 47, "sin las 500 de la demo");
+  // Una fila del host de la demo nunca se cuela como sitio, ni aunque llegue sin la marca isDemo.
+  const unmarked = splitHosts([row("demo.ledbox.online", 9, { isDemo: false })], HOST_NAMES);
+  assert.ok(unmarked.sites.every((s) => s.row === null));
+  assert.equal(unmarked.demo?.views, 9);
+  // Sin datos: cada sitio queda en null (la pantalla dice «sin datos todavía», no ceros).
+  assert.ok(splitHosts([], HOST_NAMES).sites.every((s) => s.row === null));
+});
+
+test("formatos de Tráfico: duración, porcentaje y sitio del filtro", () => {
+  assert.equal(formatDuration(null), "sin datos");
+  assert.equal(formatDuration(42), "42 s");
+  assert.equal(formatDuration(65), "1 min 05 s");
+  assert.equal(formatPct(null), "sin datos");
+  assert.equal(formatPct(33.3), "33,3 %");
+  assert.equal(parseSite("eventos"), "eventos");
+  assert.equal(parseSite("demo"), null, "la demo no es un sitio filtrable");
+  assert.equal(parseSite(undefined), null);
+});
+
+test("fuente: la página Tráfico usa el guard, los chips, la demo aparte y «sin datos todavía»", () => {
+  const page = readFileSync(join(root, "app/(superadmin)/superadmin/trafico/page.tsx"), "utf8");
+  assert.match(page, /await requirePlatformAdmin\(\)/);
+  assert.match(page, /<PeriodChips/);
+  assert.match(page, /sin datos todavía/);
+  assert.match(page, /Conversión demo → lead/);
+  const card = readFileSync(join(root, "components/platform/SiteTrafficCard.tsx"), "utf8");
+  assert.match(card, /Visitantes \(suma diaria\)/);
+  assert.match(card, /No son personas únicas/);
+  // Todo lo del negocio excluye el host de la demo; las vistas de la demo salen solo en su sección.
+  assert.match(page, /excludeHost: demo/);
+  const businessCalls = page.match(/get(Hoy|VistasPorDia|TopPaginas|TopReferrers|Dispositivos)\(.*$/gm) ?? [];
+  assert.ok(businessCalls.length >= 5);
+  for (const call of businessCalls) assert.match(call, /business|pagesScope|host:/, call);
+  const demoSection = page.indexOf('aria-label="Demo"');
+  assert.ok(demoSection > 0);
+  assert.ok(!/demoRow(\.|\?|\))/.test(page.slice(page.indexOf("return ("), demoSection)), "las vistas de la demo (demoRow) solo se muestran dentro de la sección Demo");
+  assert.ok(demoSection > page.indexOf("Vistas por día") && page.indexOf("demoRow") > demoSection || !page.slice(0, demoSection).includes("demoRow.views"));
+  // Cada gráfico/tarjeta lleva su nota «fuente · cálculo».
+  assert.ok((page.match(/platform-kpi-note/g) ?? []).length >= 9);
+  const nav = readFileSync(join(root, "components/platform/PlatformShell.tsx"), "utf8");
+  assert.match(nav, /key: "trafico", label: "Tráfico", href: "\/superadmin\/trafico"/);
+});
+
+test("fuente: los filtros de plataforma son un form GET de servidor, sin el kit de campos en el cliente", () => {
+  const filter = readFileSync(join(root, "components/platform/FilterForm.tsx"), "utf8");
+  assert.doesNotMatch(filter, /^\s*["']use client["']/m);
+  assert.match(filter, /<form[^>]*method="get"/);
+  for (const file of walk(join(root, "components/platform")).concat(walk(join(root, "app/(superadmin)")))) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /@\/components\/admin\/AdminFields/, relative(root, file));
+  }
 });

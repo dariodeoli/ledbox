@@ -4944,8 +4944,17 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Tablas de plataforma: se desplazan dentro de su caja, nunca la página */
 .platform-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .platform-controls .admin-search { flex: 1 1 14rem; max-width: 26rem; height: 44px; }
-.platform-controls > span.relative { flex: 0 1 13rem; min-width: min(100%, 10rem); width: auto !important; }
+.platform-controls .platform-control-select { flex: 0 1 13rem; min-width: min(100%, 10rem); width: auto; }
+.platform-controls .platform-control-select select { min-height: 44px; }
 .platform-controls-go { min-height: 44px; }
+.platform-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); align-items: start; }
+.platform-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
+.platform-metrics div { display: grid; gap: 2px; min-width: 0; }
+.platform-metrics dt { color: var(--a-muted-2); font-size: 11px; }
+.platform-metrics dd { margin: 0; color: var(--a-text-strong); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.platform-kpi-value small { color: var(--a-muted-2); font-size: 13px; font-weight: 500; }
+.platform-demo-section { display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px dashed var(--a-line-control); border-radius: var(--a-radius); }
+.platform-demo-section h2 { color: var(--a-text-strong); font-size: 16px; }
 .platform-notice { padding: 12px 14px; border: 1px solid var(--a-warn); border-radius: var(--a-radius); background: var(--a-warn-surface, transparent); color: var(--a-warn-text, var(--a-text)); font-size: 13px; }
 .platform-split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .platform-split:has(.platform-detail) { grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); }

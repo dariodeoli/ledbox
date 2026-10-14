@@ -11,7 +11,7 @@ test("tráfico: beacon, rate limit, agregados por host, demo_start y panel ignor
   const { db } = await import("../lib/server/db");
   const metrics = await import("../lib/server/web-metrics");
   const queries = await import("../lib/platform/queries/trafico");
-  const { traficoRange } = await import("../lib/platform/trafico-range");
+  const { resolvePeriod: traficoRange } = await import("../lib/platform/periods");
   const { visitorHash } = await import("../lib/platform/trafico-core");
 
   const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
@@ -160,7 +160,7 @@ test("tráfico: beacon, rate limit, agregados por host, demo_start y panel ignor
       assert.equal(site.sessions, 3);
       assert.equal(site.visitors, 3);
       assert.equal(site.viewsPrev, 3, "ayer: 2 del día + la de 02:30 UTC que cae en el 13");
-      assert.equal(site.viewsDelta, 33.3);
+      assert.deepEqual(site.viewsDelta, { kind: "pct", pct: 33.3, direction: "up" });
       assert.equal(site.avgSec, 18.5);
       assert.equal(site.medianSec, 20);
       assert.equal(site.avgScrollPct, 55);
@@ -193,10 +193,18 @@ test("tráfico: beacon, rate limit, agregados por host, demo_start y panel ignor
       assert.equal(byDay["2026-10-12"], 0);
       assert.equal(series.previous.reduce((n, d) => n + d.views, 0), 1);
 
+      // Sin la demo: los totales del negocio excluyen el host de la demo, que sí aparece con host propio.
+      const noDemo = await queries.getVistasPorDia(traficoRange("7d", now), { excludeHost: DEMO });
+      const withDemo = await queries.getVistasPorDia(traficoRange("7d", now));
+      assert.equal(noDemo.current.reduce((n, d) => n + d.views, 0) + 1, withDemo.current.reduce((n, d) => n + d.views, 0), "la vista de la demo no entra en el total del negocio");
+      assert.ok(!(await queries.getTopPaginas(range, { excludeHost: DEMO })).some((p) => p.host === DEMO));
+      assert.equal((await queries.getDispositivos(range, { excludeHost: DEMO })).mobile + (await queries.getDispositivos(range, { excludeHost: DEMO })).desktop, 5);
+      assert.equal((await queries.getHoy(now, { excludeHost: DEMO })).today, 5);
+
       const today = await queries.getHoy(now, { host: SITE });
       assert.equal(today.today, 4);
       assert.equal(today.yesterdaySameSlice, 1, "ayer hasta las 15:00 de Paraguay: solo la de 10:30 (la de 23:30 y la de 17:00 quedan fuera)");
-      assert.equal(today.delta, 300);
+      assert.deepEqual(today.delta, { kind: "pct", pct: 300, direction: "up" });
     });
 
     await t.test("demo_start desde /api/demo/session: una por visitante cada 30 min, sin bots, y se une a sus vistas", async () => {
@@ -238,7 +246,9 @@ test("tráfico: beacon, rate limit, agregados por host, demo_start y panel ignor
       assert.equal(demo.topModules.find((m) => m.module === "eventos")!.sessions, 1);
       assert.equal(demo.conversion.available, false);
       assert.deepEqual(demo.startedByDay.map((d) => d.started), [2]);
-      assert.equal(demo.startedDelta, "nuevo");
+      assert.deepEqual(demo.startedDelta, { kind: "nuevo" });
+      assert.equal(demo.startedByDayPrev.length, range.days.length, "el período anterior viene alineado, no inventado");
+      assert.deepEqual(demo.startedByDayPrev.map((d) => d.started), [0]);
     });
 
     await t.test("la purga perezosa borra lo de más de 400 días y deja lo reciente", async () => {

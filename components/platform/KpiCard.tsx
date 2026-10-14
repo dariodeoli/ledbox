@@ -8,7 +8,7 @@ export function formatKpiValue(value: number, format: "count" | "money"): string
   return format === "money" ? `Gs ${money.format(Math.round(value))}` : count.format(Math.round(value));
 }
 
-function Sparkline({ values, prev }: { values: number[]; prev: number[] }) {
+export function Sparkline({ values, prev }: { values: number[]; prev: number[] }) {
   if (values.length < 2) return null;
   const w = 120;
   const h = 32;
@@ -25,7 +25,7 @@ function Sparkline({ values, prev }: { values: number[]; prev: number[] }) {
   );
 }
 
-function DeltaBadge({ delta }: { delta: Delta }) {
+export function DeltaBadge({ delta }: { delta: Delta }) {
   const tone = delta.kind === "pct" ? (delta.direction === "up" ? "up" : "down") : "flat";
   return (
     <span className="platform-delta" data-tone={tone}>
