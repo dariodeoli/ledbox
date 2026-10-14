@@ -5,7 +5,7 @@
  */
 import { formatAxisCount, niceTicks } from "@/lib/chart-scale";
 
-const W = 520;
+const W = 460;
 const H = 200;
 const M = { top: 14, right: 22, bottom: 28, left: 40 };
 
@@ -40,7 +40,7 @@ export function ChartLine({
   const domainMax = ticks[ticks.length - 1];
   const height = H - M.top - M.bottom;
   const width = W - M.left - M.right;
-  const labelEvery = Math.max(1, Math.ceil(count / 6));
+  const labelEvery = Math.max(1, Math.ceil(count / 4));
   const single = count === 1;
   const x = (index: number) => M.left + (count <= 1 ? width / 2 : (index / (count - 1)) * width);
   const y = (value: number) => M.top + height - (domainMax > 0 ? Math.min(1, value / domainMax) : 0) * height;

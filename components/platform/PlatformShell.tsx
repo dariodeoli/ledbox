@@ -17,8 +17,8 @@ type NavItem = { key: PlatformSection; label: string; href: string; icon: AdminI
 const NAV: NavItem[] = [
   { key: "resumen", label: "Resumen", href: "/superadmin", icon: "overview" },
   { key: "actividad", label: "Actividad", href: "/superadmin/actividad", icon: "clock" },
-  { key: "empresas", label: "Empresas", href: "/superadmin/empresas", icon: "building", soon: true },
-  { key: "usuarios", label: "Usuarios", href: "/superadmin/usuarios", icon: "users", soon: true },
+  { key: "empresas", label: "Empresas", href: "/superadmin/empresas", icon: "building" },
+  { key: "usuarios", label: "Usuarios", href: "/superadmin/usuarios", icon: "users" },
 ];
 
 export function PlatformShell({

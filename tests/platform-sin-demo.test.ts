@@ -68,3 +68,21 @@ test("components/platform no usa la etiqueta <nav>: globals.css la fija arriba (
     assert.doesNotMatch(readFileSync(file, "utf8"), /<\/?nav[\s>]/, relative(root, file));
   }
 });
+
+test("las consultas de usuarios nunca leen hashes: solo «IS [NOT] NULL» y ningún token", () => {
+  const source = readFileSync(join(root, "lib", "platform", "queries", "usuarios.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  for (const match of source.matchAll(/(passwordHash|pinHash)/g)) {
+    const around = source.slice(match.index!, match.index! + 40);
+    assert.match(around, /^(passwordHash|pinHash)" IS (NOT )?NULL/, `uso inseguro: ${around}`);
+  }
+  assert.doesNotMatch(source, /tokenHash|jtiHash|publicToken/);
+});
+
+test("platform-routes: los dos exportar existen y llaman a requirePlatformAdmin(", () => {
+  for (const dir of ["empresas", "usuarios"]) {
+    const source = readFileSync(join(root, "app", "(superadmin)", "superadmin", dir, "exportar", "route.ts"), "utf8");
+    assert.match(source, /requirePlatformAdmin\(/);
+    assert.match(source, /rateLimit\(/);
+    assert.match(source, /csvResponse\(/);
+  }
+});
