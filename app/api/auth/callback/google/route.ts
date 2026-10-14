@@ -64,6 +64,8 @@ export async function GET(request: Request) {
   if (!user || !user.active) return Response.redirect(`${loginUrl}?error=google_not_allowed`);
   const activeOrganizationId = await resolveActiveOrganizationId(user.id);
   if (!activeOrganizationId) return Response.redirect(`${loginUrl}?error=google_not_allowed`);
+  // Google confirmó el correo (`email_verified`, ya exigido arriba): es prueba real de control.
+  if (!user.emailVerifiedAt) await db.adminUser.updateMany({ where: { id: user.id, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
   const session = await createSession({ id: user.id, email: user.email, role: user.role }, activeOrganizationId);
   const headers = new Headers({ Location: `${siteUrl.replace(/\/$/, "")}${PANEL_HOME}` });
   headers.append("Set-Cookie", `ledbox_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);

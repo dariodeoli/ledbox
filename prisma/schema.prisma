@@ -253,6 +253,28 @@ model AdminUser {
   memberships         AdminMembership[]
   passwordResetTokens PasswordResetToken[]
   avatar              AdminUserAvatar?
+  /// Última actividad en el panel (docs/SUPERADMIN.md §3): a lo sumo una escritura por hora de Paraguay.
+  lastActiveAt        DateTime?
+  /// Prueba real de control del correo (Google, invitación por correo o reset de clave).
+  /// Vuelve a null cuando cambia el correo de la cuenta.
+  emailVerifiedAt     DateTime?
+  activityDays        AdminActivityDay[]
+}
+
+/// Actividad diaria por usuario (hora de Paraguay): un renglón por (usuario, día) y
+/// `hourMask` con un bit por hora (0–23). Alimenta «usuarios activos» del panel de plataforma.
+model AdminActivityDay {
+  id             String    @id
+  userId         String
+  organizationId String?
+  day            DateTime  @db.Date
+  firstSeenAt    DateTime
+  lastSeenAt     DateTime
+  hourMask       Int       @default(0)
+  user           AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day])
 }
 
 /// Membresía de un usuario del panel a una empresa (organización).
@@ -363,6 +385,7 @@ model AdminSession {
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@index([activeOrganizationId])
+  @@index([createdAt])
 }
 
 model PasswordResetToken {
@@ -786,6 +809,7 @@ model Event {
   deleteReason   String?
   anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
+  @@index([createdAt])
 }
 
 model Budget {
@@ -878,6 +902,7 @@ model Budget {
   deleteReason   String?
   anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
+  @@index([approvedAt])
 }
 
 model BudgetItem {
@@ -993,6 +1018,7 @@ model ClientPayment {
   @@index([organizationId, status, dueAt])
   @@index([treasuryAccountId])
   @@index([expectedPaymentId])
+  @@index([paidAt])
 }
 
 /**
@@ -2044,6 +2070,8 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([entity, entityId])
   @@index([organizationId, actorId])
+  @@index([entity, createdAt])
+  @@index([createdAt])
 }
 
 /// Clave de idempotencia de una operación financiera (issue #20).
