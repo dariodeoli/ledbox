@@ -202,6 +202,8 @@ export async function PATCH(request: Request) {
       }
       if (Object.keys(accountData).length > 0) {
         await tx.adminUser.update({ where: { id: membership.adminUserId }, data: accountData });
+        // Un link de reset emitido al correo anterior no puede verificar el nuevo (docs/SUPERADMIN.md §2).
+        if (emailChanged) await tx.passwordResetToken.deleteMany({ where: { userId: membership.adminUserId, usedAt: null } });
       }
       return next;
     });

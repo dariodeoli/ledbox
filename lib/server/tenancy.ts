@@ -121,7 +121,8 @@ export async function requireAdminContext(
 
   // Registro de actividad (docs/SUPERADMIN.md §3): solo la rama de cookie, nunca la demo
   // ni la API key; va en `after()` y no puede romper ni demorar la respuesta.
-  trackAdminActivity({ userId: auth.user.id, organizationId: membership.organizationId, lastActiveAt: auth.lastActiveAt, demo });
+  // Las rutas de PIN (`allowLocked`) con la sesión bloqueada no cuentan como uso del panel.
+  if (!auth.session.lockedAt) trackAdminActivity({ userId: auth.user.id, organizationId: membership.organizationId, lastActiveAt: auth.lastActiveAt, demo });
 
   return {
     ok: true,
