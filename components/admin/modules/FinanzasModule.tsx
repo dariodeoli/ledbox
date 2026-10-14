@@ -2595,7 +2595,6 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           )}
             </AdminDialogSection>
             <AdminDialogSection
-              key={term ? "plazo" : "contado"}
               title="Más opciones"
               collapsible
               defaultOpen={term}

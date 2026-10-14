@@ -529,6 +529,10 @@ export function AdminDisclosure({
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Si pasa a ser necesaria (p. ej. elegir «a plazo»), se abre sin remontar el contenido.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   // Un error adentro nunca queda escondido: si un campo plegado queda inválido, se abre.
   useEffect(() => {
     if (!open && bodyRef.current?.querySelector('[aria-invalid="true"]')) setOpen(true);

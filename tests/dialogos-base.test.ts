@@ -117,3 +117,15 @@ test("sección plegable: un campo inválido adentro la abre sola", () => {
   assert.match(ui, /onInvalidCapture=\{\(\) => setOpen\(true\)\}/);
   assert.match(ui, /querySelector\('\[aria-invalid="true"\]'\)\) setOpen\(true\)/);
 });
+
+test("#185/#186/#191: sin aviso repetido en la papelera, plazo sin remontar y promotoras inactivas visibles", () => {
+  const trash = readFileSync(join(process.cwd(), "components/admin/TrashDialogs.tsx"), "utf8");
+  assert.match(trash, /setError\(result\.blockers\?\.length \? "" : result\.error\)/);
+  assert.doesNotMatch(trash, /admin-dialog-footer-note/);
+  const ui = readFileSync(join(process.cwd(), "components/admin/AdminUI.tsx"), "utf8");
+  assert.match(ui, /if \(defaultOpen\) setOpen\(true\);\n  \}, \[defaultOpen\]\);/);
+  const finanzas = readFileSync(join(process.cwd(), "components/admin/modules/FinanzasModule.tsx"), "utf8");
+  assert.doesNotMatch(finanzas, /key=\{term \? "plazo" : "contado"\}/);
+  const resources = readFileSync(join(process.cwd(), "app/api/admin/resources/route.ts"), "utf8");
+  assert.match(resources, /OR: \[\{ archivedAt: \{ not: null \} \}, \{ active: false \}\]/);
+});

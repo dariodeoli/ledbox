@@ -119,8 +119,9 @@ export function TrashDialog({
     const result = await runTrashAction(type, id, action, body);
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      // Con bloqueos, el detalle ya lo dice TrashBlockersNote: no repetir el mensaje en rojo.
       setBlockers(result.blockers ?? []);
+      setError(result.blockers?.length ? "" : result.error);
       return;
     }
     onDone(
@@ -147,13 +148,9 @@ export function TrashDialog({
       description={description}
       dirty={typed.length > 0 || reason.length > 0}
       onClose={onClose}
+      error={error || null}
       footer={({ requestClose }) => (
         <>
-          {error ? (
-            <div className="admin-dialog-footer-note">
-              <AdminNote tone="error">{error}</AdminNote>
-            </div>
-          ) : null}
           <AdminButton type="button" icon="close" onClick={requestClose} disabled={busy}>
             Cancelar
           </AdminButton>

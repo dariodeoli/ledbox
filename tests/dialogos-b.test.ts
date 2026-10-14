@@ -98,7 +98,8 @@ test("lo avanzado queda en «Más opciones» plegable", () => {
   for (const [name, pattern] of Object.entries(collapsibles)) assert.match(SOURCES[name], pattern, `${name}: sin «Más opciones»`);
   const fin = SOURCES.finanzas;
   assert.match(fin, /title="Más opciones" collapsible defaultOpen=\{Boolean\(payJob\.receipt\)\}/, "pago a proveedor: comprobante plegado");
-  assert.match(fin, /key=\{term \? "plazo" : "contado"\}/, "registrar cobro: el bloque avanzado se reabre al pasar a plazo");
+  // Se reabre al pasar a plazo sin remontarse (#186): defaultOpen={term} + AdminDisclosure abre cuando defaultOpen pasa a true.
+  assert.match(fin, /title="Más opciones"\s+collapsible\s+defaultOpen=\{term\}/, "registrar cobro: el bloque avanzado se reabre al pasar a plazo");
   assert.match(fin, /title="Costos internos y margen" collapsible/.test(SOURCES.pricing) ? /./ : /./);
   assert.match(SOURCES.pricing, /title="Costos internos y margen" collapsible hint="no los ve el cliente"/);
 });
