@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/server/db";
-import { getClientIp, rateLimit } from "@/lib/server/rate-limit";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { publicConfig } from "@/lib/public-config";
 import {
   MAX_BODY_BYTES,
@@ -22,6 +22,7 @@ import {
  * Nunca guarda IP ni user agent: únicamente el hash diario truncado del visitante.
  */
 
+export const GLOBAL_RATE_PER_MINUTE = 600; // por host y minuto, contra quien rota UA/IP
 export const VIEW_RATE_LIMIT = 240; // por visitante y ventana de 15 min (una vista = 2 beacons)
 const RETENTION_DAYS = 400;
 const DEMO_JOIN_WINDOW_HOURS = 2;
@@ -47,8 +48,21 @@ export function scheduleSafely(work: () => Promise<void>): void {
   }
 }
 
-function secret(): string {
-  return process.env.AUTH_SECRET || process.env.JWT_SECRET || "ledbox-web-metrics-dev-secret";
+/** Secreto de la sal. En producción, sin secreto no se registra nada (falla cerrado). */
+export function metricsSecret(): string | null {
+  const value = process.env.AUTH_SECRET || process.env.JWT_SECRET;
+  if (value) return value;
+  return process.env.NODE_ENV === "production" ? null : "ledbox-web-metrics-dev-secret";
+}
+
+/**
+ * IP para el hash: la que agrega el proxy de confianza (Traefik/Coolify), que es el ÚLTIMO valor de
+ * `X-Forwarded-For`; el primero lo escribe el cliente y se puede falsear para rotar el hash. Si no hay
+ * XFF, `X-Real-IP`. Sin ninguno, «unknown».
+ */
+export function trustedIp(request: Request): string {
+  const forwarded = (request.headers.get("x-forwarded-for") || "").split(",").map((v) => v.trim()).filter(Boolean);
+  return forwarded.at(-1) || request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export function metricsHosts(): Map<string, HostKind> {
@@ -64,8 +78,10 @@ export function metricsHosts(): Map<string, HostKind> {
   );
 }
 
-function visitorOf(request: Request, now: Date): string {
-  return visitorHash({ secret: secret(), ip: getClientIp(request), ua: request.headers.get("user-agent") || "", now });
+function visitorOf(request: Request, now: Date): string | null {
+  const key = metricsSecret();
+  if (!key) return null;
+  return visitorHash({ secret: key, ip: trustedIp(request), ua: request.headers.get("user-agent") || "", now });
 }
 
 export type ViewRecord = {
@@ -128,14 +144,18 @@ export async function touchDemoSession(input: { visitorHash: string; sessionId: 
 /** Evento `demo_start`: una fila por visitante cada 30 min (recargar la entrada no cuenta otra demo). */
 export async function recordDemoStart(input: { visitorHash: string; now: Date }): Promise<boolean> {
   const at = input.now.toISOString();
-  const inserted = await db.$executeRaw(Prisma.sql`
-    INSERT INTO "DemoSession" ("id","visitorHash","startedAt","lastSeenAt","durationSec","modules")
-    SELECT ${randomUUID()}, ${input.visitorHash}, (${at}::timestamptz AT TIME ZONE 'UTC'), (${at}::timestamptz AT TIME ZONE 'UTC'), 0, ARRAY[]::text[]
-    WHERE NOT EXISTS (
-      SELECT 1 FROM "DemoSession"
-      WHERE "visitorHash" = ${input.visitorHash}
-        AND "startedAt" > ((${at}::timestamptz AT TIME ZONE 'UTC') - make_interval(mins => ${DEMO_DEDUPE_MINUTES}::int)))`);
-  return inserted > 0;
+  // Candado por visitante dentro de la transacción: dos arranques simultáneos no insertan dos filas.
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.visitorHash}))`);
+    const inserted = await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "DemoSession" ("id","visitorHash","startedAt","lastSeenAt","durationSec","modules")
+      SELECT ${randomUUID()}, ${input.visitorHash}, (${at}::timestamptz AT TIME ZONE 'UTC'), (${at}::timestamptz AT TIME ZONE 'UTC'), 0, ARRAY[]::text[]
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "DemoSession"
+        WHERE "visitorHash" = ${input.visitorHash}
+          AND "startedAt" > ((${at}::timestamptz AT TIME ZONE 'UTC') - make_interval(mins => ${DEMO_DEDUPE_MINUTES}::int)))`);
+    return inserted > 0;
+  });
 }
 
 /** Purga perezosa (≈1 de cada 500 beacons): borra en lotes lo de más de 400 días. */
@@ -186,6 +206,13 @@ export async function handleViewBeacon(request: Request, deps: BeaconDeps = {}):
       if (originHost !== body.host) return NO_CONTENT();
     }
     const hash = visitorOf(request, now);
+    if (!hash) {
+      console.warn("[web-metrics] sin AUTH_SECRET/JWT_SECRET: no se registra nada");
+      return NO_CONTENT();
+    }
+    const minute = Math.floor(now.getTime() / 60_000);
+    const global = await rateLimit(`metrics:view:global:${body.host}:${minute}`, GLOBAL_RATE_PER_MINUTE);
+    if (!global.allowed) return NO_CONTENT();
     const limited = await rateLimit(`metrics:view:${hash}`, VIEW_RATE_LIMIT);
     if (!limited.allowed) return NO_CONTENT();
     const record: ViewRecord = {
@@ -223,6 +250,7 @@ export function scheduleDemoStart(request: Request, deps: { schedule?: Schedule;
     if (isBotUa(ua) || request.headers.get("dnt") === "1") return false;
     const now = deps.now ?? new Date();
     const hash = visitorOf(request, now);
+    if (!hash) return false;
     (deps.schedule ?? scheduleSafely)(async () => {
       await recordDemoStart({ visitorHash: hash, now });
     });

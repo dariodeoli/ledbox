@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 /**
  * Núcleo PURO de las métricas propias de tráfico (docs/SUPERADMIN.md «Tráfico»).
@@ -49,12 +50,25 @@ export function hostKindMap(config: HostConfig, options?: { allowLocal?: boolean
 // ── Path ────────────────────────────────────────────────────────────────────
 
 /** Raíces cuyo segundo segmento es un token (portal, firma, comparación, seguimiento de pedido). */
-const TOKEN_ROOTS = new Set(["p", "firma", "comparar", "pedido"]);
+const TOKEN_ROOTS = new Set(["p", "firma", "comparar", "pedido", "portal"]);
 const STATIC_SUFFIXES = new Set(["documento", "auditoria", "mayorista"]);
 /** Secciones públicas cuyo segundo segmento es un slug legible (no un secreto). */
 const SLUG_ROOTS = new Set(["productos", "catalogo", "tienda"]);
 
+/** Raíces conocidas: rutas públicas reales y rutas del panel (demo). Bajo cualquier otra raíz, lo que sigue es :id. */
+const KNOWN_ROOTS = new Set<string>([
+  ...TOKEN_ROOTS,
+  ...SLUG_ROOTS,
+  "producto",
+  "privacidad",
+  "terminos",
+  "status",
+  "demo",
+  ...ADMIN_ROUTES.map((route) => route.split("/")[1]),
+]);
+
 function looksLikeId(segment: string): boolean {
+  if (/[@%]/.test(segment)) return true; // correo o texto codificado
   if (/^\d+$/.test(segment)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) return true;
   if (/^[0-9a-f]{8,}$/i.test(segment)) return true;
@@ -79,10 +93,14 @@ export function normalizePath(raw: unknown): string | null {
   parts.forEach((part, index) => {
     const segment = part.toLowerCase();
     if (index === 0) {
-      out.push(segment);
+      out.push(/[@%]/.test(segment) ? ":id" : segment);
       return;
     }
     const root = out[0];
+    if (!KNOWN_ROOTS.has(root)) {
+      out.push(":id");
+      return;
+    }
     if (TOKEN_ROOTS.has(root)) {
       out.push(index === 1 ? ":token" : STATIC_SUFFIXES.has(segment) ? segment : ":id");
       return;
@@ -92,7 +110,7 @@ export function normalizePath(raw: unknown): string | null {
       return;
     }
     if (SLUG_ROOTS.has(root)) {
-      if (index === 1) out.push(segment.length > 60 ? ":id" : segment);
+      if (index === 1) out.push(segment.length > 60 || /[@%]/.test(segment) ? ":id" : segment);
       else out.push(STATIC_SUFFIXES.has(segment) ? segment : looksLikeId(segment) ? ":id" : segment);
       return;
     }
