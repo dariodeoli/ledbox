@@ -8,7 +8,12 @@ Reglas para agentes que trabajan en este repositorio. Leer antes de tocar códig
 - **Reglas generales de la app (obligatorias)**: `docs/REGLAS-GENERALES.md` — buscar antes de crear, un objeto por tipo, formatos normalizados, estados honestos, endpoints públicos con token, versionado y publicación. Ningún cambio nuevo puede contradecirlas.
 - Stack, estructura y puesta en marcha: `README.md`.
 
-## Topología: orquestador + implementador + 3 slots (23-09-2026)
+## Equipo de agentes de Claude Code (vigente desde 13-10-2026)
+
+- **Fuente operativa: `docs/EQUIPO-AGENTES.md`** — integrador + subagentes de `.claude/agents/` (architect en opus, mapper en haiku, ui/crm/ops/pay/infra/qa en sonnet), ciclo de pedido, worktrees `.claude/worktrees/<tarea>` en ramas `agent/<tarea>`, integración en `integracion/2.1.N`, publicación (el push a la rama viva lo hace el dueño), Sala de agentes, checks y lecciones aprendidas.
+- La topología herdr de abajo es la anterior; se conserva como referencia.
+
+## Topología: orquestador + implementador + 3 slots (23-09-2026) — anterior
 
 Runtime **herdr**: un agente por rol, cada uno en su workspace. Fuente operativa: `~/.herdr/worktrees/ledbox/orquestador/` (`PLAYBOOK.md`, `SLOTS.md`, `BRIEF.md`, `COMANDOS.md`).
 

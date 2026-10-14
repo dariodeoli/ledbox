@@ -21,3 +21,8 @@ coverage/
 *.har
 *.har.gz
 *.trace
+
+# Claude Code: se versionan los agentes del equipo (.claude/agents); lo local (worktrees,
+# borradores, ajustes personales) queda fuera.
+.claude/*
+!.claude/agents/
