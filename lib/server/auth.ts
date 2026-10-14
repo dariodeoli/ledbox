@@ -14,6 +14,8 @@ export type PublicAdminUser = {
 
 export type AuthenticatedAdmin = {
   user: PublicAdminUser;
+  /** Última actividad registrada (docs/SUPERADMIN.md §3); decide si hace falta volver a escribirla. */
+  lastActiveAt: Date | null;
   session: {
     id: string;
     userId: string;
@@ -109,6 +111,7 @@ export async function getAuthenticatedAdmin(): Promise<AuthenticatedAdmin | null
     if (!session || !session.user.active) return null;
     return {
       user: toPublicAdminUser(session.user),
+      lastActiveAt: session.user.lastActiveAt,
       session: {
         id: session.id,
         userId: session.userId,

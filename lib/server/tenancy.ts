@@ -9,6 +9,7 @@ import { jsonError } from "./http";
 import { ensureOrganizationPlan } from "./plan-limits";
 import { roleCan, type AdminCapability } from "./permissions";
 import { rateLimit, rateLimitResponse } from "./rate-limit";
+import { trackAdminActivity } from "@/lib/platform/activity";
 
 /**
  * Capa de tenancy del panel: resuelve la sesión, la empresa activa y la
@@ -117,6 +118,10 @@ export async function requireAdminContext(
   if (capability && !roleCan(role, capability)) {
     return { ok: false, response: jsonError("Forbidden", 403) };
   }
+
+  // Registro de actividad (docs/SUPERADMIN.md §3): solo la rama de cookie, nunca la demo
+  // ni la API key; va en `after()` y no puede romper ni demorar la respuesta.
+  trackAdminActivity({ userId: auth.user.id, organizationId: membership.organizationId, lastActiveAt: auth.lastActiveAt, demo });
 
   return {
     ok: true,
