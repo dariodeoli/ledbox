@@ -539,6 +539,44 @@ model QuoteItem {
   @@index([inventoryId])
 }
 
+/// Métricas propias de tráfico (docs/SUPERADMIN.md «Tráfico»). Una fila por vista de página.
+/// Sin IP ni user agent: `visitorHash` es un hash diario truncado (la sal rota por día y no se guarda).
+model WebView {
+  id           String   @id
+  viewId       String   @unique
+  sessionId    String
+  visitorHash  String
+  host         String
+  path         String
+  referrerHost String?
+  device       String
+  country      String?
+  durationSec  Int?
+  scrollPct    Int?
+  isEntry      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@index([createdAt])
+  @@index([host, createdAt])
+  @@index([path])
+}
+
+/// Sesiones de la demo pública (evento `demo_start`), aparte de las métricas del negocio.
+model DemoSession {
+  id          String   @id
+  visitorHash String
+  sessionId   String?
+  startedAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  durationSec Int      @default(0)
+  modules     String[] @default([])
+
+  @@index([startedAt])
+  @@index([visitorHash, startedAt])
+  @@index([sessionId])
+}
+
 model RateLimitBucket {
   id          String   @id
   key         String   @unique
