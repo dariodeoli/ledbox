@@ -48,6 +48,15 @@ export const INVENTORY_STATES: Record<InventoryStateKey, InventoryStateEntry> = 
 };
 
 /** «Reservado a futuro»: marca secundaria (acento · calendario), no compite con el estado principal. */
+/** Juego (combo) sin piezas cargadas: no se puede reservar hasta completarlo. */
+export const INCOMPLETE_STATE: InventoryStateEntry = {
+  key: "incomplete",
+  tone: "warn",
+  icon: "alert",
+  label: "Incompleto",
+  hint: "Juego sin piezas cargadas: no se puede reservar hasta completarlo.",
+};
+
 export const RESERVED_STATE: InventoryStateEntry = {
   key: "reserved",
   tone: "accent",

@@ -1,14 +1,14 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiUpload, adminSend, useAdminResource } from "@/lib/admin-api";
 import type { AdminInventoryCategoryRow, AdminWarehouseRow } from "@/lib/admin-types";
 import { CATEGORY_ICONS, CATEGORY_TONES, buildCategoryTree, type CategoryNode } from "@/lib/inventory-categories";
 import { FIELD_MESSAGES, INVENTORY_TAXONOMY_NAME_MAX, normalizeWarehouseCode, warehouseCodeValid } from "@/lib/field-rules";
 import { formatNumber } from "@/lib/admin-format";
 import { useAdminSession } from "../AdminShell";
 import { AdminBadge, AdminButton, AdminCell, AdminConfirmDialog, AdminDataState, AdminDialog, AdminNote, AdminPanel, AdminRow, AdminTable } from "../AdminUI";
-import { NumberField, SelectField, TextField } from "../AdminFields";
+import { FileField, NumberField, SelectField, TextField } from "../AdminFields";
 
 /**
  * Ajustes → Inventario (rediseño E1, `org.manage`: solo OWNER y ADMIN): categorías con su
@@ -285,6 +285,7 @@ function CategoryDialog({ node, roots, onClose, onDone }: { node: CategoryNode; 
           <SelectField label="Ícono" value={icon} onChange={setIcon} disabled={busy} options={[{ value: "", label: "Sin ícono" }, ...CATEGORY_ICONS.map((entry) => ({ value: entry, label: ICON_LABEL[entry] ?? entry }))]} />
           <NumberField label="Orden" value={sortOrder} onChange={setSortOrder} maxLength={4} hint="Las más chicas van primero." disabled={busy} />
         </form>
+        <CategoryPhoto node={node} disabled={busy} onChanged={() => onDone(`Foto de «${node.name}» actualizada.`)} onError={setError} />
         <div className="admin-form admin-form-grid">
           <SelectField
             label="Unir con otra categoría"
@@ -376,5 +377,41 @@ function WarehouseDialog({ warehouse, onClose, onDone }: { warehouse: AdminWareh
         ) : null}
       </div>
     </AdminDialog>
+  );
+}
+
+/** Foto propia de la categoría: subir, cambiar o quitar (JPG/PNG/WebP cuadrada, hasta 1 MB). */
+function CategoryPhoto({ node, disabled, onChanged, onError }: { node: CategoryNode; disabled: boolean; onChanged: () => void; onError: (message: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  async function upload(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    onError("");
+    const form = new FormData();
+    form.set("id", node.id);
+    form.set("file", file);
+    const result = await adminApiUpload("/api/admin/inventory/categories/image", form);
+    setBusy(false);
+    if (!result.ok) return onError(result.error);
+    onChanged();
+  }
+  async function clear() {
+    setBusy(true);
+    onError("");
+    const result = await adminSend("/api/admin/inventory/categories", { kind: "image-clear", id: node.id });
+    setBusy(false);
+    if (!result.ok) return onError(result.error);
+    onChanged();
+  }
+  return (
+    <div className="admin-form admin-form-grid" role="group" aria-label={`Foto de ${node.name}`}>
+      <div>
+        <strong>Foto de la categoría</strong>
+        <p className="admin-muted">JPG, PNG o WebP cuadrada, hasta 1 MB. La tienda la muestra en la categoría; sin foto usa la de su primer producto.</p>
+        {node.imageUrl ? <img src={node.imageUrl} alt={`Foto de ${node.name}`} width={96} height={96} style={{ objectFit: "cover", borderRadius: 8 }} /> : <span className="admin-muted">Sin foto propia.</span>}
+      </div>
+      <FileField label={node.imageUrl ? "Cambiar foto" : "Subir foto"} accept="image/jpeg,image/png,image/webp" maxBytes={1024 * 1024} disabled={disabled || busy} file={null} onSelect={(file) => void upload(file)} />
+      {node.imageUrl ? <div className="admin-form-actions"><AdminButton type="button" icon="trash" disabled={disabled || busy} onClick={() => void clear()}>Quitar foto</AdminButton></div> : null}
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { withDeletedLabel } from "@/lib/deleted-label";
+import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { after } from "next/server";
@@ -191,6 +192,8 @@ export async function POST(request: Request) {
         select: { id: true, title: true, total: true },
       });
       if (!budget) return jsonError("Presupuesto no encontrado.", 404);
+      const priceBlock = await budgetPriceGate(organizationId, budget.id, "cobrar", tx);
+      if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
     }
 
     // Cuenta de tesorería del cobro (issue #27): la pedida o la primera activa.

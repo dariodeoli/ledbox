@@ -87,6 +87,7 @@ function toItemDraft(item: AdminBudgetRow["items"][number]): ItemDraft {
     inventory: item.inventory ? { ...item.inventory, imageUrl: inventoryImageUrl({ ...item.inventory, imageUrl: item.inventory.imageUrl ?? null }) } : null,
     id: item.id,
     excluded: Boolean(item.excluded),
+    freeOnPurpose: Boolean(item.freeOnPurpose),
     name: item.name,
     quantity: String(item.quantity),
     days: String(item.days),
@@ -159,7 +160,7 @@ export function BudgetPricingDialog({
         const days = Number(item.days);
         const unitPrice = number(item.unitPrice);
         const costPrice = number(item.costPrice);
-        return { rentalDays: item.inventory ? item.rentalDays : undefined, inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, notes: item.notes, quantity, days, unitPrice, costPrice, excluded: item.excluded, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
+        return { rentalDays: item.inventory ? item.rentalDays : undefined, inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, notes: item.notes, quantity, days, unitPrice, costPrice, excluded: item.excluded, freeOnPurpose: Boolean(item.freeOnPurpose) && unitPrice === 0, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
       }),
     [draft.items],
   );
@@ -208,6 +209,7 @@ export function BudgetPricingDialog({
         days: item.days,
         unitPrice: needsRepricing && !item.excluded ? repriced?.items[activePriced.indexOf(item)]?.unitPrice ?? item.unitPrice : item.unitPrice,
         costPrice: item.costPrice,
+        freeOnPurpose: item.freeOnPurpose,
         inventoryId: item.inventoryId,
         notes: item.notes,
         // Días reales del alquiler: el servidor congela los escalones del producto con ellos.
@@ -235,7 +237,8 @@ export function BudgetPricingDialog({
             item.quantity !== original.quantity ||
             item.days !== original.days ||
             item.unitPrice !== original.unitPrice ||
-            item.costPrice !== original.costPrice
+            item.costPrice !== original.costPrice ||
+            item.freeOnPurpose !== Boolean(original.freeOnPurpose)
           );
         });
       if (itemsChanged && (approved || closed)) { setError("El presupuesto ya está aprobado o cerrado: sus ítems no se pueden cambiar."); return; }

@@ -6,6 +6,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { checkStockBeforeApproval, decideStockApproval, releaseOrphanedGateReservation, snapshotEventAssignments, type AssignmentSnapshot } from "@/lib/server/approval-stock";
 
 export const runtime = "nodejs";
@@ -67,6 +68,9 @@ export async function POST(request: Request) {
   let reservations: BudgetReservation | null = null;
 
   if (decision === "approve") {
+    // «Falta precio»: una línea en 0 sin confirmar como gratis frena la aprobación (no se fuerza).
+    const priceBlock = await budgetPriceGate(organizationId, budget.id, "aprobar");
+    if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
     // Stock antes de aprobar (alquileres P1-3), con el lock de ítems del motor. Si falta, se
     // frena con el detalle; «Aprobar igual» (`force`) solo lo puede OWNER/ADMIN y queda auditado.
     let forcedShortage: string[] | null = null;

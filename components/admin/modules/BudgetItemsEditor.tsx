@@ -77,6 +77,12 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
           ]} />
         </div>
         {item.excluded ? <AdminNote>Retirado / no incluido. La línea original se conserva.</AdminNote> : null}
+        {!item.excluded && item.unitPrice.trim() !== "" && numeric.unitPrice === 0 ? (
+          <>
+            {item.freeOnPurpose ? <AdminNote>Gratis a propósito: se incluye sin cobrar.</AdminNote> : <AdminNote tone="error"><strong>Falta precio.</strong> Cargalo para poder enviar, aprobar y cobrar; si es gratis, activalo abajo.</AdminNote>}
+            <SwitchField label="Gratis a propósito (precio 0 confirmado)" checked={Boolean(item.freeOnPurpose)} disabled={disabled} onChange={(checked) => update(index, { freeOnPurpose: checked })} />
+          </>
+        ) : null}
         {!item.excluded && item.rentalDays !== undefined && numeric.days === 1 && Number(item.rentalDays) > 1 ? <AdminNote>Precio total por {item.rentalDays} días (no se multiplica por los días).</AdminNote> : null}
         {!item.excluded && item.inventory && (item.inventory._count?.components ?? 0) > 0 && !disabled ? (
           <ComboPackagePanel

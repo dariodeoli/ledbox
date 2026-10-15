@@ -121,7 +121,9 @@ export function catalogLineAmounts(
   const unitPrice = fromStore?.pricing.unitPrice || fallbackUnitPrice || 0;
   // «Se cobra por evento» o escalón «total»: una sola unidad de tiempo, sin importar los días del período.
   const days = fromStore ? fromStore.pricing.days : billedDays(linked?.billingUnit, periodDays);
-  return { fromStore, unitPrice, days, subtotal: unitPrice * quantity * days };
+  // Sin precio de la tienda ni el que vio el cliente: la línea queda en 0 y se marca «falta precio».
+  // Nunca se presenta como un importe real: el presupuesto la bloquea hasta cargarle el precio.
+  return { fromStore, unitPrice, days, subtotal: unitPrice * quantity * days, missingPrice: unitPrice === 0 };
 }
 
 /** Nota de la línea cuando el escalón es un total cerrado: la duración se pierde en `days = 1`. */

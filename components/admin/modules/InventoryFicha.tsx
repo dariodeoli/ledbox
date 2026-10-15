@@ -496,7 +496,7 @@ export function InventoryFicha({
           <InventoryThumb item={item} size={96} />
           <div className="admin-ficha-hero-main">
             <div className="admin-ficha-badges">
-              <StateChips visual={visual} />
+              <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} />
               {archived ? <AdminBadge tone="neutral" title={`Archivado el ${formatDateShort(item.archivedAt)}`}>Archivado</AdminBadge> : null}
               {isCombo ? (
                 <AdminBadge tone="accent" title="Sin unidades propias: se arma con sus componentes.">Combo</AdminBadge>

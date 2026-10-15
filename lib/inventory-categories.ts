@@ -76,6 +76,7 @@ export type CategoryNode = {
   sortOrder: number;
   color: string | null;
   icon: string | null;
+  imageUrl?: string | null;
   archivedAt: string | null;
   itemCount: number;
   children: CategoryNode[];

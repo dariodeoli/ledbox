@@ -63,7 +63,7 @@ test("la lista: una acción visible por fila («Ficha») y el resto en «••�
   }
   // E2: el estado de la lista es el chip del mapa único (derivado, ícono + texto); el estado
   // manual del producto sigue editable, solo con permiso, desde la ficha.
-  assert.match(list, /<StateChips visual=\{visual\} \/>/);
+  assert.match(list, /<StateChips visual=\{visual\}[^>]*\/>/);
   assert.doesNotMatch(list, /<AdminSelect/, "la lista ya no edita el estado en línea");
   assert.match(moduleFile("InventoryFicha.tsx"), /writable \? \(\s*<AdminSelect/);
   assert.match(list, /<StockMeter summary=\{stockSummary\(item, rangeActive\)\}/);

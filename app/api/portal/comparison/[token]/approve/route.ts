@@ -8,6 +8,8 @@ import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { PORTAL_PRICE_MESSAGE } from "@/lib/budget-price-gate";
+import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock } from "@/lib/server/approval-stock";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -27,6 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // Stock antes de aprobar la alternativa elegida (mismo lock que el resto del motor): si falta,
   // no se aprueba ni se reserva y queda en revisión; la comparación sigue abierta para elegir otra.
   const chosen = group.budgets.find((q) => q.id === body.budgetId);
+  if (chosen && !chosen.approvedAt && await budgetPriceGate(group.organizationId, chosen.id, "aprobar")) {
+    return jsonError(PORTAL_PRICE_MESSAGE, 409, "price_missing");
+  }
   if (chosen && !chosen.approvedAt) {
     const actor = portalAuditContext(group.organizationId, name);
     const gate = await checkStockBeforeApproval({ organizationId: group.organizationId, budgetId: chosen.id, context: actor });

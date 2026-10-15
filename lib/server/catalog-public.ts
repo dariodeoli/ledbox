@@ -609,3 +609,25 @@ export async function preorderDailyLimit(
   const retryAfter = Math.max(60, Math.ceil((dayStart(nextDayKey(today)).getTime() - now.getTime()) / 1000));
   return { reached: used >= limit, used, limit, retryAfter };
 }
+
+/** Categoría tal como la ve el público: nombre igual al texto de `PublicCatalogItem.category`, foto propia y orden. */
+export type PublicCatalogCategory = { id: string; name: string; parentName: string | null; imageUrl: string | null; sortOrder: number };
+
+/**
+ * Categorías de la empresa con su foto propia (`InventoryCategory.imageUrl`), para que la tienda las
+ * muestre y, si una no tiene, use la foto de su primer producto. Sin archivadas; sin binarios.
+ */
+export async function loadPublicCategories(organizationId: string): Promise<PublicCatalogCategory[]> {
+  const rows = await db.inventoryCategory.findMany({
+    where: { organizationId, archivedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, imageUrl: true, sortOrder: true, parent: { select: { name: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.parent ? `${row.parent.name} › ${row.name}` : row.name,
+    parentName: row.parent?.name ?? null,
+    imageUrl: row.imageUrl,
+    sortOrder: row.sortOrder,
+  }));
+}

@@ -46,7 +46,7 @@ test("parser: catálogo válido, juegos y dudas como aviso", () => {
   assert.equal(result.value.doc.productos.length, 2);
   assert.equal(result.value.doc.productos[0].cobro, "dia", "sin «cobro» rige por día (lo normal en alquileres)");
   const preview = plan(base);
-  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, fotos: 2, errores: 0, avisos: 1 });
+  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, incompletos: 0, convertidos: 0, fotos: 2, fotosCategoria: 0, errores: 0, avisos: 1 });
   assert.ok(preview.problems.some((p) => p.tipo === "duda" && p.mensaje.includes("poco legible")));
 });
 
@@ -108,13 +108,14 @@ test("componentes inexistentes, juegos anidados y juegos de un componente omitid
 test("existentes: mismo código actualiza; papelera y cambio de tipo se omiten; componente del inventario sirve", () => {
   const existing: Record<string, ExistingItem> = {
     "743": { id: "i1", name: "Puff", isCombo: false, inTrash: false, units: 40 },
-    "527": { id: "i2", name: "Lounge", isCombo: false, inTrash: false, units: 0 },
+    "527": { id: "i2", name: "Lounge", isCombo: false, inTrash: false, units: 0, reservas: 2 },
     "900": { id: "i3", name: "Mesa", isCombo: false, inTrash: true, units: 1 },
   };
   const result = plan({ ...base, productos: [...base.productos, { codigo: "900", nombre: "Mesa baja" }] }, existing);
   const accion = new Map(result.items.map((i) => [i.product.codigo, i.accion]));
   assert.equal(accion.get("743"), "actualizar");
-  assert.equal(accion.get("527"), "omitir", "era unidad en el inventario y el archivo la trae como juego");
+  assert.equal(accion.get("527"), "omitir", "era unidad con reservas y el archivo la trae como juego: no se convierte");
+  assert.ok(result.problems.some((p) => p.tipo === "juego-no-convertible" && p.nivel === "error" && p.codigo === "527"), "aviso bloqueante en la vista previa");
   assert.equal(accion.get("900"), "omitir");
   assert.ok(result.problems.some((p) => p.tipo === "sku-papelera"));
   const withStock = plan({ productos: [{ codigo: "J1X", nombre: "Juego X", tipo: "juego", componentes: [{ codigo: "743", cantidad: 2 }] }] }, existing, null);
@@ -332,4 +333,117 @@ test("la aplicación responde en NDJSON con progreso y la vista previa filtra du
   assert.match(panel, /DUDA_MOTIVO_LABEL/);
   assert.match(panel, /Buscar en las dudas/);
   assert.match(panel, /progreso/);
+});
+
+// ── Pendientes de la carga real (juego incompleto, unidad → juego, precio a consultar, categorías) ──
+
+test("cantidad null sigue creando 1 unidad (decisión del dueño)", () => {
+  const result = plan({ productos: [{ codigo: "A1", nombre: "Plato", cantidad: null }] });
+  assert.equal(result.items[0].unidades, 1);
+  assert.equal(result.items[0].esCombo, false);
+});
+
+test("juego sin componentes: se importa como juego incompleto, sin stock propio, y la vista previa lo anuncia", () => {
+  const result = plan({ productos: [{ codigo: "PK-1", nombre: "Juego de mesa", tipo: "juego", cantidad: 12, componentes: [] }] });
+  const item = result.items[0];
+  assert.equal(item.esCombo, true);
+  assert.equal(item.incompleto, true);
+  assert.equal(item.unidades, 0, "un juego no tiene unidades propias, ni aunque traiga cantidad");
+  assert.equal(item.accion, "crear");
+  assert.equal(result.summary.incompletos, 1);
+  const warning = result.problems.find((p) => p.tipo === "juego-sin-componentes");
+  assert.equal(warning?.nivel, "aviso");
+  assert.match(warning!.mensaje, /juego incompleto/);
+  assert.match(warning!.mensaje, /no se puede reservar/);
+});
+
+test("juego sin componentes sobre una unidad existente la conserva como unidad (no la convierte)", () => {
+  const result = plan({ productos: [{ codigo: "743", nombre: "Puff", tipo: "juego", componentes: [] }] }, { "743": { id: "i1", name: "Puff", isCombo: false, inTrash: false, units: 3 } });
+  assert.equal(result.items[0].esCombo, false);
+  assert.equal(result.items[0].convertir, false);
+  assert.equal(result.items[0].accion, "actualizar");
+});
+
+test("juego incompleto existente: con piezas en el archivo se completa; sin piezas sigue incompleto; un combo completo conserva las suyas", () => {
+  const incomplete: Record<string, ExistingItem> = { "PK-1": { id: "g1", name: "Juego", isCombo: false, incompleto: true, inTrash: false, units: 0 }, "743": { id: "i1", name: "Puff", isCombo: false, inTrash: false, units: 5 } };
+  const completes = plan({ productos: [{ codigo: "PK-1", nombre: "Juego", tipo: "juego", componentes: [{ codigo: "743", cantidad: 2 }] }] }, incomplete, null);
+  assert.equal(completes.items[0].accion, "actualizar");
+  assert.equal(completes.items[0].incompleto, false);
+  assert.equal(completes.items[0].convertir, false);
+  const stays = plan({ productos: [{ codigo: "PK-1", nombre: "Juego", tipo: "juego", componentes: [] }] }, incomplete, null);
+  assert.equal(stays.items[0].incompleto, true);
+  assert.equal(stays.items[0].accion, "actualizar");
+  const full = plan({ productos: [{ codigo: "PK-2", nombre: "Combo", tipo: "juego", componentes: [] }] }, { "PK-2": { id: "g2", name: "Combo", isCombo: true, inTrash: false, units: 0 } }, null);
+  assert.equal(full.items[0].incompleto, false, "no pasa a incompleto por reimportar sin piezas");
+  assert.equal(full.items[0].accion, "actualizar");
+});
+
+test("unidad existente + juego con componentes: se convierte sin reservas ni historial; con cualquiera de los dos es bloqueante", () => {
+  const raw = { productos: [{ codigo: "743", nombre: "Puff", cantidad: 5 }, { codigo: "J1", nombre: "Juego puff", tipo: "juego", componentes: [{ codigo: "743", cantidad: 2 }] }] };
+  const clean = plan(raw, { J1: { id: "j", name: "Juego puff", isCombo: false, inTrash: false, units: 2, reservas: 0, unidadesConHistorial: 0 } }, null);
+  const converted = clean.items.find((i) => i.product.codigo === "J1")!;
+  assert.equal(converted.accion, "actualizar");
+  assert.equal(converted.convertir, true);
+  assert.equal(clean.summary.convertidos, 1);
+  assert.ok(clean.problems.some((p) => p.tipo === "juego-convertido" && p.nivel === "aviso"));
+  for (const blocker of [{ reservas: 1 }, { unidadesConHistorial: 1 }]) {
+    const blocked = plan(raw, { J1: { id: "j", name: "Juego puff", isCombo: false, inTrash: false, units: 2, ...blocker } }, null);
+    const item = blocked.items.find((i) => i.product.codigo === "J1")!;
+    assert.equal(item.accion, "omitir");
+    assert.equal(item.convertir, false);
+    const error = blocked.problems.find((p) => p.tipo === "juego-no-convertible");
+    assert.equal(error?.nivel, "error");
+    assert.match(error!.mensaje, /no se puede convertir en juego/);
+  }
+});
+
+test("precio null o 0: aviso con el texto «a consultar» y «falta precio»; un precio real no avisa", () => {
+  const result = plan({ productos: [{ codigo: "A1", nombre: "Sin dato", precio: null }, { codigo: "A2", nombre: "Cero", precio: 0 }, { codigo: "A3", nombre: "Con precio", precio: 5000 }] }, {}, null);
+  const warnings = result.problems.filter((p) => p.tipo === "precio-cero");
+  assert.deepEqual(warnings.map((p) => p.codigo), ["A1", "A2"]);
+  for (const warning of warnings) {
+    assert.match(warning.mensaje, /a consultar/);
+    assert.match(warning.mensaje, /Consultar/);
+    assert.match(warning.mensaje, /falta precio/);
+  }
+});
+
+test("parser de categorias: nombre normalizado, orden, foto, repetidas e inválidas como aviso", () => {
+  const parsed = normalizeCatalog({
+    productos: [{ codigo: "A1", nombre: "Plato" }],
+    categorias: [
+      { nombre: "Platos", foto: "cat-platos.jpg", orden: 3 },
+      { nombre: "  vajilla / copas ", foto: null },
+      { nombre: "PLATOS", foto: "otra.jpg" },
+      { nombre: "", foto: "x.jpg" },
+      { nombre: "Mesas", orden: -4 },
+      "texto suelto",
+    ],
+  });
+  assert.ok(parsed.ok);
+  const categories = parsed.value.doc.categorias;
+  assert.deepEqual(categories.map((c) => [c.categoria, c.subcategoria, c.foto, c.orden]), [
+    ["Platos", null, "cat-platos.jpg", 3],
+    ["vajilla", "copas", null, null],
+    ["Mesas", null, null, null],
+  ]);
+  const kinds = parsed.value.problems.map((p) => p.tipo);
+  assert.ok(kinds.includes("categoria-repetida"));
+  assert.equal(kinds.filter((k) => k === "categoria-invalida").length, 3);
+  assert.equal(parsed.value.problems.some((p) => p.nivel === "error"), false, "las categorías nunca bloquean");
+  assert.deepEqual(normalizeCatalog({ productos: [{ codigo: "A1", nombre: "Plato" }] }).ok && (normalizeCatalog({ productos: [{ codigo: "A1", nombre: "Plato" }] }) as { value: { doc: { categorias: unknown[] } } }).value.doc.categorias, [], "sin sección: lista vacía");
+});
+
+test("vista previa: «N fotos de categoría» cruza el ZIP por nombre exacto y avisa las que faltan", () => {
+  const parsed = normalizeCatalog({
+    productos: [{ codigo: "A1", nombre: "Plato", foto: null }],
+    categorias: [{ nombre: "Platos", foto: "cat-platos.jpg" }, { nombre: "Copas", foto: "CAT-COPAS.JPG" }, { nombre: "Mesas", foto: "cat-mesas.jpg" }],
+  });
+  assert.ok(parsed.ok);
+  const result = planCatalog({ products: parsed.value.doc.productos, parseProblems: parsed.value.problems, existing: new Map(), photoNames: new Set(["cat-platos.jpg", "cat-copas.jpg"]), categories: parsed.value.doc.categorias });
+  assert.equal(result.summary.fotosCategoria, 2);
+  assert.ok(result.problems.some((p) => p.tipo === "categoria-foto-faltante" && p.mensaje.includes("cat-mesas.jpg")));
+  assert.equal(result.problems.some((p) => p.tipo === "foto-sobrante"), false, "las fotos de categoría no son sobrantes");
+  const noZip = planCatalog({ products: parsed.value.doc.productos, existing: new Map(), photoNames: null, categories: parsed.value.doc.categorias });
+  assert.equal(noZip.summary.fotosCategoria, 0);
 });

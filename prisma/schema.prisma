@@ -1043,6 +1043,9 @@ model BudgetItem {
   /// Snapshot de precios de la línea (escalones por días y paquete de un combo) tomado al
   /// crearla: el portal y el cambio de días recalculan con ESTO, nunca con el inventario vivo.
   pricingSnapshot Json?
+  /// Gratis a propósito: una línea con precio unitario 0 queda «falta precio» (bloquea enviar,
+  /// aprobar y cobrar) salvo que el equipo confirme explícitamente que no se cobra.
+  freeOnPurpose Boolean      @default(false)
   budget      Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   inventory   InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
 
@@ -1929,6 +1932,9 @@ model InventoryItem {
   /// Unidades retenidas por incidentes abiertos sin unidad con código (daño o faltante por
   /// cantidad). Se mantiene bajo el lock del ítem y se descuenta de la capacidad.
   incidentHold       Int              @default(0)
+  /// Juego (combo) importado o creado sin piezas: es un juego pero su composición está por
+  /// cargar. No tiene stock propio ni se puede reservar; se limpia al guardarle componentes.
+  comboIncomplete    Boolean          @default(false)
   /// Tiempo de colchón antes/después del evento para este producto (minutos).
   /// NULL hereda el de la empresa (`OrganizationRentalSettings`).
   bufferBeforeMin    Int?
@@ -2008,6 +2014,11 @@ model InventoryCategory {
   color          String?
   icon           String?
   archivedAt     DateTime?
+  /// Foto propia de la categoría (cuadrada, ≤ 1 MB): binario + MIME en la base, servida pública por
+  /// `/api/category-images/<id>`. `imageUrl` es esa ruta con `?v=` (la tienda la muestra; NULL = sin foto).
+  imageUrl       String?
+  imageData      Bytes?
+  imageMime      String?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)

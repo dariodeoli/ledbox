@@ -158,7 +158,7 @@ export function InventoryList(props: InventoryListProps) {
                 value: <StockCell item={item} rangeActive={rangeActive} />,
                 title: stockTitle(item, rangeActive, from, to),
               },
-              { label: "Estado", value: <StateChips visual={visual} /> },
+              { label: "Estado", value: <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} /> },
               { label: "Ubicación", value: place.text, title: place.title },
               { label: "Tienda", value: <AudienceChip item={item} /> },
               {
@@ -234,7 +234,7 @@ export function InventoryList(props: InventoryListProps) {
               ) : null}
             </AdminCell>
             <AdminCell title={visual.state.hint}>
-              <StateChips visual={visual} />
+              <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} />
             </AdminCell>
             <AdminCell end title={pricesTitle(item)}>
               <PriceValue normal={item.listPrice} tiers={tiersForAudience(item.priceTiers, "RETAIL")} />

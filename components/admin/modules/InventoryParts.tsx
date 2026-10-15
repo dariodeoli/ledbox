@@ -4,7 +4,7 @@ import { tierLabel, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { formatDateShort, formatMoney, formatNumber, formatTime } from "@/lib/admin-format";
 import { CATALOG_AUDIENCE_LABEL, effectiveAudience } from "@/lib/catalog-audience";
 import { AUDIENCE_TONE, type StockSummary } from "@/lib/inventory-view";
-import type { InventorySegment, InventoryStateEntry, InventoryVisualState } from "@/lib/inventory-visual-state";
+import { INCOMPLETE_STATE, type InventorySegment, type InventoryStateEntry, type InventoryVisualState } from "@/lib/inventory-visual-state";
 import type { AdminInventoryRow } from "@/lib/admin-types";
 import { AdminBadge } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
@@ -199,10 +199,10 @@ export function StateChip({ state, label, title, className }: { state: Inventory
 }
 
 /** Estado principal y, si hay, la marca «Reservado desde dd/mm» (acento · calendario). */
-export function StateChips({ visual, compact }: { visual: InventoryVisualState; compact?: boolean }) {
+export function StateChips({ visual, compact, incomplete }: { visual: InventoryVisualState; compact?: boolean; incomplete?: boolean }) {
   return (
     <span className={compact ? "admin-inv-chips admin-inv-chips--compact" : "admin-inv-chips"}>
-      <StateChip state={visual.state} />
+      {incomplete ? <StateChip state={INCOMPLETE_STATE} /> : <StateChip state={visual.state} />}
       {visual.reserved ? <StateChip state={visual.reserved} title="Tiene una reserva a futuro." /> : null}
     </span>
   );

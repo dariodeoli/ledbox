@@ -2,6 +2,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { setCategoryImage } from "@/lib/server/category-image";
 import {
   archiveInventoryCategory,
   listInventoryCategories,
@@ -48,10 +49,11 @@ export async function POST(request: Request) {
     return Response.json({ category: { id: resolved.categoryId, text: resolved.text, parentName: resolved.parentName, childName: resolved.childName } }, { status: 201 });
   }
 
-  if (!["rename", "move", "style", "merge", "archive", "restore"].includes(kind)) return jsonError("Operación de categorías desconocida.", 400);
+  if (!["rename", "move", "style", "merge", "archive", "restore", "image-clear"].includes(kind)) return jsonError("Operación de categorías desconocida.", 400);
   if (kind !== "merge" && !id) return jsonError("Falta la categoría.", 400);
 
   const result = await db.$transaction(async (tx) => {
+    if (kind === "image-clear") return (await setCategoryImage(tx, organizationId, id, null)) ? ({ ok: true } as const) : ({ ok: false, status: 404, error: "La categoría no existe en esta empresa." } as const);
     if (kind === "rename") return renameInventoryCategory(tx, organizationId, id, body.name);
     if (kind === "move") return moveInventoryCategory(tx, organizationId, id, typeof body.parentId === "string" && body.parentId ? body.parentId : null);
     if (kind === "style") return styleInventoryCategory(tx, organizationId, id, { color: body.color, icon: body.icon, sortOrder: body.sortOrder });
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
     merge: "Unió dos categorías de inventario",
     archive: "Archivó una categoría de inventario",
     restore: "Restauró una categoría de inventario",
+    "image-clear": "Quitó la foto de una categoría de inventario",
   };
   await recordAudit({ context: auth.context, action: "update", entity: "InventoryCategory", entityId: target, summary: summary[kind], detail: { fields: { operacion: kind, ...("moved" in result ? { productos: result.moved } : {}) } } });
   return Response.json({ ok: true, ...("moved" in result ? { moved: result.moved } : {}) });

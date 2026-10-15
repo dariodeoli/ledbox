@@ -359,6 +359,8 @@ export type AdminEventChecklistRow = Pick<AdminEventRow, "id" | "name" | "tasks"
 export type AdminBudgetItem = {
   notes?: string | null;
   excluded?: boolean;
+  /** Precio 0 confirmado como gratis a propósito; sin esto, un 0 es «falta precio». */
+  freeOnPurpose?: boolean;
   id: string;
   name: string;
   quantity: number;
@@ -1743,6 +1745,8 @@ export type AdminInventoryCombo = {
   capacity: number;
   limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
   components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string }>;
+  /** Juego sin piezas cargadas: no se puede reservar hasta completarlo. */
+  incomplete?: boolean;
 };
 
 /** Asignación de inventario a un evento, tal como la sirve `/api/admin/inventory`. */
@@ -1869,6 +1873,8 @@ export type AdminInventoryCategoryRow = {
   sortOrder: number;
   color: string | null;
   icon: string | null;
+  /** Foto propia de la categoría (ruta pública); `null` = sin foto. */
+  imageUrl?: string | null;
   archivedAt: string | null;
   itemCount: number;
 };

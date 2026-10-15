@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { budgetPriceGate } from "./budget-price-gate";
 import type { ExpectedPayment, Prisma } from "@prisma/client";
 import { formatMoney } from "@/lib/admin-format";
 import { db } from "./db";
@@ -393,6 +394,10 @@ export async function confirmExpectedPayment(input: {
       paymentId: expected.paymentId,
     };
   }
+
+  // «Falta precio»: no se cobra un presupuesto con líneas en 0 sin confirmar como gratis.
+  const priceBlock = await budgetPriceGate(input.organizationId, expected.budgetId, "cobrar");
+  if (priceBlock) return { ok: false, status: 409, error: priceBlock };
 
   // Monto aplicado: el pedido (seña) o el saldo completo.
   const requestedAmount = input.amount === undefined || input.amount === null ? remaining : Math.round(input.amount);
