@@ -32,6 +32,7 @@ function darkRules(prefix: string) {
     rule(".lb-muted", `color:${p.muted}!important;border-color:${p.line}!important;`),
     rule(".lb-soft", `color:${p.mutedSoft}!important;`),
     rule(".lb-link", `color:${p.accentInk}!important;`),
+    rule(".lb-eyebrow", `color:${p.accentInk}!important;`),
     rule(".lb-note", `background-color:${p.accentSoft}!important;color:${p.muted}!important;border-color:${p.accent}!important;`),
     rule(".lb-status-accent", `background-color:${p.accentSoft}!important;color:${p.accentInk}!important;`),
     rule(".lb-status-success", `background-color:${p.successSoft}!important;color:${p.success}!important;`),

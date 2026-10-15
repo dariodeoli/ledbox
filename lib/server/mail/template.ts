@@ -1,5 +1,6 @@
 import { publicConfig } from "@/lib/public-config";
 import { normalizeHex, readableOn } from "@/lib/storefront-theme";
+import { instagramHref, instagramLabel } from "@/lib/admin-format";
 import { waMeLink } from "@/lib/whatsapp-link";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import { MAIL_PALETTES, MAIL_THEME_CSS } from "./theme";
@@ -54,27 +55,50 @@ export type MailContent = {
   eyebrow?: string | null;
   /** Optional status chip for messages that need a clear state. */
   status?: MailStatus | null;
-  /** Organization displayed in the footer; defaults to LedBox. */
+  /** Empresa que firma el correo (pie y texto plano). Si falta, rige `brand.name`; sin ninguna sale como EventOS. */
   organization?: string | null;
   /** Compact reason in the footer. */
   reason?: string | null;
   /**
-   * Marca de la empresa (solo color y logo, el resto de la plantilla no cambia). `color` ya viene
-   * validado con contraste AA contra blanco (`adjustBrandColor`); sin marca rige la de LedBox.
+   * Marca del remitente. Con `platform: true` el correo es de EventOS (alta de empresa, reset);
+   * si no, es de una empresa: logo y nombre junto a la marca EventOS, contacto en el pie y su
+   * color solo en botón y acentos (`color` ya viene validado con contraste AA contra blanco).
    */
   brand?: MailBrand | null;
 };
 
+/** Datos de contacto del perfil de la empresa; solo viaja lo que la empresa cargó. */
+export type MailContact = {
+  phone?: string | null;
+  whatsapp?: string | null;
+  instagram?: string | null;
+  email?: string | null;
+  website?: string | null;
+  /** Dirección en una línea (calle, barrio, ciudad). */
+  address?: string | null;
+  /** Link de Google Maps de la dirección. */
+  mapsUrl?: string | null;
+};
+
 export type MailBrand = {
-  /** Color de marca `#rrggbb` para el botón y el filete de las notas. */
+  /** `true`: correo de la plataforma (marca EventOS, sin empresa). */
+  platform?: boolean;
+  /** Nombre de la empresa (encabezado, pie y texto alternativo del logo). */
+  name?: string | null;
+  /** Color de marca `#rrggbb` para el botón y los acentos. */
   color?: string | null;
   /** Logo público de la empresa (variante para fondo oscuro, que es el del encabezado). */
   logoUrl?: string | null;
   /** `true` si el logo es la variante para fondo claro: se apoya sobre una chapa blanca. */
   logoOnPlate?: boolean;
-  /** Nombre de la empresa (texto alternativo del logo). */
-  name?: string | null;
+  /** Proporción del logo (ancho y alto en píxeles) para reservar el espacio en Outlook. */
+  logoWidth?: number | null;
+  logoHeight?: number | null;
+  contact?: MailContact | null;
 };
+
+/** Marca de la plataforma: correos de EventOS (alta de empresa, reset de contraseña, alertas). */
+export const PLATFORM_BRAND: MailBrand = { platform: true, name: "EventOS" };
 
 const BRAND = MAIL_PALETTES.light;
 
@@ -94,12 +118,12 @@ function paragraphs(value: string | string[] | null | undefined, style: string, 
   return listOf(value).map((text) => `<p class="${className}" style="${style}">${escapeHtml(text)}</p>`).join("");
 }
 
-/** Public logo URL; the logo remains a normal hosted asset, never a secret. */
+/** Isotipo de EventOS en PNG (los clientes de correo no dibujan SVG); es un recurso público, no un secreto. */
 export function mailLogoUrl(): string {
-  return `${publicConfig.siteUrl}/assets/icon-192.png`;
+  return `${publicConfig.siteUrl}/assets/eventos-mark.png`;
 }
 
-function rowsHtml(rows: MailRow[]): string {
+function rowsHtml(rows: MailRow[], accent: string): string {
   if (rows.length === 0) return "";
   const cells = rows
     .map((row) => {
@@ -117,7 +141,7 @@ function rowsHtml(rows: MailRow[]): string {
     })
     .join("");
   return (
-    `<table class="lb-summary" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${BRAND.cardMuted};border:1px solid ${BRAND.line};border-radius:12px;">` +
+    `<table class="lb-summary" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${BRAND.cardMuted};border:1px solid ${BRAND.line};border-left:4px solid ${accent};border-radius:12px;">` +
     `<tr><td class="lb-ink" colspan="2" style="padding:14px 16px 2px;color:${BRAND.ink};font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;">Resumen</td></tr>` +
     `<tr><td colspan="2" style="padding:0 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;border-collapse:collapse;">${cells}</table></td></tr>` +
     `</table>`
@@ -144,10 +168,10 @@ function ctaHtml(cta: MailCta, brandColor?: string | null): string {
   );
 }
 
-function noteHtml(note: string | string[] | null | undefined): string {
+function noteHtml(note: string | string[] | null | undefined, accent: string): string {
   const body = paragraphs(note, `margin:0 0 5px;color:${BRAND.muted};font-size:12.5px;line-height:1.55;`, "lb-muted");
   if (!body) return "";
-  return `<div class="lb-note" style="margin:18px 0 0;padding:12px 14px;border-left:3px solid ${BRAND.accent};background:${BRAND.accentSoft};border-radius:0 8px 8px 0;">${body}</div>`;
+  return `<div class="lb-note" style="margin:18px 0 0;padding:12px 14px;border-left:3px solid ${accent};background:${BRAND.accentSoft};border-radius:0 8px 8px 0;">${body}</div>`;
 }
 
 function statusHtml(status: MailStatus | null | undefined): string {
@@ -162,51 +186,108 @@ function statusHtml(status: MailStatus | null | undefined): string {
   return `<span class="lb-status-${tone}" style="display:inline-block;padding:6px 9px;border-radius:999px;background:${colors.background};color:${colors.color};font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(status.label.trim())}</span>`;
 }
 
-function footerHtml(input: { organization?: string | null; reason?: string | null }): string {
-  const organization = (input.organization ?? "").trim() || "LedBox";
-  const reason = (input.reason ?? "").trim();
-  const site = escapeHtml(publicConfig.siteUrl);
-  const whatsapp = escapeHtml(waMeLink(publicConfig.whatsappNumber) ?? "");
+const LINK_STYLE = `color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;`;
+
+function link(href: string, label: string): string {
+  return `<a class="lb-link" href="${escapeHtml(href)}" style="${LINK_STYLE}">${escapeHtml(label)}</a>`;
+}
+
+type ContactItem = { label: string; href: string | null };
+
+/** Medios de contacto de la empresa en el orden del pie; lo que no se cargó no aparece. */
+function contactItems(contact: MailContact | null | undefined): { channels: ContactItem[]; address: ContactItem | null } {
+  const c = contact ?? {};
+  const channels: ContactItem[] = [];
+  const phone = (c.phone ?? "").trim();
+  if (phone) channels.push({ label: phone, href: `tel:${phone.replace(/[^\d+]/g, "")}` });
+  const whatsapp = (c.whatsapp ?? "").trim();
+  if (whatsapp && waMeLink(whatsapp)) channels.push({ label: `WhatsApp ${whatsapp}`, href: waMeLink(whatsapp) });
+  const instagram = instagramLabel(c.instagram);
+  if (instagram) channels.push({ label: instagram, href: instagramHref(c.instagram) });
+  const email = (c.email ?? "").trim();
+  if (email) channels.push({ label: email, href: `mailto:${email}` });
+  const website = (c.website ?? "").trim();
+  if (website) channels.push({ label: website.replace(/^https?:\/\//i, "").replace(/\/$/, ""), href: website });
+  const address = (c.address ?? "").trim();
+  return { channels, address: address ? { label: address, href: (c.mapsUrl ?? "").trim() || null } : null };
+}
+
+type Identity = { platform: boolean; name: string; brand: MailBrand | null };
+
+function identityOf(input: MailContent): Identity {
+  const brand = input.brand ?? null;
+  const name = (brand?.name ?? "").trim() || (input.organization ?? "").trim();
+  const platform = brand?.platform === true || !name;
+  return { platform, name: platform ? "EventOS" : name, brand };
+}
+
+function footerHtml(identity: Identity, reason: string | null | undefined): string {
+  const note = (reason ?? "").trim();
+  const row = (content: string, extra = "") => `<p class="lb-muted" style="margin:6px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;${extra}">${content}</p>`;
+  let company = "";
+  if (identity.platform) {
+    const site = publicConfig.siteUrl;
+    const wa = waMeLink(publicConfig.whatsappNumber);
+    company =
+      `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:13px;font-weight:800;">EventOS</p>` +
+      row("Gestión operativa para eventos") +
+      row([link(site, "Sitio web"), wa ? link(wa, "Contactar por WhatsApp") : "", "Asunción, Paraguay"].filter(Boolean).join(" · "));
+  } else {
+    const { channels, address } = contactItems(identity.brand?.contact);
+    company = `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:14px;font-weight:800;">${escapeHtml(identity.name)}</p>`;
+    if (channels.length > 0) company += row(channels.map((item) => (item.href ? link(item.href, item.label) : escapeHtml(item.label))).join(" · "));
+    if (address) company += row(address.href ? link(address.href, address.label) : escapeHtml(address.label));
+  }
   return (
-    `<tr><td class="lb-footer lb-pad" style="padding:20px 28px 24px;border-top:1px solid ${BRAND.line};background:${BRAND.cardMuted};border-radius:0 0 14px 14px;">` +
-    `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:13px;font-weight:800;">${escapeHtml(organization)}</p>` +
-    `<p class="lb-muted" style="margin:5px 0 0;color:${BRAND.muted};font-size:11.5px;line-height:1.55;">EventOS · Gestión operativa para eventos · ${escapeHtml(APP_VERSION_LABEL)}</p>` +
-    (reason ? `<p class="lb-soft" style="margin:9px 0 0;color:${BRAND.mutedSoft};font-size:11.5px;line-height:1.55;">Recibiste este correo porque ${escapeHtml(reason)}.</p>` : "") +
-    `<p class="lb-muted" style="margin:10px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;">` +
-    `<a class="lb-link" href="${site}" style="color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;">Sitio web</a>` +
-    ` · <a class="lb-link" href="${whatsapp}" style="color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;">Contactar por WhatsApp</a>` +
-    ` · Asunción, Paraguay</p>` +
+    `<tr><td class="lb-footer lb-pad" style="padding:22px 28px 24px;border-top:1px solid ${BRAND.line};background:${BRAND.cardMuted};border-radius:0 0 14px 14px;">` +
+    company +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0;border-top:1px solid ${BRAND.line};"><tr>` +
+    `<td width="26" style="padding:12px 8px 0 0;vertical-align:middle;"><img src="${escapeHtml(mailLogoUrl())}" width="18" height="18" alt="EventOS" style="display:block;width:18px;height:18px;border-radius:4px;"></td>` +
+    `<td class="lb-muted" style="padding:12px 0 0;color:${BRAND.muted};font-size:11.5px;line-height:1.5;vertical-align:middle;">Enviado con <strong>EventOS</strong> · ${escapeHtml(APP_VERSION_LABEL)}</td>` +
+    `</tr></table>` +
+    (note ? `<p class="lb-soft" style="margin:10px 0 0;color:${BRAND.mutedSoft};font-size:11.5px;line-height:1.55;">Recibiste este correo porque ${escapeHtml(note)}.</p>` : "") +
     `</td></tr>`
   );
 }
 
-/** Encabezado: logo de la empresa (si lo hay) o la marca de LedBox. */
-function headerBrandHtml(brand: MailBrand | null | undefined): string {
+/** Marca EventOS + (si es de una empresa) divisor, logo y nombre de la empresa. */
+function headerBrandHtml(identity: Identity): string {
+  const mark = `<td style="padding:0 12px 0 0;"><img src="${escapeHtml(mailLogoUrl())}" width="38" height="38" alt="EventOS" style="display:block;width:38px;height:38px;border-radius:9px;background:${BRAND.card};"></td>`;
+  if (identity.platform) {
+    return mark + `<td class="lb-header-ink" style="font:800 17px Arial,Helvetica,sans-serif;letter-spacing:2px;color:${BRAND.headerInk};">EVENTOS</td>`;
+  }
+  const divider = `<td class="lb-header-rule" width="1" bgcolor="${BRAND.headerMuted}" style="width:1px;padding:0;background:${BRAND.headerMuted};font-size:1px;line-height:1px;"></td><td width="12" style="width:12px;font-size:1px;line-height:1px;"></td>`;
+  const name = escapeHtml(identity.name);
+  const brand = identity.brand;
   const logo = brand?.logoUrl?.trim();
   if (logo) {
-    const name = escapeHtml((brand?.name ?? "").trim() || "Logo de la empresa");
+    const height = 38;
+    const ratio = brand?.logoWidth && brand?.logoHeight ? brand.logoWidth / brand.logoHeight : null;
+    const width = ratio ? Math.max(24, Math.min(160, Math.round(height * ratio))) : null;
+    const size = width ? `width="${width}" height="${height}"` : `height="${height}"`;
     const plate = brand?.logoOnPlate ? `background:${BRAND.card};padding:5px;border-radius:8px;` : "";
     return (
-      `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(logo)}" height="38" alt="${name}" style="display:block;height:38px;max-width:160px;width:auto;${plate}box-sizing:content-box;"></td>` +
-      ((brand?.name ?? "").trim() ? `<td class="lb-header-ink" style="font:700 15px Arial,Helvetica,sans-serif;color:${BRAND.headerInk};">${name}</td>` : "")
+      mark + divider +
+      `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(logo)}" ${size} alt="${name}" style="display:block;height:${height}px;max-width:160px;${width ? `width:${width}px;` : "width:auto;"}${plate}box-sizing:content-box;"></td>` +
+      `<td class="lb-header-ink" style="font:700 16px Arial,Helvetica,sans-serif;color:${BRAND.headerInk};">${name}</td>`
     );
   }
-  return (
-    `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(mailLogoUrl())}" width="38" height="38" alt="LedBox EventOS" style="display:block;width:38px;height:38px;border-radius:8px;background:${BRAND.card};"></td>` +
-    `<td class="lb-header-ink" style="font:800 16px Arial,Helvetica,sans-serif;letter-spacing:2px;color:${BRAND.headerInk};">LEDBOX<span class="lb-brand-dot" style="color:${BRAND.accent};">.</span></td>`
-  );
+  return mark + divider + `<td class="lb-header-ink" style="font:800 20px Arial,Helvetica,sans-serif;letter-spacing:-.01em;color:${BRAND.headerInk};">${name}</td>`;
 }
 
 /** Render the complete HTML email. */
 export function renderMail(input: MailContent): string {
+  const identity = identityOf(input);
   const title = escapeHtml(input.title);
-  const eyebrow = escapeHtml((input.eyebrow ?? "LedBox · EventOS").trim());
+  const eyebrowText = (input.eyebrow ?? (identity.platform ? "EventOS" : "")).trim();
   const preheader = escapeHtml((input.preheader ?? input.title ?? "").trim());
-  const intro = paragraphs(input.intro, `margin:0 0 13px;color:${BRAND.ink};font-size:14.5px;line-height:1.68;`, "lb-ink");
-  const rows = rowsHtml(input.rows ?? []);
-  const brandColor = normalizeHex(input.brand?.color ?? null);
+  const intro = paragraphs(input.intro, `margin:0 0 14px;color:${BRAND.ink};font-size:15px;line-height:1.7;`, "lb-ink");
+  const brandColor = identity.platform ? null : normalizeHex(identity.brand?.color ?? null);
+  const accent = brandColor ?? BRAND.accent;
+  const eyebrowInk = brandColor ?? BRAND.accentInk;
+  const rows = rowsHtml(input.rows ?? [], accent);
   const cta = input.cta ? ctaHtml(input.cta, brandColor) : "";
-  const note = noteHtml(input.note);
+  const note = noteHtml(input.note, accent);
   const status = statusHtml(input.status);
 
   return (
@@ -229,7 +310,7 @@ export function renderMail(input: MailContent): string {
     `.lb-card{width:100% !important;border-radius:12px !important;}` +
     `.lb-pad{padding-left:18px !important;padding-right:18px !important;}` +
     `.lb-header-pad{padding:19px 18px !important;}` +
-    `.lb-title{font-size:21px !important;}` +
+    `.lb-title{font-size:22px !important;}` +
     `.lb-btn,.lb-btn-brand{display:block !important;text-align:center !important;padding:15px 18px !important;}` +
     `.lb-cta-table{width:100% !important;table-layout:fixed !important;}` +
     `}` +
@@ -240,24 +321,21 @@ export function renderMail(input: MailContent): string {
     `<table class="lb-canvas" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.canvas};">` +
     `<tr><td align="center" class="lb-wrap" style="padding:28px 12px 34px;">` +
     `<table role="presentation" class="lb-card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;table-layout:fixed;background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:14px;">` +
-    `<tr><td class="lb-header lb-header-pad" style="padding:22px 28px;background:${BRAND.graphite};border-radius:13px 13px 0 0;">` +
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    `<td align="left" style="vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    headerBrandHtml(input.brand) +
-    `</tr></table></td>` +
-    `<td class="lb-header-muted" align="right" style="vertical-align:middle;color:${BRAND.headerMuted};font:600 11px Arial,Helvetica,sans-serif;letter-spacing:.08em;text-transform:uppercase;">EventOS</td>` +
+    `<tr><td class="lb-header lb-header-pad" style="padding:22px 28px;background:${BRAND.graphite};border-bottom:4px solid ${accent};border-radius:13px 13px 0 0;">` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
+    headerBrandHtml(identity) +
     `</tr></table>` +
     `</td></tr>` +
-    `<tr><td class="lb-content lb-pad" style="padding:30px 28px 28px;background:${BRAND.card};color:${BRAND.ink};">` +
-    `<p class="lb-muted" style="margin:0 0 13px;color:${BRAND.muted};font-size:11px;font-weight:800;letter-spacing:.14em;line-height:1.3;text-transform:uppercase;">${eyebrow}</p>` +
-    (status ? `<p style="margin:0 0 13px;">${status}</p>` : "") +
-    `<h1 class="lb-title lb-ink" style="margin:0 0 15px;color:${BRAND.ink};font:700 24px Arial,Helvetica,sans-serif;line-height:1.22;letter-spacing:-.01em;">${title}</h1>` +
+    `<tr><td class="lb-content lb-pad" style="padding:32px 28px 30px;background:${BRAND.card};color:${BRAND.ink};">` +
+    (eyebrowText ? `<p class="lb-eyebrow" style="margin:0 0 14px;color:${eyebrowInk};font-size:11px;font-weight:800;letter-spacing:.14em;line-height:1.3;text-transform:uppercase;">${escapeHtml(eyebrowText)}</p>` : "") +
+    (status ? `<p style="margin:0 0 14px;">${status}</p>` : "") +
+    `<h1 class="lb-title lb-ink" style="margin:0 0 16px;color:${BRAND.ink};font:700 26px Arial,Helvetica,sans-serif;line-height:1.2;letter-spacing:-.015em;">${title}</h1>` +
     intro +
-    (rows ? `<div style="margin:22px 0 0;">${rows}</div>` : "") +
+    (rows ? `<div style="margin:24px 0 0;">${rows}</div>` : "") +
     cta +
     note +
     `</td></tr>` +
-    footerHtml({ organization: input.organization, reason: input.reason }) +
+    footerHtml(identity, input.reason) +
     `</table>` +
     `</td></tr></table>` +
     `</body></html>`
@@ -266,8 +344,10 @@ export function renderMail(input: MailContent): string {
 
 /** Plain-text alternative carrying the same information as the HTML version. */
 export function renderMailText(input: MailContent): string {
-  const lines: string[] = [input.title];
-  if (input.eyebrow?.trim()) lines.unshift(input.eyebrow.trim());
+  const identity = identityOf(input);
+  const lines: string[] = [identity.platform ? "EventOS" : `${identity.name} · vía EventOS`, ""];
+  if (input.eyebrow?.trim()) lines.push(input.eyebrow.trim());
+  lines.push(input.title);
   if (input.status?.label.trim()) lines.push("", input.status.label.trim());
   const intro = listOf(input.intro);
   if (intro.length > 0) lines.push("", ...intro);
@@ -282,10 +362,17 @@ export function renderMailText(input: MailContent): string {
   }
   for (const text of listOf(input.note)) lines.push("", text);
   lines.push("", "--");
-  lines.push((input.organization ?? "").trim() || "LedBox");
-  lines.push("EventOS · Gestión operativa para eventos");
+  if (identity.platform) {
+    lines.push("EventOS · Gestión operativa para eventos");
+    lines.push(`${publicConfig.siteUrl} · WhatsApp ${waMeLink(publicConfig.whatsappNumber) ?? ""} · Asunción, Paraguay`);
+  } else {
+    lines.push(identity.name);
+    const { channels, address } = contactItems(identity.brand?.contact);
+    if (channels.length > 0) lines.push(channels.map((item) => item.label).join(" · "));
+    if (address) lines.push(address.href ? `${address.label} (${address.href})` : address.label);
+  }
+  lines.push(`Enviado con EventOS · ${APP_VERSION_LABEL}`);
   if (input.reason?.trim()) lines.push(`Recibiste este correo porque ${input.reason.trim()}.`);
-  lines.push(`${publicConfig.siteUrl} · WhatsApp ${waMeLink(publicConfig.whatsappNumber) ?? ""} · Asunción, Paraguay`);
   return lines.join("\n");
 }
 

@@ -2,7 +2,7 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import { accountCurrencyLabel, accountTypeLabel } from "@/lib/org-profile";
 import { normalizeBudgetCode, portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { parsePaymentDetails, paymentPlanOf, type PortalBudgetPaymentDetails } from "../budget-portal";
-import { renderMail, renderMailText, type MailContent, type MailRow } from "./template";
+import { renderMail, renderMailText, type MailBrand, type MailContent, type MailRow } from "./template";
 
 /**
  * Correo «Presupuesto» (issue #30): el que el panel manda al cliente desde
@@ -51,6 +51,8 @@ export type BudgetMailBudget = {
 
 export type BudgetMailInput = {
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   /** Datos de pago de la empresa (`Organization.paymentDetails`); se filtran por aprobación. */
   paymentDetails: unknown;
   budget: BudgetMailBudget;
@@ -160,6 +162,7 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
     eyebrow: "Presupuesto · decisión del cliente",
     status: approved ? { label: "Aprobado", tone: "success" } : { label: "Requiere revisión", tone: "accent" },
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: mailReason(input),
   };
 

@@ -1,6 +1,6 @@
 import { adminRoleLabel } from "@/lib/admin-format";
 import { invitationAcceptUrl } from "@/lib/public-config";
-import { renderMail, renderMailText, type MailContent, type MailRow } from "./template";
+import { renderMail, renderMailText, type MailBrand, type MailContent, type MailRow } from "./template";
 
 /**
  * Correo «Invitación al equipo» (issue #31): el link público de aceptación es la
@@ -15,6 +15,8 @@ import { renderMail, renderMailText, type MailContent, type MailRow } from "./te
 export type InvitationMailInput = {
   /** Empresa a la que se suma la persona. */
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   email: string;
   role: string;
   /** Nombre de quien invita (el correo no expone su dirección). */
@@ -45,7 +47,7 @@ export function buildInvitationMail(input: InvitationMailInput): InvitationMailC
   const url = invitationAcceptUrl(input.token);
   const expiry = formatExpiry(input.expiresAt);
   const role = adminRoleLabel(input.role);
-  const subject = `Invitación al equipo de ${input.organizationName} · LedBox`;
+  const subject = `Invitación al equipo de ${input.organizationName} · EventOS`;
 
   const rows: MailRow[] = [
     { label: "Organización", value: input.organizationName, strong: true },
@@ -70,6 +72,7 @@ export function buildInvitationMail(input: InvitationMailInput): InvitationMailC
     eyebrow: "Invitación · acceso al equipo",
     status: { label: "Acción requerida", tone: "accent" },
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `te invitamos a sumarte al equipo de ${input.organizationName}`,
   };
 
