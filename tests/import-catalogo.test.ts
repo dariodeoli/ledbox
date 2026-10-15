@@ -66,7 +66,7 @@ test("validaciones: código repetido, precio 0, precio inválido, cobro y tipo",
       { codigo: "CC3", nombre: "Tres", precio: "660.000", cobro: "día" },
       { codigo: "DD4", nombre: "Cuatro", cobro: "semana" },
       { codigo: "EE5", nombre: "Cinco", tipo: "paquete" },
-      { codigo: "x", nombre: "Siete" },
+      { codigo: "x/y", nombre: "Siete" },
     ],
   };
   const result = plan(raw, {}, null);

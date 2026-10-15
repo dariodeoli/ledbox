@@ -92,7 +92,7 @@ export const FIELD_MESSAGES = {
   phone: "Ingresá un teléfono válido con código de país.",
   email: "Ingresá un correo válido.",
   serial: "El serial solo admite letras, números, guiones y guiones bajos.",
-  sku: "El SKU solo admite letras, números, espacios, puntos y guiones (2 a 60).",
+  sku: "El SKU solo admite letras, números, espacios, puntos y guiones (1 a 60).",
   image: "Usá una ruta interna (/assets/…) o una URL http(s) válida.",
   price: "Ingresá un precio válido en guaraníes (hasta Gs 10.000.000.000).",
   priceDays: "Ingresá los días de la regla (0 a 3.650).",
@@ -375,7 +375,7 @@ export function normalizeInventorySku(value: string | null | undefined): string 
 }
 
 export function inventorySkuValid(value: string | null | undefined): boolean {
-  return /^[A-Za-z0-9 ._·-]{2,60}$/.test(normalizeInventorySku(value));
+  return /^[A-Za-z0-9 ._·-]{1,60}$/.test(normalizeInventorySku(value));
 }
 
 /** Error del SKU: `null` también cuando viene vacío (el campo es opcional). */
