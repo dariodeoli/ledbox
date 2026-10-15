@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatDateShort, formatNumber, inventoryKindLabel, inventoryStatusLabel } from "@/lib/admin-format";
-import { canImportCatalog, canWriteOperations } from "@/lib/admin-policy";
+import { canImportCatalog, canSeeInventoryCosts, canWriteOperations } from "@/lib/admin-policy";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryGridRow, AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy, AdminInventoryRow } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
@@ -98,6 +98,8 @@ export function InventarioModule() {
   const barRef = useRef<HTMLDivElement>(null);
 
   const writable = canWriteOperations(role);
+  // Costos internos (y proveedor): el API los omite para VIEWER, así que tampoco se ofrecen columnas ni filtro.
+  const showCosts = canSeeInventoryCosts(role);
   const canImport = writable && canImportCatalog(role) && !demo;
   const canReadAudit = role === "OWNER" || role === "ADMIN";
   const rangeActive = Boolean(from && to);
@@ -265,8 +267,7 @@ export function InventarioModule() {
           "Cantidad",
           rangeActive ? "Libres en el rango" : "Libres ahora",
           rangeActive ? "Comprometidas en el rango" : "Comprometidas ahora",
-          "Reposición (PYG)",
-          "Costo diario (PYG)",
+          ...(showCosts ? ["Reposición (PYG)", "Costo diario (PYG)"] : []),
           "Conflicto",
         ],
         rows: [
@@ -279,8 +280,7 @@ export function InventarioModule() {
             item.quantity,
             free(item),
             committed(item),
-            item.replacementCost,
-            item.dailyCost,
+            ...(showCosts ? [item.replacementCost ?? "", item.dailyCost ?? ""] : []),
             csvBool(conflict(item)),
           ]),
           [
@@ -292,8 +292,7 @@ export function InventarioModule() {
             rows.reduce((sum, item) => sum + item.quantity, 0),
             rows.reduce((sum, item) => sum + free(item), 0),
             rows.reduce((sum, item) => sum + committed(item), 0),
-            "",
-            "",
+            ...(showCosts ? ["", ""] : []),
             "",
           ],
         ],
@@ -435,7 +434,7 @@ export function InventarioModule() {
           <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
           <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Filtrar por depósito" options={warehouseChoices} />
           <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
-          <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} />
+          {showCosts ? <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} /> : null}
           <div className="admin-inv-range">
           <div className="admin-field--filter">
             <DateField

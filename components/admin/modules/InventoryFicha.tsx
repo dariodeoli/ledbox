@@ -349,7 +349,7 @@ export function InventoryFicha({
     setUnitForm({
       code: unit.code,
       status: unit.status,
-      purchaseCost: unit.purchaseCost > 0 ? String(unit.purchaseCost) : "",
+      purchaseCost: (unit.purchaseCost ?? 0) > 0 ? String(unit.purchaseCost) : "",
       notes: unit.notes ?? "",
       warehouseId: unit.warehouseId ?? "",
       location: unit.location ?? "",
@@ -403,6 +403,8 @@ export function InventoryFicha({
   }
 
   // Tienda web y Combos solo si aplican: publicado en la tienda / es combo o está dentro de uno.
+  // Costos internos: el API los omite para VIEWER; sin ellos no hay columna, campos ni pestaña de compra.
+  const showCosts = item.dailyCost !== undefined;
   const tabs: TabKey[] = isCombo
     ? ["datos", "disponibilidad", "precios", ...(audience !== "HIDDEN" ? (["tienda"] as const) : []), "combos", "cronologia"]
     : [
@@ -413,7 +415,7 @@ export function InventoryFicha({
         "precios",
         ...(audience !== "HIDDEN" ? (["tienda"] as const) : []),
         ...(usedIn.length > 0 ? (["combos"] as const) : []),
-        "proveedor",
+        ...(showCosts ? (["proveedor"] as const) : []),
         "verificacion",
         "cronologia",
       ];
@@ -854,7 +856,7 @@ export function InventoryFicha({
             <AdminTable
               view="inventario-unidades"
               label={`Unidades de ${item.name}`}
-              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Ubicación" }, { label: "Condición" }, { label: "Costo", end: true }, { label: "Acciones", end: true }]}
+              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Ubicación" }, { label: "Condición" }, ...(showCosts ? [{ label: "Costo", end: true }] : []), { label: "Acciones", end: true }]}
             >
               {item.units.map((unit) => (
                 <AdminRow key={unit.id}>
@@ -891,9 +893,11 @@ export function InventoryFicha({
                   <AdminCell title={`Condición de ${unit.code}`}>
                     <ConditionBadge score={unit.conditionScore} />
                   </AdminCell>
-                  <AdminCell end title={unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "Sin costo cargado"}>
-                    {unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "—"}
-                  </AdminCell>
+                  {showCosts ? (
+                    <AdminCell end title={(unit.purchaseCost ?? 0) > 0 ? formatMoney(unit.purchaseCost ?? 0) : "Sin costo cargado"}>
+                      {(unit.purchaseCost ?? 0) > 0 ? formatMoney(unit.purchaseCost ?? 0) : "—"}
+                    </AdminCell>
+                  ) : null}
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       {writable ? (
@@ -940,16 +944,20 @@ export function InventoryFicha({
           </div>
         </dl>
         <dl className="admin-item-prices">
-          <div>
-            <dt>Costo diario</dt>
-            <dd>{priceText(item.dailyCost)}</dd>
-            <small>Interno, no es un precio de venta.</small>
-          </div>
-          <div>
-            <dt>Reposición</dt>
-            <dd>{priceText(item.replacementCost)}</dd>
-            <small>Interno, por unidad.</small>
-          </div>
+          {showCosts ? (
+            <>
+              <div>
+                <dt>Costo diario</dt>
+                <dd>{priceText(item.dailyCost ?? 0)}</dd>
+                <small>Interno, no es un precio de venta.</small>
+              </div>
+              <div>
+                <dt>Reposición</dt>
+                <dd>{priceText(item.replacementCost ?? 0)}</dd>
+                <small>Interno, por unidad.</small>
+              </div>
+            </>
+          ) : null}
           <div>
             <dt>Tiempo antes</dt>
             <dd>{bufferText(item.bufferBeforeMin)}</dd>
@@ -1036,7 +1044,7 @@ export function InventoryFicha({
 </TabPanel>
 
       {/* Proveedor y garantía: del lote principal y de las unidades con garantía propia. */}
-      {isCombo ? null : (
+      {isCombo || !showCosts ? null : (
         <TabPanel active={tab === "proveedor"} id={panelId("proveedor")} tab={tabId("proveedor")}>
           <AdminDialogSection title="Proveedor y garantía" stack>
             <SupplierWarrantySection item={item} taxonomy={taxonomy} />

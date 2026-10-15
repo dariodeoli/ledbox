@@ -58,6 +58,7 @@ import { replacePriceTiers } from "@/lib/server/price-tier-store";
 import { readAudienceTiers, tierWarnings, tiersForAudience } from "@/lib/price-tiers";
 import { categoryWriteData, resolveInventoryCategory, type ResolveCategoryInput } from "@/lib/server/inventory-categories";
 import { readInventoryTrace } from "@/lib/server/inventory-details";
+import { stripInventoryCosts } from "@/lib/server/inventory-costs";
 import { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } from "@/lib/server/inventory-grid";
 import { resolveUnitPlacement } from "@/lib/server/inventory-units";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
@@ -372,7 +373,7 @@ export async function GET(request: Request) {
         limit: readGridLimit(url.searchParams.get("limit")),
         range: gridStart && gridEnd && gridEnd.getTime() >= gridStart.getTime() ? { start: gridStart, end: gridEnd } : null,
       });
-      return Response.json(page);
+      return Response.json({ ...page, inventory: page.inventory.map((row) => stripInventoryCosts(row, auth.context)) });
     } catch (error) {
       if (error instanceof GridCursorError) return jsonError(error.message, 400);
       console.error("[inventory/grid] no se pudo leer", error);
@@ -490,7 +491,7 @@ export async function GET(request: Request) {
     range && definitions.size > 0
       ? await comboCapacitiesForRange({ organizationId, comboIds: [...definitions.keys()], startsAt: range.start, endsAt: range.end })
       : null;
-  return Response.json({ inventory: withComboAvailability(inventory, definitions, rangeCapacities) });
+  return Response.json({ inventory: withComboAvailability(inventory, definitions, rangeCapacities).map((row) => stripInventoryCosts(row, auth.context)) });
 }
 
 export async function POST(request: Request) {

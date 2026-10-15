@@ -1695,8 +1695,9 @@ export type AdminInventoryRow = {
   /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
   publicDescription?: string | null;
   quantity: number;
-  replacementCost: number;
-  dailyCost: number;
+  /** Costos internos: el API los omite si el rol no tiene `inventory.costs` (VIEWER). */
+  replacementCost?: number;
+  dailyCost?: number;
   /** Tiempo antes/después del evento en minutos; `null` hereda el de la empresa. */
   bufferBeforeMin?: number | null;
   bufferAfterMin?: number | null;
@@ -1831,8 +1832,8 @@ export type AdminInventoryUnitRow = {
   /** Código de inventario único por empresa (`KIO-01`), editable. */
   code: string;
   status: string;
-  /** Costo que tuvo la unidad (interno), en Gs. */
-  purchaseCost: number;
+  /** Costo que tuvo la unidad (interno), en Gs; ausente sin `inventory.costs`. */
+  purchaseCost?: number;
   notes: string | null;
   updatedAt: string;
   /** Depósito y ubicación dentro de él («E3-B2»). */

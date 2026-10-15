@@ -194,6 +194,11 @@ export function canWrite(role: AdminRole | null | undefined): boolean {
   return role !== null && role !== undefined && role !== "VIEWER";
 }
 
+/** Costos internos del inventario (`inventory.costs` en el API): todos los roles salvo VIEWER. */
+export function canSeeInventoryCosts(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN" || role === "FINANCE" || role === "OPERATIONS";
+}
+
 export function canWriteFinance(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN" || role === "FINANCE";
 }
