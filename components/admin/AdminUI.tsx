@@ -49,39 +49,147 @@ export function AdminSuccess({ children }: { children: React.ReactNode }) {
   );
 }
 
-type AdminButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "ghost" | "icon";
+/**
+ * Botón único del panel. Variantes: `primary` (acción principal, acento lleno),
+ * `secondary` (por defecto, con borde), `ghost` (sin borde: «Cancelar» y acciones
+ * terciarias), `danger` (destructiva) y `link` (enlace en línea, sin caja).
+ * Tamaños: `md` (por defecto) y `sm` (filas y tarjetas). Con `icon` y sin texto es
+ * un botón de solo ícono (pasale `aria-label`/`title`). `busy` muestra el spinner,
+ * bloquea el botón y, con `busyLabel`, cambia el texto («Guardando…»).
+ */
+export type AdminButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
+export type AdminButtonSize = "sm" | "md";
+
+type AdminButtonOwnProps = {
+  variant?: AdminButtonVariant;
+  size?: AdminButtonSize;
   icon?: AdminIconName;
+  /** Ícono al final del texto (flecha de «Ver todos →»). */
+  iconEnd?: AdminIconName;
   /** Ícono que no sale del set del panel (p. ej. la marca de WhatsApp); tiene prioridad sobre `icon`. */
   iconNode?: React.ReactNode;
-  busy?: boolean;
-  /** Texto mientras `busy` (por ejemplo «Guardando…»); sin él se conserva el texto. */
-  busyLabel?: string;
 };
 
-export function AdminButton({ variant = "ghost", icon, iconNode, busy, busyLabel, children, className, disabled, ...rest }: AdminButtonProps) {
-  const classes = ["admin-btn"];
-  if (variant === "primary") classes.push("admin-btn--primary");
-  if (!children) classes.push("admin-btn--only-icon");
+type AdminButtonProps = React.ComponentPropsWithRef<"button"> &
+  AdminButtonOwnProps & {
+    busy?: boolean;
+    /** Texto mientras `busy` (por ejemplo «Guardando…»); sin él se conserva el texto. */
+    busyLabel?: string;
+  };
+
+/** Clases de un botón de la biblioteca (única fuente: el CSS vive en `.admin-btn*`). */
+function adminButtonClasses({ variant = "secondary", size = "md", onlyIcon, className }: { variant?: AdminButtonVariant; size?: AdminButtonSize; onlyIcon?: boolean; className?: string }) {
+  const classes = ["admin-btn", `admin-btn--${variant}`];
+  if (size === "sm") classes.push("admin-btn--sm");
+  if (onlyIcon) classes.push("admin-btn--only-icon");
   if (className) classes.push(className);
+  return classes.join(" ");
+}
+
+export function AdminButton({ variant = "secondary", size = "md", icon, iconEnd, iconNode, busy, busyLabel, children, className, disabled, ...rest }: AdminButtonProps) {
   return (
-    <SharedButton {...rest} type={rest.type ?? "submit"} variant={variant === "primary" ? "primary" : "ghost"} className={classes.join(" ")} disabled={disabled || busy} aria-busy={busy || undefined}>
+    <SharedButton
+      {...rest}
+      type={rest.type ?? "submit"}
+      variant={variant === "primary" ? "primary" : "ghost"}
+      className={adminButtonClasses({ variant, size, onlyIcon: !children, className })}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+    >
       {busy ? <AdminSpinner label="Guardando" /> : iconNode ? iconNode : icon ? <AdminIcon name={icon} /> : null}
       {children ? <span>{busy && busyLabel ? busyLabel : children}</span> : null}
+      {iconEnd ? <AdminIcon name={iconEnd} /> : null}
     </SharedButton>
   );
 }
 
-export function AdminIconLink({ href, icon, label, external }: { href: string; icon: AdminIconName; label: string; external?: boolean }) {
+/**
+ * Enlace con la cara de un botón (navega, no ejecuta): las mismas variantes y
+ * tamaños que `AdminButton`. Interno → `next/link`; con `target`, `download` o
+ * una URL absoluta, de API o de impresión → `<a>` (con `rel` seguro si abre otra pestaña).
+ */
+export function AdminButtonLink({
+  href,
+  variant = "secondary",
+  size = "md",
+  icon,
+  iconEnd,
+  iconNode,
+  className,
+  children,
+  ...rest
+}: AdminButtonOwnProps & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & { href: string }) {
+  const classes = adminButtonClasses({ variant, size, onlyIcon: !children, className });
+  const content = (
+    <>
+      {iconNode ? iconNode : icon ? <AdminIcon name={icon} /> : null}
+      {children ? <span>{children}</span> : null}
+      {iconEnd ? <AdminIcon name={iconEnd} /> : null}
+    </>
+  );
+  const plain = rest.target || rest.download !== undefined || /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/api/") || href.startsWith("/imprimir/");
+  if (plain) {
+    return (
+      <a {...rest} className={classes} href={href} rel={rest.target === "_blank" ? (rest.rel ?? "noopener noreferrer") : rest.rel}>
+        {content}
+      </a>
+    );
+  }
+  return (
+    <Link {...rest} className={classes} href={href}>
+      {content}
+    </Link>
+  );
+}
+
+/**
+ * Botón de solo ícono (cerrar, menú, ayuda, abrir/copiar en una fila). El nombre
+ * accesible es obligatorio (`label`) y también es el `title`. Para una acción con
+ * texto usá `AdminButton`; para navegar, `AdminIconLink`.
+ */
+export function AdminIconButton({
+  icon,
+  iconNode,
+  iconSize = 15,
+  label,
+  className,
+  children,
+  ...rest
+}: React.ComponentPropsWithRef<"button"> & { icon?: AdminIconName; iconNode?: React.ReactNode; iconSize?: number; label: string }) {
+  return (
+    <button type="button" title={label} {...rest} className={className ? `admin-iconbtn ${className}` : "admin-iconbtn"} aria-label={label}>
+      {iconNode ?? (icon ? <AdminIcon name={icon} size={iconSize} /> : null)}
+      {children}
+    </button>
+  );
+}
+
+export function AdminIconLink({
+  href,
+  icon,
+  iconNode,
+  label,
+  external,
+  onClick,
+}: {
+  href: string;
+  icon?: AdminIconName;
+  /** Ícono que no sale del set del panel (marca de WhatsApp). */
+  iconNode?: React.ReactNode;
+  label: string;
+  external?: boolean;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+}) {
   return (
     <a
       className="admin-iconbtn"
       href={href}
       title={label}
       aria-label={label}
+      onClick={onClick}
       {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
     >
-      <AdminIcon name={icon} size={15} />
+      {iconNode ?? (icon ? <AdminIcon name={icon} size={15} /> : null)}
     </a>
   );
 }
@@ -340,22 +448,51 @@ export function AdminWhatsappTemplateButton({ title, onClick }: { title: string;
   );
 }
 
-/** Chip de estado reutilizable; `label` da nombre accesible a los de solo ícono. */
+/**
+ * Chip único del panel (estado, etiqueta, contador). Los tonos son los de
+ * `AdminTone` y los de `lib/inventory-visual-state.ts` (`ok`, `warn`, `danger`,
+ * `info`, `accent`, `neutral`): el color acompaña, nunca es el único canal, así
+ * que un estado lleva ícono o texto. `icon` suma el ícono del set del panel,
+ * `size="sm"` es la versión compacta (tablero, celdas angostas), `emphasis`
+ * resalta el borde y el peso (devolución vencida). `label` da nombre accesible a
+ * los chips de solo ícono.
+ */
 export function AdminBadge({
   tone = "neutral",
   title,
   label,
+  icon,
+  size = "md",
+  emphasis,
+  className,
+  dataState,
   children,
 }: {
   tone?: AdminTone;
   title?: string;
   /** Nombre accesible: obligatorio en los chips de solo ícono. */
   label?: string;
-  children: React.ReactNode;
+  icon?: AdminIconName;
+  size?: "sm" | "md";
+  emphasis?: boolean;
+  className?: string;
+  /** Clave del estado de negocio que dibuja el chip (`data-state`). */
+  dataState?: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <span className="admin-badge" data-tone={tone} title={title} aria-label={label} role={label ? "img" : undefined}>
-      {children}
+    <span
+      className={className ? `admin-badge ${className}` : "admin-badge"}
+      data-tone={tone}
+      data-size={size === "sm" ? "sm" : undefined}
+      data-emphasis={emphasis ? "true" : undefined}
+      data-state={dataState}
+      title={title}
+      aria-label={label}
+      role={label ? "img" : undefined}
+    >
+      {icon ? <AdminIcon name={icon} size={size === "sm" ? 11 : 12} /> : null}
+      {children !== undefined && children !== null && children !== false ? <span className="admin-badge-text">{children}</span> : null}
     </span>
   );
 }
@@ -394,40 +531,138 @@ export function AdminCountdown({
   );
 }
 
-/** Aviso inline único del panel: `note` en formularios y bloques, `alert` en las tarjetas de acceso. */
-export type AdminSubtabItem = {
-  href: string;
-  label: string;
-  icon: AdminIconName;
+export type AdminTabItem = {
+  /** Identificador de la pestaña (con `value`/`onChange`); en modo enlace es el `href`. */
+  key?: string;
+  label: React.ReactNode;
+  icon?: AdminIconName;
+  /** Contador al lado del nombre; `null`/`undefined` no dibuja nada. */
+  count?: number | string | null;
+  /** Destino: con `href` la pestaña es un enlace a una ruta real del panel. */
+  href?: string;
+  /** Pestaña activa cuando es un enlace (con `value` se deduce de `key`). */
   active?: boolean;
-  /** Contador al lado del nombre (por ejemplo, solicitudes pendientes). */
-  count?: number;
+  /** Tooltip de la pestaña. */
+  title?: string;
 };
 
 /**
- * Subnavegación del panel (issue #56): una sola pieza para las áreas con
- * secciones (Ajustes, Estado). Los links son rutas reales del panel.
+ * Pestañas únicas del panel. Dos modos con la misma cara:
+ * - **Enlaces** (todas las pestañas con `href`): subnavegación entre rutas reales
+ *   (Ajustes, Estado, Finanzas); `<nav>` con `aria-current="page"` en la activa.
+ * - **Controladas** (`value` + `onChange`): `role="tablist"` con roving tabindex,
+ *   flechas, Inicio y Fin; `tabId`/`panelId` enlazan cada pestaña con su panel.
+ * - **Filtros** (`filters`): botones `aria-pressed` para filtrar una lista.
+ * `compact` achica el alto para barras dentro de una ficha.
  */
-export function AdminSubtabs({ label, items }: { label: string; items: readonly AdminSubtabItem[] }) {
+export function AdminTabs({
+  label,
+  items,
+  value,
+  onChange,
+  tabId,
+  panelId,
+  compact,
+  filters,
+  className,
+}: {
+  label: string;
+  items: readonly AdminTabItem[];
+  value?: string;
+  onChange?: (key: string) => void;
+  tabId?: (key: string) => string;
+  panelId?: (key: string) => string;
+  compact?: boolean;
+  /** Filtros de una lista (no hay paneles): botones con `aria-pressed` en un `<nav>`, sin `role="tab"`. */
+  filters?: boolean;
+  className?: string;
+}) {
+  const refs = useRef<Record<string, HTMLElement | null>>({});
+  const keyOf = (item: AdminTabItem) => item.key ?? item.href ?? String(item.label);
+  const classes = ["admin-subtabs"];
+  if (compact) classes.push("admin-subtabs--compact");
+  if (className) classes.push(className);
+  const inner = (item: AdminTabItem) => (
+    <>
+      {item.icon ? <AdminIcon name={item.icon} size={13} /> : null}
+      <span className="admin-subtab-label">{item.label}</span>
+      {item.count !== undefined && item.count !== null ? <span className="admin-subtab-count">{typeof item.count === "number" ? formatNumber(item.count) : item.count}</span> : null}
+    </>
+  );
+  if (items.length > 0 && items.every((item) => item.href)) {
+    return (
+      <nav className={classes.join(" ")} aria-label={label}>
+        {items.map((item) => {
+          const active = item.active ?? (value !== undefined && value === keyOf(item));
+          return (
+            <Link key={keyOf(item)} className="admin-subtab" href={item.href as string} title={item.title} aria-current={active ? "page" : undefined} data-active={active ? "true" : undefined}>
+              {inner(item)}
+            </Link>
+          );
+        })}
+      </nav>
+    );
+  }
+  if (filters) {
+    return (
+      <nav className={classes.join(" ")} aria-label={label}>
+        {items.map((item) => {
+          const key = keyOf(item);
+          const active = value === key;
+          return (
+            <button key={key} type="button" className="admin-subtab" title={item.title} aria-pressed={active} data-active={active ? "true" : undefined} onClick={() => onChange?.(key)}>
+              {inner(item)}
+            </button>
+          );
+        })}
+      </nav>
+    );
+  }
+  function onKeyDown(event: React.KeyboardEvent) {
+    if (!onChange || items.length === 0) return;
+    const keys = items.map(keyOf);
+    const at = Math.max(0, keys.indexOf(value ?? keys[0]));
+    let next = -1;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (at + 1) % keys.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (at - 1 + keys.length) % keys.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = keys.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    onChange(keys[next]);
+    refs.current[keys[next]]?.focus();
+  }
   return (
-    <nav className="admin-subtabs" aria-label={label}>
-      {items.map((item) => (
-        <Link
-          key={item.href}
-          className="admin-subtab"
-          href={item.href}
-          aria-current={item.active ? "page" : undefined}
-          data-active={item.active ? "true" : undefined}
-        >
-          <AdminIcon name={item.icon} size={13} />
-          {item.label}
-          {item.count ? <span className="admin-subtab-count">{formatNumber(item.count)}</span> : null}
-        </Link>
-      ))}
-    </nav>
+    <div className={classes.join(" ")} role="tablist" aria-label={label} onKeyDown={onKeyDown}>
+      {items.map((item) => {
+        const key = keyOf(item);
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            ref={(node) => {
+              refs.current[key] = node;
+            }}
+            type="button"
+            role="tab"
+            id={tabId?.(key)}
+            className="admin-subtab"
+            title={item.title}
+            aria-selected={active}
+            aria-controls={panelId?.(key)}
+            tabIndex={active ? 0 : -1}
+            data-active={active ? "true" : undefined}
+            onClick={() => onChange?.(key)}
+          >
+            {inner(item)}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
+/** Aviso inline único del panel: `note` en formularios y bloques, `alert` en las tarjetas de acceso. */
 export function AdminNote({
   children,
   tone,
@@ -612,8 +847,9 @@ export function AdminDisclosure({
  *   `requestClose` para pasar por la misma confirmación que la X y Esc.
  * - `dirty`: con cambios sin guardar, cerrar (X, Esc o clic afuera) pide
  *   confirmación dentro del mismo diálogo.
- * - `size`: `sm` (440 px), `md` (560 px, por defecto) y `lg` (720 px); `default` y
- *   `wide` siguen valiendo como alias de `md` y `lg`. `ficha` es el panel lateral.
+ * - `size`: `sm` (440 px), `md` (560 px, por defecto), `lg` (720 px) y `xl`
+ *   (960 px, grilla de tres columnas); `default` y `wide` siguen valiendo como
+ *   alias de `md` y `lg`. `ficha` es el panel lateral.
  * - `error` / `warning`: franja entre el cuerpo y el pie (siempre visible, no
  *   se pierde al desplazar el formulario).
  * - Celular (0-767 px): hoja de 100dvh con safe-area arriba y abajo; con el
@@ -634,7 +870,7 @@ export function AdminDialog({
 }: {
   title: string;
   onClose: () => void;
-  size?: "sm" | "md" | "lg" | "default" | "wide" | "ficha";
+  size?: "sm" | "md" | "lg" | "xl" | "default" | "wide" | "ficha";
   /** Ícono del asunto del diálogo; va en un cuadro con acento suave. */
   icon?: AdminIconName;
   /** Subtítulo de una línea: qué pasa al guardar. */
@@ -753,6 +989,7 @@ export function AdminDialog({
   const classes = ["admin-dialog", "admin-dialog--sheet"];
   if (size === "sm") classes.push("admin-dialog--sm");
   if (size === "lg" || size === "wide") classes.push("admin-dialog--lg", "admin-dialog--wide");
+  if (size === "xl") classes.push("admin-dialog--xl");
   if (size === "ficha") classes.push("admin-dialog--ficha");
   const content = (
     <div
@@ -803,12 +1040,12 @@ export function AdminDialog({
               <span>Lo que cargaste todavía no se guardó.</span>
             </div>
             <div className="admin-dialog-actions">
-              <button ref={keepRef} type="button" className="admin-btn" onClick={() => setConfirming(false)}>
-                <span>Seguir editando</span>
-              </button>
-              <button type="button" className="admin-btn admin-btn--danger" onClick={() => latest.current.onClose()}>
-                <span>Descartar</span>
-              </button>
+              <AdminButton ref={keepRef} type="button" variant="ghost" onClick={() => setConfirming(false)}>
+                Seguir editando
+              </AdminButton>
+              <AdminButton type="button" variant="danger" onClick={() => latest.current.onClose()}>
+                Descartar
+              </AdminButton>
             </div>
           </div>
         ) : footer ? (
@@ -831,8 +1068,10 @@ const DIALOG_STACK: symbol[] = [];
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Sección de un diálogo: título chico en mayúsculas y grilla de dos columnas en
- * escritorio (una en celular). Un campo `wide` ocupa el ancho completo.
+ * Sección de un diálogo: título chico en mayúsculas con un separador sutil y una
+ * grilla de 12 columnas. Cada campo ocupa las columnas de su `size` (xs 3, sm 4,
+ * md 6, lg 8, full 12); con `columns` (1 a 4 campos por fila) todos miden lo mismo.
+ * En celular siempre es una columna. `AdminCol` da un ancho propio a un campo suelto.
  * `collapsible` la pliega bajo su título («Más opciones»): lo avanzado no
  * estorba, pero abierto de entrada (`defaultOpen`) cuando ya tiene datos.
  */
@@ -843,11 +1082,14 @@ export function AdminDialogSection({
   collapsible,
   defaultOpen,
   hint,
+  columns,
   children,
 }: {
   title?: string;
   /** Ancla de la sección (navegación dentro de una ficha). */
   id?: string;
+  /** Campos por fila en escritorio (1 a 4): pisa el ancho por tipo de cada campo. */
+  columns?: 1 | 2 | 3 | 4;
   /** Contenido en una sola columna de bloques (fichas) en lugar de la grilla de dos columnas de los formularios. */
   stack?: boolean;
   /** Sección plegable (requiere `title`); por defecto cerrada. */
@@ -857,7 +1099,7 @@ export function AdminDialogSection({
   hint?: string;
   children: React.ReactNode;
 }) {
-  const grid = <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"}>{children}</div>;
+  const grid = <div className={stack ? "admin-dialog-stack" : "admin-dialog-grid"} data-columns={stack ? undefined : columns}>{children}</div>;
   if (collapsible && title) {
     return (
       <section className="admin-dialog-section admin-dialog-section--collapsible" id={id}>
@@ -872,6 +1114,19 @@ export function AdminDialogSection({
       {title ? <h3 className="admin-dialog-section-title">{title}</h3> : null}
       {grid}
     </section>
+  );
+}
+
+/**
+ * Ancho propio dentro de la grilla de 12 columnas de un diálogo: `span` en
+ * doceavos (3 = un cuarto, 4 = un tercio, 6 = la mitad, 8, 12 = todo el ancho).
+ * En celular ocupa siempre el ancho completo.
+ */
+export function AdminCol({ span = 6, children }: { span?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12; children: React.ReactNode }) {
+  return (
+    <div className="admin-col" data-span={span}>
+      {children}
+    </div>
   );
 }
 

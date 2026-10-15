@@ -52,6 +52,9 @@ import { AdminIcon } from "./AdminIcons";
  * sin label visible: en ese caso exigen `ariaLabel`.
  */
 
+/** Anchos de campo de la biblioteca: xs (código, número, %), sm (monto, fecha), md (teléfono, RUC, select), lg (nombre, correo) y full (dirección, notas). */
+export type FieldSize = "xs" | "sm" | "md" | "lg" | "full";
+
 type FieldChromeProps = {
   /** Label visible arriba del control; sin label se usa `ariaLabel`. */
   label?: string;
@@ -70,6 +73,8 @@ type FieldChromeProps = {
   /** Muestra «opcional» a la derecha del label. */
   optional?: boolean;
   wide?: boolean;
+  /** Ancho por tipo de campo (la biblioteca fija el de cada pieza). */
+  size?: FieldSize;
   htmlFor?: string;
   hintId?: string;
   errorId?: string;
@@ -88,7 +93,7 @@ export function AdminFieldHelp({ label, text }: { label: string; text: string })
   </SharedTooltip></span>;
 }
 
-function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, success, required, optional, wide, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
+function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, success, required, optional, wide, size, htmlFor, hintId, errorId, children }: FieldChromeProps & { children: React.ReactNode }) {
   const message = error ? (
     <span className="admin-field-error" id={errorId} role="alert">
       {error}
@@ -111,7 +116,7 @@ function FieldChrome({ label, labelAction, help, ariaLabel, hint, error, success
     </label>
   ) : null;
   return (
-    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-state={state}>
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-state={state} data-size={wide ? "full" : size}>
       {label ? (
         labelAction || help || (optional && !required) ? (
           <span className="admin-field-heading">
@@ -178,6 +183,8 @@ export type TextFieldProps = {
   /** «opcional» a la derecha del label. */
   optional?: boolean;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   autoComplete?: string;
   inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
@@ -191,6 +198,10 @@ export type TextFieldProps = {
   list?: string;
   className?: string;
   title?: string;
+  /** Prefijo fijo dentro del campo (por ejemplo «https://»). */
+  prefix?: string;
+  /** Sufijo fijo dentro del campo (por ejemplo «días», «%», «kg»). */
+  suffix?: string;
   onFocus?: (event: React.FocusEvent<HTMLInputElement>) => void;
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
 };
@@ -210,7 +221,7 @@ export function TextField({
   error,
   success,
   optional,
-  wide,
+  wide, size,
   autoComplete,
   inputMode,
   autoCapitalize,
@@ -222,16 +233,20 @@ export function TextField({
   list,
   className,
   title,
+  prefix,
+  suffix,
   onFocus,
   onBlur,
 }: TextFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "lg"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         className={className}
         estado={success && !error ? "ok" : undefined}
+        inicio={prefix ? <span className="text-xs font-semibold">{prefix}</span> : undefined}
+        fin={suffix ? <span className="text-xs font-semibold">{suffix}</span> : undefined}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -271,6 +286,8 @@ export type TextAreaFieldProps = {
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   /** «opcional» a la derecha del label. */
   optional?: boolean;
   disabled?: boolean;
@@ -296,7 +313,7 @@ export function TextAreaField({
   placeholder,
   hint,
   error,
-  wide,
+  wide, size,
   optional,
   disabled,
   name,
@@ -307,7 +324,7 @@ export function TextAreaField({
 }: TextAreaFieldProps) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} optional={optional} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "full"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedTextarea
         ref={textareaRef}
         id={label ? fieldId : id}
@@ -350,7 +367,7 @@ export function MoneyField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   placeholder,
   disabled,
@@ -369,6 +386,8 @@ export function MoneyField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -406,7 +425,7 @@ export function MoneyField({
     return () => window.cancelAnimationFrame(frame);
   }, [invalid, value]);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} size={size ?? "sm"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}>
         <MoneyInput
           id={label ? fieldId : id}
@@ -441,7 +460,7 @@ export function PercentField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   placeholder,
   disabled,
@@ -456,6 +475,8 @@ export function PercentField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -466,7 +487,7 @@ export function PercentField({
   const clean = percentInput(value);
   const outOfRange = clean !== "" && parsePercent(clean) === null;
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "xs"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div className="admin-money admin-money--compact">
         <SharedPercentField
           id={label ? fieldId : id}
@@ -503,12 +524,14 @@ export function NumberField({
   placeholder,
   hint,
   error,
-  wide,
+  wide, size,
   disabled,
   name,
   id,
   className,
   title,
+  prefix,
+  suffix,
 }: {
   label?: string;
   help?: string;
@@ -521,18 +544,26 @@ export function NumberField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   disabled?: boolean;
   name?: string;
   id?: string;
   className?: string;
   title?: string;
+  /** Prefijo fijo dentro del campo. */
+  prefix?: string;
+  /** Unidad fija dentro del campo («días», «u.», «hs»). */
+  suffix?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "xs"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         className={className}
+        inicio={prefix ? <span className="text-xs font-semibold">{prefix}</span> : undefined}
+        fin={suffix ? <span className="text-xs font-semibold">{suffix}</span> : undefined}
         type="text"
         inputMode="numeric"
         value={value}
@@ -560,7 +591,7 @@ export function PhoneField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   placeholder = "981 000 000",
   disabled,
@@ -576,6 +607,8 @@ export function PhoneField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -591,7 +624,7 @@ export function PhoneField({
   const sharedRef = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
 
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={sharedRef} className="admin-phone-field-control">
       <SharedPhoneField
         className="admin-shared-phone"
@@ -615,16 +648,18 @@ export function PhoneField({
 }
 
 /** Ciudad libre; cada cambio limpia/resuelve el departamento dependiente. */
-export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, required, disabled, placeholder, id, name }: {
+export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name }: {
   label?: string; help?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
   onSelect: (city: string, department: string) => void;
-  hint?: string; error?: string | null; wide?: boolean; required?: boolean; disabled?: boolean;
+  hint?: string; error?: string | null; wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize; required?: boolean; disabled?: boolean;
   placeholder?: string; id?: string; name?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">
         <SharedCityAutocomplete value={value} onChange={onChange} onSelect={(city: string, department?: string) => onSelect(city, department ?? "")} disabled={disabled} placeholder={placeholder} maxLength={FIELD_LIMITS.name} inputProps={{ id: fieldId, required, name, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy(error, hint, hintId, errorId) }} />
       </div>
@@ -633,15 +668,17 @@ export function CityField({ label, help, ariaLabel, value, onChange, onSelect, h
 }
 
 /** Banco libre con catálogo y selección explícita; el servidor revalida. */
-export function BancoField({ label, help, ariaLabel, value, onChange, hint, error, wide, required, disabled, placeholder, id, name }: {
+export function BancoField({ label, help, ariaLabel, value, onChange, hint, error, wide, size, required, disabled, placeholder, id, name }: {
   label?: string; help?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
-  hint?: string; error?: string | null; wide?: boolean; required?: boolean; disabled?: boolean;
+  hint?: string; error?: string | null; wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize; required?: boolean; disabled?: boolean;
   placeholder?: string; id?: string; name?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">
         <SharedBancoCombobox id={fieldId} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} />
       </div>
@@ -658,7 +695,7 @@ export function EmailField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   placeholder,
   disabled,
@@ -675,6 +712,8 @@ export function EmailField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -685,7 +724,7 @@ export function EmailField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "lg"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedEmailField
         id={label ? fieldId : id}
         value={value}
@@ -723,7 +762,7 @@ export function RucField({
   error,
   success,
   optional,
-  wide,
+  wide, size,
   required,
   placeholder = "80012345-6",
   disabled,
@@ -742,6 +781,8 @@ export function RucField({
   success?: string | null;
   optional?: boolean;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -753,7 +794,7 @@ export function RucField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} optional={optional} success={success} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         type="text"
@@ -786,7 +827,7 @@ export function SerialField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   placeholder,
   disabled,
@@ -801,6 +842,8 @@ export function SerialField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -809,7 +852,7 @@ export function SerialField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "xs"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         type="text"
@@ -840,7 +883,7 @@ function DateLikeField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   min,
   max,
@@ -859,6 +902,8 @@ function DateLikeField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   min?: string;
   max?: string;
@@ -870,7 +915,7 @@ function DateLikeField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? type === "time" ? "xs" : type === "date" ? "sm" : "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         className={className}
@@ -920,7 +965,7 @@ export function DayField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   min,
   max,
@@ -938,6 +983,8 @@ export function DayField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   /** Límite inferior inclusive, en `AAAA-MM-DD`. */
   min?: string;
@@ -981,7 +1028,7 @@ export function DayField({
 
   const message = error ?? rangeError;
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} size={size ?? "sm"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         className={className}
@@ -1013,7 +1060,7 @@ export function SelectField({
   options,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   disabled,
   name,
@@ -1028,6 +1075,8 @@ export function SelectField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   disabled?: boolean;
   name?: string;
@@ -1035,7 +1084,7 @@ export function SelectField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedSelect
         id={label ? fieldId : id}
         value={value}
@@ -1093,7 +1142,7 @@ export function Combobox({
   placeholder,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   disabled,
   name,
@@ -1113,6 +1162,8 @@ export function Combobox({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   disabled?: boolean;
   name?: string;
@@ -1214,7 +1265,7 @@ export function Combobox({
   }
 
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "lg"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-combobox" ref={wrapperRef}>
         <input
           ref={inputRef}
@@ -1450,7 +1501,7 @@ export function PasswordField({
   onChange,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   minLength,
   maxLength = 128,
@@ -1468,6 +1519,8 @@ export function PasswordField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   minLength?: number;
   maxLength?: number;
@@ -1486,7 +1539,7 @@ export function PasswordField({
       ariaLabel={ariaLabel}
       hint={hint}
       error={error}
-      wide={wide}
+      wide={wide} size={size ?? "md"}
       htmlFor={fieldId}
       hintId={hintId}
       errorId={errorId}
@@ -1580,7 +1633,7 @@ export function PinField({
   expectedLength,
   hint,
   error,
-  wide,
+  wide, size,
   required,
   disabled,
   autoFocus,
@@ -1606,6 +1659,8 @@ export function PinField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   required?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
@@ -1652,7 +1707,7 @@ export function PinField({
   }, [value, autoSubmit, disabled, expectedLength]);
 
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "xs"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-pin" data-focused={focused ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
         <span className="admin-pin-slots" aria-hidden="true">
           {Array.from({ length }, (_, index) => (
@@ -1707,7 +1762,7 @@ export function SegmentedField({
   options,
   hint,
   error,
-  wide,
+  wide, size,
   disabled,
 }: {
   label?: string;
@@ -1719,6 +1774,8 @@ export function SegmentedField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   disabled?: boolean;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds();
@@ -1734,7 +1791,7 @@ export function SegmentedField({
     </span>
   ) : null;
   return (
-    <div className={wide ? "admin-field admin-field--wide" : "admin-field"}>
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-size={wide ? "full" : (size ?? options.length > 3 ? "full" : "lg")}>
       {label ? (
         help ? <span className="admin-field-heading">
           <span className="admin-field-label" id={labelId}>{label}</span>
@@ -1780,7 +1837,7 @@ export function AttachmentInput({
   ariaLabel,
   hint,
   error,
-  wide,
+  wide, size,
   accept = "image/jpeg,image/png,image/webp,application/pdf",
   maxBytes = 5 * 1024 * 1024,
   disabled,
@@ -1793,6 +1850,8 @@ export function AttachmentInput({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   accept?: string;
   maxBytes?: number;
   disabled?: boolean;
@@ -1833,7 +1892,7 @@ export function AttachmentInput({
       ariaLabel={ariaLabel}
       hint={hint}
       error={shown}
-      wide={wide}
+      wide={wide} size={size ?? "full"}
       htmlFor={fieldId}
       hintId={hintId}
       errorId={errorId}
@@ -1879,7 +1938,7 @@ export function FileField({
   help,
   hint,
   error,
-  wide,
+  wide, size,
   accept,
   maxBytes,
   disabled,
@@ -1892,6 +1951,8 @@ export function FileField({
   hint?: string;
   error?: string | null;
   wide?: boolean;
+  /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
+  size?: FieldSize;
   accept?: string;
   maxBytes: number;
   disabled?: boolean;
@@ -1912,7 +1973,7 @@ export function FileField({
   }
 
   return (
-    <FieldChrome label={label} help={help} hint={hint} error={shown} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome label={label} help={help} hint={hint} error={shown} wide={wide} size={size ?? "full"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-attachment">
         <input
           id={fieldId}

@@ -207,7 +207,7 @@ test("las reglas de archivado de Lead y Presupuesto coinciden con el servidor", 
 test("los módulos de CRM enchufan el menú de la papelera solo con permiso y filtran lo archivado", () => {
   const modules: Array<[string, string, RegExp]> = [
     ["ClientesModule.tsx", "Client", /\{ value: "ARCHIVED", label: "Archivados" \}/],
-    ["LeadsModule.tsx", "Lead", /setStatus\("ARCHIVED"\)/],
+    ["LeadsModule.tsx", "Lead", /key: "ARCHIVED", label: "Archivados"/],
     ["ProveedoresModule.tsx", "Supplier", /\{ value: "ARCHIVED", label: "Archivados" \}/],
     ["PromotorasModule.tsx", "Promoter", /\{ value: "ARCHIVED", label: "Archivadas" \}/],
     ["PresupuestosModule.tsx", "Budget", /\{ value: "ARCHIVED", label: "Archivados" \}/],

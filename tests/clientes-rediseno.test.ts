@@ -111,7 +111,7 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   const legacy = ficha.slice(ficha.indexOf("function NonWholesaleCatalog"), ficha.indexOf("function BudgetsTab"));
   assert.match(legacy, /if \(status\.data\)[\s\S]*<ClientCatalogAccess/, "un no mayorista con link activo puede revocarlo");
   assert.ok(legacy.includes("Este cliente ya no es mayorista pero tiene un link activo: revocalo si no corresponde."));
-  assert.match(ficha, /id=\{`ficha-tab-\$\{item\.key\}`\}[\s\S]{0,120}aria-controls="ficha-panel"/, "cada pestaña con su id y aria-controls");
+  assert.match(ficha, /tabId=\{\(key\) => `ficha-tab-\$\{key\}`\}[\s\S]{0,120}panelId=\{\(\) => "ficha-panel"\}/, "cada pestaña (AdminTabs) con su id y aria-controls");
   const route = repoFile("app/api/admin/clients/route.ts");
   assert.match(route, /take: CLIENT_LIST_LIMIT \+ 1/);
   assert.match(route, /Response\.json\(\{ clients: rows, truncated \}\)/);

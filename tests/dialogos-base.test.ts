@@ -18,7 +18,7 @@ const clientes = read("components", "admin", "modules", "ClientesModule.tsx");
 const quick = read("components", "admin", "modules", "ClientQuickForm.tsx");
 
 test("AdminDialog: tamaños sm / md / lg con alias y pie sticky con error arriba", () => {
-  assert.match(dialog, /size\?: "sm" \| "md" \| "lg" \| "default" \| "wide" \| "ficha"/);
+  assert.match(dialog, /size\?: "sm" \| "md" \| "lg" \| "xl" \| "default" \| "wide" \| "ficha"/);
   assert.match(css, /\.admin-dialog--sm\s*\{\s*width:\s*min\(440px, 100%\)/);
   assert.match(css, /\.admin-dialog--lg\s*\{\s*width:\s*min\(720px, 100%\)/);
   assert.match(dialog, /<footer className="admin-dialog-footer">/);
@@ -65,7 +65,7 @@ test("primitivas: sección con título, plegable «Más opciones», ayuda y erro
   const section = ui.slice(ui.indexOf("export function AdminDialogSection("), ui.indexOf("export function AdminConfirmDialog("));
   assert.match(section, /collapsible/);
   assert.match(section, /AdminDisclosure/);
-  assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(12, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.admin-field--wide\s*\{\s*grid-column:\s*1 \/ -1/);
   assert.match(css, /\.admin-field-error\s*\{/);
   assert.match(css, /\.admin-field-hint\s*\{/);

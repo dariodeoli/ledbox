@@ -33,7 +33,7 @@ test("proveedores: trabajos y directorio como tarjetas en ancho compacto", () =>
 
 test("proveedores: pestañas de estado y tablero solo fuera de compacto", () => {
   const module = repoFile("components/admin/modules/ProveedoresModule.tsx");
-  const tabs = module.indexOf('aria-label="Filtrar trabajos por estado"');
+  const tabs = module.indexOf('label="Filtrar trabajos por estado"');
   const dataState = module.indexOf("<AdminDataState", tabs);
   assert.ok(tabs > 0, "faltan las pestañas de estado de los trabajos");
   assert.ok(dataState > tabs, "las pestañas tienen que ir antes de la lista y del tablero");
@@ -49,7 +49,7 @@ test("leads: tarjetas con pestañas y sin Kanban cortado en ancho compacto", () 
   assert.match(module, /const narrow = useAdminNarrowViewport\(\);/);
   assert.match(module, /narrow \? null : <AdminViewSwitch view=\{view\}/);
   assert.match(module, /<AdminCardGrid label="Leads" cards=\{leadCards\} \/>/);
-  const tabs = module.indexOf('aria-label="Filtrar leads por estado"');
+  const tabs = module.indexOf('label="Filtrar leads por estado"');
   const dataState = module.indexOf("<AdminDataState", tabs);
   assert.ok(tabs > 0, "faltan las pestañas de estado de los leads");
   assert.ok(dataState > tabs, "las pestañas tienen que ir antes de la lista y del tablero");
