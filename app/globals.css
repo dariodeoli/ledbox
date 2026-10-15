@@ -5520,7 +5520,9 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-client-identity-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--a-muted); font-size: 10.5px; font-weight: 400; }
 .admin-combobox-option-content { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .admin-combobox-selected { position: absolute; inset: 0 34px 0 10px; display: flex; align-items: center; min-width: 0; pointer-events: none; }
-.admin-combobox[data-rich-selection="true"] > input { color: transparent; }
+/* El input conserva valor/teclado/ARIA; sólo su pintura se oculta bajo la identidad.
+   !important vence los selectores canónicos de controles con múltiples :not(). */
+.admin-combobox[data-rich-selection="true"] > input { color: transparent !important; -webkit-text-fill-color: transparent; }
 .admin-combobox[data-rich-selection="true"] > input:disabled { opacity: 1; }
 .admin-combobox-selected .admin-client-identity { width: 100%; }
 

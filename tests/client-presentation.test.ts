@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { withDeletedLabel } from "../lib/deleted-label";
 import { test } from "node:test";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -43,4 +45,27 @@ test("combobox cerrado muestra la misma identidad conservando input textual y te
   assert.match(html, /value="Aurora Eventos"/);
   assert.match(html, /aria-description="Ana Pérez · Mayorista"/);
   assert.match(html, /admin-client-identity-type/);
+});
+
+
+test("la identidad comercial conserva eliminado aunque el DTO sólo hubiera rotulado name", async () => {
+  const { ClientIdentityView } = await import("../components/admin/ClientIdentity");
+  const deleted = withDeletedLabel({ ...client, deletedAt: new Date("2026-10-01T12:00:00Z") });
+  assert.equal(deleted.name, "Ana Pérez (eliminado)", "contrato histórico intacto");
+  assert.equal(clientPresentation(deleted).primary, "Aurora Eventos (eliminado)");
+  const html = renderToStaticMarkup(createElement(ClientIdentityView, { client: deleted }));
+  assert.match(html, /Aurora Eventos \(eliminado\)/);
+  assert.equal(clientPresentation({ ...deleted, tradeName: "Aurora Eventos (eliminado)" }).primary, "Aurora Eventos (eliminado)");
+  assert.equal(clientPresentation({ name: "Ana (eliminado)", type: "FINAL" }).primary, "Ana (eliminado)");
+  assert.equal(clientPresentation({ ...client, name: "Ana (eliminado)", deletedAt: null }).primary, "Aurora Eventos (eliminado)");
+  assert.equal(clientPresentation({ ...deleted, tradeName: "Aurora Eventos", contactName: "Aurora Eventos" }).responsible, null);
+  assert.equal(clientPresentation(client).primary, "Aurora Eventos", "activos sin marca");
+});
+
+test("selección rica oculta pintura del input pese a la mayor especificidad de controles normales", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const rule = css.match(/\.admin-combobox\[data-rich-selection="true"\] > input \{([^}]+)\}/)?.[1];
+  assert.ok(rule);
+  assert.match(rule, /color:\s*transparent\s*!important/, "la regla común con múltiples :not no debe volver a pintar texto debajo de la identidad");
+  assert.match(rule, /-webkit-text-fill-color:\s*transparent/);
 });
