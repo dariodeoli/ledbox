@@ -1,12 +1,13 @@
 "use client";
 import { ClientesTabs } from "./ClientesTabs";
+import { ClientIdentityView } from "../ClientIdentity";
+import { clientPresentation } from "@/lib/client-identity";
 
 import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  clientTypeLabel,
   formatDate,
   formatDateShort,
   formatMoney,
@@ -156,7 +157,7 @@ function sortClients(list: AdminClientRow[], order: string): AdminClientRow[] {
 function clientContactLine(client: AdminClientRow): string {
   const phone = client.contactPhone || client.phone;
   const email = client.contactEmail || client.email;
-  return (client.contactName ? [client.contactName, phone] : [phone ?? email]).filter(Boolean).join(" · ");
+  return phone || email || "";
 }
 
 function contractedTitle(client: AdminClientRow): string {
@@ -188,26 +189,7 @@ function activityTitle(client: AdminClientRow): string {
  * Identidad del cliente (issue #36): logo subido servido con sesión o el
  * monograma de iniciales del avatar único del panel. Nunca un `<img>` a mano.
  */
-export function ClientLogo({
-  client,
-  size = 22,
-  title,
-}: {
-  client: Pick<AdminClientRow, "id" | "name" | "company" | "tradeName" | "logoUpdatedAt">;
-  size?: 22 | 40 | 64;
-  title?: string;
-}) {
-  const name = clientDisplayName(client);
-  const src = client.logoUpdatedAt ? clientLogoUrl(client.id, client.logoUpdatedAt) : null;
-  return (
-    <AdminAvatar
-      name={name}
-      src={src}
-      size={size}
-      title={title ?? (src ? `Logo de ${name}` : `Monograma de ${name} (sin logo subido)`)}
-    />
-  );
-}
+export { ClientAvatar as ClientLogo } from "../ClientIdentity";
 
 /**
  * Links directos del cliente (issue #36): Instagram y sitio web. Cada link sale
@@ -318,7 +300,7 @@ export function ClientesModule() {
    * del menú, y «Editar» se suma acá además de la ficha.
    */
   function rowActions(client: AdminClientRow) {
-    const name = clientDisplayName(client);
+    const name = clientPresentation(client).primary;
     const phone = client.whatsapp || client.phone;
     const waHref = whatsappHref(phone);
     const email = client.contactEmail || client.email;
@@ -364,23 +346,20 @@ export function ClientesModule() {
 
   /** Mismos datos que la fila, para ancho compacto: tarjeta que abre la ficha. */
   const clientCards: AdminCardData[] = rows.map((client): AdminCardData => {
-    const name = clientDisplayName(client);
+    const name = clientPresentation(client).primary;
     const metrics = client.metrics;
-    const primaryContact = clientContactLine(client);
     return {
       id: client.id,
       title: (
         <>
-          <ClientLogo client={client} size={22} />
           <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
-            <strong>{name}</strong>
+            <ClientIdentityView client={client} />
           </Link>
         </>
       ),
       titleTooltip: `${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`,
-      subtitle: [clientLegalName(client), primaryContact].filter(Boolean).join(" · ") || null,
+      subtitle: clientLegalName(client) && clientLegalName(client) !== clientPresentation(client).primary ? clientLegalName(client) : null,
       badges: [
-        { label: clientTypeLabel(client.type), tone: client.type === "RESELLER" ? "accent" : "neutral" },
         ...(client.archivedAt ? [{ label: "Archivado", tone: "neutral" as const }] : client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
         ...(client.contactName
           ? []
@@ -748,7 +727,6 @@ export function ClientesModule() {
             label="Clientes"
             columns={[
               { label: "Cliente" },
-              { label: "Tipo" },
               { label: "Contacto" },
               { label: "Eventos", end: true },
               { label: "Contratado", end: true },
@@ -758,7 +736,7 @@ export function ClientesModule() {
             ]}
           >
             {rows.map((client) => {
-              const name = clientDisplayName(client);
+              const name = clientPresentation(client).primary;
               const metrics = client.metrics;
               const contact = clientContactLine(client);
               const contactTitle =
@@ -768,18 +746,13 @@ export function ClientesModule() {
                 <AdminRow key={client.id}>
                   <AdminCell title={`${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`}>
                     <span className="admin-identity">
-                      <ClientLogo client={client} size={22} />
                       {/* Enlace extendido: toda la fila abre la ficha (teclado y clic
                           derecho incluidos); las acciones quedan por encima. */}
                       <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
-                        <strong>{name}</strong>
+                        <ClientIdentityView client={client} />
                       </Link>
-                      {clientLegalName(client) ? <small className="admin-cell-sub"> · {clientLegalName(client)}</small> : null}
                       {client.archivedAt ? <AdminBadge tone="neutral">Archivado</AdminBadge> : client.active ? null : <AdminBadge tone="neutral">Inactivo</AdminBadge>}
                     </span>
-                  </AdminCell>
-                  <AdminCell>
-                    <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
                   </AdminCell>
                   <AdminCell title={contactTitle}>
                     {/* Sin responsable cargado, la aprobación del presupuesto no

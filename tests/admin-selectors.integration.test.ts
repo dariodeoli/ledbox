@@ -14,7 +14,15 @@ test("selectores: encuentran el registro 305, respetan empresa y conservan selec
   try {
     await db.organization.createMany({ data: [org, foreign].map((id) => ({ id, slug: `selector-${id}`, name: "Selector QA" })) });
     await db.client.createMany({ data: Array.from({ length: 304 }, (_, i) => ({ id: randomUUID(), organizationId: org, name: `A cliente ${i.toString().padStart(3, "0")}` })) });
-    await db.client.createMany({ data: [{ id: target, organizationId: org, name: "Z cliente fuera del tope", phone: "+595 981765432" }, { id: foreignClient, organizationId: foreign, name: "Z cliente privado" }] });
+    await db.client.createMany({ data: [{ id: target, organizationId: org, name: "Z cliente fuera del tope", contactName: "Responsable visible QA", notes: "Nota interna excluida", phone: "+595 981765432" }, { id: foreignClient, organizationId: foreign, name: "Z cliente privado" }] });
+    await db.clientLogo.create({ data: { id: randomUUID(), clientId: target, mime: "image/png", size: 3, data: Buffer.from([1,2,3]) } });
+    const identityDTO = (await listClientSelector(org, "Responsable visible QA"))[0];
+    assert.equal(identityDTO.id, target);
+    assert.equal(identityDTO.contactName, "Responsable visible QA");
+    assert.ok(identityDTO.logoUpdatedAt);
+    assert.ok(!("logo" in identityDTO));
+    assert.ok(!("data" in identityDTO));
+    assert.ok(!("notes" in identityDTO));
     assert.equal((await listClientSelector(org, "")).length, 30);
     assert.equal((await listClientSelector(org, "fuera del tope"))[0].id, target);
     assert.equal((await listClientSelector(org, "981765432"))[0].id, target);

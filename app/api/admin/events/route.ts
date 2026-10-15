@@ -1,3 +1,4 @@
+import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
 import { rememberedVenues } from "@/lib/event-venues";
 import { EventRescheduleError, guardEventReschedule, lockEventForEdit } from "@/lib/server/event-reschedule";
 import { guardEventNameChange } from "@/lib/server/event-name";
@@ -73,18 +74,18 @@ export async function GET(request: Request) {
         location: true,
         city: true,
         department: true,
-        client: { select: { id: true, name: true, company: true, tradeName: true, legalName: true } },
+        client: { select: CLIENT_IDENTITY_SELECT },
       },
     });
-    return Response.json({ events });
+    return Response.json({ events: events.map(event => ({ ...event, client: clientIdentityDTO(event.client) })) });
   }
   const events = await db.event.findMany({
     where: { organizationId: auth.context.organizationId },
     orderBy: { startsAt: "asc" },
     take: 200,
-    include: { client: true, assignments: { include: { inventory: true } }, tasks: true },
+    include: { client: { select: { ...CLIENT_IDENTITY_SELECT, email: true, phone: true } }, assignments: { include: { inventory: true } }, tasks: true },
   });
-  return Response.json({ events });
+  return Response.json({ events: events.map(event => ({ ...event, client: clientIdentityDTO(event.client) })) });
 }
 
 export async function POST(request: Request) {

@@ -1,4 +1,6 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
+import { clientPresentation } from "@/lib/client-identity";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -6,7 +8,6 @@ import { useMemo, useRef, useState } from "react";
 import {
   budgetStatusLabel,
   checklistProgress,
-  clientTypeLabel,
   clientWhatsappMessage,
   eventStatusLabel,
   formatCountdown,
@@ -51,7 +52,7 @@ import { AdminButtonLink,
 } from "../AdminUI";
 import { ClientCatalogAccess } from "./ClientCatalogAccess";
 import { ClientFiscalSnapshot } from "./ClientFiscalFields";
-import { ClientLinks, ClientLogo } from "./ClientesModule";
+import { ClientLinks } from "./ClientesModule";
 import { locationLinkValid } from "./OperationQuickRules";
 
 const TABS = [
@@ -155,7 +156,7 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>("presupuestos");
   const { client, metrics } = detail;
-  const name = clientDisplayName(client);
+  const name = clientPresentation(client).primary;
   const events = useMemo(() => sortClientEvents(detail.events), [detail.events]);
   const history = useMemo(() => clientHistory(detail), [detail]);
   const lastEvent = useMemo(() => lastClientEvent(detail.events), [detail.events]);
@@ -189,11 +190,9 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
   return (
     <>
       <header className="admin-ficha-head">
-        <ClientLogo client={client} size={64} />
         <div className="admin-ficha-id">
           <div className="admin-client-title">
-            <h1 className="admin-ficha-name">{name}</h1>
-            <AdminBadge tone={client.type === "RESELLER" ? "accent" : "neutral"}>{clientTypeLabel(client.type)}</AdminBadge>
+            <h1 className="admin-ficha-name"><ClientIdentityView client={client} size={40} /></h1>
             <AdminBadge tone={client.active && !client.archivedAt ? "ok" : "neutral"}>{client.archivedAt ? "Archivado" : client.active ? "Activo" : "Inactivo"}</AdminBadge>
           </div>
           <p className="admin-ficha-sub">

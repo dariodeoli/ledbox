@@ -167,7 +167,7 @@ export type AdminClientRef = {
   id: string;
   name: string;
   company: string | null;
-  /** Mostrar con clientDisplayName (tradeName.trim() || name), nunca company. */
+  /** Identidad histórica: documentos usan clientDisplayName; el panel usa clientPresentation. */
   tradeName?: string | null;
   legalName?: string | null;
   type: string;
@@ -178,6 +178,7 @@ export type AdminClientRef = {
    * Presupuestos también la proyecta para su identidad; otros refs pueden omitirla.
    */
   logoUpdatedAt?: string | null;
+  contactName?: string | null;
 };
 
 export type AdminClientRow = AdminClientRef & {
@@ -215,7 +216,7 @@ export type AdminClientRow = AdminClientRef & {
 
 /**
  * Cliente mínimo para selectores (issue #62): lo que devuelve
- * `/api/admin/clients?fields=selector`, sin métricas ni logo.
+ * `/api/admin/clients?fields=selector`, sin métricas ni bytes del logo.
  */
 export type AdminClientOption = {
   id: string;
@@ -225,6 +226,8 @@ export type AdminClientOption = {
   legalName?: string | null;
   type: string;
   active: boolean;
+  contactName?: string | null;
+  logoUpdatedAt?: string | null;
 };
 
 export type AdminEventRef = {

@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -254,15 +255,7 @@ export function EventosModule() {
   const clients = useClientSelector(form.clientId);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
-  const clientChoices = useMemo(
-    () =>
-      clientOptions.map((client) => ({
-        value: client.id,
-        label: clientDisplayName(client),
-        description: clientLegalName(client) ?? undefined,
-      })),
-    [clientOptions],
-  );
+  const clientChoices = useMemo(() => clientOptions.map(clientComboboxOption), [clientOptions]);
   const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
   const promoters = useMemo(() => promotersResource.data ?? [], [promotersResource.data]);
 
@@ -863,7 +856,7 @@ export function EventosModule() {
                       {event.name}
                     </AdminButton>
                   </AdminCell>
-                  <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
+                  <AdminCell title={clientDisplayName(event.client)}><ClientIdentityView client={event.client} /></AdminCell>
                   <AdminCell title={where || "Sin lugar definido"}>{where || "—"}</AdminCell>
                   <AdminCell>
                     <PrepChips item={item} />

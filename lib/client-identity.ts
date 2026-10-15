@@ -14,3 +14,20 @@ export function clientDisplayName(client: ClientIdentity): string {
 export function clientLegalName(client: ClientIdentity): string | null {
   return client.legalName?.trim() || null;
 }
+
+/** Presentación del panel. No cambia nombres históricos, fiscales ni snapshots. */
+export type ClientPresentationInput = ClientIdentity & {
+  contactName?: string | null;
+  type?: string | null;
+};
+
+export function clientPresentation(client: ClientPresentationInput) {
+  const normalized = (value: string | null | undefined) => value?.trim().replace(/\s+/g, " ") || "";
+  const primary = normalized(client.tradeName) || normalized(client.company) || normalized(client.name);
+  const same = (a: string, b: string) => a.localeCompare(b, "es", { sensitivity: "base" }) === 0;
+  // name es histórico y puede ser otra empresa: no inferir una persona encargada.
+  const contact = normalized(client.contactName);
+  const responsible = contact && !same(contact, primary) ? contact : null;
+  const category = client.type === "RESELLER" ? "Mayorista" : client.type === "FINAL" ? "Cliente final" : null;
+  return { primary, responsible, category, description: [responsible, category].filter(Boolean).join(" · ") };
+}

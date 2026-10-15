@@ -1,12 +1,11 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
 import { inputDateTime } from "./EventoFicha";
 import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
 import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
 import { budgetEventPrompt } from "@/lib/budget-event";
-import { AdminAvatar } from "../AdminAvatar";
-import { clientLogoUrl } from "@/lib/admin-types";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -941,16 +940,7 @@ export function PresupuestosModule() {
   // Opciones del combobox (issue #88): cliente con empresa/nombre y evento con
   // fechas + cliente, sobre los catálogos que ya carga el alta.
   const clientChoices = useMemo<ComboboxOption[]>(
-    () =>
-      clientOptions.map((client) => {
-        const company = client.company?.trim() || "";
-        const label = clientDisplayName(client);
-        const details = [
-          company && company !== client.name ? client.name : null,
-          client.type === "RESELLER" ? "Mayorista / revendedor" : null,
-        ].filter(Boolean);
-        return { value: client.id, label, description: details.join(" · ") || undefined };
-      }),
+    () => clientOptions.map(clientComboboxOption),
     [clientOptions],
   );
   const eventChoices = useMemo<ComboboxOption[]>(
@@ -1091,7 +1081,8 @@ export function PresupuestosModule() {
       id: budget.id,
       status: budget.status,
       title: budget.title,
-      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      identity: <ClientIdentityView client={budget.client} />,
+      subtitle: budget.event?.name ?? null,
       amount: budget.total,
       amountNote: balance > 0 ? `saldo ${formatMoney(balance)}` : "cobrado",
       date: budget.validUntil,
@@ -1157,7 +1148,8 @@ export function PresupuestosModule() {
       id: budget.id,
       title: <AdminButton type="button" variant="link" onClick={() => openDetail(budget.id)}><strong className="admin-quote-title">{budget.title}</strong></AdminButton>,
       titleTooltip: `PRES-${budgetReference(budget.id)} · ${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`,
-      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      identity: <ClientIdentityView client={budget.client} />,
+      subtitle: budget.event?.name ?? null,
       badges: [
         { label: PIPELINE_STAGE_LABEL[budgetPipelineStage(budget)], tone: statusTone(budget.status) },
         ...(approvalState === "CAMBIOS_SOLICITADOS" ? [{ label: budgetApprovalLabel(approvalState), tone: budgetApprovalTone(approvalState), title: portalSummary(budget) }] : []),
@@ -1994,7 +1986,7 @@ export function PresupuestosModule() {
                   <AdminCell title={`Presupuesto PRES-${budgetReference(budget.id)}`}>
                     <span className="admin-nowrap admin-quote-ref">{budgetReference(budget.id)}</span>
                   </AdminCell>
-                  <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
+                  <AdminCell title={clientDisplayName(budget.client)}><ClientIdentityView client={budget.client} /></AdminCell>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
                     <AdminButton type="button" variant="link" title={`Ver el detalle de ${budget.title}`} onClick={() => openDetail(budget.id)}>
                       <strong className="admin-quote-title">{budget.event?.name ?? budget.title}</strong>

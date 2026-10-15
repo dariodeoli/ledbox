@@ -32,6 +32,8 @@ export type AdminCardData = {
   titleTooltip?: string;
   /** Línea secundaria: empresa, contacto, SKU. */
   subtitle?: string | null;
+  /** Identidad rica opcional de la entidad relacionada (cliente). */
+  identity?: React.ReactNode;
   /** Etiquetas propias de la fila (estado, tipo, avisos). */
   badges?: Array<{ label: string; tone?: AdminTone; title?: string }>;
   /** Datos clave en pares etiqueta/valor. */
@@ -65,6 +67,7 @@ export function AdminCardGrid({ label, cards }: { label: string; cards: AdminCar
               </span>
             ) : null}
           </div>
+          {card.identity}
           {card.subtitle ? <p className="admin-cards-sub">{card.subtitle}</p> : null}
           {card.fields && card.fields.length > 0 ? (
             <dl className="admin-cards-fields">

@@ -186,6 +186,8 @@ export type AdminBoardCardData = {
   title: string;
   /** Línea secundaria: cliente, proveedor, empresa, lugar. */
   subtitle?: string | null;
+  /** Identidad rica de la entidad relacionada, conservando título/subtítulo textuales. */
+  identity?: React.ReactNode;
   /** Monto clave en guaraníes; `null` no dibuja monto. */
   amount?: number | null;
   /** Aclaración del monto («saldo», «estimado»). */
@@ -563,6 +565,7 @@ export function AdminBoard({
                         </strong>
                         {card.actions ? <span className="admin-board-card-actions">{card.actions}</span> : null}
                       </div>
+                      {card.identity}
                       {card.subtitle ? (
                         <p className="admin-board-card-sub" title={card.subtitle}>
                           {card.subtitle}

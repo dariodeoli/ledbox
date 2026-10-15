@@ -1128,6 +1128,9 @@ export function SelectField({
  *   (el API revalida siempre).
  */
 export type ComboboxOption = {
+  /** Presentación rica opcional; label/description conservan búsqueda y accesibilidad. */
+  content?: React.ReactNode;
+  leading?: React.ReactNode;
   /** Valor que se entrega al elegir la opción. */
   value: string;
   /** Texto principal: es lo que muestra el campo al elegir. */
@@ -1286,7 +1289,8 @@ export function Combobox({
 
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "lg"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <span className="admin-combobox" ref={wrapperRef}>
+      <span className="admin-combobox" ref={wrapperRef} data-rich-selection={!open && (selected?.content || selected?.leading) ? "true" : undefined}>
+        {!open && (selected?.content || selected?.leading) ? <span className="admin-combobox-selected" aria-hidden="true">{selected.leading}{selected.content ?? <span>{selected.label}</span>}</span> : null}
         <input
           ref={inputRef}
           id={fieldId}
@@ -1297,6 +1301,7 @@ export function Combobox({
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-autocomplete="list"
+          aria-description={selected?.description}
           aria-activedescendant={open ? activeId : undefined}
           aria-required={required || undefined}
           aria-label={label ? undefined : ariaLabel}
@@ -1377,15 +1382,19 @@ export function Combobox({
                   id={`${listId}-option-${index}`}
                   role="option"
                   aria-selected={option.value === value}
+                  aria-label={[option.label, option.description].filter(Boolean).join(" · ")}
                   data-active={activeRow === index ? "true" : undefined}
                   className="admin-combobox-option"
                   title={option.description ? `${option.label} · ${option.description}` : option.label}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(option)}
                 >
-                  <span className="admin-combobox-option-text">
-                    <strong>{option.label}</strong>
-                    {option.description ? <small>{option.description}</small> : null}
+                  <span className="admin-combobox-option-content" aria-hidden="true">
+                    {option.leading}
+                    {option.content ?? <span className="admin-combobox-option-text">
+                      <strong>{option.label}</strong>
+                      {option.description ? <small>{option.description}</small> : null}
+                    </span>}
                   </span>
                   {option.value === value ? <AdminIcon name="check" size={13} /> : null}
                 </li>
