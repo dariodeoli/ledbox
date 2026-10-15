@@ -31,7 +31,7 @@ export function FeaturedSection({ items, fichaBase, showPrices, priceMode }: { i
           const line = showPrices && item.price ? catalogLine(item.price, 1) : null;
           return (
             <li key={item.id} className="cp-feat">
-              <a className="cp-feat-link" href={`${fichaBase}/p/${encodeURIComponent(item.id)}`} aria-label={`Ver ${item.name}`} />
+              <a className="cp-feat-link" data-store-product={item.id} href={`${fichaBase}/p/${encodeURIComponent(item.id)}`} aria-label={`Ver ${item.name}`} />
               <span className="cp-feat-media">
                 {item.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element

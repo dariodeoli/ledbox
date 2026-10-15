@@ -77,7 +77,7 @@ export async function createCollection(context: AdminContext, body: unknown): Pr
       return row;
     });
     if (!created) return jsonError(`Cada empresa admite hasta ${COLLECTIONS_MAX} colecciones.`, 409);
-    await recordAudit({ context, action: "create", entity: "Organization", entityId: organizationId, summary: `Creó la colección «${created.name}»`, detail: { fields: { nombre: created.name, productos: value.itemIds.length } } });
+    await recordAudit({ context, action: "create", entity: "Collection", entityId: created.id, summary: `Creó la colección «${created.name}»`, detail: { fields: { nombre: created.name, productos: value.itemIds.length } } });
     return Response.json({ collection: (await listCollections(organizationId)).find((entry) => entry.id === created.id) }, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return jsonError("Ya existe una colección con ese nombre; probá con otro.", 409);
@@ -97,7 +97,7 @@ export async function updateCollection(context: AdminContext, id: string, body: 
     await tx.collection.updateMany({ where: { id, organizationId }, data: { name: value.name, description: value.description, visible: value.visible, sortOrder: value.sortOrder } });
     await replaceItems(tx, organizationId, id, value.itemIds);
   });
-  await recordAudit({ context, action: "update", entity: "Organization", entityId: organizationId, summary: `Editó la colección «${value.name}»`, detail: { fields: { nombre: value.name, productos: value.itemIds.length, visible: value.visible } } });
+  await recordAudit({ context, action: "update", entity: "Collection", entityId: id, summary: `Editó la colección «${value.name}»`, detail: { fields: { nombre: value.name, productos: value.itemIds.length, visible: value.visible } } });
   return Response.json({ collection: (await listCollections(organizationId)).find((entry) => entry.id === id) });
 }
 
@@ -106,7 +106,7 @@ export async function deleteCollection(context: AdminContext, id: string): Promi
   const current = await db.collection.findFirst({ where: { id, organizationId }, select: { name: true } });
   if (!current) return jsonError("La colección no existe en esta empresa.", 404);
   await db.collection.deleteMany({ where: { id, organizationId } });
-  await recordAudit({ context, action: "delete", entity: "Organization", entityId: organizationId, summary: `Eliminó la colección «${current.name}»`, detail: { fields: { nombre: current.name } } });
+  await recordAudit({ context, action: "delete", entity: "Collection", entityId: id, summary: `Eliminó la colección «${current.name}»`, detail: { fields: { nombre: current.name } } });
   return Response.json({ ok: true });
 }
 
@@ -128,7 +128,7 @@ export async function uploadCollectionImage(context: AdminContext, id: string, r
   if (!prepared.ok) return jsonError(prepared.error, prepared.status);
   if (!(await cuotaArchivosOk(organizationId, prepared.data.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
   const saved = await db.collection.update({ where: { id }, data: { imageData: prepared.data, imageMime: prepared.mime }, select: { updatedAt: true } });
-  await recordAudit({ context, action: "update", entity: "Organization", entityId: organizationId, summary: `Subió la foto de la colección «${current.name}»`, detail: { fields: { foto: "subida", size: prepared.data.byteLength } } });
+  await recordAudit({ context, action: "update", entity: "Collection", entityId: id, summary: `Subió la foto de la colección «${current.name}»`, detail: { fields: { foto: "subida", size: prepared.data.byteLength } } });
   return Response.json({ imageVersion: saved.updatedAt.toISOString() });
 }
 
@@ -138,7 +138,7 @@ export async function removeCollectionImage(context: AdminContext, id: string): 
   if (!current) return jsonError("La colección no existe en esta empresa.", 404);
   if (!current.imageMime) return Response.json({ imageVersion: null, unchanged: true });
   await db.collection.updateMany({ where: { id, organizationId }, data: { imageData: null, imageMime: null } });
-  await recordAudit({ context, action: "update", entity: "Organization", entityId: organizationId, summary: `Quitó la foto de la colección «${current.name}»`, detail: { fields: { foto: "quitada" } } });
+  await recordAudit({ context, action: "update", entity: "Collection", entityId: id, summary: `Quitó la foto de la colección «${current.name}»`, detail: { fields: { foto: "quitada" } } });
   return Response.json({ imageVersion: null });
 }
 

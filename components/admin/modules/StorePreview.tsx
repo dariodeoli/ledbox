@@ -6,6 +6,26 @@ import { categoryDatum, formatGs, priceUnitLabel } from "@/lib/storefront-ui";
 import { ProductPlaceholder, XIcon } from "../../catalog-public/StoreIcons";
 import { StoreChrome } from "../../catalog-public/StoreChrome";
 
+/** Datos ficticios de cada rubro, únicamente para distinguir las plantillas en Apariencia. */
+const PREVIEW_EXAMPLES: Record<string, { categories: string[]; products: string[] }> = {
+  lienzo: { categories: ["Decoración", "Complementos"], products: ["Florero de ejemplo", "Lámpara de ejemplo"] },
+  marmol: { categories: ["Decoración", "Centros de mesa"], products: ["Centro de mesa de ejemplo", "Candelabro de ejemplo"] },
+  boutique: { categories: ["Ceremonia", "Recepción"], products: ["Arco de boda de ejemplo", "Mesa de novios de ejemplo"] },
+  gala: { categories: ["Ceremonia", "Banquete"], products: ["Silla de ceremonia de ejemplo", "Copa de ejemplo"] },
+  noir: { categories: ["Pantallas LED", "Sonido"], products: ["Pantalla LED de ejemplo", "Parlante de ejemplo"] },
+  escenario: { categories: ["Sonido", "Iluminación"], products: ["Sistema de sonido de ejemplo", "Cabezal móvil de ejemplo"] },
+  studio: { categories: ["Conferencias", "Exposiciones"], products: ["Atril de ejemplo", "Proyector de ejemplo"] },
+  corporativo: { categories: ["Conferencias", "Stands"], products: ["Atril de ejemplo", "Stand modular de ejemplo"] },
+  jardin: { categories: ["Jardín", "Exteriores"], products: ["Gazebo de ejemplo", "Guirnalda de ejemplo"] },
+  industrial: { categories: ["Estructuras", "Generadores"], products: ["Carpa de ejemplo", "Generador de ejemplo"] },
+  terracota: { categories: ["Vajilla", "Servicio"], products: ["Plato de ejemplo", "Bandeja de ejemplo"] },
+  gourmet: { categories: ["Vajilla", "Catering"], products: ["Juego de platos de ejemplo", "Chafing de ejemplo"] },
+  kids: { categories: ["Juegos", "Mobiliario infantil"], products: ["Inflable de ejemplo", "Mesa infantil de ejemplo"] },
+  nordico: { categories: ["Mesas", "Sillas"], products: ["Mesa de ejemplo", "Silla de ejemplo"] },
+  fiesta: { categories: ["Fiestas", "Pista y barras"], products: ["Barra de ejemplo", "Pista de baile de ejemplo"] },
+  brisa: { categories: ["Sociales", "Celebraciones"], products: ["Living de ejemplo", "Barra de ejemplo"] },
+};
+
 /**
  * Vista previa en vivo de la tienda con la apariencia que se está editando (antes de guardar). Usa **las mismas clases y
  * tokens CSS** que la tienda real (`.cp-*`, `--color-*`…): plantilla, color primario, tipografía de títulos, barra de anuncio,
@@ -41,10 +61,9 @@ export function StorePreview({
   const photoHero = Boolean(cover);
   const showPrices = appearance.priceMode !== "quote";
   const unitText = priceUnitLabel(appearance.priceMode, "PER_DAY", null);
-  const examples = [
-    { name: "Producto de ejemplo", price: 250000, capacity: "8 personas" },
-    { name: "Otro producto de ejemplo", price: 120000, capacity: null },
-  ];
+  // Solo ejemplos rotulados del selector: elegir plantilla nunca modifica el catálogo real de la empresa.
+  const niche = PREVIEW_EXAMPLES[appearance.template] ?? PREVIEW_EXAMPLES.lienzo;
+  const examples = niche.products.map((name, index) => ({ name, price: index === 0 ? 250000 : 120000 }));
   const body = (
     <StoreChrome appearance={view}>
       <div className="cp-hd" aria-hidden="true">
@@ -81,7 +100,7 @@ export function StorePreview({
         </section>
         <div className="cp-container cp-preview-body">
           <div className="cp-catgrid">
-            {["Categoría de ejemplo", "Otra categoría"].map((label) => (
+            {niche.categories.map((label) => (
               <span className="cp-catcard" key={label}>
                 <span className="cp-catcard-media"><ProductPlaceholder size={36} /></span>
                 <span className="cp-catcard-body">
@@ -96,7 +115,6 @@ export function StorePreview({
               <li className="cp-tile" key={example.name}>
                 <div className="cp-tile-media">
                   <ProductPlaceholder />
-                  {example.capacity ? <span className="cp-tile-badge"><XIcon name="users" size={14} />{example.capacity}</span> : null}
                 </div>
                 <div className="cp-tile-body">
                   <p className="cp-tile-meta">COD #101 · Ejemplo</p>

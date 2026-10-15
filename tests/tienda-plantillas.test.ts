@@ -319,7 +319,7 @@ test("fotos de categoría cuadradas y sin recorte en todas las plantillas", () =
   for (const theme of THEME_REGISTRY) assert.equal(theme.imageRatio.category, "1 / 1", theme.id);
   const cat = css.split("\n").filter((line) => /\.cp-catcard-media img|\.cp-catcard-media \{/.test(line)).join("\n");
   assert.ok(/object-fit: contain/.test(cat) && !/object-fit: cover/.test(cat), "la imagen de categoría es contain en todas las variantes");
-  assert.ok(/\.cp-catcard-media \{[^}]*background: var\(--color-surface\)/.test(css), "sobre --color-surface");
+  assert.ok(/\.cp-catcard-media \{[^}]*background: var\(--color-photo\)/.test(css), "sobre fondo claro de fotografía");
 });
 
 test("portada: escritorio ≥768 px y celular en móvil, con la otra como respaldo", () => {
@@ -327,4 +327,40 @@ test("portada: escritorio ≥768 px y celular en móvil, con la otra como respal
   assert.ok(/media="\(min-width: 768px\)"/.test(front));
   assert.ok(/covers\.mobile \?\? store\.covers\.desktop/.test(front));
   assert.ok(/--hero-ratio: 16 \/ 5/.test(css) && /--hero-ratio: 4 \/ 5/.test(css));
+});
+
+
+test("Apariencia muestra computadora y celular juntas con las portadas guardadas o nuevas", () => {
+  const settings = read("components/admin/modules/AparienciaSettings.tsx");
+  assert.match(settings, /\["desktop", "mobile"\] as const/);
+  assert.match(settings, /coverDesktop=\{coverSrc\("desktop"\)\}/);
+  assert.match(settings, /coverMobile=\{coverSrc\("mobile"\)\}/);
+  assert.ok(!settings.includes('ariaLabel="Dispositivo de la vista previa"'));
+});
+
+test("Destacados comparte la vista rápida y el carrito con el catálogo", () => {
+  assert.match(read("components/catalog-public/HomeSections.tsx"), /data-store-product=\{item.id\}/);
+  const browser = read("components/catalog-public/CatalogBrowser.tsx");
+  assert.match(browser, /event.preventDefault\(\);\s+openQuick\(id\)/);
+  assert.match(browser, /event.metaKey \|\| event.ctrlKey \|\| event.shiftKey \|\| event.altKey/);
+});
+
+
+test("colecciones tienen su entidad auditable y se pueden filtrar en el panel", () => {
+  assert.match(read("lib/admin-types.ts"), /"Collection"/);
+  assert.match(read("lib/admin-format.ts"), /Collection: "Colección de la tienda"/);
+  const source = read("lib/server/collections.ts");
+  assert.equal((source.match(/entity: "Collection"/g) ?? []).length, 5);
+  assert.ok(!source.includes('entity: "Organization"'));
+});
+
+test("las fotos de producto conservan margen y fondo claro incluso al pasar el mouse", () => {
+  for (const theme of THEME_REGISTRY) {
+    const [r, g, b] = hexToRgb(theme.colors.photo);
+    assert.ok(Math.min(r, g, b) >= 220, `${theme.id}: fondo de producto claro`);
+    assert.equal(theme.layout.photoFit, "contain");
+  }
+  assert.match(css, /\.cp-catcard-media img \{[^}]*object-fit: contain; padding: 5%/);
+  assert.match(css, /\.cp-colcard\[data-media="product"\] \.cp-colcard-media img \{[^}]*object-fit: contain; padding: 5%/);
+  assert.match(css, /\.cp-btn--on-image \{[^}]*background: var\(--color-primary\)/);
 });

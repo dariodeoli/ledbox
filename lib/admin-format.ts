@@ -1420,6 +1420,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   Supplier: "Proveedor",
   SupplierJob: "Trabajo de proveedor",
   InventoryItem: "Inventario",
+  Collection: "Colección de la tienda",
   EventInventory: "Asignación de equipo",
   InventoryIncident: "Incidente de inventario",
   InventoryCategory: "Categoría de inventario",

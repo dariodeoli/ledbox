@@ -2310,6 +2310,7 @@ export const AUDIT_ENTITIES = [
   "Supplier",
   "SupplierJob",
   "InventoryItem",
+  "Collection",
   // Unidad física del ítem (issue #112): alta, edición y retiro.
   "InventoryUnit",
   // Incidente de inventario (alquileres fase 4): daño, faltante, reparación o limpieza.

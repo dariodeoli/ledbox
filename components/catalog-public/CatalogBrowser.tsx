@@ -368,6 +368,19 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     }
     setQuickId(id);
   }, []);
+  // Destacados usa la misma vista rápida y el mismo carrito que el catálogo. El enlace conserva la ficha como respaldo.
+  useEffect(() => {
+    const openFeatured = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[data-store-product]") : null;
+      const id = link?.dataset.storeProduct;
+      if (!id || !items.some((item) => item.id === id)) return;
+      event.preventDefault();
+      openQuick(id);
+    };
+    document.addEventListener("click", openFeatured);
+    return () => document.removeEventListener("click", openFeatured);
+  }, [items, openQuick]);
   const navigateQuick = useCallback((id: string) => {
     try { window.history.replaceState(window.history.state, "", quickUrl(id)); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección de la vista rápida", failure); }
     setQuickId(id);

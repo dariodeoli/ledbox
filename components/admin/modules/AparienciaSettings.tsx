@@ -24,7 +24,7 @@ import { normalizeHex } from "@/lib/storefront-theme";
 import { DISPLAY_FONTS, THEMES, isDisplayFont, themePrimary } from "@/lib/storefront-templates";
 import { themesByRubro } from "@/lib/storefront-themes";
 import { useAdminSession } from "../AdminShell";
-import { FileField, SegmentedField, SelectField, SwitchField, TextField } from "../AdminFields";
+import { FileField, SelectField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminButtonLink, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { StorePreview } from "./StorePreview";
 import { EMPTY_HOME_PHOTOS, HomeLayoutPanels, type HomePhotoStates } from "./HomeLayoutPanels";
@@ -83,7 +83,6 @@ export function AparienciaSettings() {
   const [coverError, setCoverError] = useState<Record<CoverKind, string>>({ desktop: "", mobile: "" });
   const [home, setHome] = useState<HomeConfig>(DEFAULT_HOME);
   const [homePhotos, setHomePhotos] = useState<HomePhotoStates>(EMPTY_HOME_PHOTOS);
-  const [frame, setFrame] = useState<"desktop" | "mobile">("desktop");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -285,7 +284,7 @@ export function AparienciaSettings() {
                   ) : brandHex ? (
                     <p className="admin-field-hint" data-testid="accent-preview">
                       <span className="admin-store-swatch" style={{ background: themePrimary(template, brandHex).primary }} aria-hidden="true" />{" "}
-                      {themePrimary(template, brandHex).fromBrand ? "Con esta plantilla se usa tu color de marca." : "Tu color no da contraste suficiente con esta plantilla: se usa su color propio."}
+                      {themePrimary(template, brandHex).fromBrand ? "Con esta plantilla se usa tu color de marca." : "Tu color es neutro o no da contraste suficiente con esta plantilla: se usa su color propio."}
                     </p>
                   ) : null}
                   <div className="admin-settings-grid">
@@ -356,12 +355,12 @@ export function AparienciaSettings() {
                           <div className="admin-cover-frame" data-kind={kind} style={{ aspectRatio: `${spec.width} / ${spec.height}` }}>
                             {src ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={src} alt={`Vista previa de la ${spec.label.toLowerCase()} con su recorte`} />
+                              <img src={src} alt={`Vista previa de la ${spec.label.toLowerCase()} centrada en el formato recomendado`} />
                             ) : (
                               <span>Sin portada: se usa el encabezado simple</span>
                             )}
                           </div>
-                          {dims ? <p className="admin-field-hint">Tu imagen mide {dims.width} × {dims.height} px{ratioOff ? ` y no tiene la proporción recomendada: se recorta como ves arriba.` : "."}{dims.width < spec.width * 0.6 ? " Es más chica que la recomendada y puede verse borrosa." : ""}</p> : null}
+                          {dims ? <p className="admin-field-hint">Tu imagen mide {dims.width} × {dims.height} px{ratioOff ? ` y no tiene la proporción recomendada: se centra para ocupar el formato de portada.` : "."}{dims.width < spec.width * 0.6 ? " Es más chica que la recomendada y puede verse borrosa." : ""}</p> : null}
                           {src ? (
                             <AdminButton type="button" icon="trash" disabled={demo} onClick={() => setCovers((current) => ({ ...current, [kind]: { ...EMPTY_COVER, remove: true } }))}>
                               Quitar {spec.label.toLowerCase()}
@@ -376,14 +375,13 @@ export function AparienciaSettings() {
 
               <AdminPanel title="Vista previa en vivo" icon="eye" meta="Con datos de ejemplo; todavía no está publicada">
                 <div className="admin-settings">
-                  <SegmentedField
-                    ariaLabel="Dispositivo de la vista previa"
-                    value={frame}
-                    onChange={(value) => setFrame(value as "desktop" | "mobile")}
-                    options={[{ value: "desktop", label: "Escritorio" }, { value: "mobile", label: "Celular" }]}
-                  />
-                  <StorePreview frame={frame} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
-                  {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si no tiene portada de {frame === "desktop" ? "escritorio" : "celular"}, usa la otra.</p> : null}
+                  {(["desktop", "mobile"] as const).map((device) => (
+                    <section key={device} className="admin-settings" aria-label={`Vista previa en ${device === "desktop" ? "computadora" : "celular"}`}>
+                      <h3>{device === "desktop" ? "Computadora · 1920 × 600" : "Celular · 1080 × 1350"}</h3>
+                      <StorePreview frame={device} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
+                    </section>
+                  ))}
+                  {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si falta una portada, usa la otra centrada.</p> : null}
                 </div>
               </AdminPanel>
             </div>
