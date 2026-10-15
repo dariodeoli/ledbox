@@ -8,6 +8,7 @@ import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { statementRowFingerprint } from "@/lib/bank-statement";
 import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
 import { catalogTokenHash } from "./catalog-access";
+import { makeSeedIds, wrapTx } from "./demo-ns";
 import { buildDemoCompletion, buildDemoSignatures, SIGNATURE_BUDGET_IDS } from "./demo-data-completa";
 import { budgetDocumentHash, budgetDocumentPayload, signatureBudgetSelect, signatureDocument, SNAPSHOT_DOCUMENT_VERSION } from "./signature/document";
 import { db } from "./db";
@@ -199,6 +200,8 @@ const DEMO_ORGANIZATION: Prisma.OrganizationUncheckedCreateInput = {
   name: DEMO_ORGANIZATION_NAME,
   slug: DEMO_ORGANIZATION_SLUG,
   active: true,
+  // La vitrina es una empresa demo (docs/DEMO-INTERACTIVA.md): sin KPIs ni usuarios reales, fuera de lo público.
+  isDemo: true,
   paymentDetails: DEMO_PAYMENT_DETAILS,
 };
 
@@ -1101,10 +1104,10 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
   const fresh = organization && !options?.reset ? await demoDataIsFresh(organization) : false;
   if (!organization) {
     organization = await db.organization.create({ data: DEMO_ORGANIZATION });
-  } else if (organization.name !== DEMO_ORGANIZATION_NAME || !organization.active) {
+  } else if (organization.name !== DEMO_ORGANIZATION_NAME || !organization.active || !organization.isDemo) {
     organization = await db.organization.update({
       where: { id: organization.id },
-      data: { name: DEMO_ORGANIZATION_NAME, active: true },
+      data: { name: DEMO_ORGANIZATION_NAME, active: true, isDemo: true },
     });
   }
   // Los datos de pago se completan si faltan; si la empresa ya los tiene (los
@@ -1532,7 +1535,16 @@ function buildTasks(event: BuiltEvent, index: number, base: Date): Array<{ id: s
  * transacción no deja la demo a medias: el ancla no se escribe y el siguiente
  * ingreso reintenta.
  */
-async function seedDemoData(organizationId: string, base: Date): Promise<void> {
+/** Siembra el dataset en una sandbox (`ns` = 10 caracteres base32): ids `sbx_<ns>_*`, tokens al azar. */
+export async function seedSandboxData(organizationId: string, ns: string, base: Date = todayBase()): Promise<void> {
+  await seedDemoData(organizationId, base, ns);
+}
+
+async function seedDemoData(organizationId: string, base: Date, ns?: string): Promise<void> {
+  // Con `ns` (sandbox) los ids, tokens y correos se reescriben en el borde de la escritura (`lib/server/demo-ns.ts`);
+  // sin `ns` (vitrina) todo queda igual que siempre.
+  const ids = ns ? makeSeedIds(ns) : null;
+  const tk = (literal: string): string => (ids ? ids.tk(literal) : literal);
   const org = { organizationId };
   const now = new Date();
   // Identidad de la demo (logos y avatares) generada en el proceso, sin assets
@@ -1648,6 +1660,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     second,
     cancelled,
     contactNameOf: (clientId) => clientContact(clientId).name,
+    tk,
   });
   eventsData.push(...completion.events);
   clientsData.push(...completion.clients);
@@ -2021,7 +2034,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       securityDepositRetained: budget.securityDeposit ? (budget.securityDeposit.retained ?? null) : null,
       validUntil: budget.validUntil,
       notes: budget.notes,
-      publicToken: budget.token ?? null,
+      publicToken: budget.token ? tk(budget.token) : null,
       publicTokenCreatedAt: budget.tokenCreatedAt ?? null,
       approvedAt: budget.approval?.at ?? null,
       approvedByName: budget.approval?.byName ?? null,
@@ -2866,7 +2879,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     email: invitation.email,
     role: invitation.role,
     // El token plano solo vive en el link del correo: acá se guarda su hash.
-    tokenHash: createHash("sha256").update(invitation.token).digest("hex"),
+    tokenHash: createHash("sha256").update(tk(invitation.token)).digest("hex"),
     status: invitation.status,
     invitedById: DEMO_INVITER.id,
     invitedByName: DEMO_INVITER.name,
@@ -3431,10 +3444,14 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   });
 
   await db.$transaction(
-    async (tx) => {
-      // Un solo provisor a la vez (dos visitantes simultáneos no se pisan).
-      await tx.$queryRawUnsafe("select pg_advisory_xact_lock(724150114)::text as locked");
-      await wipeDemoData(tx, organizationId);
+    async (rawTx) => {
+      const tx = ids ? wrapTx(rawTx, ids) : rawTx;
+      // Un solo provisor a la vez (dos visitantes simultáneos no se pisan). Una sandbox nace vacía y es
+      // solo de su visitante: sin lock global ni borrado previo.
+      if (!ids) {
+        await tx.$queryRawUnsafe("select pg_advisory_xact_lock(724150114)::text as locked");
+        await wipeDemoData(tx, organizationId);
+      }
       // Equipo simulado de la demo (los actores de la auditoría): miembros solo
       // de esta empresa, con su avatar. Se borran en cada wipe y se recrean acá.
       const collaboratorsHash = await hashPassword(randomBytes(24).toString("base64url"));
@@ -3448,6 +3465,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
             role: collaborator.role,
             active: true,
             autoLockEnabled: false,
+            demoOrganizationId: ids ? organizationId : null,
           },
         });
         await tx.adminMembership.create({
@@ -3475,7 +3493,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.clientLogo.createMany({ data: clientLogosData });
       // Link privado del catálogo mayorista de Agencia Pixel (solo se guarda el hash, como en producción).
       await tx.catalogAccessToken.create({
-        data: { id: "demo_catalog_access_pixel", organizationId, clientId: DEMO_WHOLESALE_CLIENT_ID, tokenHash: catalogTokenHash(DEMO_WHOLESALE_TOKEN), createdAt: at(base, -20, 10, 0) },
+        data: { id: "demo_catalog_access_pixel", organizationId, clientId: DEMO_WHOLESALE_CLIENT_ID, tokenHash: catalogTokenHash(tk(DEMO_WHOLESALE_TOKEN)), createdAt: at(base, -20, 10, 0) },
       });
       await tx.catalogAccessToken.createMany({ data: completion.catalogTokens });
       await tx.event.createMany({ data: eventsData });
@@ -3497,9 +3515,11 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
         base,
         now,
         recipientOf: demoSignatureRecipient,
+        mapId: ids ? ids.mapString : undefined,
+        codeSalt: ids?.codeSalt,
         // Igual que la creación real: el título del documento es el de la solicitud.
         documentOf: (budgetId, title) => {
-          const budget = signatureBudgetById.get(budgetId);
+          const budget = signatureBudgetById.get(ids ? ids.mapString(budgetId) : budgetId);
           if (!budget) throw new Error(`Falta el presupuesto ${budgetId} para firmar la demo.`);
           const snapshot = budgetDocumentPayload(signatureDocument({ source: "live", version: SNAPSHOT_DOCUMENT_VERSION, budget, title, organizationName: organizationRow.name }));
           return { snapshot, hash: budgetDocumentHash(snapshot) };
@@ -3554,7 +3574,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
  * el dataset salga canónico. La organización y el usuario demo no se tocan; las
  * sesiones demo se limpian aparte.
  */
-async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
+export async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
   await tx.paymentReminderLog.deleteMany({ where: { organizationId } });
   // Registro fiscal (issue #41): primero los comprobantes y los períodos (la
   // secuencia se reescribe en cada provisión).
