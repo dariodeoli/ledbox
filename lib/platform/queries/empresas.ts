@@ -113,6 +113,8 @@ export type EmpresaDetail = {
     events: PlanUsageRow & { periodLabel: string };
   } | null;
   pendingRequests: Array<{ id: string; planName: string; requestedBy: string; createdAt: Date }>;
+  /** Invitaciones de dueño o administrador sin aceptar (para «Reenviar invitación»). Sin token ni hash. */
+  invitations: Array<{ id: string; email: string; role: string; status: string; expiresAt: Date; lastSentAt: Date | null }>;
 };
 
 /** Detalle de una empresa REAL; una demo o un id inexistente devuelve `null`. */
@@ -123,13 +125,19 @@ export async function loadEmpresaDetail(id: string): Promise<EmpresaDetail | nul
   const org = found[0];
   if (!org) return null;
   const plan = await resolveOrganizationPlan(org.id, org.planId);
-  const [usage, requests] = await Promise.all([
+  const [usage, requests, invitations] = await Promise.all([
     plan ? loadPlanUsage({ organizationId: org.id, plan }) : Promise.resolve(null),
     db.planChangeRequest.findMany({
       where: { organizationId: org.id, status: "pending" },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: { id: true, requestedByName: true, createdAt: true, plan: { select: { name: true } } },
+    }),
+    db.teamInvitation.findMany({
+      where: { organizationId: org.id, role: { in: ["OWNER", "ADMIN"] }, status: { not: "accepted" } },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, email: true, role: true, status: true, expiresAt: true, lastSentAt: true },
     }),
   ]);
   return {
@@ -140,6 +148,7 @@ export async function loadEmpresaDetail(id: string): Promise<EmpresaDetail | nul
     createdAt: org.createdAt,
     plan: plan ? { name: plan.name, maxUsers: plan.maxUsers, maxEventsPerMonth: plan.maxEventsPerMonth } : null,
     usage,
+    invitations: invitations.map((i) => ({ ...i, status: i.status === "pending" && i.expiresAt.getTime() <= Date.now() ? "expired" : i.status })),
     pendingRequests: requests.map((r) => ({ id: r.id, planName: r.plan.name, requestedBy: r.requestedByName, createdAt: r.createdAt })),
   };
 }

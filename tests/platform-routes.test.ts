@@ -76,3 +76,15 @@ test("la detección falla ante un page, layout, route o server action sin guard 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("el alta de empresa (página y server actions) está cubierta por el guard", () => {
+  const files = walk(BASE).map((file) => relative(root, file).split("\\").join("/"));
+  assert.ok(files.includes("app/(superadmin)/superadmin/empresas/nueva/page.tsx"), "falta la página de alta");
+  assert.ok(files.includes("app/(superadmin)/superadmin/empresas/acciones.ts"), "faltan las acciones de alta");
+  const actions = readFileSync(join(BASE, "superadmin", "empresas", "acciones.ts"), "utf8");
+  assert.deepEqual(
+    exportedFunctions(actions).map((fn) => fn.name).sort(),
+    ["crearEmpresaAction", "reenviarInvitacionAction"],
+  );
+  assert.deepEqual(platformViolations(walk(BASE)), []);
+});

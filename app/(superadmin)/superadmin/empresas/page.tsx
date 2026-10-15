@@ -5,6 +5,7 @@ import { EMPRESA_SORTS, loadEmpresaDetail, loadEmpresas, loadPlanOptions } from 
 import { PAGE_SIZE, parseTableParams, searchAllowed, withParams, type RawParams } from "@/lib/platform/tablas";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/admin-format";
+import { reenviarInvitacionAction } from "./acciones";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { PeriodChips } from "@/components/platform/PeriodChips";
 import { FilterForm } from "@/components/platform/FilterForm";
@@ -23,6 +24,21 @@ function strings(params: RawParams): Record<string, string> {
     if (v) out[key] = v;
   }
   return out;
+}
+
+const MAIL_NOTICE: Record<string, string> = {
+  sent: "Los correos de invitación salieron. El link vence en 7 días.",
+  failed: "No pudimos enviar algún correo. Probá «Reenviar invitación» desde el detalle.",
+  skipped: "Los correos no se enviaron (servicio de correo no configurado). Probá «Reenviar invitación» cuando esté listo.",
+  limite: "Demasiados reenvíos seguidos. Esperá unos minutos.",
+  error: "No encontramos una invitación para reenviar.",
+};
+
+/** Mensaje de resultado tras un alta o un reenvío (nunca incluye el link: solo viaja por correo). */
+function noticeFor(current: Record<string, string>): string | null {
+  const mail = current.alta ?? current.reenvio;
+  if (!mail || !MAIL_NOTICE[mail]) return null;
+  return (current.alta ? "Empresa creada. " : "") + MAIL_NOTICE[mail];
 }
 
 export default async function EmpresasPage({ searchParams }: Readonly<{ searchParams: SearchParams }>) {
@@ -46,6 +62,7 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
     <PlatformShell active="empresas" title="Empresas">
       <div className="platform-page">
         <div className="platform-toolbar">
+          <div><Link className="admin-btn admin-btn--primary platform-btn" href={`${BASE}/nueva`}>Nueva empresa</Link></div>
           <PeriodChips basePath={BASE} params={params} active={range.key} />
           <FilterForm
             basePath={BASE}
@@ -62,6 +79,7 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
             {data ? ` (${data.demoOrgs} excluida${data.demoOrgs === 1 ? "" : "s"})` : ""}. <a href={exportHref}>Exportar CSV</a>
           </p>
         </div>
+        {noticeFor(strings(params)) ? <p className="platform-notice" role="status">{noticeFor(strings(params))}</p> : null}
         {!allowed ? (
           <p className="platform-notice" role="alert">Demasiados intentos de búsqueda. Esperá unos minutos y volvé a probar.</p>
         ) : null}
@@ -128,6 +146,23 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
                       </dl>
                     </>
                   ) : null}
+                  <h3>Invitaciones sin aceptar</h3>
+                  {detail.invitations.length === 0 ? (
+                    <p className="platform-hint">No hay invitaciones sin aceptar.</p>
+                  ) : (
+                    <ul className="platform-list">
+                      {detail.invitations.map((invitation) => (
+                        <li key={invitation.id}>
+                          {invitation.email} · {invitation.role === "OWNER" ? "dueño" : "administrador"} · {invitation.status === "expired" ? "vencida" : invitation.status === "revoked" ? "revocada" : "pendiente"} · vence {formatDateTime(invitation.expiresAt)}
+                          <form action={reenviarInvitacionAction}>
+                            <input type="hidden" name="organizationId" value={detail.id} />
+                            <input type="hidden" name="invitationId" value={invitation.id} />
+                            <button type="submit" className="admin-btn platform-btn">Reenviar invitación</button>
+                          </form>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <h3>Solicitudes de plan pendientes</h3>
                   {detail.pendingRequests.length === 0 ? (
                     <p className="platform-hint">No hay solicitudes pendientes.</p>
@@ -138,7 +173,7 @@ export default async function EmpresasPage({ searchParams }: Readonly<{ searchPa
                       ))}
                     </ul>
                   )}
-                  <p className="platform-hint">Solo lectura.</p>
+                  <p className="platform-hint">El resto del detalle es de solo lectura.</p>
                 </>
               ) : (
                 <p className="platform-hint">No encontramos esa empresa.</p>
