@@ -358,7 +358,7 @@ export function ColorField({ label, value, onChange, fallbackColor = "#0b5cd5", 
   const pickerColor = normalizeHex(value) ?? normalizeHex(fallbackColor) ?? "#0b5cd5";
   return <FieldChrome label={label} hint={hint} error={error} size={size} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
     <div className="admin-color-control">
-      <input type="color" value={pickerColor} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={`Elegir ${label.toLowerCase()}`} aria-describedby={describedBy(error, hint, hintId, errorId)} />
+      <input type="color" value={pickerColor} onInput={(event) => onChange(event.currentTarget.value)} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={`Elegir ${label.toLowerCase()}`} aria-describedby={describedBy(error, hint, hintId, errorId)} />
       <SharedInput id={fieldId} type="text" value={value} onChange={(event) => onChange(event.target.value)} maxLength={7} placeholder={pickerColor} autoCapitalize="none" spellCheck={false} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy(error, hint, hintId, errorId)} />
     </div>
   </FieldChrome>;

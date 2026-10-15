@@ -20,7 +20,7 @@ const SECTIONS = [
   { key: "por-confirmar", href: "/finanzas/por-confirmar", label: "Por confirmar" },
   { key: "por-cobrar", href: "/finanzas/por-cobrar", label: "Por cobrar" },
   { key: "proveedores", href: "/finanzas/proveedores", label: "Proveedores" },
-  { key: "tesoreria", href: "/finanzas/tesoreria", label: "Tesorería" },
+  { key: "tesoreria", href: "/finanzas/tesoreria", label: "Bancos y cuentas" },
   { key: "conciliacion", href: "/finanzas/conciliacion", label: "Conciliación" },
   { key: "gastos", href: "/finanzas/gastos", label: "Gastos" },
 ] as const;

@@ -5572,7 +5572,7 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-appearance-preview-tools { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px; padding: 10px; }
 .admin-appearance-preview-tools .admin-field { flex: 1 1 180px; }
 .admin-appearance-preview-tools .admin-btn { font-size: 11px; }
-.admin-appearance-preview-stage { max-height: calc(100dvh - var(--a-topbar) - 150px); min-height: 220px; overflow: auto; overscroll-behavior: contain; padding: 8px; background: var(--a-panel-2); scrollbar-width: thin; }
+.admin-appearance-preview-stage { max-height: calc(100dvh - var(--a-topbar) - 215px); min-height: 180px; overflow: auto; overscroll-behavior: contain; padding: 8px; background: var(--a-panel-2); scrollbar-width: thin; }
 .admin-appearance-preview-stage > [data-frame] { margin-inline: auto; }
 .admin-appearance-preview-stage[data-device="mobile"] > [data-frame] { max-width: 360px; }
 .admin-appearance-preview-note { margin: 0; padding: 8px 12px; }
