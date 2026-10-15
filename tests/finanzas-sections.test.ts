@@ -107,3 +107,10 @@ test("confirmación parcial usa clave estable y la ruta comparte la transacción
   assert.match(route, /scope: "finance:expected:confirm"/);
   assert.match(route, /confirmExpectedPayment\(\{[\s\S]*?\btx,[\s\S]*?\bafterCommit,/);
 });
+
+test("el CSV de la página conserva estados pero su total incluye sólo lo cobrado", () => {
+  const csv = /function exportCollections\(\)[\s\S]*?function exportPendingCollections/.exec(moduleSource)?.[0] ?? "";
+  assert.match(csv, /receivedAmount\(settledPayments\)/);
+  assert.match(csv, /paymentStatusLabel\(payment\.status\)/);
+  assert.match(csv, /Total cobrado de esta página/);
+});

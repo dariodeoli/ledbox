@@ -46,6 +46,7 @@ import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
 import {
   accountsForPaymentMethod,
   COLLECTED_PAYMENT_METHODS,
+  receivedAmount,
   EXPENSE_CATEGORIES,
   expectedPaymentNeedsAction,
   groupProofsByBudget,
@@ -1621,7 +1622,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
   /** CSV de cobros cobrados/anulados con los mismos filtros de la lista. */
   function exportCollections() {
-    const total = settledPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const total = receivedAmount(settledPayments);
     const blocks: CsvBlock[] = [
       {
         title: "Cobros de clientes · página visible",
@@ -1637,7 +1638,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             paymentStatusLabel(payment.status),
             payment.amount,
           ]),
-          ["", "", "", "", "", "", "Total", total],
+          ["", "", "", "", "", "", "Total cobrado de esta página", total],
         ],
       },
     ];
