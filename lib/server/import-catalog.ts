@@ -18,6 +18,9 @@ import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/invent
 import { findWarehouseByCode } from "@/lib/server/inventory-warehouses";
 import { assignmentCountsAt, assignmentRange, committedAssignmentWhere, EVENT_RANGE_SELECT, lockInventoryItems } from "@/lib/server/inventory-availability";
 import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
+import { addItemsToCollection, COLLECTION_PHOTO_WIDTH, upsertCollectionByName } from "@/lib/server/collections";
+import { prepareImage } from "@/lib/server/covers";
+import { collectionSlug } from "@/lib/collections";
 import { prepareCategoryPhoto, setCategoryImage } from "@/lib/server/category-image";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
@@ -29,6 +32,7 @@ import {
   type AdjustableState,
   type UnitStateCounts,
   type CatalogCategory,
+  type CatalogCollection,
   type CatalogPlan,
   type CatalogProduct,
   type ExistingItem,
@@ -180,6 +184,8 @@ export type ImportInput = {
   photoProblems: ImportProblem[];
   /** Sección opcional `categorias` del archivo (foto propia y orden); ausente = ninguna. */
   categories?: CatalogCategory[];
+  /** Sección opcional `colecciones` del archivo (descripción, foto y orden); ausente = solo las que nombran los productos. */
+  collections?: CatalogCollection[];
 };
 
 /** Vista previa: no escribe nada. */
@@ -194,6 +200,7 @@ export async function previewCatalog(organizationId: string, input: ImportInput)
     photoNames: input.photos ? new Set(input.photos.keys()) : null,
     photoProblems: input.photoProblems,
     categories: input.categories ?? [],
+    collections: input.collections ?? [],
   });
 }
 
@@ -207,6 +214,10 @@ export type ApplyResult = {
   fotos: number;
   /** Fotos de categoría guardadas. */
   fotosCategoria: number;
+  /** Fotos extra de producto guardadas, colecciones tocadas (creadas o actualizadas) y fotos de colección guardadas. */
+  fotosExtra: number;
+  colecciones: number;
+  fotosColeccion: number;
   omitidos: number;
   fallidos: ApplyFailure[];
   summary: CatalogPlan["summary"];
@@ -245,6 +256,8 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
     ...specData(product),
     billingUnit: billingUnitOf(product.cobro),
     ...(product.precio ? { listPrice: product.precio } : {}),
+    // Estilos para filtrar: ausente = no se toca; una lista (aun vacía) reemplaza.
+    ...(Array.isArray(product.estilo) ? { tags: product.estilo } : {}),
   };
   if (planned.existingId) {
     const locked = await lockInventoryItems(tx, organizationId, [planned.existingId]);
@@ -333,6 +346,7 @@ async function writeComboMeta(tx: Tx, organizationId: string, id: string, planne
       ...specData(product),
       billingUnit: billingUnitOf(product.cobro),
       ...(product.precio ? { listPrice: product.precio } : {}),
+      ...(Array.isArray(product.estilo) ? { tags: product.estilo } : {}),
       ...visibilityData(current),
       ...(photoChanged ? { imageData: photo!.data, imageMime: photo!.mime } : {}),
     },
@@ -348,6 +362,26 @@ async function photoFor(planned: PlannedProduct, photos: Map<string, Uint8Array>
   const prepared = await preparePhoto(bytes);
   if (!prepared) failures.push({ codigo: planned.product.codigo, mensaje: `La foto «${planned.foto}» no se pudo procesar; el producto se importó sin foto.` });
   return prepared;
+}
+
+/**
+ * Fotos extra de un producto: el archivo manda (reemplaza la lista). Idempotente: si las fotos del ZIP son las mismas que
+ * ya tiene, en el mismo orden, no escribe nada. Una transacción con el candado del producto; siempre de ESTA empresa.
+ */
+async function writeExtraPhotos(organizationId: string, itemId: string, photos: PreparedPhoto[]): Promise<boolean> {
+  return db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "InventoryItem" WHERE "id" = ${itemId} AND "organizationId" = ${organizationId} FOR UPDATE`;
+      const current = await tx.inventoryImage.findMany({ where: { organizationId, itemId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { data: true } });
+      if (current.length === photos.length && current.every((row, index) => sameBytes(row.data, photos[index].data))) return false;
+      await tx.inventoryImage.deleteMany({ where: { organizationId, itemId } });
+      for (let index = 0; index < photos.length; index += 1) {
+        await tx.inventoryImage.create({ data: { id: randomUUID(), organizationId, itemId, position: index + 1, mime: photos[index].mime, size: photos[index].data.byteLength, data: photos[index].data } });
+      }
+      return true;
+    },
+    { timeout: 30_000 },
+  );
 }
 
 export type ApplyProgress = { hecho: number; total: number; fase: string };
@@ -516,6 +550,65 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     }
   }
 
+  // Fotos extra: después de los productos (necesitan su id). Cada foto se procesa una vez aunque la compartan varios.
+  let extraPhotosSaved = 0;
+  const preparedExtra = new Map<string, Promise<PreparedPhoto | null>>();
+  for (const item of planned) {
+    const code = item.product.codigo;
+    const itemId = idByCode.get(code);
+    if (!itemId || failedProducts.has(code) || item.fotosExtra === null || !input.photos) continue;
+    try {
+      const ready: PreparedPhoto[] = [];
+      for (const name of item.fotosExtra) {
+        let promise = preparedExtra.get(name);
+        if (!promise) {
+          const bytes = input.photos.get(name);
+          promise = bytes ? preparePhoto(bytes) : Promise.resolve(null);
+          preparedExtra.set(name, promise);
+        }
+        const photo = await promise;
+        if (photo) ready.push(photo);
+        else failures.push({ codigo: code, mensaje: `La foto extra «${name}» no se pudo procesar; se importó sin ella.` });
+      }
+      if (await writeExtraPhotos(organizationId, itemId, ready)) extraPhotosSaved += ready.length;
+    } catch (error) {
+      console.error(`[import-catalogo] fotos extra de ${code}:`, error instanceof Error ? error.message : error);
+      failures.push({ codigo: code, mensaje: error instanceof Error ? error.message : "No se pudieron guardar las fotos extra." });
+    }
+  }
+
+  // Colecciones: se crean o se actualizan por nombre (sin tildes ni mayúsculas) y se les suman los productos que las nombran.
+  let collectionsTouched = 0;
+  let collectionPhotos = 0;
+  const memberIds = new Map<string, string[]>();
+  for (const item of planned) {
+    const itemId = idByCode.get(item.product.codigo);
+    if (!itemId || failedProducts.has(item.product.codigo)) continue;
+    for (const name of item.product.colecciones ?? []) memberIds.set(collectionSlug(name), [...(memberIds.get(collectionSlug(name)) ?? []), itemId]);
+  }
+  for (const entry of plan.collections) {
+    try {
+      let prepared: Awaited<ReturnType<typeof prepareImage>> | null = null;
+      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      if (bytes) {
+        prepared = await prepareImage(bytes, COLLECTION_PHOTO_WIDTH);
+        if (!prepared.ok) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${prepared.error}` });
+      }
+      await db.$transaction(async (tx) => {
+        const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden });
+        await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
+        if (prepared?.ok) {
+          await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
+          collectionPhotos += 1;
+        }
+      });
+      collectionsTouched += 1;
+    } catch (error) {
+      console.error(`[import-catalogo] colección ${entry.nombre}:`, error instanceof Error ? error.message : error);
+      failures.push({ codigo: `colección ${entry.nombre}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la colección." });
+    }
+  }
+
   const result: ApplyResult = {
     lote: input.lote,
     creados: created,
@@ -523,6 +616,9 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     juegos: combosDone,
     fotos: photosSaved,
     fotosCategoria: categoryPhotos,
+    fotosExtra: extraPhotosSaved,
+    colecciones: collectionsTouched,
+    fotosColeccion: collectionPhotos,
     omitidos: plan.summary.omitidos + failedProducts.size,
     fallidos: failures,
     summary: plan.summary,
@@ -545,6 +641,8 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         juegos: combosDone,
         fotos: photosSaved,
         fotosCategoria: categoryPhotos,
+        fotosExtra: extraPhotosSaved,
+        colecciones: collectionsTouched,
         omitidos: result.omitidos,
         fallidos: failures.length,
       },

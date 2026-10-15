@@ -202,7 +202,7 @@ test("color de marca: el tema oscuro del portal se deriva aclarando hasta AA sob
 test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; lo demás se rechaza", () => {
   assert.deepEqual([...TEMPLATES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa"]);
   const ok = parseAppearance({ template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "  Envíos   a todo Asunción " }, priceMode: "unit" });
-  assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit" } });
+  assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit", home: DEFAULT_APPEARANCE.home } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);
   assert.equal(parseAppearance({ template: "clasica" }).ok, false, "los nombres viejos solo se leen de la base, no se aceptan del panel");
   assert.equal(parseAppearance({ font: "Comic Sans" }).ok, false);

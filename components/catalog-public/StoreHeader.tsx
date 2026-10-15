@@ -10,11 +10,11 @@ import { StoreLogo } from "./StoreLogo";
  */
 export type StoreNavLink = { href: string; label: string };
 
-export function storeNavLinks(basePath: string, options: { contact: boolean; categories?: ReadonlyArray<{ name: string; href: string }> }): StoreNavLink[] {
+export function storeNavLinks(basePath: string, options: { contact: boolean; howItWorks?: boolean; categories?: ReadonlyArray<{ name: string; href: string }> }): StoreNavLink[] {
   return [
     { href: `${basePath}#catalogo`, label: "Catálogo" },
     ...(options.categories ?? []).map((category) => ({ href: category.href, label: category.name })),
-    { href: `${basePath}#como-funciona`, label: "Cómo funciona" },
+    ...(options.howItWorks === false ? [] : [{ href: `${basePath}#como-funciona`, label: "Cómo funciona" }]),
     ...(options.contact ? [{ href: `${basePath}#contacto`, label: "Contacto" }] : []),
   ];
 }

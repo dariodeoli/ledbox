@@ -122,10 +122,10 @@ export async function saveOrgAppearance(context: AdminContext, body: unknown): P
   }
 
   const flat = (a: Appearance, accent: string | null, phrase: string | null) => ({
-    template: a.template, font: a.font, displayFont: a.displayFont, anuncio: JSON.stringify(a.announcement), priceMode: a.priceMode, brandColor: accent, tagline: phrase,
+    template: a.template, font: a.font, displayFont: a.displayFont, anuncio: JSON.stringify(a.announcement), priceMode: a.priceMode, brandColor: accent, tagline: phrase, inicio: JSON.stringify(a.home),
   });
   const changes = auditChanges(flat(currentAppearance, settings?.storefrontAccent ?? null, settings?.storefrontTagline ?? null), flat(parsed.appearance, brandColor, tagline), [
-    "template", "font", "displayFont", "anuncio", "priceMode", "brandColor", "tagline",
+    "template", "font", "displayFont", "anuncio", "priceMode", "brandColor", "tagline", "inicio",
   ]);
   if (changes) {
     await db.organization.update({ where: { id: organizationId }, data: { appearance: parsed.appearance as unknown as Prisma.InputJsonValue } });

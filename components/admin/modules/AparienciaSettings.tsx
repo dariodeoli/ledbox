@@ -27,6 +27,8 @@ import { useAdminSession } from "../AdminShell";
 import { FileField, SegmentedField, SelectField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminButtonLink, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { StorePreview } from "./StorePreview";
+import { EMPTY_HOME_PHOTOS, HomeLayoutPanels, type HomePhotoStates } from "./HomeLayoutPanels";
+import { DEFAULT_HOME, HOME_PHOTO_SLOTS, type HomeConfig, type HomePhotoSlot } from "@/lib/store-home";
 
 /**
  * Ajustes → Apariencia: cómo se ve la empresa para sus clientes (tienda y catálogo, mayorista, seguimiento del pedido,
@@ -50,7 +52,7 @@ const PRESET_COLORS = ["#0b5cd5", "#0f766e", "#b45309", "#9f1239", "#6d28d9", "#
 type CoverState = { file: File | null; previewUrl: string | null; remove: boolean; dims: { width: number; height: number } | null };
 const EMPTY_COVER: CoverState = { file: null, previewUrl: null, remove: false, dims: null };
 
-type Loaded = { appearance: Appearance; brandColor: string | null; tagline: string | null; covers: Record<CoverKind, string | null>; slug: string | null };
+type Loaded = { appearance: Appearance; brandColor: string | null; tagline: string | null; covers: Record<CoverKind, string | null>; homePhotos: Record<HomePhotoSlot, string | null>; slug: string | null };
 
 function readImageSize(url: string): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
@@ -79,6 +81,8 @@ export function AparienciaSettings() {
   const [color, setColor] = useState("");
   const [covers, setCovers] = useState<Record<CoverKind, CoverState>>({ desktop: EMPTY_COVER, mobile: EMPTY_COVER });
   const [coverError, setCoverError] = useState<Record<CoverKind, string>>({ desktop: "", mobile: "" });
+  const [home, setHome] = useState<HomeConfig>(DEFAULT_HOME);
+  const [homePhotos, setHomePhotos] = useState<HomePhotoStates>(EMPTY_HOME_PHOTOS);
   const [frame, setFrame] = useState<"desktop" | "mobile">("desktop");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -96,6 +100,8 @@ export function AparienciaSettings() {
     setTagline(initial.tagline ?? "");
     setColor(initial.brandColor ?? "");
     setCovers({ desktop: EMPTY_COVER, mobile: EMPTY_COVER });
+    setHome(initial.appearance.home);
+    setHomePhotos(EMPTY_HOME_PHOTOS);
   }, [initial]);
 
   useEffect(
@@ -105,7 +111,7 @@ export function AparienciaSettings() {
     [],
   );
 
-  const effective: Appearance = { template, font, displayFont: isDisplayFont(displayFont) ? displayFont : null, announcement: { on: annOn, text: annText.trim() }, priceMode };
+  const effective: Appearance = { template, font, displayFont: isDisplayFont(displayFont) ? displayFont : null, announcement: { on: annOn, text: annText.trim() }, priceMode, home };
   const brand = useMemo(() => adjustBrandColor(color), [color]);
   const brandHex = brand.ok ? brand.result?.color ?? null : null;
   const colorFieldError = !brand.ok ? brand.error : null;
@@ -120,7 +126,9 @@ export function AparienciaSettings() {
     priceMode !== initial!.appearance.priceMode ||
     tagline.trim() !== (initial!.tagline ?? "") ||
     (normalizeHex(color) ?? null) !== (initial!.brandColor ?? null) ||
-    COVER_KINDS.some((kind) => covers[kind].file || covers[kind].remove)
+    COVER_KINDS.some((kind) => covers[kind].file || covers[kind].remove) ||
+    JSON.stringify(home) !== JSON.stringify(initial!.appearance.home) ||
+    HOME_PHOTO_SLOTS.some((slot) => homePhotos[slot].file || homePhotos[slot].remove)
   );
   const invalid = Boolean(colorFieldError) || Boolean(annError) || COVER_KINDS.some((kind) => coverError[kind]);
 
@@ -173,10 +181,32 @@ export function AparienciaSettings() {
         }
       }
     }
+    // 1b) Fotos del inicio (editorial e inspiración), igual que las portadas.
+    for (const slot of HOME_PHOTO_SLOTS) {
+      const photo = homePhotos[slot];
+      if (photo.remove && !photo.file) {
+        const removed = await adminSend(`/api/admin/organization/appearance/home-photos/${slot}`, undefined, "DELETE");
+        if (!removed.ok) {
+          setBusy(false);
+          setError(`${slot}: ${removed.error}`);
+          return;
+        }
+      }
+      if (photo.file) {
+        const form = new FormData();
+        form.append("file", photo.file, photo.file.name);
+        const uploaded = await adminApiUpload(`/api/admin/organization/appearance/home-photos/${slot}`, form, { timeoutMs: 60_000 });
+        if (!uploaded.ok) {
+          setBusy(false);
+          setError(`${slot}: ${uploaded.error}`);
+          return;
+        }
+      }
+    }
     // 2) Plantilla, tipografía, fondo y color (el servidor vuelve a validar el contraste).
     const result = await adminSend<{ appearance: Appearance; brandColor: string | null; tagline: string | null; brandNotice: string | null }>(
       "/api/admin/organization/appearance",
-      { template, font, displayFont: effective.displayFont, announcement: effective.announcement, priceMode, tagline: tagline.trim(), brandColor: color.trim() ? color : null },
+      { template, font, displayFont: effective.displayFont, announcement: effective.announcement, priceMode, home, tagline: tagline.trim(), brandColor: color.trim() ? color : null },
       "PATCH",
     );
     setBusy(false);
@@ -301,6 +331,8 @@ export function AparienciaSettings() {
                     <SelectField label="Tipografía del portal y el presupuesto" value={font} onChange={(value) => { setFont(value as FontId); setNotice(""); }} options={FONTS.map((entry) => ({ value: entry.id, label: entry.label }))} hint="No cambia la tienda: ella usa las fuentes de su plantilla." disabled={demo} />
                   </div>
                 </AdminPanel>
+
+                <HomeLayoutPanels home={home} onHome={(next) => { setHome(next); setNotice(""); }} photos={homePhotos} onPhotos={(next) => { setHomePhotos(next); setNotice(""); }} versions={initial.homePhotos} disabled={demo} />
 
                 <AdminPanel title="Portada" icon="image" meta="Dos archivos separados · JPG, PNG o WebP · máximo 2 MB cada uno">
                   <div className="admin-settings">

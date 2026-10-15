@@ -5,6 +5,7 @@ import { capacityText, cardSpecs } from "@/lib/catalog-card";
 import type { ProductDetail } from "@/lib/server/catalog-product";
 import type { CatalogItemView } from "./CatalogBrowser";
 import { skuLabel } from "./ProductTile";
+import { ProductGallery } from "./ProductGallery";
 import { ProductPlaceholder, XIcon } from "./StoreIcons";
 import { Stepper } from "./Stepper";
 import { QuickViewSkeleton } from "./StoreSkeletons";
@@ -99,14 +100,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
         </header>
         <div className="cp-qv-body" ref={body}>
           <div className="cp-qv-main">
-            <div className="cp-qv-photo">
-              {item.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.imageUrl} alt={item.name} />
-              ) : (
-                <ProductPlaceholder size={56} />
-              )}
-            </div>
+            <ProductGallery images={[...(item.imageUrl ? [item.imageUrl] : []), ...(item.gallery ?? [])]} name={item.name} compact />
             <div className="cp-qv-info">
               <p className="cp-panel-meta">{item.sku ? skuLabel(item.sku) : "Sin código"} · {isPackage ? "Juego" : item.category.split("›")[0].trim()}</p>
               <h2 id="qv-titulo" className="cp-qv-name">{item.name}</h2>

@@ -16,6 +16,9 @@ import type { CartView } from "@/lib/server/store-cart";
 import { MAX_QUANTITY, formatGs, priceUnitLabel, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { cardSpecs } from "@/lib/catalog-card";
 import { CartDrawer, type Done } from "./CartDrawer";
+import { FiltersDrawer, FiltersPanel } from "./StoreFilters";
+import { EMPTY_FILTERS, activeFilterCount, capacityOptions, matchesFilters, type StoreFilters } from "@/lib/store-filters";
+import { collectTags } from "@/lib/store-tags";
 import { ContactPanel } from "./ContactPanel";
 import { EventPicker } from "./EventPicker";
 import { FilterBar } from "./FilterBar";
@@ -44,6 +47,11 @@ export type CatalogItemView = {
   dimensions?: string | null;
   price: CatalogPrice | null;
   availability: AvailabilityHint | null;
+  /** Fotos extra (después de `imageUrl`), estilos para filtrar, «destacado» y slugs de las colecciones del producto. */
+  gallery?: string[];
+  tags?: string[];
+  featured?: boolean;
+  collections?: string[];
   /** Paquete (combo): sus piezas con precio, para mostrar la suma por unidad y el ahorro. */
   package?: Array<{ name: string; quantity: number; price: CatalogPrice }> | null;
 };
@@ -76,6 +84,9 @@ type Props = {
   /** Base de las fichas de producto (`<base>/p/<id>`) y nombre de la tienda (mensaje del enlace mágico). */
   fichaBase?: string;
   storeName?: string;
+  /** Colecciones para el filtro (solo las visibles con productos) y la que viene elegida desde un link. */
+  collections?: Array<{ slug: string; name: string }>;
+  initialCollection?: string | null;
 };
 
 const money = formatGs;
@@ -106,7 +117,7 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
@@ -120,6 +131,8 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
   const [sort, setSort] = useState<SortKey>("destacados");
+  const [filters, setFilters] = useState<StoreFilters>(() => ({ ...EMPTY_FILTERS, collection: initialCollection && collections.some((entry) => entry.slug === initialCollection) ? initialCollection : null }));
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [revalidateFailed, setRevalidateFailed] = useState(false);
   const { toast, show: showToast } = useStoreToast();
@@ -200,11 +213,19 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   }, []);
 
   const categories = useMemo(() => [...new Set(items.map((item) => item.category))], [items]);
+  const days = range?.days ?? 1;
+  const capacities = useMemo(() => capacityOptions(items), [items]);
+  const allTags = useMemo(() => collectTags(items.map((item) => item.tags ?? [])), [items]);
   const visible = useMemo(() => {
     const needle = norm(query.trim());
-    return items.filter((item) => (!category || item.category === category) && (!needle || norm(`${item.name} ${item.sku ?? ""} ${item.category} ${item.description ?? ""}`).includes(needle)));
-  }, [items, query, category]);
-  const days = range?.days ?? 1;
+    return items.filter((item) => {
+      if (category && item.category !== category) return false;
+      if (needle && !norm(`${item.name} ${item.sku ?? ""} ${item.category} ${item.description ?? ""} ${(item.tags ?? []).join(" ")}`).includes(needle)) return false;
+      return matchesFilters(item, filters, { unit: item.price ? catalogLine(item.price, days).unitPrice : 0, capacities });
+    });
+  }, [items, query, category, filters, capacities, days]);
+  const changeFilters = useCallback((next: StoreFilters) => { setFilters(next); setShown(PAGE_SIZE); }, []);
+  const filterProps = { filters, onChange: changeFilters, capacities, tags: allTags, collections, showPrices, hasRange: Boolean(range), resultCount: visible.length };
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
   // Misma regla de días que el presupuesto (escalones por día o total, evento): `lib/price-tiers.ts`.
   const pricingFor = (item: CatalogItemView) => (item.price ? catalogLine(item.price, days) : null);
@@ -451,38 +472,53 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
       <EventPicker slug={slug} range={range} variant="bar" />
 
-      <FilterBar categories={categories} category={category} onCategory={(value) => { setCategory(value); setShown(PAGE_SIZE); }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} />
-      {items.length > 0 ? <p className="cp-results" role="status" data-testid="results-count">{ordered.length === 1 ? "Mostrando 1 producto" : `Mostrando ${ordered.length} productos`}</p> : null}
-      {cartNotice ? (
-        <p className="cp-note" role="status" data-testid="cart-notice">
-          {cartNotice} <button type="button" className="cp-link cp-linkbtn" onClick={() => setCartNotice("")}>Entendido</button>
-        </p>
-      ) : null}
+      <FilterBar categories={categories} category={category} onCategory={(value) => { setCategory(value); setShown(PAGE_SIZE); }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
+      <div className="cp-catalog-layout">
+        {items.length > 0 ? (
+          <aside className="cp-filters" aria-label="Filtros del catálogo">
+            <div className="cp-filters-head">
+              <h3 className="cp-fgroup-title">Filtros</h3>
+              {activeFilterCount(filters) > 0 ? <button type="button" className="cp-link cp-linkbtn" onClick={() => changeFilters(EMPTY_FILTERS)}>Limpiar</button> : null}
+            </div>
+            <FiltersPanel {...filterProps} />
+          </aside>
+        ) : null}
+        <div className="cp-catalog-main">
+        {items.length > 0 ? <p className="cp-results" role="status" data-testid="results-count">{ordered.length === 1 ? "Mostrando 1 producto" : `Mostrando ${ordered.length} productos`}</p> : null}
+        {cartNotice ? (
+          <p className="cp-note" role="status" data-testid="cart-notice">
+            {cartNotice} <button type="button" className="cp-link cp-linkbtn" onClick={() => setCartNotice("")}>Entendido</button>
+          </p>
+        ) : null}
 
-      {items.length === 0 ? <EmptyState icon="box" title="Todavía no hay productos publicados" text="Cuando la empresa publique su catálogo lo vas a ver acá." /> : null}
-      {items.length > 0 && visible.length === 0 ? (
-        <EmptyState icon="search" title="No encontramos productos con esos filtros" text="Probá con otra palabra o quitá los filtros." action={{ label: "Limpiar filtros", onClick: () => { setQuery(""); setCategory(null); setShown(PAGE_SIZE); } }} />
-      ) : null}
-      {flat
-        ? page.length > 0 ? <ul className="cp-grid" aria-label="Productos">{page.map(renderItem)}</ul> : null
-        : pageGroups.map(([groupName, rows]) => (
-            <section key={groupName} className="cp-group" aria-label={groupName}>
-              <div className="cp-group-head">
-                <h3 className="cp-group-title">{groupName}</h3>
-                <span className="cp-group-count">{visible.filter((item) => item.category === groupName).length}</span>
-              </div>
-              <ul className="cp-grid">{rows.map(renderItem)}</ul>
-            </section>
-          ))}
-      {ordered.length > shown ? (
-        <div className="cp-loadmore">
-          <button type="button" className="cp-btn" onClick={() => setShown((value) => value + PAGE_SIZE)}>Mostrar más productos</button>
-          <span className="cp-hint">Viendo {shown} de {ordered.length}</span>
+        {items.length === 0 ? <EmptyState icon="box" title="Todavía no hay productos publicados" text="Cuando la empresa publique su catálogo lo vas a ver acá." /> : null}
+        {items.length > 0 && visible.length === 0 ? (
+          <EmptyState icon="search" title="No encontramos productos con esos filtros" text="Probá con otra palabra o quitá los filtros." action={{ label: "Limpiar filtros", onClick: () => { setQuery(""); setCategory(null); setFilters(EMPTY_FILTERS); setShown(PAGE_SIZE); } }} />
+        ) : null}
+        {flat
+          ? page.length > 0 ? <ul className="cp-grid" aria-label="Productos">{page.map(renderItem)}</ul> : null
+          : pageGroups.map(([groupName, rows]) => (
+              <section key={groupName} className="cp-group" aria-label={groupName}>
+                <div className="cp-group-head">
+                  <h3 className="cp-group-title">{groupName}</h3>
+                  <span className="cp-group-count">{visible.filter((item) => item.category === groupName).length}</span>
+                </div>
+                <ul className="cp-grid">{rows.map(renderItem)}</ul>
+              </section>
+            ))}
+        {ordered.length > shown ? (
+          <div className="cp-loadmore">
+            <button type="button" className="cp-btn" onClick={() => setShown((value) => value + PAGE_SIZE)}>Mostrar más productos</button>
+            <span className="cp-hint">Viendo {shown} de {ordered.length}</span>
+          </div>
+        ) : null}
+
         </div>
-      ) : null}
+      </div>
 
       {count > 0 ? <OrderBar count={count} text={barText} onOpen={() => { setDone(null); setOpen(true); }} /> : null}
       {toast}
+      {filtersOpen ? <FiltersDrawer props={filterProps} onClose={() => setFiltersOpen(false)} onClear={() => changeFilters(EMPTY_FILTERS)} /> : null}
 
       {contactOpen ? (
         <ThemePortal>

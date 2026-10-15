@@ -144,6 +144,8 @@ model Organization {
   /// de una lista cerrada y fondo. El color de marca vive en `OrganizationRentalSettings.storefrontAccent`.
   appearance        Json?
   covers            OrganizationCover[]
+  inventoryImages   InventoryImage[]
+  collections       Collection[]
   catalogAccessRequests CatalogAccessRequest[]
   memberships       OrganizationMembership[]
   adminMemberships  AdminMembership[]
@@ -1963,6 +1965,12 @@ model InventoryItem {
   supplier           Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchasedAt        DateTime?
   warrantyUntil      DateTime?
+  /// Tienda web (parte 2): «Destacado» (sección Destacados del inicio) y estilos o colores para filtrar.
+  featured           Boolean          @default(false)
+  tags               String[]         @default([])
+  /// Fotos extra del producto (la principal sigue en `imageUrl`/`imageData`).
+  extraImages        InventoryImage[]
+  collectionLinks    CollectionItem[]
 
   @@unique([organizationId, sku])
   @@index([status, category])
@@ -2983,4 +2991,58 @@ model DeliveryNotePhoto {
 model DeliveryNoteCounter {
   organizationId String @id
   last           Int    @default(0)
+}
+
+/// Foto extra de un producto (tienda, parte 2). La foto principal queda en `InventoryItem`; estas son
+/// las siguientes, en `position` ascendente. Mismo pipeline de compresión que la foto de producto.
+model InventoryImage {
+  id             String        @id
+  organizationId String
+  itemId         String
+  position       Int           @default(0)
+  alt            String?
+  mime           String
+  size           Int
+  data           Bytes
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, position])
+  @@index([organizationId])
+}
+
+/// Colección con nombre de la tienda («Verde Bosque», «Colección Rayas»): foto de ambientación,
+/// orden y productos. Siempre de una empresa; el slug es único dentro de ella.
+model Collection {
+  id             String           @id
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  visible        Boolean          @default(true)
+  sortOrder      Int              @default(0)
+  imageMime      String?
+  imageData      Bytes?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items          CollectionItem[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, sortOrder])
+}
+
+model CollectionItem {
+  collectionId   String
+  itemId         String
+  organizationId String
+  position       Int           @default(0)
+  collection     Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, itemId])
+  @@index([itemId])
+  @@index([organizationId])
 }

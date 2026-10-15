@@ -46,6 +46,10 @@ import { TIER_SELECT } from "./line-pricing";
 import type { AudiencePriceTier } from "@/lib/price-tiers";
 import { deliveryFee } from "@/lib/delivery-zones";
 import { coverUrl, loadOrgPresentation } from "./org-presentation";
+import { loadHomePhotoVersions, homePhotoUrl } from "./home-photos";
+import { collectionImagePath } from "./collections";
+import { loadGalleryUrls } from "./product-photos";
+import { HOME_PHOTO_SLOTS, type HomePhotoSlot } from "@/lib/store-home";
 import { createPriceRequestInTx, loadPriceRequests, type PriceRequestView } from "./quote-price-request";
 
 /**
@@ -152,12 +156,14 @@ export type PublicStorefront = {
   appearance: AppearanceView;
   /** URLs de la portada por dispositivo; `null` si no subió esa portada. */
   covers: { desktop: string | null; mobile: string | null };
+  /** Fotos de ambientación del inicio (editorial e inspiración); `null` si no subió esa. */
+  homePhotos: Record<HomePhotoSlot, string | null>;
   accessMode: "OPEN" | "REQUEST" | "PRIVATE";
 };
 
 /** Identidad de la tienda para la portada: solo datos que la empresa cargó para el público. */
 export async function loadStorefront(context: PublicCatalogContext): Promise<PublicStorefront> {
-  const presentation = await loadOrgPresentation(context.organization.id);
+  const [presentation, homeVersions] = await Promise.all([loadOrgPresentation(context.organization.id), loadHomePhotoVersions(context.organization.id)]);
   return {
     name: context.organization.name,
     slug: context.organization.slug,
@@ -172,6 +178,7 @@ export async function loadStorefront(context: PublicCatalogContext): Promise<Pub
       desktop: coverUrl(context.organization.slug, "desktop", presentation.covers.desktop),
       mobile: coverUrl(context.organization.slug, "mobile", presentation.covers.mobile),
     },
+    homePhotos: Object.fromEntries(HOME_PHOTO_SLOTS.map((slot) => [slot, homePhotoUrl(context.organization.slug, slot, homeVersions[slot])])) as Record<HomePhotoSlot, string | null>,
     accessMode: context.settings.catalogAccessMode,
   };
 }
@@ -192,6 +199,13 @@ export type PublicCatalogItem = {
   price: CatalogPrice | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
   availability: AvailabilityHint | null;
+  /** Fotos extra (después de `imageUrl`), en el orden que decidió la empresa. */
+  gallery: string[];
+  /** Estilos o colores para filtrar; «Destacado» para la sección Destacados del inicio. */
+  tags: string[];
+  featured: boolean;
+  /** Slugs de las colecciones visibles en las que está. */
+  collections: string[];
   /**
    * Solo en paquetes (combos): sus piezas con el precio de la lista del catálogo, para mostrar
    * «suma por unidad» y «ahorro» con la misma regla de días. `null` si no es un combo o no se muestran precios.
@@ -219,6 +233,8 @@ type CatalogRow = {
   bufferAfterMin: number | null;
   incidentHold: number;
   webSortOrder: number;
+  featured: boolean;
+  tags: string[];
   categoryRef: { sortOrder: number } | null;
   _count: { units: number };
 };
@@ -250,6 +266,8 @@ export async function loadVisibleRows(organizationId: string, list: PriceList, i
       bufferAfterMin: true,
       incidentHold: true,
       webSortOrder: true,
+      featured: true,
+      tags: true,
       categoryRef: { select: { sortOrder: true } },
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
@@ -305,7 +323,15 @@ export async function hintsFor(organizationId: string, rows: readonly CatalogRow
 export async function loadPublicCatalogItems(context: PublicCatalogContext, range: PublicRange | null): Promise<PublicCatalogItem[]> {
   const rows = await loadVisibleRows(context.organization.id, context.priceList);
   const hints = range ? await hintsFor(context.organization.id, rows, range) : null;
-  const packages = context.settings.publicShowPrices ? await loadPackages(context, rows.map((row) => row.id)) : new Map<string, NonNullable<PublicCatalogItem["package"]>>();
+  const ids = rows.map((row) => row.id);
+  const packages = context.settings.publicShowPrices ? await loadPackages(context, ids) : new Map<string, NonNullable<PublicCatalogItem["package"]>>();
+  // Una consulta por tema (sin los bytes de las fotos): galería y colecciones de todo el catálogo juntas.
+  const [galleries, memberships] = await Promise.all([
+    loadGalleryUrls(context.organization.id, ids),
+    ids.length ? db.collectionItem.findMany({ where: { organizationId: context.organization.id, itemId: { in: ids }, collection: { visible: true } }, orderBy: { position: "asc" }, select: { itemId: true, collection: { select: { slug: true } } } }) : [],
+  ]);
+  const slugsByItem = new Map<string, string[]>();
+  for (const row of memberships) slugsByItem.set(row.itemId, [...(slugsByItem.get(row.itemId) ?? []), row.collection.slug]);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -317,8 +343,46 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     dimensions: row.dimensions?.trim() || null,
     price: context.settings.publicShowPrices ? catalogPriceFor(row, context.priceList) : null,
     availability: hints?.get(row.id) ?? null,
+    gallery: galleries.get(row.id) ?? [],
+    tags: row.tags,
+    featured: row.featured,
+    collections: slugsByItem.get(row.id) ?? [],
     package: packages.get(row.id) ?? null,
   }));
+}
+
+/** Colección tal como la ve el público: solo las visibles y solo con productos publicados en ESTE catálogo. */
+export type PublicCollection = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  /** Productos publicados, en el orden de la colección. */
+  itemIds: string[];
+};
+
+/** Nombre y descripción de una colección visible (metadatos de la landing): una consulta liviana, sin cargar el catálogo. */
+export async function loadCollectionMeta(organizationId: string, slug: string): Promise<{ name: string; description: string | null } | null> {
+  return db.collection.findFirst({ where: { organizationId, slug, visible: true, items: { some: {} } }, select: { name: true, description: true } });
+}
+
+export async function loadPublicCollections(organizationId: string, visibleItemIds: ReadonlySet<string>): Promise<PublicCollection[]> {
+  const rows = await db.collection.findMany({
+    where: { organizationId, visible: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, slug: true, name: true, description: true, imageMime: true, updatedAt: true, items: { orderBy: { position: "asc" }, select: { itemId: true } } },
+  });
+  return rows
+    .map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      description: row.description,
+      imageUrl: row.imageMime ? collectionImagePath(row.id, row.updatedAt) : null,
+      itemIds: row.items.map((entry) => entry.itemId).filter((id) => visibleItemIds.has(id)),
+    }))
+    .filter((collection) => collection.itemIds.length > 0);
 }
 
 /** Zonas de flete para la tienda: solo las activas; sin montos si la tienda no muestra precios. */
