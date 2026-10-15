@@ -209,19 +209,22 @@ export type AdminMenuItem = {
 
 /**
  * Menú de acciones compacto (issue #143): un solo botón «⋯» agrupa las acciones
- * secundarias de la fila/tarjeta (imprimir, firma, portal…) sin sumar una fila
- * de íconos. El panel flotante se posiciona con `position: fixed` para que no lo
+ * secundarias de la fila/tarjeta. Los accesos frecuentes pueden agruparse
+ * en una fila de iconos dentro del panel. El panel flotante se posiciona con `position: fixed` para que no lo
  * recorte el scroll horizontal de las tablas ni de las columnas del tablero; se
  * cierra al elegir, con Escape o con un clic afuera.
  */
 export function AdminActionsMenu({
   label,
   items,
+  shortcuts = [],
   align = "end",
 }: {
   /** Nombre accesible del menú («Acciones del presupuesto X»). */
   label: string;
   items: readonly AdminMenuItem[];
+  /** Accesos de uso frecuente en una sola fila, con nombre accesible. */
+  shortcuts?: readonly AdminMenuItem[];
   /** Borde al que se ancla el panel; por defecto a la derecha del botón. */
   align?: "start" | "end";
 }) {
@@ -285,7 +288,7 @@ export function AdminActionsMenu({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onDown);
     };
-  }, [open, align, items.length]);
+  }, [open, align, items.length, shortcuts.length]);
 
   useEffect(() => {
     if (!open || !pos) return;
@@ -331,6 +334,20 @@ export function AdminActionsMenu({
           aria-label={label}
           style={{ ...themeTokens, top: pos.top, left: pos.left }}
         >
+          {shortcuts.length > 0 ? <div className="admin-menu-shortcuts" role="group" aria-label="Accesos rápidos">
+            {shortcuts.map((item) => item.href && !item.disabled ? (
+              <Link key={item.label} className="admin-iconbtn" role="menuitem" href={item.href} aria-label={item.label} title={item.title ?? item.label}
+                {...(item.external ? { target: "_blank", rel: "noreferrer" } : {})}
+                onClick={() => { setOpen(false); buttonRef.current?.focus(); }}>
+                <AdminIcon name={item.icon} size={16} />
+              </Link>
+            ) : (
+              <button key={item.label} type="button" className="admin-iconbtn" role="menuitem" aria-label={item.label} title={item.title ?? item.label} disabled={item.disabled}
+                onClick={() => { setOpen(false); buttonRef.current?.focus(); item.onClick?.(); }}>
+                <AdminIcon name={item.icon} size={16} />
+              </button>
+            ))}
+          </div> : null}
           {items.map((item) =>
             item.href ? (
               <Link

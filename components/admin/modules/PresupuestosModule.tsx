@@ -1052,7 +1052,7 @@ export function PresupuestosModule() {
             {primary.label}
           </AdminButton>
         ) : null}
-        <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
+        <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget, menuOnly)} shortcuts={budgetShortcuts(budget)} />
       </span>
     );
   }
@@ -1101,8 +1101,8 @@ export function PresupuestosModule() {
   });
 
   /**
-   * Todas las acciones del presupuesto en un solo menú «•••». La acción lógica
-   * siguiente también vive en el botón de la fila, pero acá no se pierde nada.
+   * Todas las acciones del presupuesto en un solo menú «•••». El detalle reúne pagos,
+   * inventario, firma e historial; el menú conserva los accesos frecuentes.
    */
   /** Archivar / Desarchivar / Eliminar (`budgets.write`); solo se archivan borradores, perdidos o cancelados. */
   function budgetTrashMenu(budget: AdminBudgetRow): AdminMenuItem[] {
@@ -1115,32 +1115,27 @@ export function PresupuestosModule() {
     });
   }
 
-  function budgetMenuItems(budget: AdminBudgetRow): AdminMenuItem[] {
-    const prompt = budgetEventPrompt(budget);
-    const proofs = (proofsByBudget[budget.id] ?? []).length;
+  /** Documentos y compartir: una fila de iconos, sin repetirlos en la lista. */
+  function budgetShortcuts(budget: AdminBudgetRow): AdminMenuItem[] {
     return [
-      { label: "Ver detalle", icon: "eye" as const, onClick: () => openDetail(budget.id), title: `Detalle del presupuesto: ${budget.title}` },
-      ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget), title: `Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}` }] : []),
+      { label: "Imprimir / PDF", icon: "print", href: `/imprimir/presupuesto/${budget.id}`, external: true },
+      ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget) }] : []),
       ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
-      ...(prompt && canCreateEvent ? [prompt === "create" ? { label: "Crear evento", icon: "events" as const, onClick: () => void createEventFor(budget) } : { label: "Confirmar evento", icon: "check" as const, onClick: () => void confirmEventFor(budget) }] : []),
-      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: `/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`, title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
-      ...(writable ? [
-        { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
-        { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
-        { label: budget.securityDeposit ? "Depósito de garantía" : "Definir garantía", icon: "wallet" as const, onClick: () => setDepositBudget(budget) },
-        { label: "Inventario", icon: "inventory" as const, onClick: () => setLinksBudget(budget) },
-        ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
-        ...(!budget.approvedAt && budgetInPlay(budget) ? [{ label: "Aprobar manualmente", icon: "check" as const, onClick: () => openApproval(budget, "approve") }, { label: "Pedir cambios", icon: "alert" as const, onClick: () => openApproval(budget, "request_revision") }] : []),
-      ] : []),
-      { label: budget.publicToken ? "Portal del cliente" : "Generar link del portal", icon: "globe" as const, onClick: () => openPortal(budget), title: `${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}` },
       ...(budget.publicToken || writable ? [
-        { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget), title: `Copiar el link del portal: ${budget.title}` },
+        { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget) },
         { label: "Ver como cliente", icon: "eye" as const, onClick: () => viewAsClient(budget) },
       ] : []),
-      { label: "Firma del cliente", icon: "pen" as const, onClick: () => setSignatureBudget(budget), title: `Firma del cliente: ${budget.title}` },
-      ...(proofs > 0 ? [{ label: `Comprobantes del portal (${proofs})`, icon: "upload" as const, onClick: () => setProofDialog(budget) }] : []),
-      { label: "Imprimir / PDF", icon: "print" as const, href: `/imprimir/presupuesto/${budget.id}`, external: true, title: `Imprimir presupuesto: ${budget.title}` },
-      { label: "Cronología", icon: "audit" as const, onClick: () => setTimelineBudget(budget) },
+    ];
+  }
+
+  function budgetMenuItems(budget: AdminBudgetRow, menuOnly = false): AdminMenuItem[] {
+    const primary = primaryOf(budget);
+    // La fila ya muestra el siguiente paso. En el tablero sigue accesible arriba.
+    return [
+      ...(menuOnly && primary ? [{ label: primary.label, icon: "check" as const, onClick: () => runPrimary(budget, primary) }] : []),
+      { label: "Ver detalle", icon: "eye", onClick: () => openDetail(budget.id), title: "Cliente, pagos, garantía, inventario, firma e historial" },
+      ...(writable && !(menuOnly && primary?.kind === "edit") ? [{ label: "Editar presupuesto", icon: "edit" as const, onClick: () => setPricing(budget) }] : []),
+      { label: budget.publicToken ? "Portal del cliente" : "Generar link del portal", icon: "globe", onClick: () => openPortal(budget) },
       ...budgetTrashMenu(budget),
     ];
   }

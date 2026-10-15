@@ -115,3 +115,10 @@ test("el alta de presupuesto pliega el costo interno y el API rechaza sin ítems
     assert.doesNotMatch(repoFile(file), /(is|are) required\.|not found\./i, `${file}: mensaje en inglés`);
   }
 });
+
+ test("el cliente del diálogo conserva media grilla y el subgrid no invade sus columnas", () => {
+  const css = repoFile("app/globals.css");
+  assert.match(css, /\.admin-dialog-grid > \.admin-field-action \{[^}]*grid-column: span 6;[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.admin-form-grid > \.admin-field-action > \.admin-btn \{ grid-column: 2;/);
+  assert.doesNotMatch(css, /(?<!> )\.admin-field-action > \.admin-btn \{ grid-column: 2;/);
+ });

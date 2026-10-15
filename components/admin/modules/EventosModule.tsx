@@ -569,7 +569,7 @@ export function EventosModule() {
       <AdminModuleContext
         breadcrumb="Ventas / Eventos"
         hint="Qué falta de cada evento: checklist, equipos, seña y personal."
-        meta={`${formatNumber(events.length)} eventos`}
+        meta={`${formatNumber(events.length)} ${events.length === 1 ? "evento" : "eventos"}`}
       />
       <AdminKpis state={kpiState(operations)} label="Indicadores de eventos" className="admin-kpis--2up admin-kpis--eventos">
         <AdminKpi label="Próximos 7 días" icon="calendar" value={formatNumber(counts.next7)} note="por empezar" tone="accent" {...kpiFor("next7")} />
@@ -784,7 +784,7 @@ export function EventosModule() {
                   onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
                   createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
                 />
-                <AdminButton
+                {!editingEventId ? <AdminButton
                   type="button"
                   icon="plus"
                   disabled={Boolean(editingEventId)}
@@ -796,7 +796,7 @@ export function EventosModule() {
                   }}
                 >
                   Nuevo cliente
-                </AdminButton>
+                </AdminButton> : null}
               </div>
               </EventQuickFields>
           </form>

@@ -1700,8 +1700,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-field-action > .admin-btn { justify-self: end; }
   @supports (grid-template-rows: subgrid) {
     .admin-form-grid > .admin-field-action { grid-row: span 3; grid-template-rows: subgrid; align-items: start; }
-    .admin-field-action > .admin-field { grid-row: 1 / span 3; grid-column: 1; }
-    .admin-field-action > .admin-btn { grid-column: 2; grid-row: 2; align-self: center; }
+    .admin-form-grid > .admin-field-action > .admin-field { grid-row: 1 / span 3; grid-column: 1; }
+    .admin-form-grid > .admin-field-action > .admin-btn { grid-column: 2; grid-row: 2; align-self: center; }
   }
 }
 /* Cada campo ocupa tres filas de la grilla (label · control · mensaje) y las
@@ -1951,6 +1951,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-grid[data-columns="3"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 4; }
 .admin-dialog-grid[data-columns="4"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 3; }
 .admin-dialog-grid > [data-size="full"], .admin-dialog-grid > .admin-field--wide, .admin-dialog-grid > .admin-dialog-note { grid-column: 1 / -1; }
+.admin-dialog-grid > .admin-field-action { grid-column: span 6; grid-template-columns: minmax(0, 1fr); }
+.admin-dialog-grid > .admin-field-action > .admin-btn { justify-self: start; max-width: 100%; white-space: normal; }
 .admin-dialog-grid > .admin-col { grid-column: span 6; }
 .admin-dialog-grid > .admin-col[data-span="2"] { grid-column: span 2; } .admin-dialog-grid > .admin-col[data-span="3"] { grid-column: span 3; } .admin-dialog-grid > .admin-col[data-span="4"] { grid-column: span 4; } .admin-dialog-grid > .admin-col[data-span="5"] { grid-column: span 5; } .admin-dialog-grid > .admin-col[data-span="7"] { grid-column: span 7; } .admin-dialog-grid > .admin-col[data-span="8"] { grid-column: span 8; } .admin-dialog-grid > .admin-col[data-span="9"] { grid-column: span 9; } .admin-dialog-grid > .admin-col[data-span="10"] { grid-column: span 10; } .admin-dialog-grid > .admin-col[data-span="12"] { grid-column: 1 / -1; }
 .admin-col { display: grid; align-content: start; min-width: 0; }
@@ -5473,3 +5475,9 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Los nombres de comprobantes deben caber en la ficha móvil. */
 .admin-dialog-facts dd :is(a, .admin-btn) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: start; }
+
+/* Accesos frecuentes del menú, sin repetir filas de texto. */
+.admin-menu-shortcuts { display: flex; align-items: center; gap: 4px; padding: 4px; border-bottom: 1px solid var(--a-line); }
+.admin-menu-shortcuts .admin-iconbtn { flex: 1 1 0; min-width: 36px; min-height: 36px; border-color: transparent; }
+@media (max-width: 767px) { .admin-menu-shortcuts .admin-iconbtn { min-width: 44px; min-height: 44px; } }
+.admin-root ::selection { background: var(--a-accent-soft); color: var(--a-text-strong); }
