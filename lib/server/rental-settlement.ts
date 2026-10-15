@@ -214,14 +214,24 @@ export function lateConfigOf(settings: { lateFeeKind: LateFeeConfig["kind"]; lat
 
 async function budgetForAssignment(tx: Tx, organizationId: string, assignment: ProposeInput["assignment"]) {
   const select = { id: true, rentalSettledAt: true, items: { select: { inventoryId: true, quantity: true, days: true, unitPrice: true, excluded: true } } } as const;
-  if (assignment.budgetId) {
-    const direct = await tx.budget.findFirst({ where: { id: assignment.budgetId, organizationId }, select });
-    if (direct) return direct;
-  }
-  return tx.budget.findFirst({ where: { organizationId, eventId: assignment.eventId, status: { in: ["APPROVED", "SENT", "DRAFT"] } }, orderBy: [{ approvedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }], select });
+  let found: { id: string } | null = null;
+  if (assignment.budgetId) found = await tx.budget.findFirst({ where: { id: assignment.budgetId, organizationId }, select: { id: true } });
+  found ??= await tx.budget.findFirst({ where: { organizationId, eventId: assignment.eventId, status: { in: ["APPROVED", "SENT", "DRAFT"] } }, orderBy: [{ approvedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }], select: { id: true } });
+  if (!found) return null;
+  // Lock del presupuesto (ORDEN DE LOCKS, ver abajo) y relectura: si la liquidación terminó
+  // mientras esperábamos, `rentalSettledAt` ya viene seteado y no se proponen cargos.
+  await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${found.id} AND "organizationId" = ${organizationId} FOR UPDATE`;
+  return tx.budget.findFirst({ where: { id: found.id, organizationId }, select });
 }
 
 /**
+ * ORDEN DE LOCKS (devolución y liquidación, para no abrazarse nunca):
+ *   1. `InventoryItem` (`lockInventoryItems`, ids ordenados), 2. `Budget` (`FOR UPDATE`).
+ * La devolución toma 1 y después 2 (acá); la liquidación toma solo 2, así que ninguna espera un
+ * lock de menor orden teniendo uno de mayor. Quien necesite los dos tiene que respetar ese orden.
+ * Con el presupuesto bloqueado se vuelve a comprobar `rentalSettledAt`: un presupuesto ya
+ * liquidado no recibe cargos PROPOSED nuevos (la liquidación sumó los que existían).
+ *
  * Deja los cargos PROPOSED de una devolución. No lanza: un problema se registra en consola y la
  * devolución sigue. Sin presupuesto del evento no hay a quién cargar y no se inventa nada.
  */

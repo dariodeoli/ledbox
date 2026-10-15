@@ -194,6 +194,30 @@ test("cargos y liquidación de la devolución en PostgreSQL", { skip: !process.e
     assert.equal(after.amount, 80_000, "el extra cobrado queda intacto");
   });
 
+  await t.test("devolver mientras se liquida no deja cargos PROPOSED en un presupuesto ya liquidado", async () => {
+    const s = await seed({ deposit: null });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const holding = new Promise<void>((resolve) => (held = resolve));
+    // La liquidación en vuelo: tiene el presupuesto bloqueado y ya marcó rentalSettledAt (sin commit).
+    const settling = db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${s.budget.id} FOR UPDATE`;
+      await tx.budget.update({ where: { id: s.budget.id }, data: { rentalSettledAt: new Date(), rentalSettlement: { at: new Date().toISOString(), byName: "x", purpose: "DAMAGES", chargesTotal: 0, retained: 0, returned: 0, extra: 0, depositStatus: null } } });
+      held();
+      await gate;
+    });
+    await holding;
+    const returning = s.giveBack({ at: day(15), damaged: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    release();
+    await settling;
+    const result = await returning;
+    assert.ok(result.ok, "la devolución en sí se registra");
+    assert.equal((await charges(s.budget.id)).length, 0, "ni rotura ni demora quedan PROPOSED sobre lo ya liquidado");
+    assert.equal((await db.budget.findUniqueOrThrow({ where: { id: s.budget.id } })).total, 600_000);
+  });
+
   await t.test("liquidar dos veces y en paralelo no duplica nada", async () => {
     const s = await settledFlow(100_000, 12);
     const runs = await Promise.all([1, 2, 3, 4].map(() => settlement.settleBudgetRental(s.context, s.budget.id)));
