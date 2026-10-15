@@ -651,7 +651,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 ## v2.1.129 — 2026-10-15
 
-- Tienda: 16 plantillas agrupadas por rubro, con seis nuevas para producción y sonido (Escenario), empresas (Corporativo), fiestas (Fiesta), catering (Gourmet), infantil (Kids) y carpas y estructuras (Industrial).
+- Tienda: siete plantillas elegidas por rubro: Boutique (eventos, vajilla y decoración), Escenario (producción y sonido), Corporativo (empresas), Fiesta (eventos sociales), Gourmet (catering), Kids (infantil) e Industrial (carpas y estructuras). Se retiraron las anteriores del selector; las tiendas que las usaban pasan a una alternativa compatible.
 - Fotos de productos y categorías cuadradas, completas sobre fondo claro. Los nombres quedan debajo y el botón principal conserva un color legible en todas las plantillas.
 - Portadas separadas para computadora (1920 × 600) y celular (1080 × 1350), con vista previa de ambas en Apariencia y una alternativa centrada si falta un archivo.
 - Tienda más compacta: fechas, días, invitados, filtros y pedido alineados; cantidades y subtotales claros; aviso pequeño para guardar el carrito, sin tapar otras ventanas ni la confirmación de agregado.

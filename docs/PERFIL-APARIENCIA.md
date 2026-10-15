@@ -62,4 +62,4 @@ Especificación del dueño: `docs/TIENDA-PLANTILLAS.md` y `docs/TIENDA-BOUTIQUE.
 
 ## Actualización de Apariencia (v2.1.129)
 
-El registro contiene 16 temas, agrupados por rubro. La vista previa muestra simultáneamente computadora y celular con las portadas de la empresa; el cambio de imagen se hace con `picture` desde 768 px. Escritorio usa 16:5 y celular 4:5, con fallback centrado si falta un archivo. Las fotos de productos y categorías son cuadradas, completas sobre fondo claro, incluso en temas oscuros.
+El selector contiene siete temas (Boutique, Escenario, Corporativo, Fiesta, Gourmet, Kids e Industrial), agrupados por rubro. Los nueve retirados conservan alias de lectura hacia los temas activos. La vista previa muestra simultáneamente computadora y celular con las portadas de la empresa; el cambio de imagen se hace con `picture` desde 768 px. Escritorio usa 16:5 y celular 4:5, con fallback centrado si falta un archivo. Las fotos de productos y categorías son cuadradas, completas sobre fondo claro, incluso en temas oscuros.
