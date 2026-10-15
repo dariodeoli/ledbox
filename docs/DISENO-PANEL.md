@@ -603,3 +603,84 @@ al abrir) o con «Recorrido guiado». `/demo` muestra el recorrido y los casos
 fuertes como listas compactas con su conteo real; los casos salen de las mismas
 reglas que Inicio (`rejectedChequeWhere`, mora, comprobantes), por eso también
 aparecen en «Para hacer hoy».
+
+## 16. Biblioteca de piezas (etapa A del rediseño, 15-10-2026)
+
+Una pieza = un componente = un lugar del CSS. Si se edita la ventana, el campo de
+precio, un desplegable o el tablero, se corrige en todas las pantallas. El CSS de la
+biblioteca vive en `app/globals.css`, entre los marcadores «BIBLIOTECA DE PIEZAS» y
+«FIN BIBLIOTECA» (botón, chip, campos, ancho por tipo, segmentado y menús); la ventana
+y el tablero tienen su bloque propio (`.admin-dialog-*`, `.admin-board-*`). El
+candado `npm run check:ui` (en `test:rules`) impide volver a controles o estilos
+sueltos en `components/admin` y `app/(admin)`; los componentes de la biblioteca son
+`AdminUI.tsx`, `AdminFields.tsx` y `AdminBoard.tsx`. Guardas en `tests/biblioteca-ui.test.ts`.
+
+### 16.1 Piezas, props y cuándo usarlas
+
+| Pieza | Props principales | Usar para |
+| --- | --- | --- |
+| `AdminButton` | `variant` primary · secondary (default) · ghost · danger · link; `size` md (36 px) · sm (30 px); `icon`, `iconEnd`, `iconNode`; `busy` + `busyLabel` | Toda acción. Una sola `primary` por pantalla o ventana; «Cancelar» y las terciarias, `ghost`; destructivas, `danger`; un texto clicable dentro de una frase o tabla, `link`. Sin texto + `icon` = botón de ícono (con `aria-label`/`title`). 44 px en celular |
+| `AdminButtonLink` | las mismas que `AdminButton` + `href` | Navegar con cara de botón. Interno usa `next/link`; con `target`, `download`, URL absoluta, `/api/` o `/imprimir/` es un `<a>` |
+| `AdminIconButton` / `AdminIconLink` | `icon` o `iconNode`, `iconSize`, `label` (obligatorio: es el `aria-label` y el `title`), `children` (contador) | Cerrar, menú, ayuda, abrir/copiar en una fila |
+| `AdminBadge` | `tone` (neutral · accent · ok · warn · danger · info), `icon`, `size` md · sm, `emphasis`, `label` | Estados, etiquetas y contadores. Los estados del inventario (`lib/inventory-visual-state.ts`) pasan por `StateChip`, que lo reutiliza. El color nunca es el único canal: ícono o texto |
+| `AdminTabs` | `items` (`key`, `label`, `icon`, `count`, `href`), `value`/`onChange`, `tabId`/`panelId`, `filters`, `compact` | Con `href` en todos los ítems: subnavegación entre rutas. Con `value`/`onChange`: pestañas de una ficha (`tablist`, flechas, Inicio, Fin). Con `filters`: filtros de una lista (`aria-pressed`) |
+| `AdminDialog` | `size` sm 440 · md 560 · lg 720 · xl 960 · ficha (panel lateral); `icon`, `title`, `description`, `footer`, `error`/`warning`, `dirty` | Toda ventana. En celular es una hoja de pantalla completa con el pie pegado abajo |
+| `AdminDialogSection` | `title`, `columns` 1–4, `stack`, `collapsible` + `defaultOpen` + `hint` | Agrupar campos con título y un separador sutil. Cuerpo = grilla de 12 columnas |
+| `AdminCol` | `span` 2–10 o 12 | Ancho propio de un campo suelto dentro de la grilla del diálogo |
+| `AdminConfirmDialog` | `title`, `message`, `confirmLabel`, `danger`, `busy` | Acciones destructivas o irreversibles (nunca `confirm()`) |
+| `AdminActionsMenu` | `items`, `label` | El «•••» de filas y tarjetas: caja opaca con sombra (`--a-pop-bg`, `--a-pop-shadow`), igual que la lista del `Combobox` |
+| `AdminBoard` + `AdminViewSwitch` | ver §5 | Pipelines por estado: columnas y tarjetas con el mismo lenguaje (radio, borde, contador como chip neutro) |
+| Campos (`AdminFields.tsx`) | `label`, `help`, `hint`, `error`, `success`, `required`, `optional`, `size`, `wide` | Uno por tipo de dato (abajo) |
+
+### 16.2 Campos: una caja, un borde, un ancho por tipo
+
+- **Caja única.** Los controles de la librería (`data-oc-control`) y los propios
+  (Combobox, contraseña, PIN, buscador) miden y se pintan igual: 36 px en escritorio
+  y 44 px en celular (`--a-field-h`), radio 8 px, fondo `--c-ink-800`, **un solo
+  borde de 1 px** (`--a-field-border` = token `interactivo`, ≥ 3:1). Hover: borde un
+  poco más marcado. **Foco: borde de acento + anillo de 3 px, solo con foco.**
+  Error: borde rojo y nada más. Deshabilitado: fondo apagado; solo lectura: borde
+  punteado sin fondo. Etiqueta arriba; ayuda y error debajo. Nada de sombras
+  internas ni degradados.
+- **Prefijo y sufijo.** `MoneyField` («Gs») y `PercentField` («%») ya los traen;
+  `TextField` y `NumberField` aceptan `prefix` y `suffix` («días», «u.», «https://»).
+- **Ancho por tipo (`size`).** Cada pieza trae el suyo, con tope en rem y ancho
+  completo en celular:
+
+  | `size` | Tope | Piezas (por defecto) |
+  | --- | --- | --- |
+  | `xs` | 8 rem | `NumberField`, `PercentField`, `SerialField` (código/SKU), `PinField`, `TimeField` |
+  | `sm` | 12 rem | `MoneyField`, `DateField`, `DayField` |
+  | `md` | 17 rem | `PhoneField`, `RucField`, `SelectField`, `CityField`, `BancoField`, `PasswordField`, `DateTimeField` |
+  | `lg` | 24 rem | `TextField`, `EmailField`, `Combobox`, `SegmentedField` de hasta 3 opciones |
+  | `full` | sin tope | `TextAreaField`, `AttachmentInput`, `FileField`, `SegmentedField` de más de 3 opciones |
+
+  `wide` equivale a `size="full"` (dirección, URL, notas). Un nombre no lleva `wide`.
+- **Grilla de 12 columnas del diálogo.** Cada campo ocupa las columnas de su tamaño:
+  en `md` xs 3 · sm 4 · md 6 · lg 6; en `lg` y `xl` xs 2 · sm 3 · md 4 · lg 6; `full`
+  12. `columns` en la sección (1–4) o `AdminCol` lo pisan. Celular: una columna.
+- **Segmentado.** Una sola fila de opciones parejas (nunca parte en dos líneas); el
+  panel no carga el preflight de Tailwind, así que el CSS resetea el `<button>`.
+
+### 16.3 El candado (`npm run check:ui`)
+
+Falla si, en `components/admin` o `app/(admin)`, aparece fuera de la biblioteca: un
+`<input>`, `<select>` o `<textarea>` suelto; un `<button>` suelto; un `style=` no
+dinámico (solo valores calculados van inline); una clase de la biblioteca a mano
+(`admin-btn*`, `admin-iconbtn`, `admin-badge`, `admin-subtab`, `btn-led`…); una
+utilidad de Tailwind de borde, sombra o ancho; o, en `globals.css`, un borde,
+sombra o tamaño de campo fuera del bloque de la biblioteca.
+
+Allowlist explícita en `scripts/check-ui.mjs` (archivo, tope y motivo): los
+`<button>` que son un widget propio —navegación lateral y barra inferior, paleta de
+comandos, celdas del calendario, mosaicos y filas clicables del inventario, muestras
+de color— y la hoja imprimible (`(print)`, piel de papel propia). Si un archivo supera
+su tope, falla.
+
+### 16.4 Qué quedó fuera de esta etapa
+
+- Superadmin (`components/platform`, `app/(superadmin)`) conserva `admin-btn` a mano.
+- Hoja imprimible (`(print)`): botones y selector con piel propia (`lbprint-*`).
+- Widgets propios en la allowlist: se migran cuando la biblioteca tenga el equivalente
+  (tarjeta clicable, celda de calendario).
+- Sitio público y portal del cliente (`cp-chip`, `portal-field`) tienen otra piel.
