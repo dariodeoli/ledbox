@@ -29,10 +29,9 @@ import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { inventoryImageUrl } from "./inventory-images";
 import {
-  EVENT_RANGE_SELECT,
   MAINTENANCE_UNITS_SELECT,
   buildAvailability,
-  committedAssignmentWhere,
+  loadCommittedAssignments,
   maintenanceUnits,
   resolveRentalBuffers,
   type AssignmentRecord,
@@ -292,14 +291,13 @@ export function parsePublicRange(fromKey: unknown, toKey: unknown, today: string
 /** Pista de disponibilidad por artículo con el motor real (tiempos y retenciones incluidos). */
 export async function hintsFor(organizationId: string, rows: readonly CatalogRow[], range: PublicRange): Promise<Map<string, AvailabilityHint>> {
   const settings = await db.organizationRentalSettings.findUnique({ where: { organizationId } });
-  const assignments = rows.length
-    ? await db.eventInventory.findMany({
-        where: { inventoryId: { in: rows.map((row) => row.id) }, ...committedAssignmentWhere(organizationId) },
-        orderBy: { startsAt: "asc" },
-        take: 5000,
-        include: { event: { select: EVENT_RANGE_SELECT } },
-      })
-    : [];
+  const assignments = await loadCommittedAssignments({
+    organizationId, inventoryIds: rows.map((row) => row.id),
+    range: { startsAt: range.startsAt, endsAt: range.endsAt, bufferMinutes: Math.max(0, ...rows.map((row) => {
+      const buffers = resolveRentalBuffers(settings, row);
+      return buffers.beforeMin + buffers.afterMin;
+    })) },
+  });
   const byItem = new Map<string, AssignmentRecord[]>();
   for (const assignment of assignments) {
     const list = byItem.get(assignment.inventoryId) ?? [];
