@@ -251,5 +251,6 @@ test("la migración de categorías no depende de normalize(): con PostgreSQL < 1
   assert.match(sql, /current_setting\('server_version_num'\)::int >= 130000 AND current_setting\('server_encoding'\) = 'UTF8'/);
   assert.match(sql, /ELSE[\s\S]*translate\(t,/);
   assert.doesNotMatch(sql, /\$b\$\$f\$/, "sin «$$» pegados que cierren el bloque DO");
-  assert.equal((sql.match(/normalize\(/g) ?? []).length, 1, "normalize( solo dentro de la función condicional");
+  const code = sql.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
+  assert.equal((code.match(/normalize\(/g) ?? []).length, 1, "normalize( solo dentro de la función condicional");
 });
