@@ -540,3 +540,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 ## v2.1.114 — 2026-10-14
 
 - «Cerrar sesión» al pie del menú lateral, en el panel y en el superadmin (en la demo dice «Salir de la demo»). Antes solo se podía desde Mi perfil.
+
+## v2.1.115 — 2026-10-14
+
+- Demo completa con todos los estados: productos disponibles, reservados, agotados (hoy y en un rango), en mantenimiento, archivados y combos; presupuestos borrador, enviados, en negociación, aprobados, firmados, pagados, perdidos, cancelados y vencidos, con señas, cuotas y garantías; firmas en todos sus estados (con su huella real); incidentes, devoluciones, trabajos de proveedor y registros archivados. Las fechas se mueven con el día de hoy, así la demo nunca se ve vieja.
