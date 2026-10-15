@@ -260,3 +260,36 @@ export function scheduleDemoStart(request: Request, deps: { schedule?: Schedule;
     return false;
   }
 }
+
+/** Une la `DemoSession` más reciente del visitante con su sandbox (y cuenta el reinicio). Nunca lanza hacia afuera. */
+export async function linkDemoSandbox(input: { visitorHash: string; sandboxOrgId: string; reset: boolean }): Promise<void> {
+  await db.$executeRaw(Prisma.sql`
+    UPDATE "DemoSession" SET "sandboxOrgId" = ${input.sandboxOrgId}, "resets" = "resets" + ${input.reset ? 1 : 0}::int
+    WHERE "id" = (SELECT "id" FROM "DemoSession" WHERE "visitorHash" = ${input.visitorHash} ORDER BY "startedAt" DESC LIMIT 1)`);
+}
+
+/**
+ * Sandbox de la demo (docs/DEMO-INTERACTIVA.md §1): registra el arranque (si no es un reinicio) y deja la
+ * sandbox ligada a la `DemoSession` para anotar sus acciones al purgarla. Ignora bots y DNT.
+ */
+export function scheduleDemoSandboxLink(
+  request: Request,
+  input: { sandboxOrgId: string; reset: boolean },
+  deps: { schedule?: Schedule; now?: Date } = {},
+): boolean {
+  try {
+    const ua = request.headers.get("user-agent") || "";
+    if (isBotUa(ua) || request.headers.get("dnt") === "1") return false;
+    const now = deps.now ?? new Date();
+    const hash = visitorOf(request, now);
+    if (!hash) return false;
+    (deps.schedule ?? scheduleSafely)(async () => {
+      if (!input.reset) await recordDemoStart({ visitorHash: hash, now });
+      await linkDemoSandbox({ visitorHash: hash, sandboxOrgId: input.sandboxOrgId, reset: input.reset });
+    });
+    return true;
+  } catch (error) {
+    console.warn("[web-metrics] vínculo de la demo ignorado", error instanceof Error ? error.message : error);
+    return false;
+  }
+}

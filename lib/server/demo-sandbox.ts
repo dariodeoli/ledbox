@@ -21,6 +21,41 @@ export const SANDBOX_FILE_QUOTA_BYTES = 15 * 1024 * 1024;
 export const SANDBOX_DENIED_MESSAGE = "En la demo esto está desactivado";
 export const SANDBOX_QUOTA_MESSAGE = "La demo llegó al tope de 15 MB de archivos. Quitá alguno o reiniciá la demo.";
 
+/**
+ * Vuelta atrás (docs/DEMO-INTERACTIVA.md §9): `false` devuelve la demo a la vitrina de solo lectura.
+ * Las sandboxes que queden se purgan solas.
+ */
+export const DEMO_SANDBOX_ENABLED = true;
+
+/** Topes de la demo (constantes en código). */
+export const SANDBOX_MAX_ACTIVE = 150;
+export const SANDBOX_PER_IP_PER_HOUR = 4;
+export const SANDBOX_CREATIONS_PER_15_MIN = 60;
+/** Vence a 1 h sin uso o 24 h desde la creación, lo que llegue primero. */
+export const SANDBOX_IDLE_MS = 60 * 60 * 1000;
+export const SANDBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** Si la demo está llena, se libera la más ociosa solo si pasó más de esto sin uso. */
+export const SANDBOX_FULL_IDLE_MS = 30 * 60 * 1000;
+/** `demoLastSeenAt` se escribe como máximo cada 2 min. */
+export const SANDBOX_TOUCH_INTERVAL_MS = 2 * 60 * 1000;
+/** Una sandbox que nunca terminó de sembrarse se purga pasados estos minutos. */
+export const SANDBOX_UNREADY_MS = 5 * 60 * 1000;
+/** Sandboxes que una entrada purga en `after()`. */
+export const SANDBOX_PURGE_BATCH = 5;
+
+/**
+ * ¿La sandbox sigue vigente? Lista, antes de las 24 h de su creación y con uso en la última hora.
+ * Una vencida que todavía no se purgó ya no abre sesión.
+ */
+export function sandboxVigente(
+  org: { demoReady: boolean; demoExpiresAt: Date | null; demoLastSeenAt: Date | null; createdAt: Date },
+  now = Date.now(),
+): boolean {
+  if (!org.demoReady) return false;
+  if (org.demoExpiresAt && org.demoExpiresAt.getTime() <= now) return false;
+  return (org.demoLastSeenAt ?? org.createdAt).getTime() > now - SANDBOX_IDLE_MS;
+}
+
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { sandbox: boolean; expires: number }>();
 
@@ -40,11 +75,13 @@ export async function isSandboxOrg(organizationId: string | null | undefined, no
     select: { isDemo: true, demoParentId: true },
   });
   const sandbox = Boolean(row?.isDemo && row.demoParentId);
-  cache.set(organizationId, { sandbox, expires: now + CACHE_TTL_MS });
+  // Una empresa que todavía no existe (o ya se purgó) no se cachea: si no, una sandbox recién creada
+  // pasaría por empresa real hasta 60 s.
+  if (row) cache.set(organizationId, { sandbox, expires: now + CACHE_TTL_MS });
   return sandbox;
 }
 
-export type SalidaCanal = "mail" | "whatsapp" | "pago" | "sifen" | "webhook";
+export type SalidaCanal = "mail" | "whatsapp" | "pago" | "sifen" | "webhook" | "ia";
 export type SalidaPermitida = { ok: true } | { simulado: true; motivo: string };
 
 /** ¿El destino es de la demo (`*.demo`)? Vale para correos (`a@x.demo`) y hosts (`x.demo`). */

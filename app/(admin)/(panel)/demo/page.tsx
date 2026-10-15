@@ -12,6 +12,7 @@ import { portalBudgetUrl } from "@/lib/public-config";
 import { getAuthenticatedAdmin } from "@/lib/server/auth";
 import { db } from "@/lib/server/db";
 import { DEMO_ORGANIZATION_NAME, ensureDemoData, isDemoOrganizationId } from "@/lib/server/demo-data";
+import { isSandboxOrg } from "@/lib/server/demo-sandbox";
 import { dayKeyOf, dayStart } from "@/lib/server/notifications";
 import { rejectedChequeWhere } from "@/lib/server/resumen";
 
@@ -50,7 +51,8 @@ export default async function DemoPage() {
   const nextPath = requestHeaders.get("x-pathname") || "/demo";
   if (!auth) redirect(`/api/demo/session?next=${encodeURIComponent(nextPath)}`);
 
-  if (!(await isDemoOrganizationId(auth.session.activeOrganizationId))) {
+  const sandbox = await isSandboxOrg(auth.session.activeOrganizationId);
+  if (!sandbox && !(await isDemoOrganizationId(auth.session.activeOrganizationId))) {
     return <DemoInvite userName={auth.user.name} nextPath={nextPath} />;
   }
   const organizationId = auth.session.activeOrganizationId as string;
@@ -118,7 +120,8 @@ export default async function DemoPage() {
   // debería consumirse; si otra vía lo cerró, se vuelve a sembrar el dataset,
   // igual que la entrada del portal, para que la demo conserve el caso.
   let openBudget = openBudgetRow;
-  if (!openBudget) {
+  // En una sandbox no se vuelve a sembrar: es del visitante y «Reiniciar» la rehace entera.
+  if (!openBudget && !sandbox) {
     await ensureDemoData({ reset: true });
     openBudget = await db.budget.findFirst({
       where: {
