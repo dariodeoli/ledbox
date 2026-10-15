@@ -1,5 +1,7 @@
 "use client";
 
+import { FIELD_LIMITS } from "@/lib/field-rules";
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -710,6 +712,7 @@ function ExpectedReviewDialog({
               }
             />
             <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
               label="Monto a confirmar"
               hint={
                 row.paidAmount > 0 || partial
@@ -863,6 +866,7 @@ function ExpectedSplitDialog({
           {parts.map((part, index) => (
             <div className="admin-plan-row" key={part.key}>
               <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                 label={`Parte ${index + 1} (Gs)`}
                 value={part.amount}
                 onChange={(value) =>
@@ -2536,6 +2540,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             ]}
           />
           <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
             label="Monto"
             hint="En guaraníes"
             required
@@ -2651,6 +2656,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 placeholder="Opcional"
               />
               <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                 label="Total acordado (seña)"
                 hint="Opcional: con un total mayor al monto, registra una seña y el saldo queda como cobro a plazo"
                 value={form.totalAmount}
@@ -3518,6 +3524,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               <form id={payJobFormId} className="admin-form" onSubmit={savePayJob} aria-busy={payBusy || undefined}>
                 <AdminDialogSection title="Pago">
                 <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                   label="Monto del pago"
                   required
                   value={payJob.amount}
@@ -3812,6 +3819,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 </>
               ) : null}
               <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                 label="Saldo inicial"
                 hint="Lo que ya había en la cuenta (opcional)"
                 value={accountForm.openingBalance}
@@ -4076,6 +4084,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 </AdminDialogSection>
                 <AdminDialogSection title="Importe y fecha">
               <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                 label="Monto"
                 hint="En guaraníes"
                 required
@@ -4305,6 +4314,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               >
                 <AdminDialogSection title="Gasto">
                   <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
                     id={EXPENSE_AMOUNT_ID}
                     label="Monto"
                     hint="En guaraníes"

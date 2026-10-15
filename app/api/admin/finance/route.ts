@@ -1,3 +1,4 @@
+import { FIELD_LIMITS } from "@/lib/field-rules";
 import { withDeletedLabel } from "@/lib/deleted-label";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { randomUUID } from "node:crypto";
@@ -59,7 +60,7 @@ export const dynamic = "force-dynamic";
 
 /** Plazos ofrecidos en días desde la emisión de la factura. */
 const TERM_DAYS: readonly number[] = [0, 15, 30, 60];
-const MAX_AMOUNT = 99_000_000_000;
+const MAX_AMOUNT = FIELD_LIMITS.amountStorage;
 const MAX_INVOICE = 60;
 const MAX_REFERENCE = 120;
 
@@ -177,7 +178,7 @@ export async function POST(request: Request) {
     const clientId = typeof body.clientId === "string" ? body.clientId : "";
     const amount = Number(body.amount);
     if (!clientId || !Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_AMOUNT) {
-      return jsonError("Elegí un cliente y un monto entero en guaraníes (hasta 99.000.000.000).", 400);
+      return jsonError("Elegí un cliente y un monto entero en guaraníes (hasta 2.147.483.647).", 400);
     }
     const client = await tx.client.findFirst({
       where: { id: clientId, organizationId },
@@ -298,7 +299,7 @@ export async function POST(request: Request) {
     if (body.totalAmount !== undefined && body.totalAmount !== null && body.totalAmount !== "") {
       const total = Number(body.totalAmount);
       if (!Number.isSafeInteger(total) || total <= amount || total > MAX_AMOUNT) {
-        return jsonError("El total acordado tiene que ser mayor al monto de la seña (hasta 99.000.000.000).", 400);
+        return jsonError("El total acordado tiene que ser mayor al monto de la seña (hasta 2.147.483.647).", 400);
       }
       balanceAmount = total - amount;
       if (body.balanceDueAt !== undefined && body.balanceDueAt !== null && body.balanceDueAt !== "") {

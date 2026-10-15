@@ -1,3 +1,4 @@
+import { FIELD_LIMITS } from "@/lib/field-rules";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { jobStatusLabel } from "@/lib/admin-format";
@@ -41,7 +42,7 @@ export const dynamic = "force-dynamic";
  */
 
 const MAX = { description: 200, method: 60, receipt: 120, notes: 1000 } as const;
-const MAX_AMOUNT = 1_000_000_000_000;
+const MAX_AMOUNT = FIELD_LIMITS.amountStorage;
 
 const jobInclude = {
   supplier: { select: { id: true, name: true, phone: true, category: true } },
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
     const description = typeof body.description === "string" ? body.description.trim() : "";
     if (description.length < 2) return jsonError("Job description is required.", 400);
     const total = toInteger(body.total);
-    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
+    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("El total debe ser un entero positivo en guaraníes (hasta 2.147.483.647).", 400);
     const advance = body.advance === undefined ? 0 : toInteger(body.advance);
     if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
     if (body.category !== undefined && !isCategory(body.category)) return jsonError("Invalid supplier category.", 400);
@@ -212,7 +213,7 @@ export async function PATCH(request: Request) {
     }
 
     const total = body.total === undefined ? job.total : toInteger(body.total);
-    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("Total must be a positive amount.", 400);
+    if (total === null || total <= 0 || total > MAX_AMOUNT) return jsonError("El total debe ser un entero positivo en guaraníes (hasta 2.147.483.647).", 400);
     const advance = body.advance === undefined ? job.advance : toInteger(body.advance);
     if (advance === null || advance < 0 || advance > total) return jsonError("Advance must be an amount between 0 and the total.", 400);
 

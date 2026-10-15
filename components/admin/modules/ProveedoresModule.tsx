@@ -66,7 +66,7 @@ import {
   TextField,
 } from "../AdminFields";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
-import { FIELD_MESSAGES, emailValid, personNameValid } from "@/lib/field-rules";
+import { FIELD_LIMITS, FIELD_MESSAGES, emailValid, personNameValid } from "@/lib/field-rules";
 
 /**
  * Flujo de proveedores: directorio con alta y edición, y trabajos por evento con
@@ -708,6 +708,7 @@ export function ProveedoresModule() {
               </AdminDialogSection>
               <AdminDialogSection title="Costo y anticipo">
             <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
               label="Costo total"
               hint="En guaraníes"
               required
@@ -715,6 +716,7 @@ export function ProveedoresModule() {
               onChange={(value) => setJobForm({ ...jobForm, total: value })}
             />
             <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
               label="Anticipo"
               hint="Si lo cargás, queda con anticipo pagado"
               value={jobForm.advance}
@@ -793,6 +795,7 @@ export function ProveedoresModule() {
               </AdminDialogSection>
               <AdminDialogSection title="Costo y pagos">
             <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
               label="Costo total"
               hint="En guaraníes"
               required
@@ -801,6 +804,7 @@ export function ProveedoresModule() {
               onChange={(value) => setJobForm({ ...jobForm, total: value })}
             />
             <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
               label="Anticipo pagado"
               hint="En guaraníes"
               disabled={editingClosed}
@@ -1328,6 +1332,7 @@ function JobStatusPanel({
       />
       {asksAdvance ? (
         <MoneyField
+              limit={FIELD_LIMITS.amountStorage}
           label="Monto del anticipo"
           hint="En guaraníes, mayor a cero"
           required
