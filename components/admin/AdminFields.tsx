@@ -1,4 +1,5 @@
 "use client";
+import { normalizeHex } from "@/lib/storefront-theme";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -346,6 +347,21 @@ export function TextAreaField({
       />
     </FieldChrome>
   );
+}
+
+/** Color de marca: picker nativo y valor hexadecimal comparten una sola etiqueta. */
+export function ColorField({ label, value, onChange, fallbackColor = "#0b5cd5", hint, error, disabled, size = "full" }: {
+  label: string; value: string; onChange: (value: string) => void; fallbackColor?: string;
+  hint?: string; error?: string | null; disabled?: boolean; size?: FieldSize;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds();
+  const pickerColor = normalizeHex(value) ?? normalizeHex(fallbackColor) ?? "#0b5cd5";
+  return <FieldChrome label={label} hint={hint} error={error} size={size} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <div className="admin-color-control">
+      <input type="color" value={pickerColor} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={`Elegir ${label.toLowerCase()}`} aria-describedby={describedBy(error, hint, hintId, errorId)} />
+      <SharedInput id={fieldId} type="text" value={value} onChange={(event) => onChange(event.target.value)} maxLength={7} placeholder={pickerColor} autoCapitalize="none" spellCheck={false} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy(error, hint, hintId, errorId)} />
+    </div>
+  </FieldChrome>;
 }
 
 /**

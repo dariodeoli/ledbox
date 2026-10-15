@@ -167,3 +167,13 @@ export function moveSectionTo(order: readonly HomeSectionId[], id: HomeSectionId
 }
 
 export const editorialHasContent = (editorial: HomeEditorial): boolean => Boolean(editorial.title || editorial.text);
+
+/** Posición indicada por el borde de destino durante el arrastre (sin mutar la entrada). */
+export function moveSectionAtEdge(order: readonly HomeSectionId[], id: HomeSectionId, target: HomeSectionId, edge: "before" | "after"): HomeSectionId[] {
+  const list = normalizeOrder(order);
+  if (id === target || !list.includes(id) || !list.includes(target)) return list;
+  const next = list.filter((value) => value !== id);
+  const index = next.indexOf(target) + (edge === "after" ? 1 : 0);
+  next.splice(index, 0, id);
+  return next;
+}

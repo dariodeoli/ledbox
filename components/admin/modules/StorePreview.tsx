@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { visibleSections, type HomeSectionId } from "@/lib/store-home";
 import { CategoryAccordion } from "../../catalog-public/CategoryAccordion";
 import { appearanceView, type Appearance } from "@/lib/appearance";
-import { categoryDatum, formatGs, priceUnitLabel } from "@/lib/storefront-ui";
+import { categoryDatum, formatGs, priceUnitLabel, PREORDER_COPY } from "@/lib/storefront-ui";
 import { ProductPlaceholder, XIcon } from "../../catalog-public/StoreIcons";
 import { StoreChrome } from "../../catalog-public/StoreChrome";
 
@@ -132,7 +132,7 @@ export function StorePreview({
             <span className="cp-brand"><span className="cp-mono">{shownName.trim().slice(0, 1).toUpperCase() || "·"}</span><span className="cp-brand-name">{shownName}</span></span>
           </div>
           <div className="cp-hd-actions">
-            <span className="cp-hd-cart"><XIcon name="bag" size={18} /><span className="cp-hd-cart-label">Pedido</span></span>
+            <span className="cp-hd-cart"><XIcon name="bag" size={18} /><span className="cp-hd-cart-label">{PREORDER_COPY.name}</span></span>
           </div>
         </div>
       </div>

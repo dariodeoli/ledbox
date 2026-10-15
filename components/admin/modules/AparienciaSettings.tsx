@@ -24,7 +24,7 @@ import { normalizeHex } from "@/lib/storefront-theme";
 import { DISPLAY_FONTS, THEMES, isDisplayFont, themePrimary } from "@/lib/storefront-templates";
 import { themesByRubro } from "@/lib/storefront-themes";
 import { useAdminSession } from "../AdminShell";
-import { FileField, SelectField, SwitchField, TextField } from "../AdminFields";
+import { ColorField, FileField, SegmentedField, SelectField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminButtonLink, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { StorePreview } from "./StorePreview";
 import { EMPTY_HOME_PHOTOS, HomeLayoutPanels, type HomePhotoStates } from "./HomeLayoutPanels";
@@ -47,7 +47,7 @@ import { DEFAULT_HOME, HOME_PHOTO_SLOTS, type HomeConfig, type HomePhotoSlot } f
  * Nada se guarda hasta apretar «Guardar apariencia».
  */
 
-const PRESET_COLORS = ["#0b5cd5", "#0f766e", "#b45309", "#9f1239", "#6d28d9", "#1f2937", "#047857", "#be123c"] as const;
+const PRESET_COLORS = ["#0b5cd5", "#0f766e", "#b45309", "#9f1239", "#6d28d9", "#1f2937", "#047857", "#be123c", "#1e3a8a", "#075985", "#0e7490", "#155e75", "#166534", "#3f6212", "#854d0e", "#92400e", "#78350f", "#9a3412", "#991b1b", "#86198f", "#7e22ce", "#4338ca", "#0f172a", "#111827"] as const;
 
 type CoverState = { file: File | null; previewUrl: string | null; remove: boolean; dims: { width: number; height: number } | null };
 const EMPTY_COVER: CoverState = { file: null, previewUrl: null, remove: false, dims: null };
@@ -79,6 +79,7 @@ export function AparienciaSettings() {
   const [priceMode, setPriceMode] = useState<PriceMode>(DEFAULT_APPEARANCE.priceMode);
   const [tagline, setTagline] = useState("");
   const [color, setColor] = useState("");
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [covers, setCovers] = useState<Record<CoverKind, CoverState>>({ desktop: EMPTY_COVER, mobile: EMPTY_COVER });
   const [coverError, setCoverError] = useState<Record<CoverKind, string>>({ desktop: "", mobile: "" });
   const [home, setHome] = useState<HomeConfig>(DEFAULT_HOME);
@@ -228,7 +229,7 @@ export function AparienciaSettings() {
       <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} rows={4}>
         {initial ? (
           <form
-            className="admin-settings"
+            className="admin-settings admin-appearance-form"
             onSubmit={(event) => {
               event.preventDefault();
               void save();
@@ -236,7 +237,7 @@ export function AparienciaSettings() {
             data-testid="apariencia"
           >
             <div className="admin-appearance-grid">
-              <div className="admin-settings">
+              <div className="admin-settings admin-appearance-fields">
                 <AdminPanel title="Plantilla" icon="image" meta="Cambia el diseño de la tienda; el contenido es el mismo">
                   <div className="admin-template-groups" role="group" aria-label="Plantilla de la tienda">
                     {themesByRubro().map((group) => (
@@ -261,17 +262,7 @@ export function AparienciaSettings() {
 
                 <AdminPanel title="Color y textos" icon="sparkles" meta="El color pasa el contraste AA (mínimo 4,5:1) automáticamente">
                   <div className="admin-settings-grid">
-                    <TextField
-                      label="Color de marca (botones y enlaces)"
-                      value={color}
-                      onChange={(value) => { setColor(value); setNotice(""); }}
-                      maxLength={7}
-                      placeholder="#0b5cd5"
-                      autoCapitalize="none"
-                      error={colorFieldError}
-                      hint="Hexadecimal. Vacío, o si no da contraste suficiente con la plantilla, se usa el color propio de la plantilla."
-                      disabled={demo}
-                    />
+                    <ColorField label="Color de marca (botones y enlaces)" value={color} onChange={(value) => { setColor(value); setNotice(""); }} fallbackColor={themePrimary(template, null).primary} error={colorFieldError} hint="Elegí un color o pegá su hexadecimal. Vacío usa el color de la plantilla." disabled={demo} />
                     <div className="admin-field">
                       <span className="admin-field-label">Colores sugeridos</span>
                       <div className="admin-swatches" role="group" aria-label="Colores sugeridos">
@@ -375,17 +366,18 @@ export function AparienciaSettings() {
                 </AdminPanel>
               </div>
 
-              <AdminPanel title="Vista previa en vivo" icon="eye" meta="Con datos de ejemplo; todavía no está publicada">
-                <div className="admin-settings-previews">
-                  {(["desktop", "mobile"] as const).map((device) => (
-                    <section key={device} className="admin-settings" aria-label={`Vista previa en ${device === "desktop" ? "computadora" : "celular"}`}>
-                      <h3>{device === "desktop" ? "Computadora · 1920 × 600" : "Celular · 1080 × 1350"}</h3>
-                      <StorePreview frame={device} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
-                    </section>
-                  ))}
-                  {storeUrl ? <p className="admin-field-hint admin-settings-wide">La tienda real está en {storeUrl}. Si falta una portada, usa la otra centrada.</p> : null}
-                </div>
-              </AdminPanel>
+              <aside className="admin-appearance-preview">
+                <AdminPanel title="Vista previa" icon="eye" meta="Datos de ejemplo · sin publicar">
+                  <div className="admin-appearance-preview-tools">
+                    <SegmentedField ariaLabel="Dispositivo de la vista previa" value={previewDevice} onChange={(value) => setPreviewDevice(value === "mobile" ? "mobile" : "desktop")} options={[{ value: "desktop", label: "Escritorio" }, { value: "mobile", label: "Celular" }]} size="full" />
+                    <AdminButtonLink href="/ajustes/tienda/laboratorio" icon="external">Laboratorio de tienda</AdminButtonLink>
+                  </div>
+                  <div className="admin-appearance-preview-stage" data-device={previewDevice} tabIndex={0} aria-label={`Vista previa desplazable en ${previewDevice === "desktop" ? "escritorio" : "celular"}`}>
+                    <StorePreview key={previewDevice} frame={previewDevice} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
+                  </div>
+                  {storeUrl ? <p className="admin-field-hint admin-appearance-preview-note">Tienda: {storeUrl}. Cada dispositivo usa su portada; si falta una, usa la otra.</p> : null}
+                </AdminPanel>
+              </aside>
             </div>
 
             <div className="admin-settings-actions">

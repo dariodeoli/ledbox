@@ -324,12 +324,16 @@ test("portada: escritorio ≥768 px y celular en móvil, con la otra como respal
 });
 
 
-test("Apariencia muestra computadora y celular juntas con las portadas guardadas o nuevas", () => {
+test("Apariencia alterna computadora y celular en una vista con portadas guardadas o nuevas", () => {
   const settings = read("components/admin/modules/AparienciaSettings.tsx");
-  assert.match(settings, /\["desktop", "mobile"\] as const/);
+  assert.match(settings, /ariaLabel="Dispositivo de la vista previa"/);
+  assert.match(settings, /value: "desktop", label: "Escritorio"/);
+  assert.match(settings, /value: "mobile", label: "Celular"/);
+  assert.match(settings, /frame=\{previewDevice\}/);
+  assert.equal((settings.match(/<StorePreview\b/g) ?? []).length, 1, "sólo monta el dispositivo seleccionado");
   assert.match(settings, /coverDesktop=\{coverSrc\("desktop"\)\}/);
   assert.match(settings, /coverMobile=\{coverSrc\("mobile"\)\}/);
-  assert.ok(!settings.includes('ariaLabel="Dispositivo de la vista previa"'));
+  assert.match(settings, /className="admin-appearance-preview"/);
 });
 
 test("Destacados comparte la vista rápida y el carrito con el catálogo", () => {
