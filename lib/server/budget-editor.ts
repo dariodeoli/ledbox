@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { budgetItemError } from "../budget-items";
+import { budgetItemError, canSetFreeOnPurpose, FREE_ON_PURPOSE_FORBIDDEN, freeOnPurposeChanged } from "../budget-items";
 import { BudgetCalculationError, calculateBudgetCommercial } from "../budget-commercial-calculation";
 import { stableOrderBudgetItems } from "../budget-item-order";
 import { budgetDayValid, budgetMoneyValid, resolveBudgetPaymentPlan } from "../budget-payment-plan";
@@ -25,6 +25,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const raw = body.items;
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 100) return jsonError("El presupuesto necesita entre 1 y 100 ítems.", 400);
   if (raw.some((row) => !row || typeof row !== "object" || Array.isArray(row) || ["quantity", "days", "unitPrice", "costPrice"].some((field) => row[field] !== undefined && typeof row[field] !== "number"))) return jsonError("Las cantidades y montos deben ser numéricos, no texto ni booleanos.", 400);
+  if (!canSetFreeOnPurpose(context.role) && freeOnPurposeChanged(raw, new Map(current.items.map((item) => [item.id, item.freeOnPurpose])))) return jsonError(FREE_ON_PURPOSE_FORBIDDEN, 403);
   const items = raw.map((r: Record<string, unknown>) => ({
     id: typeof r?.id === "string" ? r.id : null,
     name: typeof r?.name === "string" ? r.name.trim() : "",

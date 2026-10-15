@@ -208,6 +208,14 @@ export function normalizeSignatureCode(input: string | null | undefined): string
 
 export const INVITATION_TOKEN_LENGTH = 24;
 
+/** Días de vigencia del link de invitación al equipo (siempre vence; no hay ajuste por empresa). */
+export const INVITATION_TTL_DAYS = 7;
+
+/** «Válido por 7 días»: el texto único del panel y del correo. */
+export function invitationValidityLabel(days: number = INVITATION_TTL_DAYS): string {
+  return `Válido por ${days} ${days === 1 ? "día" : "días"}`;
+}
+
 /**
  * Token de invitación canónico (mayúsculas, sin separadores) o `null` si no
  * tiene la forma esperada. Acepta el link completo, el path o el token suelto.

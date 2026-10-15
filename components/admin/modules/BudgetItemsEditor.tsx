@@ -10,9 +10,10 @@ import { useAdminResource } from "@/lib/admin-api";
 import type { AdminInventoryLink } from "@/lib/admin-types";
 import { SelectField } from "../AdminFields";
 import { ComboPackagePanel } from "./ComboPackagePanel";
-import { budgetDraftSubtotal, budgetItemError, budgetUsesDays, emptyBudgetItem, type BudgetItemDraft } from "@/lib/budget-items";
+import { budgetDraftSubtotal, budgetItemError, canSetFreeOnPurpose, budgetUsesDays, emptyBudgetItem, type BudgetItemDraft } from "@/lib/budget-items";
 import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { formatMoney } from "@/lib/admin-format";
+import { useAdminSession } from "../AdminShell";
 
 /** Nombre del servicio libre del atajo «+ Transporte» (un ítem más del presupuesto). */
 export const TRANSPORT_ITEM_NAME = "Transporte";
@@ -33,6 +34,8 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
   items: BudgetItemDraft[]; onChange: (items: BudgetItemDraft[]) => void; disabled?: boolean;
   range?: { startsAt: string; endsAt: string } | null;
 }) {
+  const { role } = useAdminSession();
+  const canFree = canSetFreeOnPurpose(role);
   const [picker, setPicker] = useState<number | "new" | null>(null);
   const [zonePicker, setZonePicker] = useState(false);
   const zones = useAdminResource("/api/admin/delivery-zones", (payload) => (payload.zones ?? []) as DeliveryZoneView[], { enabled: zonePicker });
@@ -79,8 +82,8 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
         {item.excluded ? <AdminNote>Retirado / no incluido. La línea original se conserva.</AdminNote> : null}
         {!item.excluded && item.unitPrice.trim() !== "" && numeric.unitPrice === 0 ? (
           <>
-            {item.freeOnPurpose ? <AdminNote>Gratis a propósito: se incluye sin cobrar.</AdminNote> : <AdminNote tone="error"><strong>Falta precio.</strong> Cargalo para poder enviar, aprobar y cobrar; si es gratis, activalo abajo.</AdminNote>}
-            <SwitchField label="Gratis a propósito (precio 0 confirmado)" checked={Boolean(item.freeOnPurpose)} disabled={disabled} onChange={(checked) => update(index, { freeOnPurpose: checked })} />
+            {item.freeOnPurpose ? <AdminNote>Gratis a propósito: se incluye sin cobrar.</AdminNote> : <AdminNote tone="error"><strong>Falta precio.</strong> Cargalo para poder enviar, aprobar y cobrar; {canFree ? "si es gratis, activalo abajo." : "si es gratis, pedile a un propietario o administrador que lo confirme."}</AdminNote>}
+            {canFree ? <SwitchField label="Gratis a propósito (precio 0 confirmado)" checked={Boolean(item.freeOnPurpose)} disabled={disabled} onChange={(checked) => update(index, { freeOnPurpose: checked })} /> : null}
           </>
         ) : null}
         {!item.excluded && item.rentalDays !== undefined && numeric.days === 1 && Number(item.rentalDays) > 1 ? <AdminNote>Precio total por {item.rentalDays} días (no se multiplica por los días).</AdminNote> : null}
