@@ -14,7 +14,7 @@ import type { AdminSessionPayload } from "@/lib/admin-types";
  * respuesta del API (`pickSessionData`), así no hay dos contratos.
  */
 export async function buildAdminSessionPayload(context: AdminContext): Promise<AdminSessionPayload> {
-  const { user, organization, role, demo } = context;
+  const { user, organization, role, demo, sandbox } = context;
   const [organizations, avatar, logos, security] = await Promise.all([
     listAdminOrganizations(user.id),
     db.adminUserAvatar.findUnique({ where: { userId: user.id }, select: { updatedAt: true } }),
@@ -36,6 +36,7 @@ export async function buildAdminSessionPayload(context: AdminContext): Promise<A
     organizations,
     // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
     demo,
+    sandbox,
     // Bloqueo por PIN (issue #21): estado de la sesión + preferencia del usuario.
     // La demo no usa PIN ni bloqueo (no tiene preferencia que aplicar). El motivo
     // solo viaja con un bloqueo vigente; desbloqueada, la pantalla no aplica.

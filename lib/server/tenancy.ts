@@ -1,10 +1,10 @@
 import type { AdminRole } from "@prisma/client";
 import { headers } from "next/headers";
 import { parseBearerToken } from "@/lib/api-tokens";
-import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
+import { getAuthenticatedAdmin, onSandboxHost, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
 import { touchApiToken, verifyApiToken } from "./api-tokens";
 import { isDemoOrganizationSlug } from "./demo-data";
-import { isSandboxOrg, SANDBOX_DENIED_MESSAGE } from "./demo-sandbox";
+import { DEMO_SANDBOX_ENABLED, isSandboxOrg, SANDBOX_DENIED_MESSAGE } from "./demo-sandbox";
 import { db } from "./db";
 import { jsonError } from "./http";
 import { ensureOrganizationPlan } from "./plan-limits";
@@ -57,6 +57,16 @@ export type RequireAdminOptions = {
 };
 
 export type AdminContextResult = { ok: true; context: AdminContext } | { ok: false; response: Response };
+
+/** `isSandboxOrg` sin lanzar: si falla se registra y se devuelve `null` (el llamador responde 503, nunca trata la empresa como real). */
+async function sandboxFlag(organizationId: string): Promise<boolean | null> {
+  try {
+    return await isSandboxOrg(organizationId);
+  } catch (error) {
+    console.error("tenancy: no se pudo verificar si la empresa es una sandbox", error);
+    return null;
+  }
+}
 
 const organizationSelect = { id: true, name: true, slug: true, planId: true } as const;
 
@@ -116,7 +126,12 @@ export async function requireAdminContext(
 
   const role = membership.role;
   const demo = isDemoOrganizationSlug(membership.organization.slug);
-  const sandbox = !demo && (await isSandboxOrg(membership.organizationId));
+  const sandbox = !demo && (await sandboxFlag(membership.organizationId));
+  if (sandbox === null) return { ok: false, response: jsonError("No pudimos verificar la empresa. Probá de nuevo.", 503) };
+  // 401 cruzado (docs/DEMO-INTERACTIVA.md §2): una empresa de la demo solo responde en el host demo y una real, fuera de él.
+  if (DEMO_SANDBOX_ENABLED && (demo || sandbox) !== (await onSandboxHost())) {
+    return { ok: false, response: jsonError("Unauthorized", 401) };
+  }
   // La empresa sin plan recibe el por defecto una sola vez (issue #42): así los
   // límites se aplican desde el primer request y no queda una empresa sin tope
   // por olvido. Best-effort: `ensureOrganizationPlan` nunca rompe el request.
@@ -172,7 +187,8 @@ async function requireApiTokenContext(token: string, capability?: AdminCapabilit
   if (!limited.allowed) return { ok: false, response: rateLimitResponse(limited.retryAfter) };
 
   const demo = isDemoOrganizationSlug(apiToken.organization.slug);
-  const sandbox = !demo && (await isSandboxOrg(apiToken.organization.id));
+  const sandbox = !demo && (await sandboxFlag(apiToken.organization.id));
+  if (sandbox === null) return { ok: false, response: jsonError("No pudimos verificar la empresa. Probá de nuevo.", 503) };
   if (capability && demo) {
     return { ok: false, response: jsonError("Modo demo: solo lectura", 403) };
   }

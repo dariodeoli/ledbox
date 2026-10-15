@@ -1,3 +1,4 @@
+import { sandboxHiddenHere } from "@/lib/server/demo-host";
 import { quotePortalAvailable } from "@/lib/quote-sharing";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -41,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     : null;
   if (!budget || !quotePortalAvailable(budget)) return jsonError("No encontramos ese presupuesto.", 404);
+  if (await sandboxHiddenHere(budget.organizationId)) return jsonError("No encontramos ese presupuesto.", 404);
   // Issue #52: la empresa demo no escribe; el portal simula el pedido en el navegador.
   if (await isDemoOrganizationId(budget.organizationId)) return jsonError("Modo demo: solo lectura", 403);
   if (budget.approvedAt) return jsonError("Este presupuesto ya fue aprobado; el equipo de LedBox puede revisarlo.", 409);

@@ -1,3 +1,4 @@
+import { sandboxHiddenHere } from "@/lib/server/demo-host";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
 import { normalizeBudgetCode } from "@/lib/public-config";
@@ -17,6 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   if (!code) return jsonError("Adjunto no encontrado.", 404);
   const budget = await db.budget.findUnique({ where: { publicToken: code }, select: { id: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
   if (!budget || !quotePortalAvailable(budget)) return jsonError("Adjunto no encontrado.", 404);
+  if (await sandboxHiddenHere(budget.organizationId)) return jsonError("Adjunto no encontrado.", 404);
   const file = await db.budgetAttachment.findFirst({ where: { id, budgetId: budget.id, organizationId: budget.organizationId, clientVisible: true, mime: "application/pdf", budget: { publicToken: code } }, select: { name: true, data: true, mime: true } });
   if (!file || !await quotePdfValid(file.data)) return jsonError("Adjunto no encontrado.", 404);
   const disposition = new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline";

@@ -119,6 +119,8 @@ export type AdminSessionPayload = {
   organization?: AdminOrganization | null;
   organizations?: AdminOrganization[] | null;
   demo?: boolean | null;
+  /** Sandbox por visitante (docs/DEMO-INTERACTIVA.md): escribe, pero nada sale hacia afuera (p. ej. sin links de WhatsApp). */
+  sandbox?: boolean | null;
   /** Panel bloqueado por PIN (issue #21). */
   locked?: boolean | null;
   /** Motivo del bloqueo vigente (para el texto de la pantalla). */

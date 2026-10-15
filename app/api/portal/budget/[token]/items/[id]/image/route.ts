@@ -1,3 +1,4 @@
+import { sandboxHiddenHere } from "@/lib/server/demo-host";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
 import { normalizeBudgetCode } from "@/lib/public-config";
@@ -16,6 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   if (!code) return jsonError("Imagen no encontrada.", 404);
   const budget = await db.budget.findUnique({ where: { publicToken: code }, select: { id: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
   if (!budget || !quotePortalAvailable(budget)) return jsonError("Imagen no encontrada.", 404);
+  if (await sandboxHiddenHere(budget.organizationId)) return jsonError("Imagen no encontrada.", 404);
   const item = await db.budgetItem.findFirst({ where: { id, budgetId: budget.id, budget: { publicToken: code }, inventory: { organizationId: budget.organizationId } }, select: { inventory: { select: { imageData: true, imageMime: true } } } });
   const data = item?.inventory?.imageData;
   const mime = data ? detectInventoryImageMime(data) : null;
