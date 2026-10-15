@@ -44,10 +44,15 @@ export async function GET(request: Request) {
     });
     return Response.json({ clients });
   }
+  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
+  const searchFields = ["name", "tradeName", "legalName", "company", "ruc", "email", "phone", "contactName", "contactEmail", "contactPhone", "billingEmail", "whatsapp"] as const;
+  // Filtrar en la base ANTES del límite: también encuentra clientes antiguos.
+  const search = query ? { OR: searchFields.map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
   // Se pide uno de más para saber, sin contar, si la lista quedó truncada.
   const fetched = await db.client.findMany({
-    where: { organizationId },
-    orderBy: { createdAt: "desc" },
+    where: { organizationId, ...search },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: CLIENT_LIST_LIMIT + 1,
     include: { _count: { select: { events: { where: live }, budgets: { where: live } } }, logo: { select: { updatedAt: true } } },
   });

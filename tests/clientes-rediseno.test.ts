@@ -115,7 +115,7 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   const route = repoFile("app/api/admin/clients/route.ts");
   assert.match(route, /take: CLIENT_LIST_LIMIT \+ 1/);
   assert.match(route, /Response\.json\(\{ clients: rows, truncated \}\)/);
-  assert.ok(repoFile("components/admin/modules/ClientesModule.tsx").includes("Mostrando los primeros 200 clientes: los indicadores no incluyen el resto. Afiná con la búsqueda."));
+  assert.ok(repoFile("components/admin/modules/ClientesModule.tsx").includes("Mostrando hasta 200 coincidencias: los indicadores corresponden a estos resultados. La búsqueda consulta toda la cartera."));
   assert.match(ficha, /canWriteClients\(role\)/);
   const css = repoFile("app/globals.css");
   assert.match(css, /\.admin-kpis\.admin-kpis--ficha \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/, "la franja de la ficha son cinco indicadores en una fila");

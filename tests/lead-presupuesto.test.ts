@@ -32,6 +32,7 @@ test("dedup por teléfono: compara la clave nacional (+595, 0 inicial)", () => {
 test("resolveClientFromLead reutiliza el cliente y solo crea si no hay coincidencia", async () => {
   const created: unknown[] = [];
   const tx = {
+    $queryRaw: async () => [],
     client: {
       findMany: async () => clients,
       create: async ({ data }: { data: Record<string, unknown> }) => {

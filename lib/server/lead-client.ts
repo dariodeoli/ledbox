@@ -128,14 +128,23 @@ export async function resolveClientFromLead(
   lead: LeadContact,
   options: { allowCreate?: boolean } = {},
 ): Promise<ResolvedLeadClient | null> {
-  const candidates = await tx.client.findMany({
-    where: { organizationId, OR: [{ email: { not: null } }, { phone: { not: null } }] },
-    orderBy: { createdAt: "desc" },
-    take: 1000,
-    select: { id: true, name: true, company: true, email: true, phone: true },
-  });
-  const existing = findMatchingClient(candidates, lead);
-  if (existing) return { client: { id: existing.id, name: existing.name, company: existing.company }, created: false };
+  // Dos leads pueden compartir contacto y llegar desde rutas distintas. El lock
+  // transaccional por empresa protege buscar + crear sin bloquear otros tenants.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`lead-client:${organizationId}`}, 0))::text AS locked`;
+  let cursor: string | undefined;
+  for (;;) {
+    const candidates = await tx.client.findMany({
+      where: { organizationId, OR: [{ email: { not: null } }, { phone: { not: null } }] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 1000,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, name: true, company: true, email: true, phone: true },
+    });
+    const existing = findMatchingClient(candidates, lead);
+    if (existing) return { client: { id: existing.id, name: existing.name, company: existing.company }, created: false };
+    if (candidates.length < 1000) break;
+    cursor = candidates[candidates.length - 1].id;
+  }
   if (options.allowCreate === false) return null;
   const created = await tx.client.create({
     data: {

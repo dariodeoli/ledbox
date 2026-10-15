@@ -182,7 +182,7 @@ export function ClientQuickFields({
       value={values.tradeName}
       onChange={(tradeName) => onChange({ tradeName })}
       placeholder="Ej.: Samsung Paraguay"
-      hint="Identidad principal de la cartera; independiente de la razón social y del contacto."
+      hint="El nombre con el que reconocés a este cliente."
       error={errors?.tradeName}
     />
   );
@@ -216,7 +216,7 @@ export function ClientQuickFields({
       value={values.company}
       onChange={(value) => onChange({ company: value })}
       placeholder="Ej.: Samsung Paraguay"
-      hint="Dato histórico de empresa; no implica razón social."
+      hint="Opcional: empresa a la que pertenece el cliente."
     />
   );
   const type = (
@@ -336,13 +336,10 @@ export function ClientQuickFields({
       <>
         <AdminDialogSection title="Datos">
           {tradeName}
-          {type}
-          {company}
-          {historicName}
-        </AdminDialogSection>
-        <AdminDialogSection title="Contacto">
           {phone}
           {email}
+        </AdminDialogSection>
+        <AdminDialogSection title="Contacto alternativo" collapsible defaultOpen={moreOpen} hint="encargado, cargo y WhatsApp">
           {contactPerson}
           {whatsapp}
         </AdminDialogSection>
@@ -353,7 +350,10 @@ export function ClientQuickFields({
         <AdminDialogSection title="Ubicación" collapsible defaultOpen={moreOpen} hint="ciudad, dirección y mapa">
           {location}
         </AdminDialogSection>
-        <AdminDialogSection title="Más opciones" collapsible defaultOpen={moreOpen} hint="web, redes, contactos por función, notas y logo">
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={moreOpen} hint="tipo de cliente, empresa, redes y otros contactos">
+          {type}
+          {company}
+          {historicName}
           {web}
           {functionContacts}
           {children}
