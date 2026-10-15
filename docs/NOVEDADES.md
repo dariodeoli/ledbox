@@ -544,3 +544,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 ## v2.1.115 — 2026-10-14
 
 - Demo completa con todos los estados: productos disponibles, reservados, agotados (hoy y en un rango), en mantenimiento, archivados y combos; presupuestos borrador, enviados, en negociación, aprobados, firmados, pagados, perdidos, cancelados y vencidos, con señas, cuotas y garantías; firmas en todos sus estados (con su huella real); incidentes, devoluciones, trabajos de proveedor y registros archivados. Las fechas se mueven con el día de hoy, así la demo nunca se ve vieja.
+
+## v2.1.116 — 2026-10-15
+
+- Demo interactiva: cada visitante recibe su propia copia de la demo completa y puede usar todo (reservar, mover, crear, enviar, aprobar desde el portal, firmar) como dueño. Nadie más ve sus cambios y la copia se borra sola a la hora sin uso (máximo 24 h). Franja «DEMO · Tus cambios se borran si no la usás por 1 hora» con la hora límite, «Reiniciar la demo» y «Salir».
+- En la demo nada sale hacia afuera: los correos y los WhatsApp se simulan y se muestra «así se vería»; el código para firmar aparece en pantalla; las claves de API, invitaciones, cambio de plan y cambio de correo o contraseña están desactivados; mayorista y tienda web dicen «No disponible en la demo».
+- Con más de 150 demos abiertas a la vez, el visitante nuevo ve «La demo está llena, volvé en unos minutos». La demo se abre con «Entrar a la demo» (los robots no gastan copias).
+- Superadmin → Tráfico → Demo: copias creadas por día, activas ahora, reinicios, cuántas hicieron algo y qué tocaron. Las copias nunca cuentan como empresas ni usuarios reales.
