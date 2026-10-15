@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+import { CATEGORY_PREVIEW_EVENT, categoryPreviewItems, type CategoryPreviewRequest } from "@/lib/store-category-preview";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -91,6 +93,8 @@ type Props = {
   categoryName?: string;
   /** La portada puede ofrecer el mismo selector; evita repetirlo en el catálogo de esa página. */
   showEventPicker?: boolean;
+  /** Sólo metadatos en el acordeón: este catálogo mantiene el único motor y sus callbacks. */
+  categoryPreviewKey?: string;
   categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }> };
 };
 
@@ -122,7 +126,7 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true, categoryPreviewKey }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
@@ -133,6 +137,31 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const visitorKey = `ledbox-store-visitor:${slug.trim().toLowerCase()}`;
   const [contactOpen, setContactOpen] = useState(false);
   const [quickId, setQuickId] = useState<string | null>(null);
+  const [categoryPreview, setCategoryPreview] = useState<{ category: string; host: HTMLElement } | null>(null);
+  useEffect(() => {
+    if (!categoryPreviewKey) return;
+    const accept = (detail: CategoryPreviewRequest) => {
+      if (!detail || detail.catalogKey !== categoryPreviewKey) return;
+      if (detail.category === null) { setCategoryPreview(null); return; }
+      if (typeof detail.category !== "string" || typeof detail.targetId !== "string" || !items.some((item) => item.category === detail.category)) return;
+      const host = document.getElementById(detail.targetId);
+      if (!host || host.dataset.storeCategoryScope !== categoryPreviewKey || host.dataset.storeCategoryPreview !== detail.category) return;
+      setCategoryPreview({ category: detail.category, host });
+    };
+    const onPreview = (event: Event) => accept((event as CustomEvent<CategoryPreviewRequest>).detail);
+    window.addEventListener(CATEGORY_PREVIEW_EVENT, onPreview);
+    // Puede abrirse antes de que termine de hidratarse el catálogo.
+    for (const host of document.querySelectorAll<HTMLElement>("[data-store-category-preview]")) {
+      if (host.dataset.storeCategoryScope === categoryPreviewKey) accept({ catalogKey: categoryPreviewKey, category: host.dataset.storeCategoryPreview ?? null, targetId: host.id });
+    }
+    return () => { window.removeEventListener(CATEGORY_PREVIEW_EVENT, onPreview); setCategoryPreview(null); };
+  }, [categoryPreviewKey, items]);
+  useEffect(() => {
+    if (!categoryPreview) return;
+    const observer = new MutationObserver(() => { if (!categoryPreview.host.isConnected) setCategoryPreview(null); });
+    observer.observe(categoryPreview.host.closest(".cp-theme") ?? document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [categoryPreview]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
   const [sort, setSort] = useState<SortKey>("destacados");
@@ -499,6 +528,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   return (
     <section id="catalogo" className="cp-section cp-catalog" aria-labelledby={categoryName ? undefined : "catalogo-titulo"} aria-label={categoryName ? `Productos de ${categoryName}` : undefined}>
+      {categoryPreview?.host.isConnected ? createPortal(<ul className="cp-grid" aria-label={`Productos de ${categoryPreview.category}`}>{categoryPreviewItems(items, categoryPreview.category).map(renderItem)}</ul>, categoryPreview.host) : null}
       {!categoryName ? <div className="cp-section-head">
         <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Catálogo de alquiler"}</p>
         <h2 id="catalogo-titulo" className="cp-h2">Elegí tus productos</h2>

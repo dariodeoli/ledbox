@@ -46,11 +46,11 @@ export function CategoryAccordion({ categories, catalogKey, showPrices, priceMod
           </button></h3>
           <a className="cp-cataccordion-link" href={category.href} aria-label={`Ver categoría ${category.name}`}>Ver categoría</a>
         </div>
-        {expanded ? <div id={panelId} className="cp-cataccordion-panel" role="region" aria-labelledby={buttonId}>
+        <div id={panelId} className="cp-cataccordion-panel" role="region" aria-labelledby={buttonId} hidden={!expanded}>{expanded ? <>
           <p className="cp-cataccordion-count">Mostrando {Math.min(CATEGORY_PREVIEW_LIMIT, category.count)} de {category.count} {category.count === 1 ? "producto" : "productos"}</p>
           <div ref={hostRef} id={previewId} data-store-category-preview={category.name} data-store-category-scope={catalogKey}>{renderProducts?.(category.name)}</div>
           <a className="cp-link cp-cataccordion-all" href={category.href}>Ver {category.count === 1 ? "el producto" : `los ${category.count} productos`} de {category.name}<XIcon name="next" size={14} /></a>
-        </div> : null}
+        </> : null}</div>
       </div>;
     })}
   </div>;
