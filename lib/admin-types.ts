@@ -167,7 +167,7 @@ export type AdminClientRef = {
   id: string;
   name: string;
   company: string | null;
-  /** Mostrar con clientDisplayName (tradeName.trim() || name), nunca company. */
+  /** Identidad histórica: documentos usan clientDisplayName; el panel usa clientPresentation. */
   tradeName?: string | null;
   legalName?: string | null;
   type: string;
@@ -178,6 +178,7 @@ export type AdminClientRef = {
    * Presupuestos también la proyecta para su identidad; otros refs pueden omitirla.
    */
   logoUpdatedAt?: string | null;
+  contactName?: string | null;
 };
 
 export type AdminClientRow = AdminClientRef & {
@@ -215,7 +216,7 @@ export type AdminClientRow = AdminClientRef & {
 
 /**
  * Cliente mínimo para selectores (issue #62): lo que devuelve
- * `/api/admin/clients?fields=selector`, sin métricas ni logo.
+ * `/api/admin/clients?fields=selector`, sin métricas ni bytes del logo.
  */
 export type AdminClientOption = {
   id: string;
@@ -225,6 +226,8 @@ export type AdminClientOption = {
   legalName?: string | null;
   type: string;
   active: boolean;
+  contactName?: string | null;
+  logoUpdatedAt?: string | null;
 };
 
 export type AdminEventRef = {
@@ -591,8 +594,8 @@ export type AdminBudgetRequestRow = {
     subtotal: number;
     discount: number;
     total: number;
-    /** Referencia mínima del cliente (el API de solicitudes solo manda nombre y empresa). */
-    client: Pick<AdminClientRef, "name" | "company">;
+    /** Identidad comercial mínima; sin notas ni bytes de imagen. */
+    client: Pick<AdminClientRef, "id" | "name" | "company" | "tradeName" | "legalName" | "contactName" | "type" | "logoUpdatedAt">;
     items: Array<Pick<AdminBudgetItem, "id" | "name" | "quantity" | "days" | "unitPrice" | "excluded">>;
   };
 };
@@ -2816,6 +2819,7 @@ export type AdminRentalSettings = {
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
+  venues?: import("./event-venues").EventVenue[];
   /** Remitos de un evento (`GET /api/admin/delivery-notes?eventId=`). */
   notes?: import("./delivery-note").AdminDeliveryNote[];
   /** Cotización de un paquete (`GET /api/admin/inventory/combos?pricing=1`). */

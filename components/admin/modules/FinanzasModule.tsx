@@ -1,4 +1,6 @@
 "use client";
+import { clientPresentation } from "@/lib/client-identity";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 
 import { FIELD_LIMITS } from "@/lib/field-rules";
 
@@ -402,7 +404,7 @@ function PaymentRemindersDialog({
   onTemplate: (payment: AdminPaymentRow) => void;
   onClose: () => void;
 }) {
-  const label = payment.client.company || payment.client.name;
+  const label = clientPresentation(payment.client).primary;
   const emailToday = reminderToday(payment, "email");
   const whatsappToday = reminderToday(payment, "whatsapp");
   const reminders = payment.reminders ?? [];
@@ -578,7 +580,7 @@ function ExpectedReviewDialog({
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
 
-  const label = row.budget.client.company || row.budget.client.name;
+  const label = clientPresentation(row.budget.client).primary;
   const concept = expectedPaymentConcept(row);
   const confirming = mode === "confirm";
   const amountValue = Number(amount) || 0;
@@ -628,7 +630,7 @@ function ExpectedReviewDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={row.budget.client} /></dd>
           </div>
           <div>
             <dt>Presupuesto</dt>
@@ -799,7 +801,7 @@ function ExpectedSplitDialog({
     ];
   });
 
-  const label = row.budget.client.company || row.budget.client.name;
+  const label = clientPresentation(row.budget.client).primary;
   const concept = expectedPaymentConcept(row);
   const { total, valid } = validateFinanceSplitAmounts(parts.map((part) => part.amount), remaining);
 
@@ -844,7 +846,7 @@ function ExpectedSplitDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={row.budget.client} /></dd>
           </div>
           <div>
             <dt>Concepto</dt>
@@ -940,7 +942,7 @@ function CollectPaymentDialog({
   const [method, setMethod] = useState<string>("Transferencia");
   const [accountId, setAccountId] = useState("");
 
-  const label = payment.client.company || payment.client.name;
+  const label = clientPresentation(payment.client).primary;
   const methodAccounts = accountsForPaymentMethod(method, accounts);
   const effectiveAccountId = methodAccounts.some((account) => account.id === accountId)
     ? accountId
@@ -980,7 +982,7 @@ function CollectPaymentDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={payment.client} /></dd>
           </div>
           <div>
             <dt>Monto</dt>
@@ -1121,7 +1123,7 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
   }, [row.budget.id]);
 
   const budget = rows?.[0]?.budget ?? row.budget;
-  const label = budget.client.company || budget.client.name;
+  const label = clientPresentation(budget.client).primary;
 
   return (
     <AdminDialog
@@ -1394,7 +1396,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       { value: "", label: "A definir" },
       ...projects.map((project) => ({
         value: project.id,
-        label: `${project.name}${project.client.company || project.client.name ? ` · ${project.client.company || project.client.name}` : ""}`,
+        label: `${project.name}${clientPresentation(project.client).primary ? ` · ${clientPresentation(project.client).primary}` : ""}`,
       })),
     ],
     [projects],
@@ -1630,7 +1632,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         rows: [
           ...settledPayments.map((payment) => [
             csvStamp(payment.collectedAt ?? payment.paidAt),
-            payment.client.company || payment.client.name,
+            clientPresentation(payment.client).primary,
             payment.budget?.title ?? "",
             payment.invoiceNumber ?? "",
             payment.method ?? "",
@@ -1655,7 +1657,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         rows: [
           ...pendingPayments.map((payment) => [
             csvDay(payment.dueAt),
-            payment.client.company || payment.client.name,
+            clientPresentation(payment.client).primary,
             payment.budget?.title ?? "",
             payment.invoiceNumber ?? "",
             csvDay(payment.invoiceIssuedAt),
@@ -1753,7 +1755,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     action: "collect" | "cancel",
     extra?: { method?: string; treasuryAccountId?: string },
   ) {
-    const label = payment.client.company || payment.client.name;
+    const label = clientPresentation(payment.client).primary;
     setBusyId(`${action}:${payment.id}`);
     setNotice(null);
     setFormError("");
@@ -1809,7 +1811,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
    * el motivo real. El panel refresca para ver el estado y el historial.
    */
   async function remindByEmail(payment: AdminPaymentRow) {
-    const label = payment.client.company || payment.client.name;
+    const label = clientPresentation(payment.client).primary;
     setReminderBusyId(`email:${payment.id}`);
     setNotice(null);
     setFormError("");
@@ -1850,7 +1852,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     setTemplateTarget({
       kind: "payment",
       id: payment.id,
-      label: payment.client.company || payment.client.name,
+      label: clientPresentation(payment.client).primary,
       phone: payment.client.phone,
     });
   }
@@ -1921,7 +1923,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   async function submitExpectedReview(payload: ExpectedReviewSubmit) {
     if (!expectedReview || expectedBusy) return;
     const row = expectedReview.row;
-    const label = row.budget.client.company || row.budget.client.name;
+    const label = clientPresentation(row.budget.client).primary;
     const concept = expectedPaymentConcept(row);
     setExpectedBusy(true);
     setExpectedError("");
@@ -2008,7 +2010,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   async function submitExpectedSplit(parts: Array<{ amount: number; dueAt: string }>) {
     if (!expectedSplit) return;
     const row = expectedSplit;
-    const label = row.budget.client.company || row.budget.client.name;
+    const label = clientPresentation(row.budget.client).primary;
     const concept = expectedPaymentConcept(row);
     setExpectedBusy(true);
     setExpectedError("");
@@ -2486,14 +2488,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
             onChange={(value) => setForm({ ...form, clientId: value, budgetId: "" })}
             placeholder="Buscá por nombre o empresa…"
             emptyLabel={clients.loading ? "Cargando clientes…" : clients.error ? "No pudimos cargar los clientes." : "No hay clientes cargados."}
-            options={(clients.data ?? []).map((client) => {
-              const company = client.company?.trim() || "";
-              return {
-                value: client.id,
-                label: company || client.name,
-                description: company && company !== client.name ? client.name : undefined,
-              };
-            })}
+            options={(clients.data ?? []).map(clientComboboxOption)}
           />
           <Combobox
             label="Presupuesto"
@@ -2696,7 +2691,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               <AdminCardGrid
                 label="Pagos esperados por confirmar"
                 cards={expectedQueue.map((row): AdminCardData => {
-                  const label = row.budget.client.company || row.budget.client.name;
+                  const label = clientPresentation(row.budget.client).primary;
                   const concept = expectedPaymentConcept(row);
                   const overdue = row.status !== "PROOF" && expectedPaymentNeedsAction(row);
                   const proof = expectedProofOf(row);
@@ -2713,7 +2708,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   const amount = row.status === "PARTIAL" ? Math.max(0, row.amount - row.paidAmount) : row.amount;
                   return {
                     id: row.id,
-                    title: label,
+                    title: <ClientIdentityView client={row.budget.client} />,
                     titleTooltip: `${label} · ${row.budget.title} · presupuesto ${row.budget.id.slice(0, 8)}`,
                     subtitle: `${concept} · ${row.budget.title}`,
                     badges: [
@@ -2830,14 +2825,14 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               ]}
             >
               {expectedQueue.map((row) => {
-                const label = row.budget.client.company || row.budget.client.name;
+                const label = clientPresentation(row.budget.client).primary;
                 const concept = expectedPaymentConcept(row);
                 const overdue = row.status !== "PROOF" && expectedPaymentNeedsAction(row);
                 const proof = expectedProofOf(row);
                 return (
                   <AdminRow key={row.id}>
                     <AdminCell title={`${label} · ${row.budget.title} · presupuesto ${row.budget.id.slice(0, 8)}`}>
-                      <strong>{label}</strong>
+                      <ClientIdentityView client={row.budget.client} />
                       <small className="admin-cell-sub"> · {row.budget.title}</small>
                     </AdminCell>
                     <AdminCell title={`${concept}${row.label.includes("· parte ") ? ` ${row.label.split("· parte ")[1]}` : ""}${row.dueAt ? ` · vence el ${formatDate(row.dueAt)}` : ""}`}>
@@ -3008,7 +3003,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               <AdminCardGrid
                 label="Cobros a plazo por cobrar"
                 cards={pendingPayments.map((payment): AdminCardData => {
-                  const label = payment.client.company || payment.client.name;
+                  const label = clientPresentation(payment.client).primary;
                   const emailToday = reminderToday(payment, "email");
                   const whatsappToday = reminderToday(payment, "whatsapp");
                   const emailDoneToday = emailToday?.status === "sent";
@@ -3029,7 +3024,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   }
                   return {
                     id: payment.id,
-                    title: label,
+                    title: <ClientIdentityView client={payment.client} />,
                     titleTooltip: `${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`,
                     subtitle: payment.budget?.title ?? null,
                     badges,
@@ -3178,7 +3173,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               ]}
             >
               {pendingPayments.map((payment) => {
-                const label = payment.client.company || payment.client.name;
+                const label = clientPresentation(payment.client).primary;
                 const emailToday = reminderToday(payment, "email");
                 const whatsappToday = reminderToday(payment, "whatsapp");
                 const emailDoneToday = emailToday?.status === "sent";
@@ -3189,7 +3184,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 return (
                   <AdminRow key={payment.id}>
                     <AdminCell title={`${label}${payment.budget ? ` · ${payment.budget.title}` : ""}`}>
-                      <strong>{label}</strong>
+                      <ClientIdentityView client={payment.client} />
                       {payment.budget ? <small className="admin-cell-sub"> · {payment.budget.title}</small> : null}
                     </AdminCell>
                     <AdminCell
@@ -3351,8 +3346,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                   const collectedAt = payment.collectedAt ?? payment.paidAt;
                   return {
                     id: payment.id,
-                    title: payment.client.company || payment.client.name,
-                    titleTooltip: `${payment.client.company || payment.client.name}${payment.budget ? ` · ${payment.budget.title}` : ""}`,
+                    title: <ClientIdentityView client={payment.client} />,
+                    titleTooltip: `${clientPresentation(payment.client).primary}${payment.budget ? ` · ${payment.budget.title}` : ""}`,
                     subtitle: payment.budget?.title ?? null,
                     badges: [{ label: paymentStatusLabel(payment.status), tone: paymentStatusTone(payment.status) }],
                     fields: [
@@ -3413,8 +3408,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                     <AdminCell title={collectedAt ? formatDateTime(collectedAt) : "Sin fecha de cobro"}>
                       {collectedAt ? `${formatDateShort(collectedAt)} · ${formatTime(collectedAt)}` : "—"}
                     </AdminCell>
-                    <AdminCell title={payment.client.company || payment.client.name}>
-                      {payment.client.company || payment.client.name}
+                    <AdminCell title={clientPresentation(payment.client).primary}>
+                      <ClientIdentityView client={payment.client} />
                     </AdminCell>
                     <AdminCell title={payment.budget?.title || "Sin presupuesto asociado"}>{payment.budget?.title || "—"}</AdminCell>
                     <AdminCell title={payment.invoiceNumber ? `Factura ${payment.invoiceNumber}` : "Sin factura emitida"}>
@@ -4523,7 +4518,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
       {proofDialog ? (
         <BudgetProofDialog
-          title={`Comprobante · ${proofDialog.client.company || proofDialog.client.name}`}
+          title={`Comprobante · ${clientPresentation(proofDialog.client).primary}`}
           subtitle={[
             proofDialog.budget?.title ?? "Sin presupuesto asociado",
             formatMoney(proofDialog.amount),
@@ -4595,7 +4590,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           title={`Comprobante · ${expectedPaymentConcept(expectedProof.row)}`}
           subtitle={[
             expectedProof.row.budget.title,
-            expectedProof.row.budget.client.company || expectedProof.row.budget.client.name,
+            clientPresentation(expectedProof.row.budget.client).primary,
             formatMoney(expectedProof.row.amount),
             `subido por ${expectedProof.proof.uploadedByName}`,
           ].join(" · ")}

@@ -81,7 +81,7 @@ test("el botón principal avisa «Guardando…» y los formularios largos usan s
   for (const name of ["finanzas", "facturacion", "presupuestos", "pricing", "quick", "signature", "conciliacion", "plantillas", "usuarios", "plan", "deposit"]) {
     assert.match(SOURCES[name], /busyLabel=/, `${name}: sin busyLabel`);
   }
-  for (const name of ["finanzas", "facturacion", "presupuestos", "pricing", "signature", "conciliacion", "firmas", "plantillas", "usuarios", "plan", "mensaje", "deposit"]) {
+  for (const name of ["finanzas", "facturacion", "presupuestos", "pricing", "signature", "conciliacion", "firmas", "usuarios", "plan", "mensaje", "deposit"]) {
     assert.match(SOURCES[name], /<AdminDialogSection\b/, `${name}: sin secciones`);
   }
 });
@@ -93,7 +93,6 @@ test("lo avanzado queda en «Más opciones» plegable", () => {
     presupuestos: /title="Más opciones" collapsible/,
     signature: /title="Más opciones" collapsible/,
     conciliacion: /title="Más opciones" collapsible/,
-    plantillas: /title="Más opciones" collapsible/,
   };
   for (const [name, pattern] of Object.entries(collapsibles)) assert.match(SOURCES[name], pattern, `${name}: sin «Más opciones»`);
   const fin = SOURCES.finanzas;
@@ -124,7 +123,6 @@ test("la ayuda de cierre sin guardar (dirty) está en los diálogos con edición
     ["finanzas", 6],
     ["facturacion", 4],
     ["presupuestos", 5],
-    ["plantillas", 1],
     ["usuarios", 3],
     ["signature", 1],
     ["conciliacion", 1],
@@ -144,13 +142,28 @@ test("la ayuda de cierre sin guardar (dirty) está en los diálogos con edición
 test("las confirmaciones destructivas usan AdminConfirmDialog, no diálogos armados a mano", () => {
   assert.match(SOURCES.facturacion, /<AdminConfirmDialog\s+title=\{`Borrar compra/);
   assert.match(SOURCES.facturacion, /<AdminConfirmDialog\s+title=\{`Cerrar \$\{monthKeyLabel\(month\)\}`\}/);
-  assert.match(SOURCES.plantillas, /<AdminConfirmDialog\s+title=\{`Borrar plantilla/);
+  assert.match(SOURCES.plantillas, /<AdminConfirmDialog\s+title=\{`Eliminar plantilla/);
   assert.match(SOURCES.usuarios, /<AdminConfirmDialog\s+title="Revocar invitación"/);
   assert.match(SOURCES.apiKeys, /<AdminConfirmDialog\s+title="Revocar la API key"/);
   assert.match(SOURCES.catalogo, /<AdminConfirmDialog\s+title="Revocar el link mayorista"/);
   assert.doesNotMatch(SOURCES.apiKeys, /<AdminDialog\b/);
   assert.doesNotMatch(SOURCES.catalogo, /<AdminDialog\b/);
   for (const source of Object.values(SOURCES)) assert.doesNotMatch(source, /window\.confirm\(/);
+});
+
+test("mensajes usa editor en página con tres paneles, estado visible y confirmación de cambios sin guardar", () => {
+  const source = SOURCES.plantillas;
+  assert.doesNotMatch(source, /<AdminDialog\b/, "la edición ya no vuelve al diálogo antiguo");
+  for (const panel of [/title="Plantillas"/, /title=\{form\?\.id \? "Personalizar mensaje" : "Nuevo mensaje"\}/, /title="Vista previa"/]) assert.match(source, panel);
+  for (const field of ["Nombre de la plantilla", "Categoría de la plantilla", "Mensaje", "Disponible al preparar mensajes"]) assert.ok(source.includes(`label="${field}"`), `falta el campo ${field}`);
+  assert.match(source, /previewMessageTemplate\(form\.body, form\.category\)/, "vista previa del motor compartido");
+  assert.match(source, /messageTemplateVariablesOf\(form\.category\)/, "variables del contexto editado");
+  assert.match(source, /const dirty = form !== null && JSON\.stringify\(form\) !== baseRef\.current/);
+  assert.match(source, /if \(dirty\) setPendingChange\(\(\) => action\)/, "cambiar selección difiere la acción");
+  assert.match(source, /<AdminConfirmDialog title="Reemplazar edición"/);
+  assert.match(source, /onNavigate=\{\(href\) => requestChange\(\(\) => router\.push\(href\)\)\}/, "salir al Directorio usa la misma confirmación");
+  assert.match(source, /window\.addEventListener\("beforeunload", onUnload\)/, "cerrar pestaña conserva el aviso de edición");
+  assert.match(source, /<AdminConfirmDialog\s+title=\{`Eliminar plantilla[^>]*danger[^>]*onConfirm=\{\(\) => void deleteTemplate\(\)\}/, "borrar exige confirmación destructiva común");
 });
 
 test("anular y reabrir: el aviso irreversible va en warning= y el motivo en su sección", () => {

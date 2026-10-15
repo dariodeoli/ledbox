@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
 
 import { eventStatusLabel, formatDateTime, formatNumber, formatTime, statusTone, type AdminTone } from "@/lib/admin-format";
 import { clientDisplayName } from "@/lib/client-identity";
@@ -151,7 +152,7 @@ export function EventCards({
               </span>
               <span className="admin-events-card-body">
                 <strong className="admin-events-card-name">{event.name}</strong>
-                <span className="admin-events-card-sub">{clientDisplayName(event.client)}</span>
+                <span className="admin-events-card-sub"><ClientIdentityView client={event.client} /></span>
                 <span className="admin-events-card-sub">{where || "Sin lugar definido"}</span>
               </span>
             </button>

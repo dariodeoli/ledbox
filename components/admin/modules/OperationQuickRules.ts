@@ -1,5 +1,5 @@
 import { contactPhoneValid } from "@/lib/admin-format";
-import { emailValid, FIELD_MESSAGES } from "@/lib/field-rules";
+import { catalogCity, emailValid, FIELD_MESSAGES } from "@/lib/field-rules";
 
 export function locationLinkValid(value: string): boolean {
   try {
@@ -16,9 +16,10 @@ export const EMPTY_EVENT_QUICK = {
 };
 export type EventQuickValues = typeof EMPTY_EVENT_QUICK;
 
-export function eventQuickError(values: EventQuickValues): string {
+export function eventQuickError(values: EventQuickValues, existingCity?: string | null): string {
   if (!values.name.trim()) return "Ingresá el nombre del evento.";
   if (values.name.length > 200) return "El nombre del evento admite hasta 200 caracteres.";
+  if (values.city && values.city !== existingCity && !catalogCity(values.city)) return "Elegí una ciudad de la lista.";
   if (values.location.length > 200) return "El lugar admite hasta 200 caracteres.";
   if (values.startsAt && values.endsAt && new Date(values.endsAt) < new Date(values.startsAt)) return "El fin no puede ser anterior al inicio.";
   if ([values.startsAt, values.endsAt].some((value) => value && !Number.isFinite(new Date(value).getTime()))) return "Ingresá una fecha y hora válidas.";

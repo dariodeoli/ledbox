@@ -80,11 +80,15 @@ test("Firmas y Plantillas salen del menú pero siguen siendo rutas y tienen su a
   }
   const presupuestos = items.find((item) => item.href === "/presupuestos");
   const ajustes = items.find((item) => item.href === "/ajustes");
+  const clientes = items.find((item) => item.href === "/clientes");
   assert.equal(isAdminNavItemActive("/firmas", presupuestos!), true);
-  assert.equal(isAdminNavItemActive("/plantillas", ajustes!), true);
+  assert.equal(isAdminNavItemActive("/plantillas", clientes!), true);
+  assert.equal(isAdminNavItemActive("/clientes/mensajes", clientes!), true);
+  assert.equal(isAdminNavItemActive("/plantillas", ajustes!), false);
   assert.equal(isAdminNavItemActive("/firmas", ajustes!), false);
   assert.equal(adminNavLabel("/firmas"), "Firmas");
-  assert.equal(adminNavLabel("/plantillas"), "Plantillas");
+  assert.equal(adminNavLabel("/plantillas"), "Mensajes");
+  assert.equal(adminNavLabel("/clientes/mensajes"), "Mensajes");
   assert.equal(adminNavIcon("/firmas"), "pen");
   // Accesos visibles: pestaña «Firmas» en Presupuestos y «Plantillas» en Ajustes, en ambas pantallas.
   assert.match(repoFile("components/admin/modules/PresupuestosTabs.tsx"), /href: "\/firmas", label: "Firmas"/);
@@ -92,7 +96,7 @@ test("Firmas y Plantillas salen del menú pero siguen siendo rutas y tienen su a
   assert.match(repoFile("components/admin/modules/FirmasModule.tsx"), /<PresupuestosTabs active="firmas" \/>/);
   assert.match(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas", label: "Plantillas"/);
   assert.match(repoFile("components/admin/modules/AjustesModule.tsx"), /<AjustesTabs active=\{section\} \/>/);
-  assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<AjustesTabs active="plantillas" \/>/);
+  assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<ClientesTabs active="mensajes" onNavigate=/);
 });
 
 test("los links internos a /firmas y /plantillas apuntan a rutas que existen", () => {

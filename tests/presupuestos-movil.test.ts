@@ -56,16 +56,21 @@ test("prioridad visual: número, cliente, evento, monto, seña o saldo, etapa y 
   assert.match(table, /\{rowActions\(budget\)\}/, "la fila muestra una acción y el menú");
 });
 
-test("acciones unificadas: una visible por fila y el resto en el menú", () => {
-  assert.match(module, /function budgetMenuItems/, "falta el menú de acciones del presupuesto");
-  assert.match(module, /label: "Imprimir \/ PDF"[\s\S]{0,200}icon: "print"/, "la impresión va en el menú");
-  assert.match(module, /label: "Firma del cliente"/, "la firma va en el menú");
-  assert.match(module, /label: budget\.publicToken \? "Portal del cliente" : "Generar link del portal"/, "el portal va en el menú");
-  assert.match(module, /<AdminActionsMenu label=\{`Acciones del presupuesto/, "la fila no usa el menú");
-  for (const label of ["Ver detalle", "Enviar por correo", "WhatsApp con plantilla", "Editar ítems, precio y documentos", "Plan de pagos", "Aprobar manualmente", "Pedir cambios", "Inventario", "Cronología", "Copiar enlace del cliente", "Ver como cliente"]) {
-    assert.ok(module.includes(`label: "${label}"`), `el menú perdió «${label}»`);
+test("acciones compactas: documentos y compartir en iconos; gestión completa en la ficha", () => {
+  const shortcuts = module.slice(module.indexOf("function budgetShortcuts"), module.indexOf("function budgetMenuItems"));
+  const menu = module.slice(module.indexOf("function budgetMenuItems"), module.indexOf("/** Tarjetas del ancho compacto"));
+  assert.match(module, /shortcuts=\{budgetShortcuts\(budget\)\}/);
+  for (const label of ["Imprimir / PDF", "Enviar por correo", "WhatsApp con plantilla", "Copiar enlace del cliente", "Ver como cliente"]) {
+    assert.ok(shortcuts.includes(`label: "${label}"`), label);
+    assert.ok(!menu.includes(`label: "${label}"`), `acceso duplicado: ${label}`);
   }
-  assert.match(module, /Comprobantes del portal/, "los comprobantes del portal se abren desde el menú");
+  assert.match(menu, /menuOnly && primary/, "el siguiente paso del tablero sigue accesible sin duplicar la fila");
+  for (const binding of ["onPlan", "onDeposit", "onInventory", "onEventName", "onSignature", "onProofs", "onApprove", "onRequestChanges"]) {
+    assert.ok(module.includes(`${binding}:`), `se perdió el acceso de la ficha ${binding}`);
+  }
+  assert.match(ui, /role="group" aria-label="Accesos rápidos"/);
+  assert.match(ui, /aria-label=\{item.label\}/, "los iconos tienen nombre para lectores de pantalla");
+  assert.match(ui, /querySelectorAll<HTMLElement>\('\[role="menuitem"\]/, "los iconos usan el mismo recorrido de teclado");
 });
 
 test("el detalle es un panel lateral con todo y ?detalle=<id> lo abre", () => {

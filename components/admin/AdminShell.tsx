@@ -291,6 +291,8 @@ function AdminCompanySwitcher({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const active = session.organization;
   const canSwitch = !session.demo && !session.sandbox && session.organizations.length > 1;
 
@@ -299,8 +301,26 @@ function AdminCompanySwitcher({
     const onPointer = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
+    const entries = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not(:disabled):not([aria-disabled="true"]), [role="menuitem"]:not(:disabled):not([aria-disabled="true"])') ?? []);
+    const initial = entries();
+    (initial.find((entry) => entry.getAttribute("aria-checked") === "true") ?? initial[0])?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      // Tab mantiene el desplazamiento nativo fuera del menú, sin atrapar el foco.
+      if (event.key === "Tab") { setOpen(false); return; }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const items = entries();
+      if (!items.length) return;
+      event.preventDefault();
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+      items[next]?.focus();
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -337,16 +357,18 @@ function AdminCompanySwitcher({
       <button
         type="button"
         className="admin-company"
+        ref={triggerRef}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Empresa activa: ${active.name}. Cambiar de empresa`}
         data-open={open ? "true" : undefined}
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}
       >
         {body}
       </button>
       {open ? (
-        <div className="admin-company-menu" role="menu" aria-label="Cambiar de empresa">
+        <div ref={menuRef} className="admin-company-menu" role="menu" aria-label="Cambiar de empresa">
           <span className="admin-company-menu-title">Tus empresas</span>
           {session.organizations.map((org) => {
             const current = org.id === active.id;

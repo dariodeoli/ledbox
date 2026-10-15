@@ -28,6 +28,20 @@ export type AdminModuleHelp = {
   links: readonly AdminModuleHelpLink[];
 };
 
+const MESSAGE_TEMPLATES_HELP: AdminModuleHelp = {
+    title: "Mensajes",
+    summary: "Los mensajes de WhatsApp que el equipo reutiliza, por contexto y con variables.",
+    bullets: [
+      "Escribí el texto una vez con variables ({{cliente}}, {{monto}}, {{vencimiento}}, {{link_portal}}) y el panel las completa con datos reales.",
+      "Solo las plantillas activas se ofrecen al enviar desde presupuestos, eventos o cobros.",
+      "FINANCE administra las de cobranza, OPERATIONS las de eventos y OWNER/ADMIN todas.",
+    ],
+    links: [
+      { href: "/presupuestos", label: "Enviar desde un presupuesto" },
+      { href: "/finanzas", label: "Recordatorios de cobro" },
+    ],
+  };
+
 export const MODULE_HELP: Record<string, AdminModuleHelp> = {
   "/dashboard": {
     title: "Inicio",
@@ -97,8 +111,8 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       "Desde la ficha se abren sus presupuestos, eventos y cobros sin salir de la pantalla.",
     ],
     links: [
+      { href: "/clientes/mensajes", label: "Mensajes reutilizables" },
       { href: "/presupuestos", label: "Presupuestos del cliente" },
-      { href: "/eventos", label: "Eventos del cliente" },
       { href: "/finanzas", label: "Cobros y saldos" },
     ],
   },
@@ -128,7 +142,7 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     links: [
       { href: "/clientes", label: "Datos del cliente" },
       { href: "/finanzas", label: "Cobros y pagos esperados" },
-      { href: "/plantillas", label: "Mensajes de WhatsApp" },
+      { href: "/clientes/mensajes", label: "Mensajes de WhatsApp" },
     ],
   },
   "/firmas": {
@@ -177,19 +191,8 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       { href: "/facturacion", label: "Registro fiscal" },
     ],
   },
-  "/plantillas": {
-    title: "Plantillas",
-    summary: "Los mensajes de WhatsApp que el equipo reutiliza, por contexto y con variables.",
-    bullets: [
-      "Escribí el texto una vez con variables ({{cliente}}, {{monto}}, {{vencimiento}}, {{link_portal}}) y el panel las completa con datos reales.",
-      "Solo las plantillas activas se ofrecen al enviar desde presupuestos, eventos o cobros.",
-      "FINANCE administra las de cobranza, OPERATIONS las de eventos y OWNER/ADMIN todas.",
-    ],
-    links: [
-      { href: "/presupuestos", label: "Enviar desde un presupuesto" },
-      { href: "/finanzas", label: "Recordatorios de cobro" },
-    ],
-  },
+  "/clientes/mensajes": MESSAGE_TEMPLATES_HELP,
+  "/plantillas": MESSAGE_TEMPLATES_HELP,
   "/inventario": {
     title: "Inventario",
     summary: "Los equipos y consumibles que la empresa mueve, con disponibilidad real por fecha.",

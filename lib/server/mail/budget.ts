@@ -1,4 +1,4 @@
-import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
+import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/admin-format";
 import { accountCurrencyLabel, accountTypeLabel } from "@/lib/org-profile";
 import { normalizeBudgetCode, portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { parsePaymentDetails, paymentPlanOf, type PortalBudgetPaymentDetails } from "../budget-portal";
@@ -45,7 +45,7 @@ export type BudgetMailBudget = {
   publicToken: string | null;
   approvedAt: Date | null;
   client: { name: string; company: string | null };
-  event: { name: string | null } | null;
+  event: { name: string | null; startsAt?: Date | null; endsAt?: Date | null } | null;
   items: BudgetMailItem[];
 };
 
@@ -117,6 +117,8 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
     value: budget.validUntil ? `hasta el ${formatDate(budget.validUntil)}` : "sin vencimiento informado",
   });
   if (budget.event?.name) rows.push({ label: "Evento", value: budget.event.name });
+  if (budget.event?.startsAt) rows.push({ label: "Inicio del evento", value: formatDateTime(budget.event.startsAt) });
+  if (budget.event?.endsAt) rows.push({ label: "Fin del evento", value: formatDateTime(budget.event.endsAt) });
   rows.push({ label: "Hoja imprimible", value: "Abrir en el panel", href: budgetPrintSheetUrl(budget.id) });
 
   // Los datos de pago son de la empresa y recién con la aprobación registrada el

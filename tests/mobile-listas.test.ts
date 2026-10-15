@@ -30,7 +30,7 @@ test("eventos: tarjetas en ancho compacto con la fecha destacada, el estado, la 
   // estado, preparación, lo que falta y la siguiente acción (el nombre era lo que
   // desaparecía en móvil).
   assert.match(cards, /admin-events-card-date[\s\S]{0,1200}admin-events-card-name/, "la fecha va destacada junto al nombre");
-  assert.match(cards, /clientDisplayName\(event\.client\)/, "el cliente entra a la tarjeta");
+  assert.match(cards, /<ClientIdentityView client=\{event\.client\} \/>/, "la identidad canónica del cliente entra a la tarjeta");
   assert.match(cards, /<EventStateBadges item=\{item\} \/>/, "el estado va en la tarjeta");
   assert.match(cards, /<PrepChips item=\{item\} \/>/, "la preparación va en la tarjeta");
   assert.match(cards, /readiness\.gaps\[0\]/, "lo primero que falta se lee en la tarjeta");
@@ -53,7 +53,9 @@ test("clientes: tarjetas en ancho compacto con contacto, deuda, última activida
   for (const label of ["Contratado", "Saldo", "Última actividad"]) {
     assert.ok(module.includes(`label: "${label}"`), `falta «${label}» en la tarjeta del cliente`);
   }
-  assert.match(module, /const primaryContact = clientContactLine\(client\)/, "el contacto principal entra a la tarjeta");
+  const cards = module.slice(module.indexOf("const clientCards:"), module.indexOf("const totals =", module.indexOf("const clientCards:")));
+  assert.match(cards, /<ClientIdentityView client=\{client\} \/>/, "responsable y segmento comparten la identidad canónica");
+  assert.match(cards, /clientContactLine\(client\)/, "el teléfono o correo principal sigue visible en la tarjeta");
   assert.match(module, /client\.active \? \[\] : \[\{ label: "Inactivo"/, "el estado inactivo va en la tarjeta");
   assert.match(module, /footer: rowActions\(client\)/, "la tarjeta comparte las acciones de la fila");
   assert.match(module, /narrow \? null : \(\n\s*<AdminViewSwitch/);
@@ -84,10 +86,12 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   const detail = repoFile("components/admin/modules/ClienteFichaModule.tsx");
   assert.match(detail, /<ClientLinks client=\{client\} name=\{name\}/, "la ficha mantiene los links");
   assert.match(detail, /mailto:/, "la ficha mantiene el correo");
-  // La plantilla de columnas queda en ocho: cliente, tipo, contacto, eventos, contratado, saldo, actividad y acciones.
+  // Tipo se integra en la identidad; contacto conserva su columna independiente.
+  assert.match(row, /<ClientIdentityView client=\{client\} \/>/, "la celda conserva responsable y segmento");
+  assert.match(repoFile("components/admin/ClientIdentity.tsx"), /identity\.category/, "el tipo sigue visible dentro de la identidad");
   const css = repoFile("app/globals.css");
   const regla = /\.admin-table--clientes \{ --clientes-cols: ([^;]+); --admin-cols: var\(--clientes-cols\); --admin-table-min: ([\d.]+)rem; \}/.exec(css);
   assert.ok(regla, "falta la plantilla de columnas de clientes");
-  assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 8, "ocho columnas, sin estado ni presupuestos sueltos");
+  assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 7, "siete columnas, con tipo integrado y contacto independiente");
   assert.equal(Number(regla[2]) <= 64, true, "el ancho mínimo no crece");
 });

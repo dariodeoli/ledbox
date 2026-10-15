@@ -1,3 +1,4 @@
+import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "./client-identity";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { withDeletedLabel } from "../deleted-label";
@@ -6,7 +7,7 @@ import { dayKeyOf, dayStart } from "./notifications";
 
 const PAGE_SIZE = 50;
 const paymentInclude = {
-  client: { select: { id: true, name: true, company: true, type: true, email: true, phone: true, deletedAt: true } },
+  client: { select: { ...CLIENT_IDENTITY_SELECT, email: true, phone: true, deletedAt: true } },
   budget: { select: { id: true, title: true, publicToken: true } },
   reminders: { orderBy: { sentAt: "desc" as const }, take: 20 },
   treasuryAccount: { select: { id: true, name: true, type: true } },
@@ -74,7 +75,7 @@ export async function readFinanceListing(organizationId: string, params: URLSear
       } }),
     ]);
     return {
-      clientPayments: clientPayments.map(payment => ({ ...payment, client: withDeletedLabel(payment.client) })),
+      clientPayments: clientPayments.map(payment => ({ ...payment, client: withDeletedLabel(clientIdentityDTO(payment.client)) })),
       supplierJobs: supplierJobs.map(job => ({ ...job, supplier: withDeletedLabel(job.supplier) })),
       financeSummary: { collected: collected._sum.amount ?? 0, collectedCount: collected._count, pendingTotal: pending._sum.amount ?? 0, pendingCount: pending._count, overdue, advances: jobs._sum.advance ?? 0, payable: Number(payable[0]?.amount ?? 0), jobsCount: jobs._count },
       ...(collections ? { paymentsPagination: { pending: pendingPage, settled: settledPage }, filterClient: withDeletedLabel(filterClient) } : {}),

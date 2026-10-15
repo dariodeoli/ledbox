@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
 import { Combobox } from "../AdminFields";
 
 import Link from "next/link";
@@ -275,7 +276,7 @@ function ResumenTab({ event, budget, stageBudget, budgetState, item }: { event: 
         <div>
           <dt>Cliente</dt>
           <dd>
-            {clientDisplayName(event.client)}
+            <ClientIdentityView client={event.client} />
             {legal ? <small className="admin-cell-sub"> · {legal}</small> : null}
             {event.client.phone ? <small className="admin-cell-sub"> · {phone ? <a href={phone} target="_blank" rel="noreferrer">{event.client.phone}</a> : event.client.phone}</small> : null}
             {" "}

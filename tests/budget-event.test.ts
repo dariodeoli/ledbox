@@ -133,10 +133,10 @@ test("aprobar crea el evento solo, después de la aprobación, en todos los cami
 test("Presupuestos: aviso con «Crear evento» en tabla, tarjetas y detalle, y precarga del cliente", () => {
   const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
   // Tabla, tarjetas y tablero comparten la acción de la fila: «Crear evento» es la
-  // acción principal del aprobado sin evento (y queda también en el menú «•••»).
+  // acción principal del aprobado sin evento; el tablero la conserva en su menú.
   assert.match(module, /case "create_event": return void createEventFor\(budget\)/, "acción de la fila en tabla, tarjetas y tablero");
   assert.match(module, /footer: rowActions\(budget\)/, "acción en las tarjetas");
-  assert.match(module, /label: "Crear evento", icon: "events"/, "«Crear evento» también en el menú");
+  assert.match(module, /menuOnly && primary \? \[{ label: primary.label, icon: "check" as const, onClick: \(\) => runPrimary\(budget, primary\)/, "el tablero conserva el siguiente paso; las filas no lo duplican");
   assert.match(module, /onCreateEvent: \(\) => void createEventFor\(budget\)/, "acción en el detalle");
   assert.match(module, /<BudgetDetailDialog/, "aviso y etapas en el detalle");
   assert.match(module, /\/api\/admin\/budgets\/\$\{budget\.id\}\/create-event/);

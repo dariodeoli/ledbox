@@ -18,6 +18,7 @@ export const ADMIN_ROUTES = [
   "/eventos",
   "/calendario",
   "/clientes",
+  "/clientes/mensajes",
   "/leads",
   "/presupuestos",
   "/firmas",

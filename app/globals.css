@@ -1517,7 +1517,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 }
 
 /* ── Menús y desplegables: una caja opaca con sombra ── */
-.admin-menu-pop, .admin-combobox-pop { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; }
+.admin-menu-pop, .admin-combobox-pop, .admin-company-menu, .admin-root .admin-field [role="listbox"]:not(.admin-combobox-list) { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; color: var(--a-text-strong); padding: 4px; }
+.admin-menu-item, .admin-company-menu-item, .admin-combobox-option, .admin-root .admin-field [role="option"] { min-height: 44px; border-radius: 8px; }
+.admin-menu-item:hover:not(:disabled), .admin-company-menu-item:hover:not(:disabled), .admin-combobox-option:hover, .admin-root .admin-field [role="option"]:is(:hover, [aria-selected="true"]) { background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-company-menu-item:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
 /* Piel única del panel: línea inferior en los campos canónicos. Se conservan
    prefijos, indicadores, validación y halo de foco de cada primitivo. No afecta
    checks, interruptores, archivos ni botones segmentados o del calendario. */
@@ -1700,8 +1703,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-field-action > .admin-btn { justify-self: end; }
   @supports (grid-template-rows: subgrid) {
     .admin-form-grid > .admin-field-action { grid-row: span 3; grid-template-rows: subgrid; align-items: start; }
-    .admin-field-action > .admin-field { grid-row: 1 / span 3; grid-column: 1; }
-    .admin-field-action > .admin-btn { grid-column: 2; grid-row: 2; align-self: center; }
+    .admin-form-grid > .admin-field-action > .admin-field { grid-row: 1 / span 3; grid-column: 1; }
+    .admin-form-grid > .admin-field-action > .admin-btn { grid-column: 2; grid-row: 2; align-self: center; }
   }
 }
 /* Cada campo ocupa tres filas de la grilla (label · control · mensaje) y las
@@ -1951,6 +1954,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-grid[data-columns="3"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 4; }
 .admin-dialog-grid[data-columns="4"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 3; }
 .admin-dialog-grid > [data-size="full"], .admin-dialog-grid > .admin-field--wide, .admin-dialog-grid > .admin-dialog-note { grid-column: 1 / -1; }
+.admin-dialog-grid > .admin-field-action { grid-column: span 6; grid-template-columns: minmax(0, 1fr); }
+.admin-dialog-grid > .admin-field-action > .admin-btn { justify-self: start; max-width: 100%; white-space: normal; }
 .admin-dialog-grid > .admin-col { grid-column: span 6; }
 .admin-dialog-grid > .admin-col[data-span="2"] { grid-column: span 2; } .admin-dialog-grid > .admin-col[data-span="3"] { grid-column: span 3; } .admin-dialog-grid > .admin-col[data-span="4"] { grid-column: span 4; } .admin-dialog-grid > .admin-col[data-span="5"] { grid-column: span 5; } .admin-dialog-grid > .admin-col[data-span="7"] { grid-column: span 7; } .admin-dialog-grid > .admin-col[data-span="8"] { grid-column: span 8; } .admin-dialog-grid > .admin-col[data-span="9"] { grid-column: span 9; } .admin-dialog-grid > .admin-col[data-span="10"] { grid-column: span 10; } .admin-dialog-grid > .admin-col[data-span="12"] { grid-column: 1 / -1; }
 .admin-col { display: grid; align-content: start; min-width: 0; }
@@ -2079,7 +2084,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Clientes (rediseño): tabla esencial —cliente, tipo, contacto, eventos,
    contratado, saldo, última actividad y una acción visible + «•••»—. La fila
    entera abre la ficha con un enlace extendido (`.admin-row-link::after`). */
-.admin-table--clientes { --clientes-cols: minmax(9.5rem, 1.8fr) 6.75rem minmax(8.5rem, 1.3fr) 4.5rem 7rem 7rem 6rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 58rem; }
+.admin-table--clientes { --clientes-cols: minmax(12rem, 2fr) minmax(8.5rem, 1.3fr) 4.5rem 7rem 7rem 6rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 58rem; }
 .admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
 .admin-table--clientes .admin-cell--actions { overflow: visible; }
 @media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }
@@ -5473,3 +5478,52 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Los nombres de comprobantes deben caber en la ficha móvil. */
 .admin-dialog-facts dd :is(a, .admin-btn) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: start; }
+
+/* Accesos frecuentes del menú, sin repetir filas de texto. */
+.admin-menu-shortcuts { display: flex; align-items: center; gap: 4px; padding: 4px; border-bottom: 1px solid var(--a-line); }
+.admin-menu-shortcuts .admin-iconbtn { flex: 1 1 0; min-width: 36px; min-height: 36px; border-color: transparent; }
+@media (max-width: 767px) { .admin-menu-shortcuts .admin-iconbtn { min-width: 44px; min-height: 44px; } }
+.admin-root ::selection { background: var(--a-accent-soft); color: var(--a-text-strong); }
+/* Clientes / Mensajes: una biblioteca, edición y vista previa del motor compartido. */
+.admin-message-workspace { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(280px, 1.4fr) minmax(230px, 1fr); gap: 12px; align-items: start; }
+.admin-message-workspace > div { min-width: 0; }
+.admin-message-controls, .admin-message-fields, .admin-message-preview-content, .admin-message-placeholder { padding: 14px; }
+.admin-message-controls { display: grid; gap: 10px; }
+.admin-message-list { display: grid; gap: 6px; padding: 0 8px 10px; max-height: 65vh; overflow-y: auto; }
+.admin-message-template { display: flex; justify-content: space-between; align-items: start; gap: 8px; width: 100%; min-width: 0; height: auto; padding: 10px; text-align: left; white-space: normal; }
+.admin-message-template[aria-pressed="true"] { background: var(--a-accent-soft); border-color: var(--a-accent); }
+.admin-message-template-copy { display: grid; gap: 4px; min-width: 0; }
+.admin-message-template-copy strong { font-size: 12.5px; line-height: 1.4; }
+.admin-message-template-copy small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--a-muted); font-size: 11px; line-height: 1.5; font-weight: 400; }
+.admin-message-fields { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.admin-message-variables { display: grid; gap: 8px; min-width: 0; }
+.admin-message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.admin-message-preview-content { display: grid; gap: 12px; }
+.admin-message-preview-column { position: sticky; top: 84px; }
+.admin-message-preview-column .admin-message-preview { min-height: 150px; }
+.admin-message-placeholder { display: grid; justify-items: start; gap: 10px; }
+@media (max-width: 1199px) {
+  .admin-message-workspace { grid-template-columns: minmax(190px, .8fr) minmax(0, 1.7fr); }
+  .admin-message-preview-column { position: static; grid-column: 2; }
+}
+@media (max-width: 767px) {
+  .admin-message-workspace { grid-template-columns: minmax(0, 1fr); }
+  .admin-message-preview-column { grid-column: auto; }
+  .admin-message-list { max-height: 260px; }
+  .admin-message-controls, .admin-message-fields, .admin-message-preview-content, .admin-message-placeholder { padding: 12px; }
+  .admin-message-template { min-height: 44px; }
+}
+/* Identidad cliente compartida: catálogo, selección y filas del panel. */
+.admin-client-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; vertical-align: middle; }
+.admin-client-identity-copy { display: grid; min-width: 0; line-height: 1.3; }
+.admin-client-identity-copy > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.admin-client-identity-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--a-muted); font-size: 10.5px; font-weight: 400; }
+.admin-combobox-option-content { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-combobox-selected { position: absolute; inset: 0 34px 0 10px; display: flex; align-items: center; min-width: 0; pointer-events: none; }
+/* El input conserva valor/teclado/ARIA; sólo su pintura se oculta bajo la identidad.
+   !important vence los selectores canónicos de controles con múltiples :not(). */
+.admin-combobox[data-rich-selection="true"] > input { color: transparent !important; -webkit-text-fill-color: transparent; }
+.admin-combobox[data-rich-selection="true"] > input:disabled { opacity: 1; }
+.admin-combobox-selected .admin-client-identity { width: 100%; }
+
+.admin-client-identity-type { display: inline; padding: 1px 4px; border-radius: 4px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 9px; font-weight: 600; }

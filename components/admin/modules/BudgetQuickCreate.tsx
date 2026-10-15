@@ -1,10 +1,10 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 
 import { useId, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
 import { canWriteOperations } from "@/lib/admin-policy";
-import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { useAdminSession } from "../AdminShell";
 import type { AdminClientOption } from "@/lib/admin-types";
 import { AdminButton, AdminDialog, AdminNote, AdminPlanLimitNote } from "../AdminUI";
@@ -84,9 +84,9 @@ export function EventQuickCreateDialog({ initialName, clientId, clients, clients
   >
     <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
       <EventQuickFields values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus>
-        {clientId ? <dl className="admin-dialog-facts"><div><dt>Cliente</dt><dd>{lockedClient ? clientDisplayName(lockedClient) : "El cliente del presupuesto"}</dd></div></dl> :
+        {clientId ? <dl className="admin-dialog-facts"><div><dt>Cliente</dt><dd>{lockedClient ? <ClientIdentityView client={lockedClient} /> : "El cliente del presupuesto"}</dd></div></dl> :
           <Combobox label="Cliente" onSearch={remoteClients.onSearch} required value={formClientId} onChange={setFormClientId}
-            options={(remoteClients.data ?? clients).map((client) => ({ value: client.id, label: clientDisplayName(client), description: clientLegalName(client) ?? undefined }))}
+            options={(remoteClients.data ?? clients).map(clientComboboxOption)}
             placeholder="Buscá por nombre o empresa…" emptyLabel={remoteClients.loading || clientsLoading ? "Cargando clientes…" : "Creá un cliente desde el campo Cliente del presupuesto."} />}
       </EventQuickFields>
       {limitError ? <AdminPlanLimitNote message={limitError} /> : null}

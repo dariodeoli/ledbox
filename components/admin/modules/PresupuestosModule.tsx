@@ -1,11 +1,11 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
+import { inputDateTime } from "./EventoFicha";
 import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
 import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
 import { budgetEventPrompt } from "@/lib/budget-event";
-import { AdminAvatar } from "../AdminAvatar";
-import { clientLogoUrl } from "@/lib/admin-types";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -95,6 +95,7 @@ import { SignatureDialog } from "./SignatureDialog";
 import {
   CheckboxField,
   Combobox,
+  DateTimeField,
   EmailField,
   MoneyField,
   NumberField,
@@ -917,6 +918,11 @@ export function PresupuestosModule() {
   const mailInFlight = useRef(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [sendStartsAt, setSendStartsAt] = useState("");
+  const [sendEndsAt, setSendEndsAt] = useState("");
+  const [sendDatesBusy, setSendDatesBusy] = useState(false);
+  const sendDatesInFlight = useRef(false);
+  const sendDatesDirty = Boolean(sendBudget && (sendStartsAt !== inputDateTime(sendBudget.event?.startsAt) || sendEndsAt !== inputDateTime(sendBudget.event?.endsAt)));
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del presupuesto. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
@@ -934,16 +940,7 @@ export function PresupuestosModule() {
   // Opciones del combobox (issue #88): cliente con empresa/nombre y evento con
   // fechas + cliente, sobre los catálogos que ya carga el alta.
   const clientChoices = useMemo<ComboboxOption[]>(
-    () =>
-      clientOptions.map((client) => {
-        const company = client.company?.trim() || "";
-        const label = clientDisplayName(client);
-        const details = [
-          company && company !== client.name ? client.name : null,
-          client.type === "RESELLER" ? "Mayorista / revendedor" : null,
-        ].filter(Boolean);
-        return { value: client.id, label, description: details.join(" · ") || undefined };
-      }),
+    () => clientOptions.map(clientComboboxOption),
     [clientOptions],
   );
   const eventChoices = useMemo<ComboboxOption[]>(
@@ -1052,7 +1049,7 @@ export function PresupuestosModule() {
             {primary.label}
           </AdminButton>
         ) : null}
-        <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget)} />
+        <AdminActionsMenu label={`Acciones del presupuesto ${budget.title}`} items={budgetMenuItems(budget, menuOnly)} shortcuts={budgetShortcuts(budget)} />
       </span>
     );
   }
@@ -1084,7 +1081,8 @@ export function PresupuestosModule() {
       id: budget.id,
       status: budget.status,
       title: budget.title,
-      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      identity: <ClientIdentityView client={budget.client} />,
+      subtitle: budget.event?.name ?? null,
       amount: budget.total,
       amountNote: balance > 0 ? `saldo ${formatMoney(balance)}` : "cobrado",
       date: budget.validUntil,
@@ -1101,8 +1099,8 @@ export function PresupuestosModule() {
   });
 
   /**
-   * Todas las acciones del presupuesto en un solo menú «•••». La acción lógica
-   * siguiente también vive en el botón de la fila, pero acá no se pierde nada.
+   * Todas las acciones del presupuesto en un solo menú «•••». El detalle reúne pagos,
+   * inventario, firma e historial; el menú conserva los accesos frecuentes.
    */
   /** Archivar / Desarchivar / Eliminar (`budgets.write`); solo se archivan borradores, perdidos o cancelados. */
   function budgetTrashMenu(budget: AdminBudgetRow): AdminMenuItem[] {
@@ -1115,32 +1113,27 @@ export function PresupuestosModule() {
     });
   }
 
-  function budgetMenuItems(budget: AdminBudgetRow): AdminMenuItem[] {
-    const prompt = budgetEventPrompt(budget);
-    const proofs = (proofsByBudget[budget.id] ?? []).length;
+  /** Documentos y compartir: una fila de iconos, sin repetirlos en la lista. */
+  function budgetShortcuts(budget: AdminBudgetRow): AdminMenuItem[] {
     return [
-      { label: "Ver detalle", icon: "eye" as const, onClick: () => openDetail(budget.id), title: `Detalle del presupuesto: ${budget.title}` },
-      ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget), title: `Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}` }] : []),
-      ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
-      ...(prompt && canCreateEvent ? [prompt === "create" ? { label: "Crear evento", icon: "events" as const, onClick: () => void createEventFor(budget) } : { label: "Confirmar evento", icon: "check" as const, onClick: () => void confirmEventFor(budget) }] : []),
-      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: `/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`, title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
-      ...(writable ? [
-        { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
-        { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
-        { label: budget.securityDeposit ? "Depósito de garantía" : "Definir garantía", icon: "wallet" as const, onClick: () => setDepositBudget(budget) },
-        { label: "Inventario", icon: "inventory" as const, onClick: () => setLinksBudget(budget) },
-        ...(budget.event && canCreateEvent ? [{ label: "Editar nombre del evento compartido", icon: "edit" as const, onClick: () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } }] : []),
-        ...(!budget.approvedAt && budgetInPlay(budget) ? [{ label: "Aprobar manualmente", icon: "check" as const, onClick: () => openApproval(budget, "approve") }, { label: "Pedir cambios", icon: "alert" as const, onClick: () => openApproval(budget, "request_revision") }] : []),
-      ] : []),
-      { label: budget.publicToken ? "Portal del cliente" : "Generar link del portal", icon: "globe" as const, onClick: () => openPortal(budget), title: `${budget.publicToken ? "QR y link del portal" : "Generar link del portal"}: ${budget.title}` },
+      { label: "Imprimir / PDF", icon: "print", href: `/imprimir/presupuesto/${budget.id}`, external: true },
+      ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget) }] : []),
+      ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "whatsapp" as const, onClick: () => openWhatsapp(budget) }] : []),
       ...(budget.publicToken || writable ? [
-        { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget), title: `Copiar el link del portal: ${budget.title}` },
+        { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget) },
         { label: "Ver como cliente", icon: "eye" as const, onClick: () => viewAsClient(budget) },
       ] : []),
-      { label: "Firma del cliente", icon: "pen" as const, onClick: () => setSignatureBudget(budget), title: `Firma del cliente: ${budget.title}` },
-      ...(proofs > 0 ? [{ label: `Comprobantes del portal (${proofs})`, icon: "upload" as const, onClick: () => setProofDialog(budget) }] : []),
-      { label: "Imprimir / PDF", icon: "print" as const, href: `/imprimir/presupuesto/${budget.id}`, external: true, title: `Imprimir presupuesto: ${budget.title}` },
-      { label: "Cronología", icon: "audit" as const, onClick: () => setTimelineBudget(budget) },
+    ];
+  }
+
+  function budgetMenuItems(budget: AdminBudgetRow, menuOnly = false): AdminMenuItem[] {
+    const primary = primaryOf(budget);
+    // La fila ya muestra el siguiente paso. En el tablero sigue accesible arriba.
+    return [
+      ...(menuOnly && primary ? [{ label: primary.label, icon: "check" as const, onClick: () => runPrimary(budget, primary) }] : []),
+      { label: "Ver detalle", icon: "eye", onClick: () => openDetail(budget.id), title: "Cliente, pagos, garantía, inventario, firma e historial" },
+      ...(writable && !(menuOnly && primary?.kind === "edit") ? [{ label: "Editar presupuesto", icon: "edit" as const, onClick: () => setPricing(budget) }] : []),
+      { label: budget.publicToken ? "Portal del cliente" : "Generar link del portal", icon: "globe", onClick: () => openPortal(budget) },
       ...budgetTrashMenu(budget),
     ];
   }
@@ -1155,7 +1148,8 @@ export function PresupuestosModule() {
       id: budget.id,
       title: <AdminButton type="button" variant="link" onClick={() => openDetail(budget.id)}><strong className="admin-quote-title">{budget.title}</strong></AdminButton>,
       titleTooltip: `PRES-${budgetReference(budget.id)} · ${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`,
-      subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
+      identity: <ClientIdentityView client={budget.client} />,
+      subtitle: budget.event?.name ?? null,
       badges: [
         { label: PIPELINE_STAGE_LABEL[budgetPipelineStage(budget)], tone: statusTone(budget.status) },
         ...(approvalState === "CAMBIOS_SOLICITADOS" ? [{ label: budgetApprovalLabel(approvalState), tone: budgetApprovalTone(approvalState), title: portalSummary(budget) }] : []),
@@ -1187,6 +1181,8 @@ export function PresupuestosModule() {
       onSend: writable ? () => openSend(budget) : undefined,
       onEdit: writable ? () => setPricing(budget) : undefined,
       onPlan: writable ? () => openPlan(budget) : undefined,
+      onCollect: writable && budget.status === "APPROVED" && primary?.kind !== "collect" && primary?.kind !== "review_proof"
+        ? () => router.push(`/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`) : undefined,
       onDeposit: writable ? () => setDepositBudget(budget) : undefined,
       onInventory: writable ? () => setLinksBudget(budget) : undefined,
       onEventName: writable && canCreateEvent && budget.event ? () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } : undefined,
@@ -1404,12 +1400,35 @@ export function PresupuestosModule() {
     setSendTo(normalizeEmail(budget.client.email ?? ""));
     setSendMessage("");
     setSendError("");
+    setSendStartsAt(inputDateTime(budget.event?.startsAt));
+    setSendEndsAt(inputDateTime(budget.event?.endsAt));
     setSendBudget(budget);
+  }
+
+  async function saveSendDates() {
+    if (!sendBudget || sendDatesInFlight.current || mailInFlight.current || sendBusy || linkBusy) return;
+    if ([sendStartsAt, sendEndsAt].some(value => value && !Number.isFinite(new Date(value).getTime()))) { setSendError("Ingresá fechas válidas."); return; }
+    if (sendStartsAt && sendEndsAt && new Date(sendEndsAt) < new Date(sendStartsAt)) { setSendError("El fin no puede ser anterior al inicio."); return; }
+    sendDatesInFlight.current = true; setSendDatesBusy(true); setSendError(""); setSendPreview(null);
+    try {
+      const result = await adminSend<{ event: NonNullable<AdminBudgetRow["event"]> }>(`/api/admin/budgets/${sendBudget.id}/schedule`, {
+        startsAt: sendStartsAt ? new Date(sendStartsAt).toISOString() : null,
+        endsAt: sendEndsAt ? new Date(sendEndsAt).toISOString() : null,
+        originalEventId: sendBudget.event?.id ?? null,
+        originalStartsAt: sendBudget.event?.startsAt ?? null,
+        originalEndsAt: sendBudget.event?.endsAt ?? null,
+      }, "PATCH");
+      if (!result.ok) { setSendError(result.error); return; }
+      setSendBudget({ ...sendBudget, event: result.data.event });
+      setSendStartsAt(inputDateTime(result.data.event.startsAt)); setSendEndsAt(inputDateTime(result.data.event.endsAt));
+      setNotice("Fechas del evento guardadas. El correo todavía no se envió.");
+      budgetsResource.reload(); events.reload();
+    } finally { sendDatesInFlight.current = false; setSendDatesBusy(false); }
   }
 
   /** Genera el link del portal desde el diálogo de envío (sin link no hay correo). */
   async function generateLinkForSend() {
-    if (!sendBudget || linkBusy || mailInFlight.current) return;
+    if (!sendBudget || linkBusy || sendDatesInFlight.current || mailInFlight.current) return;
     setSendPreview(null);
     setLinkBusy(true);
     setSendError("");
@@ -1430,7 +1449,8 @@ export function PresupuestosModule() {
 
   /** First click previews only; a separate click confirms the exact payload. */
   async function sendBudgetMail() {
-    if (!sendBudget || linkBusy || mailInFlight.current) return;
+    if (!sendBudget || linkBusy || sendDatesInFlight.current || mailInFlight.current) return;
+    if (sendDatesDirty) { setSendError("Guardá las fechas antes de previsualizar el correo."); return; }
     const to = normalizeEmail(sendTo);
     if (!emailValid(to)) {
       setSendError(FIELD_MESSAGES.email);
@@ -1966,7 +1986,7 @@ export function PresupuestosModule() {
                   <AdminCell title={`Presupuesto PRES-${budgetReference(budget.id)}`}>
                     <span className="admin-nowrap admin-quote-ref">{budgetReference(budget.id)}</span>
                   </AdminCell>
-                  <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
+                  <AdminCell title={clientDisplayName(budget.client)}><ClientIdentityView client={budget.client} /></AdminCell>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
                     <AdminButton type="button" variant="link" title={`Ver el detalle de ${budget.title}`} onClick={() => openDetail(budget.id)}>
                       <strong className="admin-quote-title">{budget.event?.name ?? budget.title}</strong>
@@ -2079,8 +2099,8 @@ export function PresupuestosModule() {
           description="El correo lleva el link del portal con el código, el resumen de ítems, total y validez, y la hoja imprimible."
           error={sendError || (!sendBudget.publicToken ? "Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el destino de aprobación." : "")}
           warning={!emailValid(sendBudget.client.email ?? "") ? "El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá." : undefined}
-          dirty={sendMessage.trim() !== ""}
-          onClose={() => { if (!sendBusy && !linkBusy) setSendBudget(null); }}
+          dirty={sendMessage.trim() !== "" || sendDatesDirty}
+          onClose={() => { if (!sendBusy && !linkBusy && !sendDatesBusy) setSendBudget(null); }}
           footer={({ requestClose }) => (
             <>
               {!sendBudget.publicToken ? (
@@ -2088,7 +2108,7 @@ export function PresupuestosModule() {
                   Generar link del portal
                 </AdminButton>
               ) : null}
-              <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy}>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy || sendDatesBusy}>
                 Cancelar
               </AdminButton>
               <AdminButton
@@ -2097,7 +2117,7 @@ export function PresupuestosModule() {
                 type="button"
                 busy={sendBusy}
                 busyLabel={sendPreview ? "Enviando…" : "Preparando…"}
-                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
+                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy || sendDatesBusy || sendDatesDirty}
                 onClick={() => void sendBudgetMail()}
               >
                 {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
@@ -2108,7 +2128,7 @@ export function PresupuestosModule() {
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
-              <dd>{clientDisplayName(sendBudget.client)}</dd>
+              <dd><ClientIdentityView client={sendBudget.client} /></dd>
             </div>
             <div>
               <dt>Total</dt>
@@ -2132,6 +2152,12 @@ export function PresupuestosModule() {
             </div>
           </dl>
 
+          {canCreateEvent ? <><AdminDialogSection title="Fechas del evento (opcional)">
+            <DateTimeField label="Inicio del evento" size="md" value={sendStartsAt} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
+            <DateTimeField label="Fin del evento" size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
+            <AdminButton icon="check" type="button" busy={sendDatesBusy} busyLabel="Guardando…" disabled={!sendDatesDirty || sendBusy || linkBusy} onClick={() => void saveSendDates()}>Guardar fechas</AdminButton>
+          </AdminDialogSection><AdminNote>Guardar fechas no aprueba el presupuesto ni reserva inventario.</AdminNote></> : null}
+
           <AdminDialogSection title="Destinatario">
           <EmailField
             label="Destinatario"
@@ -2142,7 +2168,7 @@ export function PresupuestosModule() {
               setSendPreview(null);
               setSendError("");
             }}
-            disabled={sendBusy || linkBusy}
+            disabled={sendBusy || linkBusy || sendDatesBusy}
             error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
             hint="Podés cambiarlo: el correo se envía solo a esta dirección."
           />
@@ -2158,7 +2184,7 @@ export function PresupuestosModule() {
               setSendError("");
             }}
             maxLength={600}
-            disabled={sendBusy || linkBusy}
+            disabled={sendBusy || linkBusy || sendDatesBusy}
             rows={3}
             placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
           />
@@ -2318,7 +2344,7 @@ export function PresupuestosModule() {
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
-              <dd>{clientDisplayName(resolution.request.budget.client)}</dd>
+              <dd><ClientIdentityView client={resolution.request.budget.client} /></dd>
             </div>
             <div>
               <dt>Presupuesto</dt>

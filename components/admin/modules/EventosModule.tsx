@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -254,15 +255,7 @@ export function EventosModule() {
   const clients = useClientSelector(form.clientId);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
-  const clientChoices = useMemo(
-    () =>
-      clientOptions.map((client) => ({
-        value: client.id,
-        label: clientDisplayName(client),
-        description: clientLegalName(client) ?? undefined,
-      })),
-    [clientOptions],
-  );
+  const clientChoices = useMemo(() => clientOptions.map(clientComboboxOption), [clientOptions]);
   const inventoryItems = useMemo(() => inventoryResource.data ?? [], [inventoryResource.data]);
   const promoters = useMemo(() => promotersResource.data ?? [], [promotersResource.data]);
 
@@ -409,7 +402,7 @@ export function EventosModule() {
       setFormError("Elegí el cliente del evento.");
       return;
     }
-    const invalid = eventQuickError(form);
+    const invalid = eventQuickError(form, editingEvent?.city);
     if (invalid) { setFormError(invalid); return; }
     const fields: Partial<ReturnType<typeof eventQuickPayload>> = eventQuickPayload(form);
     const original = editingEventId ? events.find((event) => event.id === editingEventId) : null;
@@ -569,7 +562,7 @@ export function EventosModule() {
       <AdminModuleContext
         breadcrumb="Ventas / Eventos"
         hint="Qué falta de cada evento: checklist, equipos, seña y personal."
-        meta={`${formatNumber(events.length)} eventos`}
+        meta={`${formatNumber(events.length)} ${events.length === 1 ? "evento" : "eventos"}`}
       />
       <AdminKpis state={kpiState(operations)} label="Indicadores de eventos" className="admin-kpis--2up admin-kpis--eventos">
         <AdminKpi label="Próximos 7 días" icon="calendar" value={formatNumber(counts.next7)} note="por empezar" tone="accent" {...kpiFor("next7")} />
@@ -784,7 +777,7 @@ export function EventosModule() {
                   onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
                   createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
                 />
-                <AdminButton
+                {!editingEventId ? <AdminButton
                   type="button"
                   icon="plus"
                   disabled={Boolean(editingEventId)}
@@ -796,7 +789,7 @@ export function EventosModule() {
                   }}
                 >
                   Nuevo cliente
-                </AdminButton>
+                </AdminButton> : null}
               </div>
               </EventQuickFields>
           </form>
@@ -863,7 +856,7 @@ export function EventosModule() {
                       {event.name}
                     </AdminButton>
                   </AdminCell>
-                  <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
+                  <AdminCell title={clientDisplayName(event.client)}><ClientIdentityView client={event.client} /></AdminCell>
                   <AdminCell title={where || "Sin lugar definido"}>{where || "—"}</AdminCell>
                   <AdminCell>
                     <PrepChips item={item} />

@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
 
 import { budgetDepositAmount } from "@/lib/budget-payment-plan";
 import { useEffect, useState } from "react";
@@ -64,6 +65,7 @@ export type BudgetDetailActions = {
   onSend?: () => void;
   onEdit?: () => void;
   onPlan?: () => void;
+  onCollect?: () => void;
   onDeposit?: () => void;
   onInventory?: () => void;
   onEventName?: () => void;
@@ -198,7 +200,7 @@ export function BudgetDetailDialog({
       <div className="admin-bd-grid">
         <Section title="Cliente y evento" actions={actions.onEventName && budget.event ? <AdminButton icon="edit" onClick={actions.onEventName}>Nombre del evento</AdminButton> : undefined}>
           <dl className="admin-dialog-facts">
-            <div><dt>Cliente</dt><dd>{clientDisplayName(budget.client)}</dd></div>
+            <div><dt>Cliente</dt><dd><ClientIdentityView client={budget.client} /></dd></div>
             <div><dt>Evento</dt><dd>{budget.event ? `${budget.event.name} · ${eventStatusLabel(budget.event.status)}` : "Sin evento"}</dd></div>
             <div><dt>Estado</dt><dd><AdminBadge tone={statusTone(budget.status)}>{budgetStatusLabel(budget.status)}</AdminBadge></dd></div>
             <div>
@@ -211,6 +213,7 @@ export function BudgetDetailDialog({
 
         <Section title="Condiciones" actions={
           <>
+            {actions.onCollect ? <AdminButton icon="finance" onClick={actions.onCollect}>Cobrar en Finanzas</AdminButton> : null}
             {actions.onPlan ? <AdminButton icon="clock" onClick={actions.onPlan}>Plan de pagos</AdminButton> : null}
             {actions.onDeposit ? <AdminButton icon="wallet" onClick={actions.onDeposit}>{budget.securityDeposit ? "Garantía" : "Definir garantía"}</AdminButton> : null}
           </>
