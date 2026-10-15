@@ -28,7 +28,7 @@ export const EMPTY_STORE_CART: StoreCartState = { items: [], from: null, to: nul
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Clave de `localStorage`: separada por tienda y por tipo de acceso para no mezclar listas de precios. */
-export function storeCartKey(slug: string, scope: "public" | "acceso" | "mayorista" = "public"): string {
+export function storeCartKey(slug: string, scope: "public" | "acceso" | "mayorista" | "lab" = "public"): string {
   return `ledbox-store-cart:v${STORE_CART_VERSION}:${scope}:${slug.trim().toLowerCase()}`;
 }
 

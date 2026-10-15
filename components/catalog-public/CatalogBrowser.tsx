@@ -78,7 +78,7 @@ type Props = {
   priceMode?: PriceMode;
   /** Slug de la empresa y tipo de acceso: separan el carrito guardado de cada tienda. */
   slug: string;
-  cartScope?: "public" | "acceso" | "mayorista" | "visitor";
+  cartScope?: "public" | "acceso" | "mayorista" | "visitor" | "lab";
   /** Cliente con acceso aprobado (o enlace mágico): el carrito también se guarda en el servidor (retomar desde otro dispositivo). */
   savedCart?: boolean;
   /** Endpoint del carrito; por defecto el de `preorderPath`. */

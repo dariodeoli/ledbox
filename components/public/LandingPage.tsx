@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { LandingHero } from "./LandingHero";
 import { useEffect, useState } from "react";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { usePublicCart } from "@/components/cart/PublicCartProvider";
@@ -60,10 +61,7 @@ export function LandingPage({ brands }: { brands: Brand[] }) {
     <PublicNav />
 
     <main>
-      <header id="hero">
-        <div><div className="hero-kicker rise on">LedBox Paraguay · Alquileres & Eventos</div><h1 className="mega rise on">Tecnología<br /><span className="led glow">visual</span> que<br />impulsa tu marca</h1><p className="hero-sub rise on">Alquiler de <strong>pantallas LED, iPoster, tótems y kioskos touch</strong>. Planificación y construcción de <strong>stands</strong> para eventos nacionales e internacionales. Coberturas digitales: <strong>videos, reels y tomas aéreas con drone</strong>.</p><div className="hero-actions rise on"><button className="btn-led" type="button" onClick={openLead}>Consultar disponibilidad</button><a href="#productos" className="btn-line">Ver productos</a></div></div>
-        <div className="hero-foot"><span><b>Alquileres</b> en todo Paraguay</span><span><b>Eventos</b> nacionales e internacionales</span><span><b>Instalación + soporte</b> incluidos</span></div>
-      </header>
+      <LandingHero kicker="LedBox Paraguay · Alquileres & Eventos" title={<>Tecnología<br /><span className="led glow">visual</span> que<br />impulsa tu marca</>} description={<>Alquiler de <strong>pantallas LED, iPoster, tótems y kioskos touch</strong>. Planificación y construcción de <strong>stands</strong> para eventos nacionales e internacionales. Coberturas digitales: <strong>videos, reels y tomas aéreas con drone</strong>.</>} actions={<><button className="btn-led" type="button" onClick={openLead}>Consultar disponibilidad</button><a href="#productos" className="btn-line">Ver productos</a></>} foot={<><span><b>Alquileres</b> en todo Paraguay</span><span><b>Eventos</b> nacionales e internacionales</span><span><b>Instalación + soporte</b> incluidos</span></>} />
       <div className="ticker" aria-hidden="true"><div className="ticker-track"><span>Pantallas LED ● iPoster ● Tótem Touch ● Kiosko Touch ● Stands ● Activaciones ● Coberturas Digitales ● </span><span>Pantallas LED ● iPoster ● Tótem Touch ● Kiosko Touch ● Stands ● Activaciones ● Coberturas Digitales ● </span></div></div>
       <section id="stats" aria-label="LedBox en números"><div className="stat rise"><div className="n">+10<em>+</em></div><div className="l">Años de experiencia en eventos</div></div><div className="stat rise"><div className="n">+100<em>+</em></div><div className="l">Expoferias cubiertas</div></div><div className="stat rise"><div className="n">PY<em>+</em></div><div className="l">Cobertura nacional e internacional</div></div><a className="stat rise stat-social" href="https://www.instagram.com/ledboxpy/" target="_blank" rel="noopener noreferrer"><div className="n"><InstagramIcon /> <em>@ledboxpy</em></div><div className="l">Seguinos en Instagram →</div></a></section>
 
