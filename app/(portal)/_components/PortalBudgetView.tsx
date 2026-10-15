@@ -351,10 +351,13 @@ function Stepper({
 function PortalPackageNote({ summary, quantity }: { summary: PackageSummary; quantity: number }) {
   if (summary.incomplete || summary.packageTotal <= 0) return null;
   return (
-    <small className="portal-item-note portal-package-note" data-testid="portal-package">
-      Paquete: {formatMoney(summary.packageTotal)} por unidad · piezas por separado: {formatMoney(summary.unitSum)}
-      {summary.savings > 0 ? <> · <strong>ahorrás {formatMoney(summary.savings * quantity)}</strong></> : null}
-    </small>
+    <details className="portal-package-note" data-testid="portal-package">
+      <summary>Paquete{summary.savings > 0 ? <> · ahorrás {formatMoney(summary.savings * quantity)}</> : " · ver composición"}</summary>
+      <small className="portal-item-note">
+        Paquete: {formatMoney(summary.packageTotal)} por unidad · piezas por separado: {formatMoney(summary.unitSum)}
+        {summary.savings > 0 ? <> · <strong>ahorrás {formatMoney(summary.savings * quantity)}</strong></> : null}
+      </small>
+    </details>
   );
 }
 

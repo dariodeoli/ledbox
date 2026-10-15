@@ -5362,3 +5362,32 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 }
 .portal-table--items thead tr { padding-inline: 10px; }
 .portal-table--items td.portal-item-action-cell { justify-content: flex-start; }
+
+/* Detalle del portal: una lista continua, con la información secundaria desplegable. */
+.portal-table--items tbody { gap: 0; border: 1px solid var(--border-2); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.portal-table--items tbody tr { padding: 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.portal-table--items tbody tr:last-child { border-bottom: 0; }
+.portal-table--items tbody tr[data-changed="true"] { box-shadow: inset 3px 0 var(--p-action); }
+.portal-table--items .portal-item-thumb { width: 40px; height: 40px; }
+.portal-table--items .portal-item-identity { gap: 8px; }
+.portal-table--items .portal-item-text { gap: 2px; }
+.portal-table--items .portal-item-name { font-size: 12.5px; line-height: 1.4; }
+.portal-package-note { font-size: 11px; line-height: 1.4; color: var(--muted-2); }
+.portal-package-note summary { cursor: pointer; }
+.portal-package-note summary:focus-visible { outline: 2px solid var(--p-action); outline-offset: 2px; }
+.portal-package-note .portal-item-note { margin: 4px 0; }
+.portal-table--items .budget-client-quantity { margin-top: 2px; gap: 6px 10px; }
+.portal-table--items .portal-quantity-group { display: flex; align-items: center; gap: 5px; }
+.portal-table--items .portal-quantity-label { font-size: 10.5px; }
+.portal-table--items .portal-item-action { width: 32px; height: 32px; }
+.portal-table--items:has(.portal-item-action-cell) { --budget-client-cols: minmax(0, 1fr) minmax(90px, .34fr) minmax(90px, .34fr) 32px; }
+@media (max-width: 720px) {
+  .portal-table--items tbody tr { padding: 10px; gap: 8px; }
+  .portal-table--items .portal-quantity-group { display: grid; gap: 3px; }
+  .portal-table--items .budget-client-quantity { gap: 8px 12px; }
+}
+@media (pointer: coarse) {
+  .portal-table--items .portal-quantity-group { display: grid; gap: 3px; }
+  .portal-table--items .portal-item-action { width: 44px; height: 44px; }
+  .portal-table--items:has(.portal-item-action-cell) { --budget-client-cols: minmax(0, 1fr) minmax(90px, .34fr) minmax(90px, .34fr) 44px; }
+}
