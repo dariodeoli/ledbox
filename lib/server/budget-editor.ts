@@ -32,6 +32,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
     notes: typeof r?.notes === "string" ? r.notes.trim().slice(0, 400) : null,
     inventoryId: typeof r?.inventoryId === "string" && r.inventoryId ? r.inventoryId : null,
     rentalDays: readRentalDays(r?.rentalDays),
+    freeOnPurpose: r?.freeOnPurpose === true && Number(r?.unitPrice) === 0,
   }));
   for (const item of items) { const error = budgetItemError(item); if (error) return jsonError(error, 400); }
   const existing = new Map(current.items.map((item) => [item.id, item]));
@@ -104,7 +105,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
       const inventoryId = Object.hasOwn(source, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId);
       const calculated = commercial.items[items.indexOf(item)];
       const snapshot = snapshots.get(String(items.indexOf(item)));
-      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: calculated.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: calculated.subtotal, ...(snapshot ? { pricingSnapshot: snapshot } : {}) };
+      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: calculated.unitPrice, costPrice: item.costPrice, freeOnPurpose: item.freeOnPurpose, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: calculated.subtotal, ...(snapshot ? { pricingSnapshot: snapshot } : {}) };
       const orderedItemData = { ...itemData, sortOrder: items.indexOf(item) };
       if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: orderedItemData });
       else await tx.budgetItem.create({ data: { id: calculated.id, budgetId, ...orderedItemData } });

@@ -9,7 +9,7 @@
  */
 
 import { PRICE_TIER_MAX_DAYS, PRICE_TIER_MAX_ROWS, PRICE_TIER_PRICE_MAX, sortTiers, type PriceTier } from "@/lib/price-tiers";
-import { parseCategoryInput } from "@/lib/inventory-categories";
+import { categoryPathKey, parseCategoryInput } from "@/lib/inventory-categories";
 import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
@@ -38,6 +38,8 @@ export const CATALOG_LIMITS = {
   zipInflatedBytes: 150 * 1024 * 1024,
   /** Productos por importación. */
   products: 1000,
+  /** Categorías declaradas por importación. */
+  categories: 200,
   /** Componentes por juego. */
   components: 60,
   /** Llamadas por empresa y ventana (15 min). */
@@ -80,7 +82,21 @@ export type CatalogProduct = {
   fila: number;
 };
 
-export type CatalogDoc = { empresa: string | null; moneda: string; productos: CatalogProduct[] };
+/** Categoría declarada en la sección opcional `categorias` del JSON (foto propia y orden). */
+export type CatalogCategory = {
+  /** Categoría principal. */
+  categoria: string;
+  /** Subcategoría si el nombre venía como «Categoría / Subcategoría». */
+  subcategoria: string | null;
+  /** Nombre de la foto dentro del ZIP, o `null`. */
+  foto: string | null;
+  /** Posición (`sortOrder`) o `null` = no se toca. */
+  orden: number | null;
+  /** Posición (1-based) en la lista `categorias`. */
+  fila: number;
+};
+
+export type CatalogDoc = { empresa: string | null; moneda: string; productos: CatalogProduct[]; categorias: CatalogCategory[] };
 
 export type ProblemKind =
   | "codigo-repetido"
@@ -96,6 +112,11 @@ export type ProblemKind =
   | "componente-invalido"
   | "juego-anidado"
   | "juego-sin-componentes"
+  | "categoria-invalida"
+  | "categoria-repetida"
+  | "categoria-foto-faltante"
+  | "juego-no-convertible"
+  | "juego-convertido"
   | "deposito-invalido"
   | "deposito-inexistente"
   | "ubicacion-invalida"
@@ -255,6 +276,54 @@ function parseComponents(raw: unknown): { ok: true; list: CatalogComponent[] } |
 
 export type NormalizeResult = { doc: CatalogDoc; problems: ImportProblem[] };
 
+/**
+ * Sección opcional `categorias: [{ nombre, foto, orden }]`. Nunca bloquea la importación: una
+ * entrada inservible se descarta con un aviso. El nombre se normaliza como el de un producto
+ * («Categoría / Subcategoría» se separa); repetidas (misma clave) se ignoran.
+ */
+export function normalizeCategories(raw: unknown, problems: ImportProblem[]): CatalogCategory[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    problems.push(problem("aviso", "categoria-invalida", null, null, "La sección «categorias» no es una lista: se ignora."));
+    return [];
+  }
+  if (raw.length > CATALOG_LIMITS.categories) {
+    problems.push(problem("aviso", "categoria-invalida", null, null, `Hay ${raw.length} categorías: el máximo es ${CATALOG_LIMITS.categories}; se ignora la sección.`));
+    return [];
+  }
+  const seen = new Set<string>();
+  const list: CatalogCategory[] = [];
+  raw.forEach((entry, index) => {
+    const fila = index + 1;
+    const row = entry && typeof entry === "object" && !Array.isArray(entry) ? (entry as Record<string, unknown>) : null;
+    const nombre = row ? text(row.nombre, 120) : null;
+    if (!row || !nombre) {
+      problems.push(problem("aviso", "categoria-invalida", null, fila, `Categoría ${fila}: falta el «nombre»; se ignora.`));
+      return;
+    }
+    const path = parseCategoryInput(nombre, "");
+    if (!path.parent) {
+      problems.push(problem("aviso", "categoria-invalida", null, fila, `Categoría «${nombre}»: el nombre no es válido; se ignora.`));
+      return;
+    }
+    const key = categoryPathKey(path.parent, path.child);
+    if (seen.has(key)) {
+      problems.push(problem("aviso", "categoria-repetida", null, fila, `Categoría «${nombre}» repetida en la lista: se usa la primera.`));
+      return;
+    }
+    seen.add(key);
+    let orden: number | null = null;
+    if (row.orden !== undefined && row.orden !== null && row.orden !== "") {
+      const value = Number(row.orden);
+      if (Number.isInteger(value) && value >= 0 && value <= 9999) orden = value;
+      else problems.push(problem("aviso", "categoria-invalida", null, fila, `Categoría «${nombre}»: «orden» tiene que ser un entero de 0 a 9999; se ignora el orden.`));
+    }
+    const foto = text(row.foto, FIELD_LIMITS.image);
+    list.push({ categoria: path.parent, subcategoria: path.child, foto, orden, fila });
+  });
+  return list;
+}
+
 /** Convierte un producto crudo; `null` cuando no sirve (y deja el error). */
 function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]): CatalogProduct | null {
   const fila = index + 1;
@@ -374,7 +443,8 @@ export function normalizeCatalog(raw: unknown): { ok: true; value: NormalizeResu
     const product = normalizeProduct(entry, index, problems);
     if (product) productos.push(product);
   });
-  return { ok: true, value: { doc: { empresa: text(head.empresa, FIELD_LIMITS.company), moneda, productos }, problems } };
+  const categorias = normalizeCategories(head.categorias, problems);
+  return { ok: true, value: { doc: { empresa: text(head.empresa, FIELD_LIMITS.company), moneda, productos, categorias }, problems } };
 }
 
 /** Parsea el texto de `catalogo.json` (con el tope de 2 MB). */
@@ -436,12 +506,23 @@ export type ExistingItem = {
   isCombo: boolean;
   inTrash: boolean;
   units: number;
+  /** Juego importado sin piezas (combo incompleto): es un juego aunque todavía no tenga componentes. */
+  incompleto?: boolean;
+  /** Asignaciones a eventos del producto (cualquier estado): una unidad con reservas no se convierte en juego. */
+  reservas?: number;
+  /** Unidades con historial (fuera de servicio, retiradas o con incidentes). */
+  unidadesConHistorial?: number;
 };
 
 export type PlannedProduct = {
   product: CatalogProduct;
   accion: "crear" | "actualizar" | "omitir";
+  /** Se carga como juego (combo): con piezas, o incompleto si el archivo no las trae. */
   esCombo: boolean;
+  /** Juego sin piezas: se importa como juego incompleto (no reservable, sin stock propio). */
+  incompleto: boolean;
+  /** Reimportación: la unidad existente pasa a juego (sin reservas ni unidades con historial). */
+  convertir: boolean;
   /** Nombre (clave) de la foto dentro del ZIP, si se encontró. */
   foto: string | null;
   publicDescription: string | null;
@@ -456,12 +537,21 @@ export type CatalogSummary = {
   actualizar: number;
   omitidos: number;
   juegos: number;
+  /** Juegos que quedan incompletos (sin piezas). */
+  incompletos: number;
+  /** Unidades existentes que se convierten en juego. */
+  convertidos: number;
   fotos: number;
+  /** Fotos de categoría encontradas en el ZIP. */
+  fotosCategoria: number;
   errores: number;
   avisos: number;
 };
 
-export type CatalogPlan = { items: PlannedProduct[]; problems: ImportProblem[]; summary: CatalogSummary };
+/** Categoría del archivo ya cruzada con el ZIP: `foto` es la clave de la foto encontrada. */
+export type PlannedCategory = { category: CatalogCategory; foto: string | null };
+
+export type CatalogPlan = { items: PlannedProduct[]; categories: PlannedCategory[]; problems: ImportProblem[]; summary: CatalogSummary };
 
 /**
  * Plan puro: decide qué se crea, qué se actualiza y qué se omite, y junta los
@@ -477,6 +567,8 @@ export function planCatalog(options: {
   photoProblems?: ReadonlyArray<ImportProblem>;
   /** Códigos de los depósitos activos de la empresa; `null` = no se verifica. */
   warehouseCodes?: ReadonlySet<string> | null;
+  /** Sección opcional `categorias` del archivo. */
+  categories?: ReadonlyArray<CatalogCategory>;
 }): CatalogPlan {
   const problems: ImportProblem[] = [...(options.parseProblems ?? []), ...(options.photoProblems ?? [])];
   const seen = new Map<string, CatalogProduct>();
@@ -491,30 +583,48 @@ export function planCatalog(options: {
     unique.push(product);
   }
   const inFile = (code: string) => seen.get(code);
-  const isComboInFile = (product: CatalogProduct) => product.componentes.length > 0;
+  const hasComponents = (product: CatalogProduct) => product.componentes.length > 0;
+  // Un juego es todo lo que trae piezas o está declarado «juego»; sin piezas queda incompleto.
+  const isGameInFile = (product: CatalogProduct) => hasComponents(product) || product.tipo === "juego";
 
   const usedPhotos = new Set<string>();
   const items: PlannedProduct[] = unique.map((product) => {
     const existing = options.existing.get(product.codigo) ?? null;
-    const esCombo = isComboInFile(product);
+    const existingIsGame = Boolean(existing && (existing.isCombo || existing.incompleto));
+    // «juego» sin piezas sobre una unidad que ya existe no la convierte: se conserva como unidad.
+    const esCombo = isGameInFile(product) && (existing === null || existingIsGame || hasComponents(product));
+    // Un juego que ya tiene piezas y el archivo no las repite conserva las suyas (no queda incompleto).
+    const incompleto = esCombo && !hasComponents(product) && !existing?.isCombo;
     const base: PlannedProduct = {
       product,
       accion: existing ? "actualizar" : "crear",
       esCombo,
+      incompleto,
+      convertir: false,
       foto: null,
       publicDescription: null,
-      unidades: product.cantidad ?? 1,
+      unidades: esCombo ? 0 : product.cantidad ?? 1,
       existingId: existing?.id ?? null,
     };
     const errors: ImportProblem[] = [];
 
-    if (product.tipo === "juego" && !esCombo) {
-      problems.push(problem("aviso", "juego-sin-componentes", product.codigo, product.fila, `${product.nombre}: figura como juego pero no trae componentes; se carga como unidad${product.cantidad ? ` (cantidad ${product.cantidad})` : ""}.`));
+    if (product.tipo === "juego" && !hasComponents(product)) {
+      problems.push(
+        problem(
+          "aviso",
+          "juego-sin-componentes",
+          product.codigo,
+          product.fila,
+          esCombo
+            ? `${product.nombre}: figura como juego pero no trae componentes; se importa como juego incompleto: sin stock propio y no se puede reservar hasta que le cargues las piezas (en el editor o reimportando con componentes).`
+            : `${product.nombre}: figura como juego sin componentes pero ya existe como unidad; se conserva como unidad. Para convertirlo en juego, reimportalo con sus componentes.`,
+        ),
+      );
     }
-    if (product.tipo === "unidad" && esCombo) {
+    if (product.tipo === "unidad" && hasComponents(product)) {
       problems.push(problem("aviso", "tipo-corregido", product.codigo, product.fila, `${product.nombre}: figura como unidad pero trae componentes; se carga como juego.`));
     }
-    if (esCombo) {
+    if (hasComponents(product)) {
       for (const component of product.componentes) {
         if (component.codigo === product.codigo) {
           errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: un juego no puede contenerse a sí mismo.`));
@@ -523,10 +633,10 @@ export function planCatalog(options: {
         const inside = inFile(component.codigo);
         const stored = options.existing.get(component.codigo);
         if (inside) {
-          if (isComboInFile(inside)) errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} es otro juego; un juego no puede contener juegos.`));
+          if (isGameInFile(inside)) errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} es otro juego; un juego no puede contener juegos.`));
         } else if (stored) {
           if (stored.inTrash) errors.push(problem("error", "componente-inexistente", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} está en la papelera.`));
-          else if (stored.isCombo) errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} ya es un juego en el inventario.`));
+          else if (stored.isCombo || stored.incompleto) errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} ya es un juego en el inventario.`));
         } else {
           errors.push(problem("error", "componente-inexistente", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} no existe en el archivo ni en el inventario.`));
         }
@@ -534,8 +644,19 @@ export function planCatalog(options: {
     }
     if (existing?.inTrash) {
       errors.push(problem("error", "sku-papelera", product.codigo, product.fila, `${product.nombre}: hay un producto con el código ${product.codigo} en la papelera; restauralo o eliminalo definitivamente.`));
-    } else if (existing && existing.isCombo !== esCombo) {
-      errors.push(problem("error", "cambia-de-tipo", product.codigo, product.fila, `${product.nombre}: en el inventario ${existing.isCombo ? "es un juego y el archivo lo trae como unidad" : "es una unidad y el archivo lo trae como juego"}; no se cambia el tipo por importación.`));
+    } else if (existing && existingIsGame && !esCombo) {
+      errors.push(problem("error", "cambia-de-tipo", product.codigo, product.fila, `${product.nombre}: en el inventario es un juego y el archivo lo trae como unidad; no se cambia el tipo por importación.`));
+    } else if (existing && !existingIsGame && esCombo) {
+      // Unidad → juego: solo sin reservas ni unidades con historial; si no, es un error que frena la fila.
+      const reservas = existing.reservas ?? 0;
+      const historial = existing.unidadesConHistorial ?? 0;
+      if (reservas > 0 || historial > 0) {
+        const motivos = [reservas > 0 ? `${reservas} reserva${reservas === 1 ? "" : "s"}` : null, historial > 0 ? `${historial} unidad${historial === 1 ? "" : "es"} con historial (mantenimiento, daños o retiros)` : null].filter(Boolean).join(" y ");
+        errors.push(problem("error", "juego-no-convertible", product.codigo, product.fila, `${product.nombre}: hoy es una unidad con ${motivos}; no se puede convertir en juego. Dejalo como unidad o armá un juego nuevo con otro código.`));
+      } else {
+        base.convertir = true;
+        problems.push(problem("aviso", "juego-convertido", product.codigo, product.fila, `${product.nombre}: hoy es una unidad sin reservas ni historial; se convierte en juego y se retiran sus ${existing.units} unidad${existing.units === 1 ? "" : "es"} (un juego no tiene unidades propias).`));
+      }
     }
     if (errors.length > 0) {
       problems.push(...errors);
@@ -546,7 +667,7 @@ export function planCatalog(options: {
       problems.push(problem("aviso", "deposito-inexistente", product.codigo, product.fila, `${product.nombre}: no hay un depósito con el código ${product.deposito}; las unidades nuevas van al depósito principal.`));
     }
     if (!product.precio) {
-      problems.push(problem("aviso", "precio-cero", product.codigo, product.fila, `${product.nombre}: precio ${product.precio === 0 ? "0" : "sin dato"}${existing ? "; se conserva el precio actual" : "; se importa con precio 0 y la tienda lo muestra como «Consultar»"}.`));
+      problems.push(problem("aviso", "precio-cero", product.codigo, product.fila, `${product.nombre}: precio ${product.precio === 0 ? "0" : "sin dato"}${existing ? "; se conserva el precio actual" : "; queda como «a consultar» (precio 0): la tienda lo muestra como «Consultar» y en un presupuesto la línea queda «falta precio» (no se puede enviar, aprobar ni cobrar hasta cargarlo o marcarla gratis a propósito)"}.`));
     }
     const description = buildPublicDescription(product);
     if (description.truncated) {
@@ -565,7 +686,7 @@ export function planCatalog(options: {
   for (let changed = true; changed; ) {
     changed = false;
     for (const item of items) {
-      if (item.accion === "omitir" || !item.esCombo) continue;
+      if (item.accion === "omitir" || !item.esCombo || item.product.componentes.length === 0) continue;
       const blocked = item.product.componentes.find((component) => items.find((other) => other.product.codigo === component.codigo)?.accion === "omitir");
       if (!blocked) continue;
       item.accion = "omitir";
@@ -576,6 +697,20 @@ export function planCatalog(options: {
   }
   usedPhotos.clear();
   for (const item of items) if (item.foto && item.accion !== "omitir") usedPhotos.add(item.foto);
+
+  // Fotos de categoría: mismo ZIP, nombre exacto (sin distinguir mayúsculas ni carpeta).
+  const categories: PlannedCategory[] = (options.categories ?? []).map((category) => {
+    let foto: string | null = null;
+    if (category.foto && options.photoNames) {
+      const key = photoKey(category.foto);
+      if (options.photoNames.has(key)) foto = key;
+      else problems.push(problem("aviso", "categoria-foto-faltante", null, category.fila, `Categoría «${category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria}»: la foto «${category.foto}» no está en el ZIP.`));
+    } else if (category.foto) {
+      problems.push(problem("aviso", "categoria-foto-faltante", null, category.fila, `Categoría «${category.categoria}»: declara la foto «${category.foto}» pero no subiste el ZIP.`));
+    }
+    return { category, foto };
+  });
+  for (const entry of categories) if (entry.foto) usedPhotos.add(entry.foto);
 
   if (!options.photoNames) {
     const declared = items.filter((item) => item.accion !== "omitir" && item.product.foto);
@@ -595,11 +730,14 @@ export function planCatalog(options: {
     actualizar: live.filter((item) => item.accion === "actualizar").length,
     omitidos: items.length - live.length,
     juegos: live.filter((item) => item.esCombo).length,
+    incompletos: live.filter((item) => item.incompleto).length,
+    convertidos: live.filter((item) => item.convertir).length,
     fotos: live.filter((item) => item.foto).length,
+    fotosCategoria: categories.filter((entry) => entry.foto).length,
     errores: problems.filter((entry) => entry.nivel === "error").length,
     avisos: problems.filter((entry) => entry.nivel === "aviso").length,
   };
-  return { items, problems, summary };
+  return { items, categories, problems, summary };
 }
 
 /** Códigos que el plan necesita conocer en la base: los del archivo y los de sus componentes. */

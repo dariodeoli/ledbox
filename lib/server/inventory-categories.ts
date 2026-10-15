@@ -200,7 +200,7 @@ export async function styleInventoryCategory(tx: Tx, organizationId: string, id:
 /** Árbol de la empresa con la cantidad de productos de cada categoría (sin la papelera). */
 export async function listInventoryCategories(tx: Tx, organizationId: string) {
   const [rows, counts] = await Promise.all([
-    tx.inventoryCategory.findMany({ where: { organizationId }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    tx.inventoryCategory.findMany({ where: { organizationId }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], omit: { imageData: true } }),
     tx.inventoryItem.groupBy({ by: ["categoryId"], where: { organizationId, categoryId: { not: null } }, _count: { _all: true } }),
   ]);
   const byId = new Map(counts.map((row) => [row.categoryId, row._count._all]));
@@ -212,6 +212,7 @@ export async function listInventoryCategories(tx: Tx, organizationId: string) {
     sortOrder: row.sortOrder,
     color: row.color,
     icon: row.icon,
+    imageUrl: row.imageUrl,
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
     itemCount: byId.get(row.id) ?? 0,
   }));

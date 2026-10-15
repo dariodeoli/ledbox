@@ -4,7 +4,7 @@ import { jsonError } from "@/lib/server/http";
 import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { canImportCatalog } from "@/lib/admin-policy";
-import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
+import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
 import { claimImportLote, readBodyLimited, settleImportLote } from "@/lib/server/import-lote";
 import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
@@ -86,7 +86,7 @@ const textOf = (form: FormData, key: string): string => {
   return typeof value === "string" ? value : "";
 };
 
-type Source = { ok: true; products: CatalogProduct[]; problems: ImportProblem[]; empresa: string | null } | { ok: false; response: Response };
+type Source = { ok: true; products: CatalogProduct[]; categories: CatalogCategory[]; problems: ImportProblem[]; empresa: string | null } | { ok: false; response: Response };
 
 async function readSource(module: ImportModule, form: FormData, accion: string, context: { demo: boolean; organizationId: string }): Promise<Source> {
   const fail = (message: string, status = 400, code?: string): Source => ({ ok: false, response: jsonError(message, status, code) });
@@ -104,7 +104,7 @@ async function readSource(module: ImportModule, form: FormData, accion: string, 
     if (file.size > CATALOG_LIMITS.jsonBytes) return fail("El JSON supera los 2 MB.", 413);
     const parsed = parseCatalogJson(await file.text());
     if (!parsed.ok) return fail(parsed.error);
-    return { ok: true, products: parsed.value.doc.productos, problems: parsed.value.problems, empresa: parsed.value.doc.empresa };
+    return { ok: true, products: parsed.value.doc.productos, categories: parsed.value.doc.categorias, problems: parsed.value.problems, empresa: parsed.value.doc.empresa };
   } else if (fuente === "planilla") {
     const file = fileOf(form, "planilla");
     if (!file) return fail("Elegí la planilla (.xlsx o .csv).");
@@ -133,7 +133,7 @@ async function readSource(module: ImportModule, form: FormData, accion: string, 
   }
   const normalized = normalizeCatalog(raw);
   if (!normalized.ok) return fail(normalized.error);
-  return { ok: true, products: normalized.value.doc.productos, problems: normalized.value.problems, empresa: normalized.value.doc.empresa };
+  return { ok: true, products: normalized.value.doc.productos, categories: normalized.value.doc.categorias, problems: normalized.value.problems, empresa: normalized.value.doc.empresa };
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ modulo: string }> }) {
@@ -178,12 +178,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       throw error;
     }
   }
-  const input: ImportInput = { products: source.products, parseProblems: source.problems, photos, photoProblems };
+  const input: ImportInput = { products: source.products, categories: source.categories, parseProblems: source.problems, photos, photoProblems };
 
   if (accion === "preview") {
     const plan = await previewCatalog(organizationId, input);
     return Response.json({
-      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products },
+      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
       // Tarjetas y filas genéricas: el panel de importación no conoce el módulo.
@@ -192,6 +192,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         { clave: "actualizar", etiqueta: "Se actualizan", valor: plan.summary.actualizar },
         { clave: "juegos", etiqueta: "Juegos (combos)", valor: plan.summary.juegos },
         { clave: "fotos", etiqueta: "Fotos", valor: plan.summary.fotos },
+        ...(plan.categories.length ? [{ clave: "fotosCategoria", etiqueta: "Fotos de categoría", valor: plan.summary.fotosCategoria }] : []),
+        ...(plan.summary.incompletos ? [{ clave: "incompletos", etiqueta: "Juegos incompletos", valor: plan.summary.incompletos }] : []),
+        ...(plan.summary.convertidos ? [{ clave: "convertidos", etiqueta: "Unidades que pasan a juego", valor: plan.summary.convertidos }] : []),
         { clave: "omitidos", etiqueta: "Se omiten", valor: plan.summary.omitidos },
       ],
       filas: plan.items.map((item) => ({
@@ -199,8 +202,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         nombre: item.product.nombre,
         accion: item.accion,
         detalle: [
-          item.esCombo ? `Juego de ${item.product.componentes.length} componente${item.product.componentes.length === 1 ? "" : "s"}` : "Unidad",
-          item.product.precio ? `Gs ${item.product.precio.toLocaleString("es-PY")}` : "sin precio",
+          item.incompleto ? "Juego incompleto (sin piezas)" : item.esCombo ? `Juego de ${item.product.componentes.length} componente${item.product.componentes.length === 1 ? "" : "s"}` : "Unidad",
+          item.convertir ? "unidad que pasa a juego" : null,
+          item.product.precio ? `Gs ${item.product.precio.toLocaleString("es-PY")}` : "precio a consultar",
           item.product.cobro === "dia" ? "por día" : "por evento",
           item.foto ? "con foto" : null,
         ]

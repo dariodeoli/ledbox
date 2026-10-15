@@ -23,6 +23,7 @@ import { SECURITY_DEPOSIT_LABEL, isSecurityDepositStatus } from "@/lib/budget-se
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetApprovalState, collectedAmount } from "@/lib/admin-types";
 import type { AdminBudgetRow, AdminTimelineEntry } from "@/lib/admin-types";
+import { lineMissingPrice } from "@/lib/budget-price-gate";
 import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
 import { BudgetEventNotice } from "../BudgetEventNotice";
 import { StageTrail } from "../StageTrail";
@@ -237,7 +238,7 @@ export function BudgetDetailDialog({
               <div className="admin-bd-items-row" role="row" key={item.id} data-excluded={item.excluded ? "true" : undefined}>
                 <span role="cell" title={item.inventory ? `Vinculado a ${item.inventory.name}` : "No reserva stock"}>{item.name}{item.excluded ? " (no incluido)" : ""}</span>
                 <span role="cell">{formatNumber(item.quantity)} × {formatNumber(item.days)}</span>
-                <span role="cell">{formatMoney(item.unitPrice)}</span>
+                <span role="cell">{formatMoney(item.unitPrice)}{lineMissingPrice(item) ? <> <AdminBadge tone="danger" title="Cargá el precio para poder enviar, aprobar y cobrar">Falta precio</AdminBadge></> : item.unitPrice === 0 && item.freeOnPurpose && !item.excluded ? <> <AdminBadge tone="neutral">Gratis</AdminBadge></> : null}</span>
                 <span role="cell"><strong>{formatMoney(item.subtotal)}</strong></span>
               </div>
             ))}

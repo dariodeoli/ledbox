@@ -20,6 +20,7 @@ import { db } from "@/lib/server/db";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { readRentalDays, snapshotsForLines } from "@/lib/server/line-pricing";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
@@ -122,7 +123,7 @@ export async function GET() {
             discount: true,
             total: true,
             client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-            items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true } },
+            items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, freeOnPurpose: true } },
           },
         },
       },
@@ -148,6 +149,8 @@ type ParsedBudgetItem = {
   inventoryId: string | null;
   /** Días reales del alquiler cuando el panel los manda con un producto (el escalón «total» guarda días = 1). */
   rentalDays: number | null;
+  /** Gratis a propósito: el 0 es válido y no queda «falta precio». */
+  freeOnPurpose: boolean;
 };
 
 /**
@@ -182,6 +185,7 @@ function parseBudgetItems(rawItems: unknown[], links: InventoryLinks): ParsedBud
       subtotal: Math.max(0, quantity * billed * unitPrice),
       inventoryId,
       rentalDays: inventoryId ? readRentalDays(value.rentalDays) : null,
+      freeOnPurpose: value.freeOnPurpose === true && unitPrice === 0,
     }];
   });
 }
@@ -417,6 +421,11 @@ async function patchBudget(request: Request) {
     if (!budget) return jsonError("Presupuesto no encontrado.", 404);
     if (budget.status === status) {
       return Response.json({ budget: { id: budget.id, status: budget.status }, unchanged: true });
+    }
+    // «Falta precio»: ni enviar ni aprobar a mano un presupuesto con líneas en 0 sin confirmar.
+    if (status === "APPROVED" || status === "SENT") {
+      const priceBlock = await budgetPriceGate(organizationId, budget.id, status === "SENT" ? "enviar" : "aprobar");
+      if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
     }
     if (budget.status === "APPROVED" && status !== "APPROVED") return jsonError("El presupuesto ya está aprobado: no se puede reabrir para cambiar sus condiciones.", 409);
     let updated: { id: string; status: CommercialStatus };
@@ -714,6 +723,7 @@ async function patchBudgetItems(params: {
         unitPrice: item.unitPrice,
         costPrice: item.costPrice,
         subtotal: item.subtotal,
+        freeOnPurpose: item.freeOnPurpose,
         inventoryId,
         ...(snapshots.has(String(parsed.indexOf(item))) ? { pricingSnapshot: snapshots.get(String(parsed.indexOf(item))) } : {}),
       };

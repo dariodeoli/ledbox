@@ -1260,7 +1260,7 @@ export function PresupuestosModule() {
       eventId: form.eventId || undefined,
       title: form.title,
       ...creationDepositBody(createDeposit),
-      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes, ...(item.inventory && item.rentalDays && Number.isInteger(Number(item.rentalDays)) ? { rentalDays: Number(item.rentalDays) } : {}) })),
+      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), freeOnPurpose: Boolean(item.freeOnPurpose) && Number(item.unitPrice) === 0, inventoryId: item.inventory?.id, notes: item.notes, ...(item.inventory && item.rentalDays && Number.isInteger(Number(item.rentalDays)) ? { rentalDays: Number(item.rentalDays) } : {}) })),
     });
     setBusy(false);
     if (!result.ok) {

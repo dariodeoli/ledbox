@@ -1,5 +1,6 @@
 import { emailValid, normalizeEmail } from "@/lib/field-rules";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
+import { missingPriceMessage, missingPriceNames } from "@/lib/budget-price-gate";
 import { recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -60,11 +61,14 @@ export async function POST(request: Request) {
     include: {
       client: { select: { name: true, company: true, tradeName: true, legalName: true } },
       event: { select: { name: true } },
-      items: { orderBy: { name: "asc" }, select: { sortOrder: true, name: true, quantity: true, days: true, subtotal: true } },
+      items: { orderBy: { name: "asc" }, select: { sortOrder: true, name: true, quantity: true, days: true, subtotal: true, unitPrice: true, excluded: true, freeOnPurpose: true } },
       organization: { select: { name: true, paymentDetails: true } },
     },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
+  // «Falta precio»: con las líneas ya leídas (misma regla que el resto de los frenos).
+  const missing = missingPriceNames(budget.items);
+  if (missing.length > 0) return jsonError(missingPriceMessage(missing, "enviar"), 409, "price_missing");
   if (!budget.publicToken) {
     return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
   }

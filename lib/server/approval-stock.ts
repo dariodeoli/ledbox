@@ -25,7 +25,26 @@ export const PORTAL_REVIEW_NOTE = PORTAL_STOCK_MESSAGE;
 
 export type StockGate =
   | { ok: true; reservation: BudgetReservation | null }
-  | { ok: false; reservation: BudgetReservation; lines: string[]; message: string };
+  /** `incomplete`: hay un juego sin piezas cargadas; no se puede forzar («Aprobar igual» no aplica). */
+  | { ok: false; reservation: BudgetReservation; lines: string[]; message: string; incomplete?: boolean };
+
+/** Una línea por juego incompleto del presupuesto (líneas que cuentan, de la empresa activa). */
+export async function incompleteGameLines(organizationId: string, budgetId: string): Promise<string[]> {
+  const rows = await db.budgetItem.findMany({
+    where: { budgetId, budget: { organizationId }, excluded: false, inventory: { comboIncomplete: true } },
+    select: { inventory: { select: { name: true } } },
+  });
+  const names = [...new Set(rows.flatMap((row) => (row.inventory ? [row.inventory.name] : [])))];
+  return names.map((name) => `«${name}» es un juego incompleto (sin piezas cargadas): cargale las piezas antes de reservarlo`);
+}
+
+/** Resultado sin reserva para un bloqueo que no viene del motor de stock. */
+async function incompleteGate(organizationId: string, budgetId: string, prefix: string): Promise<StockGate | null> {
+  const lines = await incompleteGameLines(organizationId, budgetId);
+  if (lines.length === 0) return null;
+  const reservation: BudgetReservation = { eventId: null, eventName: null, range: null, outcomes: [], requested: 0, reserved: 0, conflicts: lines.length, failed: false, blocked: true };
+  return { ok: false, reservation, lines, message: `${prefix}: ${lines.join(" · ")}.`, incomplete: true };
+}
 
 /** Una línea legible por ítem faltante: «Copa (piden 12, hay 8)». */
 export function shortageLines(reservation: Pick<BudgetReservation, "outcomes">): string[] {
@@ -47,6 +66,9 @@ export async function checkStockBeforeApproval(options: {
   /** Solo para tests. */
   reserve?: typeof reserveBudgetInventory;
 }): Promise<StockGate> {
+  // Un juego incompleto no se reserva ni se aprueba: se informa antes de tocar el stock.
+  const incomplete = await incompleteGate(options.organizationId, options.budgetId, "No se puede aprobar");
+  if (incomplete) return incomplete;
   const reserve = options.reserve ?? reserveBudgetInventory;
   const reservation = await reserve({ organizationId: options.organizationId, budgetId: options.budgetId, context: options.context, strict: true });
   if (reservation.failed) {
@@ -129,6 +151,8 @@ export async function peekStockBeforeApproval(options: {
   /** Solo para tests. */
   reserve?: typeof reserveBudgetInventory;
 }): Promise<StockGate> {
+  const incomplete = await incompleteGate(options.organizationId, options.budgetId, "No se puede firmar");
+  if (incomplete) return incomplete;
   const reserve = options.reserve ?? reserveBudgetInventory;
   const reservation = await reserve({ organizationId: options.organizationId, budgetId: options.budgetId, context: options.context, dryRun: true });
   if (reservation.failed) {
@@ -184,6 +208,8 @@ export type StockDecision =
  */
 export function decideStockApproval(gate: StockGate, force: boolean, role: AdminRole): StockDecision {
   if (gate.ok) return { kind: "proceed" };
+  // Un juego incompleto no tiene piezas que entregar: no hay faltante que asumir ni forzar.
+  if (gate.incomplete) return { kind: "blocked", canForce: false, message: `${gate.message} Cargale las piezas al juego para poder aprobar.` };
   const canForce = canApproveWithoutStock(role);
   if (!force) {
     return {

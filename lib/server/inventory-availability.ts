@@ -585,6 +585,11 @@ export async function commitInventoryAssignment(options: {
     const { commitComboAssignment } = await import("./inventory-combos");
     return commitComboAssignment({ ...options });
   }
+  // Un juego importado sin piezas no tiene stock que comprometer: mensaje claro en vez de «hay 0».
+  const incompleteGame = await db.inventoryItem.findFirst({ where: { id: options.inventoryId, organizationId: options.organizationId, comboIncomplete: true }, select: { name: true } });
+  if (incompleteGame) {
+    return { ok: false, reason: "conflict", message: `«${incompleteGame.name}» es un juego incompleto (sin piezas cargadas): cargale las piezas antes de reservarlo.` };
+  }
   return db.$transaction(
     async (tx) => {
       const now = new Date();

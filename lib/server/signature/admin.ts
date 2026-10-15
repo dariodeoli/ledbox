@@ -348,6 +348,11 @@ export async function createSignatureRequest(
     attachment = { id: found.id, name: found.name, data: new Uint8Array(found.data) };
   }
 
+  // «Falta precio»: no se pide la firma de un presupuesto con líneas en 0 sin confirmar.
+  const { budgetPriceGate } = await import("../budget-price-gate");
+  const priceBlock = await budgetPriceGate(context.organizationId, budget.id, "enviar");
+  if (priceBlock) throw new SignatureActionError(409, priceBlock);
+
   // Alternativa agrupada: no se emite un enlace que el portal no va a dejar firmar por falta de stock.
   const grouping = await db.budget.findFirst({ where: { id: budget.id, organizationId: context.organizationId }, select: { comparisonId: true, approvedAt: true } });
   if (grouping?.comparisonId && !grouping.approvedAt) {

@@ -18,10 +18,12 @@ import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/invent
 import { findWarehouseByCode } from "@/lib/server/inventory-warehouses";
 import { lockInventoryItems } from "@/lib/server/inventory-availability";
 import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
+import { prepareCategoryPhoto, setCategoryImage } from "@/lib/server/category-image";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
   codesToLookUp,
   planCatalog,
+  type CatalogCategory,
   type CatalogPlan,
   type CatalogProduct,
   type ExistingItem,
@@ -39,13 +41,36 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
   const rows = codes.length
     ? await dbWithDeleted.inventoryItem.findMany({
         where: { organizationId, sku: { in: codes } },
-        select: { id: true, sku: true, name: true, deletedAt: true, _count: { select: { components: true, units: true } } },
+        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, _count: { select: { components: true, units: true, assignments: true } } },
       })
     : [];
+  // Unidades con historial (fuera de servicio, retiradas, perdidas o con incidentes): decide si una unidad se puede convertir en juego.
+  const history = rows.length
+    ? await dbWithDeleted.inventoryUnit.groupBy({
+        by: ["inventoryId"],
+        where: { organizationId, inventoryId: { in: rows.map((row) => row.id) }, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
+        _count: { _all: true },
+      })
+    : [];
+  const historyById = new Map(history.map((row) => [row.inventoryId, row._count._all]));
   return new Map(
     rows.flatMap((row) =>
       row.sku
-        ? [[row.sku, { id: row.id, name: row.name, isCombo: row._count.components > 0, inTrash: row.deletedAt !== null, units: row._count.units } satisfies ExistingItem] as const]
+        ? [
+            [
+              row.sku,
+              {
+                id: row.id,
+                name: row.name,
+                isCombo: row._count.components > 0,
+                inTrash: row.deletedAt !== null,
+                units: row._count.units,
+                incompleto: row.comboIncomplete,
+                reservas: row._count.assignments,
+                unidadesConHistorial: historyById.get(row.id) ?? 0,
+              } satisfies ExistingItem,
+            ] as const,
+          ]
         : [],
     ),
   );
@@ -57,6 +82,8 @@ export type ImportInput = {
   /** Fotos del ZIP por clave; `null` si no se subió ZIP. */
   photos: Map<string, Uint8Array> | null;
   photoProblems: ImportProblem[];
+  /** Sección opcional `categorias` del archivo (foto propia y orden); ausente = ninguna. */
+  categories?: CatalogCategory[];
 };
 
 /** Vista previa: no escribe nada. */
@@ -70,6 +97,7 @@ export async function previewCatalog(organizationId: string, input: ImportInput)
     existing,
     photoNames: input.photos ? new Set(input.photos.keys()) : null,
     photoProblems: input.photoProblems,
+    categories: input.categories ?? [],
   });
 }
 
@@ -81,6 +109,8 @@ export type ApplyResult = {
   actualizados: number;
   juegos: number;
   fotos: number;
+  /** Fotos de categoría guardadas. */
+  fotosCategoria: number;
   omitidos: number;
   fallidos: ApplyFailure[];
   summary: CatalogPlan["summary"];
@@ -117,10 +147,10 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     if (!locked.has(planned.existingId)) throw new Error("El producto ya no existe en esta empresa.");
     const current = await tx.inventoryItem.findFirst({
       where: { id: planned.existingId, organizationId },
-      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, _count: { select: { components: true } } },
+      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, comboIncomplete: true, _count: { select: { components: true } } },
     });
     if (!current) throw new Error("El producto ya no existe en esta empresa.");
-    if (current._count.components > 0) throw new Error("Ahora es un juego en el inventario; no se cambia el tipo por importación.");
+    if (current._count.components > 0 || current.comboIncomplete) throw new Error("Ahora es un juego en el inventario; no se cambia el tipo por importación.");
     const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
     await tx.inventoryItem.update({
       where: { id: planned.existingId },
@@ -164,6 +194,18 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
   });
   if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
   return { id, created: true, photo: Boolean(photo) };
+}
+
+/** Alta de un juego sin piezas: combo incompleto, sin stock propio ni unidades. Los datos finos los completa `writeComboMeta`. */
+async function createIncompleteGame(tx: Tx, organizationId: string, planned: PlannedProduct): Promise<string> {
+  const { product } = planned;
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  if (!category) throw new Error("No se pudo resolver la categoría.");
+  const id = randomUUID();
+  await tx.inventoryItem.create({
+    data: { id, organizationId, sku: product.codigo, name: product.nombre, ...categoryWriteData(category), kind: "REUSABLE", quantity: 0, comboIncomplete: true, listPrice: product.precio ?? 0 },
+  });
+  return id;
 }
 
 /** Actualiza los datos propios de un combo (nombre, precio, descripción, visibilidad, foto). */
@@ -287,31 +329,42 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     for (const item of combos) {
       const code = item.product.codigo;
       try {
-        const components = item.product.componentes.map((component) => {
-          const componentId = idByCode.get(component.codigo);
-          if (!componentId) throw new Error(`El componente ${component.codigo} no se pudo importar.`);
-          return { componentId, quantity: component.cantidad };
-        });
-        const have = currentComponents.filter((row) => row.parentId === item.existingId);
-        const unchanged = item.existingId !== null && have.length === components.length && components.every((component) => have.some((row) => row.componentId === component.componentId && row.quantity === component.quantity));
         let comboId = item.existingId;
         let isNew = false;
-        if (!unchanged) {
-          const saved = await saveCombo({
-            organizationId,
-            id: item.existingId,
-            data: { name: item.product.nombre, category: item.product.categoria, subcategory: item.product.subcategoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
-            components,
-          });
-          if (!saved.ok) {
-            failures.push({ codigo: code, mensaje: saved.message });
-            failedProducts.add(code);
-            continue;
+        if (item.product.componentes.length === 0) {
+          // Juego sin piezas en el archivo: nuevo = juego incompleto; existente = solo se actualizan sus datos.
+          if (!item.existingId) {
+            comboId = await db.$transaction((tx) => createIncompleteGame(tx, organizationId, item), { timeout: 30_000 });
+            isNew = true;
+            idByCode.set(code, comboId);
+            created.push({ id: comboId, etiqueta: label(item) });
           }
-          comboId = saved.combo.id;
-          isNew = saved.created;
-          idByCode.set(code, comboId);
-          if (isNew) created.push({ id: comboId, etiqueta: label(item) });
+        } else {
+          const components = item.product.componentes.map((component) => {
+            const componentId = idByCode.get(component.codigo);
+            if (!componentId) throw new Error(`El componente ${component.codigo} no se pudo importar.`);
+            return { componentId, quantity: component.cantidad };
+          });
+          const have = currentComponents.filter((row) => row.parentId === item.existingId);
+          const unchanged = item.existingId !== null && have.length === components.length && components.every((component) => have.some((row) => row.componentId === component.componentId && row.quantity === component.quantity));
+          if (!unchanged) {
+            const saved = await saveCombo({
+              organizationId,
+              id: item.existingId,
+              data: { name: item.product.nombre, category: item.product.categoria, subcategory: item.product.subcategoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
+              components,
+              convertFromUnit: item.convertir,
+            });
+            if (!saved.ok) {
+              failures.push({ codigo: code, mensaje: saved.message });
+              failedProducts.add(code);
+              continue;
+            }
+            comboId = saved.combo.id;
+            isNew = saved.created;
+            idByCode.set(code, comboId);
+            if (isNew) created.push({ id: comboId, etiqueta: label(item) });
+          }
         }
         const photo = await photoOf(item);
         const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo), { timeout: 30_000 });
@@ -328,12 +381,39 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     }
   }
 
+  // Categorías declaradas: se crean si faltan, `orden` llena sortOrder y la foto se guarda por nombre normalizado.
+  let categoryPhotos = 0;
+  for (const entry of plan.categories) {
+    const { category } = entry;
+    const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
+    try {
+      let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
+      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      if (bytes) {
+        prepared = await prepareCategoryPhoto(bytes);
+        if (!prepared.ok) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${prepared.error}` });
+      }
+      const saved = await db.$transaction(async (tx) => {
+        const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria });
+        if (!resolved) throw new Error("No se pudo resolver la categoría.");
+        if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
+        if (prepared?.ok) return setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
+        return false;
+      });
+      if (saved) categoryPhotos += 1;
+    } catch (error) {
+      console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
+      failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
+    }
+  }
+
   const result: ApplyResult = {
     lote: input.lote,
     creados: created,
     actualizados: updated,
     juegos: combosDone,
     fotos: photosSaved,
+    fotosCategoria: categoryPhotos,
     omitidos: plan.summary.omitidos + failedProducts.size,
     fallidos: failures,
     summary: plan.summary,
@@ -355,6 +435,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         actualizados: updated,
         juegos: combosDone,
         fotos: photosSaved,
+        fotosCategoria: categoryPhotos,
         omitidos: result.omitidos,
         fallidos: failures.length,
       },

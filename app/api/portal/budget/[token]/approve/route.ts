@@ -11,6 +11,8 @@ import { normalizeBudgetCode } from "@/lib/public-config";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { PORTAL_PRICE_MESSAGE } from "@/lib/budget-price-gate";
+import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock } from "@/lib/server/approval-stock";
 
 export const runtime = "nodejs";
@@ -76,6 +78,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // Stock antes de aprobar (alquileres P1-3): con el mismo lock de ítems del motor se
   // verifica (y reserva, todo o nada) lo que pide el presupuesto. Si falta, NO se aprueba
   // ni se reserva: queda en revisión para el equipo y el cliente recibe un aviso claro.
+  if (!budget.approvedAt && await budgetPriceGate(budget.organizationId, budget.id, "aprobar")) {
+    return jsonError(PORTAL_PRICE_MESSAGE, 409, "price_missing");
+  }
   if (!budget.approvedAt) {
     const gate = await checkStockBeforeApproval({
       organizationId: budget.organizationId,

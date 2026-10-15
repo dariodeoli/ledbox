@@ -459,6 +459,13 @@ export async function loadSignaturePortal(
 async function withStockGate(row: SignatureRequestRow, view: PortalSignatureRequest): Promise<PortalSignatureRequest> {
   if (!view.canSign || view.demo) return view;
   const budget = await db.budget.findFirst({ where: { id: row.budgetId, organizationId: row.organizationId }, select: { comparisonId: true, approvedAt: true } });
+  if (budget && !budget.approvedAt) {
+    const { budgetPriceGate } = await import("../budget-price-gate");
+    if (await budgetPriceGate(row.organizationId, row.budgetId, "aprobar")) {
+      const { PORTAL_PRICE_MESSAGE } = await import("../../budget-price-gate");
+      return { ...view, canSign: false, blockedReason: PORTAL_PRICE_MESSAGE };
+    }
+  }
   if (!budget?.comparisonId || budget.approvedAt) return view;
   const gate = await peekStockBeforeApproval({ organizationId: row.organizationId, budgetId: row.budgetId, context: portalAuditContext(row.organizationId, row.recipientName, row.recipientEmail) });
   if (gate.ok) return view;

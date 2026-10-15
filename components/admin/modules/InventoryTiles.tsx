@@ -39,7 +39,7 @@ function InventoryTile({ item, writable, rangeActive, selected, selectionFull, o
         <InventoryThumb item={item} size={64} />
         <strong className="admin-inv-tile-name">{item.name}</strong>
         <small className="admin-code admin-inv-tile-code">{code}</small>
-        <StateChips visual={visual} compact />
+        <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} compact />
         {rangeActive || item.combo ? (
           <StockMeter summary={stockSummary(item, rangeActive)} combo={Boolean(item.combo)} />
         ) : (

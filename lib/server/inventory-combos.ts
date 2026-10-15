@@ -660,6 +660,12 @@ export async function loadComboDefinitions(organizationId: string, comboIds?: Re
     entry.components.push({ componentId: row.componentId, name: row.component.name, quantity: row.quantity, category: row.component.category, status: row.component.status });
     map.set(row.parentId, entry);
   }
+  // Juegos incompletos (importados sin piezas): son combos sin componentes, sin stock propio.
+  const incomplete = await db.inventoryItem.findMany({
+    where: { organizationId, comboIncomplete: true, ...(comboIds ? { id: { in: [...comboIds] } } : {}) },
+    select: { id: true },
+  });
+  for (const row of incomplete) if (!map.has(row.id)) map.set(row.id, { id: row.id, components: [] });
   return map;
 }
 
@@ -731,6 +737,12 @@ export async function saveCombo(options: {
   id?: string | null;
   data: ComboItemData;
   components: unknown;
+  /**
+   * Importación: convierte una unidad existente en combo. Solo si no tiene reservas (ninguna
+   * asignación a eventos) ni unidades con historial (fuera de servicio o con incidentes); sus
+   * unidades «limpias» se retiran dentro de la misma transacción.
+   */
+  convertFromUnit?: boolean;
 }): Promise<SaveComboResult> {
   const parsed = readComboComponents(options.components);
   if (!parsed.ok) return { ok: false, reason: "invalid", message: parsed.error };
@@ -744,10 +756,20 @@ export async function saveCombo(options: {
         if (comboId) {
           const lockedIds = await lockInventoryItems(tx, organizationId, [comboId]);
           if (!lockedIds.has(comboId)) return { ok: false, reason: "not-found", message: "El combo no existe en esta empresa." };
-          const existing = await tx.inventoryItem.findFirst({ where: { id: comboId, organizationId }, select: { id: true, _count: { select: { units: true } } } });
+          const existing = await tx.inventoryItem.findFirst({ where: { id: comboId, organizationId }, select: { id: true, comboIncomplete: true, _count: { select: { units: true } } } });
           if (!existing) return { ok: false, reason: "not-found", message: "El combo no existe en esta empresa." };
           before = (await tx.inventoryComponent.findMany({ where: { parentId: comboId, organizationId }, select: { componentId: true, quantity: true } })).map((row) => ({ componentId: row.componentId, quantity: row.quantity }));
-          if (before.length === 0) return { ok: false, reason: "invalid", message: "Ese ítem no es un combo." };
+          // Un juego incompleto (sin piezas) se puede completar; una unidad solo si la importación la convierte.
+          if (before.length === 0 && !existing.comboIncomplete) {
+            if (!options.convertFromUnit) return { ok: false, reason: "invalid", message: "Ese ítem no es un combo." };
+            const reservations = await tx.eventInventory.count({ where: { inventoryId: comboId, event: { organizationId } } });
+            if (reservations > 0) return { ok: false, reason: "has-reservations", message: "El producto tiene reservas: no se puede convertir en juego." };
+            const withHistory = await tx.inventoryUnit.count({
+              where: { inventoryId: comboId, organizationId, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
+            });
+            if (withHistory > 0) return { ok: false, reason: "invalid", message: "El producto tiene unidades con historial (mantenimiento, daños o retiros): no se puede convertir en juego." };
+            await tx.inventoryUnit.deleteMany({ where: { inventoryId: comboId, organizationId } });
+          }
           const active = await tx.eventInventory.count({ where: { inventoryId: comboId, ...committedAssignmentWhere(organizationId) } });
           if (active > 0) {
             return { ok: false, reason: "has-reservations", message: "El combo tiene reservas activas: liberalas antes de cambiar sus componentes." };
@@ -789,7 +811,8 @@ export async function saveCombo(options: {
         if (created) {
           await tx.inventoryItem.create({ data: { id: comboId, organizationId, quantity: 0, ...itemData } });
         } else {
-          await tx.inventoryItem.update({ where: { id: comboId }, data: itemData });
+          // Con piezas deja de estar incompleto; un combo no tiene stock propio (quantity 0).
+          await tx.inventoryItem.update({ where: { id: comboId }, data: { ...itemData, comboIncomplete: false, quantity: 0 } });
           await tx.inventoryComponent.deleteMany({ where: { parentId: comboId, organizationId } });
         }
         if (options.data.priceTiers) await replacePriceTiers(tx, organizationId, comboId, options.data.priceTiers);
@@ -813,6 +836,8 @@ export type ComboView = {
   capacity: number;
   limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
   components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: InventoryStatus }>;
+  /** Juego sin piezas cargadas: no se puede reservar hasta completarlo. */
+  incomplete?: boolean;
 };
 
 type ListedRow = {
@@ -858,6 +883,7 @@ export function withComboAvailability<T extends ListedRow>(
         canMake: component.canMake,
         status: definition.components.find((entry) => entry.componentId === component.componentId)?.status ?? "AVAILABLE",
       })),
+      ...(definition.components.length === 0 ? { incomplete: true } : {}),
     };
     return {
       ...row,
