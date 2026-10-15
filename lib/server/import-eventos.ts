@@ -359,6 +359,8 @@ export async function applyEventos(
   let sinStock = 0;
   let liberadas = 0;
 
+  // Base de clientes del lote; el cliente del vínculo se relee bajo el lock del código.
+  const known: ClientRow[] = await db.client.findMany({ where: { organizationId }, select: { id: true, name: true, company: true, email: true, phone: true }, take: 50_000 });
   let done = 0;
   for (const item of plan.items) {
     input.onProgress?.({ hecho: done, total: plan.items.length, fase: "Cargando eventos" });
@@ -381,6 +383,7 @@ export async function applyEventos(
 
           let eventId = typeof mappedId === "string" ? mappedId : null;
           let existingNotes: string | null = null;
+          let mappedClient: ClientRow | null = null;
           if (eventId) {
             // Candado del evento: dos importaciones del mismo código se serializan.
             const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${eventId} AND "organizationId" = ${organizationId} AND "deletedAt" IS NULL FOR UPDATE`);
@@ -388,7 +391,7 @@ export async function applyEventos(
           }
           let created = false;
           if (eventId) {
-            const current = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { notes: true, status: true, startsAt: true, endsAt: true } });
+            const current = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { notes: true, status: true, startsAt: true, endsAt: true, client: { select: { id: true, name: true, company: true, email: true, phone: true, deletedAt: true } } } });
             if (!current || current.status === "IN_PROGRESS" || current.status === "COMPLETED") throw new Error("El evento cambió mientras se importaba: volvé a generar la vista previa.");
             // Las reservas heredadas usan las fechas/estado del evento: cambiarlos primero
             // desplazaría stock sin pasar por disponibilidad. La reprogramación se hace en Eventos.
@@ -399,15 +402,15 @@ export async function applyEventos(
               if (active > 0) throw new EventImportConflict("Este evento tiene reservas: reprogramalo o liberá sus reservas desde Eventos antes de cambiar sus fechas o reactivarlo por importación.");
             }
             existingNotes = current.notes;
+            if (!current.client.deletedAt) mappedClient = current.client;
           } else {
             const limit = await lockedEventLimitViolation(tx, context);
             if (limit) throw new PlanLimitError(limit.error);
             eventId = randomUUID();
             created = true;
           }
-          // Cliente: el de la vista previa o, si ya apareció en este lote, el creado hace un instante.
-          const currentClients: ClientRow[] = await tx.client.findMany({ where: { organizationId }, select: { id: true, name: true, company: true, email: true, phone: true }, take: 50_000 });
-          const matched = matchClient(currentClients, doc.cliente);
+          // Reutilizar el cliente que otro import del mismo código acaba de crear.
+          const matched = (mappedClient ? matchClient([mappedClient], doc.cliente) : undefined) ?? matchClient(known, doc.cliente);
           let clientId = matched?.id ?? null;
           let clientCreated = false;
           if (!clientId) {
@@ -456,6 +459,7 @@ export async function applyEventos(
       );
       if (written.clientCreated) {
         clientesCreados.push({ id: written.clientId, etiqueta: doc.cliente.nombre });
+        known.push({ id: written.clientId, name: doc.cliente.nombre, company: null, email: doc.cliente.correo, phone: doc.cliente.telefono });
       }
       if (written.created) creados.push({ id: written.eventId, etiqueta: `${doc.codigo} · ${doc.nombre}` });
       else actualizados += 1;
