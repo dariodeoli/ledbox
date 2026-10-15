@@ -16,10 +16,11 @@ import { jsonError } from "./http";
  * responde 409 (nunca se pisa una operación con otra).
  *
  * Diseño:
- * - Carrera entre dos requests con la misma clave: el índice único
- *   `(organizationId, scope, key)` define el ganador. El perdedor recibe la
- *   violación de unicidad, su transacción se revierte completa (no queda ningún
- *   dato suelto) y responde con el resultado del ganador.
+ * - Carrera entre dos requests con la misma clave: un candado transaccional
+ *   por empresa, scope y clave serializa el intento antes de leer el resultado
+ *   y antes de cualquier candado de negocio. Así el reintento no valida contra
+ *   un saldo que el primer intento ya consumió. El índice único permanece
+ *   como respaldo y una violación revierte completa la operación perdedora.
  * - La clave es por empresa y por `scope` (`recurso:método:variante`), así la
  *   misma clave puede usarse en endpoints distintos sin chocar.
  * - La auditoría viaja en `afterCommit`: corre **una sola vez**, después del
@@ -173,6 +174,7 @@ async function runTransaction(
     transaction = await db.$transaction(
       async (tx) => {
         if (key) {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`idempotency:${organizationId}:${scope}:${key}`}, 0))::text AS locked`;
           const existing = await tx.idempotencyKey.findUnique({
             where: { organizationId_scope_key: { organizationId, scope, key } },
             select: { requestHash: true, status: true, response: true },
