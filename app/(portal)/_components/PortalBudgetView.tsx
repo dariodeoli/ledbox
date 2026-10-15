@@ -1672,6 +1672,76 @@ export function PortalBudgetView({
             </section>
           ) : null}
 
+          {budget.rental && (budget.rental.charges.length > 0 || budget.rental.settlement) ? (
+            <section className="portal-card" aria-labelledby="portal-rental-charges">
+              <div className="portal-card-head">
+                <PortalCardTitle id="portal-rental-charges" icon="wallet">
+                  Cargos de la devolución
+                </PortalCardTitle>
+              </div>
+              <ul className="portal-rental-lines">
+                {budget.rental.charges.map((charge, index) => (
+                  <li key={`${charge.label}-${index}`}>
+                    <span>
+                      {charge.label}
+                      {charge.quantity > 1 ? ` · ${charge.quantity} × ${formatMoney(charge.unitAmount)}` : ""}
+                    </span>
+                    <span className="portal-num">{charge.waived ? "Condonado" : formatMoney(charge.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+              {budget.rental.settlement ? (
+                <dl className="portal-facts portal-facts--pay">
+                  <div>
+                    <dt>Total de cargos</dt>
+                    <dd className="portal-num">{formatMoney(budget.rental.settlement.chargesTotal)}</dd>
+                  </div>
+                  {budget.rental.settlement.retained > 0 ? (
+                    <div>
+                      <dt>Descontado de tu garantía</dt>
+                      <dd className="portal-num">{formatMoney(budget.rental.settlement.retained)}</dd>
+                    </div>
+                  ) : null}
+                  {budget.securityDeposit && budget.securityDeposit.purpose === "DAMAGES" ? (
+                    <div>
+                      <dt>Garantía devuelta</dt>
+                      <dd className="portal-num">{formatMoney(budget.rental.settlement.returned)}</dd>
+                    </div>
+                  ) : null}
+                  {budget.rental.settlement.extra > 0 ? (
+                    <div>
+                      <dt>Queda por pagar</dt>
+                      <dd className="portal-num">{formatMoney(budget.rental.settlement.extra)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : (
+                <p className="portal-help">Detalle provisorio: se confirma al liquidar la devolución.</p>
+              )}
+            </section>
+          ) : null}
+
+          {budget.rental && (budget.rental.terms || budget.rental.cancellationLines.length > 0) ? (
+            <section className="portal-card" aria-labelledby="portal-rental-terms">
+              <div className="portal-card-head">
+                <PortalCardTitle id="portal-rental-terms" icon="plan">
+                  Condiciones del alquiler
+                </PortalCardTitle>
+              </div>
+              {budget.rental.terms ? <p className="portal-help portal-rental-terms">{budget.rental.terms}</p> : null}
+              {budget.rental.cancellationLines.length > 0 ? (
+                <>
+                  <h3 className="portal-rental-subtitle">Política de cancelación</h3>
+                  <ul className="portal-rental-lines">
+                    {budget.rental.cancellationLines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
           {approved ? null : paymentsCard}
 
           {/* Decisión: autorizar, pedir rebaja o cambio */}

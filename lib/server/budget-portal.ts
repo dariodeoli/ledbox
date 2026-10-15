@@ -218,6 +218,8 @@ export type PortalBudget = {
   warranty: string | null;
   /** Depósito de garantía (aparte del total, no es un cobro); `null` si el presupuesto no lo tiene. */
   securityDeposit?: import("../budget-security-deposit").SecurityDepositPublic;
+  /** Alquiler: cargos de la devolución, liquidación, condiciones y política de cancelación (si corresponde). */
+  rental?: import("./rental-settlement").PortalRental | null;
   notes: string | null;
   /**
    * Cliente, solo lo que la vista pública muestra. `contactName`/`contactRole`
@@ -359,6 +361,7 @@ type BudgetForPortal = {
   securityDeposit?: number | null;
   securityDepositStatus?: string | null;
   securityDepositRetained?: number | null;
+  securityDepositPurpose?: string | null;
   notes: string | null;
   createdAt: Date;
   /** Primera vista del portal (issue #33); `null` si el cliente nunca abrió el link. */
@@ -641,7 +644,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     deliveryAt: iso(budget.deliveryAt),
     ivaType: budget.ivaType,
     warranty: budget.warranty,
-    securityDeposit: securityDepositPublic({ securityDeposit: budget.securityDeposit ?? null, securityDepositStatus: budget.securityDepositStatus ?? null, securityDepositRetained: budget.securityDepositRetained ?? null }),
+    securityDeposit: securityDepositPublic({ securityDeposit: budget.securityDeposit ?? null, securityDepositStatus: budget.securityDepositStatus ?? null, securityDepositRetained: budget.securityDepositRetained ?? null, securityDepositPurpose: budget.securityDepositPurpose ?? null }),
     notes: budget.notes,
     client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole, logoUrl: budget.client.logo && budget.publicToken ? `/api/portal/budget/${encodeURIComponent(budget.publicToken)}/client-logo?v=${encodeURIComponent(budget.client.logo.updatedAt.toISOString())}` : null },
     event: budget.event
@@ -807,6 +810,8 @@ export async function loadPublicBudget(
   if (options.sealView && !demo) await sealPortalView(budget.id);
   const timeline = await buildBudgetTimeline(budget.organizationId, budget.id, { audience: "client" });
   const view = portalBudgetView(budget, timeline ?? []);
+  // Import diferido: el armado de correos reutiliza este módulo sin necesitar el motor de alquileres.
+  view.rental = await (await import("./rental-settlement")).loadPortalRental(budget.organizationId, budget.id);
   view.items = view.items.map((item) => {
     const source = budget.items.find((row) => row.id === item.id)?.inventory;
     if (!source || source.organizationId !== budget.organizationId) return { ...item, imageUrl: null };

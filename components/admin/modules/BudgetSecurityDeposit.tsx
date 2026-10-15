@@ -6,7 +6,10 @@ import { formatMoney, type AdminTone } from "@/lib/admin-format";
 import type { AdminBudgetRow } from "@/lib/admin-types";
 import { BUDGET_INT_MAX, defaultDepositPlanRows } from "@/lib/budget-payment-plan";
 import { isSecurityDepositStatus, securityDepositPublic } from "@/lib/budget-security-deposit";
-import { MoneyField, NumberField, TextField } from "../AdminFields";
+import { DEPOSIT_PURPOSE_LABEL, type DepositPurpose } from "@/lib/rental-charges";
+import { MoneyField, NumberField, SelectField, TextField } from "../AdminFields";
+import { useAdminSession } from "../AdminShell";
+import { RentalSettlementSection } from "./RentalSettlementSection";
 import { AdminBadge, AdminButton, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
 
 /** Tono del estado de la garantía (pendiente: aviso; en custodia: info; devuelta: ok; retenida: alerta). */
@@ -36,12 +39,16 @@ export function creationDepositBody(state: CreationDeposit): Record<string, unkn
 export function BudgetCreationDeposit({ state, onChange, defaults, subtotal, disabled }: {
   state: CreationDeposit;
   onChange: (state: CreationDeposit) => void;
-  defaults: { depositPercent: number | null; securityDepositDefault: number | null };
+  defaults: { depositPercent: number | null; securityDepositDefault: number | null; securityDepositMode?: "NONE" | "OPTIONAL" | "ALWAYS"; securityDepositCalc?: "FIXED" | "PERCENT" | "PER_PRODUCT"; securityDepositPercent?: number | null };
   subtotal: number;
   disabled?: boolean;
 }) {
   const percentValue = state.percent ?? (defaults.depositPercent === null ? "" : String(defaults.depositPercent));
-  const depositValue = state.deposit ?? (defaults.securityDepositDefault === null ? "" : String(defaults.securityDepositDefault));
+  // La política de Ajustes: solo «siempre» propone sola (fijo, % del pedido; por producto la calcula el servidor al crear).
+  const mode = defaults.securityDepositMode ?? (defaults.securityDepositDefault !== null ? "ALWAYS" : "NONE");
+  const calc = defaults.securityDepositCalc ?? "FIXED";
+  const auto = mode !== "ALWAYS" ? null : calc === "FIXED" ? defaults.securityDepositDefault : calc === "PERCENT" && defaults.securityDepositPercent ? Math.round((subtotal * defaults.securityDepositPercent) / 100) : null;
+  const depositValue = state.deposit ?? (auto === null || auto <= 0 ? "" : String(auto));
   const percent = percentValue === "" ? null : Number(percentValue);
   const rows = defaultDepositPlanRows(percent, subtotal);
   const fromSettings = state.percent === null && defaults.depositPercent !== null;
@@ -65,7 +72,7 @@ export function BudgetCreationDeposit({ state, onChange, defaults, subtotal, dis
         limit={BUDGET_INT_MAX}
         disabled={disabled}
         onChange={(value) => onChange({ ...state, deposit: value })}
-        hint={`${state.deposit === null && defaults.securityDepositDefault !== null ? "Según Ajustes. " : ""}Opcional · no se suma al total ni cuenta como cobro.`}
+        hint={`${state.deposit === null && mode === "ALWAYS" ? (calc === "PER_PRODUCT" ? "Se calcula al crear según las reglas por producto de Ajustes. " : calc === "PERCENT" ? "Según Ajustes; se recalcula con el total final. " : "Según Ajustes. ") : state.deposit === null && mode === "OPTIONAL" ? "Opcional en Ajustes: cargala si la querés. " : ""}Opcional · no se suma al total ni cuenta como cobro.`}
       />
     </div>
   );
@@ -85,6 +92,9 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
   const [amount, setAmount] = useState(budget.securityDeposit ? String(budget.securityDeposit) : "");
   const [retained, setRetained] = useState("");
   const [reason, setReason] = useState("");
+  const { role } = useAdminSession();
+  const canEdit = role === "OWNER" || role === "ADMIN" || role === "FINANCE";
+  const [purpose, setPurpose] = useState<DepositPurpose>(budget.securityDepositPurpose === "RESERVE" ? "RESERVE" : "DAMAGES");
   const [mode, setMode] = useState<Mode>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -116,7 +126,7 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
     <AdminDialog
       title={`Depósito de garantía · ${budget.title}`}
       icon="wallet"
-      size="md"
+      size="lg"
       description={`No se suma al total del presupuesto (${formatMoney(budget.total)}) ni cuenta como cobro o seña.`}
       error={error}
       onClose={onClose}
@@ -125,7 +135,8 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
           <AdminButton type="button" icon="close" disabled={busy} onClick={onClose}>Cerrar</AdminButton>
           {open ? (
             <>
-              <AdminButton type="button" busy={busy} disabled={amount === String(budget.securityDeposit ?? "")} onClick={() => void send({ kind: "security-deposit", securityDeposit: amount === "" ? null : Number(amount) }, amount === "" ? "Quitamos la garantía." : "Guardamos la garantía.")}>Guardar monto</AdminButton>
+              <AdminButton type="button" busy={busy} onClick={() => void send({ kind: "security-deposit", suggest: true, purpose }, "Calculamos la garantía según Ajustes.")}>Calcular según Ajustes</AdminButton>
+              <AdminButton type="button" busy={busy} disabled={amount === String(budget.securityDeposit ?? "") && purpose === (budget.securityDepositPurpose === "RESERVE" ? "RESERVE" : "DAMAGES")} onClick={() => void send({ kind: "security-deposit", securityDeposit: amount === "" ? null : Number(amount), purpose }, amount === "" ? "Quitamos la garantía." : "Guardamos la garantía.")}>Guardar monto</AdminButton>
               {status === "PENDING" ? <AdminButton type="button" variant="primary" icon="check" busy={busy} busyLabel="Guardando…" onClick={() => void send({ kind: "security-deposit-status", to: "HELD" }, "Garantía recibida: queda en custodia.")}>Marcar recibida</AdminButton> : null}
             </>
           ) : null}
@@ -156,7 +167,10 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
       ) : null}
       {held && advice ? <AdminNote tone={budget.equipmentReturn === "incidents" ? "warn" : undefined}>{advice}</AdminNote> : null}
       {open ? (
-        <MoneyField label="Monto de la garantía" value={amount} limit={BUDGET_INT_MAX} disabled={busy} onChange={setAmount} hint="Vacío = sin garantía." />
+        <>
+          <MoneyField label="Monto de la garantía" value={amount} limit={BUDGET_INT_MAX} disabled={busy} onChange={setAmount} hint="Vacío = sin garantía." />
+          <SelectField label="¿Para qué es?" value={purpose} disabled={busy} onChange={(value) => setPurpose(value === "RESERVE" ? "RESERVE" : "DAMAGES")} options={(Object.keys(DEPOSIT_PURPOSE_LABEL) as DepositPurpose[]).map((value) => ({ value, label: DEPOSIT_PURPOSE_LABEL[value] }))} hint="Reserva: al recibirla baja el saldo. Daños: se devuelve si no hay cargos." />
+        </>
       ) : null}
       {held && mode === "partial" ? (
         <>
@@ -165,6 +179,7 @@ export function SecurityDepositDialog({ budget, onClose, onSaved }: { budget: Ad
         </>
       ) : null}
       </AdminDialogSection>
+      {budget.event || status !== null ? <RentalSettlementSection budgetId={budget.id} canEdit={canEdit} onChanged={onSaved} /> : null}
     </AdminDialog>
   );
 }

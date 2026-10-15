@@ -216,7 +216,7 @@ export async function syncBudgetExpectedPayments(input: {
     existing.delete(item.slot);
     // Lo confirmado y lo parcial no se pisan: la plata ya entró con sus valores
     // reales y el saldo pendiente se completa o se divide a mano (issue #129).
-    if (current.status === "CONFIRMED" || current.status === "PARTIAL" || current.status === "PROOF" || current.paidAmount > 0 || current.proofId || current.paymentId || current.label.includes(" · parte ") || current.slot.startsWith("split:")) continue;
+    if (current.status === "CONFIRMED" || current.status === "PARTIAL" || current.status === "PROOF" || current.paidAmount > 0 || current.proofId || current.paymentId || current.label.includes(" · parte ") || current.slot.startsWith("split:") || current.slot.startsWith("extra:")) continue;
 
     const nextStatus: ExpectedStatusValue = current.status === "CANCELLED" ? "AWAITING" : (current.status as ExpectedStatusValue);
     const reviving = current.status === "CANCELLED";
@@ -262,9 +262,9 @@ export async function syncBudgetExpectedPayments(input: {
   }
 
   // Conceptos que salieron del plan: se cancelan (lo confirmado queda). Las
-  // partes de una división manual (`split:`) no son del plan: se respetan.
+  // partes de una división manual (`split:`) y los cargos de la devolución (`extra:`) no son del plan: se respetan.
   for (const row of existing.values()) {
-    if (row.status === "CONFIRMED" || row.status === "PARTIAL" || row.status === "PROOF" || row.status === "CANCELLED" || row.paidAmount > 0 || row.proofId || row.paymentId || row.label.includes(" · parte ") || row.slot.startsWith("split:")) continue;
+    if (row.status === "CONFIRMED" || row.status === "PARTIAL" || row.status === "PROOF" || row.status === "CANCELLED" || row.paidAmount > 0 || row.proofId || row.paymentId || row.label.includes(" · parte ") || row.slot.startsWith("split:") || row.slot.startsWith("extra:")) continue;
     const applied = await database.expectedPayment.updateMany({
       where: { id: row.id, status: row.status, amount: row.amount, paidAmount: row.paidAmount, proofId: row.proofId, paymentId: row.paymentId },
       data: { status: "CANCELLED", cancelledAt: now },

@@ -453,6 +453,8 @@ export type AdminBudgetRow = {
   /** PENDING, HELD, RETURNED, KEPT_PARTIAL o KEPT. */
   securityDepositStatus?: string | null;
   securityDepositRetained?: number | null;
+  /** RESERVE (se descuenta del saldo) o DAMAGES (se devuelve sin cargos); null = daños. */
+  securityDepositPurpose?: string | null;
   /** Devolución de equipos del evento vinculado: sin daños, con incidentes o pendiente. */
   equipmentReturn?: "clean" | "incidents" | "pending" | null;
   createdAt: string;
@@ -2662,6 +2664,25 @@ export type AdminRentalSettings = {
   depositPercent: number | null;
   /** Depósito de garantía por defecto (PYG) de los presupuestos nuevos; `null` = sin garantía. */
   securityDepositDefault: number | null;
+  /** Política de garantía (alquileres P1-2): no se usa, opcional por presupuesto o siempre. */
+  securityDepositMode: "NONE" | "OPTIONAL" | "ALWAYS";
+  /** Para qué es: reserva (se descuenta del saldo) o daños (se devuelve si no hay cargos). */
+  securityDepositPurpose: "RESERVE" | "DAMAGES";
+  /** Cómo se calcula: monto fijo, % del pedido o reglas por producto o categoría. */
+  securityDepositCalc: "FIXED" | "PERCENT" | "PER_PRODUCT";
+  securityDepositPercent: number | null;
+  securityDepositRules: Array<{ inventoryId?: string | null; categoryId?: string | null; amount: number }>;
+  /** Recargo por demora: % del alquiler o monto fijo, por día u hora, con tolerancia en minutos. */
+  lateFeeKind: "PERCENT" | "FIXED";
+  lateFeeUnit: "DAY" | "HOUR";
+  lateFeeValue: number;
+  lateGraceMinutes: number;
+  /** Rotura o faltante: % del costo de reposición. */
+  damageChargePercent: number;
+  customCharges: Array<{ id: string; name: string; amount: number; unit: "PIECE" | "EVENT"; categoryId: string | null }>;
+  /** Política de cancelación vigente (la de fábrica si la empresa no cargó una). */
+  cancellationPolicy: Array<{ minDaysBefore: number; retainPercent: number }>;
+  rentalTerms: string | null;
   holdTtlMinutes: number;
   deliveryBufferMin: number;
   returnBufferMin: number;
@@ -2688,6 +2709,10 @@ export type AdminApiResponse = {
   /** Zonas de flete (`GET /api/admin/delivery-zones`). */
   zones?: import("./delivery-zones").DeliveryZoneView[];
   settings?: AdminRentalSettings;
+  /** Liquidación de la devolución de un alquiler (`GET /api/admin/budgets/settlement`). */
+  settlement?: unknown;
+  /** Retención de la seña propuesta si se cancelara hoy (`?cancellation=1`); nunca reembolsa solo. */
+  cancellation?: unknown;
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
   /** Calendario: el tope de movimientos de inventario recortó el rango. */
@@ -2710,7 +2735,7 @@ export type AdminApiResponse = {
   budgets?: AdminBudgetRow[];
   budgetRequests?: AdminBudgetRequestRow[];
   /** Valores por defecto de la empresa para presupuestos nuevos (seña y garantía). */
-  rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null };
+  rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null; securityDepositMode?: "NONE" | "OPTIONAL" | "ALWAYS"; securityDepositCalc?: "FIXED" | "PERCENT" | "PER_PRODUCT"; securityDepositPercent?: number | null };
   proofs?: AdminBudgetPaymentProofRow[];
   clientPayments?: AdminPaymentRow[];
   /** Recordatorio recién enviado/registrado (respuesta de `/api/admin/reminders`). */

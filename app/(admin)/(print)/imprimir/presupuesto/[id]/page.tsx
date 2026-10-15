@@ -31,6 +31,7 @@ import { AdminImageBox } from "@/components/admin/AdminImageBox";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
 import { budgetUsesDays } from "@/lib/budget-items";
 import { securityDepositPublic } from "@/lib/budget-security-deposit";
+import { loadPortalRental } from "@/lib/server/rental-settlement";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 
 export const runtime = "nodejs";
@@ -75,6 +76,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   if (!budget) notFound();
 
   const securityDeposit = securityDepositPublic(budget);
+  const rental = await loadPortalRental(auth.context.organizationId, budget.id);
   const paid = budget.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const balance = budget.total - paid;
   const issuedAt = formatDateTime(budget.createdAt);
@@ -245,6 +247,34 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
             <PrintField label="Notas" value={budget.notes || "Sin notas adicionales."} wide />
           </div>
         </PrintSection>
+
+        {rental && (rental.terms || rental.cancellationLines.length > 0) ? (
+          <PrintSection title="Condiciones del alquiler">
+            {rental.terms ? <p style={{ whiteSpace: "pre-line", margin: "0 0 6px" }}>{rental.terms}</p> : null}
+            {rental.cancellationLines.length > 0 ? (
+              <>
+                <p style={{ margin: "6px 0 2px", fontWeight: 600 }}>Política de cancelación</p>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {rental.cancellationLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </PrintSection>
+        ) : null}
+
+        {rental && rental.charges.length > 0 ? (
+          <PrintSection title="Cargos de la devolución">
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {rental.charges.map((charge, index) => (
+                <li key={`${charge.label}-${index}`}>
+                  {charge.label}: {charge.waived ? "condonado" : formatMoney(charge.amount)}
+                </li>
+              ))}
+            </ul>
+          </PrintSection>
+        ) : null}
 
         {plan.dueNow ? (
           <PrintSection title="Pago">

@@ -5,6 +5,8 @@ import { budgetItemError } from "@/lib/budget-items";
 import { budgetMoneyValid, defaultDepositPlanRows, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { newBudgetDefaults, securityDepositPublic } from "@/lib/budget-security-deposit";
 import { getRentalSettings } from "@/lib/server/rental-settings";
+import { suggestDepositForOrder } from "@/lib/server/rental-settlement";
+import { isDepositPurpose } from "@/lib/rental-charges";
 import { SecurityDepositError, equipmentReturnByEvent, setBudgetSecurityDeposit, transitionBudgetSecurityDeposit } from "@/lib/server/security-deposit";
 import { assertBudgetPlanLedger, recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
 import { CommercialStatus, Prisma } from "@prisma/client";
@@ -127,7 +129,7 @@ export async function GET() {
     }),
   ]);
   const returns = await equipmentReturnByEvent(organizationId, [...new Set(budgets.flatMap((budget) => (budget.eventId && budget.securityDeposit ? [budget.eventId] : [])))]);
-  return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault }, budgets: budgets.map((budget) => {
+  return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault, securityDepositMode: rental.securityDepositMode, securityDepositCalc: rental.securityDepositCalc, securityDepositPercent: rental.securityDepositPercent }, budgets: budgets.map((budget) => {
     const { logo, ...client } = budget.client;
     return { ...budget, equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
   }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
@@ -267,7 +269,9 @@ export async function POST(request: Request) {
   // porcentaje de Ajustes (o el `depositPercent` que eligió la persona). Un
   // `installmentsJson` explícito (o `null` = sin plan) se respeta tal cual.
   const rental = await getRentalSettings(organizationId);
-  const defaults = newBudgetDefaults(body, total, rental);
+  // Garantía según la política de la empresa: solo se propone sola si es «siempre» (fijo, % o por producto).
+  const autoDeposit = await suggestDepositForOrder(organizationId, { total, lines: items.map((item) => ({ inventoryId: item.inventoryId ?? null, quantity: item.quantity })) }, { auto: true });
+  const defaults = newBudgetDefaults(body, total, { ...rental, securityDepositDefault: autoDeposit });
   if (!defaults.ok) return jsonError(defaults.error, 400);
   const installments = defaults.installments ? (defaults.installments as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
   // Depósito de garantía: opcional, aparte del total; default de la empresa.
@@ -308,6 +312,7 @@ export async function POST(request: Request) {
         installmentsJson: installments,
         securityDeposit,
         securityDepositStatus: securityDeposit ? "PENDING" : null,
+        securityDepositPurpose: securityDeposit ? (isDepositPurpose(body.securityDepositPurpose) ? body.securityDepositPurpose : rental.securityDepositPurpose) : null,
         items: { create: items.map(({ rentalDays: _rentalDays, ...item }, sortOrder) => ({ ...item, sortOrder, ...(snapshots.has(item.id) ? { pricingSnapshot: snapshots.get(item.id) } : {}) })) },
       },
       include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
@@ -487,8 +492,16 @@ async function patchBudget(request: Request) {
       if (body.kind === "security-deposit") {
         const amount = body.securityDeposit === null || body.securityDeposit === 0 ? null : body.securityDeposit;
         if (amount !== null && typeof amount !== "number") return jsonError("La garantía debe ser un monto entero en guaraníes.", 400);
-        const row = await setBudgetSecurityDeposit(auth.context, budgetId, amount);
-        return Response.json({ securityDeposit: securityDepositPublic(row), budgetId });
+        let finalAmount = amount;
+        if (body.suggest === true) {
+          // «Calcular según Ajustes»: con la política y las líneas actuales del presupuesto.
+          const current = await db.budget.findFirst({ where: { id: budgetId, organizationId }, select: { total: true, items: { where: { excluded: false }, select: { inventoryId: true, quantity: true } } } });
+          if (!current) return jsonError("Presupuesto no encontrado.", 404);
+          finalAmount = await suggestDepositForOrder(organizationId, { total: current.total, lines: current.items });
+          if (finalAmount === null) return jsonError("Según Ajustes no hay una garantía para calcular: cargá el monto a mano o revisá la política en Ajustes → Alquileres.", 409);
+        }
+        const row = await setBudgetSecurityDeposit(auth.context, budgetId, finalAmount, body.purpose === undefined ? undefined : isDepositPurpose(body.purpose) ? body.purpose : null);
+        return Response.json({ securityDeposit: securityDepositPublic(row), budgetId, ...(body.suggest === true ? { suggested: finalAmount } : {}) });
       }
       const to = typeof body.to === "string" ? body.to.toUpperCase() : "";
       const row = await transitionBudgetSecurityDeposit(auth.context, budgetId, {

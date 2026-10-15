@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryIncidentKind, type InventoryIncidentStatus, type InventoryUnitStatus } from "@prisma/client";
 import { db } from "./db";
+import { proposeReturnCharges } from "./rental-settlement";
 import { lockInventoryItems } from "./inventory-availability";
 import { syncInventoryQuantity } from "./inventory-units";
 
@@ -202,7 +203,7 @@ export async function returnAssignment(options: ReturnOptions) {
       await lockInventoryItems(tx, options.organizationId, [probe.inventoryId]);
       const row = await tx.eventInventory.findFirst({
         where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
-        include: { inventory: { select: { name: true } }, event: { select: { name: true } } },
+        include: { inventory: { select: { name: true, replacementCost: true } }, event: { select: { name: true, endsAt: true, strikeAt: true } } },
       });
       if (!row) return fail(404, "La asignación no existe en esta empresa.");
       const sent = dispatchedQuantity(row);
@@ -276,7 +277,27 @@ export async function returnAssignment(options: ReturnOptions) {
           ...(closed ? { checkedIn: true, checkedInAt: options.at } : {}),
         },
       });
-      return { ok: true as const, assignment, before: row, incidents, returned: quantity, damaged, missing, pending: stillPending, closed };
+      // Alquileres P1-4: la devolución deja cargos PROPUESTOS (demora, roturas, faltantes) para que
+      // finanzas los aplique o condone. Idempotente por clave y sin romper la devolución si falla.
+      const proposedCharges = await proposeReturnCharges(tx, {
+        organizationId: options.organizationId,
+        assignment: {
+          id: row.id,
+          inventoryId: row.inventoryId,
+          eventId: row.eventId,
+          budgetId: row.budgetId,
+          quantity: row.quantity,
+          endsAt: row.endsAt,
+          returnedQuantity: row.returnedQuantity,
+          inventory: { name: row.inventory.name, replacementCost: row.inventory.replacementCost },
+          event: { endsAt: row.event.endsAt, strikeAt: row.event.strikeAt },
+        },
+        incidents: incidents.map((incident) => ({ id: incident.id, kind: incident.kind, quantity: incident.quantity })),
+        returnedAt: options.at,
+        returnedNow: quantity,
+        missingNow: missing,
+      });
+      return { ok: true as const, assignment, before: row, incidents, returned: quantity, damaged, missing, pending: stillPending, closed, proposedCharges };
     },
     { timeout: 15_000 },
   );

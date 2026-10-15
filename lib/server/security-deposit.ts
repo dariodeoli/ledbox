@@ -6,8 +6,10 @@ import {
   securityDepositTransition,
   type SecurityDepositStatus,
 } from "../budget-security-deposit";
+import { isDepositPurpose, type DepositPurpose } from "../rental-charges";
 import { recordAudit, type AuditContext } from "./audit";
 import { db } from "./db";
+import { receiveReserveDeposit } from "./rental-settlement";
 
 /**
  * Depósito de garantía del presupuesto (alquileres). Dos operaciones, ambas
@@ -30,8 +32,8 @@ export class SecurityDepositError extends Error {
   }
 }
 
-export type SecurityDepositRow = { id: string; securityDeposit: number | null; securityDepositStatus: string | null; securityDepositRetained: number | null };
-const SELECT = { id: true, title: true, securityDeposit: true, securityDepositStatus: true, securityDepositRetained: true } as const;
+export type SecurityDepositRow = { id: string; securityDeposit: number | null; securityDepositStatus: string | null; securityDepositRetained: number | null; securityDepositPurpose?: string | null };
+const SELECT = { id: true, title: true, securityDeposit: true, securityDepositStatus: true, securityDepositRetained: true, securityDepositPurpose: true } as const;
 
 async function lockBudget(tx: Prisma.TransactionClient, budgetId: string, organizationId: string) {
   const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} AND "organizationId" = ${organizationId} FOR UPDATE`;
@@ -39,17 +41,19 @@ async function lockBudget(tx: Prisma.TransactionClient, budgetId: string, organi
   return tx.budget.findUniqueOrThrow({ where: { id: budgetId }, select: SELECT });
 }
 
-export async function setBudgetSecurityDeposit(context: AuditContext, budgetId: string, amount: number | null): Promise<SecurityDepositRow> {
+export async function setBudgetSecurityDeposit(context: AuditContext, budgetId: string, amount: number | null, purpose?: DepositPurpose | null): Promise<SecurityDepositRow> {
   if (amount !== null && !securityDepositAmountValid(amount)) throw new SecurityDepositError(400, "La garantía debe ser un monto entero en guaraníes mayor a cero.");
+  if (purpose !== undefined && purpose !== null && !isDepositPurpose(purpose)) throw new SecurityDepositError(400, "La garantía es para Reserva o para Daños.");
   const result = await db.$transaction(async (tx) => {
     const current = await lockBudget(tx, budgetId, context.organizationId);
     if (current.securityDepositStatus && current.securityDepositStatus !== "PENDING") {
       throw new SecurityDepositError(409, "La garantía ya fue recibida: cambiá su estado en lugar de su monto.");
     }
-    if (current.securityDeposit === amount) return { before: current, after: current, changed: false };
+    const nextPurpose = amount === null ? null : purpose ?? current.securityDepositPurpose ?? "DAMAGES";
+    if (current.securityDeposit === amount && (current.securityDepositPurpose ?? null) === nextPurpose) return { before: current, after: current, changed: false };
     const after = await tx.budget.update({
       where: { id: budgetId },
-      data: { securityDeposit: amount, securityDepositStatus: amount === null ? null : "PENDING", securityDepositRetained: null },
+      data: { securityDeposit: amount, securityDepositStatus: amount === null ? null : "PENDING", securityDepositRetained: null, securityDepositPurpose: nextPurpose },
       select: SELECT,
     });
     return { before: current, after, changed: true };
@@ -61,7 +65,7 @@ export async function setBudgetSecurityDeposit(context: AuditContext, budgetId: 
       entity: "Budget",
       entityId: budgetId,
       summary: amount === null ? `Quitó el depósito de garantía del presupuesto «${result.after.title}»` : `Definió el depósito de garantía del presupuesto «${result.after.title}»`,
-      detail: { changes: { securityDeposit: { from: result.before.securityDeposit, to: amount } } },
+      detail: { changes: { securityDeposit: { from: result.before.securityDeposit, to: amount }, ...(result.before.securityDepositPurpose !== result.after.securityDepositPurpose ? { securityDepositPurpose: { from: result.before.securityDepositPurpose, to: result.after.securityDepositPurpose } } : {}) } },
     });
   }
   return result.after;
@@ -78,6 +82,9 @@ export type SecurityDepositTransitionInput = {
 export async function transitionBudgetSecurityDeposit(context: AuditContext, budgetId: string, input: SecurityDepositTransitionInput): Promise<SecurityDepositRow & { returned: number }> {
   const result = await db.$transaction(async (tx) => {
     const current = await lockBudget(tx, budgetId, context.organizationId);
+    if (current.securityDepositPurpose === "RESERVE" && input.to !== "HELD") {
+      throw new SecurityDepositError(409, "Una garantía de reserva ya se descontó del saldo: no se devuelve ni se retiene desde acá.");
+    }
     const next = securityDepositTransition({ amount: current.securityDeposit, status: current.securityDepositStatus, retained: current.securityDepositRetained }, input.to, input.retainedAmount);
     if (!next.ok) throw new SecurityDepositError(409, next.error);
     if (next.retained !== null && !budgetMoneyValid(next.retained)) throw new SecurityDepositError(400, "El monto retenido no es válido.");
@@ -86,6 +93,8 @@ export async function transitionBudgetSecurityDeposit(context: AuditContext, bud
       data: { securityDepositStatus: next.status, securityDepositRetained: next.retained },
       select: SELECT,
     });
+    // Garantía de reserva: al recibirla entra como cobro confirmado y el saldo baja (misma transacción).
+    if (input.to === "HELD") await receiveReserveDeposit(tx, context, budgetId);
     // La auditoría va en la misma transacción: no puede quedar un cambio de estado sin su registro.
     const reason = input.reason?.trim().slice(0, 300) || null;
     await recordAudit(
