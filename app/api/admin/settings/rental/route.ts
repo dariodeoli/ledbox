@@ -5,6 +5,7 @@ import {
   getRentalSettings,
   parseRentalSettingsPatch,
   saveRentalSettings,
+  validateRentalSettingsRefs,
 } from "@/lib/server/rental-settings";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -44,6 +45,8 @@ export async function PATCH(request: Request) {
   }
   const parsed = parseRentalSettingsPatch(body);
   if (!parsed.ok) return jsonError(parsed.error, 400);
+  const refError = await validateRentalSettingsRefs(organizationId, parsed.data);
+  if (refError) return jsonError(refError, 400);
 
   if (parsed.data.trashPurgeDays !== undefined) {
     const trashAuth = await requireAdminContext("trash.manage");
