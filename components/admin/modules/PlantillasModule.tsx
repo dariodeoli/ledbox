@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, formatNumber, messageTemplateCategoryLabel } from "@/lib/admin-format";
@@ -18,6 +19,7 @@ const formOf = (row: AdminMessageTemplateRow): TemplateForm => ({ id: row.id, ca
 /** Misma biblioteca y API que el compositor; personalizar acá nunca envía un mensaje. */
 export function PlantillasModule() {
   const { role } = useAdminSession();
+  const router = useRouter();
   const resource = useAdminResource("/api/admin/message-templates", (payload) => payload.templates ?? []);
   const [category, setCategory] = useState<MessageTemplateCategoryValue>("budget");
   const [query, setQuery] = useState("");
@@ -33,9 +35,12 @@ export function PlantillasModule() {
   const formId = useId();
   const templates = useMemo(() => resource.data ?? [], [resource.data]);
   const rows = useMemo(() => templates.filter((row) => row.category === category && matchesQuery(query, [row.title, row.body])).sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "es")), [templates, category, query]);
-  const models = DEFAULT_MESSAGE_TEMPLATES.filter((row) => row.category === category);
+  const models = DEFAULT_MESSAGE_TEMPLATES.filter((row) => row.category === (form?.category ?? category));
   const model = models.find((row) => row.key === modelKey);
   const writable = canWriteTemplateCategory(role, category);
+  const editorWritable = writable && (!form || canWriteTemplateCategory(role, form.category));
+  const writableCategories = MESSAGE_TEMPLATE_CATEGORIES.filter((value) => canWriteTemplateCategory(role, value));
+  const editorCategoryOptions = (form && !writableCategories.includes(form.category) ? [form.category, ...writableCategories] : writableCategories).map((value) => ({ value, label: messageTemplateCategoryLabel(value) }));
   const dirty = form !== null && JSON.stringify(form) !== baseRef.current;
   const preview = useMemo(() => form ? previewMessageTemplate(form.body, form.category) : null, [form]);
 
@@ -62,13 +67,13 @@ export function PlantillasModule() {
   }
   function applyModel(key: string) {
     const selected = models.find((row) => row.key === key);
-    if (!selected || !writable || !form) return;
+    if (!selected || !editorWritable || !form) return;
     setModelKey(key);
     setForm({ ...form, title: form.title || selected.title, body: selected.body });
     setError("");
   }
   function insertVariable(key: string) {
-    if (!form || !writable || busy) return;
+    if (!form || !editorWritable || busy) return;
     const token = `{{${key}}}`, node = messageRef.current;
     const start = node?.selectionStart ?? form.body.length, end = node?.selectionEnd ?? start;
     const body = `${form.body.slice(0, start)}${token}${form.body.slice(end)}`;
@@ -78,7 +83,7 @@ export function PlantillasModule() {
   }
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form || !writable || busy) return;
+    if (!form || !editorWritable || busy) return;
     const invalid = validateMessageTemplate(form);
     if (invalid) { setError(invalid); return; }
     setBusy(true); setError(""); setNotice("");
@@ -86,6 +91,7 @@ export function PlantillasModule() {
     const result = await adminSend<{ template: AdminMessageTemplateRow }>("/api/admin/message-templates", { ...fields, ...(id ? { id } : {}) }, id ? "PATCH" : "POST");
     setBusy(false);
     if (!result.ok) { setError(result.error); return; }
+    setCategory(result.data.template.category);
     selectTemplate(result.data.template);
     setNotice("Plantilla guardada en esta empresa. No se envió ningún mensaje.");
     resource.reload();
@@ -101,7 +107,7 @@ export function PlantillasModule() {
   const activeRow = form?.id ? templates.find((row) => row.id === form.id) : null;
 
   return <div className="admin-module-page">
-    <ClientesTabs active="mensajes" />
+    <ClientesTabs active="mensajes" onNavigate={(href) => requestChange(() => router.push(href))} />
     <AdminModuleContext breadcrumb="Clientes / Mensajes" hint="Personalizá las respuestas que tu equipo reutiliza. Las variables se completan al preparar cada mensaje." meta={`${formatNumber(templates.length)} plantillas`} />
     {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
     {error ? <AdminNote tone="error">{error}</AdminNote> : null}
@@ -125,14 +131,15 @@ export function PlantillasModule() {
       <div className="admin-message-editor">
         <AdminPanel title={form?.id ? "Personalizar mensaje" : "Nuevo mensaje"} icon="edit" meta={dirty ? "Sin guardar" : undefined}>
           {form ? <form id={formId} className="admin-form admin-message-fields" onSubmit={save} aria-busy={busy || undefined}>
-            <TextField label="Nombre de la plantilla" value={form.title} onChange={(title) => setForm({ ...form, title })} required minLength={2} maxLength={MESSAGE_TEMPLATE_TITLE_MAX} disabled={!writable || busy} size="full" />
-            {writable && models.length ? <SelectField label="Modelo de referencia" value={modelKey} onChange={(key) => requestChange(() => applyModel(key))} options={[{ value: "", label: "Elegí un modelo…" }, ...models.map((row) => ({ value: row.key, label: row.title }))]} disabled={busy} hint="Carga un texto de ejemplo; recién se guarda al confirmar." size="full" /> : null}
-            <TextAreaField label="Mensaje" value={form.body} onChange={(body) => setForm({ ...form, body })} textareaRef={messageRef} required rows={11} maxLength={MESSAGE_TEMPLATE_BODY_MAX} disabled={!writable || busy} wide hint={`${formatNumber(form.body.length)} / ${formatNumber(MESSAGE_TEMPLATE_BODY_MAX)} caracteres`} />
+            <SelectField label="Categoría de la plantilla" value={form.category} onChange={(value) => { setForm({ ...form, category: value as MessageTemplateCategoryValue }); setModelKey(""); setError(""); }} options={editorCategoryOptions} disabled={!editorWritable || busy} size="full" hint="Al cambiar de categoría, revisá que las variables del mensaje sigan disponibles." />
+            <TextField label="Nombre de la plantilla" value={form.title} onChange={(title) => setForm({ ...form, title })} required minLength={2} maxLength={MESSAGE_TEMPLATE_TITLE_MAX} disabled={!editorWritable || busy} size="full" />
+            {editorWritable && models.length ? <SelectField label="Modelo de referencia" value={modelKey} onChange={(key) => requestChange(() => applyModel(key))} options={[{ value: "", label: "Elegí un modelo…" }, ...models.map((row) => ({ value: row.key, label: row.title }))]} disabled={busy} hint="Carga un texto de ejemplo; recién se guarda al confirmar." size="full" /> : null}
+            <TextAreaField label="Mensaje" value={form.body} onChange={(body) => setForm({ ...form, body })} textareaRef={messageRef} required rows={11} maxLength={MESSAGE_TEMPLATE_BODY_MAX} disabled={!editorWritable || busy} wide hint={`${formatNumber(form.body.length)} / ${formatNumber(MESSAGE_TEMPLATE_BODY_MAX)} caracteres`} />
             <div className="admin-message-variables"><span className="admin-field-label">Insertar variable</span><div className="admin-var-chips">
-              {messageTemplateVariablesOf(form.category).map((variable) => <AdminButton key={variable.key} size="sm" title={`${variable.label}: ${variable.hint}`} aria-label={`Insertar ${variable.label}`} onClick={() => insertVariable(variable.key)} disabled={!writable || busy}>{`{{${variable.key}}}`}</AdminButton>)}
+              {messageTemplateVariablesOf(form.category).map((variable) => <AdminButton key={variable.key} size="sm" title={`${variable.label}: ${variable.hint}`} aria-label={`Insertar ${variable.label}`} onClick={() => insertVariable(variable.key)} disabled={!editorWritable || busy}>{`{{${variable.key}}}`}</AdminButton>)}
             </div><span className="admin-field-hint">Se inserta donde está el cursor. Los datos reales se completan al preparar el envío.</span></div>
-            <SwitchField label="Disponible al preparar mensajes" checked={form.active} onChange={(active) => setForm({ ...form, active })} disabled={!writable || busy} wide />
-            {writable ? <div className="admin-message-actions">
+            <SwitchField label="Disponible al preparar mensajes" checked={form.active} onChange={(active) => setForm({ ...form, active })} disabled={!editorWritable || busy} wide />
+            {editorWritable ? <div className="admin-message-actions">
               <AdminButton type="submit" variant="primary" icon="check" busy={busy} busyLabel="Guardando…" disabled={!dirty}>Guardar cambios</AdminButton>
               {model ? <AdminButton icon="refresh" onClick={() => setPendingChange(() => () => applyModel(model.key))} disabled={busy}>Restaurar texto</AdminButton> : null}
               {activeRow ? <AdminButton icon="trash" title="Eliminar plantilla" aria-label="Eliminar plantilla" onClick={() => setDeleting(activeRow)} disabled={busy} /> : null}

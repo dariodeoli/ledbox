@@ -40,6 +40,16 @@ test("Clientes / Mensajes guarda la misma biblioteca por empresa sin enviar", { 
       assert.equal((await call("PATCH", { id, body: "Evento {{fecha}}" })).status, 400);
       assert.deepEqual(await db.messageTemplate.findUniqueOrThrow({ where: { id } }), before);
     });
+    await t.test("OWNER reclasifica una plantilla existente y valida variables contra el nuevo contexto", async () => {
+      const created = await call("POST", { category: "event", title: "Reclasificación QA", body: "Hola {{cliente}}, evento {{fecha}}" });
+      assert.equal(created.status, 201);
+      const template = (await created.json()).template;
+      assert.equal((await call("PATCH", { id: template.id, category: "client" })).status, 400);
+      assert.equal((await db.messageTemplate.findUniqueOrThrow({ where: { id: template.id } })).category, "event");
+      assert.equal((await call("PATCH", { id: template.id, category: "client", body: "Hola {{cliente}} de {{empresa}}" })).status, 200);
+      const saved = await db.messageTemplate.findUniqueOrThrow({ where: { id: template.id } });
+      assert.equal(saved.category, "client"); assert.equal(saved.title, template.title);
+    });
     await t.test("otra empresa no se lista ni edita; VIEWER puede leer sin guardar", async () => {
       const foreign = await db.messageTemplate.create({ data: { id: randomUUID(), organizationId: other, title: "Privada", body: model.body, category: model.category } });
       assert.ok(!(await (await call()).json()).templates.some((row: { id: string }) => row.id === foreign.id));
@@ -52,7 +62,10 @@ test("Clientes / Mensajes guarda la misma biblioteca por empresa sin enviar", { 
     await t.test("FINANCE guarda cobranzas y no edita categorías ajenas", async () => {
       await db.adminMembership.update({ where: { id: membership.id }, data: { role: "FINANCE" } });
       const collection = DEFAULT_MESSAGE_TEMPLATES.find(row => row.category === "collection")!;
-      assert.equal((await call("POST", { category: collection.category, title: collection.title, body: collection.body })).status, 201);
+      const created = await call("POST", { category: collection.category, title: collection.title, body: collection.body });
+      assert.equal(created.status, 201);
+      const owned = (await created.json()).template;
+      assert.equal((await call("PATCH", { id: owned.id, category: "event", body: "Hola {{cliente}}" })).status, 403);
       assert.equal((await call("PATCH", { id, body: model.body })).status, 403);
     });
   } finally {

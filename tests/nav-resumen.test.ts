@@ -96,7 +96,7 @@ test("Firmas y Plantillas salen del menú pero siguen siendo rutas y tienen su a
   assert.match(repoFile("components/admin/modules/FirmasModule.tsx"), /<PresupuestosTabs active="firmas" \/>/);
   assert.match(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas", label: "Plantillas"/);
   assert.match(repoFile("components/admin/modules/AjustesModule.tsx"), /<AjustesTabs active=\{section\} \/>/);
-  assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<ClientesTabs active="mensajes" \/>/);
+  assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<ClientesTabs active="mensajes" onNavigate=/);
 });
 
 test("los links internos a /firmas y /plantillas apuntan a rutas que existen", () => {
