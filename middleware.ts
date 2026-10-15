@@ -249,6 +249,16 @@ export function middleware(request: NextRequest) {
   return pass();
 }
 
+/**
+ * `api/admin/import` queda FUERA del middleware a propósito: «Importar catálogo» sube un ZIP de
+ * fotos de hasta 60 MB y, si el middleware corre, Next bufferea el cuerpo (tope por defecto 10 MB)
+ * y lo trunca. Subir el tope con `experimental.middlewareClientMaxBodySize` es global (cualquier
+ * POST, también los públicos), así que se excluye solo esta ruta. Verificado: para ese path el
+ * middleware solo haría `pass()` —la auth del panel y los permisos los resuelve la propia ruta con
+ * `requireAdminContext`, el rewrite de host solo toca `/`, los redirects de host son de páginas y
+ * `x-pathname` lo leen layouts, no las API—. Si algún día el middleware necesita actuar acá,
+ * hay que subir el ZIP en partes en vez de volver a quitar esta exclusión.
+ */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/admin/import(?:/|$)).*)"],
 };

@@ -21,8 +21,11 @@ const nextConfig = {
   // Next (externalizarlos rompe hooks durante SSR, Refs #173).
   transpilePackages: ["owncoding-ui"],
   serverExternalPackages: ["pdf-lib"],
-  // «Importar catálogo» sube fotos.zip de hasta 60 MB: el middleware bufferea el cuerpo (10 MB por defecto) y lo truncaría.
-  experimental: { middlewareClientMaxBodySize: "64mb" },
+  // «Importar catálogo» sube fotos.zip de hasta 60 MB. NO se sube `middlewareClientMaxBodySize`
+  // (es global: haría bufferear hasta 64 MB en cualquier POST, también los públicos). En su lugar
+  // `middleware.ts` excluye `api/admin/import` de su matcher: ahí el middleware no hace nada
+  // necesario (la auth y los permisos viven en la ruta), así el cuerpo llega entero sin bufferear
+  // y el resto de las rutas conserva el tope por defecto de 10 MB.
   outputFileTracingIncludes: { "/api/*": ["./node_modules/pdf-lib/cjs/**/*", "./node_modules/pdf-lib/package.json", "./node_modules/@pdf-lib/**/*", "./node_modules/pako/**/*", "./node_modules/tslib/**/*"] },
   images: { formats: ["image/avif", "image/webp"], minimumCacheTTL: 60 * 60 * 24 * 30 },
   poweredByHeader: false,
