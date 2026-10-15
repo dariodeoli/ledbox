@@ -45,6 +45,14 @@ test("paid/proof concepts cannot silently understate the revised pending balance
     assert.equal(budgetPlanLedgerError(plan.rows.map((row, n) => ({ slot: `installment:${n + 1}`, amount: row.amount })), existing), null);
   }
 });
+test("los cargos extra de la liquidación no bloquean el plan, cobrados o no", () => {
+  for (const status of ["CONFIRMED", "PARTIAL", "PROOF"]) {
+    const extra = { slot: "extra:settlement", amount: 50, status, paidAmount: status === "PROOF" ? 0 : 50 };
+    assert.equal(budgetPlanLedgerError([{ slot: "advance", amount: 100 }], [extra]), null, status);
+    // Y siguen protegidos los conceptos del plan que sí tienen cobros.
+    assert.ok(budgetPlanLedgerError([{ slot: "advance", amount: 70 }], [{ slot: "advance", amount: 100, status: "CONFIRMED", paidAmount: 100 }, extra]), status);
+  }
+});
 test("services and existing rentals retain their arithmetic without inferred conversion", () => {
   assert.equal(budgetUsesDays({ days: 1 }), false);
   assert.equal(budgetUsesDays({ days: 3 }), true);

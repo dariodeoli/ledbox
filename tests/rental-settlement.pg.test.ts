@@ -177,6 +177,23 @@ test("cargos y liquidación de la devolución en PostgreSQL", { skip: !process.e
     assert.equal((await db.expectedPayment.findUniqueOrThrow({ where: { id: extra[0].id } })).status, "AWAITING", "sincronizar el plan no cancela el extra");
   });
 
+  await t.test("liquidar, cobrar el extra, editar el plan y re-sincronizar no devuelve 409 (el extra no es del plan)", async () => {
+    const s = await settledFlow(100_000, 12);
+    await settlement.settleBudgetRental(s.context, s.budget.id);
+    const extra = await db.expectedPayment.findFirstOrThrow({ where: { budgetId: s.budget.id, concept: "extra" } });
+    const { confirmExpectedPayment } = await import("../lib/server/expected-payments");
+    const confirmed = await confirmExpectedPayment({ organizationId: s.org, expectedPaymentId: extra.id, actor: s.context });
+    assert.ok(confirmed.ok, JSON.stringify(confirmed));
+    assert.equal((await db.expectedPayment.findUniqueOrThrow({ where: { id: extra.id } })).status, "CONFIRMED");
+    // Se edita el plan (seña de 100.000) y se vuelve a sincronizar: antes daba 409 para siempre.
+    await db.budget.update({ where: { id: s.budget.id }, data: { advanceAmount: 100_000 } });
+    const synced = await syncBudgetExpectedPayments({ organizationId: s.org, budgetId: s.budget.id });
+    assert.equal(synced.created, 2, "seña y saldo del plan");
+    const after = await db.expectedPayment.findUniqueOrThrow({ where: { id: extra.id } });
+    assert.equal(after.status, "CONFIRMED");
+    assert.equal(after.amount, 80_000, "el extra cobrado queda intacto");
+  });
+
   await t.test("liquidar dos veces y en paralelo no duplica nada", async () => {
     const s = await settledFlow(100_000, 12);
     const runs = await Promise.all([1, 2, 3, 4].map(() => settlement.settleBudgetRental(s.context, s.budget.id)));
