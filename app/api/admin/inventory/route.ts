@@ -596,7 +596,7 @@ export async function POST(request: Request) {
       }
       if (isUnits) {
         await assertUnitsAvailableWithoutIncidents(tx, organizationId, ids, data.status);
-        await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryUnitUpdateManyMutationInput });
+        await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } as Prisma.InventoryUnitUpdateManyMutationInput });
         if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
       } else {
         await tx.inventoryItem.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryItemUpdateManyMutationInput });
@@ -846,7 +846,7 @@ export async function POST(request: Request) {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
         await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
-        const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data });
+        const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
         if (data.status !== undefined) await syncInventoryQuantity(tx, existing.inventoryId);
         return updated;

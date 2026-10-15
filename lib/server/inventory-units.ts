@@ -42,6 +42,15 @@ export async function assertUnitsAvailableWithoutIncidents(
   if (open) throw new InventoryUnitIncidentConflict();
 }
 
+/** Snapshot causal, independiente de relojes y de la precisión de las fechas. Producto ya bloqueado. */
+export async function beginInventoryUnitIncidentCycle(tx: Prisma.TransactionClient, organizationId: string, unitId: string): Promise<number> {
+  const unit = await tx.inventoryUnit.findFirstOrThrow({ where: { id: unitId, organizationId }, select: { incidentCycle: true } });
+  const open = await tx.inventoryIncident.count({ where: { organizationId, unitId, status: { in: ["OPEN", "IN_REPAIR"] } } });
+  if (open > 0) return unit.incidentCycle;
+  const next = await tx.inventoryUnit.update({ where: { id: unitId }, data: { incidentCycle: { increment: 1 } }, select: { incidentCycle: true } });
+  return next.incidentCycle;
+}
+
 /**
  * Cantidad del ítem = unidades activas (issue #112): las retiradas no cuentan y
  * la columna `quantity` se sincroniza para no romper los contratos existentes.

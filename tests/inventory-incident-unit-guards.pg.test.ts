@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -68,6 +69,71 @@ test("incidentes: resolver no revierte bajas y la edición de unidades no libera
       const b = await s.open("REPAIR"); await close(b.id, "RESOLVED");
       assert.equal(await s.status(), "AVAILABLE"); assert.equal(await s.free(), 1);
     });
+    await t.test("un nuevo faltante resuelto vuelve a disponible tras una baja histórica restaurada", async () => {
+      const s = await seed(), a = await s.open("MISSING");
+      await close(a.id, "WRITTEN_OFF");
+      await db.inventoryUnit.update({ where: { id: s.unit.id }, data: { status: "AVAILABLE" } });
+      const b = await s.open("MISSING"); await close(b.id, "RESOLVED");
+      assert.equal(await s.status(), "AVAILABLE"); assert.equal(await s.free(), 1);
+    });
+    await t.test("ciclos separan bajas y faltantes nuevos aunque todas sus fechas coincidan", async () => {
+      const s = await seed(), a = await s.open("MISSING"); await close(a.id, "WRITTEN_OFF");
+      await db.inventoryUnit.update({ where: { id: s.unit.id }, data: { status: "AVAILABLE" } });
+      const b = await s.open("MISSING");
+      const same = new Date("2030-01-01T00:00:00.000Z");
+      await db.inventoryIncident.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { openedAt: same, resolvedAt: same } });
+      assert.notEqual(a.unitCycle, b.unitCycle);
+      await close(b.id, "RESOLVED"); assert.equal(await s.status(), "AVAILABLE");
+    });
+    await t.test("restauración anterior al deploy con ciclo0 no hereda bajas históricas; legacy abierto es conservador", async () => {
+      const s = await seed();
+      await db.inventoryIncident.create({ data: { id: randomUUID(), organizationId: org, inventoryId: s.item.id, unitId: s.unit.id, kind: "MISSING", quantity: 1, status: "WRITTEN_OFF", unitCycle: 0 } });
+      const next = await s.open("MISSING"); assert.ok(next.unitCycle > 0);
+      await close(next.id, "RESOLVED"); assert.equal(await s.status(), "AVAILABLE");
+      const legacy = await seed();
+      await db.inventoryUnit.update({ where: { id: legacy.unit.id }, data: { status: "LOST" } });
+      await db.inventoryIncident.create({ data: { id: randomUUID(), organizationId: org, inventoryId: legacy.item.id, unitId: legacy.unit.id, kind: "MISSING", quantity: 1, status: "WRITTEN_OFF" } });
+      const old = await db.inventoryIncident.create({ data: { id: randomUUID(), organizationId: org, inventoryId: legacy.item.id, unitId: legacy.unit.id, kind: "REPAIR", quantity: 1 } });
+      await close(old.id, "RESOLVED"); assert.equal(await legacy.status(), "LOST"); assert.equal(await legacy.free(), 0);
+    });
+    await t.test("devoluciones guardan el ciclo de la unidad en el faltante", async () => {
+      const s = await seed();
+      const client = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "Cliente QA" } });
+      const event = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "Evento QA", startsAt: new Date("2035-02-01"), endsAt: new Date("2035-02-02") } });
+      const { commitInventoryAssignment } = await import("../lib/server/inventory-availability");
+      const { dispatchAssignment, returnAssignment } = await import("../lib/server/inventory-operations");
+      const assigned = await commitInventoryAssignment({ organizationId: org, eventId: event.id, inventoryId: s.item.id, quantity: 1, startsAt: new Date("2035-02-01"), endsAt: new Date("2035-02-02") });
+      assert.ok(assigned.ok);
+      assert.ok((await dispatchAssignment({ organizationId: org, assignmentId: assigned.assignment.id, at: new Date("2035-02-01"), condition: "Bueno" })).ok);
+      const returned = await returnAssignment({ organizationId: org, assignmentId: assigned.assignment.id, at: new Date("2035-02-02"), condition: "Faltante", quantity: 0, missing: 1, missingUnitIds: [s.unit.id] });
+      assert.ok(returned.ok); assert.ok(returned.incidents[0].unitCycle > 0);
+      assert.equal(returned.incidents[0].unitCycle, (await db.inventoryUnit.findUniqueOrThrow({ where: { id: s.unit.id } })).incidentCycle);
+    });
+    await t.test("importador restaura y crea un faltante nuevo en otro ciclo", async () => {
+      const { applyCatalog } = await import("../lib/server/import-catalog");
+      const { normalizeCatalog } = await import("../lib/import-catalog");
+      const { portalAuditContext } = await import("../lib/server/audit");
+      const run = async (perdidas: number) => {
+        const parsed = normalizeCatalog({ moneda: "PYG", productos: [{ codigo: "CICLO-IMPORT", nombre: "Silla ciclo QA", tipo: "unidad", precio: 10000, cantidad: 1, perdidas }] });
+        assert.ok(parsed.ok);
+        const result = await applyCatalog(portalAuditContext(org, "QA"), { products: parsed.value.doc.productos, parseProblems: parsed.value.problems, photos: null, photoProblems: [], lote: randomUUID() });
+        assert.deepEqual(result.fallidos, []);
+      };
+      await run(1);
+      const item = await db.inventoryItem.findFirstOrThrow({ where: { organizationId: org, sku: "CICLO-IMPORT" } });
+      const first = await db.inventoryIncident.findFirstOrThrow({ where: { inventoryId: item.id, status: "OPEN" } });
+      assert.ok(first.unitCycle > 0); await close(first.id, "WRITTEN_OFF");
+      await run(0); await run(1);
+      const next = await db.inventoryIncident.findFirstOrThrow({ where: { inventoryId: item.id, status: "OPEN" } });
+      assert.ok(next.unitCycle > first.unitCycle); await close(next.id, "RESOLVED");
+      assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id: next.unitId! } })).status, "AVAILABLE");
+    });
+    await t.test("migración aditiva reejecutable conserva ciclos y estados", async () => {
+      const before = await db.inventoryUnit.findMany({ where: { organizationId: org }, orderBy: { id: "asc" }, select: { id: true, status: true, incidentCycle: true } });
+      const migration = new URL("../prisma/migrations/202611020001_inventory_incident_cycles/migration.sql", import.meta.url).pathname;
+      for (let i = 0; i < 2; i++) execFileSync("psql", [url!, "-v", "ON_ERROR_STOP=1", "-q", "-f", migration], { stdio: "pipe" });
+      assert.deepEqual(await db.inventoryUnit.findMany({ where: { organizationId: org }, orderBy: { id: "asc" }, select: { id: true, status: true, incidentCycle: true } }), before);
+    });
     const base = process.env.INVENTORY_AUDIT_BASE_URL;
     const localHttp = Boolean(base && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base));
     await t.test("HTTP individual y lote: 409 atómico con incidentes abiertos; restaura explícitamente sin abiertos", { skip: !localHttp }, async () => {
@@ -103,6 +169,10 @@ test("incidentes: resolver no revierte bajas y la edición de unidades no libera
   } finally {
     await db.auditLog.deleteMany({ where: { organizationId: { in: [org, otherOrg] } } });
     await db.inventoryIncident.deleteMany({ where: { organizationId: { in: [org, otherOrg] } } });
+    await db.eventInventory.deleteMany({ where: { event: { organizationId: org } } });
+    await db.deliveryNote.deleteMany({ where: { organizationId: org } });
+    await db.event.deleteMany({ where: { organizationId: org } });
+    await db.client.deleteMany({ where: { organizationId: org } });
     await db.inventoryUnit.deleteMany({ where: { organizationId: { in: [org, otherOrg] } } });
     await db.inventoryItem.deleteMany({ where: { organizationId: { in: [org, otherOrg] } } });
     await db.adminMembership.deleteMany({ where: { organizationId: org } });

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db, dbWithDeleted } from "@/lib/server/db";
 import { auditChanges, recordAudit, type AuditContext } from "@/lib/server/audit";
-import { createInventoryUnits, isUniqueConstraintError, syncInventoryQuantity } from "@/lib/server/inventory-units";
+import { beginInventoryUnitIncidentCycle, createInventoryUnits, isUniqueConstraintError, syncInventoryQuantity } from "@/lib/server/inventory-units";
 import { saveCombo } from "@/lib/server/inventory-combos";
 import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/inventory-categories";
 import { findWarehouseByCode } from "@/lib/server/inventory-warehouses";
@@ -87,15 +87,17 @@ async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: strin
   const plan = planUnitStates({ counts, nuevas: 0, comprometidas: committed, targets });
   const change = async (unit: { id: string; code: string; status: string }, to: "AVAILABLE" | AdjustableState) => {
     const before = { status: unit.status };
-    await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to } });
     if (to === "AVAILABLE") {
       await tx.inventoryIncident.updateMany({
         where: { organizationId: context.organizationId, unitId: unit.id, status: { in: ["OPEN", "IN_REPAIR"] } },
         data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: context.user.id },
       });
+      await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to, incidentCycle: { increment: 1 } } });
     } else {
+      const unitCycle = await beginInventoryUnitIncidentCycle(tx, context.organizationId, unit.id);
+      await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to } });
       await tx.inventoryIncident.create({
-        data: { id: randomUUID(), organizationId: context.organizationId, inventoryId, unitId: unit.id, kind: INCIDENT_KIND_OF[to], quantity: 1, status: "OPEN", notes: IMPORT_NOTE, openedById: context.user.id },
+        data: { id: randomUUID(), organizationId: context.organizationId, inventoryId, unitId: unit.id, unitCycle, kind: INCIDENT_KIND_OF[to], quantity: 1, status: "OPEN", notes: IMPORT_NOTE, openedById: context.user.id },
       });
     }
     const changes = auditChanges(before, { status: to }, ["status"]);

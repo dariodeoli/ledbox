@@ -4,7 +4,7 @@ import { db } from "./db";
 import { proposeReturnCharges } from "./rental-settlement";
 import { recordDeliveryNoteLine } from "./delivery-notes";
 import { lockInventoryItems } from "./inventory-availability";
-import { syncInventoryQuantity } from "./inventory-units";
+import { beginInventoryUnitIncidentCycle, syncInventoryQuantity } from "./inventory-units";
 
 /**
  * Operaciones de alquiler (fase 4): salida parcial, devolución parcial con daños y
@@ -193,8 +193,9 @@ async function openIncidents(
     const unitStatus: InventoryUnitStatus = kind === "DAMAGE" ? "DAMAGED" : "LOST";
     const created = [];
     for (const unitId of unitIds) {
+      const unitCycle = await beginInventoryUnitIncidentCycle(tx, context.organizationId, unitId);
       await tx.inventoryUnit.update({ where: { id: unitId }, data: { status: unitStatus } });
-      created.push(await tx.inventoryIncident.create({ data: { id: randomUUID(), ...base, unitId, quantity: 1 } }));
+      created.push(await tx.inventoryIncident.create({ data: { id: randomUUID(), ...base, unitId, unitCycle, quantity: 1 } }));
     }
     await syncInventoryQuantity(tx, context.inventoryId);
     return created;
@@ -387,6 +388,7 @@ export async function createIncident(options: {
         assignmentEventId = assignment.eventId;
       }
       let quantity = options.quantity;
+      let unitCycle = 0;
       if (item._count.units > 0) {
         if (!options.unitId) return fail(400, "Elegí la unidad por su código: este ítem tiene unidades.");
         const [unit] = await checkUnits(tx, options.organizationId, item.id, [options.unitId]);
@@ -395,6 +397,7 @@ export async function createIncident(options: {
           return fail(409, `La unidad ${unit.code} ya figura como dañada, perdida o retirada.`);
         }
         quantity = 1;
+        unitCycle = await beginInventoryUnitIncidentCycle(tx, options.organizationId, unit.id);
         await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: openUnitStatus(options.kind) } });
         await syncInventoryQuantity(tx, item.id);
       } else {
@@ -412,6 +415,7 @@ export async function createIncident(options: {
           assignmentId: options.assignmentId ?? null,
           eventId: assignmentEventId,
           unitId: options.unitId ?? null,
+          unitCycle,
           heldByQuantity: item._count.units === 0,
           kind: options.kind,
           quantity,
@@ -473,11 +477,11 @@ export async function transitionIncident(options: {
           });
           // Resolver limpieza/reparación no revierte una baja de otro incidente ni un retiro manual.
           // La restauración explícita de unidades sigue siendo una operación del inventario.
-          const unit = await tx.inventoryUnit.findFirst({ where: { id: incident.unitId, organizationId: options.organizationId }, select: { status: true } });
+          const unit = await tx.inventoryUnit.findFirst({ where: { id: incident.unitId, organizationId: options.organizationId }, select: { status: true, incidentCycle: true } });
           const writtenOff = unit?.status === "LOST" ? await tx.inventoryIncident.count({
-            where: { organizationId: options.organizationId, unitId: incident.unitId, status: "WRITTEN_OFF" },
+            where: { organizationId: options.organizationId, unitId: incident.unitId, unitCycle: incident.unitCycle, status: "WRITTEN_OFF" },
           }) : 0;
-          if (others === 0 && unit && unit.status !== "RETIRED" && writtenOff === 0) {
+          if (others === 0 && unit && unit.incidentCycle === incident.unitCycle && unit.status !== "RETIRED" && writtenOff === 0) {
             await tx.inventoryUnit.update({ where: { id: incident.unitId }, data: { status: "AVAILABLE" } });
           }
         } else if (options.to === "WRITTEN_OFF") {
