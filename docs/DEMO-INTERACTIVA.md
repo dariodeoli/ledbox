@@ -122,3 +122,9 @@ test:rules, check:fields, check:contexto, prisma validate y pg en verde.
 Crecimiento de la base (tope 150; `scripts/demo-purge.mjs`); una salida nueva sin bloqueo (test de salidas);
 choque con `agent/demo-completa` (E0 va después). Vuelta atrás: `DEMO_SANDBOX_ENABLED = false` vuelve a la
 vitrina de solo lectura; migración aditiva; las sandboxes que queden se purgan solas.
+
+## 10. Estado de E2 (implementado)
+- **Seed**: `lib/server/demo-ns.ts` reescribe en el borde de la escritura (`wrapTx`) `demo_*` → `sbx_<ns>_*`, `@ledbox.demo` → `+<ns>@ledbox.demo` y sortea los tokens/códigos (el mapeo es idempotente, así las huellas de firma se calculan con los ids finales). Sin `ns` la vitrina escribe lo mismo de siempre.
+- **Ciclo de vida**: `lib/server/demo-sandboxes.ts` (`createSandbox`, `purgeSandbox`, `purgeExpiredSandboxes`, `purgeMostIdleSandbox`); topes en `demo-sandbox.ts`; `scripts/demo-purge.mjs` (`node --import tsx scripts/demo-purge.mjs [--count|--idle|--limit N]`).
+- **Identidad**: cookie `ledbox_demo` solo en el host demo (`lib/server/demo-host.ts`); aviso de vencida en la cookie legible `ledbox_demo_aviso=vencida` (60 s) para la UI de E3; pantalla `/demo-llena` (`?motivo=error` para «No pudimos preparar tu demo»).
+- **Pendiente para E3**: los links del portal que arma el panel (`portalBudgetUrl`, comparativas, firma) siguen apuntando a `clientes.`, donde una sandbox da 404; en la sandbox tienen que usar el host demo. El mayorista y los pedidos del catálogo de una sandbox no existen (el catálogo público excluye `isDemo`).

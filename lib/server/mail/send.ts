@@ -127,7 +127,14 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
 
   // Demo (docs/DEMO-INTERACTIVA.md §3): en una sandbox, o hacia un destino `*.demo`, no sale nada.
   // Se registra «Demo: simulado» y no se toca el proveedor (ni siquiera sin clave configurada).
-  const salida = await salidaPermitida({ organizationId, canal: "mail", destino: to });
+  // Falla cerrado: si no se puede saber si la empresa es una sandbox, no se envía nada.
+  let salida: Awaited<ReturnType<typeof salidaPermitida>>;
+  try {
+    salida = await salidaPermitida({ organizationId, canal: "mail", destino: to });
+  } catch (error) {
+    console.error("mail: no se pudo verificar si la empresa es una sandbox; no se envía", error);
+    return { status: "skipped", error: "No se pudo verificar el destino del correo.", providerId: null, logId: null };
+  }
   if ("simulado" in salida) {
     const simulatedId = randomUUID();
     const registered = await writeMailLog({

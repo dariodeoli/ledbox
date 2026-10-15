@@ -26,7 +26,7 @@ const rel = (file: string) => relative(root, file).split("\\").join("/");
 const code = (file: string) => readFileSync(file, "utf8");
 /** Fuente sin comentarios (los comentarios pueden nombrar `fetch(` o `wa.me` sin llamarlos). */
 const stripped = (file: string) => code(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
-const sources = (...dirs: string[]) => dirs.flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|tsx|mjs)$/.test(file));
+const sources = (...dirs: string[]) => dirs.flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|tsx|mjs|js|cjs)$/.test(file));
 
 const ROUTES = sources("app/api").filter((file) => file.endsWith("/route.ts"));
 
@@ -50,17 +50,65 @@ test("solo mail/send.ts llama a sendThroughProvider, y siempre después de salid
   assert.match(send, /"simulado" in salida/, "en sandbox no se envía");
 });
 
+/**
+ * Usos de `fetch` en el servidor: la llamada (`fetch(`, `fetch (`), la global (`globalThis.fetch`, `global.fetch`,
+ * `self.fetch`, `window.fetch`), el alias (`const f = fetch`) y pasarlo como valor (`fetch,` / `(fetch)`).
+ * Un método con ese nombre (`cliente.fetch(`) no cuenta.
+ */
+const FETCH_USE = /(^|[^\w$.])fetch\s*\(|\b(globalThis|global|self|window)\s*(\.|\[\s*["'])\s*fetch\b|=\s*fetch\s*[;,)\n]|[(,]\s*fetch\s*[,)]|=\s*(globalThis|global|self|window)\b[^;\n]*\bfetch\b/;
+/** Módulos de red: importados estático, con `import(` o con `require(`, con o sin `node:`. */
+const NETWORK_MODULES = "https?|http2|net|tls|dgram|dns|undici|axios|got|node-fetch|cross-fetch|isomorphic-fetch|ky|superagent|needle|request|nodemailer|ws|socket\\.io-client";
+const NETWORK_IMPORT = new RegExp(`(?:from\\s*|import\\s*\\(\\s*|require\\s*\\(\\s*|\\bimport\\s+)["'](?:node:)?(?:${NETWORK_MODULES})["']|XMLHttpRequest|new\\s+WebSocket\\(|\\bEventSource\\(`);
+
+test("el detector de fetch y de módulos de red atrapa todas las formas", () => {
+  for (const bad of [
+    "await fetch(url)",
+    "await fetch (url)",
+    "globalThis.fetch(url)",
+    "const f = globalThis.fetch;",
+    "const f = fetch;",
+    "const send = fetch\n",
+    "run(fetch, url)",
+    "window[\"fetch\"](url)",
+  ]) assert.match(bad, FETCH_USE, bad);
+  for (const ok of ["cliente.fetch(url)", "const prefetch = 1", "refetch()", "await fetchRuc(ruc)", "const fetched = []"]) assert.doesNotMatch(ok, FETCH_USE, ok);
+  for (const bad of [
+    'import http from "node:http"',
+    'import { request } from "https"',
+    'const net = require("node:net")',
+    'const m = await import("undici")',
+    'import axios from "axios"',
+    'import got from "got"',
+    'import fetch from "node-fetch"',
+    'import "node:https"',
+    "new XMLHttpRequest()",
+  ]) assert.match(bad, NETWORK_IMPORT, bad);
+  for (const ok of ['import { db } from "./db"', 'import path from "node:path"', 'import crypto from "node:crypto"', 'import { x } from "../lib/got-it"']) assert.doesNotMatch(ok, NETWORK_IMPORT, ok);
+});
+
 test("todo fetch( de lib/server y app/api está en una lista cerrada", () => {
-  const ALLOWED = new Set(["lib/server/ruc.ts", "app/api/auth/callback/google/route.ts"]);
+  // ia-carga.ts: proveedor de IA externo (`fetchImpl = fetch`); su única ruta pasa por salidaPermitida (test de abajo).
+  const ALLOWED = new Set(["lib/server/ruc.ts", "app/api/auth/callback/google/route.ts", "lib/server/ia-carga.ts"]);
   const offenders = sources("lib/server", "app/api")
-    .filter((file) => /(^|[^\w.])fetch\(/.test(stripped(file)) && !ALLOWED.has(rel(file)))
+    .filter((file) => FETCH_USE.test(stripped(file)) && !ALLOWED.has(rel(file)))
     .map(rel);
   assert.deepEqual(offenders, [], "una salida nueva debe pasar por salidaPermitida() y agregarse a esta lista a propósito");
-  // Los clientes de red alternativos tampoco se cuelan.
-  const clients = sources("lib/server", "app/api")
-    .filter((file) => /from\s+["'](node:)?(https?|net|tls|undici|axios|nodemailer|ws)["']|XMLHttpRequest/.test(stripped(file)))
+  // Los clientes de red alternativos tampoco se cuelan (ni con import() ni con require(), ni en .js/.cjs).
+  const clients = sources("lib", "app/api")
+    .filter((file) => NETWORK_IMPORT.test(stripped(file)))
     .map(rel);
   assert.deepEqual(clients, []);
+});
+
+test("la «Carga con IA» (proveedor externo) pasa por salidaPermitida antes de llamar al proveedor", () => {
+  const callers = sources("lib", "app").filter((file) => /\biaProviderDeConfig\(/.test(stripped(file)) && rel(file) !== "lib/server/ia-carga.ts").map(rel);
+  assert.deepEqual(callers, ["app/api/admin/ia/carga/route.ts"]);
+  const route = stripped(join(root, "app/api/admin/ia/carga/route.ts"));
+  const post = route.slice(route.indexOf("export async function POST"));
+  const gate = post.indexOf("salidaPermitida(");
+  assert.ok(gate > 0 && gate < post.indexOf("iaProviderDeConfig("), "salidaPermitida( va antes del proveedor");
+  assert.match(post, /canal:\s*"ia"/);
+  assert.match(post, /"simulado" in salida/);
 });
 
 test("los únicos fetch( permitidos son la consulta de RUC y el token de Google", () => {
