@@ -864,14 +864,19 @@ export type InventorySubstitute = {
  */
 export async function findSubstitutes(options: {
   organizationId: string;
-  item: { id: string; category: string; status: InventoryStatus };
+  item: { id: string; category: string; categoryId?: string | null; status: InventoryStatus };
   startsAt: Date;
   endsAt: Date;
   limit?: number;
 }): Promise<InventorySubstitute[]> {
   const limit = options.limit ?? 8;
   const candidates = await db.inventoryItem.findMany({
-    where: { organizationId: options.organizationId, category: options.item.category, id: { not: options.item.id } },
+    // Misma categoría = mismo `categoryId`; los productos viejos sin id comparan el texto.
+    where: {
+      organizationId: options.organizationId,
+      ...(options.item.categoryId ? { categoryId: options.item.categoryId } : { category: options.item.category }),
+      id: { not: options.item.id },
+    },
     orderBy: { name: "asc" },
     take: 100,
     omit: { imageData: true },
@@ -1039,6 +1044,7 @@ type LinkedItem = {
     name: string;
     sku: string | null;
     category: string;
+    categoryId: string | null;
     quantity: number;
     status: InventoryStatus;
     incidentHold: number;
@@ -1146,6 +1152,7 @@ export async function reserveBudgetInventory(options: {
                 name: true,
                 sku: true,
                 category: true,
+                categoryId: true,
                 quantity: true,
                 status: true,
                 incidentHold: true,
@@ -1246,6 +1253,7 @@ export async function reserveBudgetInventory(options: {
                 name: true,
                 sku: true,
                 category: true,
+                categoryId: true,
                 quantity: true,
                 status: true,
                 incidentHold: true,
@@ -1392,7 +1400,7 @@ export async function reserveBudgetInventory(options: {
           conflicts: commit?.availability?.conflicts ?? [],
           substitutes: await findSubstitutes({
             organizationId: options.organizationId,
-            item: { id: group.inventory.id, category: group.inventory.category, status: group.inventory.status },
+            item: { id: group.inventory.id, category: group.inventory.category, categoryId: group.inventory.categoryId, status: group.inventory.status },
             startsAt: range.startsAt,
             endsAt: range.endsAt,
           }),
@@ -1456,7 +1464,7 @@ export async function reserveBudgetInventory(options: {
           reason: `«${group.inventory.name}» está ${group.inventory.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede reservar.`,
           substitutes: await findSubstitutes({
             organizationId: options.organizationId,
-            item: { id: group.inventory.id, category: group.inventory.category, status: group.inventory.status },
+            item: { id: group.inventory.id, category: group.inventory.category, categoryId: group.inventory.categoryId, status: group.inventory.status },
             startsAt: range.startsAt,
             endsAt: range.endsAt,
           }),
@@ -1496,7 +1504,7 @@ export async function reserveBudgetInventory(options: {
       const substitutes = shortfall > 0
         ? await findSubstitutes({
             organizationId: options.organizationId,
-            item: { id: group.inventory.id, category: group.inventory.category, status: group.inventory.status },
+            item: { id: group.inventory.id, category: group.inventory.category, categoryId: group.inventory.categoryId, status: group.inventory.status },
             startsAt: range.startsAt,
             endsAt: range.endsAt,
           })

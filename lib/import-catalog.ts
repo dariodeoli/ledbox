@@ -9,9 +9,13 @@
  */
 
 import { PRICE_TIER_MAX_DAYS, PRICE_TIER_MAX_ROWS, PRICE_TIER_PRICE_MAX, sortTiers, type PriceTier } from "@/lib/price-tiers";
+import { parseCategoryInput } from "@/lib/inventory-categories";
 import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
+  normalizeWarehouseCode,
+  readInventoryLocation,
+  warehouseCodeValid,
   inventoryPriceValue,
   inventorySkuValid,
   normalizeInventorySku,
@@ -46,7 +50,14 @@ export type CatalogComponent = { codigo: string; cantidad: number };
 export type CatalogProduct = {
   codigo: string;
   nombre: string;
+  /** Categoría principal. «Categoría / Subcategoría» en una sola columna se separa acá. */
   categoria: string;
+  /** Subcategoría (un nivel dentro de la categoría), o `null`. */
+  subcategoria: string | null;
+  /** Código del depósito donde se guardan las unidades nuevas (opcional). */
+  deposito: string | null;
+  /** Ubicación dentro del depósito, ya normalizada («E3-B2»), o `null`. */
+  ubicacion: string | null;
   tipo: "juego" | "unidad" | null;
   /** Guaraníes enteros; `null` = sin dato. */
   precio: number | null;
@@ -85,6 +96,9 @@ export type ProblemKind =
   | "componente-invalido"
   | "juego-anidado"
   | "juego-sin-componentes"
+  | "deposito-invalido"
+  | "deposito-inexistente"
+  | "ubicacion-invalida"
   | "tipo-corregido"
   | "cambia-de-tipo"
   | "sku-papelera"
@@ -293,13 +307,33 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
   if (fotoRaw && /[\\/]|\.\./.test(fotoRaw)) {
     problems.push(problem("aviso", "foto-invalida", codigo, fila, `Código ${codigo}: el nombre de foto «${fotoRaw}» no es un archivo simple; se ignora.`));
   }
+  // Categoría y subcategoría: por separado o en una sola columna con «/», «>» o «›».
+  const categoryPath = parseCategoryInput(row.categoria === null || row.categoria === undefined ? "" : String(row.categoria), row.subcategoria === null || row.subcategoria === undefined ? "" : String(row.subcategoria));
+  // Depósito (código) y ubicación: opcionales; un valor mal escrito avisa y se ignora, nunca se inventa.
+  const depositoRaw = text(row.deposito, 20);
+  let deposito: string | null = null;
+  if (depositoRaw) {
+    const code = normalizeWarehouseCode(depositoRaw);
+    if (warehouseCodeValid(depositoRaw)) deposito = code;
+    else problems.push(problem("aviso", "deposito-invalido", codigo, fila, `Código ${codigo}: ${FIELD_MESSAGES.warehouseCode} Se ignora «${depositoRaw}».`));
+  }
+  const ubicacionRaw = text(row.ubicacion, 40);
+  let ubicacion: string | null = null;
+  if (ubicacionRaw) {
+    const normalized = readInventoryLocation(ubicacionRaw, deposito);
+    if (normalized === false) problems.push(problem("aviso", "ubicacion-invalida", codigo, fila, `Código ${codigo}: ${FIELD_MESSAGES.location} Se ignora «${ubicacionRaw}».`));
+    else ubicacion = normalized;
+  }
   const pagina = parseWholeNumber(row.pagina);
   const dudas = text(row.dudas, 500);
   if (dudas) problems.push({ ...problem("aviso", "duda", codigo, fila, `${nombre}: ${dudas}`), motivo: dudaMotivo(dudas) });
   return {
     codigo,
     nombre,
-    categoria: text(row.categoria, 80) ?? "General",
+    categoria: categoryPath.parent,
+    subcategoria: categoryPath.child,
+    deposito,
+    ubicacion,
     tipo: tipoRaw as CatalogProduct["tipo"],
     precio,
     cobro: cobroRaw,
@@ -441,6 +475,8 @@ export function planCatalog(options: {
   existing: ReadonlyMap<string, ExistingItem>;
   photoNames: ReadonlySet<string> | null;
   photoProblems?: ReadonlyArray<ImportProblem>;
+  /** Códigos de los depósitos activos de la empresa; `null` = no se verifica. */
+  warehouseCodes?: ReadonlySet<string> | null;
 }): CatalogPlan {
   const problems: ImportProblem[] = [...(options.parseProblems ?? []), ...(options.photoProblems ?? [])];
   const seen = new Map<string, CatalogProduct>();
@@ -506,6 +542,9 @@ export function planCatalog(options: {
       return { ...base, accion: "omitir" };
     }
 
+    if (product.deposito && options.warehouseCodes && !options.warehouseCodes.has(product.deposito)) {
+      problems.push(problem("aviso", "deposito-inexistente", product.codigo, product.fila, `${product.nombre}: no hay un depósito con el código ${product.deposito}; las unidades nuevas van al depósito principal.`));
+    }
     if (!product.precio) {
       problems.push(problem("aviso", "precio-cero", product.codigo, product.fila, `${product.nombre}: precio ${product.precio === 0 ? "0" : "sin dato"}${existing ? "; se conserva el precio actual" : "; se importa con precio 0 y la tienda lo muestra como «Consultar»"}.`));
     }

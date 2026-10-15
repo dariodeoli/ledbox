@@ -4,13 +4,16 @@ import { useId, useState } from "react";
 import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
 import { adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS } from "@/lib/catalog-audience";
-import { MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { DayField, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { supplierOptions, warehouseOptions, type InventoryTaxonomy } from "./InventoryTaxonomy";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 
 type Draft = { mode: string; value: string };
 
-export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClose }: {
+export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onClear, onClose }: {
   target: "items" | "units";
+  /** Depósitos y proveedores para los campos de unidades. */
+  taxonomy?: InventoryTaxonomy;
   selection: { id: string; label: string }[];
   onSaved: () => void;
   /** Vacía la selección (y cierra la ventana). */
@@ -36,10 +39,11 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClo
       if (draft.mode === "clear") changes[field.key] = null;
       else {
         if (!draft.value.trim()) { setError(`Completá ${field.label} o elegí Vaciar.`); return; }
-        changes[field.key] = field.type === "money" || field.type === "days" ? Number(draft.value) : draft.value;
+        changes[field.key] = field.type === "money" || field.type === "days" || field.type === "condition" ? Number(draft.value) : draft.value;
       }
     }
     if (!Object.keys(changes).length) { setError("Elegí al menos un campo para cambiar o vaciar."); return; }
+    if (changes.subcategory !== undefined && changes.category === undefined) { setError("La subcategoría se elige junto con su categoría: cambiá también la Categoría."); return; }
     setBusy(true);
     const result = await adminSend<{ updated: number; warnings?: string[] }>("/api/admin/inventory", { kind: target === "items" ? "bulk-items" : "bulk-units", ids: selection.map(row => row.id), changes });
     setBusy(false);
@@ -76,7 +80,12 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClo
           {draft.mode === "set" ? field.type === "money" ? <MoneyField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} disabled={busy} />
             : field.type === "days" ? <NumberField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={4} hint="0 = sin regla; hasta 3650 días." disabled={busy} />
             : field.type === "notes" ? <TextAreaField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={target === "units" ? 400 : 2000} disabled={busy} />
-            : field.type === "text" ? <TextField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={field.key === "category" ? 80 : 2000} disabled={busy} />
+            : field.type === "text" ? <TextField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={field.key === "category" ? 80 : field.key === "subcategory" ? 60 : 2000} disabled={busy} />
+            : field.type === "location" ? <TextField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={40} placeholder="Ej.: E3-B2" hint="Estante y nivel; se muestra con el código del depósito." disabled={busy} />
+            : field.type === "condition" ? <NumberField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={2} hint="Entero del 1 al 10." disabled={busy} />
+            : field.type === "date" ? <DayField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} disabled={busy} />
+            : field.type === "warehouse" ? <SelectField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(taxonomy?.warehouses ?? [])]} disabled={busy} />
+            : field.type === "supplier" ? <SelectField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[{ value: "", label: "Elegir proveedor" }, ...supplierOptions(taxonomy?.suppliers ?? [], "Sin proveedor").slice(1)]} disabled={busy} />
             : field.type === "billing" ? <SegmentedField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[...BILLING_UNIT_OPTIONS]} disabled={busy} />
             : field.type === "audience" ? <SegmentedField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[...CATALOG_AUDIENCE_OPTIONS]} disabled={busy} />
             : <SelectField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[{ value: "", label: "Elegir valor" }, ...options]} disabled={busy} /> : null}

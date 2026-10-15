@@ -1570,6 +1570,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-disclosure-toggle .admin-icon { transition: transform .15s; }
 .admin-disclosure-toggle[aria-expanded="true"] .admin-icon { transform: rotate(180deg); }
 .admin-disclosure-toggle small { min-width: 0; overflow-wrap: anywhere; color: var(--a-muted); font: 400 11px var(--font-body); letter-spacing: 0; text-transform: none; }
+@media (max-width: 720px) { .admin-disclosure-toggle { min-height: 44px; } }
 .admin-disclosure-body { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 8px; }
 .admin-disclosure-body[hidden] { display: none; }
 /* Campo con su acción al lado (issue #106): el botón queda a la altura del
@@ -1635,6 +1636,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 }
 .admin-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-form-actions { display: flex; flex-wrap: wrap; max-width: 100%; gap: 8px; margin-left: auto; }
+.admin-form-grid > .admin-form-actions { grid-column: 1 / -1; }
 .admin-form-panel .admin-btn { min-width: 0; max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
 /* Formulario en línea (pagos, gastos, filas de carga): controles anclados
    abajo, como las barras, para que el label no los corra (issue #102). */
@@ -2719,7 +2721,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-item-prices small { overflow: hidden; color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 /* Unidades físicas del ítem (issue #112): encabezado del bloque de la ficha, con su resumen y acciones. */
 .admin-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.admin-table--inventario-unidades { --inventario-unidades-cols: minmax(7rem, 1fr) 10.5rem 7rem 5.5rem; --admin-cols: var(--inventario-unidades-cols); --admin-table-min: 31.5rem; }
+.admin-table--inventario-unidades { --inventario-unidades-cols: minmax(7rem, 1fr) 10.5rem 6.5rem 8.5rem 6rem 5.5rem; --admin-cols: var(--inventario-unidades-cols); --admin-table-min: 46rem; }
+/* Stock por depósito (rediseño E1): depósito, unidades, libres, fuera de circulación y ubicaciones. */
+.admin-table--inventario-depositos { --inventario-depositos-cols: minmax(5.5rem, 1.2fr) minmax(4rem, 1fr) 2.5rem 3.25rem 2.75rem; --admin-cols: var(--inventario-depositos-cols); --admin-table-min: 18rem; }
+/* Ajustes → Inventario (rediseño E1): categorías con subcategorías y depósitos. */
+.admin-table--ajustes-categorias { --ajustes-categorias-cols: minmax(8rem, 1fr) 4.5rem 4.5rem; --admin-cols: var(--ajustes-categorias-cols); --admin-table-min: 17rem; }
+.admin-table--ajustes-depositos { --ajustes-depositos-cols: 3.25rem minmax(7rem, 1fr) 3rem 4.5rem; --admin-cols: var(--ajustes-depositos-cols); --admin-table-min: 18rem; }
+.admin-cat-root { font-weight: 700; }
+.admin-cat-child { padding-left: 14px; color: var(--a-muted); }
+/* Datos del producto (categoría, depósito, proveedor, garantía): mismos renglones que los precios. */
+.admin-item-data { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
 
 /* ── Inventario rediseñado: acciones, indicadores que filtran, lista con foto, tarjetas y ficha ── */
 .admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

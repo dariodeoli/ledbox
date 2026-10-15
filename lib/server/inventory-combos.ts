@@ -33,6 +33,7 @@ import { dayKeyOf } from "./notifications";
 import { rentalDaysBetween } from "../catalog-public";
 import { priceLine, repricedPackageTotal, substitutionPrice } from "../price-tiers";
 import type { AudiencePriceTier } from "../price-tiers";
+import { categoryWriteData, resolveInventoryCategory } from "./inventory-categories";
 import {
   comboCapacity,
   readComboComponents,
@@ -68,6 +69,7 @@ const COMPONENT_ITEM_SELECT = {
   name: true,
   sku: true,
   category: true,
+  categoryId: true,
   quantity: true,
   status: true,
   bufferBeforeMin: true,
@@ -533,7 +535,7 @@ export async function substituteComboComponent(options: {
       ]);
       if (!current) return { ok: false, reason: "not-found", message: "El componente actual no existe en esta empresa." } as const;
       if (!substitute) return { ok: false, reason: "not-found", message: "El ítem sustituto no existe en esta empresa." } as const;
-      if (substitute.category !== current.category) {
+      if (current.categoryId && substitute.categoryId ? substitute.categoryId !== current.categoryId : substitute.category !== current.category) {
         return { ok: false, reason: "invalid", message: `Solo se puede sustituir por un ítem de la misma categoría («${current.category}»).` } as const;
       }
       if (await isComboItem(tx, options.organizationId, substitute.id)) {
@@ -708,7 +710,9 @@ export type SaveComboResult =
 
 export type ComboItemData = {
   name: string;
+  /** Categoría o ruta («Combos», «Mobiliario / Sofás»); el helper único resuelve el id y el espejo. */
   category: string;
+  subcategory?: string | null;
   sku: string | null;
   notes?: string | null;
   imageUrl?: string | null;
@@ -772,9 +776,11 @@ export async function saveCombo(options: {
           }
         }
 
+        const resolvedCategory = await resolveInventoryCategory(tx, organizationId, { category: options.data.category, subcategory: options.data.subcategory });
+        if (!resolvedCategory) return { ok: false, reason: "invalid", message: "La categoría no es válida." };
         const itemData = {
           name: options.data.name,
-          category: options.data.category,
+          ...categoryWriteData(resolvedCategory),
           sku: options.data.sku,
           ...(options.data.notes !== undefined ? { notes: options.data.notes } : {}),
           ...(options.data.imageUrl !== undefined ? { imageUrl: options.data.imageUrl } : {}),
@@ -790,7 +796,7 @@ export async function saveCombo(options: {
         await tx.inventoryComponent.createMany({
           data: parsed.components.map((component) => ({ id: randomUUID(), organizationId, parentId: comboId!, componentId: component.componentId, quantity: component.quantity })),
         });
-        return { ok: true, created, combo: { id: comboId, name: options.data.name, category: options.data.category }, components: parsed.components, before };
+        return { ok: true, created, combo: { id: comboId, name: options.data.name, category: resolvedCategory.text }, components: parsed.components, before };
       },
       { timeout: 20_000 },
     );

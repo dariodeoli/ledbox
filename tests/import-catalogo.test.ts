@@ -185,7 +185,7 @@ test("fotos: se redimensionan a 1600 px y se guardan como WebP ≤ 2 MB", async 
 
 test("plantilla: .xlsx y .csv traen las columnas exactas, un ejemplo y las instrucciones", () => {
   const headers = importHeaders(productos);
-  assert.deepEqual(headers, ["codigo", "nombre", "categoria", "tipo", "precio", "cobro", "precios_dias", "cantidad", "medidas", "capacidad", "descripcion", "componentes", "foto", "pagina", "dudas"]);
+  assert.deepEqual(headers, ["codigo", "nombre", "categoria", "subcategoria", "tipo", "precio", "cobro", "precios_dias", "cantidad", "deposito", "ubicacion", "medidas", "capacidad", "descripcion", "componentes", "foto", "pagina", "dudas"]);
   const xlsx = templateXlsx(productos);
   const rows = readXlsx(xlsx, "Productos");
   assert.deepEqual(rows[0], headers);

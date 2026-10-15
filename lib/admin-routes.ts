@@ -35,6 +35,7 @@ export const ADMIN_ROUTES = [
   "/ajustes/apariencia",
   "/ajustes/correo",
   "/ajustes/alquileres",
+  "/ajustes/inventario",
   "/ajustes/tienda",
   "/ajustes/plan",
   "/ajustes/usuarios",

@@ -76,6 +76,8 @@ export const FIELD_LIMITS = {
   image: 400,
   /** Código de unidad de inventario (issue #112). */
   unitCode: 20,
+  /** Ubicación de una unidad dentro del depósito («E3-B2»). */
+  location: 20,
   /** Monto general (compras, anticipos, cobros). */
   amountGeneral: 10_000_000_000,
   /** Monto de ventas: presupuestos y precios unitarios. */
@@ -97,6 +99,9 @@ export const FIELD_MESSAGES = {
   price: "Ingresá un precio válido en guaraníes (hasta Gs 10.000.000.000).",
   priceDays: "Ingresá los días de la regla (0 a 3.650).",
   unitCode: "El código solo admite letras, números, guiones y guiones bajos (2 a 20).",
+  location: "La ubicación admite hasta 4 tramos de 1 a 4 letras o números (por ejemplo E3-B2).",
+  condition: "La condición es un número entero del 1 al 10.",
+  warehouseCode: "El código del depósito empieza con una letra y admite hasta 6 letras o números (por ejemplo D1).",
   amount: "Ingresá un monto válido en guaraníes.",
   amountLimit: "El monto supera el máximo permitido.",
   percent: "Ingresá un porcentaje entre 0 y 100.",
@@ -405,6 +410,71 @@ export function inventoryUnitPrefix(name: string | null | undefined): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Za-z0-9]/g, "");
   return letters.slice(0, 3).toUpperCase() || "UNI";
+}
+
+/** Tope del nombre de una categoría, subcategoría o depósito. */
+export const INVENTORY_TAXONOMY_NAME_MAX = 60;
+
+/** Código de depósito: «D1». Una letra y hasta cinco letras o números, en mayúsculas. */
+export function cleanWarehouseCode(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/** Como se guarda y se escribe en el campo: limpio y de hasta 6 caracteres. */
+export function normalizeWarehouseCode(value: string | null | undefined): string {
+  return cleanWarehouseCode(value).slice(0, 6);
+}
+
+/** Válido si, ya limpio y SIN recortar, cabe en el formato: un código largo no se acepta recortado en silencio. */
+export function warehouseCodeValid(value: string | null | undefined): boolean {
+  return /^[A-Z][A-Z0-9]{0,5}$/.test(cleanWarehouseCode(value));
+}
+
+/**
+ * Ubicación de una unidad dentro del depósito: segmentos de 1 a 4 letras o números unidos con
+ * guion, hasta 4 («E3-B2»). Acepta «d1 e3 b2»: si el primer segmento es el código del depósito
+ * se descarta (la ubicación se guarda separada del depósito para que cambiar su código no la rompa).
+ * Vacío = `null` (sin ubicación); inválido = `false`.
+ */
+export function readInventoryLocation(raw: unknown, warehouseCode?: string | null): string | null | false {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "string") return false;
+  const text = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+  if (!text) return null;
+  if (!/^[A-Z0-9 _.\-/]+$/.test(text)) return false;
+  let segments = text.split(/[\s_.\-/]+/).filter(Boolean);
+  const code = normalizeWarehouseCode(warehouseCode);
+  if (code && segments.length > 1 && segments[0] === code) segments = segments.slice(1);
+  if (segments.length === 0 || segments.length > 4) return false;
+  if (segments.some((segment) => !/^[A-Z0-9]{1,4}$/.test(segment))) return false;
+  return segments.join("-");
+}
+
+/** Abreviatura de ubicación: código del depósito + ubicación → «D1-E3-B2». */
+export function formatInventoryLocation(code: string | null | undefined, location: string | null | undefined): string | null {
+  const parts = [code?.trim(), location?.trim()].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join("-") : null;
+}
+
+/** Condición de una unidad: entero de 1 a 10. Vacío = `null`; inválido = `false`. */
+export function readConditionScore(raw: unknown): number | null | false {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const value = typeof raw === "string" && /^\d{1,2}$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 10) return false;
+  return value;
+}
+
+/** «8/10 · 80 %». */
+export function conditionLabel(score: number | null | undefined): string {
+  return typeof score === "number" ? `${score}/10 · ${score * 10} %` : "Sin evaluar";
 }
 
 /** Código de unidad como se guarda: mayúsculas, sin espacios ni símbolos raros. */
