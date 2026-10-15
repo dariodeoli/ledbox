@@ -5,6 +5,7 @@ import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { canImportCatalog } from "@/lib/admin-policy";
 import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
+import { claimImportLote, readBodyLimited, settleImportLote } from "@/lib/server/import-lote";
 import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
 import { ImportZipError, readPhotoZip } from "@/lib/server/import-photos";
@@ -142,12 +143,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   const { module, context } = checked;
   const { organizationId } = context;
 
-  const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > TOTAL_BODY_MAX) return jsonError("Los archivos superan el tamaño permitido (JSON 2 MB, ZIP 60 MB).", 413);
-
+  // Tope real: el `content-length` solo se declara (con chunked puede faltar o mentir), así que
+  // el cuerpo se lee con un límite ANTES de `formData()` y se corta apenas lo supera.
+  const body = await readBodyLimited(request, TOTAL_BODY_MAX);
+  if (!body.ok) return jsonError("Los archivos superan el tamaño permitido (JSON 2 MB, ZIP 60 MB).", 413);
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Response(body.bytes, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
   } catch {
     return jsonError("No pudimos leer los archivos enviados.", 400);
   }
@@ -213,6 +215,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   const lote = /^[0-9a-f-]{36}$/i.test(loteRaw) ? loteRaw : randomUUID();
   const already = await db.auditLog.findFirst({ where: { organizationId, entity: "IaCarga", entityId: lote }, select: { id: true } });
   if (already) return jsonError("Esta importación ya se aplicó. Si cambiaste archivos, generá una vista previa nueva.", 409);
+  // El chequeo anterior no es atómico (dos pedidos con el mismo lote pasan a la vez): el candado
+  // real es la clave única (empresa, scope, lote) de IdempotencyKey, tomada antes de aplicar.
+  const claimed = await claimImportLote(organizationId, lote);
+  if (!claimed) return jsonError("Esta importación ya se está aplicando o se aplicó. Si cambiaste archivos, generá una vista previa nueva.", 409);
 
   // Respuesta en NDJSON: una línea de progreso por bloque y una final con el resultado,
   // así un catálogo grande (cientos de fotos) no queda mudo ni da timeout del proxy.
@@ -224,8 +230,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         send({ progreso: { hecho: 0, total: input.products.length, fase: "Preparando" } });
         const result = await applyCatalog(context, { ...input, lote, onProgress: (progreso) => send({ progreso }) });
         send({ resultado: result });
+        await settleImportLote(organizationId, lote, true);
       } catch (error) {
         console.error("[import-catalogo] Falló la aplicación:", error instanceof Error ? error.message : error);
+        // Libera el lote: reintentar es seguro (reimportar no duplica).
+        await settleImportLote(organizationId, lote, false);
         send({ error: "No pudimos terminar la importación. Revisá el inventario y volvé a intentar: reimportar no duplica." });
       } finally {
         controller.close();
