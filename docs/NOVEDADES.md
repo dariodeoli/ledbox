@@ -536,3 +536,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Acceso: solo la cuenta del dueño con el correo verificado (entrando con Google o completando un cambio de contraseña); cualquier otra persona vuelve al inicio. Nadie puede asignar el correo del dueño a otra cuenta, y cambiar el correo de una cuenta anula sus links de cambio de contraseña.
 - Métricas propias de visitas sin datos personales: sin IP, sin navegador, sin cookies y respetando «no rastrear».
 - Los CSV del panel neutralizan fórmulas: los textos que empiezan con «=», «+», «@» o «-» salen con un apóstrofo adelante.
+
+## v2.1.114 — 2026-10-14
+
+- «Cerrar sesión» al pie del menú lateral, en el panel y en el superadmin (en la demo dice «Salir de la demo»). Antes solo se podía desde Mi perfil.
