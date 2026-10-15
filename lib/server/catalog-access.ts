@@ -63,7 +63,8 @@ export async function issueCatalogAccessTx(
 ): Promise<{ token: string; id: string }> {
   const token = catalogTokenValue();
   const id = randomUUID();
-  await tx.catalogAccessToken.updateMany({ where: { organizationId, clientId, revokedAt: null }, data: { revokedAt: new Date() } });
+  // Solo se reemplaza el link de la MISMA lista: aprobar un acceso minorista no revoca el mayorista (ni al revés).
+  await tx.catalogAccessToken.updateMany({ where: { organizationId, clientId, priceList, revokedAt: null }, data: { revokedAt: new Date() } });
   await tx.catalogAccessToken.create({ data: { id, organizationId, clientId, tokenHash: catalogTokenHash(token), priceList } });
   return { token, id };
 }
