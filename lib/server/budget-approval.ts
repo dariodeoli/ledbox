@@ -3,9 +3,10 @@ import { db } from "@/lib/server/db";
 import { recordAudit } from "@/lib/server/audit";
 import { jsonError } from "@/lib/server/http";
 import type { AdminContext } from "@/lib/server/tenancy";
-import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
+import { committedAssignmentWhere, reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { EventRescheduleError, guardEventReschedule, lockEventForEdit } from "@/lib/server/event-reschedule";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { checkStockBeforeApproval, decideStockApproval, releaseOrphanedGateReservation, snapshotEventAssignments, type AssignmentSnapshot } from "@/lib/server/approval-stock";
 
@@ -173,6 +174,7 @@ export async function setBudgetCommercialStatus(context: AdminContext, body: Rec
   try { return await changeBudgetStatus(context, body); }
   catch (error) {
     if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status, error.code);
+    if (error instanceof EventRescheduleError) return jsonError(error.message, error.status, "stock_insufficient");
     throw error;
   }
 }
@@ -184,12 +186,20 @@ async function changeBudgetStatus(context: AdminContext, body: Record<string, un
   const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
   if (!Object.values(CommercialStatus).includes(status as CommercialStatus)) return jsonError("El estado del presupuesto no es válido.", 400);
   if (status === "APPROVED") return applyManualBudgetDecision(context, { ...body, decision: "approve" });
+  // Reabrir un presupuesto reactiva sus reservas aunque el evento no cambie de estado.
+  // Fijar inventario → evento → presupuesto evita la sobreventa frente a otra reserva.
+  const observed = await db.budget.findFirst({ where: { id: budgetId, organizationId }, select: { eventId: true, status: true } });
+  if (!observed) return jsonError("Presupuesto no encontrado.", 404);
+  const mayReactivate = ["LOST", "CANCELLED"].includes(observed.status) && !["LOST", "CANCELLED"].includes(status);
+  let lockedEvent: Awaited<ReturnType<typeof lockEventForEdit>> | null = null;
   const moved = await withQuoteCommercialEdit(budgetId, organizationId, false, async (tx) => {
     const current = await tx.budget.findFirst({
       where: { id: budgetId, organizationId },
-      select: { id: true, title: true, status: true, approvedAt: true, client: { select: { name: true, company: true } } },
+      select: { id: true, title: true, status: true, approvedAt: true, eventId: true, client: { select: { name: true, company: true } } },
     });
     if (!current) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
+    const reactivating = ["LOST", "CANCELLED"].includes(current.status) && !["LOST", "CANCELLED"].includes(status);
+    if (reactivating && (!mayReactivate || current.eventId !== observed.eventId)) throw new QuoteComparisonError(409, "El evento del presupuesto cambió mientras editabas. Volvé a intentar.");
     if (current.status === status) return { budget: current, updated: { id: current.id, status: current.status }, unchanged: true };
     if (current.approvedAt || current.status === "APPROVED" || await tx.signatureRequest.count({ where: { budgetId, status: { in: ["SIGNED", "VALIDATED"] } } })) {
       throw new QuoteComparisonError(409, "El presupuesto ya está aprobado o firmado: no se puede cambiar su estado comercial.");
@@ -198,9 +208,15 @@ async function changeBudgetStatus(context: AdminContext, body: Record<string, un
       const priceBlock = await budgetPriceGate(organizationId, budgetId, "enviar", tx);
       if (priceBlock) throw new QuoteComparisonError(409, priceBlock, "price_missing");
     }
+    const previouslyCommitted = reactivating && lockedEvent
+      ? await tx.eventInventory.findMany({ where: { eventId: lockedEvent.id, ...committedAssignmentWhere(organizationId) }, select: { id: true } })
+      : [];
     const updated = await tx.budget.update({ where: { id: budgetId }, data: { status: status as CommercialStatus }, select: { id: true, status: true } });
+    if (reactivating && lockedEvent) await guardEventReschedule(tx, organizationId, lockedEvent, lockedEvent, { recheckAssignments: true, previouslyCommittedIds: previouslyCommitted.map(row => row.id) });
     return { budget: current, updated, unchanged: false };
-  });
+  }, { beforeBudgetLock: async (tx) => {
+    if (mayReactivate && observed.eventId) lockedEvent = await lockEventForEdit(tx, organizationId, observed.eventId, true);
+  } });
   const { budget, updated } = moved;
   if (moved.unchanged) return Response.json({ budget: updated, unchanged: true });
   await recordAudit({

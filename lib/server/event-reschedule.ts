@@ -21,18 +21,19 @@ export async function lockEventForEdit(tx: Prisma.TransactionClient, organizatio
 }
 
 /** Se ejecuta después del update, dentro de la misma transacción: fallar revierte también las fechas/estado. */
-export async function guardEventReschedule(tx: Prisma.TransactionClient, organizationId: string, previous: Event, updated: Event): Promise<void> {
+export async function guardEventReschedule(tx: Prisma.TransactionClient, organizationId: string, previous: Event, updated: Event, options?: { recheckAssignments?: boolean; previouslyCommittedIds?: readonly string[] }): Promise<void> {
   const reopening = previous.status === "CANCELLED" && updated.status !== "CANCELLED";
   const assignments = await tx.eventInventory.findMany({
     where: { eventId: updated.id, ...committedAssignmentWhere(organizationId) },
     include: { inventory: { omit: { imageData: true }, include: { _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } } } } },
   });
   for (const assignment of assignments) {
+    if (options?.previouslyCommittedIds?.includes(assignment.id)) continue;
     // Los combos reservan sus piezas: su fila padre no tiene stock propio.
     if (assignment.inventory._count.components > 0) continue;
     const before = assignmentRange({ ...assignment, event: previous });
     const after = assignmentRange({ ...assignment, event: updated });
-    if (!reopening && before.start?.getTime() === after.start?.getTime() && before.end?.getTime() === after.end?.getTime()) continue;
+    if (!reopening && !options?.recheckAssignments && before.start?.getTime() === after.start?.getTime() && before.end?.getTime() === after.end?.getTime()) continue;
     const available = await availabilityForRange({
       organizationId, item: { ...assignment.inventory, maintenance: maintenanceUnits(assignment.inventory) },
       startsAt: after.start ?? new Date(-8.64e15), endsAt: after.end ?? new Date(8.64e15), excludeId: assignment.id, client: tx,
