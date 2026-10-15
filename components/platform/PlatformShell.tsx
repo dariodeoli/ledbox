@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlatformLogout } from "./PlatformLogout";
 import { BrandMark } from "@/components/brand-mark";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import { AdminThemeToggle } from "@/components/admin/admin-theme";
@@ -68,6 +69,7 @@ export function PlatformShell({
           </div>
         </div>
         <div className="admin-sidebar-foot">
+          <PlatformLogout />
           <p className="admin-sidebar-note">Solo lectura · LedBox</p>
         </div>
       </aside>

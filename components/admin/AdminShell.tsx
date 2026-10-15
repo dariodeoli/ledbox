@@ -926,6 +926,19 @@ export function AdminShell({
                 </Link>
               ) : null}
 
+            {session.user ? (
+              <button
+                type="button"
+                className="admin-nav-link admin-sidebar-logout"
+                onClick={() => void logout()}
+                disabled={loggingOut}
+                title={session.demo ? "Salir de la demo y volver a ledbox.online" : "Cerrar sesión"}
+                aria-label={session.demo ? "Salir de la demo" : "Cerrar sesión"}
+              >
+                <AdminIcon name="logout" size={16} />
+                <span className="admin-nav-text">{loggingOut ? "Saliendo…" : session.demo ? "Salir de la demo" : "Cerrar sesión"}</span>
+              </button>
+            ) : null}
             <p className="admin-sidebar-note">Panel privado · LedBox</p>
           </div>
         </aside>

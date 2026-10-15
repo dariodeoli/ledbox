@@ -1246,6 +1246,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-company-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .admin-company-name { color: var(--a-text-strong); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-sidebar-note { color: var(--a-muted); font-size: 11px; }
+/* Cerrar sesión al pie del menú: misma fila que un ítem del nav, sin aspecto de botón. */
+.admin-sidebar-logout { width: 100%; border: 0; background: none; font: inherit; color: var(--a-muted); cursor: pointer; text-align: left; }
+.admin-sidebar-logout:hover:not(:disabled) { color: var(--a-text); }
+.admin-sidebar-logout:disabled { opacity: .6; cursor: progress; }
 /* Usuario en el nav lateral (issue #117): el chip es un enlace directo a Mi
    perfil —sin menú— con el avatar, el nombre y el rol. */
 .admin-user--sidebar { width: 100%; padding: 8px 8px; border-radius: 8px; background: var(--a-bg-2); text-align: left; text-decoration: none; }
