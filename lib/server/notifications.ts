@@ -614,8 +614,9 @@ async function reservationCandidates(organizationId: string): Promise<AdminNotif
         : null;
     candidates.push({
       ...base,
-      level: missingDates ? "info" : "soon",
-      subtitle: joinParts([budget.title, event.name, missingDates ?? `reservado ${missing.join(" · ")}`]),
+      // Con fechas completas el faltante es real (aprobado sin stock completo, p. ej. dos firmas por el último stock).
+      level: missingDates ? "info" : "overdue",
+      subtitle: joinParts([budget.title, event.name, missingDates ?? `Aprobado sin stock completo: reservado ${missing.join(" · ")}`]),
     });
   }
   return candidates;

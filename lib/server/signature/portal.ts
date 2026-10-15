@@ -1,6 +1,7 @@
 import { sandboxHiddenHere } from "../demo-host";
 import { ensureEventForApprovedBudget } from "../budget-event";
 import { reserveBudgetInventory } from "../inventory-availability";
+import { flagApprovedWithoutStock, peekStockBeforeApproval, PORTAL_STOCK_MESSAGE } from "../approval-stock";
 import { syncBudgetExpectedPayments } from "../expected-payments";
 import { guardQuoteApproval, QuoteComparisonError } from "../quote-comparison";
 import { createHmac } from "node:crypto";
@@ -447,7 +448,21 @@ export async function loadSignaturePortal(
     row = await loadRow(normalized);
     if (!row) return null;
   }
-  return portalView(row);
+  return withStockGate(row, portalView(row));
+}
+
+/**
+ * Firma de una alternativa agrupada: si ya no alcanza el stock para esas fechas el portal no
+ * ofrece firmar (verificación de solo lectura, sin reservar). No es una garantía: la carrera
+ * entre dos firmas la cubre `flagApprovedWithoutStock` después de firmar.
+ */
+async function withStockGate(row: SignatureRequestRow, view: PortalSignatureRequest): Promise<PortalSignatureRequest> {
+  if (!view.canSign || view.demo) return view;
+  const budget = await db.budget.findFirst({ where: { id: row.budgetId, organizationId: row.organizationId }, select: { comparisonId: true, approvedAt: true } });
+  if (!budget?.comparisonId || budget.approvedAt) return view;
+  const gate = await peekStockBeforeApproval({ organizationId: row.organizationId, budgetId: row.budgetId, context: portalAuditContext(row.organizationId, row.recipientName, row.recipientEmail) });
+  if (gate.ok) return view;
+  return { ...view, canSign: false, canReject: view.canReject, blockedReason: PORTAL_STOCK_MESSAGE };
 }
 
 // ── Firma y rechazo ─────────────────────────────────────────────────────────
@@ -667,9 +682,23 @@ export async function signSignatureRequest(input: SignatureActionInput): Promise
   if (grouped?.comparisonId) {
     const actor = portalAuditContext(row.organizationId, providerResult.signerName, row.recipientEmail);
     const auto = await ensureEventForApprovedBudget({ organizationId: row.organizationId, budgetId: row.budgetId, actor });
-    if (!auto.reservations) {
-      try { await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor }); }
-      catch (error) { console.error("[signature] la reserva quedó pendiente", { budgetId: row.budgetId, error }); }
+    // La firma ya es un acto del cliente y no se deshace. Si al reservar falta stock (otro
+    // cliente tomó el último entre la apertura y la firma) el presupuesto queda aprobado SIN
+    // stock completo: se audita con los faltantes y el equipo lo ve en los avisos (`reservation`).
+    const reservation = auto.reservations ?? (await reserveBudgetInventory({ organizationId: row.organizationId, budgetId: row.budgetId, context: actor }));
+    if (reservation.failed) {
+      console.error("[firma] la reserva de la alternativa firmada quedó pendiente", { budgetId: row.budgetId });
+      await recordAudit({
+        context: actor,
+        action: "status",
+        entity: "Budget",
+        entityId: row.budgetId,
+        summary: `«${row.title}» quedó aprobado por firma con la reserva de stock pendiente (error temporal)`,
+        detail: { fields: { stock: "reservation-failed" } },
+      });
+    } else {
+      const lines = await flagApprovedWithoutStock({ organizationId: row.organizationId, budgetId: row.budgetId, title: row.title, actor, reservation });
+      if (lines.length > 0) console.warn("[firma] alternativa firmada sin stock completo", { budgetId: row.budgetId, faltantes: lines });
     }
     await syncBudgetExpectedPayments({ organizationId: row.organizationId, budgetId: row.budgetId, actor, reason: "firma de alternativa" });
   }

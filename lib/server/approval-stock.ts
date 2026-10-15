@@ -52,6 +52,62 @@ export async function checkStockBeforeApproval(options: {
   return { ok: false, reservation, lines, message: `Falta stock para aprobar: ${lines.join(" · ")}.` };
 }
 
+/**
+ * Verificación de SOLO LECTURA (misma cuenta y mismo lock que `checkStockBeforeApproval`, pero
+ * la transacción siempre se deshace): no reserva, no audita. Se usa para decidir si el portal
+ * de firma ofrece firmar. No es una garantía: entre esta lectura y la firma otro cliente puede
+ * tomar el último stock; esa carrera la cubre `flagApprovedWithoutStock`.
+ */
+export async function peekStockBeforeApproval(options: {
+  organizationId: string;
+  budgetId: string;
+  context: AuditContext;
+  /** Solo para tests. */
+  reserve?: typeof reserveBudgetInventory;
+}): Promise<StockGate> {
+  const reserve = options.reserve ?? reserveBudgetInventory;
+  const reservation = await reserve({ organizationId: options.organizationId, budgetId: options.budgetId, context: options.context, dryRun: true });
+  if (reservation.failed) {
+    console.error("[firma] no se pudo verificar el stock de solo lectura", { budgetId: options.budgetId });
+    return { ok: true, reservation: null };
+  }
+  if (!reservation.blocked) return { ok: true, reservation };
+  const lines = shortageLines(reservation);
+  return { ok: false, reservation, lines, message: `Falta stock: ${lines.join(" · ")}.` };
+}
+
+/** Ítems que quedaron sin reserva completa (faltante real, no fechas por definir). */
+export function shortageOutcomes(reservation: Pick<BudgetReservation, "outcomes" | "failed">) {
+  return reservation.outcomes.filter((outcome) => outcome.status === "conflict" || outcome.status === "blocked");
+}
+
+/**
+ * Firma de alternativa: el presupuesto ya quedó aprobado por el cliente y la reserva dejó
+ * faltante (otro cliente tomó el último stock entre la apertura y la firma). No se deshace la
+ * firma: se audita con los faltantes y el presupuesto aparece en los avisos del equipo como
+ * «aprobado sin stock completo» (aviso `reservation`, derivado de la reserva real).
+ */
+export async function flagApprovedWithoutStock(options: {
+  organizationId: string;
+  budgetId: string;
+  title: string;
+  actor: AuditContext;
+  reservation: BudgetReservation;
+}): Promise<string[]> {
+  const short = shortageOutcomes(options.reservation);
+  if (short.length === 0) return [];
+  const lines = short.map((outcome) => `${outcome.inventoryName} (piden ${outcome.quantity}, reservadas ${outcome.reserved})`);
+  await recordAudit({
+    context: options.actor,
+    action: "status",
+    entity: "Budget",
+    entityId: options.budgetId,
+    summary: `«${options.title}» quedó aprobado por firma sin stock completo: ${lines.join(" · ")}`,
+    detail: { fields: { stock: "approved-without-full-stock", faltantes: lines } },
+  });
+  return lines;
+}
+
 export type StockDecision =
   | { kind: "proceed" }
   | { kind: "forced"; lines: string[] }

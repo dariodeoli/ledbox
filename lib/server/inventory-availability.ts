@@ -978,6 +978,8 @@ export type BudgetReservation = {
 
 /** Se lanza dentro de la transacción de una reserva estricta para deshacerla entera. */
 class StrictStockShortage extends Error {}
+/** Verificación de solo lectura: se deshace la transacción aunque alcance el stock. */
+class DryRunRollback extends Error {}
 
 const EMPTY_RESERVATION: BudgetReservation = {
   eventId: null,
@@ -1079,7 +1081,13 @@ export async function reserveBudgetInventory(options: {
    * evento o sin rango no hay nada que verificar y no bloquea.
    */
   strict?: boolean;
+  /**
+   * Solo lectura (implica `strict`): calcula bajo el mismo lock si alcanza el stock
+   * y SIEMPRE deshace la transacción. No reserva, no audita. `blocked` indica faltante.
+   */
+  dryRun?: boolean;
 }): Promise<BudgetReservation> {
+  if (options.dryRun) options = { ...options, strict: true };
   try {
     const budget = await db.budget.findFirst({
       where: { id: options.budgetId, organizationId: options.organizationId },
@@ -1306,11 +1314,15 @@ export async function reserveBudgetInventory(options: {
             });
             // El rollback deshace también lo que se escribió en las filas que sí alcanzaban.
             if (short) throw new StrictStockShortage();
+            if (options.dryRun) throw new DryRunRollback();
           }
         },
         { timeout: Math.min(60_000, 15_000 + groups.length * 100) },
       );
       } catch (error) {
+        if (error instanceof DryRunRollback) {
+          return { eventId: event.id, eventName: event.name, range, outcomes: [], requested, reserved: 0, conflicts: 0, failed: false };
+        }
         if (error instanceof StrictStockShortage) {
           strictBlocked = true;
         } else {

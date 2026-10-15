@@ -348,6 +348,14 @@ export async function createSignatureRequest(
     attachment = { id: found.id, name: found.name, data: new Uint8Array(found.data) };
   }
 
+  // Alternativa agrupada: no se emite un enlace que el portal no va a dejar firmar por falta de stock.
+  const grouping = await db.budget.findFirst({ where: { id: budget.id, organizationId: context.organizationId }, select: { comparisonId: true, approvedAt: true } });
+  if (grouping?.comparisonId && !grouping.approvedAt) {
+    const { peekStockBeforeApproval } = await import("../approval-stock");
+    const gate = await peekStockBeforeApproval({ organizationId: context.organizationId, budgetId: budget.id, context });
+    if (!gate.ok) throw new SignatureActionError(409, `${gate.message} Resolvé el faltante antes de pedir la firma.`);
+  }
+
   const code = generateSignatureCode();
   const requestId = randomUUID();
   await db.$transaction(async (tx) => {
