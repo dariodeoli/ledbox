@@ -11,7 +11,7 @@ import {
 } from "@/lib/catalog-public";
 import type { PriceMode } from "@/lib/appearance";
 import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tiers";
-import { readLocalStoreCart, sanitizeStoreCart, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
+import { readLocalStoreCart, sanitizeStoreCart, storeCartContext, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartView } from "@/lib/server/store-cart";
 import { MAX_QUANTITY, formatGs, priceUnitLabel, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { withStoreDates } from "@/lib/store-categories";
@@ -27,7 +27,6 @@ import { OrderBar } from "./OrderBar";
 import { ProductTile } from "./ProductTile";
 import { QuickView, type QuickPrice } from "./QuickView";
 import { EmptyState } from "./StoreStates";
-import { useStoreToast } from "./StoreToast";
 import { ThemePortal } from "./ThemePortal";
 
 /**
@@ -139,7 +138,6 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [revalidateFailed, setRevalidateFailed] = useState(false);
-  const { toast, show: showToast } = useStoreToast();
   const [added, setAdded] = useState<{ key: number; text: string } | null>(null);
   const addedSequence = useRef(0);
   const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,9 +148,10 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState<CartView | null>(null);
+  const [pricedView, setPricedView] = useState<{ context: string; cart: CartView } | null>(null);
   const [cartNotice, setCartNotice] = useState("");
   const seenTotal = useRef<number | null>(null);
+  const seenContext = useRef<string | null>(null);
 
   // Un link de categoría (`?categoria=`) también mueve el filtro cuando ya se estaba en la página.
   useEffect(() => {
@@ -203,6 +202,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       setSelection(Object.fromEntries(kept.map((line) => [line.id, line.quantity])));
       setZoneChoice(state.zone === "COORDINATE" || zones.some((zone) => zone.id === state.zone) ? state.zone : "");
       seenTotal.current = kept.length > 0 ? state.seenTotal : null;
+      seenContext.current = storeCartContext(state);
       if (kept.length > 0 && !range && state.from && state.to) {
         if (state.to >= todayKeyPY()) {
           const shared = new URLSearchParams(window.location.search).get("p");
@@ -236,6 +236,8 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const changeFilters = useCallback((next: StoreFilters) => { setFilters(next); setShown(PAGE_SIZE); }, []);
   const filterProps = { filters, onChange: changeFilters, capacities, tags: allTags, collections, showPrices, hasRange: Boolean(range), resultCount: visible.length };
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
+  const cartContext = storeCartContext({ items: chosen.map((item) => ({ id: item.id, quantity: selection[item.id] })), from: range?.fromKey ?? null, to: range?.toKey ?? null, zone: zoneChoice });
+  const view = pricedView?.context === cartContext ? pricedView.cart : null;
   // Misma regla de días que el presupuesto (escalones por día o total, evento): `lib/price-tiers.ts`.
   const pricingFor = (item: CatalogItemView) => (item.price ? catalogLine(item.price, days) : null);
   const unitFor = (item: CatalogItemView) => pricingFor(item)?.unitPrice ?? 0;
@@ -268,7 +270,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       from: range?.fromKey ?? null,
       to: range?.toKey ?? null,
       zone: zoneChoice,
-      seenTotal: view?.total ?? seenTotal.current,
+      seenTotal: view?.total ?? (seenContext.current === cartContext ? seenTotal.current : null),
     };
     writeLocalStoreCart(cartKey, state);
     if (!saved) return;
@@ -285,7 +287,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   // Revalidar al volver y al cambiar el carrito: el servidor devuelve precio, escalón, flete, total y stock de HOY.
   useEffect(() => {
     if (!ready || chosen.length === 0) {
-      setView(null);
+      setPricedView(null);
       return;
     }
     const controller = new AbortController();
@@ -299,6 +301,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const next = ((await response.json()) as { cart: CartView }).cart;
+        if (controller.signal.aborted) return;
         const notices: string[] = [];
         if (next.removed.length > 0) {
           notices.push(`Quitamos ${next.removed.length} ${next.removed.length === 1 ? "producto" : "productos"} de tu carrito porque ya no están en el catálogo.`);
@@ -308,18 +311,19 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           notices.push("La zona de flete que elegiste ya no está disponible: elegí otra o dejá «A coordinar».");
           setZoneChoice("");
         }
-        if (next.total !== null && seenTotal.current !== null && seenTotal.current !== next.total) {
+        if (seenContext.current === cartContext && next.total !== null && seenTotal.current !== null && seenTotal.current !== next.total) {
           notices.push(`El total cambió: antes ${money(seenTotal.current)}, ahora ${money(next.total)}. Los precios se calculan al día; la cotización los confirma.`);
         }
-        if (next.total !== null) seenTotal.current = next.total;
+        seenTotal.current = next.total;
+        seenContext.current = cartContext;
         if (notices.length > 0) setCartNotice(notices.join(" "));
-        setView(next);
+        setPricedView({ context: cartContext, cart: next });
         setRevalidateFailed(false);
       } catch (error) {
         if ((error as { name?: string })?.name === "AbortError") return;
         console.error("tienda: no se pudo revalidar el carrito; se muestran los precios del catálogo", error);
         setRevalidateFailed(true);
-        setView(null);
+        setPricedView(null);
       }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -461,7 +465,6 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   function addFromTile(id: string, quantity: number) {
     addFromQuick(id, quantity);
-    showToast("Agregado al pedido", { label: "Ver pedido", onClick: () => { setDone(null); setOpen(true); } });
   }
 
   // Sin fechas la barra igual muestra plata: la suma por día (o por evento) × cantidad con los precios públicos ya cargados.
@@ -535,8 +538,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         </div>
       </div>
 
-      {count > 0 ? <OrderBar count={count} productCount={chosen.length} names={chosen.map((item) => item.name)} confirmation={added} text={barText} onOpen={() => { setDone(null); setOpen(true); }} /> : null}
-      {!contactOpen && !open && !quickItem && !filtersOpen ? toast : null}
+      {count > 0 ? <ThemePortal><OrderBar count={count} productCount={chosen.length} names={chosen.map((item) => item.name)} confirmation={added} text={barText} onOpen={() => { setDone(null); setOpen(true); }} /></ThemePortal> : null}
       {filtersOpen ? <FiltersDrawer props={filterProps} onClose={() => setFiltersOpen(false)} onClear={() => changeFilters(EMPTY_FILTERS)} /> : null}
 
       {contactOpen ? (
@@ -566,7 +568,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
             range={range}
             inCart={selection[quickItem.id] ?? 0}
             step={quantityStep(priceMode, Boolean(quickItem.package?.length))}
-            onAdd={(id, quantity) => { addFromQuick(id, quantity); showToast("Agregado al pedido"); }}
+            onAdd={addFromQuick}
             onNavigate={navigateQuick}
             onClose={closeQuick}
           />
@@ -596,7 +598,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
             done={done}
             onDone={setDone}
             // El pedido ya se envió: el carrito (navegador y servidor) se vacía en el acto, aunque cierren con Esc.
-            onSent={() => { setSelection({}); setZoneChoice(""); setView(null); seenTotal.current = null; setCartNotice(""); }}
+            onSent={() => { setSelection({}); setZoneChoice(""); setPricedView(null); seenTotal.current = null; seenContext.current = null; setCartNotice(""); }}
             onClose={() => setOpen(false)}
             onFinish={() => { setOpen(false); setDone(null); }}
           />

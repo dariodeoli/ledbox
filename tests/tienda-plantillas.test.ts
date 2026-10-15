@@ -368,7 +368,7 @@ test("guardar carrito es un popup acotado que solo abre por una acción intencio
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
   assert.ok(!browser.includes("contactAsked"));
   assert.match(browser, /onSaveCart=\{!saved && cartScope === "public"/);
-  assert.match(browser, /!contactOpen && !open && !quickItem && !filtersOpen \? toast : null/);
+  assert.ok(!browser.includes("showToast("), "el agregado se confirma una sola vez en el resumen del pedido");
 });
 
 test("selector compacto: solo siete tarjetas con muestras, sin miniaturas que recorten precios", () => {

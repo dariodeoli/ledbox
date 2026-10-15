@@ -70,3 +70,16 @@ test("cerrar la vista rápida conserva fechas elegidas dentro del popup", () => 
   assert.match(browser, /pushedQuick.current && currentDates === quickDatesBefore.current/);
   assert.match(browser, /replaceState\(window.history.state, "", quickUrl\(null\)\)/);
 });
+
+
+test("el contexto del total incluye selección, cantidades, período y zona, sin depender del orden de las líneas", async () => {
+  const { storeCartContext } = await import("../lib/store-cart");
+  const state = { items: [{ id: "a", quantity: 1 }, { id: "b", quantity: 2 }], from: "2026-10-30", to: "2026-11-02", zone: "z1" };
+  const initial = storeCartContext(state);
+  assert.equal(storeCartContext({ ...state, items: [...state.items].reverse() }), initial);
+  for (const changed of [ { ...state, items: [{ id: "a", quantity: 2 }, state.items[1]] }, { ...state, items: [state.items[0]] }, { ...state, from: "2026-10-31" }, { ...state, to: "2026-11-03" }, { ...state, zone: "z2" } ]) assert.notEqual(storeCartContext(changed), initial);
+  const source = read("components/catalog-public/CatalogBrowser.tsx");
+  assert.match(source, /seenContext.current === cartContext && next.total !== null/);
+  assert.match(source, /seenTotal: view\?\.total \?\? \(seenContext.current === cartContext \? seenTotal.current : null\)/);
+  assert.match(source, /<ThemePortal><OrderBar/);
+});
