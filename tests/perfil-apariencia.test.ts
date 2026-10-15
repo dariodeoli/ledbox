@@ -200,7 +200,7 @@ test("color de marca: el tema oscuro del portal se deriva aclarando hasta AA sob
 // ── Apariencia ───────────────────────────────────────────────────────────────
 
 test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; lo demás se rechaza", () => {
-  assert.deepEqual([...TEMPLATES], ["lienzo", "boutique", "noir", "studio"]);
+  assert.deepEqual([...TEMPLATES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa"]);
   const ok = parseAppearance({ template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "  Envíos   a todo Asunción " }, priceMode: "unit" });
   assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit" } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);

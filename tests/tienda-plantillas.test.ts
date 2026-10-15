@@ -42,8 +42,8 @@ const SPEC_TOKENS = [
 
 // ── Registro ─────────────────────────────────────────────────────────────────
 
-test("registro: las 4 plantillas del dueño, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
-  assert.deepEqual([...STORE_THEMES], ["lienzo", "boutique", "noir", "studio"]);
+test("registro: las 4 plantillas del dueño más las 6 premium, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
+  assert.deepEqual([...STORE_THEMES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa"]);
   assert.deepEqual([...TEMPLATES], [...STORE_THEMES]);
   assert.equal(new Set(THEME_REGISTRY.map((theme) => theme.id)).size, THEME_REGISTRY.length, "ids únicos");
   for (const theme of THEME_REGISTRY) {
@@ -62,7 +62,7 @@ test("registro: las 4 plantillas del dueño, cada una con id, nombre, descripci�
 });
 
 test("registro: sumar una plantilla no toca componentes (los archivos de tema son solo datos)", () => {
-  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(lienzo|boutique|noir|studio)\.ts$/.test(name))) {
+  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(lienzo|boutique|noir|studio|jardin|marmol|terracota|nordico|gala|brisa)\.ts$/.test(name))) {
     const source = read(`lib/storefront-themes/${file}`);
     assert.ok(!/\bimport\b[^;]*react/i.test(source), `${file}: sin React`);
     assert.ok(!/function\s/.test(source), `${file}: solo un objeto de tokens`);
@@ -263,4 +263,26 @@ test("fecha del evento + días: período, tope de 30 días y mensaje de WhatsApp
 
 test("fuentes del portal: lista cerrada sin cambios", () => {
   assert.ok(FONTS.length >= 10);
+});
+
+// ── Plantillas premium (v2.1.128) ────────────────────────────────────────────
+
+test("premium: Jardín, Mármol, Terracota, Nórdico, Gala y Brisa traen rubro, tipografías cerradas y botón primario sólido de color", () => {
+  const premium = ["jardin", "marmol", "terracota", "nordico", "gala", "brisa"] as const;
+  const allowed = new Set(Object.values(DISPLAY_FONTS).map((f) => f.id));
+  assert.ok(allowed.size > 0);
+  for (const id of premium) {
+    const t = THEMES[id];
+    assert.ok(t.rubro && t.forWho, id);
+    assert.ok(t.fonts.display.google && t.fonts.body.google, id);
+    const href = themeFontHref(id);
+    assert.ok((href.match(/family=/g) ?? []).length <= 2, `${id}: máximo 2 familias`);
+    assert.ok(href.endsWith("&display=swap"), id);
+    const [r, g, b] = hexToRgb(t.colors.primary);
+    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24, `${id}: el primario no es gris`);
+  }
+  assert.equal(THEMES.gala.scheme, "dark");
+  assert.equal(THEMES.gala.layout.category, "overlay", "Gala lleva overlay en categorías");
+  assert.ok(contrastRatio(THEMES.gala.colors.onPrimary, THEMES.gala.colors.primary) >= 4.5, "dorado con contraste AA");
+  assert.ok(contrastRatio(THEMES.gala.colors.accentText, THEMES.gala.colors.bg) >= 4.5, "dorado como texto con contraste AA");
 });

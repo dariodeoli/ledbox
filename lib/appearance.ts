@@ -34,6 +34,12 @@ export const TEMPLATE_META: Record<TemplateId, { label: string; description: str
   boutique: { label: THEMES.boutique.label, description: THEMES.boutique.description, forWho: THEMES.boutique.forWho },
   noir: { label: THEMES.noir.label, description: THEMES.noir.description, forWho: THEMES.noir.forWho },
   studio: { label: THEMES.studio.label, description: THEMES.studio.description, forWho: THEMES.studio.forWho },
+  jardin: { label: THEMES.jardin.label, description: THEMES.jardin.description, forWho: THEMES.jardin.forWho },
+  marmol: { label: THEMES.marmol.label, description: THEMES.marmol.description, forWho: THEMES.marmol.forWho },
+  terracota: { label: THEMES.terracota.label, description: THEMES.terracota.description, forWho: THEMES.terracota.forWho },
+  nordico: { label: THEMES.nordico.label, description: THEMES.nordico.description, forWho: THEMES.nordico.forWho },
+  gala: { label: THEMES.gala.label, description: THEMES.gala.description, forWho: THEMES.gala.forWho },
+  brisa: { label: THEMES.brisa.label, description: THEMES.brisa.description, forWho: THEMES.brisa.forWho },
 };
 
 export function isTemplateId(value: unknown): value is TemplateId {

@@ -15,6 +15,9 @@ export const F = {
   jost: font("jost", "Jost", `"Jost", ${SANS_FALLBACK}`, "Jost:wght@400;500;600"),
   sora: font("sora", "Sora", `"Sora", ${SANS_FALLBACK}`, "Sora:wght@400;600;700"),
   archivo: font("archivo", "Archivo", `"Archivo", ${SANS_FALLBACK}`, "Archivo:wght@500;700;800"),
+  lora: font("lora", "Lora", `"Lora", ${SERIF_FALLBACK}`, "Lora:wght@400;500;600"),
+  sourceSans: font("source-sans", "Source Sans 3", `"Source Sans 3", ${SANS_FALLBACK}`, "Source+Sans+3:wght@400;600;700"),
+  jakarta: font("jakarta", "Plus Jakarta Sans", `"Plus Jakarta Sans", ${SANS_FALLBACK}`, "Plus+Jakarta+Sans:wght@400;500;600;700"),
   pinyon: font("pinyon", "Pinyon Script", '"Pinyon Script", "Segoe Script", cursive', "Pinyon+Script"),
 } as const;
 
