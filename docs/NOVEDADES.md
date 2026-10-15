@@ -561,3 +561,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Un equipo que salió y no volvió a tiempo queda ocupado hasta que vuelve, con la lista «Devoluciones vencidas» y avisos en el resumen.
 - Ya no se puede aprobar sin stock: en el portal el cliente ve «el equipo te contacta» y el presupuesto queda en revisión; en el panel solo dueño o administrador pueden «aprobar igual», y queda registrado. La firma de una alternativa sin stock no se ofrece, y si igual falta algo después de firmar, el equipo recibe una alerta.
 - Las listas de búsqueda y los menús desplegables ya no quedan tapados ni transparentes sobre el resto del formulario.
+
+## v2.1.118 — 2026-10-15
+
+- Inventario: el código del producto (SKU) admite un solo carácter, como «2» o «3». Los catálogos reales los usan y antes se rechazaban al importar.

@@ -180,14 +180,16 @@ test("SKU: opcional, legible y con el mismo mensaje en front y API", () => {
   assert.equal(inventorySkuValid("LED-P3-500"), true);
   assert.equal(inventorySkuValid("P·01"), true);
   assert.equal(inventorySkuValid("P3.9 500x500"), true);
-  assert.equal(inventorySkuValid("a"), false);
+  assert.equal(inventorySkuValid("2"), true, "catálogos reales usan códigos de un dígito (COD# 2)");
+  assert.equal(inventorySkuValid(""), false);
+  assert.equal(inventorySkuValid("a/b"), false);
   assert.equal(inventorySkuValid("<script>"), false);
   assert.equal(inventorySkuValid(`SKU-${"x".repeat(FIELD_LIMITS.sku)}`), false);
   assert.equal(inventorySkuError(""), null);
   assert.equal(inventorySkuError("   "), null);
   assert.equal(inventorySkuError("LED-P3-500"), null);
   assert.equal(inventorySkuError("<script>"), FIELD_MESSAGES.sku);
-  assert.equal(FIELD_MESSAGES.sku.includes("2 a 60"), true);
+  assert.equal(FIELD_MESSAGES.sku.includes("1 a 60"), true);
 });
 
 test("precios de venta: enteros ≥ 0 dentro del tope; vacío no cambia, basura se rechaza", () => {

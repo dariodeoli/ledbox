@@ -46,7 +46,7 @@ export type ImportModule = {
 };
 
 const PRODUCTOS_COLUMNS: ReadonlyArray<ImportColumn> = [
-  { key: "codigo", required: true, example: "527", help: "Código del producto (se usa como SKU). Mismo código = se actualiza, no se duplica. 2 a 60 caracteres: letras, números, espacio, punto, guion." },
+  { key: "codigo", required: true, example: "527", help: "Código del producto (se usa como SKU). Mismo código = se actualiza, no se duplica. 1 a 60 caracteres: letras, números, espacio, punto, guion." },
   { key: "nombre", required: true, example: "Lounge Oslo", help: "Nombre del producto (2 a 120 caracteres)." },
   { key: "categoria", required: false, example: "Sector living", help: "Categoría. Vacío = «General»." },
   { key: "tipo", required: false, example: "juego", help: "«unidad» (un producto suelto) o «juego» (un combo armado con otros productos)." },
