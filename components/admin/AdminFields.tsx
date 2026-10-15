@@ -915,7 +915,7 @@ function DateLikeField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
-    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? type === "time" ? "xs" : type === "date" ? "sm" : "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? (type === "time" ? "xs" : type === "date" ? "sm" : "md")} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <SharedInput
         id={label ? fieldId : id}
         className={className}

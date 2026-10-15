@@ -161,6 +161,13 @@ export function BudgetDetailDialog({
   const deposit = budget.securityDeposit && isSecurityDepositStatus(budget.securityDepositStatus) ? budget : null;
   const internalCost = internalCostOf({ materialCost: budget.materialCost ?? 0, laborCost: budget.laborCost ?? 0, items: budget.items });
   const linked = budget.items.filter((item) => item.inventoryId).length;
+  const portalMenu: AdminMenuItem[] = [
+    { label: "Copiar enlace", icon: "copy", onClick: actions.onCopyLink },
+    { label: "Firma del cliente", icon: "pen", onClick: actions.onSignature },
+  ];
+  if (actions.onProofs && proofCount > 0) portalMenu.push({ label: `Comprobantes (${formatNumber(proofCount)})`, icon: "upload", onClick: actions.onProofs });
+  if (actions.onApprove) portalMenu.push({ label: "Aprobar manualmente", icon: "check", onClick: actions.onApprove });
+  if (actions.onRequestChanges) portalMenu.push({ label: "Pedir cambios", icon: "alert", onClick: actions.onRequestChanges });
   return (
     <AdminDialog
       title={`PRES-${budgetReference(budget.id)} · ${budget.title}`}
@@ -263,12 +270,8 @@ export function BudgetDetailDialog({
           {actions.onSend ? <AdminButton icon="mail" onClick={actions.onSend}>Enviar por correo</AdminButton> : null}
           {actions.onWhatsapp ? <AdminButton icon="external" onClick={actions.onWhatsapp}>WhatsApp</AdminButton> : null}
           <AdminButton icon="globe" onClick={actions.onPortal}>{budget.publicToken ? "Portal y QR" : "Generar link"}</AdminButton>
-          <AdminButton icon="copy" onClick={actions.onCopyLink}>Copiar enlace</AdminButton>
           <AdminButton icon="eye" onClick={actions.onViewClient}>Ver como cliente</AdminButton>
-          <AdminButton icon="pen" onClick={actions.onSignature}>Firma del cliente</AdminButton>
-          {actions.onProofs && proofCount > 0 ? <AdminButton icon="upload" onClick={actions.onProofs}>Comprobantes ({formatNumber(proofCount)})</AdminButton> : null}
-          {actions.onApprove ? <AdminButton icon="check" onClick={actions.onApprove}>Aprobar manualmente</AdminButton> : null}
-          {actions.onRequestChanges ? <AdminButton icon="alert" onClick={actions.onRequestChanges}>Pedir cambios</AdminButton> : null}
+          <AdminActionsMenu label="Más acciones del portal y firma" items={portalMenu} />
         </>
       }>
         <dl className="admin-dialog-facts">
