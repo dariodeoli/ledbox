@@ -605,3 +605,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Panel: botones, etiquetas, pestañas y cuadros de diálogo ahora son iguales en todas las pantallas, y hay un control automático para que no se vuelvan a mezclar estilos.
 - Importar catálogo: los juegos sin piezas entran como «juego incompleto» (no se pueden alquilar hasta completarlos y no aparecen en la tienda); una unidad que pasa a ser juego se convierte sola si no tiene reservas; el precio vacío o 0 queda «a consultar» y el presupuesto avisa «falta precio» hasta cargarlo; cada categoría puede traer su foto. Las medidas y la capacidad del archivo ahora van a sus campos propios de la ficha del producto.
 - Tienda web: nueva plantilla «Catálogo editorial» con las fotos de cada categoría, orden de la tienda a tu gusto (arrastrar o Subir / Bajar), carrito que se conserva, ficha de cada producto con medidas y capacidad, y pedido de mejor precio.
+
+## v2.1.124 — 2026-10-15
+
+- Tienda: arriba aparece el sello EventOS junto al logo y nombre de tu empresa; el menú queda fijo al bajar y en el celular se compacta.
+- Tienda: fechas «Desde / Hasta», búsqueda por nombre o código y categorías como botones que se deslizan.
+- Tienda: el mismo pie en todas las páginas, con tus datos y «Desarrollado por OwnCoding · EventOS v2.1.124». Botón de WhatsApp que no tapa el pedido.
+- Invitaciones: el link sirve una sola vez y vence a los 7 días (se muestra en el panel y en el correo). Si quien invitó deja de ser propietario, sus invitaciones de propietario pendientes se cancelan solas.
+- «Gratis a propósito» en un presupuesto: solo propietario y administración.
