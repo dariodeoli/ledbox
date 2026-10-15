@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AdminRole, Prisma } from "@prisma/client";
 import { guardUserOwnerChange, UserOwnerGuardError } from "../lib/server/user-owner-guard";
+import { ASSIGNABLE_ROLES, canAssignTeamRole, TEAM_ASSIGNABLE_ROLES } from "../lib/server/permissions";
 
 type Member = { id: string; adminUserId: string; organizationId: string; role: AdminRole; active: boolean; user: { active: boolean; _count: { memberships: number } } };
 const member = (id: string, patch: Partial<Member> = {}): Member => ({
@@ -124,4 +125,33 @@ test("non-removal and inactive owner edits remain allowed without fabricating an
   await db.change(input("inactive", { role: "ADMIN" }));
   assert.equal(db.writes, 2);
   assert.equal(db.countQueries.length, 0);
+});
+
+test("only an OWNER can assign the owner role; an ADMIN gets 403 and nothing is written", async () => {
+  const asAdmin = database([member("boss"), member("peer", { role: "ADMIN" })]);
+  await assert.rejects(asAdmin.change({ ...input("peer", { role: "OWNER" }), actorRole: "ADMIN" }), denied(403));
+  assert.equal(asAdmin.writes, 0);
+
+  const rows = [member("boss"), member("peer", { role: "ADMIN" })];
+  const asOwner = database(rows);
+  await asOwner.change(input("peer", { role: "OWNER" }));
+  assert.equal(asOwner.writes, 1);
+  assert.equal(rows[1].role, "OWNER");
+});
+
+test("permissions helper: ADMIN cannot assign OWNER, OWNER can, other roles unaffected", () => {
+  assert.equal(canAssignTeamRole("ADMIN", "OWNER"), false);
+  assert.equal(canAssignTeamRole("FINANCE", "OWNER"), false);
+  assert.equal(canAssignTeamRole("OWNER", "OWNER"), true);
+  assert.equal(canAssignTeamRole("ADMIN", "VIEWER"), true);
+  assert.ok(!ASSIGNABLE_ROLES.includes("OWNER"), "API keys keep OWNER prohibited");
+  assert.ok(TEAM_ASSIGNABLE_ROLES.includes("OWNER"));
+});
+
+test("an owner can demote another owner while a second active owner remains", async () => {
+  const rows = [member("one"), member("two")];
+  const db = database(rows);
+  await db.change(input("two", { role: "ADMIN" }));
+  assert.equal(rows[1].role, "ADMIN");
+  await assert.rejects(db.change({ ...input("one", { role: "ADMIN" }), actorId: "two", actorRole: "OWNER" }), denied(409));
 });

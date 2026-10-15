@@ -10,6 +10,7 @@ import {
   invitationTokenDigest,
 } from "@/lib/server/invitations";
 import { buildInvitationMail, sendMail } from "@/lib/server/mail";
+import { canAssignTeamRole } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
-  const { organizationId, organization, user: actor } = auth.context;
+  const { organizationId, organization, user: actor, role: actorRole } = auth.context;
   const { id } = await params;
 
   const body = (await readJson(request)) as Record<string, unknown>;
@@ -33,6 +34,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const invitation = await db.teamInvitation.findFirst({ where: { id, organizationId } });
   if (!invitation) return jsonError("Invitación no encontrada.", 404);
+
+  if (!canAssignTeamRole(actorRole, invitation.role)) {
+    return jsonError("Solo un propietario puede gestionar invitaciones con el rol Propietario.", 403);
+  }
 
   const now = new Date();
   const status = effectiveInvitationStatus(invitation, now);

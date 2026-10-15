@@ -1,4 +1,5 @@
 import type { AdminRole, Prisma } from "@prisma/client";
+import { canAssignTeamRole } from "@/lib/server/permissions";
 
 export class UserOwnerGuardError extends Error {
   constructor(message: string, public readonly status: 400 | 403 | 404 | 409) {
@@ -33,6 +34,9 @@ export async function guardUserOwnerChange(
   if (!membership) throw new UserOwnerGuardError("User not found.", 404);
   if (membership.role === "OWNER" && input.actorRole !== "OWNER") {
     throw new UserOwnerGuardError("Only an owner can modify an owner.", 403);
+  }
+  if (input.patch.role === "OWNER" && membership.role !== "OWNER" && !canAssignTeamRole(input.actorRole, "OWNER")) {
+    throw new UserOwnerGuardError("Only an owner can assign the owner role.", 403);
   }
   if (input.adminUserId === input.actorId) {
     if (input.patch.active === false) throw new UserOwnerGuardError("You cannot deactivate your current user.", 400);

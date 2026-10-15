@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AdminRole } from "@prisma/client";
 import { adminRoleLabel } from "@/lib/admin-format";
 import { clearSessionCookie, hashPassword } from "@/lib/server/auth";
-import { ASSIGNABLE_ROLES } from "@/lib/server/permissions";
+import { canAssignTeamRole, TEAM_ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
 const OWNER_EMAIL_RESERVED = "Ese correo está reservado y no se puede usar desde una empresa.";
 
 function isAssignableRole(value: unknown): value is AdminRole {
-  return typeof value === "string" && (ASSIGNABLE_ROLES as readonly string[]).includes(value);
+  return typeof value === "string" && (TEAM_ASSIGNABLE_ROLES as readonly string[]).includes(value);
 }
 
 export async function GET() {
@@ -68,12 +68,13 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
-  const { organizationId } = auth.context;
+  const { organizationId, role: actorRole } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
   const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   const name = normalizePersonName(typeof body.name === "string" ? body.name : "");
   const password = typeof body.password === "string" ? body.password : "";
   const role: AdminRole = isAssignableRole(body.role) ? body.role : "VIEWER";
+  if (!canAssignTeamRole(actorRole, role)) return jsonError("Solo un propietario puede asignar el rol Propietario.", 403);
   if (!personNameValid(name)) return jsonError(FIELD_MESSAGES.name, 400);
   if (emailError(email)) return jsonError(emailError(email) ?? "Correo inválido.", 400);
   if (password.length < 12) return jsonError("La contraseña inicial debe tener al menos 12 caracteres.", 400);
@@ -245,7 +246,9 @@ export async function PATCH(request: Request) {
       action = "status";
       summary = `${updated.active ? "Activó" : "Desactivó"} el acceso de ${who}`;
     } else if ("role" in changes) {
-      summary = `Cambió el rol de ${who} a ${adminRoleLabel(updated.role)}`;
+      summary = previousRole === "OWNER" || updated.role === "OWNER"
+        ? `Cambió el rol de ${who} de ${adminRoleLabel(previousRole)} a ${adminRoleLabel(updated.role)} (actor: ${actor.email})`
+        : `Cambió el rol de ${who} a ${adminRoleLabel(updated.role)}`;
     } else {
       summary = `Editó el nombre de ${who} a «${next.name}»`;
     }
