@@ -14,14 +14,14 @@ import {
   emptyProfile,
   normalizeInstagram,
   normalizeWebsite,
-  parseOrgProfile,
+  parseOrgProfileUpdate,
   type DayHours,
   type HandoverKind,
   type OrgProfile,
   type WeekDay,
 } from "@/lib/org-profile";
 import { useAdminSession } from "../AdminShell";
-import { EmailField, PhoneField, SwitchField, TextAreaField, TextField, TimeField } from "../AdminFields";
+import { CityField, EmailField, PhoneField, SwitchField, TextAreaField, TextField, TimeField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
@@ -138,7 +138,7 @@ export function EmpresaPerfil() {
 
   async function save() {
     // La misma validación del servidor, para no mandar lo que se sabe inválido.
-    const check = parseOrgProfile(payload);
+    const check = parseOrgProfileUpdate(payload, resource.data?.location.city);
     if (!check.ok) {
       setError(check.error);
       return;
@@ -183,7 +183,7 @@ export function EmpresaPerfil() {
         <AdminPanel title="Ubicación" icon="building" meta="El botón «Cómo llegar» abre tu link de Maps">
           <div className="admin-settings-grid">
             <TextField label="Dirección" value={profile.location.address ?? ""} onChange={(value) => patchLocation("address", value)} maxLength={200} disabled={readOnly} wide />
-            <TextField label="Ciudad" value={profile.location.city ?? ""} onChange={(value) => patchLocation("city", value)} maxLength={80} disabled={readOnly} />
+            <CityField label="Ciudad" value={profile.location.city ?? ""} onChange={(value) => patchLocation("city", value)} onSelect={(city) => patchLocation("city", city)} disabled={readOnly} />
             <TextField label="Barrio" value={profile.location.neighborhood ?? ""} onChange={(value) => patchLocation("neighborhood", value)} maxLength={80} disabled={readOnly} />
             <TextField
               label="Link de Google Maps"

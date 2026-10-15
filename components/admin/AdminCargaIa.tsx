@@ -26,6 +26,7 @@ import type { AdminRole } from "@/lib/admin-types";
 import type { IaAccionExistente } from "@/lib/ia-carga";
 import {
   Combobox,
+  CityField,
   DateField,
   EmailField,
   MoneyField,
@@ -1362,10 +1363,11 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
                       onChange={(lugar) => actualizarEvento(evento.clave, { lugar })}
                       disabled={!evento.incluir}
                     />
-                    <TextField
+                    <CityField
                       label="Ciudad"
                       value={evento.ciudad}
                       onChange={(ciudad) => actualizarEvento(evento.clave, { ciudad })}
+                      onSelect={(ciudad) => actualizarEvento(evento.clave, { ciudad })}
                       disabled={!evento.incluir}
                     />
                   </div>

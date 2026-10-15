@@ -53,8 +53,9 @@ test("contactos por función normalizados sin inferir campos principales", () =>
   assert.equal(parseClientFields({ billingEmail: "x".repeat(255) + "@example.com" }).ok, false);
 });
 
-test("enlaces de ubicación HTTP/HTTPS, nunca código o credenciales; locality manual explícita", () => {
-  assert.deepEqual(parseClientFields({ locationUrl: "maps.example.com/punto", city: "Ciudad manual", department: null }), { ok: true, data: { locationUrl: "https://maps.example.com/punto", city: "Ciudad manual", department: null } });
+test("enlaces de ubicación HTTP/HTTPS, nunca código o credenciales; localidad histórica preservada", () => {
+  assert.equal(parseClientFields({ city: "Ciudad manual" }).ok, false, "las altas nuevas usan el catálogo");
+  assert.deepEqual(parseClientFields({ locationUrl: "maps.example.com/punto", city: "Ciudad manual", department: null }, "Ciudad manual"), { ok: true, data: { locationUrl: "https://maps.example.com/punto", city: "Ciudad manual", department: null } });
   for (const locationUrl of ["javascript:alert(1)", "ftp://example.com", "https://user:secret@example.com", {}]) {
     assert.equal(parseClientFields({ locationUrl }).ok, false);
     assert.equal(parseEventFields({ locationUrl }).ok, false);

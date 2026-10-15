@@ -10,6 +10,7 @@ import {
   websiteValid,
 } from "@/lib/admin-format";
 import {
+  catalogCity,
   FIELD_LIMITS,
   FIELD_MESSAGES,
   emailValid,
@@ -84,7 +85,7 @@ function optionalPhone(value: unknown): string | null | undefined | false {
 }
 
 /** Campos del cliente listos para Prisma (solo los presentes en el cuerpo). */
-export function parseClientFields(body: unknown): ClientFieldsResult {
+export function parseClientFields(body: unknown, existingCity?: string | null): ClientFieldsResult {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Datos del cliente inválidos." };
   const record = body as Record<string, unknown>;
   const data: ClientFieldPatch = {};
@@ -114,6 +115,11 @@ export function parseClientFields(body: unknown): ClientFieldsResult {
       return { ok: false, error: `El campo ${field} debe ser texto de hasta ${texts[field]} caracteres.` };
     }
     data[field] = typeof value === "string" ? (field === "tradeName" ? value.trim().replace(/\s+/g, " ") : value.trim()) || null : null;
+  }
+  if (data.city && data.city !== existingCity) {
+    const selected = catalogCity(data.city);
+    if (!selected) return { ok: false, error: "Elegí una ciudad de la lista." };
+    if (selected) { data.city = selected.ciudad; if (data.department === undefined) data.department = selected.departamento; }
   }
   if (record.locationUrl !== undefined) {
     const value = record.locationUrl;

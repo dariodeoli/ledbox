@@ -649,7 +649,7 @@ export function PhoneField({
 }
 
 /** Ciudad con sugerencias; `catalogOnly` exige selección del catálogo y conserva valores históricos. */
-export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name, catalogOnly = false }: {
+export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name, catalogOnly = true }: {
   label?: string; help?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
   catalogOnly?: boolean;
   onSelect: (city: string, department: string) => void;
