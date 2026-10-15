@@ -57,10 +57,11 @@ const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
 const PAGE_TITLES: Record<string, string> = {
   "/perfil": "Mi perfil",
   "/demo": "Demo",
-  // Firmas vive dentro de Presupuestos y Plantillas dentro de Ajustes: siguen
+  // Firmas vive dentro de Presupuestos y Mensajes dentro de Clientes: siguen
   // siendo rutas propias, pero ya no son ítems del menú.
   "/firmas": "Firmas",
-  "/plantillas": "Plantillas",
+  "/plantillas": "Mensajes",
+  "/clientes/mensajes": "Mensajes",
 };
 
 /**
@@ -68,7 +69,7 @@ const PAGE_TITLES: Record<string, string> = {
  *
  * Inicio · **Ventas** (Leads → Presupuestos → Eventos, el flujo del negocio) ·
  * Clientes · **Operación** · **Plata** · **Sistema**. Firmas es una pestaña de
- * Presupuestos y Plantillas una de Ajustes (`/firmas` y `/plantillas` siguen
+ * Presupuestos y Mensajes una de Clientes (`/firmas` y `/plantillas` siguen
  * respondiendo). Los contadores de Ventas salen de datos reales
  * (`/api/admin/nav-counts`). Las secciones de Ajustes/Estado siguen consolidadas
  * (issue #56) y sus rutas viejas entran con redirect.
@@ -99,7 +100,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Clientes",
     bare: true,
-    items: [{ href: "/clientes", label: "Clientes", icon: "clients" }],
+    items: [{ href: "/clientes", label: "Clientes", icon: "clients", also: ["/plantillas"] }],
   },
   {
     label: "Operación",
@@ -119,8 +120,8 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   {
     label: "Sistema",
     items: [
-      // Plantillas (issue #35) es una sección de Ajustes.
-      { href: "/ajustes", label: "Ajustes", icon: "settings", also: ["/plantillas"] },
+      // Mensajes vive en Clientes; /plantillas conserva el acceso histórico.
+      { href: "/ajustes", label: "Ajustes", icon: "settings" },
       { href: "/estado", label: "Estado", icon: "database", roles: RESTRICTED_MODULES["/estado/sistema"] },
     ],
   },
@@ -157,6 +158,7 @@ const PAGE_ICONS: Record<string, AdminIconName> = {
   "/demo": "overview",
   "/firmas": "pen",
   "/plantillas": "mail",
+  "/clientes/mensajes": "mail",
 };
 
 /**

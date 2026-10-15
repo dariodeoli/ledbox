@@ -1,4 +1,5 @@
 "use client";
+import { ClientesTabs } from "./ClientesTabs";
 
 import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
@@ -551,6 +552,7 @@ export function ClientesModule() {
 
   return (
     <div className="admin-module-page">
+      <ClientesTabs active="directorio" />
       <AdminModuleContext
         breadcrumb="Clientes"
         hint="A quién le vendés, cuánto te deben y quién se está enfriando."
