@@ -224,20 +224,20 @@
 .cp-hero-media { display: block; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-sand); aspect-ratio: var(--image-ratio-hero); }
 .cp-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .cp-hero[data-cover="no"] { background: var(--color-sand); }
-/* Con portada (la de escritorio ≥ 768 px y la de celular en móvil): el alto sigue la proporción de la imagen (16:5 en escritorio,
-   4:5 en celular, `--hero-ratio`), el texto va encima de un velo legible y, si el contenido es más alto, la portada crece con él. */
-.cp-hero[data-cover="yes"] { display: grid; aspect-ratio: var(--hero-ratio); color: var(--color-on-image); border-bottom: 0; margin-bottom: var(--sp-8); }
-.cp-hero[data-cover="yes"] .cp-hero-media { position: absolute; inset: 0; z-index: -2; border-radius: inherit; aspect-ratio: auto; }
-.cp-hero[data-cover="yes"]::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(90deg, var(--color-scrim) 0%, var(--color-scrim) 35%, transparent 90%), linear-gradient(0deg, var(--color-scrim) 0%, transparent 45%); }
-.cp-hero[data-cover="yes"] .cp-hero-inner { width: 100%; align-content: center; padding-block: var(--sp-6) var(--sp-6); }
-.cp-hero[data-cover="yes"] .cp-hero-sub, .cp-hero[data-cover="yes"] .cp-eyebrow { color: var(--color-on-image); }
-.cp-hero[data-cover="yes"] .cp-event { margin-bottom: calc(var(--sp-8) * -1); position: relative; z-index: 2; color: var(--color-text); }
-.cp-theme[data-hero="band"] .cp-hero[data-cover="yes"] { max-width: calc(var(--container-max) + 2 * var(--gutter)); margin-inline: auto; width: calc(100% - 2 * var(--gutter)); border-radius: var(--radius-lg); margin-top: var(--sp-4); }
+/* Con portada, la imagen es un bloque independiente: se ve entera, sin texto ni velos.
+   Escritorio 1920×600 y celular 1080×1350 usan las fuentes existentes del picture. */
+.cp-hero[data-cover="yes"] { display: grid; color: var(--color-text); margin-bottom: 0; }
+.cp-hero[data-cover="yes"] .cp-hero-media { position: relative; width: 100%; border-radius: 0; aspect-ratio: var(--hero-ratio); }
+.cp-hero[data-cover="yes"] .cp-hero-media img { object-fit: contain; object-position: center; }
+.cp-hero[data-cover="yes"] .cp-hero-inner { width: 100%; padding-block: var(--sp-5); gap: var(--sp-4); }
+.cp-hero[data-cover="yes"] .cp-hero-copy { gap: var(--sp-2); max-width: none; }
+.cp-hero[data-cover="yes"] .cp-h1 { font-size: var(--fs-32); }
+.cp-hero[data-cover="yes"] .cp-hero-sub { color: var(--color-muted); font-size: var(--fs-16); }
+.cp-hero[data-cover="yes"] .cp-hero-actions { margin-top: 0; }
+.cp-theme[data-hero="band"] .cp-hero[data-cover="yes"] { max-width: calc(var(--container-max) + 2 * var(--gutter)); margin-inline: auto; width: calc(100% - 2 * var(--gutter)); margin-top: var(--sp-4); }
+.cp-theme[data-hero="band"] .cp-hero[data-cover="yes"] .cp-hero-media { border-radius: var(--radius-lg); }
 @media (max-width: 767px) {
-  .cp-hero[data-cover="yes"] { margin-bottom: 0; }
-  .cp-hero[data-cover="yes"] .cp-event { margin-bottom: 0; }
-  .cp-hero[data-cover="yes"] .cp-hero-inner { align-content: end; }
-  .cp-hero[data-cover="yes"]::before { background: linear-gradient(0deg, var(--color-scrim) 0%, var(--color-scrim) 55%, transparent 100%); }
+  .cp-hero[data-cover="yes"] .cp-h1 { font-size: var(--fs-24); }
   .cp-hero-actions .cp-btn { flex: 1 1 100%; }
 }
 
@@ -590,10 +590,9 @@
 .cp-preview .cp-hero-sub { font-size: var(--fs-14); }
 .cp-preview .cp-hero-actions { gap: var(--sp-2); margin-top: 0; }
 .cp-preview .cp-hero-actions .cp-btn { padding-inline: var(--sp-3); min-height: var(--tap); font-size: var(--fs-14); flex: 1 1 auto; }
-.cp-preview .cp-hero[data-cover="yes"] { aspect-ratio: auto; min-height: calc(100cqw * 5 / 16); margin-bottom: 0; }
+.cp-preview .cp-hero[data-cover="yes"] .cp-h1 { font-size: var(--fs-preview-hero); }
 .cp-preview .cp-hero[data-cover="yes"] .cp-hero-inner { min-height: min-content; }
 .cp-preview[data-frame="mobile"] { max-width: 390px; margin-inline: auto; }
-.cp-preview[data-frame="mobile"] .cp-hero[data-cover="yes"] { min-height: calc(100cqw * 5 / 4); }
 .cp-preview[data-frame="mobile"] .cp-theme { --fs-preview-hero: var(--fs-32); --hero-ratio: 4 / 5; --fs-hero: var(--fs-hero-m); --fs-name: var(--fs-name-m); --header-h: 56px; }
 .cp-preview[data-frame="desktop"] .cp-theme { --hero-ratio: 16 / 5; --fs-hero: var(--fs-hero-d); --fs-name: var(--fs-name-d); }
 .cp-preview .cp-hd-cart-label, .cp-preview .cp-eventos-stamp span { display: none; }
