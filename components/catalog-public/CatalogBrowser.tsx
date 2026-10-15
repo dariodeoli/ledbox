@@ -17,7 +17,7 @@ import { PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
 import { parseVisitorContact, selfShareLinks } from "@/lib/store-contact";
 import { readLocalStoreCart, sanitizeStoreCart, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartLineView, CartView } from "@/lib/server/store-cart";
-import { CityField, EmailField, PhoneField, TextAreaField, TextField } from "@/components/admin/AdminFields";
+import { CityField, DayField, EmailField, PhoneField, TextAreaField, TextField } from "@/components/admin/AdminFields";
 
 /**
  * Catálogo de la tienda web de una empresa, carrito y armado de la preorden (sin
@@ -167,6 +167,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
   const [from, setFrom] = useState(range?.fromKey ?? "");
   const [to, setTo] = useState(range?.toKey ?? "");
+  const [dateMsg, setDateMsg] = useState("");
   const [selection, setSelection] = useState<Record<string, number>>({});
   // Flete: "" = no elegí, COORDINATE = «a coordinar», o el id de una zona (vive acá para guardarse con el carrito).
   const [zoneChoice, setZoneChoice] = useState("");
@@ -280,6 +281,16 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   // Con la revalidación del servidor, el subtotal es el SUYO (precio y stock de hoy); sin red queda el local.
   const subtotal = showPrices && range ? (view ? view.itemsSubtotal : localSubtotal) : null;
   const count = chosen.reduce((sum, item) => sum + (selection[item.id] ?? 0), 0);
+  // El encabezado de la tienda (otro componente) muestra el contador y abre el pedido: se hablan por eventos del navegador.
+  useEffect(() => {
+    (window as unknown as { __cpCartCount?: number }).__cpCartCount = count;
+    window.dispatchEvent(new CustomEvent("cp:cart-count", { detail: count }));
+  }, [count]);
+  useEffect(() => {
+    const openCart = () => { if (count > 0) { setDone(null); setOpen(true); } else document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
+    window.addEventListener("cp:open-cart", openCart);
+    return () => window.removeEventListener("cp:open-cart", openCart);
+  }, [count]);
   const selectionKey = chosen.map((item) => `${item.id}:${selection[item.id]}`).join("|");
   const currentState = (): CartSnapshot => ({ items: chosen.map((item) => ({ id: item.id, quantity: selection[item.id] })), from: range?.fromKey ?? null, to: range?.toKey ?? null, zone: zoneChoice });
 
@@ -363,7 +374,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   function applyDates(event: FormEvent) {
     event.preventDefault();
-    if (!from || !to) return;
+    if (!from || !to) { setDateMsg("Elegí las dos fechas (dd/mm/aaaa) para ver la disponibilidad."); return; }
     const extra = category ? `&categoria=${encodeURIComponent(category)}` : "";
     router.replace(`${pathname}?desde=${encodeURIComponent(from)}&hasta=${encodeURIComponent(to)}${extra}#catalogo`, { scroll: false });
   }
@@ -458,35 +469,27 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         {wholesale ? <p className="cp-lead">Precios mayoristas, solo para vos{clientName ? ` (${clientName})` : ""}. No compartas este link.</p> : null}
       </div>
 
-      <div className="cp-card cp-dates" aria-labelledby="fechas">
-        <h3 id="fechas" className="cp-h3 cp-h3--plain">1. Fechas del alquiler</h3>
-        <form className="cp-row" onSubmit={applyDates}>
-          <label className="cp-field">
-            <span>Desde</span>
-            <input type="date" value={from} min={today} onChange={(event) => { setFrom(event.target.value); if (to && event.target.value > to) setTo(event.target.value); }} required />
-          </label>
-          <label className="cp-field">
-            <span>Hasta</span>
-            <input type="date" value={to} min={from || today} onChange={(event) => setTo(event.target.value)} required />
-          </label>
-          <button className="cp-btn" type="submit">Ver disponibilidad</button>
+      <div className="cp-filterbar cp-fields" role="search" aria-label="Fechas y búsqueda">
+        <form className="cp-filterbar-dates" onSubmit={applyDates} aria-labelledby="fechas">
+          <h3 id="fechas" className="cp-filterbar-title">Fechas del alquiler</h3>
+          <div className="cp-filterbar-row">
+            <DayField label="Desde" value={from} min={today} size="full" required onChange={(value) => { setFrom(value); if (value && to && value > to) setTo(value); setDateMsg(""); }} />
+            <DayField label="Hasta" value={to} min={from || today} size="full" required onChange={(value) => { setTo(value); setDateMsg(""); }} />
+            <button className="cp-btn cp-btn--primary cp-filterbar-go" type="submit">Ver disponibilidad</button>
+          </div>
+          <p className={dateMsg ? "cp-hint cp-hint--error" : "cp-hint"} role={dateMsg ? "alert" : undefined}>
+            {dateMsg || (range
+              ? `Período: ${formatDayKey(range.fromKey)} al ${formatDayKey(range.toKey)} (${range.days} ${range.days === 1 ? "día" : "días"}). La disponibilidad es indicativa: la confirmamos al cotizar.`
+              : "Elegí las fechas para ver la disponibilidad indicativa de cada equipo.")}
+          </p>
         </form>
-        <p className="cp-hint">
-          {range
-            ? `Período: ${formatDayKey(range.fromKey)} al ${formatDayKey(range.toKey)} (${range.days} ${range.days === 1 ? "día" : "días"}). La disponibilidad es indicativa: la confirmamos al cotizar.`
-            : "Elegí las fechas para ver la disponibilidad indicativa de cada equipo."}
-        </p>
+        <div className="cp-filterbar-search">
+          <TextField ariaLabel="Buscar equipos por nombre o código" type="search" size="full" placeholder="Buscar por nombre o código" value={query} onChange={setQuery} autoComplete="off" />
+        </div>
       </div>
 
-      <div className="cp-toolbar">
-        <h3 className="cp-h3 cp-h3--plain">2. Equipos</h3>
-        <label className="cp-field cp-field--search">
-          <span className="cp-sr">Buscar equipos</span>
-          <input type="search" placeholder="Buscar por nombre, SKU o categoría" value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-      </div>
       {categories.length > 1 ? (
-        <div className="cp-cats" role="group" aria-label="Filtrar por categoría">
+        <div className="cp-cats" role="group" aria-label="Filtrar por categoría" tabIndex={-1}>
           <button type="button" className="cp-cat" aria-pressed={category === null} onClick={() => setCategory(null)}>Todas</button>
           {categories.map((name) => (
             <button key={name} type="button" className="cp-cat" aria-pressed={category === name} onClick={() => setCategory(category === name ? null : name)}>{name}</button>

@@ -4,6 +4,8 @@ import { CompanyInfo } from "@/components/catalog-public/CompanyInfo";
 import { PriceRequestForm } from "@/components/catalog-public/PriceRequestForm";
 import { ProposalActions } from "@/components/catalog-public/ProposalActions";
 import { StoreChrome } from "@/components/catalog-public/StoreChrome";
+import { StoreFooter, storeFooterLinks } from "@/components/catalog-public/StoreFooter";
+import { StoreHeader } from "@/components/catalog-public/StoreHeader";
 import { QUOTE_ITEM_STATE_LABEL, QUOTE_REQUEST_PUBLIC_COPY, formatDayKey, isQuoteItemState, isQuoteRequestStatus, preorderWhatsappUrl, quoteItemActive } from "@/lib/catalog-public";
 import { PRICE_REQUEST_LABEL } from "@/lib/price-request";
 import { loadPublicOrder } from "@/lib/server/catalog-public";
@@ -33,6 +35,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   const whatsapp = preorderWhatsappUrl(order.organization.whatsappPhone, `Hola ${order.organization.name}! Consulto por mi pedido del catálogo.`);
   return (
     <StoreChrome theme={order.organization.theme} appearance={order.organization.appearance}>
+    <StoreHeader name={order.organization.name} slug={order.organization.slug} homeHref={`/tienda/${encodeURIComponent(order.organization.slug)}`} nav={[]} cart={null} />
     <main className="cp-main cp-narrow">
       <header className="cp-header">
         <p className="cp-eyebrow">{order.organization.name}{order.priceList === "WHOLESALE" ? " · Pedido mayorista" : ""}</p>
@@ -134,6 +137,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
         <section className="cp-card" aria-label="Datos de la empresa"><CompanyInfo profile={order.organization.profile} headingId="pedido-empresa" /></section>
       ) : null}
     </main>
+    <StoreFooter name={order.organization.name} whatsappUrl={whatsapp} links={storeFooterLinks([])} />
     </StoreChrome>
   );
 }

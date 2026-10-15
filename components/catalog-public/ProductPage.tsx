@@ -2,6 +2,9 @@ import { PREORDER_RESPONSE_HOURS, catalogLine, catalogTierHints, preorderWhatsap
 import type { ProductDetail } from "@/lib/server/catalog-product";
 import type { PublicStorefront } from "@/lib/server/catalog-public";
 import { ProductAdd } from "./ProductAdd";
+import { locationLine } from "@/lib/org-profile";
+import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
+import { StoreHeader, storeNavLinks } from "./StoreHeader";
 import { StoreChrome } from "./StoreChrome";
 
 /**
@@ -35,15 +38,12 @@ export function ProductPage({ store, detail, showPrices, basePath, scope, cartPa
   const tiers = showPrices ? catalogTierHints(item.price) : [];
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Consulto por ${item.name}${item.sku ? ` (${codeOf(item.sku)})` : ""}.`);
   const specs = (item.description ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const hasContact = Boolean(whatsapp || store.email || store.profile);
+  const nav = storeNavLinks(basePath, { contact: hasContact });
   const fichaOf = (id: string) => `${basePath}/p/${encodeURIComponent(id)}`;
   return (
     <StoreChrome theme={store.theme} appearance={store.appearance}>
-      <header className="cp-nav">
-        <div className="cp-nav-inner">
-          <a className="cp-brand" href={basePath} aria-label={`Inicio de ${store.name}`}><span className="cp-brand-name">{store.name}</span></a>
-          <nav className="cp-nav-links" aria-label="Ficha del producto"><a href={`${basePath}#catalogo`}>← Volver al catálogo</a></nav>
-        </div>
-      </header>
+      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={basePath} nav={nav} cart={{ href: `${basePath}#catalogo` }} />
       <main className="cp-main cp-ficha" data-testid="product-page">
         <div className="cp-ficha-grid">
           <div className="cp-ficha-photo">
@@ -146,6 +146,8 @@ export function ProductPage({ store, detail, showPrices, basePath, scope, cartPa
           </section>
         ) : null}
       </main>
+      <StoreFooter name={store.name} tagline={store.tagline} location={store.profile ? locationLine(store.profile) : null} whatsappUrl={whatsapp} email={store.email} links={storeFooterLinks(nav)} />
+      {whatsapp ? <StoreWhatsappFloat href={whatsapp} /> : null}
     </StoreChrome>
   );
 }

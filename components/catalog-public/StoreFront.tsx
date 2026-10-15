@@ -3,6 +3,10 @@ import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-p
 import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
 import { featuredCategories } from "@/lib/featured-categories";
 import { CompanyInfo } from "./CompanyInfo";
+import { locationLine } from "@/lib/org-profile";
+import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
+import { StoreHeader, storeNavLinks } from "./StoreHeader";
+import { storeInitials } from "./StoreLogo";
 import { StoreChrome } from "./StoreChrome";
 
 /**
@@ -38,29 +42,6 @@ type Props = {
 
 const DEFAULT_TAGLINE = "Alquiler de equipos para tu evento. Elegí lo que necesitás y te respondemos con una cotización.";
 
-function initials(name: string): string {
-  const letters = name.trim().split(/\s+/).slice(0, 2).map((word) => word[0] ?? "").join("");
-  return (letters || "·").toUpperCase();
-}
-
-function Logo({ store }: { store: PublicStorefront }) {
-  const light = `/api/catalog/${encodeURIComponent(store.slug)}/logo/light`;
-  const dark = `/api/catalog/${encodeURIComponent(store.slug)}/logo/dark`;
-  if (!store.logos.light && !store.logos.dark) {
-    return <span className="cp-mono" aria-hidden="true">{initials(store.name)}</span>;
-  }
-  // `dark` es el logo para fondos claros y `light` para fondos oscuros. Con una sola
-  // variante se usa en ambos temas; la clara va sobre una chapa oscura para que se lea.
-  const onlyLight = store.logos.light && !store.logos.dark;
-  return (
-    <picture className={onlyLight ? "cp-logo cp-logo--plate" : "cp-logo"}>
-      {store.logos.light && store.logos.dark ? <source media="(prefers-color-scheme: dark)" srcSet={light} /> : null}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={store.logos.dark ? dark : light} alt={`Logo de ${store.name}`} />
-    </picture>
-  );
-}
-
 const STEPS = [
   { title: "Elegí tus equipos", text: "Marcá las fechas y sumá al pedido lo que necesitás. Ves la disponibilidad al instante, como referencia." },
   { title: "Enviá tu pedido", text: "Dejanos tus datos y el lugar del evento. No hace falta cuenta ni pago." },
@@ -71,23 +52,11 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
   const hasContact = Boolean(whatsapp || store.email || store.profile);
-  const hasLogo = store.logos.light || store.logos.dark;
+  const nav = storeNavLinks("", { contact: hasContact });
 
   return (
     <StoreChrome theme={store.theme} appearance={store.appearance}>
-      <header className="cp-nav">
-        <div className="cp-nav-inner">
-          <a className={hasLogo ? "cp-brand cp-brand--logo" : "cp-brand"} href={basePath} aria-label={`Inicio de ${store.name}`}>
-            <Logo store={store} />
-            <span className="cp-brand-name">{store.name}</span>
-          </a>
-          <nav className="cp-nav-links" aria-label="Secciones de la tienda">
-            <a href="#catalogo">Catálogo</a>
-            <a href="#como-funciona">Cómo funciona</a>
-            {hasContact ? <a href="#contacto">Contacto</a> : null}
-          </nav>
-        </div>
-      </header>
+      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={basePath} nav={nav} cart="button" />
 
       <main className="cp-main">
         {store.covers.desktop || store.covers.mobile ? (
@@ -124,7 +93,7 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={(categoryImages?.[entry.category] ?? entry.imageUrl) as string} alt="" loading="lazy" />
                       ) : (
-                        <span className="cp-feat-ph" aria-hidden="true">{initials(entry.category)}</span>
+                        <span className="cp-feat-ph" aria-hidden="true">{storeInitials(entry.category)}</span>
                       )}
                     </span>
                     <span className="cp-feat-name">{entry.category}</span>
@@ -185,9 +154,8 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
         ) : null}
       </main>
 
-      <footer className="cp-foot">
-        <p>{store.name} · Los precios son de referencia en guaraníes y se confirman en la cotización. Un pedido no es una reserva hasta que la confirmamos.</p>
-      </footer>
+      <StoreFooter name={store.name} tagline={store.tagline} location={store.profile ? locationLine(store.profile) : null} whatsappUrl={whatsapp} email={store.email} links={storeFooterLinks(nav)} />
+      {whatsapp ? <StoreWhatsappFloat href={whatsapp} /> : null}
     </StoreChrome>
   );
 }

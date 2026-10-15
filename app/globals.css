@@ -5673,3 +5673,86 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Foto de la categoría en Ajustes → Inventario. */
 .admin-cat-photo { object-fit: cover; border-radius: 8px; }
+
+/* ── Marco de la tienda pública: encabezado, fechas y filtros, pie y botón de WhatsApp ──
+   Todo con los tokens de la plantilla (`--cp-*`): cambia con la plantilla elegida y con el tema claro u oscuro. */
+.cp-hd { backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); background: color-mix(in srgb, var(--cp-bg) 82%, transparent); box-shadow: 0 1px 0 color-mix(in srgb, var(--cp-accent) 12%, transparent); }
+.cp-hd-inner { max-width: 1180px; min-height: 72px; gap: 16px; }
+.cp-hd-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.cp-eventos-stamp { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px 0 6px; border: 1px solid var(--cp-line); border-radius: 999px; color: var(--cp-muted); font: 700 0.8rem/1 var(--cp-font-body, inherit); letter-spacing: 0.02em; background: color-mix(in srgb, var(--cp-surface) 70%, transparent); }
+.cp-eventos-stamp img { display: block; width: 22px; height: 22px; border-radius: 6px; }
+.cp-hd-sep { flex: none; width: 1px; height: 28px; background: var(--cp-line); }
+.cp-hd-brand { gap: 12px; }
+.cp-hd .cp-logo img { height: 48px; max-width: 200px; }
+.cp-hd .cp-mono { width: 46px; height: 46px; }
+.cp-hd-controls { position: relative; display: flex; align-items: center; gap: 6px; flex: none; }
+.cp-hd-nav a { position: relative; }
+.cp-hd-nav a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 6px; height: 2px; border-radius: 2px; background: var(--cp-accent); transform: scaleX(0); transform-origin: left; transition: transform 0.18s ease; }
+.cp-hd-nav a:hover::after, .cp-hd-nav a:focus-visible::after { transform: scaleX(1); }
+.cp-hd-cart, .cp-hd-burger { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--cp-line); border-radius: 12px; background: var(--cp-surface); color: var(--cp-text); cursor: pointer; text-decoration: none; }
+.cp-hd-cart:hover, .cp-hd-burger:hover { border-color: var(--cp-accent); }
+.cp-hd-cart:focus-visible, .cp-hd-burger:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 2px; }
+.cp-hd-badge { position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; background: var(--cp-accent); color: var(--cp-accent-text); font: 800 0.75rem/1 var(--cp-font-body, inherit); font-variant-numeric: tabular-nums; border: 2px solid var(--cp-bg); box-sizing: border-box; }
+.cp-hd-burger { display: none; }
+.cp-hd-menu { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; display: grid; min-width: min(260px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--cp-line); border-radius: 14px; background: var(--cp-surface); box-shadow: 0 18px 40px -18px rgba(20, 24, 29, 0.5); }
+.cp-hd-menu a { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border-radius: 10px; color: var(--cp-text); font-weight: 600; text-decoration: none; }
+.cp-hd-menu a:hover, .cp-hd-menu a:focus-visible { background: var(--cp-tint); }
+@media (max-width: 760px) {
+  .cp-hd-inner { min-height: 64px; padding-inline: 12px; gap: 8px; }
+  .cp-hd-nav { display: none; }
+  .cp-hd-burger { display: inline-grid; }
+  .cp-hd-id { gap: 10px; flex: 1 1 auto; }
+  .cp-hd .cp-logo img { height: 40px; max-width: 120px; }
+  .cp-hd .cp-mono { width: 40px; height: 40px; }
+  /* En móvil el sello queda solo con el isotipo: el nombre de la empresa es lo que manda. */
+  .cp-eventos-stamp { padding: 0 5px; }
+  .cp-eventos-stamp span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .cp-brand--logo.cp-hd-brand .cp-brand-name { position: static; width: auto; height: auto; clip: auto; }
+  .cp-hd-brand .cp-brand-name { font-size: 0.95rem; }
+  .cp-theme[data-cp-template="editorial"] .cp-hd-brand .cp-brand-name { letter-spacing: 0.08em; font-size: 0.85rem; }
+}
+@media (max-width: 400px) { .cp-hd .cp-brand--logo.cp-hd-brand .cp-brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } .cp-hd .cp-logo img { max-width: 112px; } }
+
+/* Fechas y filtros */
+.cp-filterbar { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 16px 28px; align-items: start; padding: 18px 20px; border: 1px solid var(--cp-line); border-radius: 18px; background: var(--cp-surface); box-shadow: 0 1px 0 color-mix(in srgb, var(--cp-text) 4%, transparent), 0 14px 30px -24px rgba(20, 24, 29, 0.35); }
+.cp-filterbar-dates { display: grid; gap: 8px; margin: 0; }
+.cp-filterbar-title { margin: 0; color: var(--cp-muted); font: 700 0.75rem/1.2 var(--cp-font-body, inherit); letter-spacing: 0.1em; text-transform: uppercase; }
+.cp-filterbar-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.cp-filterbar-go { min-height: 46px; white-space: nowrap; }
+.cp-filterbar-search { align-self: end; }
+.cp-filterbar .cp-hint { margin: 0; }
+.cp-hint--error { color: var(--cp-danger); font-weight: 600; }
+.cp-cats { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 2px 2px 8px; margin-inline: -2px; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--cp-line) transparent; -webkit-overflow-scrolling: touch; }
+.cp-cats .cp-cat { flex: none; scroll-snap-align: start; white-space: nowrap; }
+@media (max-width: 760px) {
+  .cp-filterbar { grid-template-columns: minmax(0, 1fr); padding: 14px; gap: 14px; border-radius: 16px; }
+  .cp-filterbar-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cp-filterbar-go { grid-column: 1 / -1; width: 100%; }
+  .cp-cats { margin-inline: -16px; padding-inline: 16px; mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+}
+
+/* Pie único */
+.cp-footer { margin-top: 24px; border-top: 1px solid var(--cp-line); background: color-mix(in srgb, var(--cp-surface) 70%, var(--cp-bg)); padding-bottom: 96px; }
+.cp-footer-inner { max-width: 1180px; margin: 0 auto; padding: 36px 16px 8px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px 40px; color: var(--cp-text); }
+.cp-footer-about { display: grid; gap: 6px; align-content: start; }
+.cp-footer-name { margin: 0; font-family: var(--cp-font-head); font-weight: 750; font-size: 1.15rem; }
+.cp-footer-text { margin: 0; color: var(--cp-muted); font-size: 0.92rem; max-width: 46ch; overflow-wrap: anywhere; }
+a.cp-footer-text { width: fit-content; display: inline-flex; align-items: center; min-height: 44px; color: var(--cp-text); text-decoration: underline; text-underline-offset: 3px; }
+.cp-footer-links { position: static; inset: auto; z-index: auto; height: auto; padding: 0; border: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; transition: none; display: flex; flex-wrap: wrap; gap: 4px 8px; align-content: start; justify-content: flex-end; }
+.cp-footer-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--cp-text); font-weight: 600; font-size: 0.92rem; text-decoration: none; }
+.cp-footer-links a:hover { background: var(--cp-tint); }
+.cp-footer-note { grid-column: 1 / -1; margin: 0; padding-top: 14px; border-top: 1px solid var(--cp-line); color: var(--cp-muted); font-size: 0.8rem; }
+.cp-footer-credit { max-width: 1180px; margin: 0 auto; padding: 12px 16px 20px; color: var(--cp-muted); font-size: 0.8rem; }
+.cp-footer-credit a { color: var(--cp-text); font-weight: 650; text-underline-offset: 3px; }
+.cp-footer a:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .cp-footer-inner { grid-template-columns: minmax(0, 1fr); padding-top: 28px; }
+  .cp-footer-links { justify-content: flex-start; margin-inline: -12px; }
+}
+
+/* WhatsApp flotante de la tienda: abajo a la derecha; si está la barra del pedido, se sube encima de ella. */
+.cp-wa { position: fixed; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 14; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #128c4a; color: #fff; box-shadow: 0 10px 24px -8px rgba(18, 140, 74, 0.6); transition: bottom 0.2s ease; }
+.cp-wa:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.cp-theme:has(.cp-bar) .cp-wa { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px); }
+.cp-preview .cp-wa { display: none; }
+@media (prefers-reduced-motion: reduce) { .cp-wa { transition: none; } }
