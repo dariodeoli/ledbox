@@ -1834,6 +1834,9 @@ model InventoryItem {
   wholesaleFromPrice Int              @default(0)
   /// Piso de venta del ítem.
   minimumPrice       Int              @default(0)
+  /// «Se cobra»: DAILY = el precio se multiplica por los días del alquiler; EVENT = precio
+  /// único por evento (días = 1 en tienda, cotización y presupuesto). Default DAILY.
+  billingUnit        BillingUnit      @default(DAILY)
   notes              String?
   /// Descripción para el catálogo público (opcional, hasta 600 caracteres). Es lo único
   /// de texto libre que se publica: las `notes` son internas y nunca salen.

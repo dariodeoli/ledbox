@@ -56,6 +56,8 @@ const NEUTRAL_LABEL: Record<string, string> = {
   portal_request: "Responder",
   collection: "Cobrar",
   collection_due: "Cobrar",
+  return_overdue: "Ver devoluciones",
+  hold_expiring: "Confirmar o liberar",
 };
 
 export function buildTodayActions(input: {

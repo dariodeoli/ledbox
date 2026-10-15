@@ -4,7 +4,7 @@ import { AdminActionsMenu, AdminButton, AdminDisclosure, AdminNote } from "../Ad
 import { MoneyField, NumberField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { AdminImageBox } from "../AdminImageBox";
 import { InventoryLinkPicker } from "./BudgetInventoryPicker";
-import { quoteProductPrice } from "@/lib/quote-sharing";
+import { isEventBilled, quoteProductPrice } from "@/lib/quote-sharing";
 import { budgetDraftSubtotal, budgetItemError, budgetUsesDays, emptyBudgetItem, type BudgetItemDraft } from "@/lib/budget-items";
 import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { formatMoney } from "@/lib/admin-format";
@@ -24,14 +24,15 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
     {items.map((item, index) => {
       const numeric = { name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice) };
       const error = budgetItemError(numeric);
-      const usesDays = budgetUsesDays({ days: numeric.days, inventoryId: item.inventory?.id });
+      const perEvent = isEventBilled(item.inventory?.billingUnit);
+      const usesDays = !perEvent && budgetUsesDays({ days: numeric.days, inventoryId: item.inventory?.id });
       return <section className="budget-item" key={item.id ?? `draft-${index}`} aria-label={`Ítem ${index + 1}`}>
         <div className="budget-item-row" data-excluded={item.excluded || undefined}>
           <AdminImageBox imageUrl={item.inventory?.imageUrl} size={40} />
           <TextField label={`Ítem ${index + 1}`} required value={item.name} maxLength={160} disabled={disabled || item.excluded} onChange={(name) => update(index, { name })} />
           <MoneyField label="Precio unitario" required limit={BUDGET_INT_MAX} value={item.unitPrice} disabled={disabled || item.excluded} onChange={(unitPrice) => update(index, { unitPrice })} />
           <NumberField label="Cantidad" required maxLength={4} value={item.quantity} disabled={disabled || item.excluded} onChange={(quantity) => update(index, { quantity })} />
-          {usesDays ? <NumberField label="Días" required maxLength={4} value={item.days} disabled={disabled || item.excluded} onChange={(days) => update(index, { days })} /> : <span className="admin-muted">Servicio / pago único</span>}
+          {usesDays ? <NumberField label="Días" required maxLength={4} value={item.days} disabled={disabled || item.excluded} onChange={(days) => update(index, { days })} /> : <span className="admin-muted">{perEvent ? "Por evento" : "Servicio / pago único"}</span>}
           <strong className="admin-nowrap" aria-label={`Total del ítem ${index + 1}`}>{formatMoney(item.excluded ? 0 : numeric.quantity * numeric.days * numeric.unitPrice)}</strong>
           <AdminActionsMenu label={`Acciones del ítem ${index + 1}`} items={[
             { label: "Buscar producto", icon: "search", disabled: disabled || item.excluded, onClick: () => setPicker(index) },
@@ -51,7 +52,7 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
     {picker !== null && !disabled ? <div className="admin-plan-list">
       <InventoryLinkPicker label="Buscar producto para agregar" range={range} selected={typeof picker === "number" ? items[picker]?.inventory ?? null : null} onSelect={(product) => {
         const current = typeof picker === "number" ? items[picker] : emptyBudgetItem();
-        const next = { ...current, inventory: product, ...(product ? { name: product.name, unitPrice: String(quoteProductPrice(product, Number(current.days))) } : {}) };
+        const next = { ...current, inventory: product, ...(product ? { name: product.name, unitPrice: String(quoteProductPrice(product, Number(current.days))), ...(isEventBilled(product.billingUnit) ? { days: "1" } : {}) } : {}) };
         if (picker === "new") onChange([...items, next]); else update(picker, next);
         setPicker(null);
       }} />

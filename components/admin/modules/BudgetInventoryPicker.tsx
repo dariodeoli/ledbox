@@ -11,7 +11,7 @@ import { AdminImageBox } from "../AdminImageBox";
 
 /** Vínculo listo para guardar: solo los campos que el API acepta y dibuja. */
 function inventoryLinkOf(item: AdminInventoryItemRow): AdminInventoryLink {
-  return { id: item.id, name: item.name, sku: item.sku, category: item.category, quantity: item.quantity, status: item.status, imageUrl: item.imageUrl, listPrice: item.listPrice, listFromDays: item.listFromDays, listFromPrice: item.listFromPrice };
+  return { id: item.id, name: item.name, sku: item.sku, category: item.category, quantity: item.quantity, status: item.status, imageUrl: item.imageUrl, listPrice: item.listPrice, listFromDays: item.listFromDays, listFromPrice: item.listFromPrice, billingUnit: item.billingUnit };
 }
 
 /**

@@ -18,11 +18,18 @@ export const INVENTORY_FIELD_HELP: Record<string, string> = {
   wholesalePrice: "Tarifa normal del segmento mayorista; no se elige automáticamente por duración.",
   wholesaleFromDays: "Umbral de días de la tarifa mayorista; 0 desactiva su regla.",
   wholesaleFromPrice: "Tarifa mayorista desde su umbral de días; no cambia la tarifa de cliente final.",
+  billingUnit: "Cómo se cobra el producto: por día (el precio se multiplica por los días) o por evento (precio único, sin importar los días).",
   minimumPrice: "Piso de venta existente del producto; no sustituye sus tarifas normales.",
   purchaseCost: "Costo de adquisición de esta unidad; no es un presupuesto de reparación ni precio de venta.",
   unitStatus: "Disponible, mantenimiento, retirada, dañada o perdida. Las retiradas no cuentan como unidades activas; mantenimiento, dañadas y perdidas reducen las libres.",
   code: "Identificador único de la unidad dentro de la empresa. En alta puede generarse automáticamente.",
 };
+
+/** «Se cobra» del producto (alta, edición y lote). */
+export const BILLING_UNIT_OPTIONS = [
+  { value: "DAILY", label: "Por día" },
+  { value: "EVENT", label: "Por evento" },
+] as const;
 
 /** Campos comunes editables del contrato actual; identidad/cantidad derivada no son masivas. */
 export const ITEM_BULK_FIELDS = [
@@ -34,6 +41,7 @@ export const ITEM_BULK_FIELDS = [
   { key: "imageUrl", label: "URL manual de imagen", type: "text", clear: true },
   { key: "dailyCost", label: "Costo diario interno", type: "money", clear: true },
   { key: "replacementCost", label: "Reposición (secundario)", type: "money", clear: true },
+  { key: "billingUnit", label: "Se cobra", type: "billing", clear: false },
   { key: "listPrice", label: "Precio cliente final", type: "money", clear: true },
   { key: "listFromDays", label: "Cliente final desde días", type: "days", clear: true },
   { key: "listFromPrice", label: "Precio final desde esos días", type: "money", clear: true },
@@ -68,6 +76,7 @@ export function readBulkChanges(target: "items" | "units", value: unknown): Reco
       result[key] = field.type === "money" || field.type === "days" ? 0 : "";
     } else {
       if (field.type === "audience") { if (!isCatalogAudience(raw)) return null; }
+      else if (field.type === "billing") { if (raw !== "DAILY" && raw !== "EVENT") return null; }
       else if (field.type === "money" || field.type === "days") { if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > (field.type === "days" ? 3650 : 2147483647)) return null; }
       else if (typeof raw !== "string" || !raw.trim() || raw.length > (key === "category" ? 80 : key === "notes" ? (target === "units" ? 400 : 2000) : 2000)) return null;
       result[key] = raw;

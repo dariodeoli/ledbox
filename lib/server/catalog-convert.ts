@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
 import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, listDailyPrice, rentalDaysBetween } from "@/lib/catalog-public";
+import { billedDays } from "@/lib/quote-sharing";
 import { db } from "./db";
 import { commitInventoryAssignment, insufficientMessage } from "./inventory-availability";
 import { leadStatusAfterBudget, resolveClientFromLead } from "./lead-client";
@@ -74,13 +75,13 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const lead = quote.lead;
 
   const settings = await getRentalSettings(organizationId);
-  const days = quote.startsAt && quote.endsAt ? rentalDaysBetween(dayKeyOf(quote.startsAt), dayKeyOf(quote.endsAt)) : Math.max(1, quote.durationDays ?? 1);
+  const periodDays = quote.startsAt && quote.endsAt ? rentalDaysBetween(dayKeyOf(quote.startsAt), dayKeyOf(quote.endsAt)) : Math.max(1, quote.durationDays ?? 1);
   const inventoryIds = quote.items.flatMap((item) => (item.inventoryId ? [item.inventoryId] : []));
   const inventory = inventoryIds.length
     ? await db.inventoryItem.findMany({
         where: { organizationId, id: { in: inventoryIds } },
         select: {
-          id: true, name: true, dailyCost: true,
+          id: true, name: true, dailyCost: true, billingUnit: true,
           listPrice: true, listFromDays: true, listFromPrice: true,
           wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
         },
@@ -93,9 +94,11 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   let unpricedLines = 0;
   const lines = quote.items.map((item, sortOrder) => {
     const linked = item.inventoryId ? inventoryById.get(item.inventoryId) : undefined;
-    const unitPrice = (linked ? listDailyPrice(linked, priceList, days) : 0) || item.unitPrice || 0;
+    const unitPrice = (linked ? listDailyPrice(linked, priceList, periodDays) : 0) || item.unitPrice || 0;
     if (unitPrice <= 0) unpricedLines += 1;
     const costPrice = linked?.dailyCost ?? 0;
+    // «Se cobra por evento»: una sola unidad de tiempo, sin importar los días del período.
+    const days = billedDays(linked?.billingUnit, periodDays);
     return {
       id: randomUUID(),
       sortOrder,
@@ -112,7 +115,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const costEstimate = lines.reduce((sum, line) => sum + line.quantity * line.days * line.costPrice, 0);
   const plan = depositPlan(settings.depositPercent, subtotal);
   const noteLines = [
-    quote.startsAt && quote.endsAt ? `Período: ${dayKeyOf(quote.startsAt)} al ${dayKeyOf(quote.endsAt)} (${days} ${days === 1 ? "día" : "días"})` : null,
+    quote.startsAt && quote.endsAt ? `Período: ${dayKeyOf(quote.startsAt)} al ${dayKeyOf(quote.endsAt)} (${periodDays} ${periodDays === 1 ? "día" : "días"})` : null,
     quote.location ? `Lugar: ${quote.location}` : null,
     lead.message ? `Notas del cliente: ${lead.message}` : null,
     wholesale ? "Nació de un pedido del catálogo mayorista (precios mayoristas)." : "Nació de un pedido del catálogo público.",

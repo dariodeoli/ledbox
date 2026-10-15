@@ -31,6 +31,7 @@ import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
 import { InventoryCreateDialog, InventoryEditDialog, type InventoryNotice } from "./InventoryItemDialogs";
+import { OverdueReturnsIndicator } from "./OverdueReturns";
 import { InventoryList } from "./InventoryList";
 import { TrashDialog, trashMenuItems } from "../TrashDialogs";
 import { KIND_OPTIONS, STATUS_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
@@ -382,6 +383,8 @@ export function InventarioModule() {
           actionLabel="Ver los productos publicados en la tienda web"
         />
       </AdminKpis>
+
+      <OverdueReturnsIndicator />
 
       <nav className="admin-subtabs admin-inv-tabs" aria-label="Filtrar el inventario">
         {INVENTORY_TABS.map((tab) => (

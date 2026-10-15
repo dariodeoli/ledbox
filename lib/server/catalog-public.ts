@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import type { InventoryStatus } from "@prisma/client";
+import type { BillingUnit, InventoryStatus } from "@prisma/client";
+import { billedDays } from "@/lib/quote-sharing";
 import { registroConsentimiento } from "owncoding-ui/utils";
 import { z } from "zod";
 import { APP_VERSION } from "@/lib/version";
@@ -147,6 +148,7 @@ type CatalogRow = {
   updatedAt: Date;
   quantity: number;
   status: InventoryStatus;
+  billingUnit: BillingUnit;
   listPrice: number;
   listFromDays: number;
   listFromPrice: number;
@@ -176,6 +178,7 @@ async function loadVisibleRows(organizationId: string, list: PriceList, ids?: re
       updatedAt: true,
       quantity: true,
       status: true,
+      billingUnit: true,
       listPrice: true,
       listFromDays: true,
       listFromPrice: true,
@@ -309,7 +312,7 @@ export async function createPreorder(
   const rows = await tx.inventoryItem.findMany({
     where: { organizationId, ...catalogAudienceWhere(context.priceList), archivedAt: null, status: { not: "RETIRED" }, id: { in: ids } },
     select: {
-      id: true, name: true, sku: true,
+      id: true, name: true, sku: true, billingUnit: true,
       listPrice: true, listFromDays: true, listFromPrice: true,
       wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
     },
@@ -324,7 +327,7 @@ export async function createPreorder(
     quantity: quantities.get(row.id) ?? 1,
     unitPrice: showPrices ? listDailyPrice(row, context.priceList, range.days) || null : null,
   }));
-  const subtotal = showPrices ? estimatedSubtotal(lines.map((line) => ({ name: line.row.name, quantity: line.quantity, unitPrice: line.unitPrice })), range.days) : null;
+  const subtotal = showPrices ? estimatedSubtotal(lines.map((line) => ({ name: line.row.name, quantity: line.quantity, unitPrice: line.unitPrice, perEvent: line.row.billingUnit === "EVENT" })), range.days) : null;
 
   // Lead de ESTA empresa: se reutiliza el abierto con el mismo correo o teléfono.
   const email = input.email.trim().toLowerCase();
@@ -388,9 +391,9 @@ export async function createPreorder(
           productName: line.row.name,
           quantity: line.quantity,
           duration: range.days,
-          billingUnit: "DAILY" as const,
+          billingUnit: line.row.billingUnit === "EVENT" ? ("EVENT" as const) : ("DAILY" as const),
           unitPrice: line.unitPrice ?? undefined,
-          subtotal: line.unitPrice ? line.unitPrice * line.quantity * range.days : undefined,
+          subtotal: line.unitPrice ? line.unitPrice * line.quantity * billedDays(line.row.billingUnit, range.days) : undefined,
           notes: undefined,
         })),
       },

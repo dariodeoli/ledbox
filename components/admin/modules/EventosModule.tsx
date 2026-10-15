@@ -40,6 +40,7 @@ import { useAdminSession } from "../AdminShell";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport, type AdminModuleView } from "../AdminBoard";
 import { CalendarioModule } from "./CalendarioModule";
 import { EventosTareas } from "./EventosTareas";
+import { OverdueReturnsPanel } from "./OverdueReturns";
 import {
   AdminActionsMenu,
   AdminButton,
@@ -595,6 +596,8 @@ export function EventosModule() {
           actionLabel="Ver las tareas vencidas"
         />
       </AdminKpis>
+
+      <OverdueReturnsPanel />
 
       <nav className="admin-subtabs admin-eventos-sections" aria-label="Secciones de Eventos">
         <button type="button" className="admin-subtab" data-active={section === "eventos" ? "true" : undefined} aria-pressed={section === "eventos"} onClick={() => changeSection("eventos")}>

@@ -11,6 +11,7 @@ import { normalizeBudgetCode } from "@/lib/public-config";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock } from "@/lib/server/approval-stock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,6 +72,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (name.length < 3) return jsonError("Ingresá tu nombre y apellido.", 400);
   if (name.length > MAX_NAME) return jsonError(`El nombre no puede superar los ${MAX_NAME} caracteres.`, 400);
   if (note.length > MAX_NOTE) return jsonError(`El comentario no puede superar los ${MAX_NOTE} caracteres.`, 400);
+
+  // Stock antes de aprobar (alquileres P1-3): con el mismo lock de ítems del motor se
+  // verifica (y reserva, todo o nada) lo que pide el presupuesto. Si falta, NO se aprueba
+  // ni se reserva: queda en revisión para el equipo y el cliente recibe un aviso claro.
+  if (!budget.approvedAt) {
+    const gate = await checkStockBeforeApproval({
+      organizationId: budget.organizationId,
+      budgetId: budget.id,
+      context: portalAuditContext(budget.organizationId, name, budget.client?.email),
+    });
+    if (!gate.ok) {
+      await sendBudgetToReviewForStock({
+        organizationId: budget.organizationId,
+        budgetId: budget.id,
+        title: budget.title,
+        actor: portalAuditContext(budget.organizationId, name, budget.client?.email),
+        lines: gate.lines,
+      });
+      return jsonError(PORTAL_STOCK_MESSAGE, 409, "stock_insufficient");
+    }
+  }
 
   // Solo la primera aprobación escribe: el `where` con `approvedAt: null` evita
   // que dos pedidos simultáneos se pisen (el segundo recibe la ya registrada).

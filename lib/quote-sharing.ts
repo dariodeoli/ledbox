@@ -19,12 +19,25 @@ export function quotePortalAvailable(budget: { status: string; validUntil: Date 
   return todayDayKey(budget.validUntil) >= todayDayKey(now);
 }
 
+/** Producto que se cobra una sola vez por evento (`InventoryItem.billingUnit = EVENT`). */
+export const isEventBilled = (billingUnit: string | null | undefined): boolean => billingUnit === "EVENT";
+
+/** «Se cobra» aceptado por el API de inventario: por día (default) o por evento. */
+export const readBillingUnit = (value: unknown): "DAILY" | "EVENT" | null => (value === "DAILY" || value === "EVENT" ? value : null);
+
+/** Días que se cobran: 1 si el producto es «por evento»; si no, los del alquiler (mínimo 1). */
+export const billedDays = (billingUnit: string | null | undefined, days: number): number =>
+  isEventBilled(billingUnit) ? 1 : Math.max(1, Math.trunc(days) || 1);
+
 /** An explicit sales tier stays fixed when duration changes. Zero disables a rule. */
 export function quoteProductPrice(product: {
   listPrice?: number; listFromDays?: number; listFromPrice?: number;
   wholesalePrice?: number; wholesaleFromDays?: number; wholesaleFromPrice?: number;
   minimumPrice?: number;
-}, days: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): number {
+  /** EVENT = precio único por evento: la duración no cambia el precio (días = 1). */
+  billingUnit?: string | null;
+}, rentalDays: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): number {
+  const days = isEventBilled(product.billingUnit) ? 1 : rentalDays;
   const normal = tier === "WHOLESALE" ? product.wholesalePrice : product.listPrice;
   const threshold = tier === "WHOLESALE" ? product.wholesaleFromDays : product.listFromDays;
   const fromPrice = tier === "WHOLESALE" ? product.wholesaleFromPrice : product.listFromPrice;

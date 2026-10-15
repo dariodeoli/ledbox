@@ -6,6 +6,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { checkStockBeforeApproval, decideStockApproval } from "@/lib/server/approval-stock";
 
 export const runtime = "nodejs";
 import { clientDisplayName } from "@/lib/client-identity";
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
   let reservations: BudgetReservation | null = null;
 
   if (decision === "approve") {
+    // Stock antes de aprobar (alquileres P1-3), con el lock de ítems del motor. Si falta, se
+    // frena con el detalle; «Aprobar igual» (`force`) solo lo puede OWNER/ADMIN y queda auditado.
+    let forcedShortage: string[] | null = null;
+    if (!budget.approvedAt) {
+      const gate = await checkStockBeforeApproval({ organizationId, budgetId: budget.id, context: auth.context });
+      const decision = decideStockApproval(gate, body.force === true, user.role);
+      if (decision.kind === "blocked") return jsonError(decision.message, 409, "stock_insufficient");
+      if (decision.kind === "forbidden") return jsonError(decision.message, 403, "stock_force_forbidden");
+      if (decision.kind === "forced") forcedShortage = decision.lines;
+    }
     // Idempotente: si ya hay una aprobación registrada, se devuelve tal cual.
     let applied: { count: number };
     try { applied = await withQuoteApproval(budget.id, organizationId, (tx) => tx.budget.updateMany({
@@ -90,6 +101,16 @@ export async function POST(request: Request) {
         summary: `Aprobó manualmente el presupuesto «${budget.title}» del cliente «${clientLabel}»`,
         detail: { changes: { status: { from: budget.status, to: "APPROVED" }, approvalMethod: { from: null, to: "manual" } } },
       });
+      if (forcedShortage) {
+        await recordAudit({
+          context: auth.context,
+          action: "status",
+          entity: "Budget",
+          entityId: budget.id,
+          summary: `Aprobó igual el presupuesto «${budget.title}» del cliente «${clientLabel}» sin stock suficiente (${forcedShortage.join(" · ")})`,
+          detail: { fields: { aprobarIgual: true, actor: user.name, rol: user.role, faltantes: forcedShortage } },
+        });
+      }
       // Evento automático (CONFIRMED) y su reserva; el panel ya validó budgets.write, el evento se crea
       // como parte de la aprobación. Si falla, la aprobación sigue y queda auditado.
       const auto = await ensureEventForApprovedBudget({ organizationId, budgetId: budget.id, actor: auth.context, plan: auth.context });

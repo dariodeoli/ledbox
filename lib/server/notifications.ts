@@ -621,6 +621,44 @@ async function reservationCandidates(organizationId: string): Promise<AdminNotif
   return candidates;
 }
 
+/**
+ * Alquileres (P1-3): equipos que salieron y vencieron sin volver (una alerta por evento) y
+ * retenciones de la tienda que vencen en pocas horas. Ambos nacen de filas reales.
+ */
+async function rentalCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
+  // Import diferido: el motor de alquileres (Prisma) no se arrastra a quien solo usa los helpers de fechas de este módulo.
+  const { listExpiringHolds, listOverdueReturns } = await import("./rental-alerts");
+  const [overdue, holds] = await Promise.all([listOverdueReturns(organizationId, now), listExpiringHolds(organizationId, now)]);
+  const candidates: AdminNotification[] = [];
+  const byEvent = new Map<string, typeof overdue>();
+  for (const row of overdue) byEvent.set(row.eventId, [...(byEvent.get(row.eventId) ?? []), row]);
+  for (const [eventId, rows] of byEvent) {
+    const worst = rows[0];
+    const things = rows.slice(0, 3).map((row) => `${row.inventoryName} (${row.pending})`).join(", ");
+    candidates.push({
+      id: `return_overdue:${eventId}`,
+      kind: "return_overdue",
+      level: "overdue",
+      title: worst.eventName,
+      subtitle: joinParts([worst.clientName, `Sin volver: ${things}${rows.length > 3 ? ` y ${rows.length - 3} más` : ""}`, `${worst.hoursLate} h de atraso`]),
+      date: dayKeyOf(new Date(worst.dueAt)),
+      href: "/eventos",
+    });
+  }
+  for (const hold of holds) {
+    candidates.push({
+      id: `hold_expiring:${hold.budgetId}`,
+      kind: "hold_expiring",
+      level: "soon",
+      title: hold.clientName ?? hold.budgetTitle,
+      subtitle: joinParts([hold.budgetTitle, `La retención del stock vence en ${hold.hoursLeft} h`]),
+      date: dayKeyOf(new Date(hold.expiresAt)),
+      href: "/presupuestos",
+    });
+  }
+  return candidates;
+}
+
 // ── Orden, deduplicación y recorte ──────────────────────────────────────────
 
 const LEVEL_ORDER: Record<AdminNotificationLevel, number> = { overdue: 0, soon: 1, info: 2 };
@@ -637,6 +675,8 @@ const KIND_ORDER: Record<AdminNotificationKind, number> = {
   lead: 7,
   portal_request: 8,
   payment_proof: 9,
+  return_overdue: 3,
+  hold_expiring: 3,
 };
 
 /** Urgencia primero (vencido → próximo → informativo) y, dentro de cada nivel, por fecha. */
@@ -698,14 +738,15 @@ export async function listAdminNotifications(
   organizationId: string,
   now = new Date(),
 ): Promise<{ notifications: AdminNotification[]; notificationCounts: AdminNotificationCounts }> {
-  const [core, extras, collections, expectedDue, reservations] = await Promise.all([
+  const [core, extras, collections, expectedDue, reservations, rental] = await Promise.all([
     coreCandidates(organizationId, now),
     extraCandidates(organizationId, now),
     collectionDueCandidates(organizationId, now),
     expectedDueCandidates(organizationId, now),
     reservationCandidates(organizationId),
+    rentalCandidates(organizationId, now),
   ]);
-  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections, ...expectedDue, ...reservations]).sort(compareNotifications);
+  const sorted = dedupeByEntityAndDay([...core, ...extras, ...collections, ...expectedDue, ...reservations, ...rental]).sort(compareNotifications);
   const notificationCounts: AdminNotificationCounts = { overdue: 0, soon: 0, info: 0, total: sorted.length };
   for (const notification of sorted) notificationCounts[notification.level] += 1;
   return { notifications: sorted.slice(0, NOTIFICATION_LIMIT), notificationCounts };
