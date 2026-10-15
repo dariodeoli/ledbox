@@ -44,9 +44,10 @@ test("el endpoint suma la edición del ítem sin romper los contratos", () => {
 
 test("el formulario de edición cubre el ítem completo", () => {
   const module = inventoryModuleSource();
-  assert.match(module, /title=\{`Editar producto · \$\{editForm\.name \|\| item\.name\}`\}/);
+  assert.match(module, /title=\{isCombo \? "Editar combo" : "Editar producto"\}/);
+  assert.match(module, /className="admin-edit-hero"[\s\S]{0,400}editForm\.name\.trim\(\) \|\| item\.name/, "el encabezado muestra foto, nombre y código");
   assert.match(module, /onSubmit=\{\(event\) => void submitEditItem\(event\)\}/);
-  assert.match(module, /<AdminDialog[\s\S]{0,200}title=\{`Editar producto/, "la edición vive en una ventana (AdminDialog)");
+  assert.match(module, /<AdminDialog[\s\S]{0,200}title=\{isCombo \? "Editar combo" : "Editar producto"/, "la edición vive en una ventana (AdminDialog)");
   for (const label of [
     "Artículo",
     "Categoría",
@@ -74,4 +75,15 @@ test("el formulario de edición cubre el ítem completo", () => {
   // El alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos) reemplaza al switch «Visible en la web».
   assert.match(module, /catalogAudience: form\.catalogAudience/);
   assert.match(module, /audience === "HIDDEN"\s*\?\s*"No se publica en la tienda web de la empresa\."/, "la ficha dice si se publica o no");
+});
+
+test("el editor ordena sus secciones: identidad, precio, medidas, stock, tienda, proveedor y costos, notas, componentes", () => {
+  const module = inventoryModuleSource();
+  const edit = module.slice(module.indexOf("export function InventoryEditDialog"));
+  const titles = ["Identidad", "Precio y cobro", "Medidas y capacidad", "Stock y depósito", "Tienda web", "Proveedor y costos", "Notas internas", "Componentes"];
+  const positions = titles.map((title) => edit.indexOf(`<AdminDialogSection title="${title}">`));
+  positions.forEach((position, index) => assert.ok(position > 0, `falta la sección «${titles[index]}»`));
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "las secciones están fuera de orden");
+  assert.match(edit, /\{showCosts \? \(\s*<AdminDialogSection title="Proveedor y costos">/, "proveedor y costos solo con permiso de costos");
+  assert.match(edit, /\.\.\.\(showCosts \? \{ replacementCost/, "sin permiso de costos no se mandan costos");
 });
