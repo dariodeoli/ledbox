@@ -5360,3 +5360,5 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .portal-table--items .portal-step { width: 44px; height: 44px; }
   .portal-table--items .portal-stepper input { height: 44px; }
 }
+.portal-table--items thead tr { padding-inline: 10px; }
+.portal-table--items td.portal-item-action-cell { justify-content: flex-start; }
