@@ -1471,7 +1471,7 @@ export type AdminProfile = {
 
 /** Marca de la empresa (`GET /api/admin/organization/branding`). */
 export type AdminOrganizationBranding = {
-  organization: { id: string; name: string; slug: string };
+  organization: { id: string; name: string; slug: string; slugEditable?: boolean; slugAliases?: string[] };
   logos: AdminOrganizationLogos;
 };
 

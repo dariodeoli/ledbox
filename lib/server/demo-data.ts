@@ -1,3 +1,4 @@
+import { assertOrganizationSlugAvailable, claimOrganizationSlug } from "./organization-slugs";
 import { createHash, randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
@@ -1106,7 +1107,12 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
   let organization = await db.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG } });
   const fresh = organization && !options?.reset ? await demoDataIsFresh(organization) : false;
   if (!organization) {
-    organization = await db.organization.create({ data: DEMO_ORGANIZATION });
+    organization = await db.$transaction(async (tx) => {
+      await assertOrganizationSlugAvailable(tx, DEMO_ORGANIZATION_SLUG, DEMO_ORGANIZATION.id);
+      const created = await tx.organization.create({ data: DEMO_ORGANIZATION });
+      await claimOrganizationSlug(tx, created.slug, created.id);
+      return created;
+    });
   } else if (organization.name !== DEMO_ORGANIZATION_NAME || !organization.active || !organization.isDemo) {
     organization = await db.organization.update({
       where: { id: organization.id },

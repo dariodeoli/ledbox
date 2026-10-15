@@ -3095,3 +3095,13 @@ model CollectionItem {
   @@index([itemId])
   @@index([organizationId])
 }
+
+/// Namespace duradero: identificador actual y anteriores de la misma empresa.
+/// Sin FK a propósito: al borrar una empresa su URL queda reservada al ID histórico.
+model OrganizationSlug {
+  slug           String   @id
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+}

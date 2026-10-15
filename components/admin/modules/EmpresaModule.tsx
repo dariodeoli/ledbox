@@ -12,6 +12,7 @@ import { AdminOrgLogo } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
 import { AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { orgSlugError, ORG_SLUG_MAX } from "@/lib/platform/alta-empresa";
 import { EmpresaPerfil } from "./EmpresaPerfil";
 
 /**
@@ -21,7 +22,7 @@ import { EmpresaPerfil } from "./EmpresaPerfil";
  * hasta 1 MB, comprimidos en el navegador, validados por magic bytes y servidos
  * solo con sesión.
  *
- * El identificador (`slug`) no se edita: es la referencia estable de la empresa.
+ * El ID interno es estable; el identificador web se cambia conservando los anteriores como alias.
  * Los datos para recibir pagos se administran en Finanzas → Bancos y cuentas.
  */
 
@@ -40,6 +41,9 @@ export function EmpresaModule() {
   const readOnly = demo;
 
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugError, setSlugError] = useState("");
+  const [savingSlug, setSavingSlug] = useState(false);
   const [nameError, setNameError] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [notice, setNotice] = useState("");
@@ -49,7 +53,7 @@ export function EmpresaModule() {
   const [versions, setVersions] = useState<Partial<Record<LogoVariant, string | null>>>({});
 
   useEffect(() => {
-    if (organization) setName(organization.name);
+    if (organization) { setName(organization.name); setSlug(organization.slug); }
   }, [organization]);
 
   const logos = useMemo<AdminOrganizationLogos>(() => {
@@ -84,6 +88,17 @@ export function EmpresaModule() {
     setNotice("Guardamos el nombre de la empresa: ya se ve en el chip del panel y en las hojas imprimibles.");
     branding.reload();
     reload();
+  }
+
+  async function saveSlug(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!organization || savingSlug || !organization.slugEditable) return;
+    setSavingSlug(true); setSlugError(""); setNotice("");
+    const result = await adminSend("/api/admin/organization/branding", { slug: slug.trim(), expectedSlug: organization.slug }, "PATCH");
+    setSavingSlug(false);
+    if (!result.ok) { setSlugError(result.error); return; }
+    setNotice("Guardamos el identificador. Las direcciones anteriores siguen abriendo tu empresa y quedan reservadas para ella.");
+    branding.reload(); reload();
   }
 
   async function uploadLogo(variant: LogoVariant, image: PreparedIdentityImage) {
@@ -151,11 +166,7 @@ export function EmpresaModule() {
                   disabled={readOnly || !organization}
                   hint="Se ve en el chip del panel y en las hojas imprimibles."
                 />
-                <div className="admin-settings-readonly">
-                  <span className="admin-field-label">Identificador</span>
-                  <p className="admin-detail-value">{organization?.slug ?? "—"}</p>
-                  <span className="admin-field-hint">No se edita: es la referencia estable de la empresa.</span>
-                </div>
+
               </div>
               <div className="admin-settings-actions">
                 <AdminButton
@@ -168,6 +179,17 @@ export function EmpresaModule() {
                   Guardar nombre
                 </AdminButton>
               </div>
+            </form>
+          </AdminPanel>
+
+          <AdminPanel title="Identificador y dirección web" icon="globe" meta="Las direcciones anteriores siguen activas">
+            <form className="admin-settings" onSubmit={saveSlug}>
+              <TextField label="Identificador" value={slug} onChange={(value) => { setSlug(value); setSlugError(value === organization?.slug ? "" : orgSlugError(value.trim()) ?? ""); setNotice(""); }} maxLength={ORG_SLUG_MAX}
+                error={slugError} disabled={readOnly || !organization?.slugEditable || savingSlug} hint="Minúsculas, números y guiones. Cambia la dirección de la tienda; las anteriores se conservan como alias de tu empresa." />
+              {organization ? <p className="admin-field-hint">Dirección actual: <Link href={`/tienda/${encodeURIComponent(organization.slug)}`}>/tienda/{organization.slug}</Link></p> : null}
+              {organization?.slugAliases?.length ? <p className="admin-field-hint">Identificadores anteriores conservados: {organization.slugAliases.join(", ")}</p> : null}
+              <div className="admin-settings-actions"><AdminButton type="submit" variant="primary" icon="check" busy={savingSlug}
+                disabled={readOnly || !organization?.slugEditable || slug.trim() === organization.slug || Boolean(orgSlugError(slug.trim()))}>Guardar identificador</AdminButton></div>
             </form>
           </AdminPanel>
 

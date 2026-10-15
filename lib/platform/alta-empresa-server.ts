@@ -1,3 +1,4 @@
+import { assertOrganizationSlugAvailable, claimOrganizationSlug, OrganizationSlugTaken } from "@/lib/server/organization-slugs";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { adminRoleLabel } from "@/lib/admin-format";
@@ -94,9 +95,11 @@ export async function createOrganizationWithOwnerInvite(
   let created: Array<{ invitation: { id: string; email: string; role: InviteeRole; expiresAt: Date }; token: string }>;
   try {
     created = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+      await assertOrganizationSlugAvailable(tx, input.slug, organizationId);
       await tx.organization.create({
         data: { id: organizationId, name: input.name, slug: input.slug, active: true, planId: plan.id, planStartedAt: now },
       });
+      await claimOrganizationSlug(tx, input.slug, organizationId);
       await tx.messageTemplate.createMany({
         data: DEFAULT_MESSAGE_TEMPLATES.map((template) => ({
           id: `${organizationId}_tpl_${template.key}`,
@@ -150,7 +153,7 @@ export async function createOrganizationWithOwnerInvite(
     });
   } catch (error) {
     // Carrera: otra alta tomó el slug entre la validación y el INSERT (la restricción única decide).
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return slugTaken;
+    if (error instanceof OrganizationSlugTaken || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) return slugTaken;
     throw error;
   }
 
