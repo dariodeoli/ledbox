@@ -22,6 +22,17 @@ import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk
 import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 import { AttachmentInput, Combobox, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryThumb, KIND_PICK_OPTIONS, STATUS_PICK_OPTIONS } from "./InventoryParts";
+import { PriceTiersEditor, readTierRows, tierRowsFrom, type TierRow } from "./PriceTiersEditor";
+import { tiersForAudience } from "@/lib/price-tiers";
+
+/** Valida las dos tablas «Precio por días» del formulario antes de mandarlas. */
+function readFormTiers(listRows: TierRow[], wholesaleRows: TierRow[]) {
+  const list = readTierRows(listRows);
+  if (!list.ok) return { ok: false as const, error: `Cliente final: ${list.error}` };
+  const wholesale = readTierRows(wholesaleRows);
+  if (!wholesale.ok) return { ok: false as const, error: `Mayorista: ${wholesale.error}` };
+  return { ok: true as const, list: list.tiers, wholesale: wholesale.tiers };
+}
 
 /** Aviso del alta o la edición: el tono lo decide si hubo algo que advertir. */
 export type InventoryNotice = { message: string; tone: "ok" | "warn" };
@@ -41,23 +52,20 @@ const EMPTY_FORM = {
   /** «Se cobra»: por día (default) o por evento. */
   billingUnit: "DAILY",
   listPrice: "",
-  listFromDays: "0",
-  listFromPrice: "",
   wholesalePrice: "",
-  wholesaleFromDays: "0",
-  wholesaleFromPrice: "",
   minimumPrice: "",
+  /** «Precio por días» de cada frente (escalones). */
+  listTiers: [] as TierRow[],
+  wholesaleTiers: [] as TierRow[],
 };
 
 /** Precios de los formularios (issues #90 y #110), en el contrato de `MoneyField`. */
 const EMPTY_PRICES = {
   listPrice: "",
-  listFromDays: "0",
-  listFromPrice: "",
   wholesalePrice: "",
-  wholesaleFromDays: "0",
-  wholesaleFromPrice: "",
   minimumPrice: "",
+  listTiers: [] as TierRow[],
+  wholesaleTiers: [] as TierRow[],
 };
 
 /** Ítem completo en edición (issue #111): datos, costos, notas, foto y precios. */
@@ -104,12 +112,10 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     // distintas (la subida se cambia o se quita con sus botones).
     imageUrl: item.imageUploaded ? "" : item.imageUrl ?? "",
     listPrice: item.listPrice > 0 ? String(item.listPrice) : "",
-    listFromDays: String(item.listFromDays),
-    listFromPrice: item.listFromPrice > 0 ? String(item.listFromPrice) : "",
     wholesalePrice: item.wholesalePrice > 0 ? String(item.wholesalePrice) : "",
-    wholesaleFromDays: String(item.wholesaleFromDays),
-    wholesaleFromPrice: item.wholesaleFromPrice > 0 ? String(item.wholesaleFromPrice) : "",
     minimumPrice: item.minimumPrice > 0 ? String(item.minimumPrice) : "",
+    listTiers: tierRowsFrom(tiersForAudience(item.priceTiers, "RETAIL")),
+    wholesaleTiers: tierRowsFrom(tiersForAudience(item.priceTiers, "WHOLESALE")),
   };
 }
 
@@ -117,34 +123,31 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
 function priceWarningFor(values: InventoryPriceValues): string | null {
   return inventoryPriceWarning({
     listPrice: values.listPrice ?? 0,
-    listFromPrice: values.listFromPrice ?? 0,
+    listFromPrice: 0,
     wholesalePrice: values.wholesalePrice ?? 0,
-    wholesaleFromPrice: values.wholesaleFromPrice ?? 0,
+    wholesaleFromPrice: 0,
     minimumPrice: values.minimumPrice ?? 0,
   });
 }
 
 /**
- * Bloque de precios de un frente (issue #110): precio normal, umbral «desde X
- * días» (input chiquito: son días) y precio desde esos días. Lo comparten el
- * alta y la edición, así la regla se carga igual en los dos lados.
+ * Bloque de precios de un frente: el precio normal por día y, debajo, la tabla «Precio por días»
+ * (escalones). Lo comparten el alta y la edición, así la regla se carga igual en los dos lados.
  */
 function PriceFrontFields({
   title,
   normalValue,
-  daysValue,
-  fromValue,
+  rows,
+  perEvent,
   onNormal,
-  onDays,
-  onFrom,
+  onRows,
 }: {
   title: string;
   normalValue: string;
-  daysValue: string;
-  fromValue: string;
+  rows: TierRow[];
+  perEvent: boolean;
   onNormal: (value: string) => void;
-  onDays: (value: string) => void;
-  onFrom: (value: string) => void;
+  onRows: (rows: TierRow[]) => void;
 }) {
   return (
     <div className="admin-form-group admin-form-group--prices">
@@ -154,23 +157,9 @@ function PriceFrontFields({
         help={`${title}: tarifa normal de este segmento; la duración no cambia el segmento del cliente.`}
         value={normalValue}
         onChange={onNormal}
-        hint="En guaraníes; vacío o 0 = sin cargar."
+        hint="En guaraníes, por día (o por evento); vacío o 0 = sin cargar."
       />
-      <NumberField
-        label="Desde (días)"
-        help="Umbral de duración para este frente de precios; 0 desactiva su regla."
-        maxLength={4}
-        value={daysValue}
-        onChange={onDays}
-        hint="0 = sin regla."
-      />
-      <MoneyField
-        label="Precio desde esos días"
-        help={`${title}: tarifa desde su propio umbral de días, independiente del otro segmento.`}
-        value={fromValue}
-        onChange={onFrom}
-        hint="Vacío o 0 = sin precio por duración."
-      />
+      <PriceTiersEditor title={title} rows={rows} onChange={onRows} normalPrice={normalValue} perEvent={perEvent} />
     </div>
   );
 }
@@ -318,6 +307,11 @@ export function InventoryCreateDialog({
       setFormError(prices.error);
       return;
     }
+    const tiers = readFormTiers(form.listTiers, form.wholesaleTiers);
+    if (!tiers.ok) {
+      setFormError(tiers.error);
+      return;
+    }
     setBusy(true);
     // El alta de ítems vive en `/api/admin/resources` (contrato existente del panel).
     const result = await adminSend<{ inventory?: { id?: string }; warning?: string }>("/api/admin/resources", {
@@ -331,12 +325,9 @@ export function InventoryCreateDialog({
       imageUrl: image,
       billingUnit: form.billingUnit,
       listPrice: prices.values.listPrice ?? 0,
-      listFromDays: prices.values.listFromDays ?? 0,
-      listFromPrice: prices.values.listFromPrice ?? 0,
       wholesalePrice: prices.values.wholesalePrice ?? 0,
-      wholesaleFromDays: prices.values.wholesaleFromDays ?? 0,
-      wholesaleFromPrice: prices.values.wholesaleFromPrice ?? 0,
       minimumPrice: prices.values.minimumPrice ?? 0,
+      priceTiers: [...tiers.list.map((tier) => ({ ...tier, audience: "RETAIL" })), ...tiers.wholesale.map((tier) => ({ ...tier, audience: "WHOLESALE" }))],
     });
     if (!result.ok) {
       setBusy(false);
@@ -476,20 +467,18 @@ export function InventoryCreateDialog({
           <PriceFrontFields
             title="Precio cliente final"
             normalValue={form.listPrice}
-            daysValue={form.listFromDays}
-            fromValue={form.listFromPrice}
+            rows={form.listTiers}
+            perEvent={form.billingUnit === "EVENT"}
             onNormal={(value) => setForm({ ...form, listPrice: value })}
-            onDays={(value) => setForm({ ...form, listFromDays: value })}
-            onFrom={(value) => setForm({ ...form, listFromPrice: value })}
+            onRows={(listTiers) => setForm({ ...form, listTiers })}
           />
           <PriceFrontFields
             title="Precio mayorista"
             normalValue={form.wholesalePrice}
-            daysValue={form.wholesaleFromDays}
-            fromValue={form.wholesaleFromPrice}
+            rows={form.wholesaleTiers}
+            perEvent={form.billingUnit === "EVENT"}
             onNormal={(value) => setForm({ ...form, wholesalePrice: value })}
-            onDays={(value) => setForm({ ...form, wholesaleFromDays: value })}
-            onFrom={(value) => setForm({ ...form, wholesaleFromPrice: value })}
+            onRows={(wholesaleTiers) => setForm({ ...form, wholesaleTiers })}
           />
           <div className="admin-form-group admin-form-group--min">
             <span className="admin-form-group-title">Precio mínimo</span>
@@ -638,6 +627,11 @@ export function InventoryEditDialog({
       setEditError(prices.error);
       return;
     }
+    const tiers = readFormTiers(editForm.listTiers, editForm.wholesaleTiers);
+    if (!tiers.ok) {
+      setEditError(tiers.error);
+      return;
+    }
     const replacementCost = inventoryPriceValue(editForm.replacementCost);
     const dailyCost = inventoryPriceValue(editForm.dailyCost);
     if (replacementCost === false || dailyCost === false) {
@@ -680,12 +674,9 @@ export function InventoryEditDialog({
       kind: "prices",
       id: item.id,
       listPrice: prices.values.listPrice ?? 0,
-      listFromDays: prices.values.listFromDays ?? 0,
-      listFromPrice: prices.values.listFromPrice ?? 0,
       wholesalePrice: prices.values.wholesalePrice ?? 0,
-      wholesaleFromDays: prices.values.wholesaleFromDays ?? 0,
-      wholesaleFromPrice: prices.values.wholesaleFromPrice ?? 0,
       minimumPrice: prices.values.minimumPrice ?? 0,
+      priceTiers: [...tiers.list.map((tier) => ({ ...tier, audience: "RETAIL" })), ...tiers.wholesale.map((tier) => ({ ...tier, audience: "WHOLESALE" }))],
     });
     const warnings: string[] = [];
     if (!priceResult.ok) warnings.push(`Los precios no se guardaron: ${priceResult.error}`);
@@ -796,20 +787,18 @@ export function InventoryEditDialog({
           <PriceFrontFields
             title="Precio cliente final"
             normalValue={editForm.listPrice}
-            daysValue={editForm.listFromDays}
-            fromValue={editForm.listFromPrice}
+            rows={editForm.listTiers}
+            perEvent={editForm.billingUnit === "EVENT"}
             onNormal={(value) => setEditForm({ ...editForm, listPrice: value })}
-            onDays={(value) => setEditForm({ ...editForm, listFromDays: value })}
-            onFrom={(value) => setEditForm({ ...editForm, listFromPrice: value })}
+            onRows={(listTiers) => setEditForm({ ...editForm, listTiers })}
           />
           <PriceFrontFields
             title="Precio mayorista"
             normalValue={editForm.wholesalePrice}
-            daysValue={editForm.wholesaleFromDays}
-            fromValue={editForm.wholesaleFromPrice}
+            rows={editForm.wholesaleTiers}
+            perEvent={editForm.billingUnit === "EVENT"}
             onNormal={(value) => setEditForm({ ...editForm, wholesalePrice: value })}
-            onDays={(value) => setEditForm({ ...editForm, wholesaleFromDays: value })}
-            onFrom={(value) => setEditForm({ ...editForm, wholesaleFromPrice: value })}
+            onRows={(wholesaleTiers) => setEditForm({ ...editForm, wholesaleTiers })}
           />
           <div className="admin-form-group admin-form-group--min">
             <span className="admin-form-group-title">Precio mínimo</span>

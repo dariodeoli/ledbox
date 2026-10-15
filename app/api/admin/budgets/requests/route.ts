@@ -1,4 +1,4 @@
-import { selectionSubtotal } from "@/lib/quote-selection";
+import { selectionLine } from "@/lib/quote-selection";
 import { recalculateBudgetPaymentPlan } from "@/lib/server/budget-payment-plan";
 import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { db } from "@/lib/server/db";
@@ -65,7 +65,7 @@ async function resolveRequest(request: Request) {
           total: true,
           revisionRequestedAt: true,
           client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-          items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } },
+          items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true, pricingSnapshot: true } },
         },
       },
     },
@@ -111,7 +111,8 @@ async function resolveRequest(request: Request) {
 
     // Ítems: la propuesta (o la contra-oferta del equipo) se cruza contra los
     // ítems reales; el precio unitario lo pone el presupuesto, nunca el cliente.
-    const appliedItems: Array<{ id: string; quantity: number; days: number; subtotal: number; excluded: boolean; name: string }> = [];
+    // `days` = días del alquiler que ve el cliente; `storedDays`/`unitPrice` = lo que se guarda en la línea (escalones por días).
+    const appliedItems: Array<{ id: string; quantity: number; days: number; storedDays: number; unitPrice: number; subtotal: number; excluded: boolean; name: string }> = [];
     if (changeRequest.kind === "items" || payload.items.length > 0) {
       const rawItems = counter.items !== undefined ? counter.items : payload.items;
       const proposal = resolveItemProposal(budget.items.map((item) => ({ ...item, billingUnit: eventBilledIds.has(item.id) ? "EVENT" : null })), rawItems, { requireChange: false });
@@ -120,7 +121,8 @@ async function resolveRequest(request: Request) {
       for (const row of proposal.value) {
         const item = byId.get(row.id);
         if (!item) continue;
-        appliedItems.push({ id: item.id, quantity: row.quantity, days: row.days, excluded: row.excluded, subtotal: selectionSubtotal({ ...item, ...row }), name: item.name });
+        const line = selectionLine(item, row);
+        appliedItems.push({ id: item.id, quantity: row.quantity, days: row.days, storedDays: line.days, unitPrice: line.unitPrice, excluded: row.excluded, subtotal: line.subtotal, name: item.name });
       }
     }
     const appliedById = new Map(appliedItems.map((item) => [item.id, item]));
@@ -164,7 +166,7 @@ async function resolveRequest(request: Request) {
       for (const item of appliedItems) {
         await tx.budgetItem.update({
           where: { id: item.id },
-          data: { quantity: item.quantity, days: item.days, excluded: item.excluded, subtotal: item.subtotal },
+          data: { quantity: item.quantity, days: item.storedDays, unitPrice: item.unitPrice, excluded: item.excluded, subtotal: item.subtotal },
         });
       }
       await tx.budget.update({

@@ -1,5 +1,6 @@
 "use client";
 
+import { tierLabel, tierPreview, previewDays, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { useEffect, useId, useMemo, useState } from "react";
 import {
   damageSummary,
@@ -158,6 +159,19 @@ function AvailabilityTimeline({ item }: { item: AdminInventoryItemRow }) {
  * de unidades (alta, estado, edición, lote) vive acá; la edición del producto y
  * el archivado los resuelve el módulo con el mismo contrato de siempre.
  */
+/** «Precio por días» de un frente en la ficha: cada escalón y una vista previa con la regla real. */
+function TierList({ tiers, base, perEvent }: { tiers: PriceTier[]; base: number; perEvent: boolean }) {
+  if (tiers.length === 0 || perEvent) return null;
+  return (
+    <>
+      {tiers.map((tier) => (
+        <small key={tier.fromDays}>{tierLabel(tier)}</small>
+      ))}
+      <small className="admin-muted" data-testid="ficha-tier-preview">{tierPreview({ basePrice: base, tiers }, previewDays(tiers))}</small>
+    </>
+  );
+}
+
 export function InventoryFicha({
   item,
   inventory,
@@ -259,7 +273,7 @@ export function InventoryFicha({
 
   const summary = stockSummary(item, rangeActive);
   const problems = unitProblemCounts([item]);
-  const priceWarning = inventoryPriceWarning(item);
+  const priceWarning = inventoryPriceWarning({ ...item, listFromPrice: 0, wholesaleFromPrice: 0 });
   const usedIn = useMemo(() => (isCombo ? [] : combosUsing(inventory, item.id)), [inventory, isCombo, item.id]);
   const audience = effectiveAudience(item);
   const toggleUnit = (id: string) =>
@@ -764,20 +778,12 @@ export function InventoryFicha({
           <div>
             <dt>Cliente final</dt>
             <dd>{priceText(item.listPrice)}</dd>
-            {item.listFromPrice > 0 && item.listFromDays > 0 ? (
-              <small>
-                {daysText(item.listFromDays)}: {priceText(item.listFromPrice)}
-              </small>
-            ) : null}
+            <TierList tiers={tiersForAudience(item.priceTiers, "RETAIL")} base={item.listPrice} perEvent={item.billingUnit === "EVENT"} />
           </div>
           <div>
             <dt>Mayorista</dt>
             <dd>{priceText(item.wholesalePrice)}</dd>
-            {item.wholesaleFromPrice > 0 && item.wholesaleFromDays > 0 ? (
-              <small>
-                {daysText(item.wholesaleFromDays)}: {priceText(item.wholesaleFromPrice)}
-              </small>
-            ) : null}
+            <TierList tiers={tiersForAudience(item.priceTiers, "WHOLESALE")} base={item.wholesalePrice} perEvent={item.billingUnit === "EVENT"} />
           </div>
           <div>
             <dt>Mínimo</dt>

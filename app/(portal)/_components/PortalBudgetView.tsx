@@ -43,6 +43,8 @@ import {
 } from "@/lib/field-rules";
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 import { privacyPolicyUrl } from "@/lib/public-config";
+import { portalItemLine } from "@/lib/quote-selection";
+import type { PackageSummary } from "@/lib/price-tiers";
 import { PortalCardTitle } from "./PortalCardTitle";
 import { PortalNextStep } from "./PortalNextStep";
 import type { AdminTone } from "@/lib/admin-format";
@@ -341,6 +343,17 @@ function Stepper({
  * fija, cuadrada, foto entera con `contain`— y fallback al ícono del módulo si
  * no hay imagen o la URL no carga (nunca un cuadro roto).
  */
+/** Paquete (combo): precio del paquete, suma de sus piezas por separado y ahorro. Solo con precios completos. */
+function PortalPackageNote({ summary, quantity }: { summary: PackageSummary; quantity: number }) {
+  if (summary.incomplete || summary.packageTotal <= 0) return null;
+  return (
+    <small className="portal-item-note portal-package-note" data-testid="portal-package">
+      Paquete: {formatMoney(summary.packageTotal)} por unidad · piezas por separado: {formatMoney(summary.unitSum)}
+      {summary.savings > 0 ? <> · <strong>ahorrás {formatMoney(summary.savings * quantity)}</strong></> : null}
+    </small>
+  );
+}
+
 function PortalItemThumb({ imageUrl }: { imageUrl: string | null }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [imageUrl]);
@@ -517,7 +530,7 @@ export function PortalBudgetView({
     () =>
       budget.items.reduce((sum, item) => {
         const current = draft[item.id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
-        return sum + (current.excluded ? 0 : item.unitPrice * current.quantity * current.days);
+        return sum + portalItemLine(item, current).total;
       }, 0),
     [budget.items, draft],
   );
@@ -1497,6 +1510,7 @@ export function PortalBudgetView({
                         ? draft[item.id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) }
                         : { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
                       const changed = !approved && (current.quantity !== item.quantity || current.days !== item.days || Boolean(current.excluded) !== Boolean(item.excluded));
+                      const shown = portalItemLine(item, current);
                       return (
                         <tr key={item.id} data-excluded={current.excluded ? "true" : undefined} data-changed={changed ? "true" : undefined}>
                           <td className="portal-item-cell">
@@ -1506,6 +1520,7 @@ export function PortalBudgetView({
                                 <strong className="portal-item-name">{item.name}</strong>
                                 {current.excluded ? <small className="portal-item-note">Retirado / no incluido</small> : null}
                                 {item.notes ? <details><summary>Detalles</summary><p className="portal-item-note">{item.notes}</p></details> : null}
+                                {shown.package && !current.excluded ? <PortalPackageNote summary={shown.package} quantity={current.quantity} /> : null}
                                 <div className="budget-client-quantity">
                                   <span>Cantidad</span>
                                   {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
@@ -1520,8 +1535,8 @@ export function PortalBudgetView({
                               </span>
                             </span>
                           </td>
-                          <td className="portal-num" data-label="Precio unitario">{formatMoney(item.unitPrice)}</td>
-                          <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(current.excluded ? 0 : item.unitPrice * current.quantity * current.days)}</td>
+                          <td className="portal-num" data-label="Precio unitario">{formatMoney(shown.unitPrice)}{shown.periodTotal ? <small className="portal-item-note">total por {formatNumber(current.days)} {current.days === 1 ? "día" : "días"}</small> : null}</td>
+                          <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(shown.total)}</td>
                           {canEdit ? (
                             <td className="portal-item-action-cell">
                               <button

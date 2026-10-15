@@ -8,6 +8,7 @@
  * (`lib/field-rules.ts`); acá no se duplican.
  */
 
+import { PRICE_TIER_MAX_DAYS, PRICE_TIER_MAX_ROWS, PRICE_TIER_PRICE_MAX, sortTiers, type PriceTier } from "@/lib/price-tiers";
 import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
@@ -51,6 +52,11 @@ export type CatalogProduct = {
   precio: number | null;
   /** Cómo se cobra: por evento (por defecto) o por día. */
   cobro: "evento" | "dia";
+  /**
+   * «Precio por días» del cliente final: `precios_dias: [{desde_dias, modo: "dia"|"total", precio}]`.
+   * Vacío/ausente = no toca los escalones que el producto ya tenga.
+   */
+  preciosDias?: PriceTier[];
   cantidad: number | null;
   medidas: string | null;
   capacidad: string | null;
@@ -71,6 +77,7 @@ export type ProblemKind =
   | "nombre-invalido"
   | "tipo-invalido"
   | "cobro-invalido"
+  | "precios-dias-invalido"
   | "precio-invalido"
   | "precio-cero"
   | "cantidad-invalida"
@@ -161,6 +168,46 @@ function parseWholeNumber(raw: unknown): number | null | false {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 100_000 ? value : false;
 }
 
+/**
+ * «Precio por días»: acepta `[{desde_dias, modo: "dia"|"total", precio}]` (JSON) o el texto de planilla
+ * «3:dia:90000; 5:total:300000». Un escalón «dia» es precio por día; «total» es el total del período.
+ */
+function parseTierEntries(raw: unknown): { ok: true; list: PriceTier[] } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === "") return { ok: true, list: [] };
+  let entries: unknown[];
+  if (typeof raw === "string") {
+    const clean = raw.trim();
+    if (!clean || clean.toLowerCase() === "null") return { ok: true, list: [] };
+    entries = clean.split(/[;\n]+/).flatMap((part) => {
+      const piece = part.trim();
+      if (!piece) return [];
+      const [desde, modo, precio] = piece.split(":").map((value) => value.trim());
+      return [{ desde_dias: desde, modo, precio }];
+    });
+  } else if (Array.isArray(raw)) {
+    entries = raw;
+  } else {
+    return { ok: false, error: "«precios_dias» debe ser una lista." };
+  }
+  if (entries.length > PRICE_TIER_MAX_ROWS) return { ok: false, error: `«precios_dias» admite hasta ${PRICE_TIER_MAX_ROWS} escalones.` };
+  const seen = new Set<number>();
+  const list: PriceTier[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") return { ok: false, error: "Un escalón de «precios_dias» no tiene el formato {desde_dias, modo, precio}." };
+    const row = entry as Record<string, unknown>;
+    const desde = parseWholeNumber(row.desde_dias);
+    const modo = String(row.modo ?? "").trim().toLowerCase().replace("í", "i");
+    const precio = parsePygAmount(row.precio);
+    if (desde === false || desde === null || desde > PRICE_TIER_MAX_DAYS) return { ok: false, error: `«desde_dias» debe ser un entero de 1 a ${PRICE_TIER_MAX_DAYS}.` };
+    if (modo !== "dia" && modo !== "total") return { ok: false, error: "«modo» debe ser «dia» (precio por día) o «total» (total del período)." };
+    if (precio === false || precio === null || precio < 1 || precio > PRICE_TIER_PRICE_MAX) return { ok: false, error: "«precio» del escalón debe ser un entero en guaraníes mayor a 0." };
+    if (seen.has(desde)) return { ok: false, error: `Hay dos escalones desde ${desde} días.` };
+    seen.add(desde);
+    list.push({ fromDays: desde, mode: modo === "total" ? "TOTAL" : "PER_DAY", price: precio });
+  }
+  return { ok: true, list: sortTiers(list) };
+}
+
 /** Acepta `[{codigo,cantidad}]` o el texto de planilla «743x2; 811x4». */
 function parseComponents(raw: unknown): { ok: true; list: CatalogComponent[] } | { ok: false; error: string } {
   if (raw === null || raw === undefined || raw === "") return { ok: true, list: [] };
@@ -227,6 +274,11 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     problems.push(problem("error", "precio-invalido", codigo, fila, `Código ${codigo}: ${FIELD_MESSAGES.price}`));
     return null;
   }
+  const preciosDias = parseTierEntries(row.precios_dias);
+  if (!preciosDias.ok) {
+    problems.push(problem("error", "precios-dias-invalido", codigo, fila, `Código ${codigo}: ${preciosDias.error}`));
+    return null;
+  }
   const cantidad = parseWholeNumber(row.cantidad);
   if (cantidad === false) {
     problems.push(problem("error", "cantidad-invalida", codigo, fila, `Código ${codigo}: la cantidad debe ser un entero de 1 o más (o null).`));
@@ -251,6 +303,7 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     tipo: tipoRaw as CatalogProduct["tipo"],
     precio,
     cobro: cobroRaw,
+    preciosDias: preciosDias.list,
     cantidad,
     medidas: text(row.medidas, 120),
     capacidad: text(row.capacidad, 120),

@@ -1,5 +1,6 @@
 "use client";
 
+import { tiersForAudience } from "@/lib/price-tiers";
 import { formatNumber, inventoryKindLabel, inventoryStatusLabel, statusTone } from "@/lib/admin-format";
 import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
@@ -160,7 +161,7 @@ export function InventoryList(props: InventoryListProps) {
               { label: "Tienda", value: <AudienceChip item={item} /> },
               {
                 label: "Precio de lista",
-                value: <PriceValue normal={item.listPrice} days={item.listFromDays} from={item.listFromPrice} />,
+                value: <PriceValue normal={item.listPrice} tiers={tiersForAudience(item.priceTiers, "RETAIL")} />,
                 title: pricesTitle(item),
               },
             ],
@@ -227,10 +228,10 @@ export function InventoryList(props: InventoryListProps) {
             </AdminCell>
             <AdminCell title={writable ? `Cambiar estado: ${item.name}` : `Estado: ${inventoryStatusLabel(item.status)}`}>{statusControl(item)}</AdminCell>
             <AdminCell end title={pricesTitle(item)}>
-              <PriceValue normal={item.listPrice} days={item.listFromDays} from={item.listFromPrice} />
+              <PriceValue normal={item.listPrice} tiers={tiersForAudience(item.priceTiers, "RETAIL")} />
             </AdminCell>
             <AdminCell end title={pricesTitle(item)}>
-              <PriceValue normal={item.wholesalePrice} days={item.wholesaleFromDays} from={item.wholesaleFromPrice} />
+              <PriceValue normal={item.wholesalePrice} tiers={tiersForAudience(item.priceTiers, "WHOLESALE")} />
             </AdminCell>
             <AdminCell>
               <AudienceChip item={item} />

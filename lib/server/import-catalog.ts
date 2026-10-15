@@ -15,6 +15,7 @@ import { recordAudit, type AuditContext } from "@/lib/server/audit";
 import { createInventoryUnits, isUniqueConstraintError } from "@/lib/server/inventory-units";
 import { saveCombo } from "@/lib/server/inventory-combos";
 import { lockInventoryItems } from "@/lib/server/inventory-availability";
+import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
   codesToLookUp,
@@ -121,6 +122,7 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     if (product.cantidad !== null && current.quantity < product.cantidad) {
       await createInventoryUnits(tx, { organizationId, inventoryId: planned.existingId, name: product.nombre, quantity: product.cantidad - current.quantity });
     }
+    if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     return { id: planned.existingId, created: false, photo: photoChanged };
   }
   const id = randomUUID();
@@ -138,6 +140,7 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     },
   });
   await createInventoryUnits(tx, { organizationId, inventoryId: id, name: product.nombre, quantity: planned.unidades });
+  if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
   return { id, created: true, photo: Boolean(photo) };
 }
 
@@ -159,6 +162,7 @@ async function writeComboMeta(tx: Tx, organizationId: string, id: string, planne
       ...(photoChanged ? { imageData: photo!.data, imageMime: photo!.mime } : {}),
     },
   });
+  if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
   return photoChanged;
 }
 

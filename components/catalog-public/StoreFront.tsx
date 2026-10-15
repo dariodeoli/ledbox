@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { PREORDER_RESPONSE_HOURS, preorderWhatsappUrl } from "@/lib/catalog-public";
 import { storefrontThemeVars } from "@/lib/storefront-theme";
 import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-public";
-import { CatalogBrowser } from "./CatalogBrowser";
+import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
 
 /**
  * Tienda web de una empresa (portada + catálogo). Componente de servidor: arma la
@@ -17,6 +17,8 @@ type Props = {
   showPrices: boolean;
   demo: boolean;
   range: { fromKey: string; toKey: string; days: number } | null;
+  /** Zonas de flete de la empresa (sin precios si la tienda no los muestra). */
+  zones?: CatalogZoneView[];
   initialCategory: string | null;
   /** Ruta de la tienda (para los links de categoría). */
   basePath: string;
@@ -55,7 +57,7 @@ const STEPS = [
   { title: "Te respondemos con la cotización", text: `En hasta ${PREORDER_RESPONSE_HOURS} horas hábiles. Recién ahí se confirma la reserva: el pedido solo no la asegura.` },
 ] as const;
 
-export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null }: Props) {
+export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [] }: Props) {
   const style = storefrontThemeVars(store.theme) as CSSProperties;
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
@@ -128,6 +130,7 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
           items={items}
           range={range}
           initialCategory={initialCategory}
+          zones={zones}
         />
 
         <section id="como-funciona" className="cp-section" aria-labelledby="como">

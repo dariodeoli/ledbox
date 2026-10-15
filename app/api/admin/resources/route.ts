@@ -21,6 +21,8 @@ import {
   personNameValid,
   readInventoryPriceValues,
 } from "@/lib/field-rules";
+import { readAudienceTiers, tierWarnings, tiersForAudience } from "@/lib/price-tiers";
+import { replacePriceTiers } from "@/lib/server/price-tier-store";
 import { PROMOTER_AVAILABILITIES, type PromoterAvailabilityValue } from "@/lib/admin-types";
 
 export const runtime = "nodejs";
@@ -133,6 +135,7 @@ export async function GET(request: Request) {
             orderBy: { name: "asc" },
             take: 300,
             omit: { imageData: true },
+            include: { priceTiers: { orderBy: [{ audience: "asc" }, { fromDays: "asc" }], select: { audience: true, fromDays: true, mode: true, price: true } } },
           })
           .then((items) =>
             items.map((item) => {
@@ -206,6 +209,9 @@ export async function POST(request: Request) {
     if (imageUrl === false) return jsonError(FIELD_MESSAGES.image, 400);
     const prices = readInventoryPriceValues(body);
     if (!prices.ok) return jsonError(prices.error, 400);
+    // Precio por días: escalones opcionales de cada frente (`[{ audience, fromDays, mode, price }]`).
+    const tiers = readAudienceTiers(body.priceTiers);
+    if (!tiers.ok) return jsonError(tiers.error, 400);
     const quantity = typeof body.quantity === "number" && Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
     // El ítem y sus unidades nacen juntos (issue #112): `quantity` = unidades reales.
     let inventory;
@@ -223,11 +229,7 @@ export async function POST(request: Request) {
             quantity,
             ...newItemAudience(body),
             listPrice: prices.values.listPrice ?? 0,
-            listFromDays: prices.values.listFromDays ?? 0,
-            listFromPrice: prices.values.listFromPrice ?? 0,
             wholesalePrice: prices.values.wholesalePrice ?? 0,
-            wholesaleFromDays: prices.values.wholesaleFromDays ?? 0,
-            wholesaleFromPrice: prices.values.wholesaleFromPrice ?? 0,
             minimumPrice: prices.values.minimumPrice ?? 0,
             billingUnit: readBillingUnit(body.billingUnit) ?? "DAILY",
           },
@@ -238,6 +240,7 @@ export async function POST(request: Request) {
           name: created.name,
           quantity,
         });
+        if (tiers.tiers.length) await replacePriceTiers(tx, auth.context.organizationId, created.id, tiers.tiers);
         return created;
       });
     } catch (error) {
@@ -265,18 +268,14 @@ export async function POST(request: Request) {
           "sku",
           "imageUrl",
           "listPrice",
-          "listFromDays",
-          "listFromPrice",
           "wholesalePrice",
-          "wholesaleFromDays",
-          "wholesaleFromPrice",
           "minimumPrice",
           "billingUnit",
         ]),
       },
     });
     // Aviso (no error) si un precio rompe la coherencia entre frentes o con su regla.
-    const warning = inventoryPriceWarning(inventory);
+    const warning = [inventoryPriceWarning({ ...inventory, listFromPrice: 0, wholesaleFromPrice: 0 }), tierWarnings(inventory.listPrice, tiersForAudience(tiers.tiers, "RETAIL"))].filter(Boolean).join(" ") || null;
     return Response.json(warning ? { inventory, warning } : { inventory }, { status: 201 });
   }
 

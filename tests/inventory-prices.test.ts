@@ -64,10 +64,10 @@ test("el contrato del panel tipa los precios y las rutas los validan de una vez"
     assert.match(repoFile(route), /readInventoryPriceValues\(body\)|readInventoryPriceValues\(/, `${route}: falta la validación compartida`);
   }
   const create = repoFile("app/api/admin/resources/route.ts");
-  assert.match(create, /inventoryPriceWarning\(inventory\)/);
+  assert.match(create, /inventoryPriceWarning\(/);
   const update = repoFile("app/api/admin/inventory/route.ts");
   assert.match(update, /kind === "prices"/);
-  assert.match(update, /inventoryPriceWarning\(inventory\)/);
+  assert.match(update, /inventoryPriceWarning\(/);
 });
 
 test("el módulo Inventario muestra y edita los precios por frente", () => {
@@ -82,14 +82,16 @@ test("el módulo Inventario muestra y edita los precios por frente", () => {
       `falta el bloque «${title}»`,
     );
   }
-  for (const label of ["Precio normal", "Desde (días)", "Precio desde esos días", "Piso de venta"]) {
+  for (const label of ["Precio normal", "Piso de venta"]) {
     assert.ok(module.includes(`label="${label}"`), `falta el campo «${label}»`);
   }
+  // «Desde (días)» y «Precio desde esos días» son ahora las filas de la tabla «Precio por días» (escalones).
+  assert.ok(module.includes("Desde (días)") && module.includes("Precio por días"), "falta la tabla «Precio por días»");
   assert.match(module, /Editar producto: \$\{item\.name\}/);
   assert.match(module, /submitEditItem/);
   // El resumen legible y el aviso de coherencia se ven en lista/tarjetas/detalle.
   assert.match(module, /priceFrontText\("Final"/);
   assert.match(module, /priceFrontText\("Mayorista"/);
   assert.match(module, /formPriceWarning/);
-  assert.match(module, /const priceWarning = inventoryPriceWarning\(item\)/, "la ficha avisa precios incoherentes");
+  assert.match(module, /const priceWarning = inventoryPriceWarning\(/, "la ficha avisa precios incoherentes");
 });

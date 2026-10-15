@@ -1,6 +1,6 @@
 import { sandboxHiddenHere } from "./demo-host";
 import { securityDepositPublic } from "@/lib/budget-security-deposit";
-import { isEventBilledItem, resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
+import { isEventBilledItem, rentalDaysOf, repriceableSnapshot, resolveQuoteSelection, selectionLine, type SelectedQuoteItem } from "@/lib/quote-selection";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
 import { randomBytes } from "node:crypto";
@@ -39,16 +39,28 @@ const CODE_LENGTH = 20;
 
 export type PortalBudgetApprovalState = "PENDIENTE" | "APROBADO_DIGITAL" | "APROBADO_MANUAL" | "CAMBIOS_SOLICITADOS";
 
+/** Lo que el portal necesita para recalcular una línea: precios del frente del cliente, nunca el piso ni costos. */
+export type PortalItemPricing = {
+  billingUnit: "DAILY" | "EVENT";
+  base: number;
+  tiers: Array<{ fromDays: number; mode: "PER_DAY" | "TOTAL"; price: number }>;
+  /** Solo en paquetes: piezas con su precio para mostrar «suma por unidad» y «ahorro». */
+  package: Array<{ name: string; quantity: number; base: number; billingUnit: "DAILY" | "EVENT"; tiers: Array<{ fromDays: number; mode: "PER_DAY" | "TOTAL"; price: number }> }> | null;
+};
+
 export type PortalBudgetItem = {
   usesDays?: boolean;
   id: string;
   name: string;
   quantity: number;
+  /** Días del alquiler que ve el cliente (una línea con escalón «total» guarda `days = 1` y acá trae los reales). */
   days: number;
   unitPrice: number;
   subtotal: number;
   excluded?: boolean;
   notes: string | null;
+  /** Precios del ítem para recalcular al cambiar los días (escalones y paquete); sin piso ni costos. */
+  pricing?: PortalItemPricing | null;
   /**
    * Imagen del producto de inventario vinculado al ítem (issue #107), aditiva:
    * `null` sin vínculo, sin imagen o con una URL inválida. El portal la dibuja
@@ -353,7 +365,7 @@ type BudgetForPortal = {
   organization: { name: string; slug: string; paymentDetails: unknown };
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logo?: { updatedAt: Date } | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
-  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
+  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; pricingSnapshot?: unknown; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
   payments: Array<{ id: string; amount: number; status?: string }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
@@ -491,6 +503,18 @@ export function paymentPlanOf(budget: {
   };
 }
 
+/** Precios públicos de la línea (para recalcular en el navegador); `null` si la línea tiene precio fijo. */
+function portalPricing(item: Parameters<typeof repriceableSnapshot>[0]): PortalItemPricing | null {
+  const snapshot = repriceableSnapshot(item);
+  if (!snapshot) return null;
+  return {
+    billingUnit: snapshot.billingUnit,
+    base: snapshot.base,
+    tiers: snapshot.tiers,
+    package: snapshot.package ? snapshot.package.components.map(({ name, quantity, base, billingUnit, tiers }) => ({ name, quantity, base, billingUnit, tiers })) : null,
+  };
+}
+
 /** Propuesta de ítems de una solicitud, cruzada contra los ítems reales del presupuesto. */
 function requestItemsView(
   items: BudgetForPortal["items"],
@@ -504,7 +528,7 @@ function requestItemsView(
     if (!item) return [];
     const quantity = Math.max(1, Math.round(Number(row.quantity) || item.quantity));
     // Producto por evento: siempre 1 día aunque el payload guardado traiga otra cosa.
-    const days = isEventBilledItem(item) ? 1 : Math.max(1, Math.round(Number(row.days) || item.days));
+    const days = isEventBilledItem(item) ? 1 : Math.max(1, Math.round(Number(row.days) || rentalDaysOf(item)));
     return [
       {
         id: item.id,
@@ -514,8 +538,8 @@ function requestItemsView(
         excluded: row.excluded === true,
         previousExcluded: Boolean(item.excluded),
         previousQuantity: item.quantity,
-        previousDays: item.days,
-        subtotal: row.excluded === true ? 0 : quantity * days * item.unitPrice,
+        previousDays: rentalDaysOf(item),
+        subtotal: row.excluded === true ? 0 : selectionLine(item, { quantity, days }).subtotal,
         previousSubtotal: item.subtotal,
       },
     ];
@@ -612,11 +636,12 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
       id: item.id,
       name: item.name,
       quantity: item.quantity,
-      days: item.days,
+      days: rentalDaysOf(item),
       unitPrice: item.unitPrice,
       subtotal: item.subtotal,
       excluded: Boolean(item.excluded),
       notes: item.notes,
+      pricing: portalPricing(item),
       // Imagen del producto vinculado (issue #107): aditiva y opcional; solo
       // viaja una URL de imagen válida (el resto cae al ícono en el portal).
       imageUrl:
@@ -796,7 +821,7 @@ function positiveInt(value: unknown): number | null {
  * igual (el equipo puede aprobar la propuesta tal como llegó).
  */
 export function resolveItemProposal(
-  items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; excluded?: boolean }>,
+  items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; excluded?: boolean; pricingSnapshot?: unknown }>,
   raw: unknown,
   options?: { requireChange?: boolean },
 ): ProposalResult<ProposedItem[]> {

@@ -27,6 +27,12 @@ import {
   type RangeAvailability,
 } from "./inventory-availability";
 import { isUniqueConstraintError } from "./inventory-units";
+import { replacePriceTiers } from "./price-tier-store";
+import { loadPricedItems, pricedProduct } from "./line-pricing";
+import { dayKeyOf } from "./notifications";
+import { rentalDaysBetween } from "../catalog-public";
+import { priceLine, repricedPackageTotal, substitutionPrice } from "../price-tiers";
+import type { AudiencePriceTier } from "../price-tiers";
 import {
   comboCapacity,
   readComboComponents,
@@ -439,8 +445,38 @@ export async function confirmComboHold(options: { organizationId: string; assign
   );
 }
 
+/**
+ * Precio de la sustitución para los días del rango de la asignación (frente cliente final):
+ * `delta` por paquete y `packageAfter` = precio del paquete + diferencia (regla de `lib/price-tiers.ts`).
+ * `known: false` si falta el precio de alguna pieza o el rango; el presupuesto NO se modifica solo.
+ */
+export type SubstitutionPriceReport =
+  | { known: true; days: number; delta: number; packageBefore: number; packageAfter: number }
+  | { known: false; days: number | null };
+
+async function substitutionPriceReport(
+  tx: Tx,
+  organizationId: string,
+  comboId: string,
+  fromId: string,
+  toId: string,
+  perCombo: number,
+  start: Date | null,
+  end: Date | null,
+): Promise<SubstitutionPriceReport> {
+  if (!start || !end || end.getTime() < start.getTime()) return { known: false, days: null };
+  const days = rentalDaysBetween(dayKeyOf(start), dayKeyOf(end));
+  const priced = await loadPricedItems(organizationId, [comboId, fromId, toId], tx);
+  const combo = priced.get(comboId), from = priced.get(fromId), to = priced.get(toId);
+  if (!combo || !from || !to) return { known: false, days };
+  const diff = substitutionPrice(pricedProduct(from, "RETAIL", true), pricedProduct(to, "RETAIL", true), perCombo, days);
+  const packageBefore = priceLine(pricedProduct(combo, "RETAIL", true), days).total;
+  if (!diff.known || packageBefore <= 0) return { known: false, days };
+  return { known: true, days, delta: diff.delta, packageBefore, packageAfter: repricedPackageTotal(packageBefore, diff.delta) };
+}
+
 export type SubstituteResult =
-  | { ok: true; combo: { id: string; name: string }; event: { id: string; name: string }; from: { id: string; name: string }; to: { id: string; name: string }; units: number }
+  | { ok: true; combo: { id: string; name: string }; event: { id: string; name: string }; from: { id: string; name: string }; to: { id: string; name: string }; units: number; price: SubstitutionPriceReport }
   | { ok: false; reason: "not-found"; message: string }
   | { ok: false; reason: "invalid"; message: string }
   | { ok: false; reason: "conflict"; message: string }
@@ -587,6 +623,7 @@ export async function substituteComboComponent(options: {
         where: { id: row.id },
         data: { comboSubstitutions: Object.keys(nextSubs).length ? nextSubs : Prisma.DbNull },
       });
+      const price = await substitutionPriceReport(tx, options.organizationId, state.combo.id, current.id, substitute.id, definition.quantity, start, end);
       return {
         ok: true,
         combo: { id: state.combo.id, name: state.combo.name },
@@ -594,6 +631,7 @@ export async function substituteComboComponent(options: {
         from: { id: current.id, name: current.name },
         to: { id: substitute.id, name: substitute.name },
         units,
+        price,
       } as const;
     },
     { timeout: 20_000 },
@@ -674,7 +712,9 @@ export type ComboItemData = {
   sku: string | null;
   notes?: string | null;
   imageUrl?: string | null;
-  prices?: Partial<Record<"listPrice" | "listFromDays" | "listFromPrice" | "wholesalePrice" | "wholesaleFromDays" | "wholesaleFromPrice" | "minimumPrice", number>>;
+  prices?: Partial<Record<"listPrice" | "wholesalePrice" | "minimumPrice", number>>;
+  /** Precio del paquete por días (escalones); ausente = no cambia, lista = reemplaza. */
+  priceTiers?: AudiencePriceTier[];
 };
 
 /**
@@ -746,6 +786,7 @@ export async function saveCombo(options: {
           await tx.inventoryItem.update({ where: { id: comboId }, data: itemData });
           await tx.inventoryComponent.deleteMany({ where: { parentId: comboId, organizationId } });
         }
+        if (options.data.priceTiers) await replacePriceTiers(tx, organizationId, comboId, options.data.priceTiers);
         await tx.inventoryComponent.createMany({
           data: parsed.components.map((component) => ({ id: randomUUID(), organizationId, parentId: comboId!, componentId: component.componentId, quantity: component.quantity })),
         });

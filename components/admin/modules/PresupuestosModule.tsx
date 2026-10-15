@@ -1246,7 +1246,7 @@ export function PresupuestosModule() {
       eventId: form.eventId || undefined,
       title: form.title,
       ...creationDepositBody(createDeposit),
-      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes })),
+      items: createItems.map((item) => ({ name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice), inventoryId: item.inventory?.id, notes: item.notes, ...(item.inventory && item.rentalDays && Number.isInteger(Number(item.rentalDays)) ? { rentalDays: Number(item.rentalDays) } : {}) })),
     });
     setBusy(false);
     if (!result.ok) {
@@ -2575,6 +2575,14 @@ export function PresupuestosModule() {
                 outcome.substitutes.length > 0
                   ? `Sustitutos: ${outcome.substitutes.map((substitute) => `${substitute.name} (${formatNumber(substitute.available)} libres)`).join(", ")}`
                   : null,
+                ...(outcome.comboParts ?? []).map(
+                  (part) =>
+                    `Falta «${part.name}» (piden ${formatNumber(part.needed)}, hay ${formatNumber(part.available)})${
+                      part.alternatives.length > 0
+                        ? `: alternativas ${part.alternatives.map((alt) => `${alt.name} (${formatNumber(alt.available)} libres, ${alt.priceDelta === null ? "sin precio" : alt.priceDelta === 0 ? "mismo precio" : `${alt.priceDelta > 0 ? "+" : "−"}${formatMoney(Math.abs(alt.priceDelta))}`})`).join(", ")}`
+                        : ": sin alternativas con stock"
+                    }`,
+                ),
               ]
                 .filter((part): part is string => Boolean(part))
                 .join(" · ");

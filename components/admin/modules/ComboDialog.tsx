@@ -4,10 +4,13 @@ import { useId, useMemo, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
 import { formatNumber } from "@/lib/admin-format";
 import { comboCapacity, comboCapacityLabel, MAX_COMBO_COMPONENTS } from "@/lib/inventory-combos";
-import { FIELD_LIMITS, FIELD_MESSAGES, inventorySkuError, normalizeInventorySku, personNameValid } from "@/lib/field-rules";
+import { FIELD_LIMITS, FIELD_MESSAGES, inventorySkuError, normalizeInventorySku, personNameValid, readInventoryPriceValues } from "@/lib/field-rules";
+import { packageSummary, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
+import { formatMoney } from "@/lib/admin-format";
+import { PriceTiersEditor, readTierRows, tierRowsFrom, type TierRow } from "./PriceTiersEditor";
 import type { AdminInventoryItemRow } from "@/lib/admin-types";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
-import { Combobox, NumberField, TextField } from "../AdminFields";
+import { Combobox, MoneyField, NumberField, TextField } from "../AdminFields";
 
 type ComponentDraft = { key: number; componentId: string; quantity: string };
 
@@ -38,6 +41,11 @@ export function ComboDialog({
       : [{ key: 0, componentId: "", quantity: "1" }],
   );
   const [nextKey, setNextKey] = useState(combo?.combo?.components.length ?? 1);
+  // Precio del paquete: lo que paga el cliente por el combo entero (no la suma de sus piezas).
+  const [listPrice, setListPrice] = useState(combo && combo.listPrice > 0 ? String(combo.listPrice) : "");
+  const [wholesalePrice, setWholesalePrice] = useState(combo && combo.wholesalePrice > 0 ? String(combo.wholesalePrice) : "");
+  const [listTiers, setListTiers] = useState<TierRow[]>(tierRowsFrom(tiersForAudience(combo?.priceTiers, "RETAIL")));
+  const [wholesaleTiers, setWholesaleTiers] = useState<TierRow[]>(tierRowsFrom(tiersForAudience(combo?.priceTiers, "WHOLESALE")));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -65,6 +73,21 @@ export function ComboDialog({
     return comboCapacity(known, new Map(candidates.map((item) => [item.id, item.availability.availableNow])));
   }, [rows, candidates]);
 
+  // Suma de las piezas por separado vs. precio del paquete (misma regla de días que la tienda y el presupuesto).
+  const savings = useMemo(() => {
+    const parts = rows.flatMap((row) => {
+      const item = candidates.find((candidate) => candidate.id === row.componentId);
+      const quantity = Number(row.quantity);
+      return item && Number.isInteger(quantity) && quantity > 0
+        ? [{ name: item.name, quantity, base: item.listPrice, minimum: 0, billingUnit: item.billingUnit === "EVENT" ? ("EVENT" as const) : ("DAILY" as const), tiers: tiersForAudience(item.priceTiers, "RETAIL") as PriceTier[] }]
+        : [];
+    });
+    const base = Number(listPrice.replace(/[^\d]/g, "")) || 0;
+    const tiers = readTierRows(listTiers);
+    if (parts.length === 0 || parts.length !== rows.length || base <= 0 || !tiers.ok) return null;
+    return [1, 3, 5].map((days) => ({ days, ...packageSummary({ basePrice: base, tiers: tiers.tiers }, parts, days) }));
+  }, [rows, candidates, listPrice, listTiers]);
+
   const dirty = Boolean(name || sku || rows.some((row) => row.componentId));
 
   function patchRow(key: number, patch: Partial<ComponentDraft>) {
@@ -83,10 +106,19 @@ export function ComboDialog({
     if (rows.some((row) => !/^\d+$/.test(row.quantity.trim()) || Number(row.quantity) < 1)) {
       return setError("La cantidad de cada componente debe ser un entero mayor a cero.");
     }
+    const prices = readInventoryPriceValues({ listPrice, wholesalePrice });
+    if (!prices.ok) return setError(prices.error);
+    const retail = readTierRows(listTiers);
+    if (!retail.ok) return setError(`Cliente final: ${retail.error}`);
+    const wholesale = readTierRows(wholesaleTiers);
+    if (!wholesale.ok) return setError(`Mayorista: ${wholesale.error}`);
     setBusy(true);
     setError("");
     const result = await adminSend("/api/admin/inventory/combos", {
       kind: "combo-save",
+      listPrice: prices.values.listPrice ?? 0,
+      wholesalePrice: prices.values.wholesalePrice ?? 0,
+      priceTiers: [...retail.tiers.map((tier) => ({ ...tier, audience: "RETAIL" })), ...wholesale.tiers.map((tier) => ({ ...tier, audience: "WHOLESALE" }))],
       ...(combo ? { id: combo.id } : {}),
       name: name.trim(),
       sku: normalizeInventorySku(sku),
@@ -174,6 +206,21 @@ export function ComboDialog({
           <AdminNote>Elegí los componentes y sus cantidades para ver cuántos combos se pueden armar con el stock libre de hoy.</AdminNote>
         )}
         </div>
+        </AdminDialogSection>
+        <AdminDialogSection title="Precio del paquete" hint="lo que paga el cliente por el combo entero">
+          <MoneyField label="Precio del paquete" value={listPrice} onChange={setListPrice} disabled={busy} hint="Cliente final, por día (o por evento). Vacío = sin precio cargado." />
+          <PriceTiersEditor title="cliente final" rows={listTiers} onChange={setListTiers} normalPrice={listPrice} perEvent={false} disabled={busy} />
+          <MoneyField label="Precio del paquete mayorista" value={wholesalePrice} onChange={setWholesalePrice} disabled={busy} hint="Solo para el catálogo mayorista. Vacío = sin precio cargado." />
+          <PriceTiersEditor title="mayorista" rows={wholesaleTiers} onChange={setWholesaleTiers} normalPrice={wholesalePrice} perEvent={false} disabled={busy} />
+          <div className="admin-field--wide">
+            {savings ? (
+              <AdminNote tone="ok">
+                {savings.map((row) => (row.incomplete ? `${row.days} ${row.days === 1 ? "día" : "días"}: falta el precio de alguna pieza` : `${row.days} ${row.days === 1 ? "día" : "días"}: paquete ${formatMoney(row.packageTotal)} · piezas por separado ${formatMoney(row.unitSum)} · ${row.savings > 0 ? `ahorro ${formatMoney(row.savings)}` : "sin ahorro"}`)).join(" — ")}
+              </AdminNote>
+            ) : (
+              <AdminNote>Cargá el precio del paquete y elegí los componentes para ver cuánto se ahorra frente a las piezas por separado.</AdminNote>
+            )}
+          </div>
         </AdminDialogSection>
         <AdminDialogSection title="Más opciones" collapsible defaultOpen={Boolean(combo?.sku) || Boolean(combo && combo.category !== "Combos")} hint="categoría y SKU">
         <TextField label="Categoría" maxLength={80} value={category} onChange={setCategory} disabled={busy} hint="Los componentes se sustituyen por ítems de su propia categoría, no de esta." />

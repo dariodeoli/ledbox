@@ -81,6 +81,47 @@ precios por días, fechas pico).
 Cancelación con penalidad (retención sugerida por política, sin reembolso automático) · pedido mínimo (aviso, no
 bloquea) · flete por zona (`DeliveryZone`) · clientes bloqueados (`Client.blockedAt/blockedReason`) · franjas de
 entrega/retiro y agenda del camión · vista de lavandería · facturar cargos extra.
+### P2 implementado: precio por días, flete por zona y paquetes
+Un solo cálculo puro (`lib/price-tiers.ts`, `lib/delivery-zones.ts`) lo usan tienda, presupuesto, conversión del
+catálogo, mayorista y portal. Todo en Int PYG.
+
+**Precio por días** (`InventoryPriceTier`: producto, frente RETAIL|WHOLESALE, `fromDays`, `mode` PER_DAY|TOTAL, precio;
+único por producto + frente + días). Para N días rige el escalón con el **mayor `fromDays` ≤ N**: PER_DAY = precio × N;
+TOTAL = precio fijo del período (5 días por 300.000 = 300.000 también a los 10). Sin escalón: precio base × N, o una sola
+vez si el producto es EVENT (EVENT ignora los escalones). Una línea TOTAL se guarda con `días = 1` y el total como precio
+unitario (así `cantidad × días × precio` queda exacto al guaraní) y recuerda los días reales en
+`BudgetItem.pricingSnapshot` (escalones y paquete congelados al crear la línea: el portal y los cambios de días
+recalculan con eso, nunca con el inventario vivo; si alguien edita el precio a mano la línea queda fija). El piso de
+venta (`minimumPrice`) aplica al precio por día, no a un total cerrado. Migración `202610220001`: el
+`listFromDays/listFromPrice` y `wholesaleFrom*` viejos pasan a escalones **PER_DAY** (antes el precio «desde» se
+multiplicaba por los días); las columnas viejas quedan sin uso y no se tocan. UI: tabla «Precio por días» en el alta y
+la edición del producto (con vista previa «3 días = …, 5 días = …»), en la ficha y en Inventario → Combos; la tienda
+muestra «desde 5 días: 300.000 total». Importar: `precios_dias` = `[{desde_dias, modo: "dia"|"total", precio}]` en el
+JSON o `5:total:300000; 3:dia:90000` en la planilla (cliente final; vacío no toca lo cargado).
+
+**Flete por zona** (`DeliveryZone`: nombre único por empresa, `basePrice`, `volumeThreshold`, `extraPrice`, notas,
+orden, `archivedAt`). Regla: flete = precio base + recargo **si las piezas del pedido SUPERAN el umbral** (50 piezas con
+umbral 50 no pagan; 51 sí). «Piezas» = suma de cantidades de las líneas de inventario (un combo cuenta por su
+cantidad; el flete y las líneas libres no cuentan). Ajustes → Alquileres → «Zonas de flete» (alta, edición, archivar y
+restaurar; `budgets.write`: OWNER, ADMIN y FINANCE; OPERATIONS y VIEWER no editan montos). En la tienda el cliente elige
+zona (opcional) o «A coordinar»; el pedido guarda el id y el NOMBRE de la zona. Al convertir se crea la línea
+«Flete — <zona>» editable a mano; el presupuesto es un snapshot: editar, archivar o borrar la zona no lo cambia. Si la
+zona se borró antes de convertir no se inventa un monto: queda una nota para coordinar. En el editor del presupuesto,
+«Flete por zona» calcula con las piezas actuales.
+
+**Paquetes (combos con precio)**. El combo ya reserva todas sus piezas; ahora además: precio del paquete (el precio del
+combo, con sus propios escalones), **suma por unidad** (precio de cada pieza × cantidad con la regla de días de cada
+una) y **ahorro** = suma − paquete (nunca negativo; si falta el precio de alguna pieza no se muestra ahorro) en
+presupuesto, tienda y portal. Si una pieza no alcanza (cotizar: `GET /api/admin/inventory/combos?pricing=1`; aprobar:
+`reserveBudgetInventory` → `comboParts`) se listan **alternativas reales** (`findSubstitutes`: misma categoría, con
+stock libre, que no sean parte del paquete ni otro combo) con la **diferencia de precio**
+`cantidad por paquete × (total del sustituto − total de la pieza)` para los mismos días. **Regla de re-precio: precio
+del paquete + diferencia** (nunca por debajo de 0); sin precio en alguna de las dos piezas la diferencia es «sin precio»
+y el equipo fija el monto. El presupuesto no se modifica solo: en el editor, «Usar este precio» fija la línea al total
+con el reemplazo; la sustitución en un evento ya reservado (`substituteComboComponent`) informa la diferencia y el
+paquete re-precificado. Un combo de categorías mixtas («Evento completo»: tótem + piso + impresión + sillas) se arma
+en Inventario → Combos con su precio de paquete.
+
 ### P3
 Precios de temporada, flete por km, comisión del planner, ranking de roturas, aviso automático de devolución vencida.
 

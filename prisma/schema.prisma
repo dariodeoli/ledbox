@@ -164,6 +164,8 @@ model Organization {
   inventoryUnits    InventoryUnit[]
   inventoryIncidents InventoryIncident[]
   inventoryComponents InventoryComponent[]
+  inventoryPriceTiers InventoryPriceTier[]
+  deliveryZones     DeliveryZone[]
   rentalSettings    OrganizationRentalSettings?
   promoters         Promoter[]
   auditLogs         AuditLog[]
@@ -527,6 +529,11 @@ model QuoteRequest {
   /// Lista de precios aplicada al pedido: RETAIL (cliente final) o WHOLESALE
   /// (catálogo mayorista). El presupuesto convertido usa la misma lista.
   priceList      String        @default("RETAIL")
+  /// Zona de flete elegida en la tienda (opcional). El nombre queda copiado: si la zona se edita
+  /// o se borra, el pedido conserva lo que vio el cliente. `deliveryCoordinate` = «a coordinar».
+  deliveryZoneId   String?
+  deliveryZoneName String?
+  deliveryCoordinate Boolean    @default(false)
   /// Presupuesto en que se convirtió (único: convertir dos veces no es posible).
   budget         Budget?
 
@@ -981,6 +988,9 @@ model BudgetItem {
   /// los ítems vinculados reservan stock del evento con el rango del evento.
   /// Sin vínculo el ítem no reserva nada.
   inventoryId String?
+  /// Snapshot de precios de la línea (escalones por días y paquete de un combo) tomado al
+  /// crearla: el portal y el cambio de días recalculan con ESTO, nunca con el inventario vivo.
+  pricingSnapshot Json?
   budget      Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   inventory   InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
 
@@ -1850,6 +1860,8 @@ model InventoryItem {
   usedInCombos       InventoryComponent[] @relation("ComboComponent")
   budgetItems        BudgetItem[]
   quoteItems         QuoteItem[]
+  /// Escalones de precio por días (docs/ALQUILERES-OPERACION.md «Precio por días»).
+  priceTiers         InventoryPriceTier[]
   units              InventoryUnit[]
   incidents          InventoryIncident[]
   /// Unidades retenidas por incidentes abiertos sin unidad con código (daño o faltante por
@@ -2542,4 +2554,56 @@ model QuoteComparison {
   budgets          Budget[]
 
   @@index([organizationId, createdAt])
+}
+
+enum PriceTierAudience {
+  RETAIL
+  WHOLESALE
+}
+
+enum PriceTierMode {
+  /// El precio del escalón es POR DÍA: total = precio × días.
+  PER_DAY
+  /// El precio del escalón es el TOTAL del período: total = precio fijo.
+  TOTAL
+}
+
+/// Escalón de precio por días de un producto (alquileres P2). Para N días rige el escalón con el
+/// mayor `fromDays` <= N; sin escalón rige el precio base. Un producto «por evento» los ignora.
+model InventoryPriceTier {
+  id             String            @id
+  organizationId String
+  inventoryId    String
+  audience       PriceTierAudience
+  fromDays       Int
+  mode           PriceTierMode
+  price          Int
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inventory      InventoryItem     @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryId, audience, fromDays])
+  @@index([organizationId, inventoryId])
+}
+
+/// Zona de flete de la empresa (alquileres P2). Flete = `basePrice` y, si el pedido supera
+/// `volumeThreshold` piezas, se suma `extraPrice`. Archivar no borra: los presupuestos conservan su línea.
+model DeliveryZone {
+  id              String       @id
+  organizationId  String
+  name            String
+  basePrice       Int
+  volumeThreshold Int?
+  extraPrice      Int?
+  notes           String?
+  sortOrder       Int          @default(0)
+  archivedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, archivedAt])
 }

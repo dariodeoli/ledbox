@@ -25,6 +25,7 @@ import { BudgetReferenceLinks } from "./BudgetReferenceLinks";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload } from "./BudgetPaymentPlanEditor";
 import { budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
+import { repriceableSnapshot } from "@/lib/quote-selection";
 import { resolveBudgetPaymentPlan, BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { clientDisplayName } from "@/lib/client-identity";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
@@ -79,7 +80,10 @@ const IVA_OPTIONS = [
 ];
 
 function toItemDraft(item: AdminBudgetRow["items"][number]): ItemDraft {
+  // Una línea con precio por días recuerda los días reales del alquiler (la «total» guarda días = 1).
+  const rentalDays = item.inventoryId ? repriceableSnapshot({ days: item.days, unitPrice: item.unitPrice, pricingSnapshot: item.pricingSnapshot, inventory: item.inventory })?.rentalDays : undefined;
   return {
+    ...(rentalDays ? { rentalDays: String(rentalDays) } : {}),
     inventory: item.inventory ? { ...item.inventory, imageUrl: inventoryImageUrl({ ...item.inventory, imageUrl: item.inventory.imageUrl ?? null }) } : null,
     id: item.id,
     excluded: Boolean(item.excluded),
@@ -155,7 +159,7 @@ export function BudgetPricingDialog({
         const days = Number(item.days);
         const unitPrice = number(item.unitPrice);
         const costPrice = number(item.costPrice);
-        return { inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, notes: item.notes, quantity, days, unitPrice, costPrice, excluded: item.excluded, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
+        return { rentalDays: item.inventory ? item.rentalDays : undefined, inventoryId: item.inventory?.id ?? null, id: item.id, name: item.name, notes: item.notes, quantity, days, unitPrice, costPrice, excluded: item.excluded, subtotal: item.excluded ? 0 : quantity * days * unitPrice };
       }),
     [draft.items],
   );
@@ -206,6 +210,8 @@ export function BudgetPricingDialog({
         costPrice: item.costPrice,
         inventoryId: item.inventoryId,
         notes: item.notes,
+        // Días reales del alquiler: el servidor congela los escalones del producto con ellos.
+        ...(item.inventoryId && item.rentalDays && Number.isInteger(Number(item.rentalDays)) ? { rentalDays: Number(item.rentalDays) } : {}),
       }));
       // Integer unit prices can miss the target by a few guaraníes. Round the
       // repriced subtotal upward and use an explicit discount to close exactly.

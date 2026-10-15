@@ -59,11 +59,12 @@ test("el formulario de edición cubre el ítem completo", () => {
     "Costo diario",
     "Notas internas",
     "Precio normal",
-    "Precio desde esos días",
     "Piso de venta",
   ]) {
     assert.ok(module.includes(`label="${label}"`), `falta el campo «${label}» en la edición`);
   }
+  // «Precio desde esos días» pasó a la tabla «Precio por días» (escalones por frente, alquileres P2).
+  assert.ok(module.includes("Precio por días"), "falta la tabla «Precio por días» en la edición");
   // La foto se comparte con el alta y se puede cambiar o quitar.
   assert.match(module, /function PhotoFields/);
   assert.match(module, /adminApiUpload\(`\/api\/admin\/inventory\/\$\{item\.id\}\/image`/);

@@ -53,6 +53,8 @@ import {
   rangeLabel,
 } from "@/lib/server/inventory-availability";
 import { dispatchAssignment, returnAssignment } from "@/lib/server/inventory-operations";
+import { replacePriceTiers } from "@/lib/server/price-tier-store";
+import { readAudienceTiers, tierWarnings, tiersForAudience } from "@/lib/price-tiers";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
 export const runtime = "nodejs";
@@ -349,6 +351,7 @@ export async function GET(request: Request) {
     omit: { imageData: true },
     include: {
       units: { orderBy: { code: "asc" } },
+      priceTiers: { orderBy: [{ audience: "asc" }, { fromDays: "asc" }], select: { audience: true, fromDays: true, mode: true, price: true } },
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
   });
@@ -499,7 +502,7 @@ export async function POST(request: Request) {
     }
     const warnings = isUnits ? [] : result.flatMap(row => {
       const merged = { ...row, ...data } as typeof row & { listPrice: number; listFromPrice: number; wholesalePrice: number; wholesaleFromPrice: number; minimumPrice: number };
-      const warning = inventoryPriceWarning(merged);
+      const warning = inventoryPriceWarning({ ...merged, listFromPrice: 0, wholesaleFromPrice: 0 });
       return warning ? [`${(row as { name: string }).name}: ${warning}`] : [];
     });
     return Response.json({ updatedIds: ids, updated: ids.length, warnings });
@@ -708,6 +711,9 @@ export async function POST(request: Request) {
     if (!id) return jsonError("Falta el ítem de inventario.", 400);
     const prices = readInventoryPriceValues(body);
     if (!prices.ok) return jsonError(prices.error, 400);
+    // Precio por días (escalones): ausente = no cambia; lista = reemplaza todos los escalones del producto.
+    const tiers = body.priceTiers === undefined ? null : readAudienceTiers(body.priceTiers);
+    if (tiers && !tiers.ok) return jsonError(tiers.error, 400);
     const existing = await db.inventoryItem.findFirst({
       where: { id, organizationId },
       select: {
@@ -724,40 +730,34 @@ export async function POST(request: Request) {
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
     // Los campos sin valor no cambian: es una edición parcial de precios.
-    const inventory = await db.inventoryItem.update({
-      where: { id: existing.id },
-      data: {
-        listPrice: prices.values.listPrice ?? undefined,
-        listFromDays: prices.values.listFromDays ?? undefined,
-        listFromPrice: prices.values.listFromPrice ?? undefined,
-        wholesalePrice: prices.values.wholesalePrice ?? undefined,
-        wholesaleFromDays: prices.values.wholesaleFromDays ?? undefined,
-        wholesaleFromPrice: prices.values.wholesaleFromPrice ?? undefined,
-        minimumPrice: prices.values.minimumPrice ?? undefined,
-      },
+    const saved = await db.$transaction(async (tx) => {
+      const inventory = await tx.inventoryItem.update({
+        where: { id: existing.id },
+        data: {
+          listPrice: prices.values.listPrice ?? undefined,
+          wholesalePrice: prices.values.wholesalePrice ?? undefined,
+          minimumPrice: prices.values.minimumPrice ?? undefined,
+        },
+      });
+      const tierChange = tiers?.ok ? await replacePriceTiers(tx, organizationId, existing.id, tiers.tiers) : null;
+      const priceTiers = await tx.inventoryPriceTier.findMany({ where: { organizationId, inventoryId: existing.id }, orderBy: [{ audience: "asc" }, { fromDays: "asc" }], select: { audience: true, fromDays: true, mode: true, price: true } });
+      return { inventory, tierChange, priceTiers };
     });
-    const priceFields = [
-      "listPrice",
-      "listFromDays",
-      "listFromPrice",
-      "wholesalePrice",
-      "wholesaleFromDays",
-      "wholesaleFromPrice",
-      "minimumPrice",
-    ] as const;
+    const { inventory, tierChange, priceTiers } = saved;
+    const priceFields = ["listPrice", "wholesalePrice", "minimumPrice"] as const;
     const changes = auditChanges(existing, inventory, priceFields);
-    if (changes) {
+    if (changes || tierChange?.changed) {
       await recordAudit({
         context: auth.context,
         action: "update",
         entity: "InventoryItem",
         entityId: inventory.id,
         summary: `Actualizó los precios de «${existing.name}»`,
-        detail: { changes },
+        detail: { changes: { ...(changes ?? {}), ...(tierChange?.changed ? { priceTiers: { from: tierChange.before, to: priceTiers } } : {}) } },
       });
     }
-    const warning = inventoryPriceWarning(inventory);
-    return Response.json(warning ? { inventory, warning } : { inventory });
+    const warning = [inventoryPriceWarning({ ...inventory, listFromPrice: 0, wholesaleFromPrice: 0 }), tiers?.ok ? tierWarnings(inventory.listPrice, tiersForAudience(tiers.tiers, "RETAIL")) : null].filter(Boolean).join(" ") || null;
+    return Response.json(warning ? { inventory: { ...inventory, priceTiers }, warning } : { inventory: { ...inventory, priceTiers } });
   }
 
   if (kind === "assignment") {

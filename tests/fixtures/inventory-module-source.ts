@@ -12,6 +12,7 @@ export const INVENTORY_MODULE_FILES = [
   "InventoryFicha.tsx",
   "InventoryItemDialogs.tsx",
   "InventoryParts.tsx",
+  "PriceTiersEditor.tsx",
 ] as const;
 
 export function inventoryModuleSource(): string {
