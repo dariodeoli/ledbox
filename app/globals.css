@@ -3078,6 +3078,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-cards .admin-rowcheck { width: 44px; height: 44px; }
   .admin-cards .admin-actions { flex-wrap: wrap; }
   .admin-cards .admin-filter--cell { height: 44px; max-width: 100%; }
+  .admin-ficha-nav.admin-ficha-tabs { flex-wrap: nowrap; min-width: 0; max-width: calc(100% + 32px); overflow-x: auto; }
+  .admin-ficha-nav.admin-ficha-tabs .admin-subtab { flex: 0 0 auto; min-width: 44px; white-space: nowrap; scroll-margin-inline: 8px; }
   .admin-ficha-nav .admin-subtab, .admin-inv-tabs .admin-subtab { min-height: 44px; }
   .admin-timeline-list li { grid-template-columns: auto minmax(0, 1fr); }
   .admin-timeline-when { grid-column: 2; white-space: normal; }
