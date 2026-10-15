@@ -1009,7 +1009,7 @@ export async function POST(request: Request) {
       summary: `Despachó ${result.quantity} unidad${result.quantity === 1 ? "" : "es"} de «${before.inventory.name}» para «${before.event.name}»${result.remaining > 0 ? ` (faltan despachar ${result.remaining})` : ""}`,
       detail: { fields: { quantity: result.quantity, checkoutQuantity: assignment.checkoutQuantity, conditionOut, note: note || null } },
     });
-    return Response.json({ assignment });
+    return Response.json({ assignment, deliveryNote: result.deliveryNote });
   }
 
   if (kind === "checkin") {
@@ -1065,7 +1065,7 @@ export async function POST(request: Request) {
         },
       },
     });
-    return Response.json({ assignment, incidents: result.incidents, pending: result.pending, closed: result.closed });
+    return Response.json({ assignment, incidents: result.incidents, pending: result.pending, closed: result.closed, deliveryNote: result.deliveryNote });
   }
 
   if (kind === "hold-confirm" || kind === "assignment-release") {

@@ -172,6 +172,8 @@ model Organization {
   inventoryItems    InventoryItem[]
   inventoryUnits    InventoryUnit[]
   inventoryIncidents InventoryIncident[]
+  deliveryNotes      DeliveryNote[]
+  deliveryNotePhotos DeliveryNotePhoto[]
   inventoryComponents InventoryComponent[]
   inventoryPriceTiers InventoryPriceTier[]
   deliveryZones     DeliveryZone[]
@@ -918,6 +920,7 @@ model Event {
   deletedById    String?
   deleteReason   String?
   anonymizedAt   DateTime?
+  deliveryNotes   DeliveryNote[]
   @@index([organizationId, deletedAt])
   @@index([createdAt])
 }
@@ -2840,4 +2843,66 @@ model RentalCharge {
   @@unique([budgetId, dedupeKey])
   @@index([organizationId, budgetId])
   @@index([organizationId, eventId])
+}
+
+// ── Remitos de salida y de devolución firmados (alquileres P1-5) ─────────────
+enum DeliveryNoteKind {
+  OUT
+  IN
+}
+
+/// Remito de un evento: salida (OUT) o devolución (IN). El número es correlativo por empresa y sin
+/// huecos (`DeliveryNoteCounter`, dentro de la misma transacción del movimiento). Mientras no está
+/// firmado acumula las líneas de los movimientos; firmado, `linesSnapshot` y la firma no cambian
+/// nunca más (lo garantiza también un trigger de la base).
+model DeliveryNote {
+  id             String           @id
+  organizationId String
+  eventId        String
+  kind           DeliveryNoteKind
+  number         Int
+  /// [{ assignmentId, inventoryId, name, sku, ordered, moved, damaged, missing }]
+  linesSnapshot  Json
+  notes          String?
+  createdById    String?
+  createdAt      DateTime         @default(now())
+  signerName     String?
+  signerDocument String?
+  /// Trazo de la firma DRAWN (PNG) capturado en el celular del operador.
+  signatureData  Bytes?
+  signatureMime  String?
+  signedAt       DateTime?
+  signedById     String?
+  signedIp       String?
+  signedUserAgent String?
+  /// Condiciones del alquiler vigentes al firmar (congeladas).
+  termsSnapshot  String?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event          Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photos         DeliveryNotePhoto[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, eventId, kind, signedAt])
+}
+
+model DeliveryNotePhoto {
+  id             String       @id
+  organizationId String
+  noteId         String
+  mime           String
+  size           Int
+  data           Bytes
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  note           DeliveryNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId, createdAt])
+}
+
+/// Último número de remito por empresa. Se incrementa con un upsert atómico dentro de la
+/// transacción del movimiento: si esta se revierte, el número también (sin huecos).
+model DeliveryNoteCounter {
+  organizationId String @id
+  last           Int    @default(0)
 }

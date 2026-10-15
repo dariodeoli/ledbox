@@ -120,6 +120,8 @@ export async function bytesDeArchivos(organizationId: string): Promise<number> {
       + COALESCE((SELECT SUM(octet_length("data")) FROM "BudgetPaymentProof" WHERE "organizationId" = ${organizationId}), 0)
       + COALESCE((SELECT SUM(octet_length("data")) FROM "BudgetAttachment" WHERE "organizationId" = ${organizationId}), 0)
       + COALESCE((SELECT SUM(octet_length("data")) FROM "SignatureEvidence" WHERE "organizationId" = ${organizationId}), 0)
+      + COALESCE((SELECT SUM(octet_length("data")) FROM "DeliveryNotePhoto" WHERE "organizationId" = ${organizationId}), 0)
+      + COALESCE((SELECT SUM(octet_length("signatureData")) FROM "DeliveryNote" WHERE "organizationId" = ${organizationId}), 0)
       + COALESCE((SELECT SUM(octet_length("imageData")) FROM "InventoryItem" WHERE "organizationId" = ${organizationId}), 0)
       + COALESCE((SELECT SUM(octet_length(a."data")) FROM "AdminUserAvatar" a JOIN "AdminUser" u ON u."id" = a."userId" WHERE u."demoOrganizationId" = ${organizationId}), 0)
     )::bigint AS total`;

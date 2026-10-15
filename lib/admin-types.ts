@@ -2762,6 +2762,8 @@ export type AdminRentalSettings = {
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
+  /** Remitos de un evento (`GET /api/admin/delivery-notes?eventId=`). */
+  notes?: import("./delivery-note").AdminDeliveryNote[];
   /** Cotización de un paquete (`GET /api/admin/inventory/combos?pricing=1`). */
   quote?: unknown;
   /** Zonas de flete (`GET /api/admin/delivery-zones`). */
