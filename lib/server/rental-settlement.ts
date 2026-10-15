@@ -689,6 +689,9 @@ export async function proposeCancellationRetention(organizationId: string, budge
   const startsAt = budget.event?.startsAt ?? budget.deliveryAt;
   if (!startsAt) return { daysBefore: null, percent: null, retained: 0, refundable: 0, advancePaid: 0 };
   const daysBefore = Math.floor((startsAt.getTime() - now.getTime()) / 86_400_000);
+  // La «Garantía de reserva» (origin deposit_reserve) CUENTA como seña para la retención por
+  // cancelación: es parte del pago del alquiler. Lo que no cuenta es la garantía de daños retenida
+  // ni el cobro de cargos extra (ingresos por cargos, no seña). Decisión de producto: no cambiar sin QA.
   const advancePaid = budget.payments.filter((payment) => countsTowardBudgetBalance(payment)).reduce((sum, payment) => sum + payment.amount, 0);
   const proposal = cancellationRetention(settings.cancellationPolicy, { daysBefore, advancePaid });
   return { daysBefore, advancePaid, ...proposal };

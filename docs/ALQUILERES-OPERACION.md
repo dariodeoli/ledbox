@@ -158,7 +158,7 @@ condiciones, la política y los cargos.
 garantía de daños retenida (`deposit_retained`) y el cobro de un cargo extra (`rental_extra`) entran a tesorería e
 ingresos pero NO bajan el saldo ni el «por cobrar» del presupuesto (resumen, panel, ficha del cliente, portal, impreso,
 aviso de saldo y plan). La garantía de reserva (`deposit_reserve`) sí es parte del pago: al recibirla se imputa al plan
-(seña, cuotas, saldo) como un cobro más y baja el saldo esperado; sin plan queda como cobro libre.
+(seña, cuotas, saldo) como un cobro más y baja el saldo esperado; sin plan queda como cobro libre. Por eso la garantía de reserva cuenta como seña para la retención por cancelación; la retenida y los cargos no.
 
 **Cancelación**: `GET /api/admin/budgets/settlement?budgetId=…&cancellation=1` y el diálogo de la garantía muestran la
 retención PROPUESTA de lo cobrado según la política; no reembolsa ni mueve plata. **Pendiente**: colchón por categoría
