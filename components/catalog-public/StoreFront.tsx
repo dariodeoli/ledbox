@@ -3,7 +3,6 @@ import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-p
 import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
 import { CategoryCard } from "./CategoryCard";
 import { EventPicker } from "./EventPicker";
-import { THEMES } from "@/lib/storefront-templates";
 import { storeCategories, storeCategoryHref, withStoreDates } from "@/lib/store-categories";
 import { featuredCategories } from "@/lib/featured-categories";
 import { CompanyInfo } from "./CompanyInfo";
@@ -66,7 +65,6 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   const priceMode = store.appearance.priceMode;
   // «A cotizar»: la tienda no muestra montos aunque la empresa los tenga cargados.
   const showPrices = showPricesProp && priceMode !== "quote";
-  const layout = THEMES[store.appearance.template].layout;
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
   const minByCategory = new Map<string, number>();
@@ -92,7 +90,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   const featuredItems = items.filter((item) => item.featured).slice(0, 8);
   const hasCollections = collections.length > 0;
   const heroNode = (
-        <section className="cp-hero" aria-labelledby="titulo" data-cover={hasCover ? "yes" : "no"} data-testid="store-hero">
+        <section className="cp-hero cp-home-hero" aria-labelledby="titulo" data-cover={hasCover ? "yes" : "no"} data-testid="store-hero">
           {hasCover ? (
             <picture className="cp-hero-media" data-testid="store-cover">
               {/* Escritorio (≥ 768 px): la de 1920×600. Celular: la de 1080×1350. Si falta una, la otra (centrada, sin deformar). */}
@@ -102,17 +100,21 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             </picture>
           ) : null}
           <div className="cp-hero-inner">
-            <div className="cp-hero-copy">
-              <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Tienda de alquiler"}</p>
-              <h1 id="titulo" className="cp-h1"><span className="cp-sr">{store.name}: </span>{title}</h1>
-              <p className="cp-hero-sub">{sub}</p>
-              {demo ? <p className="cp-note" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
+            <div className="cp-home-intro">
+              <div className="cp-hero-copy">
+                <p className="cp-eyebrow">{wholesale ? "Tu catálogo mayorista" : "Alquiler para eventos"}</p>
+                <h1 id="titulo" className="cp-h1"><span className="cp-sr">{store.name}: </span>{title}</h1>
+                <p className="cp-hero-sub">{sub}</p>
+              </div>
               <div className="cp-hero-actions">
-                <a className="cp-btn cp-btn--lg cp-btn--primary" href="#catalogo">Ver catálogo</a>
-                {shownIds.has("como-funciona") ? <a className="cp-btn cp-btn--lg" href="#como-funciona">Cómo funciona</a> : null}
+                <a className="cp-btn cp-btn--primary" href="#catalogo">Ver catálogo</a>
+                {shownIds.has("como-funciona") ? <a className="cp-link" href="#como-funciona">Cómo funciona</a> : null}
               </div>
             </div>
-            <EventPicker slug={store.slug} range={range} variant="hero" restore />
+            <div className="cp-home-booking">
+              <EventPicker slug={store.slug} range={range} variant="hero" restore />
+            </div>
+            {demo ? <p className="cp-note cp-demo-notice" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
           </div>
         </section>
   );
@@ -122,8 +124,8 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
           {featured.length > 1 ? (
             <section className="cp-section" aria-labelledby="categorias">
               <div className="cp-section-head">
-                <p className="cp-eyebrow">Explorá</p>
                 <h2 id="categorias" className="cp-h2">Categorías</h2>
+                <p className="cp-lead">Encontrá lo que necesitás para tu evento.</p>
               </div>
               <div className="cp-catgrid">
                 {featured.map((entry) => (
@@ -161,6 +163,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             items={items}
             range={range}
             initialCategory={initialCategory}
+            showEventPicker={!shownIds.has("hero")}
             categoryNavigation={publicCategories ? { allHref: `${withStoreDates(basePath, range)}#catalogo`, links: categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name) })) } : undefined}
             zones={zones}
             priceMode={priceMode}
@@ -177,8 +180,8 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
     "como-funciona": (
           <section id="como-funciona" className="cp-section cp-block-sand" aria-labelledby="como">
             <div className="cp-section-head">
-              <p className="cp-eyebrow">Paso a paso</p>
-              <h2 id="como" className="cp-h2">Cómo funciona</h2>
+              <h2 id="como" className="cp-h2">Tu evento, paso a paso</h2>
+              <p className="cp-lead">Elegís, consultás y coordinamos con vos.</p>
             </div>
             <ol className="cp-steps">
               {STEPS.map((step, index) => (
@@ -197,7 +200,6 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
           {zones.length > 0 ? (
             <section className="cp-section" aria-labelledby="zonas" data-testid="delivery-zones">
               <div className="cp-section-head">
-                <p className="cp-eyebrow">Entrega</p>
                 <h2 id="zonas" className="cp-h2">Zonas de entrega</h2>
                 <p className="cp-lead">Llevamos y retiramos en estas zonas. El flete se cotiza junto con tu pedido.</p>
               </div>
@@ -207,7 +209,6 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
           {hasContact ? (
             <section id="contacto" className="cp-section cp-contact" aria-labelledby="contacto-titulo">
               <div className="cp-section-head">
-                <p className="cp-eyebrow">Hablemos</p>
                 <h2 id="contacto-titulo" className="cp-h2">Contacto</h2>
                 <p className="cp-lead">¿Dudas o algo que no encontrás en el catálogo? Escribinos.</p>
               </div>

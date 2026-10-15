@@ -23,10 +23,10 @@ export function FeaturedSection({ items, fichaBase, showPrices, priceMode }: { i
   return (
     <section id="destacados" className="cp-section" aria-labelledby="destacados-titulo" data-testid="home-featured">
       <div className="cp-section-head">
-        <p className="cp-eyebrow">Selección</p>
-        <h2 id="destacados-titulo" className="cp-h2">Destacados</h2>
+        <h2 id="destacados-titulo" className="cp-h2">Nuestra selección</h2>
+        <p className="cp-lead">Productos destacados para tu próximo evento.</p>
       </div>
-      <ul className="cp-featgrid">
+      <ul className="cp-featgrid" aria-label="Productos destacados">
         {items.map((item) => {
           const line = showPrices && item.price ? catalogLine(item.price, 1) : null;
           return (
@@ -45,7 +45,7 @@ export function FeaturedSection({ items, fichaBase, showPrices, priceMode }: { i
                 <span className="cp-feat-name">{item.name}</span>
                 {line && line.unitPrice > 0 ? (
                   <span className="cp-feat-price"><strong>{formatGs(line.unitPrice)}</strong> <span className="cp-price-unit">{priceUnitLabel(priceMode, line.mode, null)}</span></span>
-                ) : null}
+                ) : <span className="cp-feat-price">Consultar precio y disponibilidad</span>}
               </span>
             </li>
           );
@@ -81,11 +81,10 @@ export function CollectionsSection({ collections, items, base }: { collections: 
   return (
     <section id="colecciones" className="cp-section" aria-labelledby="colecciones-titulo" data-testid="home-collections">
       <div className="cp-section-head">
-        <p className="cp-eyebrow">Ambientes</p>
         <h2 id="colecciones-titulo" className="cp-h2">Colecciones</h2>
         <p className="cp-lead">Productos pensados para combinar entre sí.</p>
       </div>
-      <ul className="cp-colgrid">
+      <ul className="cp-colgrid" aria-label="Colecciones de productos">
         {collections.map((collection) => {
           // Sin foto de ambientación se usa la del primer producto que tenga: nunca una imagen inventada.
           const productPhoto = collection.imageUrl ? null : collection.itemIds.map((id) => byId.get(id)?.imageUrl).find(Boolean) ?? null;
@@ -120,7 +119,6 @@ export function InspirationSection({ inspiration, photos, instagram }: { inspira
   return (
     <section id="inspiracion" className="cp-section" aria-labelledby="inspiracion-titulo" data-testid="home-inspiration">
       <div className="cp-section-head">
-        <p className="cp-eyebrow">Inspiración</p>
         <h2 id="inspiracion-titulo" className="cp-h2">{inspiration.title || "Ideas para tu evento"}</h2>
       </div>
       <ul className="cp-inspo" data-count={shown.length}>

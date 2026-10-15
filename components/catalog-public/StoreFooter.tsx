@@ -47,36 +47,23 @@ export function StoreFooter({ name, tagline, location, whatsappUrl, email, links
           <p className="cp-footer-name">{name}</p>
           {tagline ? <p className="cp-footer-tag">{tagline}</p> : null}
           {place ? <p className="cp-footer-text">{place}</p> : null}
+          {zones.length > 0 ? <p className="cp-footer-text"><strong>Entregas:</strong> {zones.join(", ")}</p> : null}
+          {methods.length > 0 ? <p className="cp-footer-text"><strong>Medios de pago:</strong> {methods.join(", ")}</p> : null}
         </div>
-        {categories.length > 0 ? (
-          <nav className="cp-footer-col" aria-label="Catálogo">
-            <h2>Catálogo</h2>
-            {categories.map((category) => <a key={category.name} href={category.href}>{category.name}</a>)}
-          </nav>
-        ) : null}
-        {hasContact ? (
-          <div className="cp-footer-col">
-            <h2>Contacto</h2>
-            {whatsappUrl ? <a className="cp-footer-wa" href={whatsappUrl} target="_blank" rel="noopener noreferrer"><WhatsappIcon size={18} />&nbsp;WhatsApp</a> : null}
-            {phones.map((phone) => <a key={phone} href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>)}
-            {mail ? <a href={`mailto:${mail}`}>{mail}</a> : null}
-            {instagram ? <a href={`https://instagram.com/${instagram}`} target="_blank" rel="noopener noreferrer">Instagram @{instagram}</a> : null}
-          </div>
-        ) : null}
-        {hours.length > 0 || zones.length > 0 || methods.length > 0 ? (
-          <div className="cp-footer-col">
-            {hours.length > 0 ? (
-              <>
-                <h2>Horarios</h2>
-                <div className="cp-footer-hours">
-                  {hours.map((line) => <div key={line.days}><span>{line.days}</span><span className="cp-nowrap">{line.text}</span></div>)}
-                </div>
-              </>
-            ) : null}
-            {zones.length > 0 ? <p className="cp-footer-text"><strong>Zonas de entrega:</strong> {zones.join(", ")}</p> : null}
-            {methods.length > 0 ? <p className="cp-footer-text"><strong>Medios de pago:</strong> {methods.join(", ")}</p> : null}
-          </div>
-        ) : null}
+        <nav className="cp-footer-col" aria-label="Catálogo">
+          <h2>Catálogo</h2>
+          {links.find((link) => link.label === "Catálogo") ? <a href={links.find((link) => link.label === "Catálogo")!.href}>Ver todos los productos</a> : null}
+          {categories.slice(0, 6).map((category) => <a key={category.name} href={category.href}>{category.name}</a>)}
+        </nav>
+        <div className="cp-footer-col">
+          <h2>{hasContact ? "Contacto" : "Información"}</h2>
+          {whatsappUrl ? <a className="cp-footer-wa" href={whatsappUrl} target="_blank" rel="noopener noreferrer"><WhatsappIcon size={18} />WhatsApp</a> : null}
+          {phones.map((phone) => <a key={phone} href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>)}
+          {mail ? <a href={`mailto:${mail}`}>{mail}</a> : null}
+          {instagram ? <a href={`https://instagram.com/${instagram}`} target="_blank" rel="noopener noreferrer">Instagram @{instagram}</a> : null}
+          {hours.length > 0 ? <div className="cp-footer-hours" aria-label="Horarios de atención">{hours.map((line) => <div key={line.days}><span>{line.days}</span><span className="cp-nowrap">{line.text}</span></div>)}</div> : null}
+          {!hasContact && hours.length === 0 ? <p className="cp-footer-text">Armá tu pedido y recibí una cotización antes de confirmar.</p> : null}
+        </div>
       </div>
       <div className="cp-footer-legal">
         <p>Todas las imágenes son referenciales. Los precios son de referencia en guaraníes y se confirman en la cotización. Un pedido no es una reserva hasta que la confirmamos.</p>

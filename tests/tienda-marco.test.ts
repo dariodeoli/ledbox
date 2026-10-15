@@ -16,6 +16,7 @@ test("pie de la tienda: crédito de OwnCoding con la versión de package.json (l
   const nav = storeNavLinks("/tienda/demo", { contact: true });
   const html = renderToStaticMarkup(createElement(StoreFooter, { name: "La Vajilla Alquileres", links: storeFooterLinks(nav) }));
   assert.equal((html.match(/<footer\b/g) ?? []).length, 1);
+  assert.equal((html.match(/class="cp-footer-col"/g) ?? []).length, 3, "tres columnas principales");
   assert.ok(text(html).includes(`Desarrollado por OwnCoding · EventOS v${version}`));
   assert.ok(html.includes("La Vajilla Alquileres"));
   for (const label of ["Catálogo", "Cómo funciona", "Contacto"]) assert.ok(text(html).includes(label), label);
@@ -24,19 +25,21 @@ test("pie de la tienda: crédito de OwnCoding con la versión de package.json (l
   assert.ok(!text(html).includes("WhatsApp"));
 });
 
-test("encabezado de la tienda: sello EventOS, separador y empresa; navegación y carrito", () => {
+test("encabezado de la tienda: identidad de la empresa y navegación compacta; crédito EventOS en el pie", () => {
   const html = renderToStaticMarkup(createElement(StoreHeader, {
     name: "La Vajilla Alquileres", slug: "la-vajilla", logos: { light: true, dark: true }, homeHref: "/tienda/la-vajilla",
     nav: storeNavLinks("", { contact: true }), cart: "button",
   }));
-  const eventos = html.indexOf("EventOS");
-  const sep = html.indexOf("cp-hd-sep");
-  const empresa = html.indexOf("La Vajilla Alquileres");
-  assert.ok(eventos >= 0 && eventos < sep && sep < empresa, "orden: EventOS | empresa");
-  assert.ok(html.includes("/assets/eventos-mark.png"));
+  assert.ok(html.includes("Inicio de La Vajilla Alquileres"));
+  assert.ok(!html.includes("EventOS") && !html.includes("eventos-mark.png") && !html.includes("cp-hd-sep"));
   assert.ok(html.includes("/api/catalog/la-vajilla/logo/light") && html.includes("/api/catalog/la-vajilla/logo/dark"), "logo por tema");
-  for (const label of ["Catálogo", "Cómo funciona", "Contacto"]) assert.ok(html.includes(label), label);
+  for (const label of ["Catálogo", "Contacto"]) assert.ok(html.includes(label), label);
+  assert.ok(!html.includes("Cómo funciona"));
   assert.ok(html.includes("cp-hd-cart"));
+  const fallback = renderToStaticMarkup(createElement(StoreHeader, {
+    name: "Negocio sin logo", slug: "negocio", homeHref: "/tienda/negocio", nav: [], cart: null,
+  }));
+  assert.ok(text(fallback).includes("Negocio sin logo"));
 });
 
 test("sin contacto cargado, el menú no ofrece «Contacto»", () => {

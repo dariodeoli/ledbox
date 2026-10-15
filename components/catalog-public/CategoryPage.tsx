@@ -26,10 +26,12 @@ export function CategoryPage({ store, category, categories, items, collections, 
           <nav className="cp-crumbs" aria-label="Ruta">
             <a href={home}>Inicio</a><span aria-hidden="true">/</span><a href={`${home}#catalogo`}>Catálogo</a><span aria-hidden="true">/</span><span aria-current="page">{category.name}</span>
           </nav>
-          <header className="cp-section-head">
+          <header className="cp-section-head cp-category-head">
+            <div>
             <p className="cp-eyebrow">Categoría</p>
             <h1 className="cp-h3">{category.name}</h1>
             <p className="cp-hint">{count} {count === 1 ? "producto" : "productos"}</p>
+            </div>
             <a className="cp-link" href={`${home}#catalogo`}>Volver al catálogo completo</a>
           </header>
           <CatalogBrowser organizationName={store.name} showPrices={showPrices && store.appearance.priceMode !== "quote"} preorderPath={`/api/catalog/${encodeURIComponent(store.slug)}/preorder`} wholesale={false} clientName={null} demo={demo} items={items} range={range} initialCategory={category.name} categoryName={category.name} categoryNavigation={{ allHref: `${home}#catalogo`, links }} zones={zones} priceMode={store.appearance.priceMode} slug={store.slug} cartScope="public" fichaBase={basePath} storeName={store.name} collections={collections.map((entry) => ({ slug: entry.slug, name: entry.name }))} />

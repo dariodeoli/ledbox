@@ -89,6 +89,8 @@ type Props = {
   initialCollection?: string | null;
   /** En una página propia, limpiar filtros nunca abandona esta categoría. Los items siguen completos para el carrito. */
   categoryName?: string;
+  /** La portada puede ofrecer el mismo selector; evita repetirlo en el catálogo de esa página. */
+  showEventPicker?: boolean;
   categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }> };
 };
 
@@ -120,7 +122,7 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
@@ -492,7 +494,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         {wholesale ? <p className="cp-lead">Precios mayoristas, solo para vos{clientName ? ` (${clientName})` : ""}. No compartas este link.</p> : null}
       </div> : null}
 
-      <EventPicker slug={slug} range={range} variant="bar" />
+      {showEventPicker ? <EventPicker slug={slug} range={range} variant="bar" /> : null}
 
       <FilterBar categoryNavigation={categoryNavigation} categories={categories} category={categoryName ?? category} onCategory={(value) => { setCategory(value); setShown(PAGE_SIZE); }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
       <div className="cp-catalog-layout">
