@@ -681,7 +681,8 @@ export function ClientesModule() {
                 <AdminImageUpload
                   label="Logo del cliente"
                   mode="logo"
-                  hint="JPG, PNG o WebP hasta 1 MB; se recorta y comprime en el navegador. Sin logo queda el monograma de iniciales."
+                  editSrc={previewLogoSrc}
+                  hint="JPG, PNG o WebP hasta 1 MB. Podés ajustar el encuadre antes de guardar. Sin logo queda el monograma de iniciales."
                   preview={<AdminAvatar name={previewName} src={previewLogoSrc} size={64} title={`Logo de ${previewName}`} />}
                   busy={busy}
                   onPrepared={(image) => {

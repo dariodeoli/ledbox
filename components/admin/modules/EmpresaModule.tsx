@@ -191,6 +191,7 @@ export function EmpresaModule() {
                     key={variant}
                     label={logoVariantLabel(variant)}
                     mode="logo"
+                    editSrc={logoSrc(variant)}
                     hint={
                       variant === "light"
                         ? "Para fondos oscuros (panel en modo oscuro)."

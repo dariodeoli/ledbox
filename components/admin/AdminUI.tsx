@@ -19,11 +19,13 @@ import {
   type AdminTone,
 } from "@/lib/admin-format";
 import { adminApiGet } from "@/lib/admin-api";
-import { prepareIdentityImage, type PreparedIdentityImage } from "@/lib/identity-image";
+import { loadImageSource, prepareIdentityImage, type LoadedImage, type PreparedIdentityImage } from "@/lib/identity-image";
+import { DEFAULT_IMAGE_FRAMING, boundedImageFraming, identityImageSize, imageFramingRect, initialImageFraming, type ImageFraming } from "@/lib/image-framing";
+import { detectIdentityImageMime } from "@/lib/admin-types";
 import { BrandMark } from "@/components/brand-mark";
 import { AdminIcon } from "./AdminIcons";
 import { AdminAvatar } from "./AdminAvatar";
-import { PinField } from "./AdminFields";
+import { NumberField, PinField } from "./AdminFields";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 import { SIMULATED_WHATSAPP_NOTICE } from "@/lib/mail-preview";
 
@@ -1952,6 +1954,7 @@ export function AdminImageUpload({
   hint,
   mode = "avatar",
   preview,
+  editSrc,
   busy,
   disabled,
   error,
@@ -1964,6 +1967,8 @@ export function AdminImageUpload({
   /** `avatar` recorta cuadrado desde el centro; `logo` conserva la relación de aspecto. */
   mode?: "avatar" | "logo";
   preview: React.ReactNode;
+  /** Imagen actual controlada por el consumidor; se vuelve a editar sólo al pedirlo. */
+  editSrc?: string | null;
   busy?: boolean;
   disabled?: boolean;
   error?: string | null;
@@ -1981,20 +1986,25 @@ export function AdminImageUpload({
   const message = error || localError;
   const working = Boolean(busy) || preparing;
 
-  async function pick(file: File | null) {
-    if (!file) return;
+  const [editing, setEditing] = useState<File | null>(null);
+  function pick(file: File | null) {
+    if (!file || working || disabled) return;
     setLocalError("");
-    setPreparing(true);
-    const result = await prepareIdentityImage(
-      file,
-      mode === "logo" ? { square: false, maxSide: 1024 } : { square: true, maxSide: 512 },
-    );
-    setPreparing(false);
-    if (!result.ok) {
-      setLocalError(result.error);
-      return;
-    }
-    onPrepared(result.image);
+    setEditing(file);
+  }
+  async function editCurrent() {
+    if (!editSrc || working || disabled) return;
+    setLocalError(""); setPreparing(true);
+    try {
+      const source = new URL(editSrc, window.location.href);
+      const localData = /^data:image\/(?:jpeg|png|webp);base64,/i.test(editSrc);
+      if (!localData && (source.origin !== window.location.origin || !["http:", "https:"].includes(source.protocol))) throw new Error("No se puede editar esta imagen desde una dirección externa. Subí el archivo original.");
+      const response = await fetch(editSrc, { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("No pudimos abrir la imagen actual. Probá de nuevo o subí el original.");
+      const blob = await response.blob();
+      setEditing(new File([blob], "imagen-actual", { type: blob.type }));
+    } catch (failure) { setLocalError(failure instanceof Error ? failure.message : "No pudimos abrir la imagen actual."); }
+    finally { setPreparing(false); }
   }
 
   return (
@@ -2015,6 +2025,7 @@ export function AdminImageUpload({
           >
             {working ? "Procesando" : "Subir imagen"}
           </AdminButton>
+          {editSrc ? <AdminButton type="button" icon="edit" disabled={disabled || working} onClick={() => void editCurrent()}>Editar encuadre</AdminButton> : null}
           {onRemove ? (
             <AdminButton
               type="button"
@@ -2041,6 +2052,7 @@ export function AdminImageUpload({
           event.target.value = "";
         }}
       />
+      {editing ? <AdminIdentityImageEditor file={editing} mode={mode} onCancel={() => setEditing(null)} onApply={(image) => { setEditing(null); onPrepared(image); }} /> : null}
       {message ? (
         <span className="admin-field-error" id={errorId} role="alert">
           {message}
@@ -2052,4 +2064,89 @@ export function AdminImageUpload({
       ) : null}
     </div>
   );
+}
+
+/** Encuadre único de avatar y logos: el mismo rectángulo dibuja preview y exportación. */
+export function AdminIdentityImageEditor({ file, mode, onApply, onCancel }: {
+  file: File; mode: "avatar" | "logo"; onApply: (image: PreparedIdentityImage) => void; onCancel: () => void;
+}) {
+  const [loaded, setLoaded] = useState<LoadedImage | null>(null);
+  const [framing, setFraming] = useState<ImageFraming>({ ...DEFAULT_IMAGE_FRAMING });
+  const [initial, setInitial] = useState<ImageFraming>({ ...DEFAULT_IMAGE_FRAMING });
+  const [zoomInput, setZoomInput] = useState("100");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const helpId = useId();
+  const drag = useRef<{ pointerId: number; x: number; y: number; framing: ImageFraming } | null>(null);
+  const square = mode === "avatar", maxSide = square ? 512 : 1024;
+  const size = loaded ? identityImageSize(loaded.width, loaded.height, square, maxSide) : { width: 1, height: 1 };
+  useEffect(() => {
+    let active = true;
+    let resource: LoadedImage | null = null;
+    const read = async () => {
+      try {
+        if (!file.size || !detectIdentityImageMime(new Uint8Array(await file.slice(0, 16).arrayBuffer()))) throw new Error("Elegí un JPG, PNG o WebP real. El archivo no puede estar vacío.");
+        resource = await loadImageSource(file);
+        if (!resource || resource.width < 1 || resource.height < 1) throw new Error("No pudimos leer esta imagen; probá con otro archivo.");
+        if (!active) { resource.release(); resource = null; return; }
+        const frame = initialImageFraming(resource.width, resource.height, square);
+        setLoaded(resource); setFraming(frame); setInitial(frame);
+      } catch (failure) { if (active) setError(failure instanceof Error ? failure.message : "No pudimos leer la imagen."); }
+      finally { if (active) setLoading(false); }
+    };
+    void read();
+    return () => { active = false; resource?.release(); resource = null; };
+  }, [file, square]);
+  useEffect(() => {
+    if (!loaded || !canvasRef.current) return;
+    const context = canvasRef.current.getContext("2d");
+    if (!context) { setError("El navegador no permite preparar la imagen."); return; }
+    context.clearRect(0, 0, size.width, size.height);
+    const rect = imageFramingRect(loaded.width, loaded.height, size.width, size.height, framing);
+    context.drawImage(loaded.image, rect.x, rect.y, rect.width, rect.height);
+  }, [loaded, framing, size.width, size.height]);
+  useEffect(() => { setZoomInput(String(Math.round(framing.zoom * 100))); }, [framing.zoom]);
+  function update(patch: Partial<ImageFraming>) { setFraming((current) => boundedImageFraming({ ...current, ...patch })); }
+  async function apply() {
+    if (!loaded || applying || loading) return;
+    setApplying(true); setError("");
+    try {
+      const result = await prepareIdentityImage(file, { square, maxSide, framing });
+      if (!result.ok) { setError(result.error); return; }
+      onApply(result.image);
+    } catch { setError("No pudimos preparar la imagen. Probá otra vez."); }
+    finally { setApplying(false); }
+  }
+  function move(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!loaded || !drag.current || event.pointerId !== drag.current.pointerId || applying) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const rect = imageFramingRect(loaded.width, loaded.height, size.width, size.height, drag.current.framing);
+    update({ x: drag.current.framing.x + (rect.travelX ? (event.clientX - drag.current.x) * size.width / bounds.width / rect.travelX : 0), y: drag.current.framing.y + (rect.travelY ? (event.clientY - drag.current.y) * size.height / bounds.height / rect.travelY : 0) });
+  }
+  return <AdminDialog title={square ? "Encuadrar foto de perfil" : "Encuadrar logo"} size="md" icon="image" error={error}
+    description="Arrastrá la imagen o ajustá los controles. Recién se usa cuando pulsás Aplicar."
+    dirty={JSON.stringify(framing) !== JSON.stringify(initial)} onClose={() => { if (!applying) onCancel(); }}
+    footer={({ requestClose }) => <><AdminButton icon="close" onClick={requestClose} disabled={applying}>Cancelar</AdminButton><AdminButton variant="primary" icon="check" onClick={() => void apply()} disabled={!loaded || loading} busy={applying} busyLabel="Preparando…">Aplicar</AdminButton></>}>
+    {loading ? <AdminLoadingRows rows={2} /> : loaded ? <div className="admin-image-editor">
+      <div className="admin-image-editor-stage" data-mode={mode}>
+        <canvas ref={canvasRef} width={size.width} height={size.height} tabIndex={0} aria-label="Vista previa del encuadre. Usá las flechas para mover y más o menos para acercar." aria-describedby={helpId}
+          onPointerDown={(event) => { if (applying) return; event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, framing }; }} onPointerMove={move}
+          onPointerUp={(event) => { if (drag.current?.pointerId === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId); } }} onPointerCancel={() => { drag.current = null; }}
+          onKeyDown={(event) => { if (applying) return; const step = event.shiftKey ? .2 : .05; if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-"].includes(event.key)) { event.preventDefault(); if (event.key === "ArrowLeft") update({ x: framing.x - step }); else if (event.key === "ArrowRight") update({ x: framing.x + step }); else if (event.key === "ArrowUp") update({ y: framing.y - step }); else if (event.key === "ArrowDown") update({ y: framing.y + step }); else update({ zoom: framing.zoom + (event.key === "-" ? -.25 : .25) }); } }} />
+      </div>
+      <p className="admin-field-hint" id={helpId}>Arrastrá para mover. Con teclado: flechas para posición, + y − para zoom. El fondo cuadriculado indica transparencia.</p>
+      <div className="admin-image-editor-presets">
+        <AdminButton icon="image" onClick={() => setFraming({ ...DEFAULT_IMAGE_FRAMING })} disabled={applying}>Ajustar completa</AdminButton>
+        {square ? <AdminButton icon="user" onClick={() => setFraming(initialImageFraming(loaded.width, loaded.height, true))} disabled={applying}>Rellenar centrado</AdminButton> : null}
+        <AdminButton icon="refresh" onClick={() => setFraming(initial)} disabled={applying}>Reiniciar</AdminButton>
+      </div>
+      <div className="admin-image-editor-controls">
+        <div className="admin-image-editor-zoom" onBlur={() => setZoomInput(String(Math.round(framing.zoom * 100)))}><AdminButton title="Alejar imagen" aria-label="Alejar imagen" onClick={() => update({ zoom: framing.zoom - .25 })} disabled={applying || framing.zoom <= 1}>−</AdminButton><NumberField label="Zoom" suffix="%" value={zoomInput} onChange={(value) => { setZoomInput(value); const zoom = Number(value); if (value && zoom >= 100 && zoom <= 800) update({ zoom: zoom / 100 }); }} hint="100–800 %" error={zoomInput && (Number(zoomInput) < 100 || Number(zoomInput) > 800) ? "Usá entre 100 y 800 %." : null} disabled={applying} /><AdminButton icon="plus" title="Acercar imagen" aria-label="Acercar imagen" onClick={() => update({ zoom: framing.zoom + .25 })} disabled={applying || framing.zoom >= 8} /></div>
+        <NumberField label="Posición horizontal" suffix="%" value={String(Math.round((framing.x + 1) * 50))} onChange={(value) => update({ x: Number(value) / 50 - 1 })} disabled={applying} hint="0 izquierda · 50 centro · 100 derecha" size="md" />
+        <NumberField label="Posición vertical" suffix="%" value={String(Math.round((framing.y + 1) * 50))} onChange={(value) => update({ y: Number(value) / 50 - 1 })} disabled={applying} hint="0 arriba · 50 centro · 100 abajo" size="md" />
+      </div>
+    </div> : null}
+  </AdminDialog>;
 }

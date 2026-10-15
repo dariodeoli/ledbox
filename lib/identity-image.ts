@@ -1,6 +1,6 @@
 "use client";
 
-import { imageFramingRect, type ImageFraming } from "./image-framing";
+import { identityImageSize, imageFramingRect, type ImageFraming } from "./image-framing";
 
 import {
   detectIdentityImageMime,
@@ -116,10 +116,7 @@ export async function prepareIdentityImage(
   }
 
   try {
-    const scale = Math.min(1, maxSide / Math.max(loaded.width, loaded.height));
-    const side = square ? Math.min(loaded.width, loaded.height) : 0;
-    const width = square ? Math.max(1, Math.round(side * scale)) : Math.max(1, Math.round(loaded.width * scale));
-    const height = square ? width : Math.max(1, Math.round(loaded.height * scale));
+    const { width, height } = identityImageSize(loaded.width, loaded.height, square, maxSide);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;

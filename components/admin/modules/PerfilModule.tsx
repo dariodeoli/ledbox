@@ -207,6 +207,7 @@ export function PerfilModule() {
             <AdminImageUpload
               label="Foto de perfil"
               mode="avatar"
+              editSrc={avatarSrc}
               hint="JPG, PNG o WebP hasta 1 MB. Se recorta cuadrada y se comprime en tu navegador; solo se ve con sesión del panel."
               preview={<AdminAvatar name={data?.name ?? user?.name} src={avatarSrc} size={64} />}
               busy={avatarBusy}
