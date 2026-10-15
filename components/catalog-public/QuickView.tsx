@@ -10,6 +10,8 @@ import { ProductPlaceholder, XIcon } from "./StoreIcons";
 import { Stepper } from "./Stepper";
 import { QuickViewSkeleton } from "./StoreSkeletons";
 import { formatGs, MAX_QUANTITY } from "@/lib/storefront-ui";
+import { AVAILABILITY_HINT_LABEL } from "@/lib/catalog-public";
+import { EventPicker } from "./EventPicker";
 import { useModalBehavior } from "./ThemePortal";
 
 /**
@@ -30,7 +32,9 @@ type Props = {
   /** Base del endpoint JSON de la ficha, terminada en `/product/`. */
   productApi: string;
   /** `<base>/p/<id>`: la página completa del producto. */
-  fichaHref: string | null;
+  fichaHref?: string | null;
+  slug?: string;
+  range?: { fromKey: string; toKey: string; days: number } | null;
   /** Cantidad de este producto que ya está en el pedido. */
   inCart: number;
   /** De a cuánto sube la cantidad (10 en las piezas «c/u»). */
@@ -44,7 +48,7 @@ const money = formatGs;
 
 type Loaded = { state: "loading" } | { state: "error" } | { state: "ok"; detail: ProductDetail };
 
-export function QuickView({ item, items, showPrices, priceOf, productApi, fichaHref, inCart, step = 1, onAdd, onNavigate, onClose }: Props) {
+export function QuickView({ item, items, showPrices, priceOf, productApi, slug, range = null, inCart, step = 1, onAdd, onNavigate, onClose }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -52,12 +56,13 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
 
   const cache = useRef(new Map<string, ProductDetail>());
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
+  const [retry, setRetry] = useState(0);
   const [quantity, setQuantity] = useState(step);
   const [added, setAdded] = useState(0);
 
+  useEffect(() => { setQuantity(step); setAdded(0); }, [item.id, step]);
+
   useEffect(() => {
-    setQuantity(step);
-    setAdded(0);
     body.current?.scrollTo({ top: 0 });
     const hit = cache.current.get(item.id);
     if (hit) { setLoaded({ state: "ok", detail: hit }); return; }
@@ -68,6 +73,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
         const response = await fetch(`${productApi}${encodeURIComponent(item.id)}`, { signal: controller.signal, cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const detail = ((await response.json()) as { detail: ProductDetail }).detail;
+        if (!detail?.item || detail.item.id !== item.id) throw new Error("Ficha pública inválida");
         cache.current.set(item.id, detail);
         setLoaded({ state: "ok", detail });
       } catch (failure) {
@@ -77,14 +83,18 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
       }
     })();
     return () => controller.abort();
-  }, [item.id, productApi, step]);
+  }, [item.id, productApi, step, retry]);
 
-  const specs = useMemo(() => cardSpecs(item), [item]);
-  const price = priceOf(item);
-  const detail = loaded.state === "ok" ? loaded.detail : null;
-  const isPackage = Boolean(item.package?.length) || Boolean(detail && detail.includes.length > 0);
+  const detail = loaded.state === "ok" && loaded.detail.item.id === item.id ? loaded.detail : null;
+  // La disponibilidad viene del catálogo para las fechas elegidas; el endpoint de ficha
+  // entrega el resto del mismo DTO público, sin costos ni cantidades internas.
+  const product = detail?.item ?? item;
+  const specs = useMemo(() => cardSpecs(product), [product]);
+  const price = priceOf(product);
+  const isPackage = Boolean(product.package?.length) || Boolean(detail && detail.includes.length > 0);
   const similar = (detail?.similar ?? []).map((entry) => items.find((candidate) => candidate.id === entry.id) ?? (entry as CatalogItemView));
   const descriptionLines = (specs.description ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const images = [...new Set([...(product.imageUrl ? [product.imageUrl] : []), ...(product.gallery ?? [])])];
 
   function add() {
     onAdd(item.id, quantity);
@@ -95,15 +105,15 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
     <div className="cp-overlay cp-overlay--qv" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="cp-qv" role="dialog" aria-modal="true" aria-labelledby="qv-titulo" ref={panel} tabIndex={-1} data-testid="quick-view">
         <header className="cp-qv-head">
-          <p className="cp-qv-kicker">Vista rápida</p>
+          <p className="cp-qv-kicker">Detalle del producto</p>
           <button type="button" ref={closeButton} className="cp-btn cp-btn--icon cp-btn--ghost" onClick={onClose} aria-label="Cerrar la vista rápida"><XIcon name="close" size={20} /></button>
         </header>
         <div className="cp-qv-body" ref={body}>
           <div className="cp-qv-main">
-            <ProductGallery images={[...(item.imageUrl ? [item.imageUrl] : []), ...(item.gallery ?? [])]} name={item.name} compact />
+            <ProductGallery key={item.id} images={images} name={product.name} compact />
             <div className="cp-qv-info">
-              <p className="cp-panel-meta">{item.sku ? skuLabel(item.sku) : "Sin código"} · {isPackage ? "Juego" : item.category.split("›")[0].trim()}</p>
-              <h2 id="qv-titulo" className="cp-qv-name">{item.name}</h2>
+              <p className="cp-panel-meta">{product.sku ? skuLabel(product.sku) : "Sin código"} · {isPackage ? "Juego · " : ""}{product.category}</p>
+              <h2 id="qv-titulo" className="cp-qv-name">{product.name}</h2>
               {specs.dimensions || specs.capacity ? (
                 <ul className="cp-plain">
                   {specs.dimensions ? <li className="cp-hint"><XIcon name="ruler" size={14} /> Medidas: {specs.dimensions}</li> : null}
@@ -114,9 +124,9 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
                 {showPrices && price.unit > 0 ? (
                   <span className="cp-panel-price"><span className="cp-price-lg">{money(price.unit)}</span><span className="cp-price-unit">{price.unitText}</span></span>
                 ) : (
-                  <span className="cp-price-unit">{showPrices ? "Consultar precio" : "A cotizar"}</span>
+                  <span className="cp-price-unit">Consultar precio y disponibilidad</span>
                 )}
-                {price.saving ? <p className="cp-tile-sub"><strong className="cp-tile-save">Ahorrás {money(price.saving.savings)}</strong> · Por separado <s>{money(price.saving.unitSum)}</s></p> : null}
+                {showPrices && price.saving ? <p className="cp-tile-sub"><strong className="cp-tile-save">Ahorrás {money(price.saving.savings)}</strong> · Por separado <s>{money(price.saving.unitSum)}</s></p> : null}
                 {showPrices && price.tierHints.length > 0 ? (
                   <ul className="cp-qv-tiers" aria-label="Escalones por días">
                     {price.tierHints.map((hint) => <li key={hint}>{hint}</li>)}
@@ -126,10 +136,13 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
               {detail && detail.includes.length > 0 ? (
                 <section aria-labelledby="qv-incluye" className="cp-qv-sec">
                   <h3 id="qv-incluye" className="cp-qv-h">Incluye</h3>
-                  <ul className="cp-checks" data-testid="quick-includes">
+                  <ul className="cp-checks cp-qv-includes" data-testid="quick-includes">
                     {detail.includes.map((part) => (
                       <li key={`${part.name}-${part.sku ?? ""}`}>
-                        <XIcon name="check" size={16} />
+                        <span className="cp-qv-part-photo">{part.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={part.imageUrl} alt="" loading="lazy" />
+                        ) : <ProductPlaceholder size={18} />}</span>
                         <span><strong>{part.quantity} × {part.name}</strong>{part.sku ? <small className="cp-hint"> {skuLabel(part.sku)}</small> : null}</span>
                       </li>
                     ))}
@@ -142,9 +155,26 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
                   <div className="cp-pre">{descriptionLines.join("\n")}</div>
                 </section>
               ) : null}
-              {loaded.state === "loading" ? <><QuickViewSkeleton /><span className="cp-sr" role="status">Cargando piezas y opciones similares…</span></> : null}
-              {loaded.state === "error" ? <p className="cp-hint" role="status">No pudimos cargar las piezas y las opciones similares. Probá abrir la página del producto.</p> : null}
-              {fichaHref ? <a className="cp-link cp-qv-open" href={fichaHref}>Ver la ficha completa</a> : null}
+              {loaded.state === "loading" ? <><QuickViewSkeleton /><span className="cp-sr" role="status">Cargando la ficha completa del producto…</span></> : null}
+              {product.tags && product.tags.length > 0 ? (
+                <section className="cp-qv-sec" aria-labelledby="qv-caracteristicas">
+                  <h3 id="qv-caracteristicas" className="cp-qv-h">Características</h3>
+                  <p className="cp-hint">{product.tags.join(" · ")}</p>
+                </section>
+              ) : null}
+              {slug ? <EventPicker slug={slug} range={range} variant="panel" title="Fechas del alquiler" emptyNote="Elegí las fechas para consultar la disponibilidad." /> : null}
+              {range ? (
+                <p className="cp-avail" data-tone={item.availability ?? "CONSULT"} data-testid="quick-availability">
+                  {item.availability === "AVAILABLE" ? "Disponible para tu fecha" : item.availability === "LOW" ? AVAILABILITY_HINT_LABEL.LOW : "Consultar disponibilidad"}
+                </p>
+              ) : null}
+              <p className="cp-hint">La disponibilidad es indicativa y se confirma al cotizar.{showPrices ? " Los precios son de referencia y se confirman en la cotización." : ""}</p>
+              {loaded.state === "error" ? (
+                <div className="cp-qv-retry" role="status">
+                  <p>No pudimos cargar todos los datos del producto.</p>
+                  <button type="button" className="cp-btn" onClick={() => setRetry((attempt) => attempt + 1)}>Volver a intentar</button>
+                </div>
+              ) : null}
             </div>
           </div>
           {similar.length > 0 ? (
@@ -167,7 +197,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
                         </div>
                         <div className="cp-mini-body">
                           <span className="cp-mini-name">{entry.name}</span>
-                          <span className="cp-hint">{showPrices && entryPrice.unit > 0 ? `${money(entryPrice.unit)} ${entryPrice.unitText}` : "Consultar precio"}</span>
+                          <span className="cp-hint">{showPrices && entryPrice.unit > 0 ? `${money(entryPrice.unit)} ${entryPrice.unitText}` : "Consultar precio y disponibilidad"}</span>
                         </div>
                       </div>
                     </li>

@@ -52,6 +52,7 @@ export function CartDrawer(props: {
   onSent: () => void;
   onClose: () => void;
   onFinish: () => void;
+  onSaveCart?: () => void;
 }) {
   const { range, lines, localSubtotal, perDay, view, showPrices, done, zones, zoneChoice, priceMode } = props;
   const zone = zones.find((entry) => entry.id === zoneChoice) ?? null;
@@ -302,6 +303,7 @@ export function CartDrawer(props: {
               {error ? <p className="cp-error" role="alert">{error}</p> : null}
             </div>
             <footer className="cp-drawer-foot">
+              {props.onSaveCart ? <button type="button" className="cp-btn cp-btn--ghost cp-save-cart" onClick={props.onSaveCart}>Guardar carrito para después</button> : null}
               <div className="cp-cart-actions">
                 {step === 2 ? <button type="button" className="cp-btn" onClick={() => setStep(1)}>Volver</button> : <button type="button" className="cp-btn" onClick={props.onClose}>Seguir eligiendo</button>}
                 {step === 1 ? (
