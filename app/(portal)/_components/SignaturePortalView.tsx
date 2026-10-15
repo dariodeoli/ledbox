@@ -23,7 +23,7 @@ import { SignatureDocumentSheet } from "./SignatureDocumentSheet";
  * respuesta real, nunca con un estado optimista.
  */
 
-type ActionError = { error?: string; signature?: PortalSignatureRequest } | null;
+type ActionError = { error?: string; signature?: PortalSignatureRequest; demoOtp?: string } | null;
 
 const EVIDENCE_STATUS: Record<string, string> = {
   PENDING: "Pendiente",
@@ -42,6 +42,8 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
   const [otp, setOtp] = useState("");
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpNotice, setOtpNotice] = useState("");
+  /** Solo en la demo: el código que el servidor devuelve en vez de enviarlo por correo. */
+  const [demoOtp, setDemoOtp] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [rejectBusy, setRejectBusy] = useState(false);
@@ -113,6 +115,13 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
       setError(data?.error ?? "No pudimos enviar el código.");
       return;
     }
+    if (typeof data?.demoOtp === "string") {
+      // Demo: no se envió ningún correo; el código se muestra acá.
+      setDemoOtp(data.demoOtp);
+      setOtpNotice("Demo: no se envió ningún correo. Usá el código que ves acá.");
+      return;
+    }
+    setDemoOtp("");
     setOtpNotice(`Te enviamos un código a ${current.recipient.email ?? "tu correo"}.`);
   }
 
@@ -349,6 +358,15 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
                         Verificar código
                       </button>
                     </div>
+                    {demoOtp ? (
+                      <div className="portal-demo-otp" role="status">
+                        <span>Demo: el código no se envía por correo. Tu código es</span>
+                        <span className="portal-demo-otp-code" aria-label={`Código de la demo: ${demoOtp.split("").join(" ")}`}>{demoOtp}</span>
+                        <button type="button" className="portal-btn" onClick={() => setOtp(demoOtp)} disabled={otpBusy || otp === demoOtp}>
+                          Usar este código
+                        </button>
+                      </div>
+                    ) : null}
                     {otpNotice ? (
                       <p className="portal-ok" role="status">
                         {otpNotice}

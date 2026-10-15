@@ -28,10 +28,12 @@ import {
   notificationTone,
   paymentReminderMessage,
   statusTone,
+  isWhatsappSandbox,
   whatsappHref,
+  whatsappReachable,
   setWhatsappSandbox,
 } from "@/lib/admin-format";
-import { publicConfig } from "@/lib/public-config";
+import { publicConfig, setPortalSandbox } from "@/lib/public-config";
 import { ADMIN_NAV_GROUP_KEY, ADMIN_ROOT_ID, readStoredPinDigits, storePinDigits } from "@/lib/admin-theme";
 import {
   adminAvatarUrl,
@@ -47,8 +49,9 @@ import {
   type AdminSessionUser,
 } from "@/lib/admin-types";
 import { AdminIcon } from "./AdminIcons";
+import { AdminSandboxStrip } from "./AdminSandboxStrip";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
-import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen } from "./AdminUI";
+import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
 /**
  * Paleta del buscador (issue #67): llega diferida. Su código no entra en el
  * arranque del panel; con el shell ocioso se prefetchea el chunk para que la
@@ -80,6 +83,9 @@ export type AdminSessionState = {
   demo: boolean;
   /** Sandbox por visitante de la demo: escribe, pero nada sale hacia afuera (sin links de WhatsApp). */
   sandbox?: boolean;
+  /** Solo en una sandbox: último uso y tope de 24 h (ISO) para la hora límite de la franja. */
+  demoLastSeenAt?: string | null;
+  demoExpiresAt?: string | null;
   /** Panel bloqueado por PIN (issue #21): se dibuja la pantalla de bloqueo y nada del panel detrás. */
   locked: boolean;
   /** Motivo del bloqueo vigente (para el texto de la pantalla). */
@@ -180,6 +186,10 @@ function asLockInfo(value: unknown): AdminSessionLock | null {
   };
 }
 
+function asIsoString(value: unknown): string | null {
+  return typeof value === "string" && value && Number.isFinite(new Date(value).getTime()) ? value : null;
+}
+
 /**
  * `GET /api/admin/session` devuelve hoy `{ user: { user, session } }` y va a pasar a
  * `{ user, organization, organizations[] }`. Se leen las dos formas.
@@ -190,6 +200,8 @@ function pickSessionData(raw: unknown): {
   organizations: AdminOrganization[];
   demo: boolean;
   sandbox: boolean;
+  demoLastSeenAt: string | null;
+  demoExpiresAt: string | null;
   locked: boolean;
   lockReason: "inactivity" | "manual";
   lock: AdminSessionLock | null;
@@ -212,6 +224,8 @@ function pickSessionData(raw: unknown): {
     organizations,
     demo,
     sandbox: outer.sandbox === true || inner.sandbox === true,
+    demoLastSeenAt: asIsoString(inner.demoLastSeenAt) ?? asIsoString(outer.demoLastSeenAt),
+    demoExpiresAt: asIsoString(inner.demoExpiresAt) ?? asIsoString(outer.demoExpiresAt),
     locked: outer.locked === true || inner.locked === true,
     lockReason,
     lock: asLockInfo(inner.lock) ?? asLockInfo(outer.lock),
@@ -223,9 +237,10 @@ function pickSessionData(raw: unknown): {
  * parser que la respuesta del API, así los dos caminos no divergen.
  */
 function sessionDataFromPayload(payload: AdminSessionPayload): AdminSessionData {
-  const { user, organization, organizations, demo, sandbox, locked, lockReason, lock } = pickSessionData(payload);
+  const { user, organization, organizations, demo, sandbox, demoLastSeenAt, demoExpiresAt, locked, lockReason, lock } = pickSessionData(payload);
   const role = user ? asAdminRole(user.role) : null;
   setWhatsappSandbox(sandbox);
+  setPortalSandbox(sandbox);
   return {
     user: user ? { ...user, role: role ?? user.role } : null,
     role,
@@ -233,6 +248,8 @@ function sessionDataFromPayload(payload: AdminSessionPayload): AdminSessionData 
     organizations,
     demo,
     sandbox,
+    demoLastSeenAt,
+    demoExpiresAt,
     locked,
     lockReason,
     lock,
@@ -368,14 +385,15 @@ export function AdminShell({
       setSession((current) => ({ ...current, loading: false, error: result.error }));
       return;
     }
-    const { user, organization, organizations, demo, sandbox, locked, lockReason, lock } = pickSessionData(result.data);
+    const { user, organization, organizations, demo, sandbox, demoLastSeenAt, demoExpiresAt, locked, lockReason, lock } = pickSessionData(result.data);
     setWhatsappSandbox(sandbox);
+    setPortalSandbox(sandbox);
     if (!user) {
       setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
       return;
     }
     const role = asAdminRole(user.role);
-    setSession({ user: { ...user, role }, role, organization, organizations, demo, sandbox, locked, lockReason, lock, loading: false, error: "" });
+    setSession({ user: { ...user, role }, role, organization, organizations, demo, sandbox, demoLastSeenAt, demoExpiresAt, locked, lockReason, lock, loading: false, error: "" });
   }, []);
 
   useEffect(() => {
@@ -743,7 +761,7 @@ export function AdminShell({
   }, []);
 
   const logout = useCallback(async () => {
-    if (session.demo) {
+    if (session.demo || session.sandbox) {
       await exitDemo();
       return;
     }
@@ -754,7 +772,7 @@ export function AdminShell({
       router.replace("/login");
       router.refresh();
     }
-  }, [session.demo, exitDemo, router]);
+  }, [session.demo, session.sandbox, exitDemo, router]);
 
   const sessionValue = useMemo<AdminSessionState>(
     () => ({ ...session, reload: () => void loadSession(), lockEligible, lockPanel, logout, loggingOut }),
@@ -940,11 +958,11 @@ export function AdminShell({
                 className="admin-nav-link admin-sidebar-logout"
                 onClick={() => void logout()}
                 disabled={loggingOut}
-                title={session.demo ? "Salir de la demo y volver a ledbox.online" : "Cerrar sesión"}
-                aria-label={session.demo ? "Salir de la demo" : "Cerrar sesión"}
+                title={session.demo || session.sandbox ? "Salir de la demo y volver a ledbox.online" : "Cerrar sesión"}
+                aria-label={session.demo || session.sandbox ? "Salir de la demo" : "Cerrar sesión"}
               >
                 <AdminIcon name="logout" size={16} />
-                <span className="admin-nav-text">{loggingOut ? "Saliendo…" : session.demo ? "Salir de la demo" : "Cerrar sesión"}</span>
+                <span className="admin-nav-text">{loggingOut ? "Saliendo…" : session.demo || session.sandbox ? "Salir de la demo" : "Cerrar sesión"}</span>
               </button>
             ) : null}
             <p className="admin-sidebar-note">Panel privado · LedBox</p>
@@ -1025,6 +1043,15 @@ export function AdminShell({
               </a>
             </div>
           </header>
+
+          {session.sandbox ? (
+            <AdminSandboxStrip
+              lastSeenAt={session.demoLastSeenAt}
+              expiresAt={session.demoExpiresAt}
+              onExit={() => void exitDemo()}
+              exiting={loggingOut}
+            />
+          ) : null}
 
           {session.demo ? (
             <div className="admin-demo-strip" role="status">
@@ -1115,6 +1142,9 @@ function AdminNotificationItem({ notification, writable }: { notification: Admin
   const when = `${formatCalendarDayShort(notification.date)} · ${formatDayWhen(notification.date)}`;
   const reminder = writable ? notification.reminder ?? null : null;
   const whatsappLink = reminder ? whatsappHref(reminder.phone, paymentReminderMessage(reminder)) : null;
+  // Demo: sin wa.me, el aviso muestra «Así se vería el mensaje».
+  const [simulating, setSimulating] = useState(false);
+  const simulatedMessage = reminder && !whatsappLink && isWhatsappSandbox() && whatsappReachable(reminder.phone) ? paymentReminderMessage(reminder) : null;
   const paymentId = notification.id.startsWith("collection_due:")
     ? notification.id.slice("collection_due:".length)
     : "";
@@ -1151,6 +1181,23 @@ function AdminNotificationItem({ notification, writable }: { notification: Admin
         >
           <WhatsappIcon size={15} />
         </a>
+      ) : null}
+      {simulatedMessage && reminder ? (
+        <>
+          <button
+            type="button"
+            className="admin-iconbtn"
+            title={`Ver cómo se vería el recordatorio por WhatsApp: ${reminder.client}`}
+            aria-label={`Ver cómo se vería el recordatorio por WhatsApp: ${reminder.client}`}
+            onClick={() => {
+              setSimulating(true);
+              rememberWhatsapp();
+            }}
+          >
+            <WhatsappIcon size={15} />
+          </button>
+          {simulating ? <AdminSimulatedMessageDialog to={reminder.client} message={simulatedMessage} onClose={() => setSimulating(false)} /> : null}
+        </>
       ) : null}
       <AdminIcon name="arrow-right" size={14} />
     </div>

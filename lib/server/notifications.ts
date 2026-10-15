@@ -1,5 +1,6 @@
 import { formatGs } from "owncoding-ui/utils";
 import { db } from "./db";
+import { isSandboxOrg } from "./demo-sandbox";
 import { portalBudgetUrl } from "@/lib/public-config";
 import type {
   AdminCalendarAlert,
@@ -425,6 +426,8 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
  * no hay acción y el aviso queda igual.
  */
 async function collectionDueCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
+  // En una sandbox el link del portal usa el host de la demo (en `clientes.` daría 404).
+  const sandbox = await isSandboxOrg(organizationId);
   const soonLimit = new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS);
   const todayKey = dayKeyOf(now);
   const pending = await db.clientPayment.findMany({
@@ -458,7 +461,7 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
               dueAt: payment.dueAt.toISOString(),
               invoiceNumber: payment.invoiceNumber,
               budgetTitle: payment.budget?.title ?? null,
-              portalUrl: payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken) : null,
+              portalUrl: payment.budget?.publicToken ? portalBudgetUrl(payment.budget.publicToken, { sandbox }) : null,
             }
           : null,
       },
@@ -473,6 +476,8 @@ async function collectionDueCandidates(organizationId: string, now: Date): Promi
  * el WhatsApp viaja con los datos reales para reclamar la transferencia.
  */
 async function expectedDueCandidates(organizationId: string, now: Date): Promise<AdminNotification[]> {
+  // En una sandbox el link del portal usa el host de la demo (en `clientes.` daría 404).
+  const sandbox = await isSandboxOrg(organizationId);
   const soonLimit = new Date(now.getTime() + NOTIFICATION_WINDOW_DAYS * DAY_MS);
   const todayKey = dayKeyOf(now);
   const pending = await db.expectedPayment.findMany({
@@ -513,7 +518,7 @@ async function expectedDueCandidates(organizationId: string, now: Date): Promise
               dueAt: expected.dueAt.toISOString(),
               invoiceNumber: null,
               budgetTitle: expected.budget.title,
-              portalUrl: expected.budget.publicToken ? portalBudgetUrl(expected.budget.publicToken) : null,
+              portalUrl: expected.budget.publicToken ? portalBudgetUrl(expected.budget.publicToken, { sandbox }) : null,
             }
           : null,
       },

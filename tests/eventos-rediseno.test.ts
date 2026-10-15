@@ -186,7 +186,7 @@ test("permisos intactos: sin permiso de escritura no hay siguiente acción, edic
   assert.match(module, /\{writable \? <NextActionButton item=\{item\} onRun=\{runNext\}/, "la fila solo ofrece la siguiente acción con permiso");
   assert.match(module, /if \(!next \|\| !writable\) return;/, "runNext ignora a quien no escribe");
   assert.match(module, /if \(writable\) entries\.push\(\{ label: "Editar evento"/);
-  assert.match(module, /if \(writable && whatsappHref\(event\.client\.phone\)\)/);
+  assert.match(module, /if \(writable && whatsappReachable\(event\.client\.phone\)\)/);
   assert.match(module, /const closable = writable && !isEventClosed\(event\)/);
   assert.match(module, /\{writable && showForm \?/, "el alta/edición sigue detrás del permiso");
   assert.match(module, /\{writable && closeBlock \?/, "«Cerrar igual» sigue detrás del permiso");

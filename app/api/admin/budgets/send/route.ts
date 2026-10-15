@@ -74,6 +74,7 @@ export async function POST(request: Request) {
     paymentDetails: budget.organization.paymentDetails,
     budget: { ...budget, items: stableOrderBudgetItems(budget.items) },
     message,
+    sandbox: auth.context.sandbox,
   });
   if (!content) return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
 
@@ -111,7 +112,9 @@ export async function POST(request: Request) {
     entity: "Budget",
     entityId: budget.id,
     summary:
-      result.status === "sent"
+      result.simulated
+        ? `Simuló el envío por correo del presupuesto «${budget.title}» a «${clientLabel}» (${to}): en la demo no sale ningún correo`
+        : result.status === "sent"
         ? `Envió por correo el presupuesto «${budget.title}» a «${clientLabel}» (${to})`
         : `No pudo enviar por correo el presupuesto «${budget.title}» a «${clientLabel}»: ${result.error ?? "sin detalle"}`,
     detail: {
@@ -128,6 +131,8 @@ export async function POST(request: Request) {
   return Response.json({
     status: result.status,
     error: result.error ?? null,
+    // Demo: el correo no salió; solo una sandbox recibe la vista previa de lo que se habría enviado.
+    ...(result.simulated ? { simulated: true, preview: result.preview ?? null } : {}),
     to,
     subject: content.subject,
     portalUrl: content.portalUrl,

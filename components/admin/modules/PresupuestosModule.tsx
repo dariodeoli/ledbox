@@ -10,7 +10,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PresupuestosTabs } from "./PresupuestosTabs";
 import { AdminMailPreview } from "../AdminMailPreview";
-import type { MailPreview } from "@/lib/mail-preview";
+import { AdminSimulatedMailDialog } from "../AdminSimulatedMail";
+import { SIMULATED_MAIL_NOTICE, type MailPreview, type SimulatedMail } from "@/lib/mail-preview";
 import {
   budgetApprovalLabel,
   budgetApprovalTone,
@@ -894,6 +895,8 @@ export function PresupuestosModule() {
   const [sendMessage, setSendMessage] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendPreview, setSendPreview] = useState<MailPreview | null>(null);
+  /** Demo: correo que no salió, con su vista previa. */
+  const [simulatedMail, setSimulatedMail] = useState<SimulatedMail | null>(null);
   const mailInFlight = useRef(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [sendError, setSendError] = useState("");
@@ -1409,7 +1412,7 @@ export function PresupuestosModule() {
     setSendBusy(true);
     setSendError("");
     try {
-      const result = await adminSend<MailPreview | { status: string; error: string | null; to: string }>("/api/admin/budgets/send", {
+      const result = await adminSend<MailPreview | { status: string; error: string | null; to: string; simulated?: boolean; preview?: SimulatedMail | null }>("/api/admin/budgets/send", {
         budgetId: sendBudget.id,
         to,
         message: sendMessage.trim() || undefined,
@@ -1422,6 +1425,14 @@ export function PresupuestosModule() {
       }
       if (result.data.status === "preview" && "confirmationToken" in result.data) {
         setSendPreview(result.data);
+        return;
+      }
+      if ("simulated" in result.data && result.data.simulated) {
+        // Demo: no salió ningún correo; se muestra cómo se habría visto.
+        setNotice(`${SIMULATED_MAIL_NOTICE}: presupuesto «${sendBudget.title}» para ${result.data.to}.`);
+        setSimulatedMail(result.data.preview ?? null);
+        setSendBudget(null);
+        budgetsResource.reload();
         return;
       }
       if (result.data.status === "sent") {
@@ -2122,6 +2133,8 @@ export function PresupuestosModule() {
           ) : null}
         </AdminDialog>
       ) : null}
+
+      {simulatedMail ? <AdminSimulatedMailDialog mail={simulatedMail} onClose={() => setSimulatedMail(null)} /> : null}
 
       {approval ? (
         <AdminDialog

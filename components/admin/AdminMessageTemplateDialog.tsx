@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
-import { whatsappHref } from "@/lib/admin-format";
+import { isWhatsappSandbox, whatsappHref } from "@/lib/admin-format";
+import { SIMULATED_WHATSAPP_NOTICE } from "@/lib/mail-preview";
 import { MESSAGE_TEMPLATE_TARGET_CATEGORIES, type AdminMessageTemplateRow } from "@/lib/admin-types";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminEmpty, AdminLoadingRows, AdminNote } from "./AdminUI";
 import { SelectField } from "./AdminFields";
@@ -96,6 +97,9 @@ export function MessageTemplateSendDialog({
   }, [templateId, target.kind, target.id]);
 
   const href = preview.status === "ready" ? whatsappHref(preview.phone, preview.message) : null;
+  // Demo: no se abre wa.me; el envío se simula (queda registrado) y el texto se muestra tal cual.
+  const sandbox = isWhatsappSandbox();
+  const simulatedReady = sandbox && preview.status === "ready" && Boolean(preview.phone);
 
   /** Registra el envío (no bloquea la apertura de WhatsApp). */
   const register = useCallback(() => {
@@ -123,11 +127,15 @@ export function MessageTemplateSendDialog({
       size="md"
       icon="mail"
       description={`Elegí una plantilla: el mensaje se completa con los datos reales de ${target.label} y se abre en WhatsApp listo para enviar.`}
-      error={registerError || (preview.status === "error" ? preview.error : "") || (preview.status === "ready" && !href ? "El cliente no tiene teléfono cargado." : "")}
+      error={registerError || (preview.status === "error" ? preview.error : "") || (preview.status === "ready" && !href && !simulatedReady ? "El cliente no tiene teléfono cargado." : "")}
       onClose={onClose}
       footer={<>
       <AdminButton icon="close" type="button" onClick={onClose}>Cerrar</AdminButton>
-      {href ? (
+      {simulatedReady ? (
+        <AdminButton variant="primary" type="button" iconNode={<WhatsappIcon size={15} />} onClick={register} disabled={Boolean(registered)}>
+          {registered ? "Envío simulado" : "Simular envío"}
+        </AdminButton>
+      ) : href ? (
         <a
           className="admin-btn admin-btn--primary"
           href={href}
@@ -175,13 +183,19 @@ export function MessageTemplateSendDialog({
       </AdminDialogSection>
 
       {preview.status === "loading" || preview.status === "ready" ? (
-        <AdminDialogSection title="Vista previa" stack>
+        <AdminDialogSection title={sandbox ? SIMULATED_WHATSAPP_NOTICE : "Vista previa"} stack>
           {preview.status === "loading" ? <p className="admin-dialog-text">Armando el mensaje con los datos reales…</p> : null}
           {preview.status === "ready" ? <pre className="admin-message-preview">{preview.message}</pre> : null}
         </AdminDialogSection>
       ) : null}
 
-      {registered && !registerError ? (
+      {registered && !registerError && sandbox ? (
+        <AdminNote tone="ok">
+          Demo: no se abrió WhatsApp ni salió ningún mensaje. {SIMULATED_WHATSAPP_NOTICE}: es el texto de arriba. El envío simulado quedó registrado.
+        </AdminNote>
+      ) : null}
+
+      {registered && !registerError && !sandbox ? (
         <AdminNote tone="ok">
           {registered === "already"
             ? `WhatsApp abierto con «${selected?.title ?? "la plantilla"}». Este cobro ya tenía un WhatsApp registrado hoy: no se duplica.`

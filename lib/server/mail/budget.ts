@@ -55,6 +55,8 @@ export type BudgetMailInput = {
   budget: BudgetMailBudget;
   /** Mensaje corto escrito por el equipo en el diálogo de envío (opcional). */
   message?: string | null;
+  /** Empresa sandbox de la demo: el link del portal usa el host de la demo (en `clientes.` daría 404). */
+  sandbox?: boolean;
 };
 
 export type BudgetMailContent = {
@@ -89,7 +91,7 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
   // El token guardado ya es el código canónico; `normalizeBudgetCode` lo deja igual
   // (y tolera un valor viejo sin guiones) sin reformatear dos veces.
   const code = budget.publicToken ? (normalizeBudgetCode(budget.publicToken) ?? budget.publicToken) : null;
-  const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken) : null;
+  const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken, { sandbox: input.sandbox }) : null;
   if (!code || !portalUrl) return null;
 
   const approved = Boolean(budget.approvedAt);

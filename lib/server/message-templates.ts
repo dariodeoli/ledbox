@@ -315,6 +315,8 @@ export type BudgetMessageData = MessageTemplateSender & {
   balance: number;
   validUntil: string | Date | null;
   portalToken: string | null;
+  /** Sandbox de la demo: el link del portal usa el host de la demo. */
+  sandbox?: boolean;
 };
 
 /** Variables de un presupuesto: total, saldo, validez y link del portal. */
@@ -326,7 +328,7 @@ export function budgetMessageValues(data: BudgetMessageData): MessageTemplateVar
     monto: formatMoney(data.total),
     saldo: formatMoney(data.balance),
     vencimiento: data.validUntil ? formatDate(data.validUntil) : null,
-    link_portal: data.portalToken ? portalBudgetUrl(data.portalToken) : null,
+    link_portal: data.portalToken ? portalBudgetUrl(data.portalToken, { sandbox: data.sandbox }) : null,
     vendedor: data.sellerName,
   };
 }

@@ -64,7 +64,8 @@ export async function POST(request: Request) {
   }
 
   if (!client.email) return jsonError("El cliente no tiene correo cargado.", 400);
-  if (!emailConfigured()) {
+  // En una sandbox de la demo no sale nada: el recordatorio se simula aunque falte el proveedor.
+  if (!emailConfigured() && !auth.context.sandbox) {
     return jsonError("Falta configurar RESEND_API_KEY: el recordatorio por email está deshabilitado.", 503);
   }
 
@@ -84,5 +85,6 @@ export async function POST(request: Request) {
     reminder: outcome.reminder,
     alreadySentToday: outcome.alreadySentToday,
     error: outcome.error,
+    ...(outcome.simulated ? { simulated: true, preview: outcome.preview ?? null } : {}),
   });
 }

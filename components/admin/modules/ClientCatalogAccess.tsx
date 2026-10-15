@@ -6,6 +6,8 @@ import { formatDateTime } from "@/lib/admin-format";
 import { whatsappHref } from "@/lib/admin-format";
 import { TextField } from "../AdminFields";
 import { AdminButton, AdminConfirmDialog, AdminNote, AdminPanel } from "../AdminUI";
+import { useAdminSession } from "../AdminShell";
+import { SANDBOX_UNAVAILABLE } from "@/lib/mail-preview";
 
 /**
  * «Compartir catálogo mayorista» en la ficha del cliente. El link es privado,
@@ -16,7 +18,20 @@ import { AdminButton, AdminConfirmDialog, AdminNote, AdminPanel } from "../Admin
 type Status = { active: { createdAt: string; lastUsedAt: string | null } | null; revoked: number };
 type CatalogAccessPayload = { access: Status; storeEnabled: boolean; url?: string };
 
-export function ClientCatalogAccess({ clientId, clientName, phone, canEdit }: { clientId: string; clientName: string; phone: string | null; canEdit: boolean }) {
+export function ClientCatalogAccess(props: { clientId: string; clientName: string; phone: string | null; canEdit: boolean }) {
+  const { sandbox } = useAdminSession();
+  // Demo: la sandbox no tiene catálogo público, así que no hay link mayorista que compartir.
+  if (sandbox) {
+    return (
+      <AdminPanel title="Catálogo mayorista" icon="inventory" meta="Link privado del cliente">
+        <p className="admin-note" data-testid="catalog-access-sandbox">{SANDBOX_UNAVAILABLE}</p>
+      </AdminPanel>
+    );
+  }
+  return <ClientCatalogAccessLive {...props} />;
+}
+
+function ClientCatalogAccessLive({ clientId, clientName, phone, canEdit }: { clientId: string; clientName: string; phone: string | null; canEdit: boolean }) {
   const base = `/api/admin/clients/${clientId}/catalog-access`;
   const resource = useAdminResource<{ access: Status; storeEnabled: boolean } | null>(base, (payload) => (payload as unknown as CatalogAccessPayload) ?? null);
   const [busy, setBusy] = useState(false);

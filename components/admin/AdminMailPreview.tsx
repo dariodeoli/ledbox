@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import type { MailPreview } from "@/lib/mail-preview";
+import type { SimulatedMail } from "@/lib/mail-preview";
 
 /** First shared email preview: real server payload isolated from the panel.
  * Confirmation stays with the caller; this component never dispatches mail. */
-export function AdminMailPreview({ preview }: { preview: MailPreview }) {
+export function AdminMailPreview({ preview }: { preview: SimulatedMail }) {
   return (
     <section aria-label="Vista previa del correo">
       <dl className="admin-dialog-facts">

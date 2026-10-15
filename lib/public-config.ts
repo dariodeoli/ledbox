@@ -104,9 +104,40 @@ export const BUDGET_CODE_ALPHABET = UNAMBIGUOUS_ALPHABET;
 
 const BUDGET_CODE_LENGTH = 20;
 
+let portalSandbox = false;
+
+/**
+ * El shell avisa si la sesión es una sandbox de la demo: a partir de ahí los links del portal que arma
+ * el panel (presupuesto, firma, comparativa, «ver como cliente») usan el host de la demo, porque en una
+ * sandbox `clientes.` da 404 (docs/DEMO-INTERACTIVA.md §3). Solo en el navegador (en el servidor sería un
+ * estado compartido entre pedidos: allá se pasa `{ sandbox }` explícito).
+ */
+export function setPortalSandbox(sandbox: boolean): void {
+  if (typeof window !== "undefined") portalSandbox = sandbox;
+}
+
+/**
+ * Único lugar donde se decide el host de los links públicos del cliente: `clientes.` para una empresa
+ * real y el host de la demo para una sandbox (`tests/demo-portal-links.test.ts` lo exige).
+ */
+export function portalOrigin(options: { sandbox?: boolean } = {}): string {
+  return (options.sandbox ?? portalSandbox) ? publicConfig.demoUrl : publicConfig.clientUrl;
+}
+
+/** Reescribe los links de `clientes.` de un texto (correo, mensaje) al host de la demo; sin `sandbox` no toca nada. */
+export function rebasePortalLinks(text: string, sandbox: boolean): string {
+  if (!sandbox || !text || publicConfig.clientUrl === publicConfig.demoUrl) return text;
+  return text.split(publicConfig.clientUrl).join(publicConfig.demoUrl);
+}
+
 /** Link público de un presupuesto en el portal del cliente. */
-export function portalBudgetUrl(token: string): string {
-  return `${publicConfig.clientUrl}/p/${token}`;
+export function portalBudgetUrl(token: string, options: { sandbox?: boolean } = {}): string {
+  return `${portalOrigin(options)}/p/${token}`;
+}
+
+/** Link público de una comparativa de cotizaciones en el portal del cliente. */
+export function comparisonPortalUrl(token: string, options: { sandbox?: boolean } = {}): string {
+  return `${portalOrigin(options)}/comparar/${encodeURIComponent(token)}`;
 }
 
 /** Código canónico agrupado (`XXXX-XXXX-XXXX-XXXX-XXXX`). */
@@ -143,8 +174,8 @@ export const SIGNATURE_CODE_ALPHABET = UNAMBIGUOUS_ALPHABET;
 const SIGNATURE_CODE_LENGTH = 20;
 
 /** Link público de una solicitud de firma en el portal del cliente. */
-export function signaturePortalUrl(code: string): string {
-  return `${publicConfig.clientUrl}/firma/${code}`;
+export function signaturePortalUrl(code: string, options: { sandbox?: boolean } = {}): string {
+  return `${portalOrigin(options)}/firma/${code}`;
 }
 
 /** Código canónico agrupado (`XXXX-XXXX-XXXX-XXXX-XXXX`). */

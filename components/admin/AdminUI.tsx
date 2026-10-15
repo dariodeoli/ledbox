@@ -13,7 +13,9 @@ import {
   formatDateTime,
   formatNumber,
   timelineKindLabel,
+  isWhatsappSandbox,
   whatsappHref,
+  whatsappReachable,
   type AdminTone,
 } from "@/lib/admin-format";
 import { adminApiGet } from "@/lib/admin-api";
@@ -23,6 +25,7 @@ import { AdminIcon } from "./AdminIcons";
 import { AdminAvatar } from "./AdminAvatar";
 import { PinField } from "./AdminFields";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
+import { SIMULATED_WHATSAPP_NOTICE } from "@/lib/mail-preview";
 
 /** Primitivas del panel: un solo diseño por tipo (botón, badge, campo, tabla, estado vacío). */
 
@@ -278,13 +281,49 @@ export function AdminWhatsappLink({
   /** Mensaje prellenado del chat (issue #36); sin él abre el chat pelado. */
   message?: string | null;
 }) {
+  const [simulating, setSimulating] = useState(false);
   const href = whatsappHref(phone, message);
-  if (!href) return null;
+  if (!href) {
+    // Demo: no se abre wa.me; si hay texto, se muestra cómo se vería el mensaje.
+    if (!isWhatsappSandbox() || !whatsappReachable(phone) || !String(message ?? "").trim()) return null;
+    const simulatedLabel = `Ver cómo se vería el mensaje de WhatsApp a ${name}`;
+    return (
+      <>
+        <button type="button" className="admin-iconbtn" title={simulatedLabel} aria-label={simulatedLabel} onClick={() => setSimulating(true)}>
+          <WhatsappIcon size={15} />
+        </button>
+        {simulating ? <AdminSimulatedMessageDialog to={name} message={String(message)} onClose={() => setSimulating(false)} /> : null}
+      </>
+    );
+  }
   const label = `Escribir por WhatsApp a ${name}`;
   return (
     <a className="admin-iconbtn" href={href} target="_blank" rel="noreferrer" title={label} aria-label={label}>
       <WhatsappIcon size={15} />
     </a>
+  );
+}
+
+/**
+ * Demo: en una sandbox no se abre WhatsApp. Este diálogo muestra el texto tal como se habría enviado
+ * («Así se vería el mensaje»); nada sale hacia afuera.
+ */
+export function AdminSimulatedMessageDialog({ to, message, onClose }: { to: string; message: string; onClose: () => void }) {
+  return (
+    <AdminDialog
+      title={`${SIMULATED_WHATSAPP_NOTICE} · ${to}`}
+      icon="mail"
+      size="md"
+      description="Demo: no se abre WhatsApp ni sale ningún mensaje."
+      onClose={onClose}
+      footer={({ requestClose }) => (
+        <AdminButton icon="close" type="button" onClick={requestClose}>
+          Cerrar
+        </AdminButton>
+      )}
+    >
+      <pre className="admin-message-preview">{message}</pre>
+    </AdminDialog>
   );
 }
 

@@ -23,8 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const evidence = signatureClientEvidence(request.headers);
   try {
     if (action === "send") {
-      const signature = await sendSignatureOtp({ code: codigo, evidence });
-      return Response.json({ signature });
+      const { demoOtp, ...signature } = await sendSignatureOtp({ code: codigo, evidence });
+      // `demoOtp` solo existe en una sandbox de la demo (el correo se simula y el código se muestra en pantalla).
+      return Response.json({ signature, ...(demoOtp !== undefined ? { demoOtp } : {}) });
     }
     if (action === "verify") {
       await verifySignatureOtp({ code: codigo, evidence, otp: String(body.otp ?? "") });
