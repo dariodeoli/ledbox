@@ -1087,11 +1087,11 @@ export function AdminShell({
               <AdminThemeToggle />
               <AdminButtonLink
                 className="admin-hide-sm"
-                href={publicConfig.siteUrl}
+                href={session.organization?.slug ? `${publicConfig.siteUrl}/tienda/${session.organization.slug}` : publicConfig.siteUrl}
                 target="_blank"
                 rel="noreferrer"
-                title="Abrir el sitio público en una pestaña nueva"
-               icon="external">Ver sitio</AdminButtonLink>
+                title={session.organization?.slug ? `Abrir la tienda de ${session.organization.name} en una pestaña nueva` : "Abrir el sitio público en una pestaña nueva"}
+               icon="external">{session.organization?.slug ? "Ver mi tienda" : "Ver sitio"}</AdminButtonLink>
             </div>
           </header>
 
