@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AVAILABILITY_HINT_LABEL, preorderWhatsappUrl, type AvailabilityHint } from "@/lib/catalog-public";
-import { MAX_QUANTITY, productWhatsappMessage } from "@/lib/storefront-ui";
+import { MAX_QUANTITY, productWhatsappMessage, PREORDER_COPY } from "@/lib/storefront-ui";
 import { EventPicker } from "./EventPicker";
 import { Stepper } from "./Stepper";
 import { XIcon } from "./StoreIcons";
@@ -41,7 +41,7 @@ export function BuyPanel({ itemId, name, sku, slug, scope, cartPath, range, avai
     const result = await addToStoredCart({ slug, scope, cartPath, itemId, quantity });
     setBusy(false);
     if (!result.ok) { setError(result.error); return; }
-    show(`Agregado al pedido (${result.count})`, { label: "Ver pedido", onClick: () => { window.location.href = `${basePath}#catalogo`; } });
+    show(`Agregado al pedido (${result.count})`, { label: PREORDER_COPY.open, onClick: () => { window.location.href = `${basePath}#catalogo`; } });
     if (result.warning) setError(result.warning);
   }
 
@@ -56,10 +56,10 @@ export function BuyPanel({ itemId, name, sku, slug, scope, cartPath, range, avai
       ) : null}
       <div className="cp-buy-row">
         <Stepper label={name} value={quantity} step={step} min={step} max={MAX_QUANTITY} onChange={setQuantity} />
-        <button type="button" className="cp-btn cp-btn--primary cp-btn--lg" disabled={busy} onClick={() => void add()}><XIcon name="plus" size={18} />Agregar al pedido</button>
+        <button type="button" className="cp-btn cp-btn--primary cp-btn--lg" disabled={busy} onClick={() => void add()}><XIcon name="plus" size={18} />Agregar a la preorden</button>
       </div>
       {whatsapp ? <a className="cp-btn cp-btn--block" href={whatsapp} target="_blank" rel="noopener noreferrer">Consultar por WhatsApp</a> : null}
-      <p className="cp-panel-note">{showPrices ? "Los precios son de referencia y se confirman en la cotización. " : ""}Un pedido no es una reserva: te respondemos con la cotización.</p>
+      <p className="cp-panel-note">{showPrices ? "Los precios son de referencia y se confirman en la cotización. " : ""}{PREORDER_COPY.notice} {PREORDER_COPY.logistics}</p>
       {error ? <p className="cp-note" role="status">{error}</p> : null}
       {toast}
     </div>

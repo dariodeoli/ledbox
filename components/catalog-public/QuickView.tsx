@@ -1,4 +1,5 @@
 "use client";
+import { PREORDER_COPY } from "@/lib/storefront-ui";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { capacityText, cardSpecs } from "@/lib/catalog-card";
@@ -210,9 +211,9 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, slug, 
         </div>
         <footer className="cp-qv-foot">
           <Stepper label={item.name} value={quantity} step={step} min={step} max={MAX_QUANTITY} onChange={setQuantity} />
-          <button type="button" className="cp-btn cp-btn--primary cp-btn--lg cp-qv-add" onClick={add}>Agregar al pedido</button>
+          <button type="button" className="cp-btn cp-btn--primary cp-btn--lg cp-qv-add" onClick={add}>Agregar a la preorden</button>
           <p className="cp-qv-note" role="status">
-            {added > 0 ? `Agregaste ${added} ${added === 1 ? "unidad" : "unidades"}. En tu pedido: ${inCart}.` : inCart > 0 ? `Ya tenés ${inCart} en tu pedido.` : "Un pedido no es una reserva: te respondemos con la cotización."}
+            {added > 0 ? `Agregaste ${added} ${added === 1 ? "unidad" : "unidades"}. En tu pedido: ${inCart}.` : inCart > 0 ? `Ya tenés ${inCart} en tu pedido.` : PREORDER_COPY.notice}
           </p>
         </footer>
       </div>

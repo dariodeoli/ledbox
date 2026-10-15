@@ -13,7 +13,7 @@ import type { PriceMode } from "@/lib/appearance";
 import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tiers";
 import { readLocalStoreCart, sanitizeStoreCart, storeCartContext, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartView } from "@/lib/server/store-cart";
-import { MAX_QUANTITY, formatGs, priceUnitLabel, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
+import { MAX_QUANTITY, formatGs, priceUnitLabel, PREORDER_COPY, preorderEstimate, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { withStoreDates } from "@/lib/store-categories";
 import { cardSpecs } from "@/lib/catalog-card";
 import { CartDrawer, type Done } from "./CartDrawer";
@@ -314,7 +314,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           setZoneChoice("");
         }
         if (seenContext.current === cartContext && next.total !== null && seenTotal.current !== null && seenTotal.current !== next.total) {
-          notices.push(`El total cambió: antes ${money(seenTotal.current)}, ahora ${money(next.total)}. Los precios se calculan al día; la cotización los confirma.`);
+          notices.push(`La referencia estimada cambió: antes ${money(seenTotal.current)}, ahora ${money(next.total)}. Revisá el desglose de productos y flete; no es una reserva confirmada.`);
         }
         seenTotal.current = next.total;
         seenContext.current = cartContext;
@@ -490,10 +490,11 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     if (priced === 0) return null;
     return { sum, missing, unit: events === priced ? "por evento" : events > 0 ? "por día o evento" : priceMode === "unit" ? "c/u" : "por día" };
   })();
+  const estimate = preorderEstimate(subtotal, view?.delivery);
   const barText = showPrices
     ? !range
-      ? perDay ? `${money(perDay.sum)} ${perDay.unit} · elegí fechas para el total` : "Elegí fechas para el total"
-      : view && view.total !== null ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : "Confirmamos el monto en la cotización"
+      ? perDay ? `${money(perDay.sum)} ${perDay.unit}${perDay.missing ? " + productos por cotizar" : ""} · elegí fechas` : "Elegí fechas para el total"
+      : estimate.amount !== null ? `${estimate.label} ${money(estimate.amount)}${estimate.logisticsPending ? " · flete a cotizar" : ""}` : PREORDER_COPY.consult
     : null;
 
   return (

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CityField, EmailField, MoneyField, PhoneField, SelectField, TextAreaField, TextField } from "@/components/admin/AdminFields";
-import { deliveryExtraApplies, deliveryFee, deliveryRateText } from "@/lib/delivery-zones";
+import { deliveryExtraApplies, deliveryRateText } from "@/lib/delivery-zones";
 import { PRICE_AMOUNT_MAX, PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
 import type { PriceMode } from "@/lib/appearance";
-import { formatGs, priceUnitLabel } from "@/lib/storefront-ui";
+import { formatGs, priceUnitLabel, PREORDER_COPY, preorderEstimate } from "@/lib/storefront-ui";
 import type { CartView } from "@/lib/server/store-cart";
 import type { CatalogZoneView } from "./CatalogBrowser";
 import { EventPicker } from "./EventPicker";
@@ -57,10 +57,11 @@ export function CartDrawer(props: {
   const { range, lines, localSubtotal, perDay, view, showPrices, done, zones, zoneChoice, priceMode } = props;
   const zone = zones.find((entry) => entry.id === zoneChoice) ?? null;
   const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
-  // Flete y total: los del servidor (revalidados); sin red, el cálculo local con la misma regla.
-  const fee = view ? view.delivery.fee : showPrices && zone ? deliveryFee(zone, pieces) : null;
+  // El subtotal local conserva el motor de productos; el flete sólo se informa tras revalidarlo el API.
   const subtotal = view ? view.itemsSubtotal : localSubtotal;
-  const total = subtotal !== null ? subtotal + (fee ?? 0) : null;
+  const estimate = preorderEstimate(subtotal, view?.delivery);
+  const fee = estimate.fee;
+  const total = estimate.amount;
   const viewLines = new Map((view?.lines ?? []).map((line) => [line.id, line]));
   const unpriced = lines.some((line) => !viewLines.get(line.id)?.unitPrice);
   const [name, setName] = useState("");
@@ -106,7 +107,7 @@ export function CartDrawer(props: {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!range) { setError("Elegí la fecha del evento y los días antes de enviar el pedido."); return; }
+    if (!range) { setError("Elegí la fecha del evento y los días antes de enviar la preorden."); return; }
     if (location.length < 2) { setError("Contanos dónde es el evento: ciudad o dirección."); return; }
     const amount = askPrice ? parsePriceAmount(priceAmount.trim()) : null;
     if (askPrice && priceComment.trim().length < 3) { setError("Contanos por qué pedís un mejor precio (al menos 3 caracteres)."); return; }
@@ -156,16 +157,17 @@ export function CartDrawer(props: {
         {done ? (
           <>
             <header className="cp-drawer-head">
-              <h2 id="pedido-titulo" className="cp-drawer-title">{done.kind === "saved" ? "Recibimos tu pedido" : "Demo: no se guardó nada"}</h2>
+              <h2 id="pedido-titulo" className="cp-drawer-title">{done.kind === "saved" ? PREORDER_COPY.received : "Demo: no se guardó nada"}</h2>
               <button type="button" className="cp-btn cp-btn--icon cp-btn--ghost" onClick={props.onFinish} aria-label="Cerrar"><XIcon name="close" size={20} /></button>
             </header>
             <div className="cp-drawer-body cp-done" data-testid="preorder-done">
               {done.kind === "saved" ? (
                 <>
                   <p>
-                    Recibimos tu pedido. <strong>Todavía NO es una reserva confirmada</strong>: te respondemos antes de{" "}
+                    <strong>{PREORDER_COPY.notice}</strong> Te respondemos antes de{" "}
                     <strong>{respondFormat.format(new Date(done.respondBy))}</strong>.
                   </p>
+                  <p className="cp-hint">{PREORDER_COPY.logistics}</p>
                   {done.priceRequested ? <p>Pediste un mejor precio: la empresa te responde en tu seguimiento. Nada cambia hasta que apruebes la versión final.</p> : null}
                   <p className="cp-hint">Podés seguirlo en cualquier momento con este link (guardalo):</p>
                   <p><a className="cp-link cp-wrap" href={done.trackingPath}>{done.trackingPath}</a></p>
@@ -185,11 +187,11 @@ export function CartDrawer(props: {
           <form onSubmit={step === 2 ? submit : (event) => { event.preventDefault(); if (stepOneReady && priceOk) { setError(""); setStep(2); } else if (!priceOk) setError("Contanos por qué pedís un mejor precio (al menos 3 caracteres)."); }} className="cp-drawer-form" noValidate={false}>
             <header className="cp-drawer-head">
               <div>
-                <h2 id="pedido-titulo" className="cp-drawer-title">{step === 1 ? `${props.wholesale ? "Tu pedido mayorista" : "Tu pedido"} (${pieces})` : "Tus datos"}</h2>
+                <h2 id="pedido-titulo" className="cp-drawer-title">{step === 1 ? `${props.wholesale ? "Tu preorden mayorista" : PREORDER_COPY.title} (${pieces})` : "Datos para cotizar"}</h2>
                 {step === 1 ? <p className="cp-hint cp-num" data-testid="cart-count">{lines.length} {lines.length === 1 ? "producto" : "productos"} · {pieces} {pieces === 1 ? "unidad" : "unidades"}</p> : null}
                 {props.wholesale && props.clientName ? <p className="cp-hint">A nombre de {props.clientName}</p> : null}
               </div>
-              <button type="button" className="cp-btn cp-btn--icon cp-btn--ghost" onClick={props.onClose} aria-label="Cerrar el pedido"><XIcon name="close" size={20} /></button>
+              <button type="button" className="cp-btn cp-btn--icon cp-btn--ghost" onClick={props.onClose} aria-label="Cerrar la preorden"><XIcon name="close" size={20} /></button>
             </header>
             <div className="cp-drawer-body">
               {step === 1 ? (
@@ -197,7 +199,7 @@ export function CartDrawer(props: {
                   <div data-testid="cart-range">
                     <EventPicker slug={props.slug} range={range} variant="drawer" onApply={props.onRange} title="Fecha del evento" emptyNote="Elegí la fecha del evento y los días para ver el total y la disponibilidad." />
                   </div>
-                  <ul className="cp-cart-lines" aria-label="Productos del pedido">
+                  <ul className="cp-cart-lines" aria-label="Productos de la preorden">
                     {lines.map((line) => {
                       const priced = viewLines.get(line.id);
                       const fixed = priced?.mode === "TOTAL" || priced?.mode === "EVENT";
@@ -216,7 +218,7 @@ export function CartDrawer(props: {
                             {line.sku ? <span className="cp-cart-cod">{skuLabel(line.sku)}</span> : null}
                             <span className="cp-cart-row">
                               <Stepper label={line.name} value={line.quantity} step={line.step} min={0} onChange={(next) => { if (next <= 0 && lines.length === 1) props.onClose(); props.onQuantity(line.id, next); }} />
-                              {showPrices ? <span className="cp-cart-sub" data-testid="cart-line-subtotal">{priced?.subtotal ? formatGs(priced.subtotal) : "—"}</span> : null}
+                              {showPrices && priced?.subtotal ? <span className="cp-cart-sub" data-testid="cart-line-subtotal">{formatGs(priced.subtotal)}</span> : null}
                             </span>
                             {showPrices && priced?.unitPrice ? (
                               <span className="cp-cart-price">
@@ -225,7 +227,7 @@ export function CartDrawer(props: {
                                 {line.quantity > 1 ? ` × ${line.quantity}` : ""}
                               </span>
                             ) : null}
-                            {showPrices && !priced?.unitPrice && view ? <span className="cp-cart-price">Precio a confirmar en la cotización</span> : null}
+                            {!priced?.unitPrice ? <span className="cp-cart-price">{PREORDER_COPY.consult}</span> : null}
                             {priced?.tier ? <span className="cp-chip cp-tier-chip">Escalón {priced.tier}</span> : null}
                             {priced?.availability === "CONSULT" ? <span className="cp-chip cp-chip--muted">Consultar disponibilidad</span> : null}
                             {line.pieces ? <details className="cp-includes"><summary>Incluye</summary><p className="cp-hint">{line.pieces}</p></details> : null}
@@ -239,36 +241,38 @@ export function CartDrawer(props: {
                     <div className="cp-fields">
                       <SelectField label="Flete (opcional)" size="full" value={zoneChoice} onChange={props.onZone}
                         options={[{ value: "", label: "Lo defino después" }, ...zones.map((entry) => ({ value: entry.id, label: `${entry.name}${showPrices && entry.basePrice > 0 ? ` · ${formatGs(entry.basePrice)}` : ""}` })), { value: "COORDINATE", label: "A coordinar" }]}
-                        hint={zone && showPrices
-                          ? `Flete estimado ${formatGs(fee ?? 0)}${deliveryExtraApplies(zone, pieces) ? ` (incluye recargo por más de ${zone.volumeThreshold} piezas)` : zone.volumeThreshold !== null && zone.extraPrice ? ` (${deliveryRateText(zone).split(" + ")[1] ?? ""})` : ""}`
-                          : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Si elegís la zona te mostramos el flete estimado."} />
+                        hint={zone && showPrices && fee !== null
+                          ? `Flete estimado ${formatGs(fee)}${deliveryExtraApplies(zone, pieces) ? ` (incluye recargo por más de ${zone.volumeThreshold} piezas)` : zone.volumeThreshold !== null && zone.extraPrice ? ` (${deliveryRateText(zone).split(" + ")[1] ?? ""})` : ""}`
+                          : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Elegí una zona para consultar el flete; se suma sólo cuando recibimos su importe."} />
                     </div>
                   ) : null}
                   {showPrices ? (
-                    <dl className="cp-summary" data-testid="cart-summary" aria-label="Resumen del pedido">
+                    <dl className="cp-summary" data-testid="cart-summary" aria-label="Resumen de la preorden">
                       {view && view.tierSavings > 0 && subtotal !== null ? (
                         <>
                           <div><dt>Subtotal a precio de lista</dt><dd>{formatGs(subtotal + view.tierSavings)}</dd></div>
                           <div><dt>Descuento por escalón de días</dt><dd className="cp-num--ok">− {formatGs(view.tierSavings)}</dd></div>
                         </>
                       ) : null}
-                      {range ? (
+                      {range && fee !== null ? (
                         <div><dt>Subtotal de productos</dt><dd>{subtotal !== null ? formatGs(subtotal) : "A cotizar"}</dd></div>
                       ) : perDayText ? (
                         <div><dt>Suma por día</dt><dd>{perDayText}</dd></div>
                       ) : null}
-                      <div><dt>Entrega e instalación</dt><dd>{zoneChoice && zoneChoice !== "COORDINATE" && fee !== null ? formatGs(fee) : "Se cotiza"}</dd></div>
+                      <div><dt>Flete</dt><dd>{fee !== null ? formatGs(fee) : "A cotizar"}</dd></div>
                       {range && total !== null ? (
-                        <div className="cp-summary-total" data-testid="cart-total"><dt>Total estimado</dt><dd>{formatGs(total)}</dd></div>
+                        <div className="cp-summary-total" data-testid="cart-total"><dt>{estimate.label}</dt><dd>{formatGs(total)}</dd></div>
                       ) : null}
                     </dl>
                   ) : null}
                   {showPrices ? (
                     <p className="cp-hint">
-                      {!range ? "El total aparece cuando elegís las fechas." : total !== null ? "Confirmamos el monto final en la cotización." : "El total se confirma en la cotización."}
+                      {!range ? "Elegí las fechas para estimar los productos." : total !== null ? "Importes de referencia, sujetos a cotización." : PREORDER_COPY.consult}
+                      {estimate.logisticsPending ? ` ${PREORDER_COPY.logistics}` : " Los servicios no detallados se cotizan aparte, si corresponden."}
                       {unpriced && view ? " Los productos sin precio cargado también se confirman en la cotización." : ""}
                     </p>
-                  ) : <p className="cp-hint">Te enviamos la cotización con los montos. Confirmamos el monto final al responder.</p>}
+                  ) : <p className="cp-hint">{PREORDER_COPY.consult}. {PREORDER_COPY.logistics}</p>}
+                  <p className="cp-hint">{PREORDER_COPY.notice}</p>
                   {showPrices ? (
                     <div className="cp-price-ask" data-testid="price-ask">
                       <label className="cp-check">
@@ -278,7 +282,7 @@ export function CartDrawer(props: {
                       {askPrice ? (
                         <div id="mejor-precio" className="cp-price-ask-fields cp-fields">
                           <TextAreaField label="¿Por qué lo pedís?" size="full" value={priceComment} onChange={setPriceComment} maxLength={PRICE_COMMENT_MAX} rows={2} required placeholder="Ej.: somos clientes frecuentes" />
-                          <MoneyField label="Monto que querías pagar en total (opcional)" size="full" value={priceAmount} onChange={setPriceAmount} limit={PRICE_AMOUNT_MAX} placeholder="Ej.: 1.200.000" />
+                          <MoneyField label="Monto que proponés (opcional)" size="full" value={priceAmount} onChange={setPriceAmount} limit={PRICE_AMOUNT_MAX} placeholder="Ej.: 1.200.000" />
                           <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
                         </div>
                       ) : null}
@@ -287,7 +291,11 @@ export function CartDrawer(props: {
                 </>
               ) : (
                 <>
-                  <p className="cp-hint">Para responderte necesitamos tus datos. No es una reserva: te confirmamos disponibilidad y precio.</p>
+                  <p className="cp-hint">{PREORDER_COPY.notice} Revisamos disponibilidad, precio y logística antes de enviarte una cotización.</p>
+                  <dl className="cp-summary" aria-label="Resumen antes de enviar">
+                    <div><dt>{lines.length} {lines.length === 1 ? "producto" : "productos"} · {pieces} {pieces === 1 ? "unidad" : "unidades"}</dt><dd>{showPrices && total !== null ? `${estimate.label}: ${formatGs(total)}` : PREORDER_COPY.consult}</dd></div>
+                    {estimate.logisticsPending ? <div><dt>Logística</dt><dd>A cotizar</dd></div> : null}
+                  </dl>
                   <div className="cp-fields cp-fields-grid" data-testid="cart-fields">
                     <TextField label="Nombre y apellido" required value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
                     <PhoneField label="WhatsApp" required value={phone} onChange={setPhone} />
@@ -297,7 +305,7 @@ export function CartDrawer(props: {
                     <TextAreaField label="Comentarios" optional wide value={notes} onChange={setNotes} maxLength={1000} rows={3} />
                   </div>
                   <input className="cp-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
-                  <p className="cp-legal">Al enviar aceptás que usemos estos datos solo para responder tu pedido.</p>
+                  <p className="cp-legal">Al enviar aceptás que usemos estos datos solo para responder tu preorden.</p>
                 </>
               )}
               {error ? <p className="cp-error" role="alert">{error}</p> : null}
@@ -309,7 +317,7 @@ export function CartDrawer(props: {
                 {step === 1 ? (
                   <button type="submit" className="cp-btn cp-btn--primary" disabled={!stepOneReady} title={!range ? "Elegí las fechas del evento para continuar" : undefined}>Continuar con tus datos</button>
                 ) : (
-                  <button type="submit" className="cp-btn cp-btn--primary" disabled={busy || !range}>{busy ? "Enviando…" : "Enviar pedido"}</button>
+                  <button type="submit" className="cp-btn cp-btn--primary" disabled={busy || !range}>{busy ? "Enviando…" : PREORDER_COPY.send}</button>
                 )}
               </div>
             </footer>
