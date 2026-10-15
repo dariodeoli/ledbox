@@ -185,13 +185,14 @@ export async function POST(request: Request) {
     });
     if (!client) return jsonError("El cliente no existe en esta empresa.", 404);
     const budgetId = typeof body.budgetId === "string" ? body.budgetId : "";
-    let budget: { id: string; title: string; total: number } | null = null;
+    let budget: { id: string; title: string; total: number; clientId: string } | null = null;
     if (budgetId) {
       budget = await tx.budget.findFirst({
         where: { id: budgetId, organizationId },
-        select: { id: true, title: true, total: true },
+        select: { id: true, title: true, total: true, clientId: true },
       });
       if (!budget) return jsonError("Presupuesto no encontrado.", 404);
+      if (budget.clientId !== client.id) return jsonError("El presupuesto corresponde a otro cliente. Elegí su cliente para registrar el cobro.", 409);
       const priceBlock = await budgetPriceGate(organizationId, budget.id, "cobrar", tx);
       if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
     }
@@ -474,7 +475,7 @@ export async function PATCH(request: Request) {
             budget: payment.budget,
             account,
           }),
-          ...(requestedAccount ? { treasuryAccountId: requestedAccount.id } : {}),
+          treasuryAccountId: account?.id ?? null,
         },
       });
       if (applied.count === 0) {

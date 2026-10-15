@@ -281,6 +281,9 @@ export async function PATCH(request: Request) {
   if (!expenseId) return jsonError("Falta el gasto.", 400);
 
   return withIdempotency({ request, organizationId, scope: "expenses:PATCH", body }, async (tx) => {
+    // Serializar antes de leer: una edición parcial no debe reenviar relaciones
+    // viejas y pisar la cuenta/proveedor que otro operador acaba de guardar.
+    await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${expenseId} AND "organizationId" = ${organizationId} FOR UPDATE`;
     const expense = await tx.expense.findFirst({ where: { id: expenseId, organizationId } });
     if (!expense) return jsonError("El gasto no existe en esta empresa.", 404);
 

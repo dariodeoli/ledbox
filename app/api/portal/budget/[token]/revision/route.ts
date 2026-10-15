@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const code = normalizeBudgetCode(token);
   const budget = code
     ? await db.budget.findUnique({
-        where: { publicToken: code },
+        where: { publicToken: code, deletedAt: null, client: { deletedAt: null } },
         select: {
           id: true,
           title: true,
