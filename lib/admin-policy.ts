@@ -227,6 +227,11 @@ export function canWriteCarga(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN" || role === "OPERATIONS";
 }
 
+/** «Importar» de cada módulo (carga masiva): solo OWNER y ADMIN (el API exige además la escritura del módulo). */
+export function canImportCatalog(role: AdminRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
 /** Ajustes → Eliminados (`trash.manage`): ver, restaurar, borrar definitivo y anonimizar. */
 export function canManageTrash(role: AdminRole | null | undefined): boolean {
   return role === "OWNER" || role === "ADMIN";

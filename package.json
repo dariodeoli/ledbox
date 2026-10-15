@@ -32,6 +32,7 @@
   "dependencies": {
     "@prisma/client": "^6.16.2",
     "bcryptjs": "^3.0.2",
+    "fflate": "0.8.2",
     "jose": "^6.1.0",
     "next": "15.5.27",
     "owncoding-ui": "github:dariodeoli/owncoding-ui#22f68c037440e71ccce68348adea4460bcc0a82a",
@@ -41,6 +42,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "resend": "^6.0.0",
+    "sharp": "0.35.5",
     "zod": "^4.1.5"
   },
   "devDependencies": {

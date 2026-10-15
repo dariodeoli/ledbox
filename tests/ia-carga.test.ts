@@ -304,10 +304,9 @@ test("el endpoint no crea nada: solo lee, audita y devuelve la vista previa", ()
   assert.doesNotMatch(lib, /console\.log/, "el texto pegado no se imprime en logs");
 });
 
-test("el diálogo se monta desde el shell con el permiso del asistente", () => {
+test("el diálogo ya no se monta desde el encabezado: la IA vive dentro de «Importar»", () => {
   const shell = repoFile("components/admin/AdminShell.tsx");
-  assert.match(shell, /canWriteCarga\(session\.user\?\.role\)/);
-  assert.match(shell, /import\("\.\/AdminCargaIa"\)/);
+  assert.doesNotMatch(shell, /AdminCargaIa|canWriteCarga/, "el header ya no tiene el botón ni el diálogo de IA");
   const dialogo = repoFile("components/admin/AdminCargaIa.tsx");
   assert.match(dialogo, /Carga con IA/);
   assert.match(dialogo, /IA_TEXTO_MAX/);

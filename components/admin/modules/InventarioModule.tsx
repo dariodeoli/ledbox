@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatDateShort, formatNumber, inventoryKindLabel, inventoryStatusLabel } from "@/lib/admin-format";
-import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { canImportCatalog, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
@@ -26,6 +26,7 @@ import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid } from "../AdminCards";
+import dynamic from "next/dynamic";
 import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
@@ -54,8 +55,10 @@ function syncProductParam(id: string) {
  * tarjetas con foto) → ficha lateral del producto (`?producto=<id>` la abre por
  * link). La disponibilidad la calcula el API; acá solo se muestra.
  */
+const AdminImportPanel = dynamic(() => import("../AdminImportPanel").then((mod) => mod.AdminImportPanel), { ssr: false });
+
 export function InventarioModule() {
-  const { role } = useAdminSession();
+  const { role, demo } = useAdminSession();
   const searchParams = useSearchParams();
   const productParam = searchParams.get("producto")?.trim() ?? "";
   const handledProductParam = useRef("");
@@ -68,6 +71,7 @@ export function InventarioModule() {
   const [focus, setFocus] = useState<InventoryFocus>("all");
   const [showForm, setShowForm] = useState(false);
   const [incidentsOpen, setIncidentsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [comboDialog, setComboDialog] = useState<{ item: AdminInventoryItemRow | null } | null>(null);
   const [editItem, setEditItem] = useState<AdminInventoryItemRow | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -84,6 +88,7 @@ export function InventarioModule() {
   const narrow = useAdminNarrowViewport();
 
   const writable = canWriteOperations(role);
+  const canImport = writable && canImportCatalog(role) && !demo;
   const canReadAudit = role === "OWNER" || role === "ADMIN";
   const rangeActive = Boolean(from && to);
 
@@ -298,6 +303,11 @@ export function InventarioModule() {
         {writable ? (
           <AdminButton icon="inventory" onClick={() => setComboDialog({ item: null })} title="Armar un combo con productos que ya tenés cargados">
             Nuevo combo
+          </AdminButton>
+        ) : null}
+        {canImport ? (
+          <AdminButton icon="upload" onClick={() => setImportOpen(true)} aria-haspopup="dialog" title="Cargar productos, juegos y fotos desde una planilla, ChatGPT o la IA de LedBox">
+            Importar catálogo
           </AdminButton>
         ) : null}
         <AdminButton
@@ -621,6 +631,7 @@ export function InventarioModule() {
         />
       ) : null}
 
+      {canImport && importOpen ? <AdminImportPanel moduloId="productos" onClose={() => setImportOpen(false)} onApplied={reloadAll} /> : null}
       {writable && comboDialog ? (
         <ComboDialog
           combo={comboDialog.item}

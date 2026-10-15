@@ -319,5 +319,5 @@ test("el panel aplica cobros con Finanzas, idempotencia y permiso de FIN", () =>
   assert.match(dialog, /fila\.accion === "vincular"/, "lo vinculado no se crea");
   assert.match(dialog, /tu rol no puede registrar cobros/, "sin permiso se avisa y no se llama al endpoint");
   const shell = repoFile("components/admin/AdminShell.tsx");
-  assert.match(shell, /rol=\{session\.user\?\.role \?\? null\}/, "el diálogo recibe el rol para gatillar las acciones");
+  assert.doesNotMatch(shell, /AdminCargaIaDialog/, "el encabezado ya no monta el diálogo (la IA vive en «Importar»)");
 });

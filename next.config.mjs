@@ -21,6 +21,8 @@ const nextConfig = {
   // Next (externalizarlos rompe hooks durante SSR, Refs #173).
   transpilePackages: ["owncoding-ui"],
   serverExternalPackages: ["pdf-lib"],
+  // «Importar catálogo» sube fotos.zip de hasta 60 MB: el middleware bufferea el cuerpo (10 MB por defecto) y lo truncaría.
+  experimental: { middlewareClientMaxBodySize: "64mb" },
   outputFileTracingIncludes: { "/api/*": ["./node_modules/pdf-lib/cjs/**/*", "./node_modules/pdf-lib/package.json", "./node_modules/@pdf-lib/**/*", "./node_modules/pako/**/*", "./node_modules/tslib/**/*"] },
   images: { formats: ["image/avif", "image/webp"], minimumCacheTTL: 60 * 60 * 24 * 30 },
   poweredByHeader: false,

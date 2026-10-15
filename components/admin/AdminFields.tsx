@@ -1868,3 +1868,79 @@ export function AttachmentInput({
     </FieldChrome>
   );
 }
+
+/**
+ * Archivo cualquiera con tope de tamaño (importaciones: JSON, planilla, ZIP).
+ * El contenido se valida en el servidor; acá solo se controla el tamaño y se
+ * muestra el nombre elegido. Para fotos sueltas se usa `AttachmentInput`.
+ */
+export function FileField({
+  label,
+  help,
+  hint,
+  error,
+  wide,
+  accept,
+  maxBytes,
+  disabled,
+  file,
+  onSelect,
+  id,
+}: {
+  label: string;
+  help?: string;
+  hint?: string;
+  error?: string | null;
+  wide?: boolean;
+  accept?: string;
+  maxBytes: number;
+  disabled?: boolean;
+  file: File | null;
+  onSelect: (file: File | null) => void;
+  id?: string;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds(id);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [localError, setLocalError] = useState("");
+  const shown = error || localError || null;
+
+  function pick(next: File | null) {
+    setLocalError("");
+    if (next && next.size === 0) return setLocalError("El archivo está vacío; probá con otro.");
+    if (next && next.size > maxBytes) return setLocalError(`El archivo supera los ${Math.round(maxBytes / (1024 * 1024))} MB.`);
+    onSelect(next);
+  }
+
+  return (
+    <FieldChrome label={label} help={help} hint={hint} error={shown} wide={wide} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+      <span className="admin-attachment">
+        <input
+          id={fieldId}
+          ref={inputRef}
+          className="sr-only"
+          type="file"
+          accept={accept}
+          disabled={disabled}
+          onChange={(event) => {
+            pick(event.target.files?.[0] ?? null);
+            event.target.value = "";
+          }}
+          aria-invalid={shown ? true : undefined}
+          aria-describedby={describedBy(shown, hint, hintId, errorId)}
+        />
+        <button className="admin-btn admin-btn--ghost" type="button" disabled={disabled} onClick={() => inputRef.current?.click()} aria-label={`Elegir archivo: ${label}`}>
+          <AdminIcon name="upload" size={15} />
+          <span>{file ? "Cambiar archivo" : "Elegir archivo"}</span>
+        </button>
+        {file ? (
+          <span className="admin-import-file">
+            {file.name} · {(file.size / 1024 / 1024 >= 1 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`)}
+            <button className="admin-btn admin-btn--ghost admin-btn--only-icon" type="button" disabled={disabled} onClick={() => onSelect(null)} aria-label={`Quitar ${file.name}`}>
+              <AdminIcon name="close" size={14} />
+            </button>
+          </span>
+        ) : null}
+      </span>
+    </FieldChrome>
+  );
+}

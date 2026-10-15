@@ -5010,3 +5010,21 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .platform-split:has(.platform-detail) { grid-template-columns: minmax(0, 1fr); }
   .platform-detail { order: -1; }
 }
+
+/* Importar (AdminImportPanel) */
+.admin-import { display: grid; gap: 14px; }
+.admin-import-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.admin-import-card { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--a-line-2); border-radius: 10px; background: var(--a-panel); }
+.admin-import-card strong { font-size: 1.4rem; line-height: 1.1; }
+.admin-import-card span { font-size: .8125rem; color: var(--a-muted); }
+.admin-import-h { margin: 0 0 6px; font-size: .9375rem; }
+.admin-import-problems, .admin-import-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.admin-import-problems li { font-size: .875rem; overflow-wrap: anywhere; }
+.admin-import-rows li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; padding: 4px 0; border-bottom: 1px solid var(--a-line-2); overflow-wrap: anywhere; }
+.admin-import-row-main { flex: 1 1 180px; min-width: 0; }
+.admin-import-file { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; overflow-wrap: anywhere; }
+.admin-import a.admin-btn { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+@media (max-width: 767px) { .admin-import-problems, .admin-import-rows { max-height: none; } }
+.admin-import-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+.admin-import-dudas { max-height: 340px; }
+@media (max-width: 767px) { .admin-import-filters { grid-template-columns: minmax(0, 1fr); } .admin-import-dudas { max-height: none; } }
