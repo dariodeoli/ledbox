@@ -257,7 +257,7 @@ export function CartDrawer(props: {
                       {range && fee !== null ? (
                         <div><dt>Subtotal de productos</dt><dd>{subtotal !== null ? formatGs(subtotal) : "A cotizar"}</dd></div>
                       ) : perDayText ? (
-                        <div><dt>Suma por día</dt><dd>{perDayText}</dd></div>
+                        <div><dt>Productos sin fechas</dt><dd>{perDayText}</dd></div>
                       ) : null}
                       <div><dt>Flete</dt><dd>{fee !== null ? formatGs(fee) : "A cotizar"}</dd></div>
                       {range && total !== null ? (
