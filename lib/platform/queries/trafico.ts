@@ -176,10 +176,100 @@ export type DemoResumen = {
   topModules: DemoModuleRow[];
   /** Conversión demo → registro/lead: sin vínculo honesto, siempre «sin datos». */
   conversion: { available: false; reason: string };
+  /** Sandboxes por visitante (docs/DEMO-INTERACTIVA.md §4). Ninguna cuenta como empresa real. */
+  sandboxes: DemoSandboxesResumen;
 };
 
+export type DemoSandboxesResumen = {
+  /** Sandboxes creadas en el período: demos con sandbox, una por visitante (el reinicio se cuenta aparte). */
+  created: number;
+  createdPrev: number;
+  createdDelta: Delta;
+  createdByDay: Array<{ day: string; created: number }>;
+  createdByDayPrev: Array<{ day: string; created: number }>;
+  /** Sandboxes vigentes ahora mismo (listas, sin vencer y con uso en la última hora). No depende del período. */
+  activeNow: number;
+  /** «Reiniciar la demo» de las demos del período. */
+  resets: number;
+  /** Demos del período que quedaron ligadas a una sandbox (la base de los porcentajes y promedios). */
+  measured: number;
+  /** Con al menos una escritura (acción auditada del visitante, viva o ya purgada). `null` sin demos. */
+  withWrite: number;
+  withWritePct: number | null;
+  /** Acciones por demo: purgadas (`DemoSession.actions`) más las vivas (`AuditLog`). `null` sin demos. */
+  avgActions: number | null;
+  /** Entidades más tocadas: vivas desde `AuditLog` de las sandboxes y purgadas desde `DemoSession.actionsByEntity`. */
+  topEntities: Array<{ entity: string; actions: number }>;
+};
+
+const SANDBOX_IDLE_MS = 60 * 60 * 1000;
+const TOP_ENTITIES = 8;
+
+/** Acciones vivas por demo del período: auditoría de la sandbox que no es del seed (`sbx_<ns>_*`). */
+const liveActions = (range: PeriodRange) => Prisma.sql`
+  SELECT s."id" AS sid, a."entity" AS entity, count(*)::int AS n
+  FROM "DemoSession" s
+  JOIN "Organization" o ON o."id" = s."sandboxOrgId" AND o."isDemo" = true AND o."demoParentId" IS NOT NULL
+  JOIN "AuditLog" a ON a."organizationId" = o."id" AND NOT starts_with(a."id", 'sbx_' || substring(o."id" from 5 for 10) || '_')
+  WHERE s."sandboxOrgId" IS NOT NULL AND s."startedAt" >= ${ts(range.start)} AND s."startedAt" < ${ts(range.end)}
+  GROUP BY s."id", a."entity"`;
+
+async function getDemoSandboxes(range: PeriodRange, now: Date): Promise<DemoSandboxesResumen> {
+  const rowsByDay = await db.$queryRaw<Array<{ day: string; created: number }>>(Prisma.sql`
+    SELECT to_char(${paraguayDay('"startedAt"')}, 'YYYY-MM-DD') AS day, count(*)::int AS created
+    FROM "DemoSession" WHERE "sandboxOrgId" IS NOT NULL AND "startedAt" >= ${ts(range.prevStart)} AND "startedAt" < ${ts(range.end)} GROUP BY 1`);
+  const byDay = new Map(rowsByDay.map((r) => [r.day, r.created]));
+  const createdByDay = range.days.map((day) => ({ day, created: byDay.get(day) ?? 0 }));
+  const createdByDayPrev = range.prevDays.map((day) => ({ day, created: byDay.get(day) ?? 0 }));
+  const created = createdByDay.reduce((sum, r) => sum + r.created, 0);
+  const createdPrev = createdByDayPrev.reduce((sum, r) => sum + r.created, 0);
+
+  const idleCut = new Date(now.getTime() - SANDBOX_IDLE_MS);
+  const active = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+    SELECT count(*)::int AS n FROM "Organization"
+    WHERE "isDemo" = true AND "demoParentId" IS NOT NULL AND "demoReady" = true
+      AND ("demoExpiresAt" IS NULL OR "demoExpiresAt" > ${ts(now)})
+      AND COALESCE("demoLastSeenAt", "createdAt") > ${ts(idleCut)}`);
+
+  const totals = await db.$queryRaw<Array<{ measured: number; actions: number; with_write: number; resets: number }>>(Prisma.sql`
+    WITH live AS (SELECT sid, sum(n)::int AS n FROM (${liveActions(range)}) x GROUP BY sid)
+    SELECT count(*)::int AS measured,
+           COALESCE(sum(d."actions" + COALESCE(live.n, 0)), 0)::int AS actions,
+           (count(*) FILTER (WHERE d."actions" + COALESCE(live.n, 0) > 0))::int AS with_write,
+           COALESCE(sum(d."resets"), 0)::int AS resets
+    FROM "DemoSession" d LEFT JOIN live ON live.sid = d."id"
+    WHERE d."sandboxOrgId" IS NOT NULL AND d."startedAt" >= ${ts(range.start)} AND d."startedAt" < ${ts(range.end)}`);
+
+  const entities = await db.$queryRaw<Array<{ entity: string; actions: number }>>(Prisma.sql`
+    SELECT entity, sum(n)::int AS actions FROM (
+      SELECT j.key AS entity, (j.value)::int AS n
+      FROM "DemoSession" d, LATERAL jsonb_each_text(COALESCE(d."actionsByEntity", '{}'::jsonb)) j
+      WHERE d."sandboxOrgId" IS NOT NULL AND d."startedAt" >= ${ts(range.start)} AND d."startedAt" < ${ts(range.end)}
+      UNION ALL
+      SELECT entity, n FROM (${liveActions(range)}) l
+    ) all_actions
+    GROUP BY entity HAVING sum(n) > 0 ORDER BY actions DESC, entity LIMIT ${TOP_ENTITIES}`);
+
+  const measured = totals[0]?.measured ?? 0;
+  const withWrite = totals[0]?.with_write ?? 0;
+  return {
+    created,
+    createdPrev,
+    createdDelta: computeDelta(created, createdPrev),
+    createdByDay,
+    createdByDayPrev,
+    activeNow: active[0]?.n ?? 0,
+    resets: totals[0]?.resets ?? 0,
+    measured,
+    withWrite,
+    withWritePct: measured > 0 ? Math.round((withWrite / measured) * 1000) / 10 : null,
+    avgActions: measured > 0 ? round1((totals[0]?.actions ?? 0) / measured) : null,
+    topEntities: entities,
+  };
+}
+
 /** Todo lo de la demo, aparte de las métricas del negocio. */
-export async function getDemo(range: PeriodRange): Promise<DemoResumen> {
+export async function getDemo(range: PeriodRange, now: Date = new Date()): Promise<DemoResumen> {
   const rowsByDay = await db.$queryRaw<Array<{ day: string; started: number }>>(Prisma.sql`
     SELECT to_char(${paraguayDay('"startedAt"')}, 'YYYY-MM-DD') AS day, count(*)::int AS started
     FROM "DemoSession" WHERE "startedAt" >= ${ts(range.prevStart)} AND "startedAt" < ${ts(range.end)} GROUP BY 1`);
@@ -217,5 +307,6 @@ export async function getDemo(range: PeriodRange): Promise<DemoResumen> {
       available: false,
       reason: "Sin datos: la demo no comparte ningún identificador con los leads ni con los registros, así que no se puede medir sin adivinar.",
     },
+    sandboxes: await getDemoSandboxes(range, now),
   };
 }
