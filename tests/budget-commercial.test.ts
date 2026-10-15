@@ -130,7 +130,7 @@ test("el endpoint usa la comparación completa y la guarda del módulo", () => {
  */
 test("el PATCH de ítems conserva el vínculo con el inventario (issue #107)", () => {
   const route = repoFile("app/api/admin/budgets/route.ts");
-  assert.match(route, /items: \{ select: \{ id: true, name: true, inventoryId: true, excluded: true \} \}/, "el PATCH lee el vínculo vigente");
+  assert.match(route, /items: \{ select: \{ id: true, name: true, inventoryId: true, excluded: true, freeOnPurpose: true \} \}/, "el PATCH lee el vínculo vigente");
   assert.match(
     route,
     /Object\.hasOwn\(raw, "inventoryId"\) \? item\.inventoryId : item\.inventoryId \?\? \(item\.id \? linksById\.get\(item\.id\) \?\? null : null\)/,
