@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/server/db";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
@@ -89,7 +89,8 @@ export async function POST(request: Request) {
   const { organizationId, organization } = auth.context;
 
   const body = await readJson(request);
-  const record = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  if (!isJsonObject(body)) return jsonError("Los datos de pago deben ser un objeto JSON.", 400);
+  const record = body;
   for (const field of FIELDS) {
     const raw = record[field.key];
     if (raw !== undefined && raw !== null && typeof raw !== "string") return jsonError(`El campo ${field.label} debe ser texto.`, 400);

@@ -7,7 +7,7 @@ import { clearSessionCookie, hashPassword } from "@/lib/server/auth";
 import { canAssignTeamRole, TEAM_ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
 import { guardUserOwnerChange, UserOwnerGuardError } from "@/lib/server/user-owner-guard";
@@ -73,7 +73,9 @@ export async function POST(request: Request) {
   const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, role: actorRole } = auth.context;
-  const body = await readJson(request) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("El formulario debe ser un objeto JSON.", 400);
+  if (body.role !== undefined && !isAssignableRole(body.role)) return jsonError("Elegí un rol válido.", 400);
   const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   const name = normalizePersonName(typeof body.name === "string" ? body.name : "");
   const password = typeof body.password === "string" ? body.password : "";
@@ -135,7 +137,10 @@ export async function PATCH(request: Request) {
   const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, user: actor, role: actorRole } = auth.context;
-  const body = await readJson(request) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("El formulario debe ser un objeto JSON.", 400);
+  if (body.role !== undefined && !isAssignableRole(body.role)) return jsonError("Elegí un rol válido.", 400);
+  if (body.active !== undefined && typeof body.active !== "boolean") return jsonError("El acceso debe estar activo o inactivo.", 400);
   if (typeof body.id !== "string") return jsonError("User id is required.", 400);
 
   const membership = await db.adminMembership.findFirst({

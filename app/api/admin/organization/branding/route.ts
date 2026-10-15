@@ -1,7 +1,7 @@
 import { recordAudit, auditChanges } from "@/lib/server/audit";
 import { loadOrganizationLogos, logoVersions } from "@/lib/server/branding";
 import { db } from "@/lib/server/db";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { FIELD_MESSAGES, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
@@ -37,7 +37,8 @@ export async function PATCH(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
 
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("El formulario debe ser un objeto JSON.", 400);
   const name = normalizePersonName(typeof body.name === "string" ? body.name : "");
   if (!personNameValid(name)) return jsonError(FIELD_MESSAGES.name, 400);
 
