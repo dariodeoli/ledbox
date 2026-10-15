@@ -382,6 +382,9 @@ export function AdminShell({
         redirectToLogin();
         return;
       }
+      // Sin sesión confirmada, los links nunca quedan apuntando a la demo.
+      setWhatsappSandbox(false);
+      setPortalSandbox(false);
       setSession((current) => ({ ...current, loading: false, error: result.error }));
       return;
     }

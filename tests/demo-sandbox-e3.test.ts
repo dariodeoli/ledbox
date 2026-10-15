@@ -174,3 +174,12 @@ test("mayorista y tienda web: 'No disponible en la demo' en la sandbox", () => {
   assert.match(ajustes, /sandbox\s*\?\s*\(/);
   assert.ok(ajustes.includes("SANDBOX_UNAVAILABLE"));
 });
+
+test("QA E3: el recordatorio simulado se audita como simulado y un error de sesión apaga el modo demo de los links", async () => {
+  const { readFileSync } = await import("node:fs");
+  const reminders = readFileSync("lib/server/reminders.ts", "utf8");
+  assert.match(reminders, /sent\.simulated\s*\?\s*`Simuló el recordatorio de pago/);
+  assert.match(reminders, /fields: \{ \.\.\.detail\.fields, simulado: true \}/);
+  const shell = readFileSync("components/admin/AdminShell.tsx", "utf8");
+  assert.match(shell, /setWhatsappSandbox\(false\);\s*setPortalSandbox\(false\);\s*setSession\(\(current\) => \(\{ \.\.\.current, loading: false, error: result\.error \}\)\)/);
+});

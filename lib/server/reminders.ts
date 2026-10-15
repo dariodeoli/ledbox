@@ -419,8 +419,11 @@ export async function sendReminderEmailForTarget(input: {
       action: "remind",
       entity: fields.expectedPaymentId ? "ExpectedPayment" : "ClientPayment",
       entityId: fields.expectedPaymentId ?? (fields.paymentId as string),
-      summary: `Envió el recordatorio de pago por email a «${label}» (${concept})`,
-      detail,
+      // En la demo nada sale: el historial lo dice tal cual (docs/DEMO-INTERACTIVA.md §11).
+      summary: sent.simulated
+        ? `Simuló el recordatorio de pago por email a «${label}» (${concept}) · demo, no se envió`
+        : `Envió el recordatorio de pago por email a «${label}» (${concept})`,
+      detail: sent.simulated ? { ...detail, fields: { ...detail.fields, simulado: true } } : detail,
     });
     return {
       status: "sent",
