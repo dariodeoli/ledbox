@@ -583,3 +583,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - **Condición** de cada unidad del 1 al 10 (también en %), y **proveedor, fecha de compra y garantía**, con «Registrar compra» para sumar unidades nuevas.
 - Ajustes → **Inventario**: administrar categorías, subcategorías y depósitos.
 - Importar productos acepta categoría, subcategoría, depósito y ubicación (planilla, ChatGPT e IA).
+
+## v2.1.121 — 2026-10-15
+
+- Ajustes → Alquileres, todo configurable por empresa y editable en cada caso: **garantía** (no, opcional o siempre; para reservar o por daños; monto fijo, % del pedido o por producto), **recargo por demora** (% o monto fijo, por día o por hora, con tolerancia), **roturas y faltantes** (100 % del costo de reposición por defecto), **cargos personalizados** (lavado, mancha, armado…, por pieza o por evento y por categoría), **política de cancelación** por tramos y **condiciones del alquiler**, con el monto calculado a la vista.
+- **Liquidación de la devolución**: al devolver, el sistema propone los cargos; el equipo los aplica o los condona (con motivo) y «Liquida»: con garantía por daños se retiene lo justo y se devuelve el resto, o queda un saldo a cobrar; el cliente ve el detalle en su portal. La garantía retenida y los cargos extra cuentan como ingreso pero no bajan lo que el cliente debe del alquiler.
+- **Pantalla nueva de Inventario**: estado con color e ícono (alquilado en rojo, «Vencida» destacada, disponible, dañado, mantenimiento), cuadrícula compacta, vista por categoría, filtros por tipo, categoría, depósito, estado y proveedor, y carga por partes para cientos de productos. La ficha tiene pestañas.
+- Los costos internos (costo diario, reposición, compra y proveedor) solo los ven dueño, administración, finanzas y operación.
+- Finanzas: el indicador de cobros pasa a llamarse «Ingresos de clientes».
