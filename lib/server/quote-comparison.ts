@@ -34,8 +34,10 @@ export async function guardQuoteApproval(tx: Prisma.TransactionClient, budgetId:
   return budget;
 }
 
-export async function withQuoteApproval<T>(budgetId: string, organizationId: string, write: (tx: Prisma.TransactionClient) => Promise<T>, token?: string): Promise<T> {
+export async function withQuoteApproval<T>(budgetId: string, organizationId: string, write: (tx: Prisma.TransactionClient) => Promise<T>, token?: string, options?: { beforeBudgetLock?: (tx: Prisma.TransactionClient) => Promise<unknown> }): Promise<T> {
   return db.$transaction(async (tx) => {
+    // El caller puede fijar inventario y evento en orden canónico ANTES de Budget.
+    await options?.beforeBudgetLock?.(tx);
     await guardQuoteApproval(tx, budgetId, organizationId, token);
     return write(tx);
   });

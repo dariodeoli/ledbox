@@ -191,7 +191,8 @@ test("papelera E2 fix: el reporte de dinero incluye eliminados, el lock del even
   assert.match(read("app/(admin)/(print)/imprimir/reporte/page.tsx"), /loadMonthlyReportEvents/);
   assert.match(read("lib/server/rental-report.ts"), /rentableItemWhere\(organizationId\), deletedAt: undefined, id: \{ in: usedIds \}/);
   const availability = read("lib/server/inventory-availability.ts");
-  assert.match(availability, /"deletedAt" IS NULL FOR UPDATE/);
+  assert.match(read("lib/server/event-lock.ts"), /"deletedAt" IS NULL FOR UPDATE/);
+  assert.match(availability, /export \{ lockLiveEvent \} from "\.\/event-lock"/);
   assert.ok(availability.indexOf("lockInventoryItems(tx, options.organizationId, [options.inventoryId])") < availability.indexOf("lockLiveEvent(tx, options.organizationId, options.eventId)"), "orden: ítems antes que evento");
   const trash = read("lib/server/trash.ts");
   assert.match(trash, /const TABLES = \{/);
