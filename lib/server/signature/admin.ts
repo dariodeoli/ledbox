@@ -118,7 +118,7 @@ function adminEventActor(row: { actorType: string; actorName: string | null }): 
 }
 
 /** Vista del panel de una solicitud: estado real, cadena y último correo. */
-export function adminSignatureView(row: AdminSignatureRow, mail?: { status: string; error: string | null; to: string; at: Date } | null): AdminSignatureRequestRow {
+export function adminSignatureView(row: AdminSignatureRow, mail?: { status: string; error: string | null; to: string; at: Date } | null, sandbox = false): AdminSignatureRequestRow {
   const status = row.status as SignatureStatusValue;
   const stale = signatureIsExpired(status, row.expiresAt, new Date());
   const effective = stale ? ("EXPIRED" as SignatureStatusValue) : status;
@@ -151,7 +151,7 @@ export function adminSignatureView(row: AdminSignatureRow, mail?: { status: stri
     cancelledAt: iso(row.cancelledAt),
     cancelReason: row.cancelReason,
     createdAt: row.createdAt.toISOString(),
-    portalUrl: signaturePortalUrl(row.publicCode),
+    portalUrl: signaturePortalUrl(row.publicCode, { sandbox }),
     active: signatureCanSign(effective) && !stale,
     chainValid: verifySignatureChain(row.events).valid,
     events: row.events.map((event) => ({
@@ -193,7 +193,7 @@ async function loadAdminRow(organizationId: string, id: string): Promise<AdminSi
 export async function getSignatureRequest(context: AdminContext, id: string): Promise<AdminSignatureRequestRow | null> {
   const row = await loadAdminRow(context.organizationId, id);
   if (!row) return null;
-  return adminSignatureView(row, await lastMailForRequest(row.id));
+  return adminSignatureView(row, await lastMailForRequest(row.id), context.sandbox);
 }
 
 /**
@@ -223,7 +223,7 @@ async function expireStaleSignatureRequests(
 }
 
 /** Último correo de cada solicitud (una sola consulta del historial de correo). */
-async function attachLastMail(rows: AdminSignatureRow[]): Promise<AdminSignatureRequestRow[]> {
+async function attachLastMail(rows: AdminSignatureRow[], sandbox: boolean): Promise<AdminSignatureRequestRow[]> {
   const mails = await db.mailLog.findMany({
     where: { entity: "SignatureRequest", entityId: { in: rows.map((row) => row.id) }, category: "signature" },
     orderBy: { sentAt: "desc" },
@@ -235,7 +235,7 @@ async function attachLastMail(rows: AdminSignatureRow[]): Promise<AdminSignature
       lastMail.set(mail.entityId, { status: mail.status, error: mail.error, to: mail.to, at: mail.sentAt });
     }
   }
-  return rows.map((row) => adminSignatureView(row, lastMail.get(row.id) ?? null));
+  return rows.map((row) => adminSignatureView(row, lastMail.get(row.id) ?? null, sandbox));
 }
 
 /**
@@ -257,7 +257,7 @@ export async function listSignatureRequests(context: AdminContext, budgetId: str
     take: 50,
     include: adminInclude,
   });
-  return attachLastMail(await expireStaleSignatureRequests(rows, where));
+  return attachLastMail(await expireStaleSignatureRequests(rows, where), context.sandbox);
 }
 
 /**
@@ -273,7 +273,7 @@ export async function listOrganizationSignatureRequests(context: AdminContext): 
     take: 200,
     include: adminInclude,
   });
-  return attachLastMail(await expireStaleSignatureRequests(rows, where));
+  return attachLastMail(await expireStaleSignatureRequests(rows, where), context.sandbox);
 }
 
 export type CreateSignatureRequestInput = {
@@ -439,7 +439,7 @@ export async function createSignatureRequest(
       recipientName,
       senderName: context.user.name,
       code,
-      portalUrl: signaturePortalUrl(code),
+      portalUrl: signaturePortalUrl(code, { sandbox: context.sandbox }),
       expiresAt,
       methodLabel: signatureMethodLabel(method),
       message,
@@ -489,7 +489,7 @@ export async function createSignatureRequest(
 
   const row = await loadAdminRow(context.organizationId, requestId);
   if (!row) throw new SignatureActionError(500, "No pudimos leer la solicitud recién creada.");
-  return { request: adminSignatureView(row, await lastMailForRequest(requestId)), mail };
+  return { request: adminSignatureView(row, await lastMailForRequest(requestId), context.sandbox), mail };
 }
 
 /** Cancela (revoca) una solicitud activa: bloquea la firma y deja su evento. */
@@ -554,7 +554,7 @@ export async function cancelSignatureRequest(
 
   const fresh = await loadAdminRow(context.organizationId, row.id);
   if (!fresh) throw new SignatureActionError(500, "No pudimos leer la solicitud cancelada.");
-  return adminSignatureView(fresh, await lastMailForRequest(row.id));
+  return adminSignatureView(fresh, await lastMailForRequest(row.id), context.sandbox);
 }
 
 /** Reenvía el correo de la solicitud (mismo link y código) si sigue activa. */
@@ -579,7 +579,7 @@ export async function resendSignatureRequest(
     recipientName: row.recipientName,
     senderName: context.user.name,
     code: row.publicCode,
-    portalUrl: signaturePortalUrl(row.publicCode),
+    portalUrl: signaturePortalUrl(row.publicCode, { sandbox: context.sandbox }),
     expiresAt: row.expiresAt,
     methodLabel: signatureMethodLabel(row.method),
   });

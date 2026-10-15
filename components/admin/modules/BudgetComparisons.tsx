@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import type { AdminBudgetRow } from "@/lib/admin-types";
 import { useAdminResource } from "@/lib/admin-api";
-import { publicConfig } from "@/lib/public-config";
+import { comparisonPortalUrl } from "@/lib/public-config";
 import { TextField, DateField, SwitchField } from "../AdminFields";
 import { AdminButton, AdminDialog, AdminNote } from "../AdminUI";
 import { quoteComparisonEligible } from "@/lib/quote-sharing";
@@ -20,7 +20,7 @@ export function BudgetComparisons({ quotes }: { quotes: AdminBudgetRow[] }) {
   const ids = Object.keys(chosen);
   const clientId = quotes.find((q) => q.id === ids[0])?.client.id;
   const candidates = useMemo(() => quotes.filter((q) => quoteComparisonEligible(q) && (!clientId || q.client.id === clientId) && !(groups.data ?? []).some((g) => g.budgets.some((b) => b.id === q.id))), [quotes, clientId, groups.data]);
-  function url(group: Group) { return `${publicConfig.clientUrl}/comparar/${encodeURIComponent(group.publicToken)}`; }
+  function url(group: Group) { return comparisonPortalUrl(group.publicToken); }
   async function mutate(body: unknown, method: string) {
     setBusy(true); setMessage("");
     try {

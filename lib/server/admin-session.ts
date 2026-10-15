@@ -21,6 +21,11 @@ export async function buildAdminSessionPayload(context: AdminContext): Promise<A
     loadOrganizationLogos(organization.id),
     loadAdminSecurity(user.id),
   ]);
+  // Sandbox de la demo: la franja muestra la hora límite (1 h sin uso o 24 h desde el alta). Si nunca se
+  // registró uso, `demoLastSeenAt` es la fecha de alta (así no queda nulo ni se inventa una hora).
+  const sandboxTimes = sandbox
+    ? await db.organization.findUnique({ where: { id: organization.id }, select: { demoLastSeenAt: true, demoExpiresAt: true, createdAt: true } })
+    : null;
   return {
     // El avatar (issue #22) viaja con la fecha de subida: el chip arma la URL con
     // esa versión y refresca la foto cuando el usuario la cambia.
@@ -37,6 +42,12 @@ export async function buildAdminSessionPayload(context: AdminContext): Promise<A
     // La sesión demo se marca para que el shell muestre el aviso de solo lectura.
     demo,
     sandbox,
+    ...(sandboxTimes
+      ? {
+          demoLastSeenAt: (sandboxTimes.demoLastSeenAt ?? sandboxTimes.createdAt).toISOString(),
+          demoExpiresAt: sandboxTimes.demoExpiresAt?.toISOString() ?? null,
+        }
+      : {}),
     // Bloqueo por PIN (issue #21): estado de la sesión + preferencia del usuario.
     // La demo no usa PIN ni bloqueo (no tiene preferencia que aplicar). El motivo
     // solo viaja con un bloqueo vigente; desbloqueada, la pantalla no aplica.

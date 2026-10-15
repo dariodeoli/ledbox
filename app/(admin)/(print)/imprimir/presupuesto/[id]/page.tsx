@@ -14,7 +14,7 @@ import {
   invoiceTaxTypeLabel,
 } from "@/lib/admin-format";
 import { organizationLogoUrl } from "@/lib/admin-types";
-import { portalBudgetUrl, publicConfig } from "@/lib/public-config";
+import { portalBudgetUrl, portalOrigin } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
 import { loadOrganizationLogos } from "@/lib/server/branding";
 import { parsePaymentDetails, paymentPlanOf } from "@/lib/server/budget-portal";
@@ -76,7 +76,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   const balance = budget.total - paid;
   const issuedAt = formatDateTime(budget.createdAt);
   const reference = `Nº ${budgetReference(budget.id)}`;
-  const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken) : null;
+  const portalUrl = budget.publicToken ? portalBudgetUrl(budget.publicToken, { sandbox: auth.context.sandbox }) : null;
   const portalQr = portalUrl ? await qrSvg(portalUrl, 168) : null;
   const plan = paymentPlanOf(budget);
   const details = parsePaymentDetails(budget.organization.paymentDetails);
@@ -286,7 +286,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
                 <p className="lbprint-portal-code">{budget.publicToken}</p>
                 <PrintField label="Link del presupuesto" value={portalUrl} wide />
                 <p className="lbprint-note">
-                  Escaneá el QR o entrá a {publicConfig.clientUrl.replace(/^https?:\/\//, "")} con el código para ver el detalle
+                  Escaneá el QR o entrá a {portalOrigin({ sandbox: auth.context.sandbox }).replace(/^https?:\/\//, "")} con el código para ver el detalle
                   y aprobar el presupuesto online. El link es personal del cliente y puede revocarse desde el panel.
                 </p>
               </div>

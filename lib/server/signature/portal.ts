@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { normalizeSignatureCode } from "@/lib/public-config";
 import { isDemoOrganizationSlug } from "../demo-data";
+import { isSandboxOrg } from "../demo-sandbox";
 import { recordAudit, portalAuditContext } from "../audit";
 import { rateLimit } from "../rate-limit";
 import { appendSignatureEvent, type SignatureActorInput } from "./events";
@@ -790,13 +791,21 @@ const OTP_TTL_MS = 10 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
 
 /**
+ * Demo: el código que se muestra en pantalla en vez de enviarse. **Solo** en una sandbox y solo cuando el
+ * correo quedó simulado: en una empresa real (aunque el destino sea `*.demo`) nunca se expone.
+ */
+export function demoOtpToExpose(input: { sandbox: boolean; mailSimulated: boolean | undefined; code: string }): string | undefined {
+  return input.sandbox && input.mailSimulated === true ? input.code : undefined;
+}
+
+/**
  * Envía (o reenvía) el código OTP por correo. La solicitud tiene que estar
  * activa, con OTP configurado y correo del destinatario cargado.
  */
 export async function sendSignatureOtp(input: {
   code: string;
   evidence: SignatureClientEvidence;
-}): Promise<PortalSignatureRequest> {
+}): Promise<PortalSignatureRequest & { demoOtp?: string }> {
   const normalized = normalizeSignatureCode(input.code);
   if (!normalized) throw new SignatureActionError(404, "El enlace no es válido o la solicitud no existe.");
   await limitedOrThrow(`signature-otp-send:${normalized}`, 6);
@@ -829,7 +838,9 @@ export async function sendSignatureOtp(input: {
     entityId: row.id,
     actor: { name: row.senderName, email: row.senderEmail },
   });
-  if (result.status !== "sent") {
+  // Demo: en una sandbox el correo se simula y el código se muestra en pantalla (`demoOtp`).
+  const demoOtp = demoOtpToExpose({ sandbox: await isSandboxOrg(row.organizationId), mailSimulated: result.simulated, code });
+  if (result.status !== "sent" && demoOtp === undefined) {
     await appendSignatureEvent({
       requestId: row.id,
       organizationId: row.organizationId,
@@ -853,11 +864,11 @@ export async function sendSignatureOtp(input: {
     eventType: "OTP_SENT",
     status: row.status,
     actor: { type: "SYSTEM" },
-    metadata: { destino: row.recipientEmail, expiraEnMinutos: OTP_TTL_MS / 60_000 },
+    metadata: { destino: row.recipientEmail, expiraEnMinutos: OTP_TTL_MS / 60_000, ...(demoOtp !== undefined ? { simulado: true } : {}) },
   });
   const view = await loadSignaturePortal(normalized);
   if (!view) throw new SignatureActionError(404, "El enlace no es válido o la solicitud no existe.");
-  return view;
+  return demoOtp !== undefined ? { ...view, demoOtp } : view;
 }
 
 function otpCodeHash(code: string): string {

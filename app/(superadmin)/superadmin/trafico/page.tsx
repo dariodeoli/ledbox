@@ -21,6 +21,7 @@ import {
   splitHosts,
   type SiteHosts,
 } from "@/lib/platform/trafico-view";
+import { auditEntityLabel } from "@/lib/admin-format";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { PeriodChips } from "@/components/platform/PeriodChips";
 import { ChartLine } from "@/components/platform/ChartLine";
@@ -81,6 +82,8 @@ export default async function TraficoPage({ searchParams }: Readonly<{ searchPar
   const deviceTotal = devices.mobile + devices.desktop;
   const refTotal = referrers.totalViews;
   const demoHasStarts = demoData.started > 0 || demoData.startedPrev > 0;
+  const sandboxes = demoData.sandboxes;
+  const sandboxesHaveData = sandboxes.created > 0 || sandboxes.createdPrev > 0 || sandboxes.activeNow > 0;
 
   return (
     <PlatformShell active="trafico" title="Tráfico">
@@ -269,6 +272,75 @@ export default async function TraficoPage({ searchParams }: Readonly<{ searchPar
               </article>
             </div>
           )}
+          {sandboxesHaveData ? (
+            <section className="platform-panel" aria-label="Sandboxes de la demo">
+              <header className="platform-panel-head">
+                <h2>Sandboxes de la demo</h2>
+                <p className="platform-hint">Cada visitante trabaja en su propia empresa de prueba. Ninguna cuenta como empresa real.</p>
+              </header>
+              <div className="platform-kpis">
+                <article className="platform-kpi" aria-label="Sandboxes creadas">
+                  <p className="platform-kpi-label">Sandboxes creadas</p>
+                  <p className="platform-kpi-value">{formatNumber(sandboxes.created)}</p>
+                  <div className="platform-kpi-row">
+                    <span className="platform-delta" data-tone={deltaTone(sandboxes.createdDelta)}>{formatDelta(sandboxes.createdDelta)}</span>
+                    <span className="platform-kpi-prev">antes: {formatNumber(sandboxes.createdPrev)}</span>
+                  </div>
+                  <p className="platform-kpi-note">DemoSession · una por demo iniciada con sandbox; los reinicios van aparte.</p>
+                </article>
+                <article className="platform-kpi" aria-label="Sandboxes activas ahora">
+                  <p className="platform-kpi-label">Activas ahora</p>
+                  <p className="platform-kpi-value">{formatNumber(sandboxes.activeNow)}</p>
+                  <p className="platform-kpi-note">Empresas sandbox vigentes (con uso en la última hora). No depende del período.</p>
+                </article>
+                <article className="platform-kpi" aria-label="Reinicios de la demo">
+                  <p className="platform-kpi-label">Reinicios</p>
+                  <p className="platform-kpi-value">{formatNumber(sandboxes.resets)}</p>
+                  <p className="platform-kpi-note">DemoSession · «Reiniciar la demo» de las demos del período.</p>
+                </article>
+                <article className="platform-kpi" aria-label="Demos con al menos una escritura">
+                  <p className="platform-kpi-label">Con al menos una escritura</p>
+                  {sandboxes.withWritePct === null ? (
+                    <p className="platform-kpi-empty">{EMPTY}</p>
+                  ) : (
+                    <>
+                      <p className="platform-kpi-value">{formatNumber(sandboxes.withWritePct, 1)}%</p>
+                      <p className="platform-kpi-prev">{formatNumber(sandboxes.withWrite)} de {formatNumber(sandboxes.measured)} demos</p>
+                    </>
+                  )}
+                  <p className="platform-kpi-note">AuditLog de la sandbox (viva) o acciones guardadas al purgarla.</p>
+                </article>
+                <article className="platform-kpi" aria-label="Acciones promedio por demo">
+                  <p className="platform-kpi-label">Acciones promedio</p>
+                  {sandboxes.avgActions === null ? <p className="platform-kpi-empty">{EMPTY}</p> : <p className="platform-kpi-value">{formatNumber(sandboxes.avgActions, 1)}</p>}
+                  <p className="platform-kpi-note">Cambios auditados por demo (crear, editar, enviar…), sin los datos de ejemplo.</p>
+                </article>
+              </div>
+              <ChartLine
+                days={sandboxes.createdByDay.map((point) => point.day)}
+                prevDays={sandboxes.createdByDayPrev.map((point) => point.day)}
+                values={sandboxes.createdByDay.map((point) => point.created)}
+                prevValues={sandboxes.createdByDayPrev.map((point) => point.created)}
+                caption="Sandboxes creadas por día"
+              />
+              <p className="platform-kpi-note">DemoSession · sandboxes creadas por día de Paraguay.</p>
+              <h3 className="platform-subhead">Entidades más tocadas</h3>
+              {sandboxes.topEntities.length === 0 ? (
+                <p className="platform-kpi-empty">{EMPTY}</p>
+              ) : (
+                <ChartBarList
+                  label="Entidades más tocadas en las sandboxes"
+                  items={sandboxes.topEntities.map((item) => ({
+                    key: item.entity,
+                    label: auditEntityLabel(item.entity),
+                    value: item.actions,
+                    valueLabel: formatNumber(item.actions),
+                  }))}
+                />
+              )}
+              <p className="platform-kpi-note">Vivas desde AuditLog de las sandboxes y ya purgadas desde DemoSession. Solo demos medidas (sin bots ni «No rastrear»).</p>
+            </section>
+          ) : null}
           {demoHasStarts ? (
             <section className="platform-panel" aria-label="Demos iniciadas por día">
               <header className="platform-panel-head"><h2>Demos iniciadas por día</h2></header>

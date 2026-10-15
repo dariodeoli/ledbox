@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { publicConfig } from "@/lib/public-config";
+import { onDemoHost } from "@/lib/server/demo-host";
 import { PORTAL_BOOT_SCRIPT, PORTAL_ROOT_ID } from "@/lib/portal-theme";
 import { PortalThemeToggle } from "./_components/PortalThemeToggle";
 
@@ -17,7 +18,9 @@ export const metadata: Metadata = {
  * columna de contenido. Desde el 25-09-2026 suma modo claro/oscuro propio
  * (preferencia del visitante) y el toggle en la barra superior.
  */
-export default function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // En el host de la demo todo lo que se ve es de una sandbox (o de la vitrina): nunca un presupuesto real.
+  const demoHost = await onDemoHost();
   return (
     <div className="portal" id={PORTAL_ROOT_ID} data-theme="dark" suppressHydrationWarning>
       {/* Aplica el tema guardado (localStorage) antes del primer pintado. */}
@@ -34,6 +37,12 @@ export default function PortalLayout({ children }: Readonly<{ children: React.Re
           <PortalThemeToggle />
         </div>
       </header>
+
+      {demoHost ? (
+        <div className="portal-demo-strip" role="status">
+          <span>DEMO: no es un presupuesto real</span>
+        </div>
+      ) : null}
 
       <main className="portal-main">{children}</main>
 

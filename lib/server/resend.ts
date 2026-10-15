@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { publicConfig } from "@/lib/public-config";
+import type { SimulatedMail } from "@/lib/mail-preview";
 import { normalizeEmail } from "@/lib/field-rules";
 import { appEmailSender, emailConfigured, renderMail, renderMailText, sendMail } from "./mail";
 
@@ -69,7 +70,7 @@ export type ReminderEmailPayload = {
  * el id del proveedor implícito en el historial y lanza si Resend rechaza el
  * envío, para que el llamador lo registre en `PaymentReminderLog`.
  */
-export async function sendReminderEmail(payload: ReminderEmailPayload): Promise<void> {
+export async function sendReminderEmail(payload: ReminderEmailPayload): Promise<{ simulated: boolean; preview?: SimulatedMail }> {
   const result = await sendMail({
     to: payload.to,
     subject: payload.subject,
@@ -82,5 +83,8 @@ export async function sendReminderEmail(payload: ReminderEmailPayload): Promise<
     actor: payload.actor ?? null,
   });
   if (result.status === "failed") throw new Error(result.error ? `Resend: ${result.error}` : "Reminder email could not be sent");
+  // Demo: el correo quedó simulado (no es un fallo); la vista previa solo existe en una sandbox.
+  if (result.simulated) return { simulated: true, preview: result.preview };
   if (result.status === "skipped") throw new Error(result.error ?? "Reminder email could not be sent");
+  return { simulated: false };
 }

@@ -855,6 +855,16 @@ export function setWhatsappSandbox(sandbox: boolean): void {
   if (typeof window !== "undefined") whatsappSandbox = sandbox;
 }
 
+/** ¿La sesión es una sandbox de la demo? Ahí WhatsApp no abre `wa.me`: la pantalla muestra «Así se vería el mensaje». */
+export function isWhatsappSandbox(): boolean {
+  return whatsappSandbox;
+}
+
+/** ¿El teléfono sirve para WhatsApp? (independiente de la demo: decide si se dibuja la acción). */
+export function whatsappReachable(phone: string | null | undefined): boolean {
+  return String(phone || "").replace(/\D/g, "").length >= 8;
+}
+
 /** Link de mensajería con el teléfono normalizado sin signos (números locales asumen Paraguay). */
 export function whatsappHref(phone: string | null | undefined, message?: string | null, options: { sandbox?: boolean } = {}): string | null {
   const digits = String(phone || "").replace(/\D/g, "");

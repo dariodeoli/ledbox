@@ -9,7 +9,7 @@ import {
   formatDateTime,
   formatNumber,
   formatTime,
-  whatsappHref,
+  whatsappReachable,
 } from "@/lib/admin-format";
 import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
@@ -492,7 +492,7 @@ export function EventosModule() {
     if (writable) entries.push({ label: "Editar evento", icon: "edit", onClick: () => openEventEdit(event) });
     if (!inFicha) entries.push({ label: "Ver cronología", icon: "audit", onClick: () => openFicha(event.id, "historial") });
     entries.push({ label: "Imprimir orden de trabajo", icon: "print", href: `/imprimir/evento/${event.id}`, external: true });
-    if (writable && whatsappHref(event.client.phone)) {
+    if (writable && whatsappReachable(event.client.phone)) {
       entries.push({
         label: "Enviar por WhatsApp con plantilla",
         icon: "mail",

@@ -33,7 +33,7 @@ import {
   treasuryDirectionLabel,
   treasuryDirectionTone,
   treasuryOriginLabel,
-  whatsappHref,
+  whatsappReachable,
 } from "@/lib/admin-format";
 import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
@@ -98,6 +98,8 @@ import {
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { useAdminNarrowViewport } from "../AdminBoard";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
+import { AdminSimulatedMailDialog } from "../AdminSimulatedMail";
+import { SIMULATED_MAIL_NOTICE, type SimulatedMail } from "@/lib/mail-preview";
 import { Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
@@ -477,7 +479,7 @@ function PaymentRemindersDialog({
             >
               {emailDoneToday ? "Enviado hoy" : "Recordar por email"}
             </AdminButton>
-            {whatsappHref(payment.client.phone) ? (
+            {whatsappReachable(payment.client.phone) ? (
               <button
                 type="button"
                 className="admin-btn"
@@ -1221,6 +1223,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   // Recordatorios de cobro (issue #19): envío por email, apertura de WhatsApp y
   // detalle del cobro con su historial.
   const [reminderBusyId, setReminderBusyId] = useState("");
+  /** Demo: recordatorio por correo que no salió, con su vista previa. */
+  const [simulatedMail, setSimulatedMail] = useState<SimulatedMail | null>(null);
   const [remindersFor, setRemindersFor] = useState("");
   const [runningReminders, setRunningReminders] = useState(false);
   /** Envío por WhatsApp con plantilla (issue #35) para el cobro elegido. */
@@ -1853,7 +1857,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     setReminderBusyId(`email:${payment.id}`);
     setNotice(null);
     setFormError("");
-    const result = await adminSend<{ reminder?: AdminPaymentReminder; alreadySentToday?: boolean }>(
+    const result = await adminSend<{ reminder?: AdminPaymentReminder; alreadySentToday?: boolean; simulated?: boolean; preview?: SimulatedMail | null }>(
       "/api/admin/reminders",
       { paymentId: payment.id, channel: "email" },
     );
@@ -1870,6 +1874,10 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       });
     } else if (result.data.alreadySentToday) {
       setNotice({ tone: "ok", text: `Ya se envió un recordatorio hoy a ${reminder?.to ?? label}: no se duplica.` });
+    } else if (result.data.simulated) {
+      // Demo: no salió ningún correo; se muestra cómo se habría visto.
+      setNotice({ tone: "ok", text: `${SIMULATED_MAIL_NOTICE}: recordatorio a ${reminder?.to ?? label}.` });
+      setSimulatedMail(result.data.preview ?? null);
     } else {
       setNotice({ tone: "ok", text: `Recordatorio enviado a ${reminder?.to ?? label} con el link del portal.` });
     }
@@ -3143,7 +3151,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                             onClick={() => void remindByEmail(payment)}
                           />
                         ) : null}
-                        {writable && whatsappHref(payment.client.phone) ? (
+                        {writable && whatsappReachable(payment.client.phone) ? (
                           <AdminWhatsappTemplateButton
                             title={
                               whatsappToday
@@ -3295,7 +3303,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                             onClick={() => void remindByEmail(payment)}
                           />
                         ) : null}
-                        {writable && whatsappHref(payment.client.phone) ? (
+                        {writable && whatsappReachable(payment.client.phone) ? (
                           <AdminWhatsappTemplateButton
                             title={
                               whatsappToday
@@ -4527,6 +4535,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           onClose={() => setRemindersFor("")}
         />
       ) : null}
+
+      {simulatedMail ? <AdminSimulatedMailDialog mail={simulatedMail} onClose={() => setSimulatedMail(null)} /> : null}
 
       {templateTarget ? (
         <MessageTemplateSendDialog

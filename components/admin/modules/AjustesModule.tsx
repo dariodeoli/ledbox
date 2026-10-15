@@ -2,6 +2,8 @@
 
 import { canManageOrganization } from "@/lib/admin-policy";
 import { useAdminSession } from "../AdminShell";
+import { AdminNote } from "../AdminUI";
+import { SANDBOX_UNAVAILABLE } from "@/lib/mail-preview";
 import { AjustesTabs, type AdminAjustesSection } from "./AjustesTabs";
 import { AlquileresSettings } from "./AlquileresSettings";
 import { CorreoModule } from "./CorreoModule";
@@ -26,7 +28,7 @@ import { UsuariosModule } from "./UsuariosModule";
 export type { AdminAjustesSection } from "./AjustesTabs";
 
 export function AjustesModule({ section }: { section: AdminAjustesSection }) {
-  const { role } = useAdminSession();
+  const { role, sandbox } = useAdminSession();
   const canManage = canManageOrganization(role);
 
   return (
@@ -36,7 +38,14 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
       {section === "empresa" && canManage ? <EmpresaModule /> : null}
       {section === "correo" && canManage ? <CorreoModule /> : null}
       {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
-      {section === "tienda" && canManage ? <TiendaWebSettings /> : null}
+      {section === "tienda" && canManage ? (
+        sandbox ? (
+          // Demo: el catálogo público excluye las sandboxes; no hay tienda ni pedidos que configurar.
+          <AdminNote>{SANDBOX_UNAVAILABLE}: la demo no tiene tienda web pública ni pedidos del catálogo.</AdminNote>
+        ) : (
+          <TiendaWebSettings />
+        )
+      ) : null}
       {section === "plan" ? <PlanModule /> : null}
       {section === "usuarios" && canManage ? <UsuariosModule /> : null}
       {section === "eliminados" && canManage ? <EliminadosModule /> : null}

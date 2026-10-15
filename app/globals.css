@@ -3181,6 +3181,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
     linear-gradient(180deg, #f2f4ff, #f6f8ff 42%, #f6f8ff);
 }
 .portal-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--border); background: var(--p-glass); -webkit-backdrop-filter: var(--p-blur); backdrop-filter: var(--p-blur); }
+.portal-demo-strip { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; min-height: 36px; padding: 6px clamp(16px, 4vw, 40px); border-bottom: 1px solid color-mix(in srgb, var(--p-warn) 50%, transparent); background: color-mix(in srgb, var(--p-warn) 14%, var(--bg)); color: var(--text-strong); font-size: 13px; font-weight: 700; text-align: center; }
+.portal-demo-otp { display: grid; gap: 4px; margin: 8px 0; padding: 12px 14px; border: 1px dashed color-mix(in srgb, var(--p-warn) 60%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--p-warn) 10%, transparent); color: var(--text); font-size: 14px; }
+.portal-demo-otp-code { color: var(--text-strong); font: 800 28px/1.1 var(--font-display, inherit); letter-spacing: .3em; font-variant-numeric: tabular-nums; }
 .portal-top-actions { display: inline-flex; align-items: center; gap: 10px; }
 .portal-themebtn { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: transparent; color: var(--muted-2); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .portal-themebtn:hover { border-color: var(--led); background: var(--led-soft); color: var(--led); }
@@ -4462,6 +4465,11 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-demo-strip-link:hover { color: var(--a-text-strong); }
 .admin-demo-strip-link:disabled { opacity: .5; cursor: default; }
 @media (max-width: 560px) { .admin-demo-strip { gap: 4px 12px; padding: 4px 12px; } .admin-demo-strip-links { gap: 20px; } }
+.admin-demo-strip-deadline { color: var(--a-muted-2); font-weight: 500; }
+.admin-demo-strip[data-sandbox] .admin-demo-strip-link::after { inset: -15px -8px; }
+.admin-demo-strip--notice { background: var(--a-accent-soft); }
+/* Correo y WhatsApp simulados de la demo (docs/DEMO-INTERACTIVA.md §3). */
+.admin-demo-simulated { display: grid; gap: 8px; }
 
 /* Resumen */
 .admin-resumen { gap: 16px; }
@@ -4917,6 +4925,7 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .platform-panel { display: grid; gap: 8px; min-width: 0; padding: 14px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
 .platform-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .platform-panel-head h2 { color: var(--a-text-strong); font-size: 15px; }
+.platform-subhead { margin: 12px 0 4px; color: var(--a-text-strong); font-size: 13px; font-weight: 700; }
 .platform-panel-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; color: var(--a-text-strong); font-variant-numeric: tabular-nums; }
 .platform-chart { display: grid; gap: 6px; min-width: 0; margin: 0; }
 .platform-chart-svg { display: block; width: 100%; max-width: 560px; height: auto; }

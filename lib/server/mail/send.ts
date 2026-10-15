@@ -3,7 +3,10 @@ import type { MailStatus } from "@prisma/client";
 import { normalizeEmail } from "@/lib/field-rules";
 import { db } from "../db";
 import { salidaPermitida } from "../demo-sandbox";
-import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
+import { rebasePortalLinks } from "@/lib/public-config";
+import type { SimulatedMail } from "@/lib/mail-preview";
+import { isSandboxOrg } from "../demo-sandbox";
+import { appEmailSender, emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
 
 /**
  * Envío único de correo de la app (`sendMail`).
@@ -63,6 +66,10 @@ export type SendMailResult = {
   providerId?: string | null;
   /** Fila del historial; `null` cuando no hubo intento o no se pudo registrar. */
   logId?: string | null;
+  /** Demo: el correo no salió, quedó simulado. `status` sigue siendo `skipped`. */
+  simulated?: boolean;
+  /** Solo en una sandbox (nunca en una empresa real): el correo tal como se habría enviado. */
+  preview?: SimulatedMail;
 };
 
 const MAX_ERROR = 300;
@@ -150,7 +157,23 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
       actor,
       sentAt: now,
     });
-    return { status: "skipped", error: salida.motivo, providerId: null, logId: registered ? simulatedId : null };
+    // La vista previa solo viaja en una sandbox: un destino `*.demo` de una empresa real no la expone.
+    // En la sandbox los links de `clientes.` pasan al host de la demo (allá daría 404).
+    let preview: SimulatedMail | undefined;
+    try {
+      if (await isSandboxOrg(organizationId)) {
+        preview = {
+          from: appEmailSender(),
+          to,
+          subject: input.subject,
+          html: rebasePortalLinks(input.html, true),
+          text: rebasePortalLinks(input.text ?? "", true),
+        };
+      }
+    } catch (error) {
+      console.error("mail: no se pudo armar la vista previa del correo simulado", error);
+    }
+    return { status: "skipped", error: salida.motivo, providerId: null, logId: registered ? simulatedId : null, simulated: true, ...(preview ? { preview } : {}) };
   }
 
   if (!emailConfigured()) return { status: "skipped", error: missingApiKeyMessage() };

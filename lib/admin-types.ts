@@ -121,6 +121,9 @@ export type AdminSessionPayload = {
   demo?: boolean | null;
   /** Sandbox por visitante (docs/DEMO-INTERACTIVA.md): escribe, pero nada sale hacia afuera (p. ej. sin links de WhatsApp). */
   sandbox?: boolean | null;
+  /** Solo en una sandbox: último uso registrado y tope de 24 h (ISO). La hora límite sale de `sandboxDeadline`. */
+  demoLastSeenAt?: string | null;
+  demoExpiresAt?: string | null;
   /** Panel bloqueado por PIN (issue #21). */
   locked?: boolean | null;
   /** Motivo del bloqueo vigente (para el texto de la pantalla). */

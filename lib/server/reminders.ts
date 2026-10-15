@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { PaymentReminderLog, Prisma } from "@prisma/client";
 import { daysUntilDue, formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
-import { portalBudgetUrl } from "@/lib/public-config";
+import { portalBudgetUrl, rebasePortalLinks } from "@/lib/public-config";
+import type { SimulatedMail } from "@/lib/mail-preview";
+import { isSandboxOrg } from "./demo-sandbox";
 import { recordAudit, type AuditContext } from "./audit";
 import { parsePaymentDetails, type PortalBudgetPaymentDetails } from "./budget-portal";
 import { db } from "./db";
@@ -270,6 +272,9 @@ export type PaymentReminderOutcome = {
   /** Ya había un recordatorio de hoy para este cobro y canal. */
   alreadySentToday: boolean;
   error?: string;
+  /** Demo: el recordatorio no salió, se simuló. Con `preview` solo en una sandbox. */
+  simulated?: boolean;
+  preview?: SimulatedMail;
 };
 
 function isUniqueViolation(error: unknown): boolean {
@@ -332,6 +337,8 @@ export async function sendReminderEmailForTarget(input: {
     };
   }
 
+  // En una sandbox el link del portal usa el host de la demo (en `clientes.` daría 404).
+  const sandbox = await isSandboxOrg(organization.id);
   const content = buildPaymentReminderEmail({
     organizationName: organization.name,
     client: fields.client,
@@ -339,7 +346,7 @@ export async function sendReminderEmailForTarget(input: {
     dueAt: fields.dueAt,
     invoiceNumber: fields.invoiceNumber,
     budgetTitle: fields.budgetTitle,
-    portalUrl: fields.portalUrl,
+    portalUrl: fields.portalUrl ? rebasePortalLinks(fields.portalUrl, sandbox) : null,
     paymentDetails: parsePaymentDetails(organization.paymentDetails),
   });
 
@@ -394,7 +401,7 @@ export async function sendReminderEmailForTarget(input: {
     },
   };
   try {
-    await sendReminderEmail({
+    const sent = await sendReminderEmail({
       to,
       subject: content.subject,
       html: content.html,
@@ -415,7 +422,12 @@ export async function sendReminderEmailForTarget(input: {
       summary: `Envió el recordatorio de pago por email a «${label}» (${concept})`,
       detail,
     });
-    return { status: "sent", reminder, alreadySentToday: false };
+    return {
+      status: "sent",
+      reminder,
+      alreadySentToday: false,
+      ...(sent.simulated ? { simulated: true, ...(sent.preview ? { preview: sent.preview } : {}) } : {}),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo enviar el recordatorio.";
     reminder = await db.paymentReminderLog.update({

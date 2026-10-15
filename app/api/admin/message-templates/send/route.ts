@@ -78,6 +78,7 @@ async function resolveTarget(
         balance: budget.total - collectedAmount(budget.payments),
         validUntil: budget.validUntil,
         portalToken: budget.publicToken,
+        sandbox: context.sandbox,
       }),
       reminder: null,
     };
