@@ -59,3 +59,7 @@ Especificación del dueño: `docs/TIENDA-PLANTILLAS.md` y `docs/TIENDA-BOUTIQUE.
 - **Inicio** (`Organization.appearance.home`, `lib/store-home.ts`): orden y visibilidad de secciones (portada, categorías, destacados, editorial y colecciones, catálogo, cómo funciona, inspiración, contacto; el catálogo no se oculta), bloque editorial e inspiración con sus fotos (`OrganizationCover` con las ranuras `editorial` e `inspiracion-1..3`). Una sección sin contenido no se dibuja.
 - **Destacado y estilos** por producto (`featured`, `tags`) y filtros del catálogo: capacidad, precio por día, estilo, colección y «Disponible en mis fechas» (barra lateral; cajón en el celular).
 - Lo que sigue sin datos: badges «Nuevo» y «Popular».
+
+## Actualización de Apariencia (v2.1.129)
+
+El registro contiene 16 temas, agrupados por rubro. La vista previa muestra simultáneamente computadora y celular con las portadas de la empresa; el cambio de imagen se hace con `picture` desde 768 px. Escritorio usa 16:5 y celular 4:5, con fallback centrado si falta un archivo. Las fotos de productos y categorías son cuadradas, completas sobre fondo claro, incluso en temas oscuros.

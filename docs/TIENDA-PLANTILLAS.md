@@ -8,6 +8,16 @@ Tiendas en /tienda/{slug}, de venta y de alquiler: precio «por día», fechas y
 - **Tarjeta:** toda la tarjeta abre la vista rápida, más UN botón «Agregar» (icono + texto). Se quita «Ver más». El código va chico y discreto, y el precio va sin caja gris.
 - **No tocar** la landing principal app/(public) ni app/(product).
 
+## Actualización vigente: v2.1.129
+
+- Hay **16 plantillas**, agrupadas por rubro en Apariencia. A Lienzo, Boutique, Noir y Studio se sumaron Jardín, Mármol, Terracota, Nórdico, Gala y Brisa; ahora también Escenario (producción, sonido e iluminación), Corporativo (empresas), Fiesta (eventos sociales), Gourmet (catering), Kids (infantil) e Industrial (carpas, estructuras y generadores).
+- Fotos de producto y categoría siempre completas: caja cuadrada, fondo claro y `contain`. Los temas con pie oscuro conservan el nombre debajo de la foto. Solo ambientaciones usan `cover`.
+- Portadas independientes: escritorio desde 768 px, 1920 × 600 (16:5); celular, 1080 × 1350 (4:5). Si falta una se centra la otra. La vista previa de Apariencia muestra las dos versiones juntas con los archivos de la empresa.
+- Boutique conserva la guía cálida editorial (crema, oliva, Cormorant/Jost y script decorativo); los datos y precios del ejemplo del dueño no se cargan en negocios reales.
+- Controles y carrito compactos, conservando áreas táctiles de 44 px. El aviso de guardar carrito es pequeño y no compite con la confirmación de agregado.
+
+Estas reglas reemplazan las indicaciones históricas de cuatro temas y de texto encima de fotos de producto de las secciones siguientes.
+
 ## Arquitectura (obligatorio)
 1. Datos separados de la presentación: los componentes reciben props y el tema decide el look.
 2. Tema = archivo de tokens (CSS variables) + variantes de layout. Nada de colores ni tamaños hardcodeados en los componentes.
