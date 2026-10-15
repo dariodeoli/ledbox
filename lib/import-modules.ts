@@ -51,7 +51,7 @@ const PRODUCTOS_COLUMNS: ReadonlyArray<ImportColumn> = [
   { key: "categoria", required: false, example: "Sector living", help: "Categoría. Vacío = «General»." },
   { key: "tipo", required: false, example: "juego", help: "«unidad» (un producto suelto) o «juego» (un combo armado con otros productos)." },
   { key: "precio", required: false, example: "660000", help: "Precio de alquiler en guaraníes, número entero y sin símbolos. Vacío = sin dato." },
-  { key: "cobro", required: false, example: "evento", help: "«evento» (se cobra una vez por evento, valor por defecto) o «dia» (por día de alquiler). Vacío = evento." },
+  { key: "cobro", required: false, example: "evento", help: "«dia» (por día de alquiler, valor por defecto) o «evento» (un precio total por evento). Vacío = dia." },
   { key: "cantidad", required: false, example: "", help: "Unidades en stock (entero). En un juego se deja vacío: su capacidad sale de los componentes." },
   { key: "medidas", required: false, example: "1.60x0.75", help: "Medidas tal como figuran en el catálogo." },
   { key: "capacidad", required: false, example: "8 personas", help: "Capacidad, por ejemplo «8 personas»." },
@@ -72,7 +72,7 @@ const PRODUCTOS_JSON_SHAPE = `{
       "categoria": "Sector living",
       "tipo": "juego",
       "precio": 660000,
-      "cobro": "evento",
+      "cobro": "dia",
       "cantidad": null,
       "medidas": "1.60x0.75",
       "capacidad": "8 personas",
@@ -97,7 +97,7 @@ Reglas:
 3. Juegos y componentes: un juego lleva en "componentes" la lista { "codigo", "cantidad" } de los productos que lo forman. Cada código de componente tiene que existir también como producto en el catálogo. Un juego NO puede ser componente de otro juego. Una unidad lleva "componentes": [].
 4. "cantidad": entero con el stock si el catálogo lo dice; si no, null. En los juegos va null (la capacidad sale de los componentes).
 5. "precio": guaraníes (PYG) como número entero, sin puntos, sin "Gs" y sin decimales (660000, no "660.000"). Si el catálogo no trae precio, null. Nunca conviertas otras monedas: dejá null y anotalo en "dudas".
-6. "cobro": "evento" salvo que el catálogo diga por día (entonces "dia").
+6. "cobro": "dia" (precio por día de alquiler) salvo que el catálogo diga que el precio es total por evento (entonces "evento").
 7. Si falta un dato, usá null. NO inventes códigos, precios, medidas, capacidades ni descripciones.
 8. "medidas" y "capacidad": copialas tal como figuran ("1.60x0.75", "8 personas").
 9. "foto": el nombre del archivo de la foto del producto, "<codigo>.jpg" (por ejemplo "527.jpg"). Si no hay foto, null.
@@ -119,7 +119,7 @@ const PRODUCTOS_IA_INSTRUCTIONS = [
   "- No inventes datos: si un campo no está en el texto, va null (o [] en componentes).",
   "- `codigo` y `nombre` son obligatorios; sin alguno de los dos, no incluyas el producto.",
   "- `tipo`: \"unidad\" o \"juego\". Un juego lleva `componentes` [{codigo, cantidad}] con códigos que existan como productos en el mismo texto; un juego no contiene juegos.",
-  "- `cobro`: \"evento\" salvo que el texto diga por día (\"dia\").",
+  "- `cobro`: \"dia\" salvo que el texto diga que el precio es total por evento (\"evento\").",
   "- `precio`: guaraníes enteros sin separadores. Si está en otra moneda o es ambiguo, null y explicalo en `dudas`.",
   "- `foto`: \"<codigo>.jpg\" solo si el texto menciona una foto; si no, null.",
   `- Como máximo ${CATALOG_LIMITS.products} productos; no repitas códigos.`,

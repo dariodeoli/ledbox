@@ -28,14 +28,8 @@ import {
 
 const BLOCK_SIZE = 25;
 
-/**
- * TODO(integrador): `InventoryItem.billingUnit` (DAILY | EVENT) llega con la rama
- * agent/alquiler-p1. Al juntar las ramas: poner esto en true y agregar
- * `billingUnit: product.cobro === "dia" ? "DAILY" : "EVENT"` en `baseData`
- * (writeUnitItem) y en la actualización de `writeComboMeta`. Mientras tanto el
- * campo `cobro` se valida y se muestra en la vista previa, pero no se guarda.
- */
-export const BILLING_UNIT_IN_SCHEMA = false;
+/** `cobro` del catálogo → `InventoryItem.billingUnit` (docs/ALQUILERES-OPERACION.md P1-1). */
+const billingUnitOf = (cobro: "evento" | "dia") => (cobro === "evento" ? ("EVENT" as const) : ("DAILY" as const));
 
 /** Lo que hay en la empresa para esos códigos (incluye la papelera). */
 export async function loadExisting(organizationId: string, codes: string[]): Promise<Map<string, ExistingItem>> {
@@ -106,6 +100,7 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     name: product.nombre,
     category: product.categoria,
     publicDescription: planned.publicDescription,
+    billingUnit: billingUnitOf(product.cobro),
     ...(product.precio ? { listPrice: product.precio } : {}),
   };
   if (planned.existingId) {
@@ -158,6 +153,7 @@ async function writeComboMeta(tx: Tx, organizationId: string, id: string, planne
       name: product.nombre,
       category: product.categoria,
       publicDescription: planned.publicDescription,
+      billingUnit: billingUnitOf(product.cobro),
       ...(product.precio ? { listPrice: product.precio } : {}),
       ...visibilityData(current),
       ...(photoChanged ? { imageData: photo!.data, imageMime: photo!.mime } : {}),

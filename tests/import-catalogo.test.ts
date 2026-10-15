@@ -44,7 +44,7 @@ test("parser: catálogo válido, juegos y dudas como aviso", () => {
   const result = parseCatalogJson(JSON.stringify(base));
   assert.ok(result.ok);
   assert.equal(result.value.doc.productos.length, 2);
-  assert.equal(result.value.doc.productos[0].cobro, "evento", "sin «cobro» rige por evento");
+  assert.equal(result.value.doc.productos[0].cobro, "dia", "sin «cobro» rige por día (lo normal en alquileres)");
   const preview = plan(base);
   assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, fotos: 2, errores: 0, avisos: 1 });
   assert.ok(preview.problems.some((p) => p.tipo === "duda" && p.mensaje.includes("poco legible")));
@@ -263,7 +263,7 @@ test("la IA no manda nada afuera en la demo: la ruta usa el punto central de sal
 
 test("el prompt para ChatGPT incluye las reglas del módulo", () => {
   const prompt = productos.chatgptPrompt;
-  for (const piece of ["juego", "componentes", "<codigo>.jpg", "fotos.zip", "PYG", "entero", "null", "dudas", "NO inventes", 'cobro: "evento"'.replace("cobro: ", ""), '"cobro": "evento" salvo que el catálogo diga por día']) {
+  for (const piece of ["juego", "componentes", "<codigo>.jpg", "fotos.zip", "PYG", "entero", "null", "dudas", "NO inventes", 'cobro: "evento"'.replace("cobro: ", ""), '"cobro": "dia" (precio por día de alquiler) salvo que el catálogo diga que el precio es total por evento']) {
     assert.ok(prompt.includes(piece), `falta «${piece}» en el prompt`);
   }
   for (const key of importHeaders(productos)) assert.ok(prompt.includes(`"${key}"`) || prompt.includes(key), `el prompt no nombra ${key}`);

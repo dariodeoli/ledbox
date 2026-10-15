@@ -217,7 +217,7 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     problems.push(problem("error", "tipo-invalido", codigo, fila, `Código ${codigo}: «tipo» debe ser «juego» o «unidad».`));
     return null;
   }
-  const cobroRaw = text(row.cobro, 20)?.toLowerCase().replace("í", "i") ?? "evento";
+  const cobroRaw = text(row.cobro, 20)?.toLowerCase().replace("í", "i") ?? "dia";
   if (cobroRaw !== "evento" && cobroRaw !== "dia") {
     problems.push(problem("error", "cobro-invalido", codigo, fila, `Código ${codigo}: «cobro» debe ser «evento» o «dia».`));
     return null;
