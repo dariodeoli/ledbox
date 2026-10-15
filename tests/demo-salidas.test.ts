@@ -113,7 +113,7 @@ test("todo fetch( de lib/** y app/** (server actions, rutas, páginas) está en 
 test("la «Carga con IA» (proveedor externo) pasa por salidaPermitida antes de llamar al proveedor", () => {
   const callers = sources("lib", "app").filter((file) => /\biaProviderDeConfig\(/.test(stripped(file)) && rel(file) !== "lib/server/ia-carga.ts").map(rel).sort();
   // Cada caller nuevo del proveedor de IA tiene que sumarse acá y pasar por la compuerta.
-  assert.deepEqual(callers, ["app/api/admin/ia/carga/route.ts", "app/api/admin/import/[modulo]/route.ts"]);
+  assert.deepEqual(callers, ["app/api/admin/ia/carga/route.ts", "app/api/admin/import/[modulo]/route.ts", "lib/server/import-eventos-http.ts"]);
   for (const file of callers) {
     const route = stripped(join(root, file));
     const gate = route.indexOf("salidaPermitida(");

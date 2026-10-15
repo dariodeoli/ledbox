@@ -10,6 +10,7 @@ import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
 import { ImportZipError, readPhotoZip } from "@/lib/server/import-photos";
 import { applyCatalog, previewCatalog, type ImportInput } from "@/lib/server/import-catalog";
+import { importarEventos } from "@/lib/server/import-eventos-http";
 import { analizarImportacion } from "@/lib/server/import-ia";
 import { cuotaArchivosOk, salidaPermitida } from "@/lib/server/demo-sandbox";
 import { IaError, iaConfig, iaProviderDeConfig } from "@/lib/server/ia-carga";
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
  *   normalizado (`catalogo`) y la misma vista previa; `apply` recibe ese
  *   `catalogo` (lo que se vio es lo que se aplica) y el mismo `zip`.
  *
- * Solo OWNER y ADMIN con `inventory.write`. Todo acotado a la empresa activa.
+ * Solo OWNER y ADMIN con la capacidad del módulo (`inventory.write`; `events.write` en eventos). Todo acotado a la empresa activa.
  */
 
 const TOTAL_BODY_MAX = CATALOG_LIMITS.zipBytes + CATALOG_LIMITS.jsonBytes + CATALOG_LIMITS.sheetBytes + 1024 * 1024;
@@ -158,6 +159,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
 
   const limited = await rateLimit(accion === "apply" ? `import-aplicar:${organizationId}` : `import-vista:${organizationId}`, accion === "apply" ? CATALOG_LIMITS.applyRate : CATALOG_LIMITS.previewRate);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
+
+  // Eventos con productos: validación y aplicación propias (lib/server/import-eventos*.ts).
+  if (module.id === "eventos") return importarEventos(module, context, form, accion);
 
   const source = await readSource(module, form, accion, context);
   if (!source.ok) return source.response;
