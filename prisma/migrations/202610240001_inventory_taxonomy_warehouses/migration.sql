@@ -4,9 +4,12 @@
 -- Aditiva, idempotente y re-ejecutable: tablas e índices con IF NOT EXISTS,
 -- columnas con ADD COLUMN IF NOT EXISTS, FKs y CHECK con guarda duplicate_object y
 -- backfills con ids determinísticos + ON CONFLICT DO NOTHING / «solo si es NULL».
--- El texto `InventoryItem.category` NO se toca: sigue como espejo de la categoría.
+-- El texto `InventoryItem.category` queda como espejo de la categoría en el formato único
+-- «Padre › Hija» (al final del backfill se normaliza, para que no convivan dos formatos).
 -- La normalización de `key` replica `categoryKey` de `lib/inventory-categories.ts`
--- (minúsculas, sin tildes, espacios colapsados); si cambia, actualizá los dos.
+-- (NFD sin marcas combinantes, espacios colapsados, minúsculas) con `normalize(…, NFD)` de
+-- Postgres 13+, así cubre todos los acentos latinos igual que el runtime; si cambia, actualizá
+-- los dos (lo comprueba tests/inventario-fix120.pg.test.ts).
 
 CREATE TABLE IF NOT EXISTS "InventoryCategory" (
   "id"             TEXT NOT NULL,
@@ -121,8 +124,8 @@ BEGIN
     FROM segs WHERE array_length(parts, 1) >= 1
   )
   SELECT org, raw, parent_name, child_name,
-    lower(regexp_replace(translate(btrim(parent_name), 'áàäâéèëêíìïîóòöôúùüûñçÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑÇ', 'aaaaeeeeiiiioooouuuuncAAAAEEEEIIIIOOOOUUUUNC'), '\s+', ' ', 'g')) AS parent_key,
-    CASE WHEN child_name IS NOT NULL THEN lower(regexp_replace(translate(btrim(child_name), 'áàäâéèëêíìïîóòöôúùüûñçÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑÇ', 'aaaaeeeeiiiioooouuuuncAAAAEEEEIIIIOOOOUUUUNC'), '\s+', ' ', 'g')) END AS child_key
+    lower(btrim(regexp_replace(regexp_replace(normalize(parent_name, NFD), '[\u0300-\u036f]', '', 'g'), '\s+', ' ', 'g'))) AS parent_key,
+    CASE WHEN child_name IS NOT NULL THEN lower(btrim(regexp_replace(regexp_replace(normalize(child_name, NFD), '[\u0300-\u036f]', '', 'g'), '\s+', ' ', 'g'))) END AS child_key
   FROM named;
 
   INSERT INTO "InventoryCategory" ("id", "organizationId", "name", "parentId", "key", "sortOrder", "createdAt", "updatedAt")
@@ -153,6 +156,15 @@ BEGIN
 
   DROP TABLE IF EXISTS _inv_cat_src;
 END $$;
+
+-- Texto espejo único «Padre › Hija»: todo producto con categoría pasa a ese formato
+-- (idempotente: solo toca las filas que difieren).
+UPDATE "InventoryItem" i
+SET "category" = CASE WHEN p."id" IS NULL THEN c."name" ELSE p."name" || ' › ' || c."name" END
+FROM "InventoryCategory" c
+LEFT JOIN "InventoryCategory" p ON p."id" = c."parentId"
+WHERE i."categoryId" = c."id"
+  AND i."category" IS DISTINCT FROM (CASE WHEN p."id" IS NULL THEN c."name" ELSE p."name" || ' › ' || c."name" END);
 
 -- Backfill de depósitos: «Depósito principal · D1» solo en empresas con unidades, y
 -- todas sus unidades sin depósito quedan ahí. Los depósitos nuevos los crea el API.

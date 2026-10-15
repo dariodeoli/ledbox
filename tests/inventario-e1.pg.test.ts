@@ -60,8 +60,8 @@ test("Inventario E1 en PostgreSQL: categorías, depósitos, condición, compra, 
       const vajilla = await db.inventoryItem.findMany({ where: { organizationId: b, name: { in: ["Copa", "Plato"] } } });
       assert.equal(new Set(vajilla.map((i) => i.categoryId)).size, 1, "«Vajilla» y «vajilla » comparten categoría");
       const texts = await db.inventoryItem.findMany({ where: { organizationId: a }, select: { name: true, category: true } });
-      assert.ok(texts.some((i) => i.category === "vajilla "), "el texto original no se toca");
-      assert.ok(texts.some((i) => i.category === "Mobiliario > Mesas"));
+      assert.ok(!texts.some((i) => i.category === "vajilla " || i.category === "Mobiliario > Mesas"), "el texto se normaliza al espejo «Padre › Hija»");
+      assert.ok(texts.some((i) => i.name === "Mesa" && i.category === "Mobiliario › Mesas"));
       const mesas = await db.inventoryCategory.findFirstOrThrow({ where: { organizationId: a, key: "mobiliario/mesas" }, include: { parent: true } });
       assert.equal(mesas.parent?.name, "Mobiliario");
       const sofas = await db.inventoryItem.findMany({ where: { organizationId: a, name: { in: ["Sofá", "Banqueta"] } } });

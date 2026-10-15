@@ -11,7 +11,7 @@ test("Inventario E1 (notas de QA 2.1.120) en PostgreSQL", { skip: !process.env.T
   process.env.DATABASE_URL = url.toString();
   const { db } = await import("../lib/server/db");
   const categories = await import("../lib/server/inventory-categories");
-  const { categoryKey } = await import("../lib/inventory-categories");
+  const { categoryKey, categoryPathKey } = await import("../lib/inventory-categories");
   const warehouses = await import("../lib/server/inventory-warehouses");
 
   const orgs: string[] = [];
@@ -80,9 +80,39 @@ test("Inventario E1 (notas de QA 2.1.120) en PostgreSQL", { skip: !process.env.T
       assert.equal((await db.inventoryUnit.findFirstOrThrow({ where: { organizationId: org, code: "S-2" } })).warehouseId, d1.id);
       assert.equal(await db.inventoryUnit.count({ where: { organizationId: org, warehouseId: { in: [d2.id, d3.id] } } }), 1);
     });
+    await t.test("3) la key del backfill SQL coincide con categoryKey del runtime en una lista de casos y el texto queda «Padre › Hija»", async () => {
+      const org = await newOrg();
+      const cases = [
+        "Vajilla", "  vajilla  fina ", "Ñandú", "Cañón", "Pão de Açúcar", "Ação", "Über Café", "Crème Brûlée", "Żółć", "Žluťoučký kůň",
+        "Ǻrhus", "Ấ Ế Ố", "Ớ Ừ Ữ", "Đà Nẵng", "Łódź", "Straße", "Ørsted", "Æon", "Çedilha", "Ĉapelo", "ÀÉÎÕÜ", "Cafe\u0301 nuevo",
+      ];
+      for (const [index, name] of cases.entries()) await addItem(org, `Prod ${index}`, name);
+      await addItem(org, "Hija", "Música / Sonído");
+      await addItem(org, "Hija 2", "Música > sonido");
+      psql(migration);
+      const rows = await db.inventoryCategory.findMany({ where: { organizationId: org }, include: { parent: true } });
+      assert.ok(rows.length >= cases.length);
+      for (const row of rows) {
+        const expected = row.parent ? categoryPathKey(row.parent.name, row.name) : categoryKey(row.name);
+        assert.equal(row.key, expected, `key de «${row.name}»`);
+      }
+      for (const name of cases) {
+        const key = categoryKey(name.replace(/\s+/g, " ").trim());
+        assert.ok(rows.some((row) => !row.parentId && row.key === key), `existe la categoría con key «${key}» (de «${name}»)`);
+      }
+      const musica = rows.filter((row) => row.parent?.key === "musica");
+      assert.equal(musica.length, 1, "«Sonído» y «sonido» caen en la misma subcategoría");
+      const texts = await db.inventoryItem.findMany({ where: { organizationId: org, name: { in: ["Hija", "Hija 2"] } }, select: { category: true } });
+      assert.ok(texts.every((i) => i.category === "Música › Sonído" || i.category === "Música › sonido"), "espejo «Padre › Hija»");
+      assert.equal(new Set(texts.map((i) => i.category)).size, 1, "los dos productos muestran el mismo texto");
+      const before = await db.inventoryItem.findMany({ where: { organizationId: org }, select: { id: true, category: true }, orderBy: { id: "asc" } });
+      psql(migration);
+      assert.deepEqual(await db.inventoryItem.findMany({ where: { organizationId: org }, select: { id: true, category: true }, orderBy: { id: "asc" } }), before, "correrla de nuevo no cambia nada");
+    });
+
   } finally {
     await db.organization.deleteMany({ where: { id: { in: orgs } } });
     await db.$disconnect();
   }
-  void categories; void categoryKey; void psql; void migration;
+  void categories;
 });
