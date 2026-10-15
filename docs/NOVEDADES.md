@@ -628,3 +628,15 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tienda: la barra del pedido muestra el monto. Sin fechas dice cuánto es por día y «Elegí fechas para el total»; con fechas, el total.
 - Tienda: cinco plantillas nuevas para elegir en Apariencia: Tecnológica, Boutique, Noche, Fresca y Minimal. Las tarjetas, la vista rápida y el carrito siguen el estilo de cada una.
 - Tienda: la sección de contacto ya no se ve partida en dos columnas.
+
+## v2.1.127 — 2026-10-15
+
+- Tienda: ahora hay 4 plantillas para elegir en Ajustes → Apariencia: Lienzo, Boutique, Noir y Studio, agrupadas por rubro y con una vista previa real de cada una. Las empresas que ya habían elegido una pasaron solas a la más parecida (minimal y clásica → Lienzo; boutique y editorial → Boutique; noche, tecnológica y oscura → Noir; fresca → Studio).
+- Tienda: encabezado fijo que se achica al bajar, con el sello EventOS chico junto al logo, botón «Pedido (N)» y una barra de anuncio opcional que editás vos.
+- Tienda: portada única sin repetir el nombre de la empresa. Elegís la fecha del evento y los días de alquiler; «Invitados» es opcional y no filtra. Las fechas se recuerdan en toda la tienda.
+- Tienda: categorías con «N productos · Desde Gs. …» en letra chica; barra de filtros que acompaña al bajar, con categorías, orden (precio, nombre, capacidad) y buscador; botón «Mostrar más».
+- Tienda: la tarjeta entera abre la vista rápida y tiene un solo botón «+ Agregar» con aviso al agregar. Capacidad sobre la foto, precio sin caja y, si no hay foto, un ícono del tema (nunca letras sueltas).
+- Tienda: ficha nueva con la foto grande y el panel de compra fijo al costado: precio una sola vez, «Incluye» con tildes, fechas con disponibilidad, WhatsApp con el mensaje armado, acordeón y «Completá el ambiente».
+- Tienda: el pedido se abre como cajón (hoja inferior en el celular) con las fechas adentro, arriba; si faltan, un aviso neutro, no rojo. Muestra «Total estimado» y «Confirmamos el monto final en la cotización». En el celular hay una barra compacta; el botón de WhatsApp no la pisa.
+- Tienda: pie completo (contacto, horarios, zonas de entrega, medios de pago) con «Desarrollado por OwnCoding · EventOS v…». Pantallas de carga, de «sin resultados» y de error.
+- Apariencia: color de marca, frase de la tienda, tipografía de los títulos (lista curada), barra de anuncio con texto, modo de precio (por día, por unidad «c/u» con cantidades de a 10, o a cotizar) y portada. El fondo propio y el acento manuscrito se retiraron: cada plantilla trae su fondo.
