@@ -641,3 +641,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tienda: pie completo (contacto, horarios, zonas de entrega, medios de pago) con «Desarrollado por OwnCoding · EventOS v…». Pantallas de carga, de «sin resultados» y de error.
 - Apariencia: color de marca, frase de la tienda, tipografía de los títulos (lista curada), barra de anuncio con texto, modo de precio (por día, por unidad «c/u» con cantidades de a 10, o a cotizar) y portada. El fondo propio y el acento manuscrito se retiraron: cada plantilla trae su fondo.
 - Panel: el botón «Ver mi tienda» abre la tienda de la empresa activa (antes llevaba a la página de LedBox).
+
+## v2.1.128 — 2026-10-15
+
+- Seis plantillas nuevas para la tienda, listas para elegir en Ajustes → Apariencia: Jardín (verdes y papel, para exteriores y bodas al aire libre), Mármol (blanco y gris piedra, para lujo y decoración premium), Terracota (tierra y crema, para vajilla rústica y catering), Nórdico (madera clara, para mobiliario y oficinas), Gala (negro y dorado, para bodas de gala y eventos nocturnos) y Brisa (azul profundo y arena, para eventos de playa y náutica). Todas cumplen contraste AA y tienen el botón principal de color.
+- Importar catálogo: ahora podés indicar cuántas unidades están en mantenimiento, dañadas o perdidas (columnas «En mantenimiento», «Dañadas» y «Perdidas»). Una planilla anterior sin esas columnas sigue valiendo.
