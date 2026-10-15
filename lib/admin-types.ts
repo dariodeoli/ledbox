@@ -51,6 +51,10 @@ export type AdminIconName =
   | "upload"
   | "trash"
   | "globe"
+  /** Estados de inventario (E2): alquilado, mantenimiento y archivado. */
+  | "truck"
+  | "wrench"
+  | "archive"
   /** Menú de acciones de fila/tarjeta (issue #143): el botón «⋯». */
   | "dots"
   | "database"
@@ -1867,19 +1871,54 @@ export type AdminWarehouseRow = {
   unitCount: number;
 };
 
+/** Disponibilidad de hoy de un producto, con los agregados del estado visual (rediseño E2). */
+export type AdminInventoryAvailabilityNow = {
+  committedNow: number;
+  availableNow: number;
+  overcommittedNow: boolean;
+  /** Unidades en mantenimiento (issue #112): no cuentan como libres. */
+  maintenanceNow: number;
+  /** Disponibilidad del rango pedido; `null` cuando la lista va sin rango. */
+  range?: AdminInventoryRangeAvailability | null;
+  /** Unidades por estado (`groupBy`): AVAILABLE, MAINTENANCE, DAMAGED, LOST, RETIRED. */
+  unitsByStatus?: Record<string, number>;
+  /** Cantidad retenida por incidentes abiertos sin unidad con código, por tipo. */
+  holdByKind?: Record<string, number>;
+  /** Inicio de la próxima reserva a futuro (ISO) o `null`. */
+  nextCommittedAt?: string | null;
+  /** Unidades que salieron y no volvieron con el fin ya pasado (P1-3). */
+  overduePending?: number;
+};
+
+/** Dónde están las unidades (`groupBy` de depósito y ubicación) y quién las proveyó. */
+export type AdminInventoryGridStock = {
+  unitCount: number;
+  locations: Array<{ warehouseId: string | null; location: string | null; units: number }>;
+  supplierIds: string[];
+};
+
 /** Ítem de `/api/admin/inventory`: incluye asignaciones, unidades y disponibilidad de hoy. */
 export type AdminInventoryItemRow = AdminInventoryRow & {
   assignments: AdminInventoryAssignmentRow[];
   units: AdminInventoryUnitRow[];
-  availability: {
-    committedNow: number;
-    availableNow: number;
-    overcommittedNow: boolean;
-    /** Unidades en mantenimiento (issue #112): no cuentan como libres. */
-    maintenanceNow: number;
-    /** Disponibilidad del rango pedido; `null` cuando la lista va sin rango. */
-    range?: AdminInventoryRangeAvailability | null;
-  };
+  availability: AdminInventoryAvailabilityNow;
+};
+
+/**
+ * Fila liviana de `/api/admin/inventory?fields=grid` (rediseño E2): sin unidades ni asignaciones,
+ * con los agregados por `groupBy`. La ficha trae el detalle (`AdminInventoryItemRow`).
+ */
+export type AdminInventoryGridRow = AdminInventoryRow & {
+  availability: AdminInventoryAvailabilityNow;
+  stock: AdminInventoryGridStock;
+};
+
+/** Página de la grilla: `nextCursor` es `null` en la última. */
+export type AdminInventoryGridPage = {
+  inventory: AdminInventoryGridRow[];
+  nextCursor: string | null;
+  /** Productos de la empresa (se informa en la primera página). */
+  total?: number;
 };
 
 /**
@@ -2721,7 +2760,12 @@ export type AdminApiResponse = {
   supplierJobs?: AdminSupplierJobRow[];
   jobs?: AdminSupplierJobRow[];
   suppliers?: AdminSupplierRow[];
-  inventory?: Array<AdminInventoryRow | AdminInventoryItemRow>;
+  inventory?: Array<AdminInventoryRow | AdminInventoryItemRow | AdminInventoryGridRow>;
+  /** Cursor de la página siguiente de `?fields=grid` (rediseño E2). */
+  nextCursor?: string | null;
+  total?: number;
+  /** `?fields=grid&unitMatch=`: productos con una unidad cuyo código coincide. */
+  matchedIds?: string[];
   availability?: AdminInventoryAvailability;
   occupancy?: AdminInventoryOccupancy;
   substitutes?: AdminInventorySubstitute[];

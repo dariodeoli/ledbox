@@ -19,7 +19,7 @@ import { AdminIcon } from "./AdminIcons";
  * pantallas chicas, sin desbordar la página.
  */
 
-export type AdminModuleView = "list" | "board" | "grid" | "calendar";
+export type AdminModuleView = "list" | "board" | "grid" | "calendar" | "category";
 
 /** Vistas por defecto del panel: lista y tablero (cuadrícula y calendario se suman por módulo). */
 const DEFAULT_MODULE_VIEWS: readonly AdminModuleView[] = ["list", "board"];
@@ -37,6 +37,8 @@ const VIEW_ALIASES: Record<string, AdminModuleView> = {
   cuadricula: "grid",
   calendar: "calendar",
   calendario: "calendar",
+  category: "category",
+  categoria: "category",
 };
 
 function viewFromParam(value: string | null): AdminModuleView | null {
@@ -112,11 +114,12 @@ export function useAdminNarrowViewport(): boolean {
 }
 
 /** Etiqueta e ícono de cada vista del conmutador. */
-const MODULE_VIEW_OPTIONS: Record<AdminModuleView, { label: string; icon: "menu" | "overview" | "calendar" }> = {
+const MODULE_VIEW_OPTIONS: Record<AdminModuleView, { label: string; icon: "menu" | "overview" | "calendar" | "inventory" }> = {
   list: { label: "Lista", icon: "menu" },
   board: { label: "Tablero", icon: "overview" },
   grid: { label: "Cuadrícula", icon: "overview" },
   calendar: { label: "Calendario", icon: "calendar" },
+  category: { label: "Por categoría", icon: "inventory" },
 };
 
 /**

@@ -986,6 +986,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-ok-text: #7df0b8;
   --a-warn-text: #ffd489;
   --a-danger-text: #ffa4b3;
+  /* Estados de inventario (E2): azul/violeta (info) y acento como estado. AA medido en
+     tests/inventory-visual-tokens.test.ts; excepción anotada en DISENO-PANEL.md §3. */
+  --a-info-surface: rgba(167, 139, 250, .18);
+  --a-info-text: #d4c8ff;
+  --a-accent-surface: rgba(90, 217, 255, .14);
+  --a-accent-text: #a5eaff;
   --a-radius: 14px;
   --a-radius-lg: 20px;
   /* Campos y ventanas (rediseño 13-10-2026): fondo un tono más oscuro que el
@@ -1065,6 +1071,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-ok-text: #0b6b43;
   --a-warn-text: #7a5005;
   --a-danger-text: #a82640;
+  --a-info-surface: #e8e7fc;
+  --a-info-text: #3730a3;
+  --a-accent-surface: #dff1f7;
+  --a-accent-text: #084e66;
   --a-radius: 18px;
   --a-radius-lg: 26px;
   --a-field-bg: #ffffff;

@@ -65,6 +65,22 @@ const ICON_PATHS: Record<AdminIconName, React.ReactNode> = {
       <path d="M6 9.8v4.4M18 9.8v4.4" />
     </>
   ),
+  truck: (
+    <>
+      <path d="M3 6.5h11v9.5H3z" />
+      <path d="M14 9.5h4l3 3.2V16h-7z" />
+      <circle cx="7.5" cy="17.5" r="1.8" />
+      <circle cx="17" cy="17.5" r="1.8" />
+    </>
+  ),
+  wrench: <path d="M14.5 6.2a4.2 4.2 0 0 0-5.3 5.3L3.8 17a1.9 1.9 0 0 0 2.7 2.7l5.5-5.4a4.2 4.2 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z" />,
+  archive: (
+    <>
+      <rect x="3" y="4.5" width="18" height="4.5" rx="1.2" />
+      <path d="M5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V9" />
+      <path d="M10 13h4" />
+    </>
+  ),
   inventory: (
     <>
       <path d="M3.5 8 12 4l8.5 4v8L12 20l-8.5-4z" />

@@ -1,5 +1,17 @@
 import { effectiveAudience, type CatalogAudience } from "./catalog-audience";
-import type { AdminInventoryAssignmentRow, AdminInventoryItemRow } from "./admin-types";
+import type { AdminInventoryAssignmentRow, AdminInventoryAvailabilityNow, AdminInventoryItemRow, AdminInventoryRow, AdminInventoryUnitRow } from "./admin-types";
+
+/**
+ * Lo que necesitan los filtros y los indicadores de una fila: sirve tanto para la fila completa
+ * (con unidades y asignaciones) como para la liviana de la pantalla (`?fields=grid`, con los
+ * agregados por `groupBy` en `availability`).
+ */
+export type InventoryRowLike = Pick<AdminInventoryRow, "id" | "catalogAudience" | "visibleOnWeb"> & {
+  combo?: unknown;
+  units?: ReadonlyArray<Pick<AdminInventoryUnitRow, "status">>;
+  assignments?: AdminInventoryItemRow["assignments"];
+  availability: AdminInventoryAvailabilityNow;
+};
 
 /**
  * Reglas puras de la vista del módulo Inventario (rediseño de la pantalla): qué
@@ -34,15 +46,23 @@ export function isPublished(item: Pick<AdminInventoryItemRow, "catalogAudience" 
   return effectiveAudience(item) !== "HIDDEN";
 }
 
-/** Unidades fuera de circulación de un conjunto de productos, por estado. */
-export function unitProblemCounts(items: ReadonlyArray<Pick<AdminInventoryItemRow, "units">>) {
+/** Unidades fuera de circulación de un conjunto de productos, por estado (más lo retenido por cantidad). */
+export function unitProblemCounts(items: ReadonlyArray<Pick<InventoryRowLike, "units" | "availability">>) {
   const counts = { maintenance: 0, damaged: 0, lost: 0 };
   for (const item of items) {
-    for (const unit of item.units) {
-      if (unit.status === "MAINTENANCE") counts.maintenance += 1;
-      else if (unit.status === "DAMAGED") counts.damaged += 1;
-      else if (unit.status === "LOST") counts.lost += 1;
+    if (item.units) {
+      for (const unit of item.units) {
+        if (unit.status === "MAINTENANCE") counts.maintenance += 1;
+        else if (unit.status === "DAMAGED") counts.damaged += 1;
+        else if (unit.status === "LOST") counts.lost += 1;
+      }
+      continue;
     }
+    const byStatus = item.availability.unitsByStatus ?? {};
+    const hold = item.availability.holdByKind ?? {};
+    counts.maintenance += (byStatus.MAINTENANCE ?? 0) + (hold.REPAIR ?? 0) + (hold.CLEANING ?? 0);
+    counts.damaged += (byStatus.DAMAGED ?? 0) + (hold.DAMAGE ?? 0);
+    counts.lost += (byStatus.LOST ?? 0) + (hold.MISSING ?? 0);
   }
   return { ...counts, total: counts.maintenance + counts.damaged + counts.lost };
 }
@@ -54,8 +74,10 @@ export type InventoryFocusContext = {
 };
 
 /** ¿El producto tiene un incidente abierto o una unidad fuera de circulación? */
-export function hasIncident(item: Pick<AdminInventoryItemRow, "id" | "units">, openIncidentIds: ReadonlySet<string>): boolean {
-  return openIncidentIds.has(item.id) || item.units.some((unit) => (UNIT_PROBLEM_STATUSES as readonly string[]).includes(unit.status));
+export function hasIncident(item: Pick<InventoryRowLike, "id" | "units" | "availability">, openIncidentIds: ReadonlySet<string>): boolean {
+  if (openIncidentIds.has(item.id)) return true;
+  if (item.units) return item.units.some((unit) => (UNIT_PROBLEM_STATUSES as readonly string[]).includes(unit.status));
+  return unitProblemCounts([item]).total > 0;
 }
 
 /** Rango efectivo de una asignación: el propio o, si falta, el de su evento. */
@@ -84,7 +106,7 @@ function overlaps(span: { start: Date; end: Date }, from: Date, to: Date): boole
 
 /** ¿Tiene reservas o retenciones vivas que tocan la ventana `[from, to)`? */
 export function hasLiveAssignmentIn(item: Pick<AdminInventoryItemRow, "assignments">, from: Date, to: Date, now: Date): boolean {
-  return item.assignments.some((assignment) => {
+  return (item.assignments ?? []).some((assignment) => {
     if (!assignmentIsLive(assignment, now)) return false;
     const span = assignmentSpan(assignment);
     return span ? overlaps(span, from, to) : false;
@@ -92,7 +114,7 @@ export function hasLiveAssignmentIn(item: Pick<AdminInventoryItemRow, "assignmen
 }
 
 /** ¿El producto entra en el foco elegido? */
-export function itemInFocus(item: AdminInventoryItemRow, focus: InventoryFocus, context: InventoryFocusContext): boolean {
+export function itemInFocus(item: InventoryRowLike, focus: InventoryFocus, context: InventoryFocusContext): boolean {
   switch (focus) {
     case "all":
       return true;
@@ -106,13 +128,20 @@ export function itemInFocus(item: AdminInventoryItemRow, focus: InventoryFocus, 
       return !isPublished(item);
     case "free":
       return item.availability.availableNow > 0;
-    case "week":
-      return hasLiveAssignmentIn(item, context.now, new Date(context.now.getTime() + 7 * DAY_MS), context.now);
+    case "week": {
+      const until = new Date(context.now.getTime() + 7 * DAY_MS);
+      // Fila liviana: lo comprometido ahora o la próxima reserva dentro de la semana.
+      if (!item.assignments) {
+        const next = item.availability.nextCommittedAt ? new Date(item.availability.nextCommittedAt) : null;
+        return item.availability.committedNow > 0 || Boolean(next && next.getTime() < until.getTime());
+      }
+      return hasLiveAssignmentIn({ assignments: item.assignments }, context.now, until, context.now);
+    }
   }
 }
 
 /** Cuántos productos entran en cada pestaña (sobre los ya filtrados por búsqueda). */
-export function tabCounts(items: ReadonlyArray<AdminInventoryItemRow>, context: InventoryFocusContext): Record<(typeof INVENTORY_TABS)[number]["value"], number> {
+export function tabCounts(items: ReadonlyArray<InventoryRowLike>, context: InventoryFocusContext): Record<(typeof INVENTORY_TABS)[number]["value"], number> {
   const counts = { all: 0, combos: 0, incidents: 0, published: 0, hidden: 0 } as Record<(typeof INVENTORY_TABS)[number]["value"], number>;
   for (const tab of INVENTORY_TABS) counts[tab.value] = items.filter((item) => itemInFocus(item, tab.value, context)).length;
   return counts;
