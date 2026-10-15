@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryIncidentKind, type InventoryIncidentStatus, type InventoryUnitStatus } from "@prisma/client";
 import { db } from "./db";
 import { proposeReturnCharges } from "./rental-settlement";
+import { recordDeliveryNoteLine } from "./delivery-notes";
 import { lockInventoryItems } from "./inventory-availability";
 import { syncInventoryQuantity } from "./inventory-units";
 
@@ -79,7 +80,7 @@ export async function dispatchAssignment(options: {
       await lockInventoryItems(tx, options.organizationId, [probe.inventoryId]);
       const row = await tx.eventInventory.findFirst({
         where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
-        include: { inventory: { select: { name: true } }, event: { select: { name: true } } },
+        include: { inventory: { select: { name: true, sku: true } }, event: { select: { name: true } } },
       });
       if (!row) return fail(404, "La asignación no existe en esta empresa.");
       if (row.releasedAt) return fail(409, "La asignación fue liberada: volvé a asignar el equipo.");
@@ -104,7 +105,24 @@ export async function dispatchAssignment(options: {
           checkoutNote: readNotes(options.note),
         },
       });
-      return { ok: true as const, assignment, before: row, quantity, remaining: remaining - quantity };
+      // Remito de salida (P1-5): con lo realmente despachado ahora, en la misma transacción.
+      const deliveryNote = await recordDeliveryNoteLine(tx, {
+        organizationId: options.organizationId,
+        eventId: row.eventId,
+        kind: "OUT",
+        actorId: options.actorId,
+        line: {
+          assignmentId: row.id,
+          inventoryId: row.inventoryId,
+          name: row.inventory.name,
+          sku: row.inventory.sku,
+          ordered: row.quantity,
+          moved: quantity,
+          damaged: 0,
+          missing: 0,
+        },
+      });
+      return { ok: true as const, assignment, before: row, quantity, remaining: remaining - quantity, deliveryNote };
     },
     { timeout: 15_000 },
   );
@@ -203,7 +221,7 @@ export async function returnAssignment(options: ReturnOptions) {
       await lockInventoryItems(tx, options.organizationId, [probe.inventoryId]);
       const row = await tx.eventInventory.findFirst({
         where: { id: options.assignmentId, event: { organizationId: options.organizationId } },
-        include: { inventory: { select: { name: true, replacementCost: true } }, event: { select: { name: true, endsAt: true, strikeAt: true } } },
+        include: { inventory: { select: { name: true, sku: true, replacementCost: true } }, event: { select: { name: true, endsAt: true, strikeAt: true } } },
       });
       if (!row) return fail(404, "La asignación no existe en esta empresa.");
       const sent = dispatchedQuantity(row);
@@ -297,7 +315,24 @@ export async function returnAssignment(options: ReturnOptions) {
         returnedNow: quantity,
         missingNow: missing,
       });
-      return { ok: true as const, assignment, before: row, incidents, returned: quantity, damaged, missing, pending: stillPending, closed, proposedCharges };
+      // Remito de devolución (P1-5): lo realmente devuelto, dañado y faltante en este movimiento.
+      const deliveryNote = await recordDeliveryNoteLine(tx, {
+        organizationId: options.organizationId,
+        eventId: row.eventId,
+        kind: "IN",
+        actorId: options.actorId,
+        line: {
+          assignmentId: row.id,
+          inventoryId: row.inventoryId,
+          name: row.inventory.name,
+          sku: row.inventory.sku,
+          ordered: sent,
+          moved: quantity,
+          damaged,
+          missing,
+        },
+      });
+      return { ok: true as const, assignment, before: row, incidents, returned: quantity, damaged, missing, pending: stillPending, closed, proposedCharges, deliveryNote };
     },
     { timeout: 15_000 },
   );

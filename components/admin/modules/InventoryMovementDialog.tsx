@@ -133,7 +133,7 @@ export function InventoryMovementDialog({
     onDone(
       result.queued
         ? `Sin conexión: la ${label.toLowerCase()} quedó guardada en este equipo y se sube al volver la señal.`
-        : `${label} registrada: ${assignment.inventory.name} (${formatNumber(returnCount)} u.).`,
+        : `${label} registrada: ${assignment.inventory.name} (${formatNumber(returnCount)} u.). El remito quedó en Equipos: firmalo ahí.`,
       Boolean(result.queued),
     );
   }
