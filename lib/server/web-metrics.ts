@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/server/db";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { publicConfig } from "@/lib/public-config";
+import { trustedIp } from "@/lib/server/trusted-ip";
 import {
   MAX_BODY_BYTES,
   countryFromHeaders,
@@ -55,15 +56,8 @@ export function metricsSecret(): string | null {
   return process.env.NODE_ENV === "production" ? null : "ledbox-web-metrics-dev-secret";
 }
 
-/**
- * IP para el hash: la que agrega el proxy de confianza (Traefik/Coolify), que es el ÚLTIMO valor de
- * `X-Forwarded-For`; el primero lo escribe el cliente y se puede falsear para rotar el hash. Si no hay
- * XFF, `X-Real-IP`. Sin ninguno, «unknown».
- */
-export function trustedIp(request: Request): string {
-  const forwarded = (request.headers.get("x-forwarded-for") || "").split(",").map((v) => v.trim()).filter(Boolean);
-  return forwarded.at(-1) || request.headers.get("x-real-ip")?.trim() || "unknown";
-}
+/** IP para el hash: ver `lib/server/trusted-ip.ts` (`TRUSTED_PROXY_HOPS`). */
+export { trustedIp };
 
 export function metricsHosts(): Map<string, HostKind> {
   return hostKindMap(

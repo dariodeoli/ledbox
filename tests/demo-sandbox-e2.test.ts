@@ -136,6 +136,14 @@ test("/api/demo/session: sandbox solo en el host demo, reiniciar, DELETE, topes 
   const route = src("app/api/demo/session/route.ts");
   assert.match(route, /DEMO_SANDBOX_ENABLED/);
   assert.match(route, /onSandboxHost\(\)/);
+  // Crear solo por POST, con Origin/Referer del host demo y sin bots; el GET muestra la entrada y no siembra.
+  const enter = route.slice(route.indexOf("async function enterSandbox"), route.indexOf("function sameHostOrigin"));
+  assert.ok(enter.indexOf('request.method !== "POST"') > 0 && enter.indexOf('request.method !== "POST"') < enter.indexOf("createSandbox("), "el GET no crea");
+  assert.ok(enter.indexOf("sameHostOrigin(request)") < enter.indexOf("createSandbox(") && enter.indexOf("isBotUa(") < enter.indexOf("createSandbox("));
+  assert.match(route, /Entrar a la demo/);
+  assert.match(route, /method="post" action="\/api\/demo\/session"/);
+  assert.match(route, /rateLimit\(`demo:session:\$\{trustedIp\(request\)\}`/, "el límite de handleEntry usa la IP confiable");
+  assert.doesNotMatch(route, /getClientIp/);
   assert.match(route, /createSandbox\(\{ ip: trustedIp\(request\) \}\)/, "el tope por IP usa el IP confiable, no el primer XFF");
   assert.match(route, /setDemoSessionCookie\(/);
   assert.match(route, /createSession\(sandbox\.user, sandbox\.organizationId, \{ expiresAt: sandbox\.expiresAt \}\)/);
@@ -212,4 +220,16 @@ test("WhatsApp: la sesión del panel expone sandbox y whatsappHref lo usa por de
   assert.match(format, /sandbox: options\.sandbox \?\? whatsappSandbox/);
   const shell = src("components/admin/AdminShell.tsx");
   assert.equal((shell.match(/setWhatsappSandbox\(sandbox\)/g) ?? []).length, 2, "payload embebido y recarga de la sesión");
+});
+
+test("IP de confianza: TRUSTED_PROXY_HOPS en un solo lugar, compartida por web-metrics y los topes de la demo", async () => {
+  const { TRUSTED_PROXY_HOPS, trustedIp } = await import("../lib/server/trusted-ip");
+  assert.equal(TRUSTED_PROXY_HOPS, 1);
+  const req = (headers: Record<string, string>) => new Request("https://demo.ledbox.online/", { headers });
+  assert.equal(trustedIp(req({ "x-forwarded-for": "6.6.6.6, 190.1.1.1" })), "190.1.1.1", "el último; el primero lo escribe el cliente");
+  assert.equal(trustedIp(req({ "x-forwarded-for": "190.1.1.1" })), "190.1.1.1");
+  assert.equal(trustedIp(req({ "x-real-ip": "190.2.2.2" })), "190.2.2.2");
+  assert.equal(trustedIp(req({})), "unknown");
+  assert.match(src("lib/server/web-metrics.ts"), /from "@\/lib\/server\/trusted-ip"/);
+  assert.equal((src("lib/server/web-metrics.ts") + src("app/api/demo/session/route.ts")).match(/TRUSTED_PROXY_HOPS/g), null, "la constante vive solo en trusted-ip.ts");
 });

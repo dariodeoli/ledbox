@@ -3622,8 +3622,14 @@ export async function wipeDemoData(tx: Prisma.TransactionClient, organizationId:
   // ninguna otra empresa, así que borrarlas no toca datos reales). La membresía
   // del usuario demo no se toca: es la que habilita su sesión de solo lectura.
   await tx.adminMembership.deleteMany({ where: { organizationId, adminUserId: { not: DEMO_USER_ID } } });
-  for (const collaborator of COLLABORATORS) {
-    await tx.adminUser.deleteMany({ where: { id: collaborator.id } });
+  // Vitrina: los colaboradores tienen ids literales. Sandbox: llevan `demoOrganizationId` (sus ids están
+  // reescritos con el ns), y los literales son los de la vitrina, que nunca se tocan desde acá.
+  if (organizationId === DEMO_ORGANIZATION_ID) {
+    for (const collaborator of COLLABORATORS) {
+      await tx.adminUser.deleteMany({ where: { id: collaborator.id } });
+    }
+  } else {
+    await tx.adminUser.deleteMany({ where: { demoOrganizationId: organizationId } });
   }
   await tx.auditLog.deleteMany({ where: { organizationId } });
 }

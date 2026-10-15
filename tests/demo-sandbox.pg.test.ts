@@ -451,6 +451,52 @@ test("demo interactiva E2: seed con ns, aislamiento entre sandboxes, reinicio y 
     await sandboxes.purgeSandbox(next.organizationId);
     created.splice(created.findIndex((c) => c.organizationId === next.organizationId), 1);
   });
+
+  // QA: purgar una sandbox no puede tocar a los colaboradores de la vitrina (ids literales demo_user_*).
+  const showcaseTeam = async () => {
+    const userIds = ["demo_user_valeria", "demo_user_marco"];
+    return {
+      users: await db.adminUser.count({ where: { id: { in: userIds } } }),
+      memberships: await db.adminMembership.count({ where: { organizationId: showcaseId, adminUserId: { in: userIds } } }),
+      avatars: await db.adminUserAvatar.count({ where: { userId: { in: userIds } } }),
+    };
+  };
+
+  await t.test("QA: purgar una sandbox (a mano, por reinicio y con scripts/demo-purge.mjs) deja intactos a los colaboradores de la vitrina", async () => {
+    const baseline = await showcaseTeam();
+    assert.deepEqual(baseline, { users: 2, memberships: 2, avatars: 2 }, "la vitrina tiene a Valeria y Marco con membresía y avatar");
+
+    // 1) Purga puntual (la que usan Reiniciar y DELETE).
+    const one = await make("10.9.3.1");
+    assert.equal(await sandboxes.purgeSandbox(one.organizationId), true);
+    assert.deepEqual(await leftovers(db, one.organizationId, one.ns), [], "todo sbx_<ns>_* en 0");
+    assert.equal(await db.adminUser.count({ where: { demoOrganizationId: one.organizationId } }), 0, "y sus usuarios");
+    assert.deepEqual(await showcaseTeam(), baseline, "purga puntual: la vitrina conserva su equipo");
+    created.splice(created.findIndex((c) => c.organizationId === one.organizationId), 1);
+
+    // 2) Reiniciar: crea otra y purga la anterior.
+    const before = await make("10.9.3.2");
+    const after = await make("10.9.3.2");
+    assert.equal(await sandboxes.purgeSandbox(before.organizationId), true);
+    assert.deepEqual(await leftovers(db, before.organizationId, before.ns), []);
+    assert.deepEqual(await showcaseTeam(), baseline, "reiniciar: la vitrina conserva su equipo");
+    created.splice(created.findIndex((c) => c.organizationId === before.organizationId), 1);
+    assert.ok(await db.organization.findUnique({ where: { id: after.organizationId } }), "la nueva sigue");
+
+    // 3) El script de purga, sobre una sandbox vencida.
+    await db.organization.update({ where: { id: after.organizationId }, data: { demoLastSeenAt: new Date(Date.now() - 3 * 3_600_000) } });
+    const { execFileSync } = await import("node:child_process");
+    const out = execFileSync(process.execPath, ["--import", "tsx", "scripts/demo-purge.mjs", "--limit", "50"], {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },
+      encoding: "utf8",
+    });
+    assert.match(out, /Sandboxes borradas: [1-9]/);
+    assert.deepEqual(await leftovers(db, after.organizationId, after.ns), [], "el script deja todo en 0");
+    assert.deepEqual(await showcaseTeam(), baseline, "scripts/demo-purge.mjs: la vitrina conserva su equipo");
+    created.splice(created.findIndex((c) => c.organizationId === after.organizationId), 1);
+    sandboxLib.clearSandboxCache();
+  });
 });
 
 test("demo interactiva E2: topes, 429, página llena y 20 entradas simultáneas en PostgreSQL", { skip: !process.env.TEST_DATABASE_URL }, async (t) => {

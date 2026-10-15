@@ -86,15 +86,25 @@ test("el detector de fetch y de módulos de red atrapa todas las formas", () => 
   for (const ok of ['import { db } from "./db"', 'import path from "node:path"', 'import crypto from "node:crypto"', 'import { x } from "../lib/got-it"']) assert.doesNotMatch(ok, NETWORK_IMPORT, ok);
 });
 
-test("todo fetch( de lib/server y app/api está en una lista cerrada", () => {
+/** Los componentes `'use client'` corren en el navegador del visitante, no en el servidor: sus fetch no son salidas. */
+const isClientComponent = (file: string) => /^\s*(["'])use client\1/.test(stripped(file));
+const serverSources = (...dirs: string[]) => sources(...dirs).filter((file) => !isClientComponent(file));
+
+test("el filtro de 'use client' reconoce la directiva", () => {
+  const client = join(root, "components/admin/AdminShell.tsx");
+  assert.ok(isClientComponent(client), "AdminShell es un componente de cliente");
+  assert.ok(!isClientComponent(join(root, "lib/server/ruc.ts")));
+});
+
+test("todo fetch( de lib/** y app/** (server actions, rutas, páginas) está en una lista cerrada", () => {
   // ia-carga.ts: proveedor de IA externo (`fetchImpl = fetch`); su única ruta pasa por salidaPermitida (test de abajo).
   const ALLOWED = new Set(["lib/server/ruc.ts", "app/api/auth/callback/google/route.ts", "lib/server/ia-carga.ts"]);
-  const offenders = sources("lib/server", "app/api")
+  const offenders = serverSources("lib", "app")
     .filter((file) => FETCH_USE.test(stripped(file)) && !ALLOWED.has(rel(file)))
     .map(rel);
   assert.deepEqual(offenders, [], "una salida nueva debe pasar por salidaPermitida() y agregarse a esta lista a propósito");
   // Los clientes de red alternativos tampoco se cuelan (ni con import() ni con require(), ni en .js/.cjs).
-  const clients = sources("lib", "app/api")
+  const clients = serverSources("lib", "app")
     .filter((file) => NETWORK_IMPORT.test(stripped(file)))
     .map(rel);
   assert.deepEqual(clients, []);
