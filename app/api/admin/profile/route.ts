@@ -2,7 +2,7 @@ import type { AdminRole } from "@prisma/client";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
-import { requireAdminContext } from "@/lib/server/tenancy";
+import { listSelectableOrganizations, requireAdminContext } from "@/lib/server/tenancy";
 import { FIELD_MESSAGES, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
@@ -25,10 +25,19 @@ type ProfileUser = {
   email: string;
   passwordHash: string | null;
   avatar: { updatedAt: Date } | null;
+  defaultOrganizationId?: string | null;
 };
 
-function profilePayload(user: ProfileUser, role: AdminRole) {
+function profilePayload(
+  user: ProfileUser,
+  role: AdminRole,
+  organizations: Array<{ id: string; name: string }> = [],
+) {
+  const defaultOrganizationId =
+    user.defaultOrganizationId && organizations.some((org) => org.id === user.defaultOrganizationId) ? user.defaultOrganizationId : null;
   return {
+    defaultOrganizationId,
+    organizations: organizations.map((org) => ({ id: org.id, name: org.name })),
     id: user.id,
     name: user.name,
     email: user.email,
@@ -44,6 +53,7 @@ const profileSelect = {
   email: true,
   passwordHash: true,
   avatar: { select: { updatedAt: true } },
+  defaultOrganizationId: true,
 } as const;
 
 /** Nombre normalizado como se guarda: sin espacios de más y con tope del panel. */
@@ -59,7 +69,8 @@ export async function GET() {
 
   const user = await db.adminUser.findUnique({ where: { id: auth.context.user.id }, select: profileSelect });
   if (!user) return jsonError("No encontramos tu cuenta.", 404);
-  return Response.json({ profile: profilePayload(user, auth.context.role) });
+  const organizations = await listSelectableOrganizations(user.id);
+  return Response.json({ profile: profilePayload(user, auth.context.role, organizations) });
 }
 
 export async function PATCH(request: Request) {
@@ -87,5 +98,6 @@ export async function PATCH(request: Request) {
     });
   }
 
-  return Response.json({ profile: profilePayload({ ...before, name }, role), unchanged: !changes });
+  const organizations = await listSelectableOrganizations(actor.id);
+  return Response.json({ profile: profilePayload({ ...before, name }, role, organizations), unchanged: !changes });
 }

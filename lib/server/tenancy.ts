@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { parseBearerToken } from "@/lib/api-tokens";
 import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
 import { touchApiToken, verifyApiToken } from "./api-tokens";
-import { isDemoOrganizationSlug } from "./demo-data";
+import { DEMO_ORGANIZATION_SLUG, isDemoOrganizationSlug } from "./demo-data";
 import { db } from "./db";
 import { jsonError } from "./http";
 import { ensureOrganizationPlan } from "./plan-limits";
@@ -56,7 +56,15 @@ async function findMembership(adminUserId: string, organizationId: string | null
     });
     if (current) return current;
   }
-  // Sin empresa activa (o si la membresía se desactivó) se usa la primera membresía.
+  // Sin empresa activa (o si la membresía se desactivó) se usa la predeterminada y, si no vale, la primera.
+  const preferred = await validDefaultOrganizationId(adminUserId);
+  if (preferred) {
+    const byDefault = await db.adminMembership.findFirst({
+      where: { ...base, organizationId: preferred },
+      include: { organization: { select: organizationSelect } },
+    });
+    if (byDefault) return byDefault;
+  }
   return db.adminMembership.findFirst({
     where: base,
     orderBy: { createdAt: "asc" },
@@ -230,8 +238,55 @@ export async function setActiveOrganization(
   return { ...membership.organization, role: membership.role };
 }
 
-/** Primera empresa activa del usuario (se fija como activa al iniciar sesión). */
+/**
+ * Filtro único de las empresas que un usuario puede elegir como predeterminada: membresía activa, empresa
+ * activa y que no sea la demo (vitrina). Cuando entre la demo interactiva (sandboxes con `isDemo`), se suma ACÁ.
+ */
+export function selectableMembershipWhere(adminUserId: string) {
+  return { adminUserId, active: true, organization: { active: true, slug: { not: DEMO_ORGANIZATION_SLUG } } } as const;
+}
+
+/** Empresas que el usuario puede fijar como predeterminada (nunca ajenas, demo ni inactivas). */
+export async function listSelectableOrganizations(adminUserId: string): Promise<AdminOrganization[]> {
+  const memberships = await db.adminMembership.findMany({
+    where: selectableMembershipWhere(adminUserId),
+    orderBy: { createdAt: "asc" },
+    include: { organization: { select: organizationSelect } },
+  });
+  return memberships.map((membership) => ({ ...membership.organization, role: membership.role }));
+}
+
+/** Fija (o limpia con `null`) la empresa predeterminada. `false` = no es una empresa elegible del usuario (403). */
+export async function setDefaultOrganization(adminUserId: string, organizationId: string | null): Promise<boolean> {
+  if (organizationId !== null) {
+    const allowed = await db.adminMembership.findFirst({
+      where: { ...selectableMembershipWhere(adminUserId), organizationId },
+      select: { id: true },
+    });
+    if (!allowed) return false;
+  }
+  await db.adminUser.update({ where: { id: adminUserId }, data: { defaultOrganizationId: organizationId } });
+  return true;
+}
+
+/** Predeterminada vigente del usuario, o `null` si no eligió una o ya no vale. */
+async function validDefaultOrganizationId(adminUserId: string): Promise<string | null> {
+  const user = await db.adminUser.findUnique({ where: { id: adminUserId }, select: { defaultOrganizationId: true } });
+  if (!user?.defaultOrganizationId) return null;
+  const membership = await db.adminMembership.findFirst({
+    where: { ...selectableMembershipWhere(adminUserId), organizationId: user.defaultOrganizationId },
+    select: { organizationId: true },
+  });
+  return membership?.organizationId ?? null;
+}
+
+/**
+ * Empresa que se abre al iniciar sesión: la predeterminada si sigue valiendo; si no (membresía revocada,
+ * empresa desactivada), la primera membresía activa.
+ */
 export async function resolveActiveOrganizationId(adminUserId: string): Promise<string | null> {
+  const preferred = await validDefaultOrganizationId(adminUserId);
+  if (preferred) return preferred;
   const membership = await db.adminMembership.findFirst({
     where: { adminUserId, active: true, organization: { active: true } },
     orderBy: { createdAt: "asc" },

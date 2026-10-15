@@ -1410,6 +1410,9 @@ export type AdminProfile = {
   role: AdminRole;
   hasPassword: boolean;
   avatarUpdatedAt: string | null;
+  /** Empresas elegibles como predeterminada (activas, con membresía, sin demo) y la elegida. */
+  organizations?: Array<{ id: string; name: string }>;
+  defaultOrganizationId?: string | null;
 };
 
 /** Marca de la empresa (`GET /api/admin/organization/branding`). */

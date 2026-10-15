@@ -258,6 +258,9 @@ model AdminUser {
   /// Prueba real de control del correo (Google, invitación por correo o reset de clave).
   /// Vuelve a null cuando cambia el correo de la cuenta.
   emailVerifiedAt     DateTime?
+  /// Empresa predeterminada al iniciar sesión (elegida en Mi perfil). Sin FK a propósito: se valida
+  /// en código contra una membresía activa de una empresa activa y no demo; si deja de valer se usa la primera.
+  defaultOrganizationId String?
   activityDays        AdminActivityDay[]
 }
 
