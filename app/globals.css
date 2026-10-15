@@ -3407,8 +3407,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   --p-warn: #fbc35f;
   --p-danger: #ff7d92;
   --p-info: #a78bfa;
-  --p-grad-action: linear-gradient(120deg, #5ad9ff, #a78bfa);
-  --p-action-ink: #0d1026;
+  /* Acción primaria: color SÓLIDO (nunca gris ni apagado); la empresa puede reemplazarlo. */
+  --p-action: #38bdf8;
+  --p-action-ink: #04202c;
   --ink: #0d1026;
   --p-glass: rgba(10, 10, 19, .55);
   --p-shadow: 0 30px 64px -40px rgba(0, 0, 0, .9);
@@ -3447,7 +3448,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   --p-warn: #7a5005;
   --p-danger: #a82640;
   --p-info: #4f46e5;
-  --p-grad-action: linear-gradient(120deg, #0b6f8f, #4f46e5);
+  --p-action: #0a6a8a;
   --p-action-ink: #ffffff;
   --ink: #ffffff;
   --p-glass: rgba(255, 255, 255, .66);
@@ -3502,7 +3503,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-error { color: var(--p-danger); font-size: 12.5px; line-height: 1.5; }
 .portal-btn { justify-self: start; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--line-control); border-radius: 999px; background: transparent; color: var(--text); font: 700 11px var(--font-body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s, filter .15s; }
 .portal-btn:hover:not(:disabled) { border-color: var(--led); color: var(--led); }
-.portal-btn--primary { border-color: transparent; background: var(--p-grad-action); color: var(--p-action-ink); }
+.portal-btn--primary { border-color: transparent; background: var(--p-action); color: var(--p-action-ink); }
 .portal-btn--primary:hover:not(:disabled) { border-color: transparent; color: var(--p-action-ink); filter: brightness(1.08); }
 .portal-btn--primary:active:not(:disabled) { filter: brightness(.96); }
 .portal-btn--primary:disabled { filter: saturate(.55); }
@@ -3525,14 +3526,14 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-budget-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .portal-nowrap { white-space: nowrap; }
 .portal-budget-grid { display: grid; gap: 16px; }
-.portal-budget-main { display: grid; gap: 16px; min-width: 0; }
+.portal-budget-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 /* Columna lateral (total, saldo y acción principal): solo desde 1024 px. En
    celular y tablet la acción principal queda fija abajo (`.portal-mobile-sticky`). */
 .portal-budget-aside { display: none; min-width: 0; }
 .portal-card-head { display: grid; gap: 8px; }
 /* «Qué tenés que hacer ahora» (rediseño 13-10-2026): una sola tarjeta con la
    única acción pendiente según el estado real; el tono marca el acento. */
-.portal-next { gap: 12px; border-color: var(--border-2); border-left: 4px solid var(--led); }
+.portal-next { gap: 12px; border-color: var(--border-2); border-left: 4px solid var(--p-action); }
 .portal-next[data-tone="ok"] { border-left-color: var(--p-ok); }
 .portal-next[data-tone="warn"] { border-left-color: var(--p-warn); }
 .portal-next[data-tone="danger"] { border-left-color: var(--p-danger); }
@@ -3540,7 +3541,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-next[data-tone="neutral"] { border-left-color: var(--border-2); }
 .portal-next-eyebrow { color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .portal-next-body { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; }
-.portal-next-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--led-soft); color: var(--led); }
+.portal-next-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--p-action); color: var(--p-action-ink); }
 .portal-next[data-tone="ok"] .portal-next-icon { background: color-mix(in srgb, var(--p-ok) 12%, transparent); color: var(--p-ok); }
 .portal-next[data-tone="warn"] .portal-next-icon { background: color-mix(in srgb, var(--p-warn) 12%, transparent); color: var(--p-warn); }
 .portal-next[data-tone="danger"] .portal-next-icon { background: color-mix(in srgb, var(--p-danger) 12%, transparent); color: var(--p-danger); }
@@ -3581,13 +3582,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-decision-option { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; min-height: 82px; padding: 13px 14px; border: 1px solid var(--border-2); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
 .portal-decision-option:hover { border-color: var(--led-dim); transform: translateY(-1px); }
 .portal-decision-option:focus-within { outline: 2px solid var(--led); outline-offset: 2px; }
-.portal-decision-option[data-active="true"] { border-color: var(--led); background: var(--led-soft); }
+.portal-decision-option[data-active="true"] { border-color: var(--p-action); background: color-mix(in srgb, var(--p-action) 14%, var(--surface-2)); box-shadow: 0 0 0 1px var(--p-action); }
+.portal-decision-option[data-active="true"] .portal-decision-option-title { color: var(--text-strong); }
 .portal-decision-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .portal-decision-option-copy { display: grid; align-content: start; gap: 4px; min-width: 0; pointer-events: none; }
 .portal-decision-option-title { font-size: 14px; font-weight: 800; }
 .portal-decision-option-helper { color: var(--muted-2); font-size: 12px; line-height: 1.45; }
-.portal-decision-option-mark { display: block; width: 19px; height: 19px; margin-top: 1px; border: 2px solid var(--line-control); border-radius: 50%; background: transparent; pointer-events: none; }
-.portal-decision-option[data-active="true"] .portal-decision-option-mark { border-color: var(--led); box-shadow: inset 0 0 0 4px var(--surface-2); background: var(--led); }
+.portal-decision-option-mark { display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border: 2px solid var(--line-control); border-radius: 50%; background: transparent; color: var(--p-action-ink); pointer-events: none; }
+.portal-decision-option-mark svg { opacity: 0; }
+.portal-decision-option[data-active="true"] .portal-decision-option-mark { border-color: var(--p-action); background: var(--p-action); }
+.portal-decision-option[data-active="true"] .portal-decision-option-mark svg { opacity: 1; }
 .portal-submit-state { color: var(--muted-2); font-size: 12px; line-height: 1.45; }
 .portal-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: portal-spin .7s linear infinite; }
 @keyframes portal-spin { to { transform: rotate(360deg); } }
@@ -3682,7 +3686,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-consent-purpose a:hover { text-decoration: underline; }
 
 /* Autogestión del presupuesto (issue #14): editor de ítems, rebaja, solicitudes y pago */
-.portal-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; }
+.portal-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; align-items: start; }
 .portal-form-row--discount { align-items: end; }
 .portal-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal-form-actions .portal-btn { flex: 0 1 auto; }
@@ -3776,7 +3780,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-request-response { padding: 8px 10px; border-radius: var(--p-radius); background: var(--surface); color: var(--muted-2); font-size: 12.5px; line-height: 1.5; }
 /* Comprobantes de pago (issue #17): el archivo se elige acá, se comprime en el
    navegador y se sube por token; el listado muestra el estado real del cobro. */
-.portal-field input[type="file"] { padding: 9px 10px; font-size: 13px; cursor: pointer; }
+.portal-field input[type="file"] { min-height: 46px; padding: 5px 8px; font-size: 12.5px; cursor: pointer; }
 .portal-field input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 700 10px var(--font-body); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .portal-field input[type="file"]::file-selector-button:hover { border-color: var(--led); color: var(--led); }
 .portal-proofs { display: grid; gap: 8px; list-style: none; }
@@ -3920,7 +3924,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .portal-mobile-sticky { position: fixed; right: 0; bottom: 0; left: 0; z-index: 90; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right)); border-top: 1px solid var(--border-2); background: var(--p-glass); -webkit-backdrop-filter: var(--p-blur); backdrop-filter: var(--p-blur); box-shadow: var(--p-shadow); }
   .portal-mobile-sticky-total { display: grid; gap: 1px; min-width: 0; }
   .portal-mobile-sticky-total strong { color: var(--text); font-size: 17px; }
-  .portal-budget--sticky .portal-card--action, .portal-budget--sticky .portal-card--pay { scroll-margin-top: 24px; scroll-margin-bottom: 110px; }
+  .portal-budget--sticky .portal-card--action, .portal-budget--sticky .portal-card--pay { scroll-margin-bottom: 110px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5170,9 +5174,9 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Portal del cliente: color y tipografía de la empresa (el tono sale del tema claro u oscuro). */
 .portal-brandscope { display: contents; }
-.portal-brandscope[data-branded="true"] { --pb-led: var(--pb-d); --pb-on: var(--pb-d-on); }
-.portal[data-theme="light"] .portal-brandscope[data-branded="true"] { --pb-led: var(--pb-l); --pb-on: var(--pb-l-on); }
-.portal-brandscope[data-branded="true"] { --led: var(--pb-led); --led-dim: var(--pb-led); --led-soft: color-mix(in srgb, var(--pb-led) 14%, transparent); --p-grad-action: linear-gradient(120deg, var(--pb-led), var(--pb-led)); --p-action-ink: var(--pb-on); }
+.portal-brandscope[data-branded="true"] { --pb-led: var(--pb-d); --pb-on: var(--pb-d-on); --pb-act: var(--pb-a-d); --pb-act-on: var(--pb-a-d-on); }
+.portal[data-theme="light"] .portal-brandscope[data-branded="true"] { --pb-led: var(--pb-l); --pb-on: var(--pb-l-on); --pb-act: var(--pb-a-l); --pb-act-on: var(--pb-a-l-on); }
+.portal-brandscope[data-branded="true"] { --led: var(--pb-led); --led-dim: var(--pb-led); --led-soft: color-mix(in srgb, var(--pb-led) 14%, transparent); --p-action: var(--pb-act); --p-action-ink: var(--pb-act-on); }
 .portal-brandscope { font-family: var(--pb-font, var(--font-body)); }
 .portal-company { margin-top: 16px; }
 .portal-company .portal-facts { gap: 10px; }
@@ -5310,3 +5314,24 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-pick-list .admin-check { min-height: 44px; display: flex; align-items: center; }
 .admin-cover-frame[data-ratio="4-3"] { aspect-ratio: 4 / 3; }
 .admin-cover-frame[data-ratio="4-5"] { aspect-ratio: 4 / 5; max-width: 220px; }
+/* ── Portal: anclas, resumen y contacto (15-10-2026) ──
+   El encabezado es pegajoso: toda ancla del portal deja su bloque justo debajo de él
+   (scroll-margin-top = altura del encabezado), así «Pagar» o «Tu decisión» no quedan cortados. */
+.portal { --portal-top-h: 67px; }
+.portal [id], .portal-card, .portal-banner { scroll-margin-top: calc(var(--portal-top-h) + 8px); }
+.portal-summary { gap: 14px; }
+.portal-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.portal-summary-facts { display: grid; gap: 10px; margin: 0; }
+.portal-summary-facts dt { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.portal-summary-facts dd { margin: 2px 0 0; color: var(--text); font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.portal-summary-mobile { display: block; min-width: 0; }
+@media (min-width: 1024px) { .portal-summary-mobile { display: none; } }
+.portal-contact-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.portal-contact-actions .portal-btn { justify-self: auto; letter-spacing: .08em; }
+.portal-contact-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.portal-contact-list li { display: flex; align-items: center; gap: 12px; min-height: 44px; min-width: 0; color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.portal-contact-list .admin-icon, .portal-contact-list svg { flex: 0 0 auto; color: var(--muted-2); }
+.portal-contact-list a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 480px) { .portal-contact-actions .portal-btn { width: 100%; } }
+.portal-link { color: var(--led-dim); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.portal-link:hover { color: var(--text-strong); }

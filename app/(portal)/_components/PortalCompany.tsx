@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { AdminIcon } from "@/components/admin/AdminIcons";
 import { whatsappHref } from "@/lib/admin-format";
 import {
   HANDOVER_KINDS,
@@ -26,7 +27,19 @@ export function PortalBrandScope({ company, children }: { company: PortalCompany
   );
 }
 
-export function PortalCompanyInfo({ company }: { company: PortalCompany | null | undefined }) {
+/** Cómo llegar: el link de Maps de la empresa o, si no hay, una búsqueda de Google Maps con su dirección. */
+export function companyMapsHref(mapsUrl: string | null | undefined, place: string | null | undefined): string | null {
+  if (mapsUrl && /^https?:\/\//i.test(mapsUrl)) return mapsUrl;
+  const query = (place ?? "").trim();
+  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null;
+}
+
+/** `+595 981 123456` -> `+595981123456` para `tel:`. */
+function telHref(phone: string): string {
+  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+export function PortalCompanyInfo({ company, reference }: { company: PortalCompany | null | undefined; reference?: string }) {
   const profile = company?.profile;
   if (!company || !profile) return null;
   const place = locationLine(profile);
@@ -34,42 +47,70 @@ export function PortalCompanyInfo({ company }: { company: PortalCompany | null |
   const handover = HANDOVER_KINDS.filter((kind) => profile.handover[kind].length > 0);
   const methods = acceptedPaymentMethods(profile);
   const { contact, location } = profile;
-  const wa = contact.whatsapp ? whatsappHref(contact.whatsapp, `Hola ${company.name}! Consulto por mi presupuesto.`) : null;
+  const waMessage = reference ? `Hola ${company.name}! Te escribo por el presupuesto Nº ${reference}.` : `Hola ${company.name}! Consulto por mi presupuesto.`;
+  const wa = contact.whatsapp ? whatsappHref(contact.whatsapp, waMessage) : null;
+  const maps = companyMapsHref(location.mapsUrl, place);
+  const phones = [contact.phone, contact.phone2].filter((phone): phone is string => Boolean(phone));
+  const hasContact = Boolean(wa || maps || phones.length > 0 || contact.email || contact.instagram || contact.website);
+  const hasFacts = hours.length > 0 || handover.length > 0 || methods.length > 0 || Boolean(profile.conditions);
   return (
     <section className="portal-card portal-company" aria-labelledby="portal-company" data-testid="portal-company">
       <div className="portal-card-head">
         <h2 id="portal-company" className="portal-card-title">{company.name}</h2>
-        <p className="portal-card-lead">Datos de la empresa</p>
+        <p className="portal-card-lead">{hasContact ? "Escribinos o visitanos: te atendemos con gusto." : "Datos de la empresa"}</p>
       </div>
+      {wa || maps ? (
+        <div className="portal-contact-actions portal-print-hide">
+          {wa ? (
+            <a className="portal-btn portal-btn--primary" href={wa} target="_blank" rel="noopener noreferrer">
+              <AdminIcon name="whatsapp" size={17} />
+              Escribir por WhatsApp
+            </a>
+          ) : null}
+          {maps ? (
+            <a className="portal-btn" href={maps} target="_blank" rel="noopener noreferrer">
+              <AdminIcon name="map-pin" size={17} />
+              Cómo llegar
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+      {hasContact || place ? (
+        <ul className="portal-contact-list">
+          {place ? (
+            <li>
+              <AdminIcon name="map-pin" size={17} />
+              <span>{place}</span>
+            </li>
+          ) : null}
+          {phones.map((phone) => (
+            <li key={phone}>
+              <AdminIcon name="phone" size={17} />
+              <a className="portal-link" href={telHref(phone)}>{phone}</a>
+            </li>
+          ))}
+          {contact.email ? (
+            <li>
+              <AdminIcon name="mail" size={17} />
+              <a className="portal-link" href={`mailto:${contact.email}`}>{contact.email}</a>
+            </li>
+          ) : null}
+          {contact.instagram ? (
+            <li>
+              <AdminIcon name="instagram" size={17} />
+              <a className="portal-link" href={`https://instagram.com/${contact.instagram}`} target="_blank" rel="noopener noreferrer">@{contact.instagram}</a>
+            </li>
+          ) : null}
+          {contact.website ? (
+            <li>
+              <AdminIcon name="globe" size={17} />
+              <a className="portal-link" href={contact.website} target="_blank" rel="noopener noreferrer">{contact.website.replace(/^https?:\/\//, "")}</a>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+      {hasFacts ? (
       <dl className="portal-facts">
-        {place || location.mapsUrl ? (
-          <div>
-            <dt>Dónde estamos</dt>
-            <dd>
-              {place}{" "}
-              {location.mapsUrl ? <a className="portal-link" href={location.mapsUrl} target="_blank" rel="noopener noreferrer">Cómo llegar</a> : null}
-            </dd>
-          </div>
-        ) : null}
-        {contact.phone || contact.phone2 || wa ? (
-          <div>
-            <dt>Teléfonos</dt>
-            <dd>
-              {[contact.phone, contact.phone2].filter(Boolean).join(" · ")}
-              {wa ? <> {" "}<a className="portal-link" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a></> : null}
-            </dd>
-          </div>
-        ) : null}
-        {contact.email || contact.website || contact.instagram ? (
-          <div>
-            <dt>En línea</dt>
-            <dd>
-              {contact.email ? <a className="portal-link" href={`mailto:${contact.email}`}>{contact.email}</a> : null}
-              {contact.website ? <> {" "}<a className="portal-link" href={contact.website} target="_blank" rel="noopener noreferrer">{contact.website.replace(/^https?:\/\//, "")}</a></> : null}
-              {contact.instagram ? <> {" "}<a className="portal-link" href={`https://instagram.com/${contact.instagram}`} target="_blank" rel="noopener noreferrer">@{contact.instagram}</a></> : null}
-            </dd>
-          </div>
-        ) : null}
         {hours.length > 0 ? (
           <div>
             <dt>Horario de atención</dt>
@@ -95,6 +136,7 @@ export function PortalCompanyInfo({ company }: { company: PortalCompany | null |
           </div>
         ) : null}
       </dl>
+      ) : null}
     </section>
   );
 }

@@ -58,6 +58,7 @@ import {
   portalStage,
   portalStatusChip,
   portalTransferDestination,
+  portalHowToPay,
 } from "@/lib/portal-view";
 
 /**
@@ -280,7 +281,9 @@ function PortalDecisionOptions({
                   {option.helper}
                 </span>
               </span>
-              <span className="portal-decision-option-mark" aria-hidden="true" />
+              <span className="portal-decision-option-mark" aria-hidden="true">
+                <AdminIcon name="check" size={13} />
+              </span>
             </label>
           );
         })}
@@ -687,6 +690,81 @@ export function PortalBudgetView({
         };
     }
   })();
+
+  /** Tarjeta «Tu presupuesto»: total, saldo, cómo se paga, fechas del evento y estado. */
+  const howToPay = portalHowToPay(budget.paymentPlan, budget.total);
+  const summaryCard = (titleId: string, withAction: boolean) => (
+    <div className="portal-card portal-summary" aria-labelledby={withAction ? undefined : titleId} role={withAction ? undefined : "region"}>
+      <div className="portal-summary-head">
+        <PortalCardTitle id={titleId} icon="overview">
+          Tu presupuesto
+        </PortalCardTitle>
+        <span className="portal-chip" data-tone={statusChip.tone}>
+          {statusChip.label}
+        </span>
+      </div>
+      <div className="portal-totals portal-totals--aside">
+        <div className="portal-total-row portal-total-row--strong">
+          <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
+          <span className="portal-num">{formatMoney(summaryTotal)}</span>
+        </div>
+        {approved && (budget.collectedAmount ?? 0) > 0 ? (
+          <div className="portal-total-row">
+            <span>Cobrado</span>
+            <span className="portal-num">{formatMoney(budget.collectedAmount ?? 0)}</span>
+          </div>
+        ) : null}
+        {approved ? (
+          <div className="portal-total-row">
+            <span>Saldo</span>
+            <span className="portal-num">{formatMoney(balance)}</span>
+          </div>
+        ) : null}
+      </div>
+      <dl className="portal-summary-facts">
+        {howToPay ? (
+          <div>
+            <dt>Cómo se paga</dt>
+            <dd>{howToPay}</dd>
+          </div>
+        ) : null}
+        {budget.event?.startsAt ? (
+          <div>
+            <dt>Fecha del evento</dt>
+            <dd>{formatDateTime(budget.event.startsAt)}</dd>
+          </div>
+        ) : null}
+        {stage === "authorize" && budget.validUntil ? (
+          <div>
+            <dt>Vigencia</dt>
+            <dd>
+              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                {formatCountdown(budget.validUntil, "client")}
+              </span>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      {withAction ? (
+        stickyKind === "authorize" ? (
+          <button
+            type="button"
+            className="portal-btn portal-btn--primary portal-btn--block portal-print-hide"
+            onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            aria-controls="portal-action"
+          >
+            Ir a la decisión
+          </button>
+        ) : stickyKind === "pay" ? (
+          <a className="portal-btn portal-btn--primary portal-btn--block portal-print-hide" href="#portal-pay">
+            Ver cómo pagar
+          </a>
+        ) : (
+          <p className="portal-help">{nextStep.title}.</p>
+        )
+      ) : null}
+    </div>
+  );
 
   /** Avance real del plan de cobros: confirmados sobre el total vigente. */
   const paymentProgress = (() => {
@@ -1416,6 +1494,9 @@ export function PortalBudgetView({
             {headFacts}
           </header>
 
+          {/* Celular y tablet: la misma tarjeta «Tu presupuesto», sin repetir la acción (ya está en «Qué tenés que hacer ahora») */}
+          <div className="portal-summary-mobile">{summaryCard("portal-summary-mobile", false)}</div>
+
           {/* Confirmación inmediata de la autorización: próximos pasos y descarga */}
           {justApproved ? (
             <section className="portal-banner portal-banner--ok portal-success" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
@@ -2030,52 +2111,9 @@ export function PortalBudgetView({
           </section>
         </div>
 
-        {/* Escritorio: total, saldo y acción principal siempre a la vista */}
+        {/* Escritorio: total, saldo, cómo se paga y acción principal siempre a la vista */}
         <aside className="portal-budget-aside" aria-labelledby="portal-summary">
-          <div className="portal-card portal-summary">
-            <PortalCardTitle id="portal-summary" icon="overview">
-              Tu presupuesto
-            </PortalCardTitle>
-            <div className="portal-totals portal-totals--aside">
-              <div className="portal-total-row portal-total-row--strong">
-                <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
-                <span className="portal-num">{formatMoney(summaryTotal)}</span>
-              </div>
-              {approved && (budget.collectedAmount ?? 0) > 0 ? (
-                <div className="portal-total-row">
-                  <span>Cobrado</span>
-                  <span className="portal-num">{formatMoney(budget.collectedAmount ?? 0)}</span>
-                </div>
-              ) : null}
-              {approved ? (
-                <div className="portal-total-row">
-                  <span>Saldo</span>
-                  <span className="portal-num">{formatMoney(balance)}</span>
-                </div>
-              ) : null}
-            </div>
-            {stage === "authorize" && budget.validUntil ? (
-              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                {formatCountdown(budget.validUntil, "client")}
-              </span>
-            ) : null}
-            {stickyKind === "authorize" ? (
-              <button
-                type="button"
-                className="portal-btn portal-btn--primary portal-btn--block portal-print-hide"
-                onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                aria-controls="portal-action"
-              >
-                Ir a la decisión
-              </button>
-            ) : stickyKind === "pay" ? (
-              <a className="portal-btn portal-btn--primary portal-btn--block portal-print-hide" href="#portal-pay">
-                Ver cómo pagar
-              </a>
-            ) : (
-              <p className="portal-help">{nextStep.title}.</p>
-            )}
-          </div>
+          {summaryCard("portal-summary", true)}
         </aside>
       </div>
 

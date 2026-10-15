@@ -75,7 +75,11 @@ export type AdminIconName =
   /** Colapsar/expandir el sidebar de escritorio (solo íconos). */
   | "panel-left"
   /** Carga con IA (issue #120): asistente de pegado y revisión. */
-  | "sparkles";
+  | "sparkles"
+  /** Contacto de la empresa en el portal del cliente. */
+  | "phone"
+  | "map-pin"
+  | "whatsapp";
 
 export type AdminSessionUser = {
   id: string;
