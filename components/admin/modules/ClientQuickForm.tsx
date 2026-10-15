@@ -238,7 +238,7 @@ export function ClientQuickFields({
   const location = (
     <>
       <CityField label="Ciudad" value={values.city} onChange={(city) => onChange({ city, department: "" })}
-        onSelect={(city, department) => onChange({ city, department })} hint="Seleccioná una ciudad para completar departamento o escribí a mano." />
+        onSelect={(city, department) => onChange({ city, department })} hint="Elegí una ciudad de la lista; el departamento se completa al seleccionarla." />
       <TextField label="Departamento" maxLength={120} value={values.department} onChange={(department) => onChange({ department })} hint="Podés completarlo a mano." />
       <TextField label="Dirección" maxLength={300} value={values.address} onChange={(address) => onChange({ address })} />
       <TextField label="Referencia de dirección" maxLength={400} value={values.addressReference} onChange={(addressReference) => onChange({ addressReference })} />

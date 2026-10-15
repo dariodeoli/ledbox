@@ -1,3 +1,4 @@
+import { PREORDER_COPY } from "@/lib/storefront-ui";
 import { XIcon } from "./StoreIcons";
 
 /** Resumen persistente del pedido: mismos importes y cantidades en escritorio y celular, sin interrumpir la compra. */
@@ -7,13 +8,13 @@ export function OrderBar({ count, productCount, text, names, confirmation, onOpe
 }) {
   const summary = names.slice(0, 2).join(" · ") + (names.length > 2 ? ` · y ${names.length - 2} más` : "");
   return (
-    <aside className="cp-bar" aria-label="Tu pedido" data-testid="order-bar">
+    <aside className="cp-bar" aria-label={PREORDER_COPY.title} data-testid="order-bar">
       <div className="cp-bar-text">
         <strong>{productCount} {productCount === 1 ? "producto" : "productos"} · {count} {count === 1 ? "unidad" : "unidades"}</strong>
         {text ? <span data-testid="order-amount">{text}</span> : null}
         {confirmation ? <span key={confirmation.key} className="cp-bar-confirmation" role="status" data-testid="order-confirmation"><XIcon name="check" size={16} /><span title={confirmation.text}>{confirmation.text}</span></span> : <span className="cp-bar-product-names" title={names.join(" · ")}>{summary}</span>}
       </div>
-      <button type="button" className="cp-btn cp-btn--primary" onClick={onOpen}>Ver pedido</button>
+      <button type="button" className="cp-btn cp-btn--primary" onClick={onOpen}>{PREORDER_COPY.open}</button>
     </aside>
   );
 }

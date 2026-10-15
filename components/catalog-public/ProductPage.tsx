@@ -1,3 +1,4 @@
+import { PREORDER_COPY } from "@/lib/storefront-ui";
 import { PREORDER_RESPONSE_HOURS, catalogLine, catalogTierHints, preorderWhatsappUrl } from "@/lib/catalog-public";
 import { capacityText, cardSpecs } from "@/lib/catalog-card";
 import { HANDOVER_KINDS, HANDOVER_LABEL, locationLine, rangesLabel } from "@/lib/org-profile";
@@ -167,7 +168,8 @@ export function ProductPage({ store, detail, showPrices: showPricesProp, basePat
             <details>
               <summary>Condiciones de alquiler</summary>
               <div className="cp-acc-body">
-                <p>Un pedido no es una reserva: te respondemos en hasta {PREORDER_RESPONSE_HOURS} horas hábiles con la cotización y, recién ahí, se confirma.</p>
+                <p>{PREORDER_COPY.notice} Te respondemos en hasta {PREORDER_RESPONSE_HOURS} horas hábiles con una cotización para revisar.</p>
+                <p>{PREORDER_COPY.logistics}</p>
                 <p>La disponibilidad que ves es indicativa y se confirma al cotizar.</p>
                 {conditions ? <p className="cp-pre">{conditions}</p> : null}
               </div>

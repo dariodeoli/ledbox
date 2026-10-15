@@ -97,3 +97,27 @@ export function todayKeyPY(now: Date = new Date()): string {
 
 /** «12/10/2026» a partir de `2026-10-12`. */
 export const dayLabel = (key: string) => key.split("-").reverse().join("/");
+
+/** Copia y resumen únicos del armado de una preorden; no cambian precios ni reservan stock. */
+export const PREORDER_COPY = {
+  name: "Preorden",
+  title: "Tu preorden",
+  open: "Ver preorden",
+  send: "Enviar preorden",
+  received: "Recibimos tu preorden",
+  notice: "Enviar una preorden no confirma el alquiler ni reserva productos o fechas.",
+  logistics: "El flete y los servicios de logística pendientes se cotizan según el lugar del evento.",
+  consult: "Consultar precio y disponibilidad",
+} as const;
+
+/** Sólo se suma un flete que el API revalidó. Sin ese dato, el importe es de productos. */
+export function preorderEstimate(productsSubtotal: number | null, delivery?: { choice: string; fee: number | null } | null) {
+  const products = productsSubtotal !== null && Number.isFinite(productsSubtotal) && productsSubtotal > 0 ? productsSubtotal : null;
+  const fee = delivery?.choice === "ZONE" && delivery.fee !== null && Number.isFinite(delivery.fee) && delivery.fee >= 0 ? delivery.fee : null;
+  return {
+    products, fee,
+    amount: products !== null ? products + (fee ?? 0) : null,
+    label: fee !== null ? "Estimado con flete" : "Productos estimados",
+    logisticsPending: fee === null,
+  };
+}

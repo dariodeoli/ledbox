@@ -1,4 +1,5 @@
 import {
+  catalogCity,
   FIELD_MESSAGES,
   PROFILE_MESSAGES,
   emailValid,
@@ -208,6 +209,19 @@ export function parseOrgProfile(body: unknown): Result<OrgProfile> {
   if (conditions.length > CONDITIONS_MAX) return { ok: false, error: `Las condiciones comerciales no pueden superar los ${CONDITIONS_MAX} caracteres.` };
   profile.conditions = conditions || null;
   return { ok: true, value: profile };
+}
+
+/** Escritura del panel: sólo una ciudad nueva debe pertenecer al catálogo; leer historia sigue tolerante. */
+export function parseOrgProfileUpdate(body: unknown, existingCity?: string | null): Result<OrgProfile> {
+  const parsed = parseOrgProfile(body);
+  if (!parsed.ok) return parsed;
+  const city = parsed.value.location.city;
+  if (city && city !== existingCity) {
+    const selected = catalogCity(city);
+    if (!selected) return { ok: false, error: "Elegí una ciudad de la lista." };
+    parsed.value.location.city = selected.ciudad;
+  }
+  return parsed;
 }
 
 /** Lee lo guardado (JSON de la base) tolerando filas viejas o rotas: nunca lanza. */

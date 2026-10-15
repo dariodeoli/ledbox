@@ -299,3 +299,9 @@ reinstaura el token de lectura (fine-grained, solo lectura de
 - `Combobox` admite contenido enriquecido para opciones y selección sin perder el texto de búsqueda ni el nombre accesible. `AdminActionsMenu` admite accesos frecuentes en una fila de iconos.
 - `AdminDialog`, `AdminConfirmDialog` y las superficies de menús/combobox/selector de empresa conservan una base común. Las listas internas no dibujan otra superficie. Los controles nativos de fecha mantienen el selector del navegador.
 - `ClientesTabs` comparte Directorio/Mensajes; `PlantillasModule` reutiliza la API, las variables y el compositor existentes. La vista previa es texto con datos ficticios y guardar una plantilla no envía mensajes.
+
+### Encuadre y catálogo de ciudades (2.1.134)
+
+- `AdminImageUpload` y `AdminIdentityImageEditor` en `AdminUI` son el único flujo de encuadre para foto de perfil, logos de empresa y logo de cliente. `imageFramingRect` y `prepareIdentityImage` comparten geometría entre vista previa y exportación. Cancelar o desmontar invalida trabajo asíncrono; nunca se aplica un resultado tardío. Editar una imagen guardada trabaja sobre su versión actual; no recupera partes eliminadas por recortes anteriores.
+- `CityField` usa el catálogo cerrado por defecto. Empresa, clientes, eventos y revisión de CargaIA consumen el mismo selector. Los validadores de perfiles/clientes rechazan ciudades nuevas fuera del catálogo y permiten conservar una histórica sin alterarla. Esto no migra ni valida retroactivamente todos los imports.
+- `HomeConfig` conserva orden/visibilidad de módulos y agrega `categoryLayout`; `CategoryAccordion` reutiliza `CatalogBrowser`/`ProductTile` y el mismo carrito. La vista previa de Apariencia sigue siendo un ejemplo, sin afirmar que replica productos reales.

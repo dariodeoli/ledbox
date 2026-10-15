@@ -35,6 +35,39 @@ test("Ajustes HTTP: guardar y reabrir, cuerpos inválidos sin borrar datos y per
       assert.equal(reopenedProfile.profile.conditions, profile.conditions);
       assert.equal(reopenedProfile.profile.contact.email, profile.contact.email);
     });
+    await t.test("módulos y diseño de categorías persisten por empresa y al cambiar plantilla", async () => {
+      assert.equal((await call("organization/appearance", "PATCH", { organizationId: foreign, home: { categoryLayout: "accordion", order: ["categorias", "catalogo", "hero"], hidden: ["catalogo", "inspiracion"] } })).status, 200);
+      let reopened = await (await call("organization/appearance")).json();
+      assert.equal(reopened.appearance.home.categoryLayout, "accordion");
+      assert.equal(reopened.appearance.home.order[0], "categorias");
+      assert.deepEqual(reopened.appearance.home.hidden, ["inspiracion"]);
+      const before = await db.organization.findUniqueOrThrow({ where: { id: org } });
+      assert.equal((await call("organization/appearance", "PATCH", { home: { categoryLayout: "invalid" } })).status, 400);
+      assert.deepEqual(await db.organization.findUniqueOrThrow({ where: { id: org } }), before);
+      assert.equal((await call("organization/appearance", "PATCH", { template: "industrial" })).status, 200);
+      reopened = await (await call("organization/appearance")).json();
+      assert.equal(reopened.appearance.home.categoryLayout, "accordion");
+      assert.equal(reopened.appearance.home.order[0], "categorias");
+      assert.equal((await db.organization.findUniqueOrThrow({ where: { id: foreign } })).appearance, null);
+    });
+    await t.test("Ciudad valida empresa y cliente, normaliza el catálogo y conserva el histórico", async () => {
+      assert.equal((await call("organization/profile", "PATCH", { profile: { ...profile, location: { city: "asuncion" } } })).status, 200);
+      assert.equal((await (await call("organization/profile")).json()).profile.location.city, "Asunción");
+      const before = await db.organization.findUniqueOrThrow({ where: { id: org } });
+      assert.equal((await call("organization/profile", "PATCH", { profile: { ...profile, location: { city: "Asunciónx" } } })).status, 400);
+      assert.deepEqual(await db.organization.findUniqueOrThrow({ where: { id: org } }), before);
+      await db.organization.update({ where: { id: org }, data: { profile: { ...profile, location: { city: "Localidad histórica QA" } } } });
+      assert.equal((await call("organization/profile", "PATCH", { profile: { ...profile, location: { city: "Localidad histórica QA" }, conditions: "Condición actualizada" } })).status, 200);
+      assert.equal((await (await call("organization/profile")).json()).profile.location.city, "Localidad histórica QA");
+      const clientsBefore = await db.client.count({ where: { organizationId: org } });
+      assert.equal((await call("clients", "POST", { name: "Cliente de ciudad inválida", city: "Asunciónx" })).status, 400);
+      assert.equal(await db.client.count({ where: { organizationId: org } }), clientsBefore);
+      const created = await call("clients", "POST", { name: "Cliente de ciudad válida", city: "asuncion" });
+      assert.equal(created.status, 201);
+      const client = (await created.json()).client;
+      assert.equal(client.city, "Asunción");
+      assert.equal(client.department, "Asunción");
+    });
     for (const [route, method] of [["organization/payment-details", "POST"], ["organization/profile", "PATCH"], ["organization/branding", "PATCH"], ["users", "PATCH"], ["users", "POST"]]) {
       await t.test(`${method} ${route}: null, listas y escalares se rechazan sin mutación`, async () => {
         const before = await db.organization.findUniqueOrThrow({ where: { id: org } });

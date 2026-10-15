@@ -1,5 +1,7 @@
 "use client";
 
+import { identityImageSize, imageFramingRect, type ImageFraming } from "./image-framing";
+
 import {
   detectIdentityImageMime,
   IDENTITY_IMAGE_MAX_BYTES,
@@ -37,13 +39,15 @@ export type PrepareIdentityImageResult =
 export type PrepareIdentityImageOptions = {
   /** Recorte cuadrado centrado (avatar de persona) o relación original (logo). */
   square: boolean;
+  /** Encuadre elegido explícitamente; ausente mantiene el contrato anterior. */
+  framing?: ImageFraming;
   /** Lado máximo de la imagen final, en px. */
   maxSide: number;
 };
 
-type LoadedImage = { image: CanvasImageSource; width: number; height: number; release: () => void };
+export type LoadedImage = { image: CanvasImageSource; width: number; height: number; release: () => void };
 
-async function loadImageSource(file: Blob): Promise<LoadedImage | null> {
+export async function loadImageSource(file: Blob): Promise<LoadedImage | null> {
   if (typeof createImageBitmap === "function") {
     try {
       // `from-image` respeta la orientación EXIF de las fotos de celular.
@@ -96,7 +100,7 @@ const QUALITIES = [0.86, 0.7, 0.55];
 /** Valida y prepara la imagen elegida en el navegador (canvas, sin librerías). */
 export async function prepareIdentityImage(
   file: File,
-  { square, maxSide }: PrepareIdentityImageOptions,
+  { square, maxSide, framing }: PrepareIdentityImageOptions,
 ): Promise<PrepareIdentityImageResult> {
   if (file.size === 0) return { ok: false, error: "El archivo está vacío; probá de nuevo." };
   const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
@@ -112,17 +116,17 @@ export async function prepareIdentityImage(
   }
 
   try {
-    const scale = Math.min(1, maxSide / Math.max(loaded.width, loaded.height));
-    const side = square ? Math.min(loaded.width, loaded.height) : 0;
-    const width = square ? Math.max(1, Math.round(side * scale)) : Math.max(1, Math.round(loaded.width * scale));
-    const height = square ? width : Math.max(1, Math.round(loaded.height * scale));
+    const { width, height } = identityImageSize(loaded.width, loaded.height, square, maxSide);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return { ok: false, error: "No pudimos procesar la imagen en este navegador." };
 
-    if (square) {
+    if (framing) {
+      const rect = imageFramingRect(loaded.width, loaded.height, width, height, framing);
+      context.drawImage(loaded.image, rect.x, rect.y, rect.width, rect.height);
+    } else if (square) {
       const sourceSide = Math.min(loaded.width, loaded.height);
       const sx = (loaded.width - sourceSide) / 2;
       const sy = (loaded.height - sourceSide) / 2;

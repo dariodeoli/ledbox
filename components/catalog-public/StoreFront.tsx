@@ -1,6 +1,7 @@
 import { PREORDER_RESPONSE_HOURS, preorderWhatsappUrl } from "@/lib/catalog-public";
 import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-public";
 import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
+import { CategoryAccordion } from "./CategoryAccordion";
 import { CategoryCard } from "./CategoryCard";
 import { EventPicker } from "./EventPicker";
 import { storeCategories, storeCategoryHref, withStoreDates } from "@/lib/store-categories";
@@ -68,7 +69,11 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
   const minByCategory = new Map<string, number>();
+  const countsByCategory = new Map<string, number>();
+  const imagesByCategory = new Map<string, string>();
   for (const item of items) {
+    countsByCategory.set(item.category, (countsByCategory.get(item.category) ?? 0) + 1);
+    if (item.imageUrl && !imagesByCategory.has(item.category)) imagesByCategory.set(item.category, item.imageUrl);
     const unit = item.price?.unit ?? 0;
     if (unit > 0) minByCategory.set(item.category, Math.min(minByCategory.get(item.category) ?? unit, unit));
   }
@@ -80,6 +85,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   };
   const hasContact = Boolean(whatsapp || store.email || store.profile);
   const home = store.appearance.home;
+  const accordionCategories = "categoryLayout" in home && home.categoryLayout === "accordion";
   const order = visibleSections(home);
   const shownIds = new Set<HomeSectionId>(order);
   const nav = storeNavLinks("", { contact: hasContact && shownIds.has("contacto"), howItWorks: shownIds.has("como-funciona"), categories: featured.length > 1 ? featured.slice(0, 3).map((entry) => ({ name: entry.category, href: categoryHref(entry.category) })) : [] });
@@ -121,13 +127,18 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   const sectionNodes: Record<Exclude<HomeSectionId, "hero">, ReactNode> = {
     categorias: (
       <>
-          {featured.length > 1 ? (
+          {(accordionCategories ? categoryIndex.length > 0 : featured.length > 1) ? (
             <section className="cp-section" aria-labelledby="categorias">
               <div className="cp-section-head">
                 <h2 id="categorias" className="cp-h2">Categorías</h2>
                 <p className="cp-lead">Encontrá lo que necesitás para tu evento.</p>
               </div>
-              <div className="cp-catgrid">
+              {accordionCategories ? <CategoryAccordion
+                catalogKey={basePath}
+                showPrices={showPrices}
+                priceMode={priceMode}
+                categories={categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name), imageUrl: categoryImages?.[entry.name] ?? imagesByCategory.get(entry.name) ?? null, count: countsByCategory.get(entry.name) ?? 0, minUnit: minByCategory.get(entry.name) ?? null }))}
+              /> : <div className="cp-catgrid">
                 {featured.map((entry) => (
                   <CategoryCard
                     key={entry.category}
@@ -140,7 +151,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
                     priceMode={priceMode}
                   />
                 ))}
-              </div>
+              </div>}
             </section>
           ) : null}
       </>
@@ -164,6 +175,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             range={range}
             initialCategory={initialCategory}
             showEventPicker={!shownIds.has("hero")}
+            categoryPreviewKey={accordionCategories && shownIds.has("categorias") ? basePath : undefined}
             categoryNavigation={publicCategories ? { allHref: `${withStoreDates(basePath, range)}#catalogo`, links: categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name) })) } : undefined}
             zones={zones}
             priceMode={priceMode}

@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+import { CATEGORY_PREVIEW_EVENT, categoryPreviewItems, type CategoryPreviewRequest } from "@/lib/store-category-preview";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,7 +15,7 @@ import type { PriceMode } from "@/lib/appearance";
 import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tiers";
 import { readLocalStoreCart, sanitizeStoreCart, storeCartContext, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartView } from "@/lib/server/store-cart";
-import { MAX_QUANTITY, formatGs, priceUnitLabel, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
+import { MAX_QUANTITY, formatGs, priceUnitLabel, PREORDER_COPY, preorderEstimate, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { withStoreDates } from "@/lib/store-categories";
 import { cardSpecs } from "@/lib/catalog-card";
 import { CartDrawer, type Done } from "./CartDrawer";
@@ -91,6 +93,8 @@ type Props = {
   categoryName?: string;
   /** La portada puede ofrecer el mismo selector; evita repetirlo en el catálogo de esa página. */
   showEventPicker?: boolean;
+  /** Sólo metadatos en el acordeón: este catálogo mantiene el único motor y sus callbacks. */
+  categoryPreviewKey?: string;
   categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }> };
 };
 
@@ -122,7 +126,7 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true, categoryPreviewKey }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
@@ -133,6 +137,34 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const visitorKey = `ledbox-store-visitor:${slug.trim().toLowerCase()}`;
   const [contactOpen, setContactOpen] = useState(false);
   const [quickId, setQuickId] = useState<string | null>(null);
+  const [categoryPreview, setCategoryPreview] = useState<{ category: string; host: HTMLElement } | null>(null);
+  useEffect(() => {
+    if (!categoryPreviewKey) return;
+    const accept = (detail: CategoryPreviewRequest) => {
+      if (!detail || detail.catalogKey !== categoryPreviewKey) return;
+      if (detail.category === null) { setCategoryPreview(null); return; }
+      if (typeof detail.category !== "string" || typeof detail.targetId !== "string" || !items.some((item) => item.category === detail.category)) return;
+      const host = document.getElementById(detail.targetId);
+      if (!host || host.dataset.storeCategoryScope !== categoryPreviewKey || host.dataset.storeCategoryPreview !== detail.category) return;
+      setCategoryPreview({ category: detail.category, host });
+    };
+    const onPreview = (event: Event) => accept((event as CustomEvent<CategoryPreviewRequest>).detail);
+    window.addEventListener(CATEGORY_PREVIEW_EVENT, onPreview);
+    // Puede abrirse antes de que termine de hidratarse el catálogo.
+    for (const host of document.querySelectorAll<HTMLElement>("[data-store-category-preview]")) {
+      if (host.dataset.storeCategoryScope === categoryPreviewKey) accept({ catalogKey: categoryPreviewKey, category: host.dataset.storeCategoryPreview ?? null, targetId: host.id });
+    }
+    return () => { window.removeEventListener(CATEGORY_PREVIEW_EVENT, onPreview); setCategoryPreview(null); };
+  }, [categoryPreviewKey, items]);
+  useEffect(() => {
+    if (!categoryPreview) return;
+    const observedHost = categoryPreview.host;
+    const observer = new MutationObserver(() => {
+      if (!observedHost.isConnected) setCategoryPreview((current) => current?.host === observedHost ? null : current);
+    });
+    observer.observe(categoryPreview.host.closest(".cp-theme") ?? document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [categoryPreview]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
   const [sort, setSort] = useState<SortKey>("destacados");
@@ -314,7 +346,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           setZoneChoice("");
         }
         if (seenContext.current === cartContext && next.total !== null && seenTotal.current !== null && seenTotal.current !== next.total) {
-          notices.push(`El total cambió: antes ${money(seenTotal.current)}, ahora ${money(next.total)}. Los precios se calculan al día; la cotización los confirma.`);
+          notices.push(`La referencia estimada cambió: antes ${money(seenTotal.current)}, ahora ${money(next.total)}. Revisá el desglose de productos y flete; no es una reserva confirmada.`);
         }
         seenTotal.current = next.total;
         seenContext.current = cartContext;
@@ -490,14 +522,16 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     if (priced === 0) return null;
     return { sum, missing, unit: events === priced ? "por evento" : events > 0 ? "por día o evento" : priceMode === "unit" ? "c/u" : "por día" };
   })();
+  const estimate = preorderEstimate(subtotal, view?.delivery);
   const barText = showPrices
     ? !range
-      ? perDay ? `${money(perDay.sum)} ${perDay.unit} · elegí fechas para el total` : "Elegí fechas para el total"
-      : view && view.total !== null ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : "Confirmamos el monto en la cotización"
+      ? perDay ? `${money(perDay.sum)} ${perDay.unit}${perDay.missing ? " + productos por cotizar" : ""} · elegí fechas` : "Elegí fechas para el total"
+      : estimate.amount !== null ? `${estimate.label} ${money(estimate.amount)}${estimate.logisticsPending ? " · flete a cotizar" : ""}` : PREORDER_COPY.consult
     : null;
 
   return (
     <section id="catalogo" className="cp-section cp-catalog" aria-labelledby={categoryName ? undefined : "catalogo-titulo"} aria-label={categoryName ? `Productos de ${categoryName}` : undefined}>
+      {categoryPreview?.host.isConnected ? createPortal(<ul className="cp-grid" aria-label={`Productos de ${categoryPreview.category}`}>{categoryPreviewItems(items, categoryPreview.category).map(renderItem)}</ul>, categoryPreview.host) : null}
       {!categoryName ? <div className="cp-section-head">
         <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Catálogo de alquiler"}</p>
         <h2 id="catalogo-titulo" className="cp-h2">Elegí tus productos</h2>

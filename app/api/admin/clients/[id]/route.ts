@@ -170,7 +170,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!before) return jsonError("No encontramos ese cliente en la empresa activa.", 404);
 
   const body = await readJson(request);
-  const parsed = parseClientFields(body);
+  const parsed = parseClientFields(body, before.city);
   if (!parsed.ok) return jsonError(parsed.error, 400);
   if (parsed.data.city !== undefined && parsed.data.city !== before.city && parsed.data.department === undefined) parsed.data.department = null;
   let fiscal;

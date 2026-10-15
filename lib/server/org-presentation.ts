@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { adjustBrandColor, parseAppearance, readAppearance, type Appearance, type CoverKind } from "@/lib/appearance";
-import { parseOrgProfile, readOrgProfile, type OrgProfile } from "@/lib/org-profile";
+import { parseOrgProfileUpdate, readOrgProfile, type OrgProfile } from "@/lib/org-profile";
 import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
 import { auditChanges, recordAudit } from "./audit";
 import { db } from "./db";
@@ -68,11 +68,11 @@ export async function saveOrgProfile(context: AdminContext, body: unknown): Prom
   if (!record) return jsonError("El perfil debe ser un objeto JSON.", 400);
   const profileBody = "profile" in record ? record.profile : record;
   if (!isJsonObject(profileBody)) return jsonError("El perfil debe ser un objeto JSON.", 400);
-  const parsed = parseOrgProfile(profileBody);
-  if (!parsed.ok) return jsonError(parsed.error, 400);
-
   const row = await db.organization.findUnique({ where: { id: organizationId }, select: { profile: true } });
   const before = readOrgProfile(row?.profile);
+  const parsed = parseOrgProfileUpdate(profileBody, before.location.city);
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+
   const flat = (profile: OrgProfile) => ({
     contacto: JSON.stringify(profile.contact),
     ubicacion: JSON.stringify(profile.location),

@@ -1,3 +1,4 @@
+import { PREORDER_COPY } from "@/lib/storefront-ui";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CompanyInfo } from "@/components/catalog-public/CompanyInfo";
@@ -14,7 +15,7 @@ import { dayKeyOf } from "@/lib/server/notifications";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: { absolute: "Seguimiento de tu pedido" },
+  title: { absolute: "Seguimiento de tu preorden" },
   robots: { index: false, follow: false },
 };
 
@@ -32,14 +33,14 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   const copy = QUOTE_REQUEST_PUBLIC_COPY[isQuoteRequestStatus(order.status) ? order.status : "NEW"];
   const open = order.status === "NEW" || order.status === "REVIEWING";
   const proposed = order.status === "PROPOSED";
-  const whatsapp = preorderWhatsappUrl(order.organization.whatsappPhone, `Hola ${order.organization.name}! Consulto por mi pedido del catálogo.`);
+  const whatsapp = preorderWhatsappUrl(order.organization.whatsappPhone, `Hola ${order.organization.name}! Consulto por mi preorden del catálogo.`);
   return (
     <StoreChrome theme={order.organization.theme} appearance={order.organization.appearance}>
     <StoreHeader name={order.organization.name} slug={order.organization.slug} homeHref={`/tienda/${encodeURIComponent(order.organization.slug)}`} nav={[]} cart={null} />
     <main className="cp-container cp-main-pad cp-narrow">
       <header className="cp-header">
-        <p className="cp-eyebrow">{order.organization.name}{order.priceList === "WHOLESALE" ? " · Pedido mayorista" : ""}</p>
-        <h1 className="cp-h1">Seguimiento de tu pedido</h1>
+        <p className="cp-eyebrow">{order.organization.name}{order.priceList === "WHOLESALE" ? " · Preorden mayorista" : ""}</p>
+        <h1 className="cp-h1">Seguimiento de tu preorden</h1>
       </header>
       <section className="cp-card" aria-labelledby="estado">
         <h2 id="estado" className="cp-h2">
@@ -75,10 +76,11 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
             </div>
           ) : null}
           <div>
-            <dt>Subtotal estimado</dt>
-            <dd>{order.subtotal ? `Gs. ${gs.format(order.subtotal)} (referencia, sujeto a cotización)` : "A cotizar"}</dd>
+            <dt>Referencia de la preorden</dt>
+            <dd>{order.subtotal ? `Gs. ${gs.format(order.subtotal)} (sujeto a cotización)` : PREORDER_COPY.consult}</dd>
           </div>
         </dl>
+        <p className="cp-hint">{PREORDER_COPY.logistics} Los servicios sin importe informado no están incluidos en esta referencia.</p>
         <h3 className="cp-h3">{order.proposal ? (proposed ? "Propuesta de la empresa" : "Artículos del pedido") : "Artículos pedidos"}</h3>
         <ul className="cp-list">
           {order.items.map((item, index) => {

@@ -709,3 +709,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Clientes: presentación compartida con logo o iniciales, nombre comercial, responsable y tipo de cliente en las principales listas, fichas y selectores.
 - Clientes → Mensajes: biblioteca de plantillas, personalización, variables, modelos, vista previa y guardado por empresa. Cambiar de sección con una edición pendiente pide confirmación. Guardar no envía mensajes.
 - Menús, desplegables y selector de empresa comparten la superficie visual; el selector de empresa también admite navegación por teclado.
+
+## v2.1.134 — 2026-10-15
+
+- Apariencia: módulos de la tienda ordenables y visibles por empresa, independientes de la plantilla. «Poner primero» permite subir Categorías u otra sección en un paso. La vista previa respeta esa organización.
+- Categorías: cada empresa elige Tarjetas o Desplegables. Los desplegables muestran hasta cuatro productos y conservan el enlace a la página completa, las fechas y el mismo carrito.
+- Preorden: el resumen distingue productos estimados y flete pendiente de cotizar; enviar no confirma alquiler ni reserva productos o fechas.
+- Fotos de identidad: editor compartido para perfil y logos de empresa/cliente, con zoom, posición, teclado, arrastre y vista previa antes de aplicar. También permite reabrir la imagen guardada. Las fotos de productos conservan su encuadre completo.
+- Ciudad: empresa, clientes, eventos y revisión de cargas usan el selector compartido del catálogo del sistema. Los valores históricos se conservan cuando se editan otros datos.
+- Auditoría de los pedidos del día registrada en documentación e issues, distinguiendo entregas, trabajo en curso y hallazgos históricos sin reproducir.

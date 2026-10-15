@@ -1,5 +1,6 @@
 "use client";
 
+import { PREORDER_COPY } from "@/lib/storefront-ui";
 import { useState, type FormEvent } from "react";
 import { PRICE_COMMENT_MAX, parsePriceRequest } from "@/lib/price-request";
 
@@ -37,7 +38,7 @@ export function PriceRequestForm({ token, total }: { token: string; total: numbe
         window.location.reload();
         return;
       }
-      setError(response.status === 429 ? "Hiciste muchos intentos seguidos. Esperá unos minutos y volvé a probar." : payload.error ?? "No pudimos enviar tu pedido. Probá de nuevo.");
+      setError(response.status === 429 ? "Hiciste muchos intentos seguidos. Esperá unos minutos y volvé a probar." : payload.error ?? "No pudimos enviar tu solicitud. Probá de nuevo.");
     } catch (failure) {
       console.error("pedido: no se pudo enviar el pedido de precio", failure);
       setError("No pudimos conectar. Revisá tu conexión y probá de nuevo.");
@@ -54,18 +55,19 @@ export function PriceRequestForm({ token, total }: { token: string; total: numbe
   }
   return (
     <form className="cp-offer" onSubmit={submit} data-testid="price-request-form" aria-label="Pedir un mejor precio">
+      <p className="cp-hint">{PREORDER_COPY.notice} {PREORDER_COPY.logistics}</p>
       <label className="cp-field">
         <span>¿Por qué lo pedís?</span>
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={PRICE_COMMENT_MAX} rows={3} required placeholder="Ej.: somos clientes frecuentes, es para un evento grande." />
       </label>
       <label className="cp-field">
-        <span>Monto que querías pagar en total, en Gs. (opcional)</span>
+        <span>Monto que proponés, en Gs. (opcional)</span>
         <input inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.\s]/g, "").slice(0, 16))} placeholder="Ej.: 1.200.000" />
       </label>
       <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
       {error ? <p className="cp-error" role="alert">{error}</p> : null}
       <div className="cp-row">
-        <button type="submit" className="cp-btn cp-btn--primary" disabled={busy}>{busy ? "Enviando…" : "Enviar pedido de precio"}</button>
+        <button type="submit" className="cp-btn cp-btn--primary" disabled={busy}>{busy ? "Enviando…" : "Enviar solicitud de precio"}</button>
         <button type="button" className="cp-btn" disabled={busy} onClick={() => setOpen(false)}>Cancelar</button>
       </div>
     </form>

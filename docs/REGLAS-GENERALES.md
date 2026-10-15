@@ -22,7 +22,8 @@ Nunca un `<input>` suelto. Un objeto canónico por tipo:
 | Contraseña | PasswordInput | mostrar/ocultar obligatorio |
 | Archivo/imagen | AttachmentInput | JPG/PNG/WebP/PDF ≤5 MiB, validación por MIME + magic bytes |
 | Búsqueda | SearchField | lupa + limpiar; el debounce vive en la pantalla |
-| Catálogo (banco, producto, ciudad, RUC) | Combobox/autocomplete | texto libre permitido; sugiere y completa campos derivados; extractores aplican solo al confirmar |
+| Catálogo (banco, producto, RUC) | Combobox/autocomplete | texto libre permitido; sugiere y completa campos derivados; extractores aplican solo al confirmar |
+| Ciudad | CityField | catálogo cerrado del sistema; elegir completa departamento. Una ciudad histórica se conserva hasta elegir otra; no se convierte al editar otros datos |
 | Catálogo cerrado | Select | estados, roles, moneda; nunca texto libre |
 | Booleano | Switch | interruptor estilo iPhone; `onChange(event.target.checked)` |
 | Selección múltiple | checkbox (accent) | listas con varias filas |
