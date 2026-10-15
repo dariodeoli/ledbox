@@ -198,4 +198,25 @@ test("demo completa: un ejemplo de cada estado, coherente con el motor de reserv
       }
     }
   });
+  await t.test("firmas: el documento de cada firma SIGNED/VALIDATED carga sin error y su huella es la real", async () => {
+    const portal = await import("../lib/server/signature/portal");
+    const document = await import("../lib/server/signature/document");
+    const rows = await db.signatureRequest.findMany({ where: { ...org, status: { in: ["SIGNED", "VALIDATED"] } }, include: portal.requestInclude });
+    assert.ok(rows.length >= 2, "faltan firmas SIGNED y VALIDATED");
+    assert.deepEqual(new Set(rows.map((row) => row.status)), new Set(["SIGNED", "VALIDATED"]));
+    for (const row of rows) {
+      // Las mismas funciones del portal y de document.ts, sin atrapar errores.
+      const snapshot = document.verifiedSignatureSnapshot(row);
+      assert.ok(snapshot, `${row.publicCode}: debería ser un documento v2`);
+      const fromPortal = portal.signatureBudgetDocument(row);
+      assert.deepEqual(fromPortal, snapshot);
+      const view = await portal.loadSignaturePortal(row.publicCode);
+      assert.ok(view, `${row.publicCode}: el portal no cargó la solicitud`);
+      const hash = document.budgetDocumentHash(document.budgetDocumentPayload(snapshot));
+      assert.equal(row.documentHash, hash, `${row.publicCode}: la huella guardada no es la del documento`);
+      const live = await db.budget.findFirstOrThrow({ where: { id: row.budgetId, organizationId: row.organizationId }, select: document.signatureBudgetSelect });
+      const liveDoc = document.signatureDocument({ source: "live", version: document.SNAPSHOT_DOCUMENT_VERSION, budget: live, title: row.title, organizationName: row.organization.name });
+      assert.equal(document.budgetDocumentHash(document.budgetDocumentPayload(liveDoc)), hash, `${row.publicCode}: el presupuesto sembrado no coincide con la huella`);
+    }
+  });
 });

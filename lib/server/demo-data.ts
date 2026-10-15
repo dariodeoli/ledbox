@@ -8,7 +8,8 @@ import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { statementRowFingerprint } from "@/lib/bank-statement";
 import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
 import { catalogTokenHash } from "./catalog-access";
-import { buildDemoCompletion, buildDemoSignatures } from "./demo-data-completa";
+import { buildDemoCompletion, buildDemoSignatures, SIGNATURE_BUDGET_IDS } from "./demo-data-completa";
+import { budgetDocumentHash, budgetDocumentPayload, signatureBudgetSelect, signatureDocument, SNAPSHOT_DOCUMENT_VERSION } from "./signature/document";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -1971,15 +1972,12 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
 
   budgetSeeds.push(...completion.budgetSeeds);
   const budgetClientOf = new Map(budgetSeeds.map((budget) => [budget.id, budget.event?.clientId ?? budget.clientId ?? ""]));
-  const signatures = buildDemoSignatures({
-    organizationId,
-    base,
-    now,
-    recipientOf: (budgetId) => {
-      const client = CLIENT_BY_ID.get(budgetClientOf.get(budgetId) ?? "");
-      return { name: client?.name ?? "Cliente", email: client ? contactEmailOf(client) : "cliente@ledbox.demo" };
-    },
-  });
+  // Las firmas se arman dentro de la transacción, con el presupuesto ya insertado:
+  // sus huellas salen del documento real (mismas funciones que la creación real).
+  const demoSignatureRecipient = (budgetId: string) => {
+    const client = CLIENT_BY_ID.get(budgetClientOf.get(budgetId) ?? "");
+    return { name: client?.name ?? "Cliente", email: client ? contactEmailOf(client) : "cliente@ledbox.demo" };
+  };
   const budgetTotals = new Map<string, number>();
   const budgetsData: Prisma.BudgetUncheckedCreateInput[] = [];
   const budgetItemsData: Prisma.BudgetItemUncheckedCreateInput[] = [];
@@ -2044,9 +2042,11 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
           }
         : {}),
     });
-    for (const item of budget.items) {
+    // Posición explícita: sin ella el orden de las líneas queda librado a Postgres y la huella de la firma no es estable.
+    for (const [position, item] of budget.items.entries()) {
       budgetItemsData.push({
         id: item.id,
+        sortOrder: position,
         budgetId: budget.id,
         name: item.name,
         quantity: item.quantity,
@@ -3489,6 +3489,22 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.quoteRequest.createMany({ data: quotesData });
       await tx.budget.createMany({ data: budgetsData });
       await tx.budgetItem.createMany({ data: budgetItemsData });
+      const organizationRow = await tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true } });
+      const signatureBudgets = await tx.budget.findMany({ where: { organizationId, id: { in: SIGNATURE_BUDGET_IDS } }, select: signatureBudgetSelect });
+      const signatureBudgetById = new Map(signatureBudgets.map((budget) => [budget.id, budget]));
+      const signatures = buildDemoSignatures({
+        organizationId,
+        base,
+        now,
+        recipientOf: demoSignatureRecipient,
+        // Igual que la creación real: el título del documento es el de la solicitud.
+        documentOf: (budgetId, title) => {
+          const budget = signatureBudgetById.get(budgetId);
+          if (!budget) throw new Error(`Falta el presupuesto ${budgetId} para firmar la demo.`);
+          const snapshot = budgetDocumentPayload(signatureDocument({ source: "live", version: SNAPSHOT_DOCUMENT_VERSION, budget, title, organizationName: organizationRow.name }));
+          return { snapshot, hash: budgetDocumentHash(snapshot) };
+        },
+      });
       await tx.signatureRequest.createMany({ data: signatures.signatureRequests });
       await tx.signatureEvent.createMany({ data: signatures.signatureEvents });
       await tx.signatureEvidence.createMany({ data: signatures.signatureEvidence });
