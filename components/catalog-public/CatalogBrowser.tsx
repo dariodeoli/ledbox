@@ -346,6 +346,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   // Vista rápida: popup con la ficha. La URL lleva `?p=<id>` (se puede compartir), «atrás» lo cierra y el catálogo
   // de atrás no se mueve (ni el scroll ni el carrito).
   const pushedQuick = useRef(false);
+  const quickDatesBefore = useRef<string | null>(null);
   const quickItem = quickId ? items.find((entry) => entry.id === quickId) ?? null : null;
   const quickUrl = (id: string | null) => {
     const url = new URL(window.location.href);
@@ -354,6 +355,8 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     return `${url.pathname}${url.search}${url.hash}`;
   };
   const openQuick = useCallback((id: string) => {
+    const params = new URLSearchParams(window.location.search);
+    quickDatesBefore.current = JSON.stringify([params.get("desde"), params.get("hasta")]);
     try {
       window.history.pushState(window.history.state, "", quickUrl(id));
       pushedQuick.current = true;
@@ -381,7 +384,11 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     setQuickId(id);
   }, []);
   const closeQuick = useCallback(() => {
-    if (pushedQuick.current) { window.history.back(); return; }
+    const params = new URLSearchParams(window.location.search);
+    const currentDates = JSON.stringify([params.get("desde"), params.get("hasta")]);
+    // Si cambió el período dentro del popup, cerrar conserva esas fechas en vez de deshacerlas con «atrás».
+    if (pushedQuick.current && currentDates === quickDatesBefore.current) { window.history.back(); return; }
+    pushedQuick.current = false;
     try { window.history.replaceState(window.history.state, "", quickUrl(null)); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección al cerrar la vista rápida", failure); }
     setQuickId(null);
   }, []);

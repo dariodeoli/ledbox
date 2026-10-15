@@ -62,3 +62,11 @@ test("el resumen persistente diferencia productos y unidades, con importe y conf
   assert.ok(!browser.includes("contactAsked"), "agregar no abre un formulario automático");
   assert.match(browser, /onSaveCart=\{!saved && cartScope === "public"/);
 });
+
+
+test("cerrar la vista rápida conserva fechas elegidas dentro del popup", () => {
+  const browser = read("components/catalog-public/CatalogBrowser.tsx");
+  assert.match(browser, /quickDatesBefore.current = JSON.stringify\(\[params.get\("desde"\), params.get\("hasta"\)\]\)/);
+  assert.match(browser, /pushedQuick.current && currentDates === quickDatesBefore.current/);
+  assert.match(browser, /replaceState\(window.history.state, "", quickUrl\(null\)\)/);
+});
