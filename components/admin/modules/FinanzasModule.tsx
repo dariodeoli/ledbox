@@ -2391,9 +2391,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           <AdminKpis label="Indicadores de finanzas">
             <AdminKpi
               state={kpiState(finance)}
-              label="Cobrado a clientes" icon="finance"
+              label="Ingresos de clientes" icon="finance"
               value={formatMoney(totals.collected)}
-              note={`${formatNumber(totals.collectedCount)} cobros`}
+              note={`${formatNumber(totals.collectedCount)} cobros · incluye garantías retenidas y cargos extra`}
               tone="ok"
             />
             <AdminKpi
