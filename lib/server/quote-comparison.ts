@@ -6,7 +6,7 @@ import { quotePortalAvailable } from "../quote-sharing";
 import { live } from "@/lib/server/trash-filter";
 
 export class QuoteComparisonError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 
 /** Lock order is quote, then group. Creation locks all candidate quotes in id order.
@@ -16,6 +16,7 @@ export async function guardQuoteApproval(tx: Prisma.TransactionClient, budgetId:
   await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
   const budget = await tx.budget.findUnique({ where: { id: budgetId } });
   if (!budget || budget.organizationId !== organizationId || (token !== undefined && budget.publicToken !== token)) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
+  if (budget.status === "LOST" || budget.status === "CANCELLED") throw new QuoteComparisonError(409, "El presupuesto está cerrado. Reabrilo explícitamente antes de aprobar.");
   const items = await tx.budgetItem.findMany({ where: { budgetId }, select: { excluded: true } });
   const pending = await tx.budgetChangeRequest.count({ where: { budgetId, kind: "items", status: "pending" } });
   const installments = Array.isArray(budget.installmentsJson) ? budget.installmentsJson : [];

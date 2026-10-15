@@ -1006,9 +1006,16 @@ export function PresupuestosModule() {
 
   const moveBudget = useCallback(async (budget: AdminBudgetRow, nextStatus: string) => {
     setBoardError("");
-    const result = await adminSend("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
-    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
-  }, []);
+    const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
+    if (!result.ok) return { ok: false as const, error: result.error };
+    if (nextStatus === "APPROVED" && result.data.reservations?.outcomes.length) {
+      setReservationReport({ title: budget.title, reservation: result.data.reservations });
+    }
+    // El movimiento puede crear evento y pagos: releer el objeto completo evita
+    // dejar «Crear evento» o acciones de borrador sobre la tarjeta aprobada.
+    budgetsResource.reload();
+    return { ok: true as const };
+  }, [budgetsResource.reload]);
   const board = useAdminBoardMove({ rows: boardRows, move: moveBudget, onError: setBoardError });
 
   /** Siguiente acción lógica del presupuesto según su etapa y los permisos del rol. */

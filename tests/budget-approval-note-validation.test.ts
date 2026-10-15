@@ -12,7 +12,7 @@ test("#163 revision requires a non-whitespace note while approval keeps its opti
 });
 
 test("#163 UI length boundary matches API trimming without truncating notes", () => {
-  const api = readFileSync(new URL("../app/api/admin/budgets/approval/route.ts", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../lib/server/budget-approval.ts", import.meta.url), "utf8");
   assert.match(api, new RegExp(`const MAX_NOTE = ${BUDGET_APPROVAL_NOTE_MAX};`));
   for (const decision of ["approve", "request_revision"] as const) {
     assert.equal(budgetApprovalNoteError(decision, "x".repeat(1000)), null);
