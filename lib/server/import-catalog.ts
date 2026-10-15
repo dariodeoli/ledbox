@@ -11,18 +11,23 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db, dbWithDeleted } from "@/lib/server/db";
-import { recordAudit, type AuditContext } from "@/lib/server/audit";
-import { createInventoryUnits, isUniqueConstraintError } from "@/lib/server/inventory-units";
+import { auditChanges, recordAudit, type AuditContext } from "@/lib/server/audit";
+import { createInventoryUnits, isUniqueConstraintError, syncInventoryQuantity } from "@/lib/server/inventory-units";
 import { saveCombo } from "@/lib/server/inventory-combos";
 import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/inventory-categories";
 import { findWarehouseByCode } from "@/lib/server/inventory-warehouses";
-import { lockInventoryItems } from "@/lib/server/inventory-availability";
+import { assignmentCountsAt, assignmentRange, committedAssignmentWhere, EVENT_RANGE_SELECT, lockInventoryItems } from "@/lib/server/inventory-availability";
 import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
 import { prepareCategoryPhoto, setCategoryImage } from "@/lib/server/category-image";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
+  ADJUSTABLE_STATES,
   codesToLookUp,
   planCatalog,
+  planUnitStates,
+  stateTargetsOf,
+  type AdjustableState,
+  type UnitStateCounts,
   type CatalogCategory,
   type CatalogPlan,
   type CatalogProduct,
@@ -36,6 +41,84 @@ const BLOCK_SIZE = 25;
 
 /** `cobro` del catálogo → `InventoryItem.billingUnit` (docs/ALQUILERES-OPERACION.md P1-1). */
 const billingUnitOf = (cobro: "evento" | "dia") => (cobro === "evento" ? ("EVENT" as const) : ("DAILY" as const));
+
+/**
+ * Cantidad comprometida por producto: asignaciones que comprometen stock (mismas reglas que la
+ * disponibilidad), sin devolver y vigentes o futuras. Las unidades no se fijan a un evento, así que
+ * esta cantidad es la reserva que no se puede sacar de AVAILABLE.
+ */
+async function committedQuantities(client: Pick<typeof db, "eventInventory">, organizationId: string, inventoryIds: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (inventoryIds.length === 0) return result;
+  const now = new Date();
+  const rows = await client.eventInventory.findMany({
+    where: { inventoryId: { in: inventoryIds }, ...committedAssignmentWhere(organizationId, now) },
+    select: { inventoryId: true, quantity: true, startsAt: true, endsAt: true, checkedOut: true, checkedIn: true, checkedInAt: true, releasedAt: true, holdExpiresAt: true, event: { select: EVENT_RANGE_SELECT } },
+  });
+  for (const row of rows) {
+    if (row.checkedIn || row.checkedInAt || !assignmentCountsAt(row, now)) continue;
+    const { end } = assignmentRange(row);
+    const outstanding = row.checkedOut;
+    if (!outstanding && end && end.getTime() < now.getTime()) continue;
+    result.set(row.inventoryId, (result.get(row.inventoryId) ?? 0) + row.quantity);
+  }
+  return result;
+}
+
+const INCIDENT_KIND_OF = { MAINTENANCE: "REPAIR", DAMAGED: "DAMAGE", LOST: "MISSING" } as const;
+const STATE_LABEL = { AVAILABLE: "disponible", MAINTENANCE: "mantenimiento", DAMAGED: "dañada", LOST: "perdida" } as const;
+const IMPORT_NOTE = "Importación";
+
+/**
+ * Lleva las unidades al estado del archivo dentro de la transacción del producto (con el candado del
+ * ítem ya tomado). Mismo rastro que el cambio manual de la ficha: auditoría de la unidad y cantidad
+ * sincronizada; además un incidente abierto («Importación») al salir de servicio, que se resuelve
+ * cuando la unidad vuelve a estar disponible. Nunca toca unidades RETIRED.
+ */
+async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: string, itemName: string, targets: ReturnType<typeof stateTargetsOf>) {
+  const units = await tx.inventoryUnit.findMany({ where: { organizationId: context.organizationId, inventoryId, status: { in: ["AVAILABLE", ...ADJUSTABLE_STATES] } }, orderBy: { code: "asc" }, select: { id: true, code: true, status: true } });
+  const counts: UnitStateCounts = { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+  for (const unit of units) counts[unit.status as keyof UnitStateCounts] += 1;
+  const committed = (await committedQuantities(tx, context.organizationId, [inventoryId])).get(inventoryId) ?? 0;
+  const plan = planUnitStates({ counts, nuevas: 0, comprometidas: committed, targets });
+  const change = async (unit: { id: string; code: string; status: string }, to: "AVAILABLE" | AdjustableState) => {
+    const before = { status: unit.status };
+    await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to } });
+    if (to === "AVAILABLE") {
+      await tx.inventoryIncident.updateMany({
+        where: { organizationId: context.organizationId, unitId: unit.id, status: { in: ["OPEN", "IN_REPAIR"] } },
+        data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: context.user.id },
+      });
+    } else {
+      await tx.inventoryIncident.create({
+        data: { id: randomUUID(), organizationId: context.organizationId, inventoryId, unitId: unit.id, kind: INCIDENT_KIND_OF[to], quantity: 1, status: "OPEN", notes: IMPORT_NOTE, openedById: context.user.id },
+      });
+    }
+    const changes = auditChanges(before, { status: to }, ["status"]);
+    if (changes) {
+      await recordAudit(
+        { context, action: "update", entity: "InventoryUnit", entityId: unit.id, summary: `Importación: la unidad «${unit.code}» de «${itemName}» pasó a ${STATE_LABEL[to]}`, detail: { changes } },
+        tx,
+      );
+    }
+  };
+  // Primero vuelven a disponible, después salen de servicio (las últimas por código).
+  const returned = new Set<string>();
+  for (const state of ADJUSTABLE_STATES) {
+    for (const unit of units.filter((row) => row.status === state).slice(0, plan.aDisponible[state])) {
+      await change(unit, "AVAILABLE");
+      returned.add(unit.id);
+    }
+  }
+  const pool = units.filter((row) => row.status === "AVAILABLE" || returned.has(row.id)).reverse();
+  for (const state of ADJUSTABLE_STATES) {
+    for (let i = 0; i < plan.aEstado[state]; i += 1) {
+      const unit = pool.shift();
+      if (unit) await change(unit, state);
+    }
+  }
+  await syncInventoryQuantity(tx, inventoryId);
+}
 
 /** Lo que hay en la empresa para esos códigos (incluye la papelera). */
 export async function loadExisting(organizationId: string, codes: string[]): Promise<Map<string, ExistingItem>> {
@@ -54,6 +137,16 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
       })
     : [];
   const historyById = new Map(history.map((row) => [row.inventoryId, row._count._all]));
+  const ids = rows.map((row) => row.id);
+  const byStatus = ids.length ? await dbWithDeleted.inventoryUnit.groupBy({ by: ["inventoryId", "status"], where: { organizationId, inventoryId: { in: ids } }, _count: { _all: true } }) : [];
+  const statesById = new Map<string, UnitStateCounts>();
+  for (const row of byStatus) {
+    if (row.status === "RETIRED") continue;
+    const counts = statesById.get(row.inventoryId) ?? { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+    counts[row.status] = row._count._all;
+    statesById.set(row.inventoryId, counts);
+  }
+  const committedById = await committedQuantities(dbWithDeleted, organizationId, ids);
   return new Map(
     rows.flatMap((row) =>
       row.sku
@@ -69,6 +162,8 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
                 incompleto: row.comboIncomplete,
                 reservas: row._count.assignments,
                 unidadesConHistorial: historyById.get(row.id) ?? 0,
+                estados: statesById.get(row.id) ?? { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 },
+                comprometidas: committedById.get(row.id) ?? 0,
               } satisfies ExistingItem,
             ] as const,
           ]
@@ -136,7 +231,8 @@ const specData = (product: Parameters<typeof catalogSpecs>[0]) => {
 };
 
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
-async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
+async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
+  const { organizationId } = context;
   const { product } = planned;
   // Categoría y subcategoría: se crean o se asocian con el helper único (sin duplicar padre ni hija).
   const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
@@ -176,6 +272,8 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
       });
     }
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
+    const targets = stateTargetsOf(product);
+    if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, planned.existingId, product.nombre, targets);
     return { id: planned.existingId, created: false, photo: photoChanged };
   }
   const id = randomUUID();
@@ -201,6 +299,8 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     ...(product.ubicacion ? { location: product.ubicacion } : {}),
   });
   if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
+  const targets = stateTargetsOf(product);
+  if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, id, product.nombre, targets);
   return { id, created: true, photo: Boolean(photo) };
 }
 
@@ -303,7 +403,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       const outcomes = await db.$transaction(
         async (tx) => {
           const list: Array<[PlannedProduct, Outcome]> = [];
-          for (const item of block) list.push([item, await writeUnitItem(tx, organizationId, item, blockPhotos.get(item.product.codigo) ?? null)]);
+          for (const item of block) list.push([item, await writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null)]);
           return list;
         },
         { timeout: 60_000, maxWait: 10_000 },
@@ -313,7 +413,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       console.error("[import-catalogo] Bloque revertido, se reintenta producto por producto:", blockError instanceof Error ? blockError.message : blockError);
       for (const item of block) {
         try {
-          const outcome = await db.$transaction((tx) => writeUnitItem(tx, organizationId, item, blockPhotos.get(item.product.codigo) ?? null), { timeout: 30_000 });
+          const outcome = await db.$transaction((tx) => writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null), { timeout: 30_000 });
           note(outcome, item);
         } catch (error) {
           const message = isUniqueConstraintError(error) ? `Ya existe un producto con el código ${item.product.codigo}.` : error instanceof Error ? error.message : "No se pudo importar.";

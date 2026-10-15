@@ -17,7 +17,7 @@ import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } fr
 type Tarjeta = { clave: string; etiqueta: string; valor: number };
 type Problema = { nivel: "error" | "aviso"; tipo: string; codigo: string | null; mensaje: string; motivo?: string };
 type Fila = { codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
-type Preview = { catalogo: unknown; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
+type Preview = { catalogo: unknown; estados?: string | null; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
 type Resultado = {
   lote: string;
   creados: Array<{ id: string; etiqueta: string }>;
@@ -234,6 +234,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               </div>
             ))}
           </div>
+          {preview.estados ? <p className="admin-field-hint">{preview.estados}</p> : null}
           {errores.length > 0 ? (
             <section aria-label="Errores">
               <h3 className="admin-import-h">Errores ({errores.length}): esos productos no se importan</h3>

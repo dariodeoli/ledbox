@@ -47,7 +47,7 @@ test("parser: catálogo válido, juegos y dudas como aviso", () => {
   assert.equal(result.value.doc.productos.length, 2);
   assert.equal(result.value.doc.productos[0].cobro, "dia", "sin «cobro» rige por día (lo normal en alquileres)");
   const preview = plan(base);
-  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, incompletos: 0, convertidos: 0, fotos: 2, fotosCategoria: 0, errores: 0, avisos: 1 });
+  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, incompletos: 0, convertidos: 0, estadosMantenimiento: 0, estadosDanadas: 0, estadosPerdidas: 0, estadosDisponibles: 0, fotos: 2, fotosCategoria: 0, errores: 0, avisos: 1 });
   assert.ok(preview.problems.some((p) => p.tipo === "duda" && p.mensaje.includes("poco legible")));
 });
 
@@ -191,7 +191,7 @@ test("fotos: se redimensionan a 1600 px y se guardan como WebP ≤ 2 MB", async 
 
 test("plantilla: .xlsx y .csv traen las columnas exactas, un ejemplo y las instrucciones", () => {
   const headers = importHeaders(productos);
-  assert.deepEqual(headers, ["codigo", "nombre", "categoria", "subcategoria", "tipo", "precio", "cobro", "precios_dias", "cantidad", "deposito", "ubicacion", "medidas", "capacidad", "descripcion", "componentes", "foto", "pagina", "dudas"]);
+  assert.deepEqual(headers, ["codigo", "nombre", "categoria", "subcategoria", "tipo", "precio", "cobro", "precios_dias", "cantidad", "en_mantenimiento", "danadas", "perdidas", "deposito", "ubicacion", "medidas", "capacidad", "descripcion", "componentes", "foto", "pagina", "dudas"]);
   const xlsx = templateXlsx(productos);
   const rows = readXlsx(xlsx, "Productos");
   assert.deepEqual(rows[0], headers);

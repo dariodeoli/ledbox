@@ -186,6 +186,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
+      estados:
+        plan.summary.estadosMantenimiento + plan.summary.estadosDanadas + plan.summary.estadosPerdidas + plan.summary.estadosDisponibles > 0
+          ? `Estados de unidades: ${plan.summary.estadosMantenimiento} a mantenimiento, ${plan.summary.estadosDanadas} dañadas, ${plan.summary.estadosPerdidas} perdidas, ${plan.summary.estadosDisponibles} vuelven a disponible.`
+          : null,
       // Tarjetas y filas genéricas: el panel de importación no conoce el módulo.
       tarjetas: [
         { clave: "crear", etiqueta: "Se crean", valor: plan.summary.crear },
