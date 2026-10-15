@@ -326,7 +326,8 @@ export const preorderSchema = z.object({
     .max(40),
   /** Zona de flete elegida (opcional) o «a coordinar»; con zona el pedido lleva el flete estimado. */
   deliveryZoneId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
-  deliveryCoordinate: z.coerce.boolean().optional(),
+  // Estricto: `z.coerce.boolean()` convertía el texto "false" en true. Solo booleano o "true"/"false" explícitos.
+  deliveryCoordinate: z.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")]).optional(),
   idempotencyKey: z.string().trim().max(200).optional(),
   honeypot,
   website: honeypot,
