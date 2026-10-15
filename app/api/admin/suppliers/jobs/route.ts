@@ -193,6 +193,9 @@ export async function PATCH(request: Request) {
   if (typeof body.id !== "string") return jsonError("Job id is required.", 400);
 
   return withIdempotency({ request, organizationId, scope: "suppliers-jobs:PATCH", body }, async (tx) => {
+    // Compartir el candado de tesorería antes de leer evita validar un estado
+    // o un saldo anterior a otro pago, edición o cancelación concurrente.
+    await tx.$queryRaw`SELECT id FROM "SupplierJob" WHERE id = ${body.id as string} AND "organizationId" = ${organizationId} FOR UPDATE`;
     const job = await tx.supplierJob.findFirst({ where: { id: body.id as string, organizationId }, include: jobInclude });
     if (!job) return jsonError("Job not found.", 404);
     const closed = !isSupplierJobOpen(job.status);

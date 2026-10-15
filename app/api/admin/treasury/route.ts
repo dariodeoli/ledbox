@@ -363,6 +363,10 @@ export async function POST(request: Request) {
       // ── Pago o anticipo a un trabajo de proveedor ─────────────────────────────
       const jobId = typeof body.jobId === "string" ? body.jobId : "";
       if (!jobId) return jsonError("Elegí el trabajo del proveedor.", 400);
+      // El saldo y el estado se leen después de serializar pagos y ediciones
+      // del mismo trabajo. Claves distintas son operaciones distintas: la
+      // idempotencia sola no impide gastar dos veces el mismo saldo.
+      await tx.$queryRaw`SELECT id FROM "SupplierJob" WHERE id = ${jobId} AND "organizationId" = ${organizationId} FOR UPDATE`;
       const job = await tx.supplierJob.findFirst({
         where: { id: jobId, organizationId },
         include: { supplier: { select: { id: true, name: true } } },
