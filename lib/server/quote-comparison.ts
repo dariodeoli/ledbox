@@ -55,10 +55,13 @@ export async function findPublicComparison(token: string) {
  * Recheck approval after waiting: an edit that loses the race must not alter
  * the terms that have just been signed. Internal cost-only edits stay allowed.
  */
-export async function withQuoteCommercialEdit<T>(budgetId: string, organizationId: string, commercial: boolean, write: (tx: Prisma.TransactionClient) => Promise<T>, options?: { beforeBudgetLock?: (tx: Prisma.TransactionClient) => Promise<unknown> }): Promise<T> {
+export async function withQuoteCommercialEdit<T>(budgetId: string, organizationId: string, commercial: boolean, write: (tx: Prisma.TransactionClient) => Promise<T>, options?: { beforeBudgetLock?: (tx: Prisma.TransactionClient) => Promise<unknown>; budgetLockMode?: "no-key-update" }): Promise<T> {
   return db.$transaction(async (tx) => {
     await options?.beforeBudgetLock?.(tx);
-    await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
+    // Las constancias no cambian claves: NO KEY UPDATE permite las referencias
+    // de cobros mientras serializa revocación/edición antes de ExpectedPayment.
+    if (options?.budgetLockMode === "no-key-update") await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR NO KEY UPDATE`;
+    else await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
     const budget = await tx.budget.findUnique({ where: { id: budgetId } });
     if (!budget || budget.organizationId !== organizationId) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
     if (commercial && (budget.status === "LOST" || budget.status === "CANCELLED")) throw new QuoteComparisonError(409, "El presupuesto está cerrado: sus condiciones no se pueden cambiar.");
