@@ -1,5 +1,5 @@
 import { db } from "@/lib/server/db";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { auditRenames } from "@/lib/server/inventory-families-audit";
@@ -27,7 +27,8 @@ export async function POST(request: Request) {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("Los datos deben ser un objeto JSON.", 400);
   const result = await db.$transaction(
     async (tx) => {
       const created = await createFamily(tx, organizationId, {
