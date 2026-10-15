@@ -700,3 +700,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Una solicitud de cambios del portal no puede deshacer una aprobación simultánea. Una constancia tampoco hace retroceder un cobro ya confirmado.
 - Por cobrar incorpora páginas y filtros en servidor; los importes corresponden a todos los resultados, aunque el cobro sea antiguo. El CSV identifica la página exportada y suma solamente lo cobrado.
 - Los formularios inválidos se rechazan antes de modificar el perfil, los datos bancarios, usuarios e inventario. Finanzas, tesorería, trabajos y gastos validan el límite real de cada importe almacenado sin dejar registros parciales.
+
+## v2.1.133 — 2026-10-15
+
+- Presupuestos: acciones frecuentes en una fila de iconos; el detalle reúne pagos, garantías, inventario e historial, sin repetir el siguiente paso.
+- Al preparar el correo del presupuesto podés guardar inicio y fin del evento antes de generar la vista previa. Guardar fechas no aprueba el presupuesto ni reserva equipos.
+- Eventos: formulario alineado, ciudad del catálogo y recintos reutilizables con dirección, referencia y contacto. Escribir un recinto nuevo alcanza para guardarlo con el evento.
+- Clientes: presentación compartida con logo o iniciales, nombre comercial, responsable y tipo de cliente en las principales listas, fichas y selectores.
+- Clientes → Mensajes: biblioteca de plantillas, personalización, variables, modelos, vista previa y guardado por empresa. Cambiar de sección con una edición pendiente pide confirmación. Guardar no envía mensajes.
+- Menús, desplegables y selector de empresa comparten la superficie visual; el selector de empresa también admite navegación por teclado.
