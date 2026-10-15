@@ -663,6 +663,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 ## v2.1.130 — 2026-10-15
 
+- Boutique adopta el estilo minimalista elegido: blanco y negro, tipografía moderna y pie claro. Fecha, días e invitados usan campos cortos (160/100/80 px en computadora), sin estirarse por toda la pantalla.
+
 - Nuevo diseño completo de la tienda: encabezado con identidad de la empresa, inicio ordenado, catálogo de cuatro columnas en computadora y dos en celular, filtros discretos y pie en tres columnas.
 
 - Cada categoría de la tienda tiene su propia página y conserva las fechas elegidas y el pedido al navegar.
