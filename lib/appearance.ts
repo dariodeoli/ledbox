@@ -1,3 +1,4 @@
+import { DESIGN_TEMPLATES, TEMPLATE_TOKENS, isDesignTemplate, templateFontHref, templateVars } from "./storefront-templates";
 import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, normalizeHex, rgbToHex, type Rgb } from "./storefront-theme";
 
 /**
@@ -8,7 +9,7 @@ import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, norma
  * páginas públicas, el panel (vista previa en vivo) y los tests.
  */
 
-export const TEMPLATES = ["clasica", "minimalista", "elegante", "oscura", "editorial"] as const;
+export const TEMPLATES = ["clasica", "minimalista", "elegante", "oscura", "editorial", ...DESIGN_TEMPLATES] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 export const DEFAULT_TEMPLATE: TemplateId = "clasica";
 
@@ -18,6 +19,11 @@ export const TEMPLATE_META: Record<TemplateId, { label: string; description: str
   elegante: { label: "Elegante", description: "Títulos con serif, líneas finas y tarjetas sobrias." },
   oscura: { label: "Oscura", description: "Fondo oscuro siempre, con tarjetas elevadas." },
   editorial: { label: "Catálogo editorial", description: "Fondo crema, títulos serif con acento manuscrito, verde oliva y secciones grandes por categoría, como un catálogo impreso." },
+  tecnologica: { label: TEMPLATE_TOKENS.tecnologica.label, description: TEMPLATE_TOKENS.tecnologica.description },
+  boutique: { label: TEMPLATE_TOKENS.boutique.label, description: TEMPLATE_TOKENS.boutique.description },
+  noche: { label: TEMPLATE_TOKENS.noche.label, description: TEMPLATE_TOKENS.noche.description },
+  fresca: { label: TEMPLATE_TOKENS.fresca.label, description: TEMPLATE_TOKENS.fresca.description },
+  minimal: { label: TEMPLATE_TOKENS.minimal.label, description: TEMPLATE_TOKENS.minimal.description },
 };
 
 export function isTemplateId(value: unknown): value is TemplateId {
@@ -96,7 +102,7 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const next: Appearance = { ...current };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Clásica, Minimalista, Elegante, Oscura o Catálogo editorial." };
+    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Clásica, Minimalista, Elegante, Oscura, Catálogo editorial, Tecnológica, Boutique, Noche, Fresca o Minimal." };
     next.template = input.template;
   }
   if (input.font !== undefined) {
@@ -200,7 +206,15 @@ export type AppearanceView = {
   /** Variables CSS inline del contenedor. */
   vars: Record<string, string>;
   /** Atributos `data-*` del contenedor. */
-  attrs: { "data-cp-template": TemplateId; "data-cp-bg": "custom" | "default"; "data-cp-script": "on" | "off" };
+  attrs: {
+    "data-cp-template": TemplateId;
+    "data-cp-bg": "custom" | "default";
+    "data-cp-script": "on" | "off";
+    /** Mismo id que `data-cp-template`: engancha el CSS de las plantillas de diseño. */
+    "data-store-template": TemplateId;
+    /** Solo las plantillas de diseño fijan su esquema (claro u oscuro) sin importar el del sistema. */
+    "data-store-scheme"?: "light" | "dark";
+  };
 };
 
 /** Todo lo que necesita una superficie para vestirse con la apariencia. */
@@ -212,21 +226,32 @@ export function appearanceView(appearance: Appearance): AppearanceView {
   // Editorial: los títulos van siempre en serif (la elegida, si lo es; si no, Cormorant Garamond).
   const headFont = editorial && !SERIF_FONTS.includes(font.id) ? EDITORIAL_HEAD : font;
   if (editorial) vars["--cp-font-head"] = headFont.family;
+  const design = isDesignTemplate(appearance.template) ? appearance.template : null;
+  if (design) {
+    // Plantilla de diseño: sus tokens mandan; una tipografía elegida (≠ del sistema) reemplaza solo el cuerpo.
+    Object.assign(vars, templateVars(design));
+    if (font.google) vars["--cp-font-body"] = font.family;
+  }
   const script = editorial && appearance.script;
   if (script) vars["--cp-font-script"] = SCRIPT_FONT.family;
-  if (appearance.background && appearance.template !== "oscura") {
+  const ownBackground = appearance.template !== "oscura" && !design;
+  if (appearance.background && ownBackground) {
     vars["--cp-bg-custom"] = appearance.background;
     vars["--cp-text-custom"] = BACKGROUND_TEXT;
     vars["--cp-muted-custom"] = mutedOn(appearance.background);
   }
   return {
     template: appearance.template,
-    fontHref: googleHref([font.google, editorial ? headFont.google : null, script ? SCRIPT_FONT.google : null]),
+    fontHref: design
+      ? templateFontHref(design, font.google)
+      : googleHref([font.google, editorial ? headFont.google : null, script ? SCRIPT_FONT.google : null]),
     vars,
     attrs: {
       "data-cp-template": appearance.template,
-      "data-cp-bg": appearance.background && appearance.template !== "oscura" ? "custom" : "default",
+      "data-cp-bg": appearance.background && ownBackground ? "custom" : "default",
       "data-cp-script": script ? "on" : "off",
+      "data-store-template": appearance.template,
+      ...(design ? { "data-store-scheme": TEMPLATE_TOKENS[design].scheme } : {}),
     },
   };
 }

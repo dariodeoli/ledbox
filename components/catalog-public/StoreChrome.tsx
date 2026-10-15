@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { AppearanceView } from "@/lib/appearance";
 import { editorialTheme } from "@/lib/storefront-editorial";
+import { designTemplateTheme, isDesignTemplate } from "@/lib/storefront-templates";
 import { storefrontThemeVars, type StorefrontTheme } from "@/lib/storefront-theme";
 
 /**
@@ -10,7 +11,11 @@ import { storefrontThemeVars, type StorefrontTheme } from "@/lib/storefront-them
  */
 export function StoreChrome({ theme, appearance, children }: { theme: StorefrontTheme; appearance: AppearanceView | null; children: ReactNode }) {
   // Plantilla editorial: sin color de marca rige el verde oliva; con color, manda el de la empresa.
-  const effective = appearance?.template === "editorial" ? editorialTheme(theme) : theme;
+  // Plantillas de diseño: el color de marca manda solo si da contraste AA; si no, el acento de la plantilla.
+  const effective =
+    appearance?.template === "editorial" ? editorialTheme(theme)
+    : appearance && isDesignTemplate(appearance.template) ? designTemplateTheme(appearance.template, theme)
+    : theme;
   const style = { ...storefrontThemeVars(effective), ...(appearance?.vars ?? {}) } as CSSProperties;
   return (
     <div className="cp-theme" style={style} {...(appearance?.attrs ?? {})}>
