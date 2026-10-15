@@ -1,4 +1,11 @@
-export type QuoteSelectionItem = { id: string; name: string; quantity: number; days: number; unitPrice: number; excluded?: boolean };
+export type QuoteSelectionItem = {
+  id: string; name: string; quantity: number; days: number; unitPrice: number; excluded?: boolean;
+  /** `EVENT`: se cobra una sola vez por evento, los días no existen (siempre 1). */
+  billingUnit?: string | null;
+  inventory?: { billingUnit?: string | null } | null;
+};
+/** Ítem cuyo inventario se cobra por evento: su `days` es siempre 1 (alquileres P1-1). */
+export const isEventBilledItem = (item: Pick<QuoteSelectionItem, "billingUnit" | "inventory">): boolean => (item.billingUnit ?? item.inventory?.billingUnit) === "EVENT";
 export type SelectedQuoteItem = { id: string; quantity: number; days: number; excluded: boolean };
 
 export function selectionSubtotal(item: Pick<QuoteSelectionItem, "quantity" | "days" | "unitPrice" | "excluded">): number {
@@ -28,9 +35,10 @@ export function resolveQuoteSelection(items: QuoteSelectionItem[], raw: unknown,
     if (Object.entries(row).some(([key, value]) => value !== undefined && !["id", "quantity", "days", "excluded"].includes(key))) return fail("La propuesta contiene campos que no se pueden cambiar desde el portal.");
     if (row.excluded !== undefined && typeof row.excluded !== "boolean") return fail("La selección del ítem no es válida.");
     if (typeof row.quantity !== "number" || typeof row.days !== "number") return fail("La cantidad y los días deben ser números enteros.");
-    const quantity = row.quantity, days = row.days;
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999 || !Number.isInteger(days) || days < 1 || days > 365) return fail("La cantidad debe ser de 1 a 999 y los días de 1 a 365. Usá Retirar para excluir un ítem.");
     const original = byId.get(row.id)!;
+    // Producto por evento: el cliente no puede multiplicarlo por días; se fuerza a 1.
+    const quantity = row.quantity, days = isEventBilledItem(original) ? 1 : row.days;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999 || !Number.isInteger(days) || days < 1 || days > 365) return fail("La cantidad debe ser de 1 a 999 y los días de 1 a 365. Usá Retirar para excluir un ítem.");
     if (row.excluded === true && (quantity !== original.quantity || days !== original.days)) return fail("Al retirar un ítem se conservan su cantidad y días originales.");
     seen.add(row.id);
     value.push({ id: row.id, quantity, days, excluded: row.excluded === undefined ? Boolean(byId.get(row.id)!.excluded) : row.excluded });

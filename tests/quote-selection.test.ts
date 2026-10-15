@@ -61,3 +61,23 @@ test("admin exclusion of a changed counteroffer restores original quantities and
     assert.deepEqual(counterofferExclusion(items[0], proposed, false), { ...proposed, excluded: false }, "included counteroffers keep their proposed terms");
   }
 });
+
+test("productos por evento: los días de la propuesta se fuerzan a 1 al validar y al leer el payload", async () => {
+  const { parseProposalPayload } = await import("../lib/server/budget-portal");
+  const rental = [
+    { id: "evt", name: "Copa", quantity: 10, days: 1, unitPrice: 5000, inventory: { billingUnit: "EVENT" } },
+    { id: "day", name: "Mesa", quantity: 2, days: 1, unitPrice: 1000, inventory: { billingUnit: "DAILY" } },
+  ];
+  const proposal = resolveQuoteSelection(rental, [{ id: "evt", quantity: 12, days: 5 }, { id: "day", quantity: 2, days: 4 }]);
+  assert.equal(proposal.ok, true);
+  if (!proposal.ok) return;
+  assert.equal(proposal.value.find((row) => row.id === "evt")?.days, 1, "por evento: nunca más de un día");
+  assert.equal(proposal.value.find((row) => row.id === "day")?.days, 4, "por día: respeta lo pedido");
+  assert.equal(selectionSubtotal({ ...rental[0], ...proposal.value[0] }), 12 * 1 * 5000);
+  // Una propuesta que solo cambia los días de un producto por evento no cambia nada.
+  assert.equal(resolveQuoteSelection(rental.slice(0, 1), [{ id: "evt", quantity: 10, days: 7 }]).ok, false);
+  // Payload ya guardado con días > 1: se lee con 1 al aplicar.
+  const stored = { items: [{ id: "evt", quantity: 12, days: 9 }, { id: "day", quantity: 2, days: 9 }] };
+  const parsed = parseProposalPayload(stored, new Set(["evt"]));
+  assert.deepEqual(parsed.items.map((row) => [row.id, row.days]), [["evt", 1], ["day", 9]]);
+});

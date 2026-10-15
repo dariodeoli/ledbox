@@ -1,6 +1,6 @@
 import { sandboxHiddenHere } from "./demo-host";
 import { securityDepositPublic } from "@/lib/budget-security-deposit";
-import { resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
+import { isEventBilledItem, resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
 import { randomBytes } from "node:crypto";
@@ -353,7 +353,7 @@ type BudgetForPortal = {
   organization: { name: string; slug: string; paymentDetails: unknown };
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logo?: { updatedAt: Date } | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
-  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null } | null }>;
+  items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
   payments: Array<{ id: string; amount: number; status?: string }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
@@ -503,7 +503,8 @@ function requestItemsView(
     const item = byId.get(row.id);
     if (!item) return [];
     const quantity = Math.max(1, Math.round(Number(row.quantity) || item.quantity));
-    const days = Math.max(1, Math.round(Number(row.days) || item.days));
+    // Producto por evento: siempre 1 día aunque el payload guardado traiga otra cosa.
+    const days = isEventBilledItem(item) ? 1 : Math.max(1, Math.round(Number(row.days) || item.days));
     return [
       {
         id: item.id,
@@ -676,7 +677,7 @@ export const portalInclude = {
   event: { select: { name: true, location: true, startsAt: true } },
   // La imagen del producto vinculado viaja con el ítem (issue #107): solo la
   // URL, nunca costos ni stock del inventario.
-  items: { orderBy: { name: "asc" }, include: { inventory: { select: { imageUrl: true, organizationId: true, id: true, imageMime: true } } } },
+  items: { orderBy: { name: "asc" }, include: { inventory: { select: { imageUrl: true, organizationId: true, id: true, imageMime: true, billingUnit: true } } } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
   payments: { select: { id: true, amount: true, status: true } },
   // Pagos esperados (issue #28): estado real de cada concepto y cuenta destino.
@@ -837,7 +838,7 @@ export type ParsedProposal = {
 };
 
 /** Payload guardado de una solicitud; ignora filas con forma rara (nunca lanza). */
-export function parseProposalPayload(value: unknown): ParsedProposal {
+export function parseProposalPayload(value: unknown, eventBilledItemIds: ReadonlySet<string> = new Set()): ParsedProposal {
   const payload = isRecord(value) ? value : {};
   const items = Array.isArray(payload.items)
     ? payload.items.flatMap((row) => {
@@ -845,7 +846,7 @@ export function parseProposalPayload(value: unknown): ParsedProposal {
         const quantity = positiveInt(row.quantity);
         const days = positiveInt(row.days);
         if (quantity === null || days === null) return [];
-        return [{ id: row.id, quantity, days, excluded: row.excluded === true }];
+        return [{ id: row.id, quantity, days: eventBilledItemIds.has(row.id) ? 1 : days, excluded: row.excluded === true }];
       })
     : [];
   const rawDiscount = isRecord(payload.discount) ? payload.discount : null;

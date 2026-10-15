@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
           discount: true,
           organizationId: true,
           client: { select: { name: true, company: true, email: true } },
-          items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true } },
+          items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, inventory: { select: { billingUnit: true } } } },
         },
       })
     : null;
@@ -120,7 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     createdAt: now,
   };
   try { await withQuoteCommercialEdit(budget.id, budget.organizationId, true, async (tx) => {
-      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, include: { items: true } });
+      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, include: { items: { include: { inventory: { select: { billingUnit: true } } } } } });
       if (fresh.publicToken !== code || !quotePortalAvailable(fresh)) throw new QuoteComparisonError(404, "El enlace ya no está vigente.");
       const pending = await tx.budgetChangeRequest.findFirst({ where: { budgetId: budget.id, kind, status: "pending" }, select: { id: true } });
       if (kind === "items") {

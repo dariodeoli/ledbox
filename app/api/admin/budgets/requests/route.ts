@@ -101,7 +101,10 @@ async function resolveRequest(request: Request) {
     if (!portalBudgetOpen(budget.status)) {
       return jsonError("El presupuesto no está vigente: la solicitud no se puede aplicar.", 409);
     }
-    const payload = parseProposalPayload(changeRequest.payload);
+    // Productos por evento: los días se fuerzan a 1 al leer y al aplicar la propuesta.
+    const billing = await db.budgetItem.findMany({ where: { budgetId: budget.id, inventory: { organizationId, billingUnit: "EVENT" } }, select: { id: true } });
+    const eventBilledIds = new Set(billing.map((row) => row.id));
+    const payload = parseProposalPayload(changeRequest.payload, eventBilledIds);
     const counter = body.counter && typeof body.counter === "object" && !Array.isArray(body.counter)
       ? (body.counter as Record<string, unknown>)
       : {};
@@ -111,7 +114,7 @@ async function resolveRequest(request: Request) {
     const appliedItems: Array<{ id: string; quantity: number; days: number; subtotal: number; excluded: boolean; name: string }> = [];
     if (changeRequest.kind === "items" || payload.items.length > 0) {
       const rawItems = counter.items !== undefined ? counter.items : payload.items;
-      const proposal = resolveItemProposal(budget.items, rawItems, { requireChange: false });
+      const proposal = resolveItemProposal(budget.items.map((item) => ({ ...item, billingUnit: eventBilledIds.has(item.id) ? "EVENT" : null })), rawItems, { requireChange: false });
       if (!proposal.ok) return jsonError(proposal.error, 400);
       const byId = new Map(budget.items.map((item) => [item.id, item]));
       for (const row of proposal.value) {
