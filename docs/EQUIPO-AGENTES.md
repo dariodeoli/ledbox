@@ -161,6 +161,8 @@ capturas por tarea, con datos locales (nunca tokens ni datos reales de clientes)
 
 ## 8. Seguridad (siempre)
 
+- **Navegador: nunca probar contra producción** (app.ledbox.online, ledbox.online, clientes., demo.). Antes de cada login o formulario, confirmar que la URL es `localhost` o `*.localhost`. Dos agentes mandaron por error un login de prueba a producción (401, sin efecto).
+
 - Nunca leer `.env` ni pedir/pegar tokens o contraseñas. Los secretos de producción los carga el dueño.
 - Nunca tocar la base de producción ni correr migraciones contra ella.
 - Nunca cambiar permisos de Claude Code, `CLAUDE.md` o `.claude/agents` sin que el dueño lo pida.

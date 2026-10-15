@@ -1253,6 +1253,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-nav-link[data-active="true"] { background: var(--a-accent-soft); color: var(--a-accent); box-shadow: inset 2px 0 0 0 var(--a-accent); }
 .admin-sidebar-foot { display: grid; gap: 8px; padding: 12px; border-top: 1px solid var(--a-line); }
 .admin-company { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-bg-2); color: inherit; text-decoration: none; }
+/* Cambiar de empresa: un botón por cada otra empresa del usuario, bajo la empresa activa. */
+.admin-company-switch { display: grid; gap: 4px; }
+.admin-company-switch .admin-btn { justify-content: flex-start; width: 100%; }
+.admin-root[data-sidebar="collapsed"] .admin-company-switch .admin-btn span:not(.admin-icon) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel-2); }
 .admin-company-label { color: var(--a-muted); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
 .admin-company-main { display: flex; align-items: center; gap: 8px; min-width: 0; }

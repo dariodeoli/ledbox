@@ -591,3 +591,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - **Pantalla nueva de Inventario**: estado con color e ícono (alquilado en rojo, «Vencida» destacada, disponible, dañado, mantenimiento), cuadrícula compacta, vista por categoría, filtros por tipo, categoría, depósito, estado y proveedor, y carga por partes para cientos de productos. La ficha tiene pestañas.
 - Los costos internos (costo diario, reposición, compra y proveedor) solo los ven dueño, administración, finanzas y operación.
 - Finanzas: el indicador de cobros pasa a llamarse «Ingresos de clientes».
+
+## v2.1.122 — 2026-10-15
+
+- Cambiar de empresa: quien pertenece a más de una empresa ve, debajo de la empresa activa en el menú lateral, un botón «Cambiar a <empresa>» por cada una. Faltaba el botón (el servidor ya lo permitía).

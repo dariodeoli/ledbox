@@ -50,7 +50,7 @@ import {
 import { AdminIcon } from "./AdminIcons";
 import { AdminSandboxStrip } from "./AdminSandboxStrip";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
-import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
+import { AdminBadge, AdminButton, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
 /**
  * Paleta del buscador (issue #67): llega diferida. Su código no entra en el
  * arranque del panel; con el shell ocioso se prefetchea el chunk para que la
@@ -749,6 +749,16 @@ export function AdminShell({
     }
   }, []);
 
+  const switchOrganization = useCallback(async (organizationId: string) => {
+    const response = await fetch("/api/admin/session", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationId }),
+    });
+    // La empresa activa cambia en la sesión: se recarga el panel para que todo lea la empresa nueva.
+    if (response.ok) window.location.assign("/dashboard");
+  }, []);
+
   const logout = useCallback(async () => {
     if (session.demo || session.sandbox) {
       await exitDemo();
@@ -916,6 +926,18 @@ export function AdminShell({
                   </span>
                 </div>
               )
+            ) : null}
+            {/* Cambiar de empresa: solo quien es miembro de más de una (fuera de la demo). */}
+            {!session.demo && !session.sandbox && session.organization && session.organizations.length > 1 ? (
+              <div className="admin-company-switch" role="group" aria-label="Cambiar de empresa">
+                {session.organizations
+                  .filter((org) => org.id !== session.organization?.id)
+                  .map((org) => (
+                    <AdminButton key={org.id} type="button" icon="building" title={`Pasar a ${org.name}`} onClick={() => void switchOrganization(org.id)}>
+                      {`Cambiar a ${org.name}`}
+                    </AdminButton>
+                  ))}
+              </div>
             ) : null}
               {session.user ? (
                 /* El chip es un enlace directo: la cuenta vive en Mi perfil (issue #117). */
