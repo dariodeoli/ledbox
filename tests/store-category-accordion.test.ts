@@ -102,5 +102,24 @@ test("puente real rechaza otros scopes/hosts y monta sólo la categoría autoriz
   assert.match(browser, /categoryPreviewItems\(items, categoryPreview\.category\)\.map\(renderItem\)/);
   assert.match(browser, /onQuantity=\{setQuantity\}/); assert.match(browser, /onAdd=\{addFromTile\}/);
   assert.match(browser, /window\.removeEventListener\(CATEGORY_PREVIEW_EVENT, onPreview\)/);
-  assert.match(browser, /if \(!categoryPreview\.host\.isConnected\) setCategoryPreview\(null\)/);
+  assert.match(browser, /observer\.disconnect\(\)/);
+});
+
+
+test("cerrar el host anterior no vacía la categoría nueva por un observer tardío", () => {
+  const source = ts.createSourceFile("CatalogBrowser.tsx", read("components/catalog-public/CatalogBrowser.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback: ts.Expression | undefined;
+  const visit = (node: ts.Node) => { if (ts.isNewExpression(node) && node.expression.getText(source) === "MutationObserver") callback = node.arguments?.[0]; ts.forEachChild(node, visit); };
+  visit(source); assert.ok(callback);
+  const oldHost = { isConnected: false }, newHost = { isConnected: true };
+  const newSelection = { category: "Barras", host: newHost };
+  let current: typeof newSelection | null = newSelection;
+  const handler = runInNewContext(ts.transpileModule(`(${callback.getText(source)})`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
+    observedHost: oldHost, categoryPreview: { category: "Calzado", host: oldHost },
+    setCategoryPreview: (next: typeof current | ((value: typeof current) => typeof current)) => { current = typeof next === "function" ? next(current) : next; },
+  }) as () => void;
+  handler(); assert.equal(current, newSelection, "un callback del host viejo conserva la selección nueva");
+  current = { category: "Calzado", host: oldHost }; handler(); assert.equal(current, null, "sí limpia la selección cuando el host desconectado sigue siendo el actual");
+  oldHost.isConnected = true; current = { category: "Calzado", host: oldHost }; const connected = current;
+  handler(); assert.equal(current, connected);
 });

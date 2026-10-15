@@ -158,7 +158,10 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   }, [categoryPreviewKey, items]);
   useEffect(() => {
     if (!categoryPreview) return;
-    const observer = new MutationObserver(() => { if (!categoryPreview.host.isConnected) setCategoryPreview(null); });
+    const observedHost = categoryPreview.host;
+    const observer = new MutationObserver(() => {
+      if (!observedHost.isConnected) setCategoryPreview((current) => current?.host === observedHost ? null : current);
+    });
     observer.observe(categoryPreview.host.closest(".cp-theme") ?? document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [categoryPreview]);
