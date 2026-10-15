@@ -81,6 +81,10 @@ export async function POST(request: Request) {
     if (kind === "default") return setDefaultWarehouse(tx, organizationId, id);
     if (kind === "delete") return deleteWarehouse(tx, organizationId, id);
     return archiveWarehouse(tx, organizationId, id, kind === "archive");
+  }).catch((error: unknown) => {
+    // FK RESTRICT: llegaron unidades al depósito justo antes de borrarlo.
+    if (kind === "delete" && (error as { code?: string } | null)?.code === "P2003") return { ok: false as const, status: 409 as const, error: "El depósito recibió unidades: archivalo en lugar de borrarlo." };
+    throw error;
   });
   if (!result.ok) return jsonError(result.error, result.status);
   const labels: Record<string, string> = { update: "Editó un depósito", default: "Marcó el depósito principal", archive: "Archivó un depósito", restore: "Restauró un depósito", delete: "Eliminó un depósito" };

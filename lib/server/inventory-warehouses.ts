@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { INVENTORY_TAXONOMY_NAME_MAX, FIELD_MESSAGES, normalizeWarehouseCode, warehouseCodeValid } from "@/lib/field-rules";
 
 /**
@@ -120,6 +120,12 @@ export async function deleteWarehouse(tx: Tx, organizationId: string, id: string
   const target = await tx.warehouse.findFirst({ where: { id, organizationId } });
   if (!target) return fail(404, "El depósito no existe en esta empresa.");
   if (target.isDefault) return fail(409, "Es el depósito principal: no se puede borrar.");
+  // Lock de la fila del depósito: un alta o movimiento de unidades hacia él toma `FOR KEY SHARE` por la FK
+  // y espera acá; con la FK en RESTRICT, si igual ganara la carrera el borrado falla en vez de dejar `warehouseId` en NULL.
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`SELECT "id" FROM "Warehouse" WHERE "id" = ${id} AND "organizationId" = ${organizationId} FOR UPDATE`,
+  );
+  if (locked.length === 0) return fail(404, "El depósito no existe en esta empresa.");
   const units = await tx.inventoryUnit.count({ where: { organizationId, warehouseId: id } });
   if (units > 0) return fail(409, `Tiene ${units} unidad${units === 1 ? "" : "es"}: archivalo en lugar de borrarlo.`);
   await tx.warehouse.delete({ where: { id } });

@@ -1962,7 +1962,7 @@ model InventoryUnit {
   /// Depósito donde está la unidad y su ubicación dentro (estante-nivel, «E3-B2»). El stock por
   /// depósito es un `groupBy` de unidades: no hay un segundo número que pueda no cuadrar.
   warehouseId    String?
-  warehouse      Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  warehouse      Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   location       String?
   /// Condición 1 a 10 (CHECK en la base); se muestra «8/10 · 80 %».
   conditionScore Int?                @db.SmallInt
