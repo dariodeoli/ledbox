@@ -1,3 +1,4 @@
+import { budgetDepositAmount } from "@/lib/budget-payment-plan";
 import { CommercialStatus } from "@prisma/client";
 import { db } from "@/lib/server/db";
 import { rentalBalancePaymentFilter } from "@/lib/payment-origin";
@@ -42,7 +43,7 @@ export async function loadEventReadiness(organizationId: string, eventIds: reado
   const ids = events.map((event) => event.id);
   const budgets = await db.budget.findMany({
     where: { organizationId, eventId: { in: ids } },
-    select: { id: true, eventId: true, status: true, createdAt: true, advanceAmount: true, title: true, total: true },
+    select: { id: true, eventId: true, status: true, createdAt: true, advanceAmount: true, installmentsJson: true, title: true, total: true },
   });
   const picked = pickEventBudgets(budgets);
   const budgetIds = [...picked.values()].map((budget) => budget.id);
@@ -60,7 +61,7 @@ export async function loadEventReadiness(organizationId: string, eventIds: reado
       eventId,
       budgetId: budget?.id ?? null,
       hasBudget: Boolean(budget),
-      advanceAmount: budget?.advanceAmount ?? 0,
+      advanceAmount: budget ? budgetDepositAmount(budget) : 0,
       collected: budget ? collectedBy.get(budget.id) ?? 0 : 0,
       title: budget?.title ?? null,
       status: budget?.status ?? null,

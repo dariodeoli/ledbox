@@ -41,7 +41,7 @@ import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody } from "./BudgetSecurityDeposit";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
 import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
-import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { budgetDepositAmount, budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { BUDGET_APPROVAL_NOTE_MAX, budgetApprovalNoteError } from "@/lib/budget-approval-validation";
 import { clientDisplayName } from "@/lib/client-identity";
 import { ClientQuickCreateDialog, EventQuickCreateDialog } from "./BudgetQuickCreate";
@@ -1031,7 +1031,7 @@ export function PresupuestosModule() {
       case "create_event": return void createEventFor(budget);
       case "confirm_event": return void confirmEventFor(budget);
       case "collect":
-      case "review_proof": return router.push("/finanzas");
+      case "review_proof": return router.push(`/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`);
     }
   }
 
@@ -1076,6 +1076,7 @@ export function PresupuestosModule() {
   const boardCards: AdminBoardCardData[] = board.rows.map((budget) => {
     const paid = collectedAmount(budget.payments);
     const balance = budget.total - paid;
+    const advance = budgetDepositAmount(budget);
     const approvalState = budgetApprovalState(budget);
     const stage = budgetPipelineStage(budget);
     return {
@@ -1121,7 +1122,7 @@ export function PresupuestosModule() {
       ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget), title: `Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}` }] : []),
       ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
       ...(prompt && canCreateEvent ? [prompt === "create" ? { label: "Crear evento", icon: "events" as const, onClick: () => void createEventFor(budget) } : { label: "Confirmar evento", icon: "check" as const, onClick: () => void confirmEventFor(budget) }] : []),
-      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: "/finanzas", title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
+      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: `/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`, title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
       ...(writable ? [
         { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
         { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
@@ -1147,6 +1148,7 @@ export function PresupuestosModule() {
   const budgetCards: AdminCardData[] = rows.map((budget) => {
     const paid = collectedAmount(budget.payments);
     const balance = budget.total - paid;
+    const advance = budgetDepositAmount(budget);
     const approvalState = budgetApprovalState(budget);
     return {
       id: budget.id,
@@ -1159,7 +1161,7 @@ export function PresupuestosModule() {
       ],
       fields: [
         { label: "Monto", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
-        { label: budget.advanceAmount > 0 && paid < budget.advanceAmount ? "Seña" : "Saldo", value: formatMoney(budget.advanceAmount > 0 && paid < budget.advanceAmount ? budget.advanceAmount - paid : balance), title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)} · saldo ${formatMoney(balance)}` },
+        { label: advance > 0 && paid < advance ? "Seña" : "Saldo", value: formatMoney(advance > 0 && paid < advance ? advance - paid : balance), title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)} · saldo ${formatMoney(balance)}` },
         {
           label: "Vence",
           value: budget.validUntil ? (
@@ -1953,7 +1955,8 @@ export function PresupuestosModule() {
             {rows.map((budget) => {
               const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
-              const advanceDue = Math.max(0, budget.advanceAmount - paid);
+              const advance = budgetDepositAmount(budget);
+              const advanceDue = Math.max(0, advance - paid);
               const approvalState = budgetApprovalState(budget);
               const stage = budgetPipelineStage(budget);
               return (
@@ -1971,7 +1974,7 @@ export function PresupuestosModule() {
                   <AdminCell end title={formatMoney(budget.total)}>
                     <strong>{formatMoney(budget.total)}</strong>
                   </AdminCell>
-                  <AdminCell end title={`Saldo ${formatMoney(balance)} de ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}${budget.advanceAmount > 0 ? ` · seña ${formatMoney(budget.advanceAmount)}` : ""}`}>
+                  <AdminCell end title={`Saldo ${formatMoney(balance)} de ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}${advance > 0 ? ` · seña ${formatMoney(advance)}` : ""}`}>
                     {balance === 0 && budget.total > 0 ? "Cobrado" : (
                       <>
                         <small className="admin-cell-sub">{advanceDue > 0 ? "seña " : "saldo "}</small>

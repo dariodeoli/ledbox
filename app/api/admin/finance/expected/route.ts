@@ -1,6 +1,7 @@
 import { withDeletedLabel } from "@/lib/deleted-label";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { withIdempotency } from "@/lib/server/idempotency";
 import { jsonError, readJson } from "@/lib/server/http";
 import { confirmExpectedPayment, reviewExpectedPayment, splitExpectedPayment } from "@/lib/server/expected-payments";
 import { dayKeyOf, dayStart, isValidDayKey } from "@/lib/server/notifications";
@@ -189,27 +190,34 @@ export async function POST(request: Request) {
   const reference = typeof body.reference === "string" ? body.reference : null;
   const notes = typeof body.notes === "string" ? body.notes : null;
 
-  const outcome = await confirmExpectedPayment({
-    organizationId: auth.context.organizationId,
-    expectedPaymentId,
-    accountId,
-    amount,
-    method,
-    actor: auth.context,
-    collectedAt,
-    reference,
-    notes,
-  });
-  if (!outcome.ok) return jsonError(outcome.error, outcome.status);
-
-  return Response.json({
-    expectedPayment: outcome.expectedPayment,
-    alreadyConfirmed: outcome.alreadyConfirmed,
-    movementCreated: outcome.movementCreated,
-    // Cobro parcial/seña (issue #129): lo aplicado y el saldo que queda.
-    appliedAmount: outcome.appliedAmount,
-    remaining: outcome.remaining,
-    paymentId: outcome.paymentId,
-    partial: outcome.appliedAmount > 0 && outcome.remaining > 0,
+  return withIdempotency({ request, organizationId: auth.context.organizationId, scope: "finance:expected:confirm", body }, async (tx) => {
+    const afterCommit: Array<() => Promise<void>> = [];
+    const outcome = await confirmExpectedPayment({
+      organizationId: auth.context.organizationId,
+      expectedPaymentId,
+      accountId,
+      amount,
+      method,
+      actor: auth.context,
+      collectedAt,
+      reference,
+      notes,
+      tx,
+      afterCommit,
+    });
+    if (!outcome.ok) return jsonError(outcome.error, outcome.status);
+    return {
+      status: 200,
+      body: {
+        expectedPayment: outcome.expectedPayment,
+        alreadyConfirmed: outcome.alreadyConfirmed,
+        movementCreated: outcome.movementCreated,
+        appliedAmount: outcome.appliedAmount,
+        remaining: outcome.remaining,
+        paymentId: outcome.paymentId,
+        partial: outcome.appliedAmount > 0 && outcome.remaining > 0,
+      },
+      afterCommit: async () => { for (const audit of afterCommit) await audit(); },
+    };
   });
 }

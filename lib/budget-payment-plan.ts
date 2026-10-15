@@ -112,6 +112,20 @@ export function defaultDepositPlanRows(percent: number | null | undefined, total
   return plan.ok ? plan.rows.map(budgetPaymentConditionPayload) : null;
 }
 
+/** Seña visible/operativa, sin cambiar ni duplicar el plan guardado.
+ * El alta por porcentaje guarda la seña como primera condición; los planes
+ * anteriores pueden usar advanceAmount separado. Una cuota común no es seña.
+ */
+export function budgetDepositAmount(budget: { advanceAmount?: number | null; installmentsJson?: unknown }): number {
+  if (budgetMoneyValid(budget.advanceAmount ?? 0) && (budget.advanceAmount ?? 0) > 0) return budget.advanceAmount!;
+  if (!Array.isArray(budget.installmentsJson)) return 0;
+  const first = budget.installmentsJson[0];
+  if (!first || typeof first !== "object" || !budgetMoneyValid(first.amount)) return 0;
+  const isDeposit = first.moment === "Al aprobar el presupuesto" ||
+    (typeof first.label === "string" && /^seña(?:\s|$)/i.test(first.label.trim()));
+  return isDeposit ? first.amount : 0;
+}
+
 /** Recalculate only extended plans; never reinterpret old stored amounts. */
 export function hasDynamicBudgetPlan(raw: unknown): boolean {
   return Array.isArray(raw) && raw.some((row) => row?.type === "percent" || row?.type === "remainder");

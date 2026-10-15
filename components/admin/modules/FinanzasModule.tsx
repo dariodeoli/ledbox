@@ -102,7 +102,7 @@ import { AdminSimulatedMailDialog } from "../AdminSimulatedMail";
 import { SIMULATED_MAIL_NOTICE, type SimulatedMail } from "@/lib/mail-preview";
 import { Combobox, DateField, MoneyField, NumberField, SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
-import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, newIdempotencyKey, useAdminResource } from "@/lib/admin-api";
 import { BudgetProofDialog } from "./PresupuestosModule";
 import { ConciliacionBancaria } from "./ConciliacionBancaria";
 
@@ -1196,6 +1196,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const venceFilter = parseAgingParam(searchParams.get("vence"));
   // `?cliente=<id>` (ficha del cliente → Cobrar): se valida contra los cobros cargados de la empresa activa.
   const clienteParam = searchParams.get("cliente");
+  const presupuestoParam = searchParams.get("presupuesto");
   const clienteFilter = useMemo(
     () => (clienteParam ? finance.data?.payments.find((payment) => payment.client.id === clienteParam)?.client ?? null : null),
     [finance.data, clienteParam],
@@ -1238,7 +1239,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
 
   // Pagos esperados (issue #28): cola "Por confirmar", confirmación en cuenta y
   // trazabilidad del presupuesto.
-  const expected = useAdminResource("/api/admin/finance/expected", (payload) => ({
+  const expected = useAdminResource(`/api/admin/finance/expected${presupuestoParam ? `?budgetId=${encodeURIComponent(presupuestoParam)}` : ""}`, (payload) => ({
     rows: payload.expectedPayments ?? [],
     summary: payload.expectedSummary ?? EMPTY_EXPECTED_SUMMARY,
   }));
@@ -1251,6 +1252,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const [collectError, setCollectError] = useState("");
   const [expectedTimeline, setExpectedTimeline] = useState<AdminExpectedPaymentRow | null>(null);
   const [expectedBusy, setExpectedBusy] = useState(false);
+  const expectedAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const [expectedError, setExpectedError] = useState("");
 
   // ── Tesorería y gastos (issue #27) ────────────────────────────────────────
@@ -1479,7 +1481,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   const expectedQueue = useMemo(
     () =>
       expectedRows
-        .filter((row) => expectedPaymentNeedsAction(row))
+        .filter((row) => presupuestoParam
+          ? ["AWAITING", "PROOF", "PARTIAL"].includes(row.status)
+          : expectedPaymentNeedsAction(row))
         .filter((row) =>
           matchesQuery(query, [
             row.budget.client.company,
@@ -1490,7 +1494,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           ]),
         )
         .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
-    [expectedRows, query],
+    [expectedRows, query, presupuestoParam],
   );
 
   const totals = useMemo(() => {
@@ -1944,7 +1948,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
    * que el cliente ve en el portal. Idempotente: reintentar no duplica.
    */
   async function submitExpectedReview(payload: ExpectedReviewSubmit) {
-    if (!expectedReview) return;
+    if (!expectedReview || expectedBusy) return;
     const row = expectedReview.row;
     const label = row.budget.client.company || row.budget.client.name;
     const concept = expectedPaymentConcept(row);
@@ -1958,6 +1962,10 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     let appliedAmount = 0;
     let remainingAfter = 0;
     if (payload.kind === "confirm") {
+      const fingerprint = JSON.stringify({ rowId: row.id, ...payload });
+      if (expectedAttempt.current?.fingerprint !== fingerprint) {
+        expectedAttempt.current = { fingerprint, key: newIdempotencyKey() };
+      }
       const result = await adminSend<{
         alreadyConfirmed?: boolean;
         movementCreated?: boolean;
@@ -1971,7 +1979,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         method: payload.method || undefined,
         date: payload.date || undefined,
         reference: payload.reference || undefined,
-      });
+      }, "POST", { idempotencyKey: expectedAttempt.current.key });
       if (!result.ok) failure = result.error;
       else {
         alreadyConfirmed = Boolean(result.data.alreadyConfirmed);
@@ -1994,6 +2002,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       return;
     }
     setExpectedReview(null);
+    expectedAttempt.current = null;
     if (payload.kind === "confirm") {
       const accountName = accounts.find((account) => account.id === payload.accountId)?.name ?? "la cuenta";
       if (!alreadyConfirmed && remainingAfter > 0) {
@@ -2676,6 +2685,12 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               : undefined
           }
         >
+          {presupuestoParam ? (
+            <AdminNote>
+              Cobros de {expectedRows[0]?.budget.title ?? "este presupuesto"}: incluye los pendientes futuros y sin fecha. {" "}
+              <Link href="/finanzas/por-confirmar">Ver todos los presupuestos</Link>
+            </AdminNote>
+          ) : null}
           <p className="admin-note admin-expected-note">
             <AdminIcon name="info" size={14} />
             <span>
@@ -2710,7 +2725,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
                 cards={expectedQueue.map((row): AdminCardData => {
                   const label = row.budget.client.company || row.budget.client.name;
                   const concept = expectedPaymentConcept(row);
-                  const overdue = row.status === "AWAITING" || row.status === "PARTIAL";
+                  const overdue = row.status !== "PROOF" && expectedPaymentNeedsAction(row);
                   const proof = expectedProofOf(row);
                   const status =
                     row.status === "PARTIAL"
@@ -2844,7 +2859,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               {expectedQueue.map((row) => {
                 const label = row.budget.client.company || row.budget.client.name;
                 const concept = expectedPaymentConcept(row);
-                const overdue = row.status === "AWAITING" || row.status === "PARTIAL";
+                const overdue = row.status !== "PROOF" && expectedPaymentNeedsAction(row);
                 const proof = expectedProofOf(row);
                 return (
                   <AdminRow key={row.id}>

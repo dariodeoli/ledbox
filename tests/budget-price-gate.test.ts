@@ -50,5 +50,5 @@ test("la regla está cableada en enviar, aprobar (panel, portal, comparación, f
   assert.match(repoFile("lib/server/signature/admin.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("lib/server/signature/portal.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("app/api/admin/finance/route.ts"), /budgetPriceGate\(organizationId, budget\.id, "cobrar", tx\)/);
-  assert.match(repoFile("lib/server/expected-payments.ts"), /budgetPriceGate\(input\.organizationId, expected\.budgetId, "cobrar"\)/);
+  assert.match(repoFile("lib/server/expected-payments.ts"), /budgetPriceGate\(input\.organizationId, expected\.budgetId, "cobrar", database\)/);
 });

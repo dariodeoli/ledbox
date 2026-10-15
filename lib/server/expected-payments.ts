@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { COLLECTED_PAYMENT_METHODS } from "../admin-types";
 import { budgetPriceGate } from "./budget-price-gate";
 import type { ExpectedPayment, Prisma } from "@prisma/client";
 import { formatMoney } from "@/lib/admin-format";
@@ -58,15 +59,6 @@ const expectedInclude = {
 } as const;
 
 export type ExpectedPaymentWithRefs = Prisma.ExpectedPaymentGetPayload<{ include: typeof expectedInclude }>;
-
-/** Cuenta de tesorería esperada por defecto: la primera activa (orden del panel). */
-async function firstActiveAccount(organizationId: string) {
-  return db.treasuryAccount.findFirst({
-    where: { organizationId, active: true, currency: "PYG" },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    select: accountSelect,
-  });
-}
 
 /**
  * Plan real del presupuesto como lista de conceptos esperados. El anticipo
@@ -363,6 +355,9 @@ function isoDay(value: Date | null): string | null {
 export async function confirmExpectedPayment(input: {
   organizationId: string;
   expectedPaymentId: string;
+  /** La ruta idempotente comparte su transacción y difiere auditoría hasta commit. */
+  tx?: Prisma.TransactionClient;
+  afterCommit?: Array<() => Promise<void>>;
   accountId?: string | null;
   /** Monto a confirmar (issue #129): menor al saldo registra una seña. */
   amount?: number | null;
@@ -373,7 +368,8 @@ export async function confirmExpectedPayment(input: {
   reference?: string | null;
   notes?: string | null;
 }): Promise<ConfirmExpectedOutcome> {
-  const expected = await db.expectedPayment.findFirst({
+  const database = input.tx ?? db;
+  const expected = await database.expectedPayment.findFirst({
     where: { id: input.expectedPaymentId, organizationId: input.organizationId },
     include: expectedInclude,
   });
@@ -396,11 +392,11 @@ export async function confirmExpectedPayment(input: {
   }
 
   // «Falta precio»: no se cobra un presupuesto con líneas en 0 sin confirmar como gratis.
-  const priceBlock = await budgetPriceGate(input.organizationId, expected.budgetId, "cobrar");
+  const priceBlock = await budgetPriceGate(input.organizationId, expected.budgetId, "cobrar", database);
   if (priceBlock) return { ok: false, status: 409, error: priceBlock };
 
   // Monto aplicado: el pedido (seña) o el saldo completo.
-  const requestedAmount = input.amount === undefined || input.amount === null ? remaining : Math.round(input.amount);
+  const requestedAmount = input.amount === undefined || input.amount === null ? remaining : input.amount;
   if (!Number.isSafeInteger(requestedAmount) || requestedAmount <= 0) {
     return { ok: false, status: 400, error: "El monto a confirmar tiene que ser un entero en guaraníes mayor a cero." };
   }
@@ -409,7 +405,9 @@ export async function confirmExpectedPayment(input: {
   }
   const appliedAmount = requestedAmount;
   const isPartial = appliedAmount < remaining;
-  const method = (input.method ?? "").trim().slice(0, 60) || "Transferencia";
+  const rawMethod = (input.method ?? "").trim() || "Transferencia";
+  const method = COLLECTED_PAYMENT_METHODS.find((value) => value.toLowerCase() === rawMethod.toLowerCase());
+  if (!method) return { ok: false, status: 400, error: "Elegí el método real del cobro: transferencia, efectivo, cheque, tarjeta u otro." };
 
   /** Cobro a plazo ya vinculado al comprobante (flujo del issue #17). */
   const pending = expected.proof?.payment?.status === "PENDING" ? expected.proof.payment : null;
@@ -422,13 +420,16 @@ export async function confirmExpectedPayment(input: {
   }
 
   const requested = input.accountId
-    ? await db.treasuryAccount.findFirst({
+    ? await database.treasuryAccount.findFirst({
         where: { id: input.accountId, organizationId: input.organizationId },
         select: accountSelect,
       })
     : undefined;
   if (input.accountId && !requested) return { ok: false, status: 404, error: "La cuenta no existe en esta empresa." };
-  const account = requested ?? expected.expectedAccount ?? (await firstActiveAccount(input.organizationId));
+  const account = requested ?? expected.expectedAccount ?? (await database.treasuryAccount.findFirst({
+    where: { organizationId: input.organizationId, active: true, currency: "PYG" },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: accountSelect,
+  }));
   if (!account) {
     return { ok: false, status: 400, error: "Creá una cuenta de tesorería antes de confirmar el pago." };
   }
@@ -450,7 +451,7 @@ export async function confirmExpectedPayment(input: {
     account,
   });
 
-  const applied = await db.$transaction(async (tx) => {
+  const apply = async (tx: Prisma.TransactionClient) => {
     // Candado: solo escribe si el saldo no cambió desde la lectura (issue #129).
     const claimed = await tx.expectedPayment.updateMany({
       where: {
@@ -583,23 +584,30 @@ export async function confirmExpectedPayment(input: {
       await tx.budgetPaymentProof.update({ where: { id: expected.proof.id }, data: { paymentId } });
     }
     return { updated, paymentId, movementCreated };
-  });
+  };
+  const applied = input.tx ? await apply(input.tx) : await db.$transaction(apply);
 
   const remainingAfter = isPartial ? remaining - appliedAmount : 0;
   if (!applied) {
-    const current = await db.expectedPayment.findUnique({ where: { id: expected.id }, include: expectedInclude });
+    const current = await database.expectedPayment.findUnique({ where: { id: expected.id }, include: expectedInclude });
+    // Solo un concepto realmente confirmado permite responder como reintento.
+    // Una seña, división o cancelación concurrente exige recargar el saldo:
+    // no se informa éxito de un cobro que este intento no aplicó.
+    if (!current || current.status !== "CONFIRMED") {
+      return { ok: false, status: 409, error: "El pago esperado cambió mientras lo confirmabas: actualizá el saldo y volvé a intentar." };
+    }
     return {
       ok: true,
       alreadyConfirmed: true,
-      expectedPayment: current ?? expected,
+      expectedPayment: current,
       movementCreated: false,
       appliedAmount: 0,
-      remaining: Math.max(0, expected.amount - expected.paidAmount),
-      paymentId: null,
+      remaining: Math.max(0, current.amount - current.paidAmount),
+      paymentId: current.paymentId,
     };
   }
 
-  await recordAudit({
+  const audit = () => recordAudit({
     context: input.actor,
     action: "status",
     entity: "ExpectedPayment",
@@ -630,6 +638,9 @@ export async function confirmExpectedPayment(input: {
       },
     },
   });
+
+  if (input.afterCommit) input.afterCommit.push(audit);
+  else await audit();
 
   return {
     ok: true,
@@ -672,7 +683,7 @@ export async function splitExpectedPayment(input: {
   }
 
   const parts = input.parts.map((part) => {
-    const amount = Math.round(Number(part.amount));
+    const amount = Number(part.amount);
     const dueDay = part.dueAt ? String(part.dueAt).trim().slice(0, 10) : "";
     return {
       amount,
@@ -697,6 +708,11 @@ export async function splitExpectedPayment(input: {
         organizationId: input.organizationId,
         status: { in: ["AWAITING", "PROOF", "PARTIAL"] },
         paidAmount: expected.paidAmount,
+        // Otra división conserva paidAmount, pero modifica amount y el plan.
+        // Comparar ambos evita crear dos veces las nuevas cuotas.
+        amount: expected.amount,
+        proofId: expected.proofId,
+        paymentId: expected.paymentId,
       },
       data: {
         // La primera parte queda en el concepto original (conserva su seña).
@@ -717,7 +733,9 @@ export async function splitExpectedPayment(input: {
             id: randomUUID(),
             organizationId: input.organizationId,
             budgetId: expected.budgetId,
-            concept: "balance",
+            // Los cargos de devolución siguen siendo ingreso extra: cobrarlos
+            // en cuotas no debe descontarlos del saldo del alquiler.
+            concept: expected.concept === "extra" ? "extra" : "balance",
             slot: `split:${randomUUID()}`,
             installmentNumber: null,
             label: `${expected.label} · parte ${index + 1}/${parts.length}`,
