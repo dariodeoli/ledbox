@@ -575,3 +575,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Apariencia: plantillas (Clásica, Minimalista, Elegante, Oscura), color de marca con control de contraste, tipografía y portada para escritorio (1920×600) y para celular (1080×1350), con vista previa.
 - Acceso al catálogo: abierto, con solicitud (el cliente se registra y la empresa lo aprueba como cliente final o mayorista) o privado.
 - Pedidos de la tienda: la empresa puede aceptarlos, rechazarlos con motivo o modificarlos (cantidades, quitar, reemplazar, «ya no lo tengo») y el cliente aprueba la versión modificada desde su seguimiento.
+
+## v2.1.120 — 2026-10-15
+
+- Inventario más ordenado: cada producto tiene **Tipo** (reutilizable, consumible o descartable), **Categoría** y **Subcategoría** (por ejemplo Reutilizable › Vajilla › Copas). Las categorías que ya existían se convierten solas, sin perder nada.
+- **Depósitos** con código y **ubicación** de cada unidad (por ejemplo «D1-E3-B2»), «Mover unidades» entre depósitos y stock por depósito en la ficha.
+- **Condición** de cada unidad del 1 al 10 (también en %), y **proveedor, fecha de compra y garantía**, con «Registrar compra» para sumar unidades nuevas.
+- Ajustes → **Inventario**: administrar categorías, subcategorías y depósitos.
+- Importar productos acepta categoría, subcategoría, depósito y ubicación (planilla, ChatGPT e IA).
