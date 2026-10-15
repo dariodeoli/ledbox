@@ -788,10 +788,10 @@
 .cp-theme .cp-fields [role="listbox"] { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
 .cp-theme .cp-fields [role="option"] { min-height: var(--tap); }
 .cp-theme .cp-fields .admin-field-hint { font-size: var(--fs-12); line-height: 1.5; }
-.cp-theme .cp-event { padding: var(--sp-3) var(--sp-4); box-shadow: none; }
+.cp-theme .cp-event { padding: var(--sp-3) var(--sp-4); border-radius: 0; box-shadow: none; }
 .cp-theme .cp-event-date { position: relative; min-width: 0; }
 .cp-theme .cp-event-date > .admin-icon { position: absolute; left: 2px; top: 32px; color: var(--color-muted); pointer-events: none; }
-.cp-theme .cp-event-date input { padding-left: 28px; }
+.cp-theme .cp-fields .cp-event-date .admin-field input[data-oc-control]:not([type="hidden"]):not([type="checkbox"]) { padding-inline-start: 30px; }
 .cp-theme .cp-event-fields { gap: var(--sp-3); align-items: start; }
 .cp-theme .cp-event-fields > .cp-btn { align-self: end; }
 .cp-theme .cp-stepper { border: 0; border-bottom: 1px solid var(--color-muted); border-radius: 0; background: transparent; gap: 0; }
@@ -862,3 +862,13 @@
   .cp-qv-add { flex-basis: min-content; min-width: 0; padding-inline: var(--sp-3); }
   .cp-footer-inner { padding-block: var(--sp-6); }
 }
+
+/* Pedido: acción principal visible y dos accesos secundarios en una sola fila. */
+.cp-drawer-head, .cp-drawer-foot { flex-shrink: 0; }
+.cp-drawer-foot:has(.cp-save-cart) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-1) var(--sp-2); padding-block: var(--sp-2) calc(var(--sp-2) + env(safe-area-inset-bottom)); }
+.cp-drawer-foot:has(.cp-save-cart) .cp-cart-actions { display: contents; }
+.cp-drawer-foot:has(.cp-save-cart) .cp-cart-actions > .cp-btn--primary { grid-row: 1; grid-column: 1 / -1; min-height: var(--tap); }
+.cp-drawer-foot:has(.cp-save-cart) .cp-save-cart { grid-row: 2; grid-column: 1; }
+.cp-drawer-foot:has(.cp-save-cart) .cp-cart-actions > .cp-btn:not(.cp-btn--primary) { grid-row: 2; grid-column: 2; }
+.cp-drawer-foot:has(.cp-save-cart) :is(.cp-save-cart, .cp-cart-actions > .cp-btn:not(.cp-btn--primary)) { min-height: var(--tap); min-width: 0; padding: var(--sp-1); border-color: transparent; background: transparent; color: var(--color-muted); font-size: var(--fs-12); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.cp-drawer-foot:has(.cp-save-cart) :is(.cp-save-cart, .cp-cart-actions > .cp-btn:not(.cp-btn--primary)):hover { color: var(--color-primary); }
