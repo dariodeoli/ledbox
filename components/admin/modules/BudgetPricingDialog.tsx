@@ -2,12 +2,13 @@
 
 import { useId, useMemo, useRef, useState } from "react";
 import { ConfirmDialog as AdminConfirm } from "owncoding-ui";
-import {
+import { AdminButtonLink,
   AdminButton,
   AdminDialog,
   AdminNote,
   AdminDialogSection,
   AdminDisclosure,
+  AdminTabs,
 } from "@/components/admin/AdminUI";
 import {
   AttachmentInput,
@@ -331,7 +332,7 @@ export function BudgetPricingDialog({
       dirty={dirty}
       onClose={() => { if (!attachmentToDelete && !attachmentDeleteInFlight.current) onClose(); }}
       footer={({ requestClose }) => <>
-        <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</a>
+        <AdminButtonLink href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Vista previa guardada</AdminButtonLink>
         <span className="admin-dialog-spacer" />
         <AdminButton type="button" onClick={requestClose}>
           Cancelar
@@ -348,9 +349,13 @@ export function BudgetPricingDialog({
         </AdminNote>
       ) : null}
 
-      <nav className="admin-subtabs" aria-label="Editar presupuesto">
-        {[{ value: "items", label: "Ítems y precio" }, { value: "conditions", label: "Condiciones" }, { value: "payments", label: "Plan de pagos" }].map((tab) => <AdminButton type="button" key={tab.value} aria-pressed={section === tab.value} onClick={() => setSection(tab.value)}>{tab.label}</AdminButton>)}
-      </nav>
+      <AdminTabs
+        filters
+        label="Editar presupuesto"
+        value={section}
+        onChange={setSection}
+        items={[{ key: "items", label: "Ítems y precio" }, { key: "conditions", label: "Condiciones" }, { key: "payments", label: "Plan de pagos" }]}
+      />
       <form id={formId} className="admin-form" onSubmit={(event) => void save(event)}>
         <div hidden={section !== "items"}>
         <AdminDialogSection title="Cliente y evento">
@@ -478,16 +483,13 @@ export function BudgetPricingDialog({
           <ul className="admin-plan-list">
             {attachments.map((attachment) => (
               <li className="admin-plan-row" key={attachment.id}>
-                <a
-                  className="admin-btn admin-btn--ghost"
+                <AdminButtonLink
+                 
                   href={`/api/admin/budgets/attachments/${attachment.id}`}
                   target="_blank"
                   rel="noreferrer"
                   title={`Abrir «${attachment.name}»`}
-                >
-                  <AdminIcon name="receipt" size={14} />
-                  <span>{attachment.name}</span>
-                </a>
+                 icon="receipt">{attachment.name}</AdminButtonLink>
                 <small className="admin-cell-sub">
                   {formatNumber(Math.max(1, Math.round(attachment.size / 1024)))} kB · {attachment.uploadedByName}
                 </small>

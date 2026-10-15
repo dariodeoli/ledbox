@@ -73,7 +73,7 @@ import { portalBudgetUrl } from "@/lib/public-config";
 import { WhatsappIcon } from "@/components/whatsapp/WhatsappIcon";
 import { useAdminSession } from "../AdminShell";
 import { AdminIcon } from "../AdminIcons";
-import {
+import { AdminButtonLink,
   AdminBadge,
   AdminButton,
   AdminCell,
@@ -90,7 +90,7 @@ import {
   AdminPanel,
   AdminRow,
   AdminSelect,
-  AdminSubtabs,
+  AdminTabs,
   AdminTable,
   AdminToolbar,
   AdminWhatsappTemplateButton,
@@ -480,9 +480,8 @@ function PaymentRemindersDialog({
               {emailDoneToday ? "Enviado hoy" : "Recordar por email"}
             </AdminButton>
             {whatsappReachable(payment.client.phone) ? (
-              <button
+              <AdminButton
                 type="button"
-                className="admin-btn"
                 data-done={whatsappToday ? "true" : undefined}
                 title={
                   whatsappToday
@@ -491,10 +490,10 @@ function PaymentRemindersDialog({
                 }
                 aria-label={`Enviar por WhatsApp con plantilla: ${label}`}
                 onClick={() => onTemplate(payment)}
+                iconNode={<WhatsappIcon size={15} />}
               >
-                <WhatsappIcon size={15} />
-                <span>Enviar por WhatsApp</span>
-              </button>
+                Enviar por WhatsApp
+              </AdminButton>
             ) : (
               <span className="admin-muted">El cliente no tiene teléfono cargado</span>
             )}
@@ -667,9 +666,9 @@ function ExpectedReviewDialog({
             <dd>
               {row.proof ? (
                 onViewProof ? (
-                  <button type="button" className="admin-linkbtn" onClick={onViewProof}>
+                  <AdminButton type="button" variant="link" onClick={onViewProof}>
                     Ver el comprobante ({formatDateTime(row.proof.createdAt)})
-                  </button>
+                  </AdminButton>
                 ) : (
                   `Recibido el ${formatDateTime(row.proof.createdAt)}`
                 )
@@ -1531,10 +1530,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           { label: "Vencidos", value: formatNumber(expectedSummary.overdue.count) },
         ],
         footer: (
-          <Link className="admin-btn" href="/finanzas/por-confirmar">
-            Ver por confirmar
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/por-confirmar" iconEnd="arrow-right">Ver por confirmar</AdminButtonLink>
         ),
       },
       {
@@ -1555,10 +1551,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           { label: "Vencidos", value: formatNumber(totals.overdue) },
         ],
         footer: (
-          <Link className="admin-btn" href="/finanzas/por-cobrar">
-            Ver por cobrar
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/por-cobrar" iconEnd="arrow-right">Ver por cobrar</AdminButtonLink>
         ),
       },
       {
@@ -1574,10 +1567,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           { label: "Anticipos pagados", value: formatMoney(totals.advances) },
         ],
         footer: (
-          <Link className="admin-btn" href="/finanzas/proveedores">
-            Ver proveedores
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/proveedores" iconEnd="arrow-right">Ver proveedores</AdminButtonLink>
         ),
       },
       {
@@ -1590,10 +1580,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           { label: "Movimientos", value: formatNumber(movements.length) },
         ],
         footer: (
-          <Link className="admin-btn" href="/finanzas/tesoreria">
-            Ver tesorería
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/tesoreria" iconEnd="arrow-right">Ver tesorería</AdminButtonLink>
         ),
       },
       {
@@ -1605,10 +1592,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
           { label: "Cuentas activas", value: formatNumber(summary.activeAccounts) },
         ],
         footer: (
-          <Link className="admin-btn" href="/finanzas/conciliacion">
-            Ver conciliación
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/conciliacion" iconEnd="arrow-right">Ver conciliación</AdminButtonLink>
         ),
       },
       {
@@ -1618,10 +1602,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         badges: [{ label: `${formatNumber(expenseRows.length)} del período`, tone: undefined }],
         fields: [{ label: "Total del período", value: formatMoney(gastosTotal) }],
         footer: (
-          <Link className="admin-btn" href="/finanzas/gastos">
-            Ver gastos
-            <AdminIcon name="arrow-right" size={14} />
-          </Link>
+          <AdminButtonLink href="/finanzas/gastos" iconEnd="arrow-right">Ver gastos</AdminButtonLink>
         ),
       },
     ];
@@ -2358,7 +2339,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       />
 
       <div className="admin-subtabs-bar">
-        <AdminSubtabs
+        <AdminTabs
           label="Secciones de Finanzas"
           items={FINANZAS_SECTIONS.map((item) => ({
             href: item.href,
@@ -2375,17 +2356,14 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         <>
           <AdminToolbar>
             <span className="admin-export">
-              <Link
-                className="admin-btn"
+              <AdminButtonLink
+               
                 href="/imprimir/reporte"
                 target="_blank"
                 rel="noreferrer"
                 title="Abrir el reporte mensual imprimible"
                 aria-label="Abrir el reporte mensual imprimible"
-              >
-                <AdminIcon name="print" size={15} />
-                <span>Reporte mensual</span>
-              </Link>
+               icon="print">Reporte mensual</AdminButtonLink>
             </span>
           </AdminToolbar>
           <AdminKpis label="Indicadores de finanzas">

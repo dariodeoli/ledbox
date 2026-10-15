@@ -425,7 +425,6 @@ export function InventoryCreateDialog({
             label="Artículo"
             help={INVENTORY_FIELD_HELP.name}
             required
-            wide
             autoFocus
             maxLength={120}
             value={form.name}
@@ -740,7 +739,6 @@ export function InventoryEditDialog({
           <TextField
             label="Artículo"
             required
-            wide
             maxLength={120}
             value={editForm.name}
             help={INVENTORY_FIELD_HELP.name}

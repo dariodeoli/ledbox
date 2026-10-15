@@ -37,6 +37,7 @@ import {
   AdminRow,
   AdminTable,
   AdminToolbar,
+  AdminTabs,
 } from "../AdminUI";
 import { SearchField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { AdminIcon } from "../AdminIcons";
@@ -243,26 +244,22 @@ export function PlantillasModule() {
         <AdminKpi label="Categorías" icon="overview" value={formatNumber(totals.categories)} note={`de ${formatNumber(MESSAGE_TEMPLATE_CATEGORIES.length)}`} tone="accent" />
       </AdminKpis>
 
-      <nav className="admin-subtabs" aria-label="Categorías de plantillas">
-        {MESSAGE_TEMPLATE_CATEGORIES.map((value) => (
-          <button
-            key={value}
-            type="button"
-            className="admin-subtab"
-            data-active={value === category ? "true" : undefined}
-            aria-pressed={value === category}
-            onClick={() => {
-              setCategory(value);
-              setForm(null);
-              setFormError("");
-            }}
-          >
-            <AdminIcon name={MESSAGE_TEMPLATE_CATEGORY_ICONS[value]} size={13} />
-            {messageTemplateCategoryLabel(value)}
-            <span className="admin-subtab-count">{formatNumber(counts.get(value) ?? 0)}</span>
-          </button>
-        ))}
-      </nav>
+      <AdminTabs
+        filters
+        label="Categorías de plantillas"
+        value={category}
+        onChange={(key) => {
+          setCategory(key as typeof category);
+          setForm(null);
+          setFormError("");
+        }}
+        items={MESSAGE_TEMPLATE_CATEGORIES.map((value) => ({
+          key: value,
+          label: messageTemplateCategoryLabel(value),
+          icon: MESSAGE_TEMPLATE_CATEGORY_ICONS[value],
+          count: counts.get(value) ?? 0,
+        }))}
+      />
 
       <AdminToolbar>
         <SearchField
@@ -482,15 +479,15 @@ export function PlantillasModule() {
               <span className="admin-field-label">Variables de {messageTemplateCategoryLabel(form.category).toLowerCase()}</span>
               <div className="admin-var-chips">
                 {messageTemplateVariablesOf(form.category).map((variable) => (
-                  <button
+                  <AdminButton
                     key={variable.key}
                     type="button"
-                    className="admin-var-chip"
+                    size="sm"
                     title={`${variable.label}: ${variable.hint}`}
                     onClick={() => insertVariable(variable.key)}
                   >
                     {`{{${variable.key}}}`}
-                  </button>
+                  </AdminButton>
                 ))}
               </div>
               <span className="admin-field-hint">

@@ -178,7 +178,6 @@ export function ClientQuickFields({
       label="Nombre fantasía / comercial"
       required={!values.name.trim()}
       autoFocus={autoFocus}
-      wide={layout === "sections"}
       maxLength={200}
       value={values.tradeName}
       onChange={(tradeName) => onChange({ tradeName })}

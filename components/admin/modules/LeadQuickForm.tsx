@@ -108,7 +108,6 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
             onChange={(name) => setValues((current) => ({ ...current, name }))}
             maxLength={120}
             required
-            wide
             autoFocus
             autoComplete="off"
             error={submitted ? errors.name : null}

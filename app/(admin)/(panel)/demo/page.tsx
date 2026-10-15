@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import { DemoIntro } from "@/components/admin/DemoIntro";
 import { DemoTour } from "@/components/admin/DemoTour";
-import { AdminPanel } from "@/components/admin/AdminUI";
+import { AdminButton, AdminButtonLink, AdminPanel } from "@/components/admin/AdminUI";
 import { formatNumber } from "@/lib/admin-format";
 import { DEMO_STRONG_CASES, type DemoStrongCaseId } from "@/lib/demo-tour";
 import { portalBudgetUrl } from "@/lib/public-config";
@@ -164,14 +164,13 @@ export default async function DemoPage() {
           <form method="post" action="/api/demo/session">
             <input type="hidden" name="next" value={nextPath} />
             <input type="hidden" name="reset" value="1" />
-            <button
-              className="admin-btn"
+            <AdminButton
               type="submit"
+              icon="refresh"
               title="Reinicia la demo: vuelve a sembrar los datos simulados con las fechas de hoy (no toca datos reales)"
             >
-              <AdminIcon name="refresh" size={15} />
-              <span>Reiniciar la demo</span>
-            </button>
+              Reiniciar la demo
+            </AdminButton>
           </form>
         }
       />
@@ -227,15 +226,11 @@ function DemoInvite({ userName, nextPath }: { userName: string; nextPath: string
         <div className="admin-demo-actions">
           <form method="post" action="/api/demo/session">
             <input type="hidden" name="next" value={nextPath} />
-            <button className="admin-btn admin-btn--primary" type="submit">
-              <AdminIcon name="power" size={15} />
-              <span>Entrar a la demo</span>
-            </button>
+            <AdminButton variant="primary" type="submit" icon="power">
+              Entrar a la demo
+            </AdminButton>
           </form>
-          <Link className="admin-btn" href="/dashboard">
-            <AdminIcon name="overview" size={15} />
-            <span>Volver a mi panel</span>
-          </Link>
+          <AdminButtonLink href="/dashboard" icon="overview">Volver a mi panel</AdminButtonLink>
         </div>
       </section>
     </div>

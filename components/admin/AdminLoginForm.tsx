@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminError, AdminSpinner } from "./AdminUI";
+import { AdminButton, AdminError } from "./AdminUI";
 import { EmailField, HoneypotField, PasswordField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 import { GoogleMark } from "./GoogleMark";
@@ -80,7 +80,7 @@ export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
           name="password"
         />
         <HoneypotField />
-        <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Iniciando sesión" /> Ingresando…</> : "Ingresar al panel →"}</button>
+        <AdminButton variant="primary" className="admin-submit" type="submit" busy={pending} busyLabel="Ingresando…">Ingresar al panel →</AdminButton>
       </form>
       <p className="admin-footnote">Acceso restringido a usuarios autorizados de LedBox.</p>
     </section>

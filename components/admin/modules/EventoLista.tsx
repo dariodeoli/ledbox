@@ -193,7 +193,8 @@ export function NextActionButton({
   if (!next) return null;
   return (
     <AdminButton
-      className="admin-btn--next"
+      variant="primary"
+      size="sm"
       icon={next.key === "finalize" ? "check" : next.key === "return" ? "checkin" : next.key === "dispatch" ? "arrow-right" : "audit"}
       busy={busy}
       title={`${next.label}: ${item.event.name}`}

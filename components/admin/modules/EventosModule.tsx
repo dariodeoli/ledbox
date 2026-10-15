@@ -60,6 +60,7 @@ import {
   AdminToolbar,
   type AdminMenuItem,
   AdminPlanLimitNote,
+  AdminTabs,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { ClientQuickDialog } from "./ClientQuickForm";
@@ -599,15 +600,17 @@ export function EventosModule() {
 
       <OverdueReturnsPanel />
 
-      <nav className="admin-subtabs admin-eventos-sections" aria-label="Secciones de Eventos">
-        <button type="button" className="admin-subtab" data-active={section === "eventos" ? "true" : undefined} aria-pressed={section === "eventos"} onClick={() => changeSection("eventos")}>
-          Eventos
-        </button>
-        <button type="button" className="admin-subtab" data-active={section === "tareas" ? "true" : undefined} aria-pressed={section === "tareas"} onClick={() => changeSection("tareas")}>
-          Tareas
-          {operations.data ? <span className="admin-subtab-count">{formatNumber(taskEntries.length)}</span> : null}
-        </button>
-      </nav>
+      <AdminTabs
+        filters
+        className="admin-eventos-sections"
+        label="Secciones de Eventos"
+        value={section}
+        onChange={(key) => changeSection(key as typeof section)}
+        items={[
+          { key: "eventos", label: "Eventos" },
+          { key: "tareas", label: "Tareas", count: operations.data ? taskEntries.length : null },
+        ]}
+      />
 
       {section === "tareas" ? null : (
       <AdminToolbar>
@@ -809,7 +812,7 @@ export function EventosModule() {
         empty={allEvents.length === 0}
         emptyTitle="Todavía no hay eventos" emptyIcon="events"
         emptyHint="Creá un evento para activar su checklist de montaje, evento, desmontaje y cobro."
-        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={startNewEvent}>Crear evento →</button> : undefined}
+        emptyAction={writable ? <AdminButton type="button" variant="link" onClick={startNewEvent}>Crear evento →</AdminButton> : undefined}
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda o cambiá el filtro de estado." />
@@ -841,9 +844,9 @@ export function EventosModule() {
                     )}
                   </AdminCell>
                   <AdminCell title={event.name}>
-                    <button type="button" className="admin-link-btn" onClick={() => openFicha(event.id)} aria-haspopup="dialog" aria-label={`Abrir el evento ${event.name}`}>
+                    <AdminButton type="button" variant="link" onClick={() => openFicha(event.id)} aria-haspopup="dialog" aria-label={`Abrir el evento ${event.name}`}>
                       {event.name}
-                    </button>
+                    </AdminButton>
                   </AdminCell>
                   <AdminCell title={clientDisplayName(event.client)}>{clientDisplayName(event.client)}</AdminCell>
                   <AdminCell title={where || "Sin lugar definido"}>{where || "—"}</AdminCell>

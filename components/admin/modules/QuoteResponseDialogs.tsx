@@ -60,7 +60,7 @@ export function RejectQuoteDialog({ quote, onClose, onDone }: { quote: AdminLead
       footer={({ requestClose }) => (
         <>
           <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>Cancelar</AdminButton>
-          <AdminButton type="button" variant="ghost" className="admin-btn--danger" icon="check" busy={busy} busyLabel="Rechazando…" disabled={!valid} onClick={() => void submit()}>
+          <AdminButton type="button" variant="danger" icon="check" busy={busy} busyLabel="Rechazando…" disabled={!valid} onClick={() => void submit()}>
             Rechazar pedido
           </AdminButton>
         </>

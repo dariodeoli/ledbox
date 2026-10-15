@@ -11,7 +11,7 @@ import { useAdminSession } from "../AdminShell";
 import { AdminOrgLogo } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
-import { AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButtonLink, AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { EmpresaPerfil } from "./EmpresaPerfil";
 
 /**
@@ -177,10 +177,7 @@ export function EmpresaModule() {
             acceso.
           </p>
           <div className="admin-settings-actions">
-            <Link className="admin-btn" href="/presupuestos" title="Abrir Presupuestos para cargar los datos de pago de la empresa">
-              <AdminIcon name="bank" size={15} />
-              <span>Ir a Datos de pago</span>
-            </Link>
+            <AdminButtonLink href="/presupuestos" title="Abrir Presupuestos para cargar los datos de pago de la empresa" icon="bank">Ir a Datos de pago</AdminButtonLink>
           </div>
         </AdminPanel>
 

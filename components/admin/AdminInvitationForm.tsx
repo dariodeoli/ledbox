@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { adminRoleLabel, formatDate } from "@/lib/admin-format";
 import type { AdminInvitationPublicView } from "@/lib/admin-types";
-import { AdminCountdown, AdminError, AdminNote, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { AdminButton, AdminButtonLink, AdminCountdown, AdminError, AdminNote, AdminSuccess } from "./AdminUI";
 import { HoneypotField, PasswordField, TextField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 import { GoogleMark } from "./GoogleMark";
@@ -123,9 +123,7 @@ export function AdminInvitationForm({
           <div className="admin-success-block">
             <AdminSuccess>Listo: ya sos parte del equipo de {view.organization}.</AdminSuccess>
             <p>Entrando al panel con el rol {adminRoleLabel(view.role)}…</p>
-            <Link href="/dashboard" className="btn-led admin-inline-link">
-              Ir al panel →
-            </Link>
+            <AdminButtonLink variant="primary" href="/dashboard">Ir al panel →</AdminButtonLink>
           </div>
         ) : !view.canAccept ? (
           <>
@@ -143,9 +141,7 @@ export function AdminInvitationForm({
                 <AdminNote tone="error">Tu cuenta está desactivada. Pedile al equipo que la reactive para sumarte.</AdminNote>
               )}
             </div>
-            <Link href="/login" className="btn-led admin-inline-link">
-              Ir a iniciar sesión →
-            </Link>
+            <AdminButtonLink variant="primary" href="/login">Ir a iniciar sesión →</AdminButtonLink>
           </>
         ) : (
           <>
@@ -201,15 +197,9 @@ export function AdminInvitationForm({
                 />
               ) : null}
               <HoneypotField />
-              <button className="btn-led admin-submit" type="submit" disabled={pending}>
-                {pending ? (
-                  <>
-                    <AdminSpinner label="Aceptando la invitación" /> Aceptando…
-                  </>
-                ) : (
-                  "Aceptar la invitación →"
-                )}
-              </button>
+              <AdminButton variant="primary" className="admin-submit" type="submit" busy={pending} busyLabel="Aceptando…">
+                Aceptar la invitación →
+              </AdminButton>
             </form>
           </>
         )}
@@ -232,9 +222,7 @@ export function AdminInvitationMissing() {
           No encontramos esta invitación: el link puede estar incompleto o corresponder a una invitación revocada o
           eliminada. Pedile al equipo de LedBox que te la reenvíen.
         </p>
-        <Link href="/login" className="btn-led admin-inline-link">
-          Ir a iniciar sesión →
-        </Link>
+        <AdminButtonLink variant="primary" href="/login">Ir a iniciar sesión →</AdminButtonLink>
       </section>
     </AdminFrame>
   );

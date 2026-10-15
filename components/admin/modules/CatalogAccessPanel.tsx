@@ -145,7 +145,7 @@ export function CatalogAccessRequests({ canDecide }: { canDecide: boolean }) {
           footer={({ requestClose }) => (
             <>
               <AdminButton icon="close" type="button" onClick={requestClose}>Cancelar</AdminButton>
-              <AdminButton type="button" variant="ghost" className="admin-btn--danger" icon="check" busy={busy === rejecting.id} busyLabel="Rechazando…" onClick={() => void reject()}>Rechazar solicitud</AdminButton>
+              <AdminButton type="button" variant="danger" icon="check" busy={busy === rejecting.id} busyLabel="Rechazando…" onClick={() => void reject()}>Rechazar solicitud</AdminButton>
             </>
           )}
         >

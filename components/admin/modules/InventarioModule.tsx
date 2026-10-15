@@ -22,6 +22,7 @@ import {
   AdminNote,
   AdminSelect,
   AdminToolbar,
+  AdminTabs,
 } from "../AdminUI";
 import { DateField, SearchField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
@@ -405,27 +406,17 @@ export function InventarioModule() {
 
       <OverdueReturnsIndicator />
 
-      <nav className="admin-subtabs admin-inv-tabs" aria-label="Filtrar el inventario">
-        {INVENTORY_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            className="admin-subtab"
-            data-active={focus === tab.value ? "true" : undefined}
-            aria-pressed={focus === tab.value}
-            onClick={() => setFocus(tab.value)}
-          >
-            {tab.label}
-            <span className="admin-subtab-count">{formatNumber(counts[tab.value])}</span>
-          </button>
-        ))}
-        {focusLabel ? (
-          <button type="button" className="admin-subtab" data-active="true" aria-pressed="true" title="Quitar este filtro" onClick={() => setFocus("all")}>
-            {focusLabel}
-            <span className="admin-subtab-count">{formatNumber(rows.length)}</span>
-          </button>
-        ) : null}
-      </nav>
+      <AdminTabs
+        filters
+        className="admin-inv-tabs"
+        label="Filtrar el inventario"
+        value={focusLabel ? "__quitar" : focus}
+        onChange={(key) => setFocus(key === "__quitar" ? "all" : (key as typeof focus))}
+        items={[
+          ...INVENTORY_TABS.map((tab) => ({ key: tab.value, label: tab.label, count: counts[tab.value] })),
+          ...(focusLabel ? [{ key: "__quitar", label: focusLabel, count: rows.length, title: "Quitar este filtro" }] : []),
+        ]}
+      />
 
       <div className="admin-inv-bar" ref={barRef}>
         <AdminToolbar>
@@ -529,7 +520,7 @@ export function InventarioModule() {
         emptyTitle="Inventario vacío"
         emptyIcon="inventory"
         emptyHint="Cargá los equipos y materiales para asignarlos a los eventos."
-        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => setShowForm(true)}>Cargar el primer producto →</button> : undefined}
+        emptyAction={writable ? <AdminButton type="button" variant="link" onClick={() => setShowForm(true)}>Cargar el primer producto →</AdminButton> : undefined}
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda, otra pestaña o cambiá los filtros." />

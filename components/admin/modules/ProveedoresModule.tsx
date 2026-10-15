@@ -52,6 +52,7 @@ import {
   AdminToolbar,
   AdminWhatsappLink,
   type AdminMenuItem,
+  AdminTabs,
 } from "../AdminUI";
 import {
   Combobox,
@@ -698,7 +699,6 @@ export function ProveedoresModule() {
             </div>
             <TextField
               label="Trabajo / concepto"
-              wide
               required
               maxLength={200}
               value={jobForm.description}
@@ -785,7 +785,6 @@ export function ProveedoresModule() {
             </div>
             <TextField
               label="Trabajo / concepto"
-              wide
               required
               maxLength={200}
               value={jobForm.description}
@@ -885,41 +884,17 @@ export function ProveedoresModule() {
 
         {/* Pestañas de estado (issue #151): encima de la lista y del tablero; en
             ancho compacto reemplazan al Kanban, que quedaba cortado en 390. */}
-        <nav className="admin-subtabs" aria-label="Filtrar trabajos por estado">
-          <button
-            type="button"
-            className="admin-subtab"
-            data-active={jobStatus === "ALL" ? "true" : undefined}
-            aria-pressed={jobStatus === "ALL"}
-            onClick={() => setJobStatus("ALL")}
-          >
-            Todos
-            <span className="admin-subtab-count">{formatNumber(jobs.length)}</span>
-          </button>
-          <button
-            type="button"
-            className="admin-subtab"
-            data-active={jobStatus === "OPEN" ? "true" : undefined}
-            aria-pressed={jobStatus === "OPEN"}
-            onClick={() => setJobStatus("OPEN")}
-          >
-            Abiertos
-            <span className="admin-subtab-count">{formatNumber(openJobsCount)}</span>
-          </button>
-          {SUPPLIER_JOB_STATUSES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className="admin-subtab"
-              data-active={jobStatus === value ? "true" : undefined}
-              aria-pressed={jobStatus === value}
-              onClick={() => setJobStatus(value)}
-            >
-              {jobStatusLabel(value)}
-              <span className="admin-subtab-count">{formatNumber(jobStatusCounts.get(value) ?? 0)}</span>
-            </button>
-          ))}
-        </nav>
+        <AdminTabs
+          filters
+          label="Filtrar trabajos por estado"
+          value={jobStatus}
+          onChange={setJobStatus}
+          items={[
+            { key: "ALL", label: "Todos", count: jobs.length },
+            { key: "OPEN", label: "Abiertos", count: openJobsCount },
+            ...SUPPLIER_JOB_STATUSES.map((value) => ({ key: value as string, label: jobStatusLabel(value), count: jobStatusCounts.get(value) ?? 0 })),
+          ]}
+        />
 
         <AdminDataState
           loading={jobsResource.loading}

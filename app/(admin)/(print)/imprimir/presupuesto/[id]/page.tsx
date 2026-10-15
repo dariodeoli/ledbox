@@ -251,11 +251,11 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
 
         {rental && (rental.terms || rental.cancellationLines.length > 0) ? (
           <PrintSection title="Condiciones del alquiler">
-            {rental.terms ? <p style={{ whiteSpace: "pre-line", margin: "0 0 6px" }}>{rental.terms}</p> : null}
+            {rental.terms ? <p className="lbprint-terms">{rental.terms}</p> : null}
             {rental.cancellationLines.length > 0 ? (
               <>
-                <p style={{ margin: "6px 0 2px", fontWeight: 600 }}>Política de cancelación</p>
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <p className="lbprint-terms-title">Política de cancelación</p>
+                <ul className="lbprint-list">
                   {rental.cancellationLines.map((line) => (
                     <li key={line}>{line}</li>
                   ))}
@@ -267,7 +267,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
 
         {rental && rental.charges.length > 0 ? (
           <PrintSection title="Cargos de la devolución">
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <ul className="lbprint-list">
               {rental.charges.map((charge, index) => (
                 <li key={`${charge.label}-${index}`}>
                   {charge.label}: {charge.waived ? "condonado" : formatMoney(charge.amount)}

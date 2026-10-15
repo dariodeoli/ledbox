@@ -5,7 +5,7 @@ import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime } from "@/lib/admin-format";
 import { whatsappHref } from "@/lib/admin-format";
 import { TextField } from "../AdminFields";
-import { AdminButton, AdminConfirmDialog, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButtonLink, AdminButton, AdminConfirmDialog, AdminNote, AdminPanel } from "../AdminUI";
 import { useAdminSession } from "../AdminShell";
 import { SANDBOX_UNAVAILABLE } from "@/lib/mail-preview";
 
@@ -101,7 +101,7 @@ function ClientCatalogAccessLive({ clientId, clientName, phone, canEdit }: { cli
           <span className="admin-actions">
             <AdminButton icon="copy" onClick={() => void copy()}>Copiar</AdminButton>
             {share ? (
-              <a className="admin-btn" href={share} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+              <AdminButtonLink href={share} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</AdminButtonLink>
             ) : null}
           </span>
         </div>

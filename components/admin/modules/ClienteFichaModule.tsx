@@ -32,7 +32,7 @@ import type { AdminClientDetail, AdminClientEventRow, AdminClientPaymentRow } fr
 import { useAdminSession } from "../AdminShell";
 import { useTrashFlow } from "../TrashDialogs";
 import { AdminIcon } from "../AdminIcons";
-import {
+import { AdminButtonLink,
   AdminBadge,
   AdminCell,
   AdminDataState,
@@ -47,6 +47,7 @@ import {
   AdminTimeline,
   AdminWhatsappLink,
   AdminActionsMenu,
+  AdminTabs,
 } from "../AdminUI";
 import { ClientCatalogAccess } from "./ClientCatalogAccess";
 import { ClientFiscalSnapshot } from "./ClientFiscalFields";
@@ -153,7 +154,6 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
   const { role } = useAdminSession();
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>("presupuestos");
-  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   const { client, metrics } = detail;
   const name = clientDisplayName(client);
   const events = useMemo(() => sortClientEvents(detail.events), [detail.events]);
@@ -186,16 +186,6 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
         ? `Abrir el presupuesto enviado a ${name}`
         : `Armar un presupuesto para ${name}`;
 
-  /** Flechas, Inicio y Fin mueven entre pestañas (patrón de tablist). */
-  function onTabKey(event: React.KeyboardEvent, index: number) {
-    const keys: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 };
-    if (!(event.key in keys)) return;
-    event.preventDefault();
-    const next = TABS[(keys[event.key] + TABS.length) % TABS.length].key;
-    setTab(next);
-    tabRefs.current[next]?.focus();
-  }
-
   return (
     <>
       <header className="admin-ficha-head">
@@ -215,17 +205,13 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
         </div>
         <div className="admin-ficha-actions">
           {primary ? (
-            <Link className="admin-btn admin-btn--primary" href={primaryHref} title={primaryTitle}>
-              <AdminIcon name={primary.kind === "collect" ? "finance" : primary.kind === "follow" ? "budgets" : "plus"} />
-              <span>{primary.label}</span>
-            </Link>
+            <AdminButtonLink variant="primary" href={primaryHref} title={primaryTitle} icon={primary.kind === "collect" ? "finance" : primary.kind === "follow" ? "budgets" : "plus"}>
+              {primary.label}
+            </AdminButtonLink>
           ) : null}
           <AdminWhatsappLink phone={contactPhone} name={name} message={clientWhatsappMessage(client.contactName || name)} />
           {canEdit ? (
-            <Link className="admin-btn" href={`/clientes?editar=${encodeURIComponent(client.id)}`} title={`Editar ${name}`}>
-              <AdminIcon name="edit" />
-              <span>Editar</span>
-            </Link>
+            <AdminButtonLink href={`/clientes?editar=${encodeURIComponent(client.id)}`} title={`Editar ${name}`} icon="edit">Editar</AdminButtonLink>
           ) : null}
           {canEdit ? (
             <AdminActionsMenu label={`Más acciones de ${name}`} items={trash.menu({ id: client.id, name, archived: Boolean(client.archivedAt), canWrite: canEdit })} />
@@ -261,27 +247,14 @@ function ClientFicha({ detail, onReload }: { detail: AdminClientDetail; onReload
 
       <div className="admin-ficha-grid">
         <div className="admin-ficha-main">
-          <nav className="admin-subtabs" role="tablist" aria-label={`Secciones de la ficha de ${name}`}>
-            {TABS.map((item, index) => (
-              <button
-                key={item.key}
-                ref={(node) => { tabRefs.current[item.key] = node; }}
-                type="button"
-                role="tab"
-                id={`ficha-tab-${item.key}`}
-                aria-selected={tab === item.key}
-                aria-controls="ficha-panel"
-                tabIndex={tab === item.key ? 0 : -1}
-                className="admin-subtab"
-                data-active={tab === item.key ? "true" : undefined}
-                onClick={() => setTab(item.key)}
-                onKeyDown={(event) => onTabKey(event, index)}
-              >
-                {item.label}
-                {counts[item.key] === null ? null : <span className="admin-subtab-count">{formatNumber(counts[item.key] ?? 0)}</span>}
-              </button>
-            ))}
-          </nav>
+          <AdminTabs
+            label={`Secciones de la ficha de ${name}`}
+            value={tab}
+            onChange={(key) => setTab(key as TabKey)}
+            tabId={(key) => `ficha-tab-${key}`}
+            panelId={() => "ficha-panel"}
+            items={TABS.map((item) => ({ key: item.key, label: item.label, count: counts[item.key] }))}
+          />
           <div id="ficha-panel" role="tabpanel" aria-labelledby={`ficha-tab-${tab}`} className="admin-ficha-panel">
             {tab === "presupuestos" ? <BudgetsTab detail={detail} name={name} /> : null}
             {tab === "eventos" ? <EventsTab events={events} name={name} /> : null}

@@ -31,6 +31,7 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
+  AdminIconButton,
 } from "../AdminUI";
 import { DayField, SearchField } from "../AdminFields";
 import { useAdminResource } from "@/lib/admin-api";
@@ -341,17 +342,13 @@ function AuditoriaView() {
                     </AdminCell>
                     <AdminCell title={detailText ? `${log.summary} — ${detailText}` : log.summary}>{log.summary}</AdminCell>
                     <AdminCell end>
-                      <button
-                        type="button"
-                        className="admin-iconbtn"
+                      <AdminIconButton
+                        icon={open ? "close" : "info"}
+                        label={open ? "Ocultar el detalle del cambio" : "Ver el detalle del cambio"}
                         onClick={() => toggleDetail(log.id)}
                         aria-expanded={open}
                         aria-controls={`audit-detail-${log.id}`}
-                        title={open ? "Ocultar el detalle del cambio" : "Ver el detalle del cambio"}
-                        aria-label={open ? "Ocultar el detalle del cambio" : "Ver el detalle del cambio"}
-                      >
-                        <AdminIcon name={open ? "close" : "info"} size={15} />
-                      </button>
+                      />
                     </AdminCell>
                   </AdminRow>
                   {open ? <AuditDetail log={log} lines={lines} /> : null}

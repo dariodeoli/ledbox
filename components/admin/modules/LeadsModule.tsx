@@ -45,6 +45,7 @@ import {
   AdminToolbar,
   AdminWhatsappLink,
   type AdminMenuItem,
+  AdminTabs,
 } from "../AdminUI";
 import { CheckboxField, SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { LeadQuickDialog } from "./LeadQuickForm";
@@ -500,41 +501,17 @@ export function LeadsModule() {
 
       {/* Pestañas de estado (issue #151): encima de la lista y del tablero; en
           ancho compacto reemplazan al Kanban, que quedaba cortado en 390. */}
-      <nav className="admin-subtabs" aria-label="Filtrar leads por estado">
-        <button
-          type="button"
-          className="admin-subtab"
-          data-active={status === "ALL" ? "true" : undefined}
-          aria-pressed={status === "ALL"}
-          onClick={() => setStatus("ALL")}
-        >
-          Todos
-          <span className="admin-subtab-count">{formatNumber(list.length)}</span>
-        </button>
-        {STATUS_FILTER_OPTIONS.slice(1).map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="admin-subtab"
-            data-active={status === option.value ? "true" : undefined}
-            aria-pressed={status === option.value}
-            onClick={() => setStatus(option.value)}
-          >
-            {option.label}
-            <span className="admin-subtab-count">{formatNumber(statusCounts.get(option.value) ?? 0)}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          className="admin-subtab"
-          data-active={status === "ARCHIVED" ? "true" : undefined}
-          aria-pressed={status === "ARCHIVED"}
-          onClick={() => setStatus("ARCHIVED")}
-        >
-          Archivados
-          <span className="admin-subtab-count">{formatNumber(archivedLeads.length)}</span>
-        </button>
-      </nav>
+      <AdminTabs
+        filters
+        label="Filtrar leads por estado"
+        value={status}
+        onChange={setStatus}
+        items={[
+          { key: "ALL", label: "Todos", count: list.length },
+          ...STATUS_FILTER_OPTIONS.slice(1).map((option) => ({ key: option.value, label: option.label, count: statusCounts.get(option.value) ?? 0 })),
+          { key: "ARCHIVED", label: "Archivados", count: archivedLeads.length },
+        ]}
+      />
 
       <AdminDataState
         loading={leads.loading}

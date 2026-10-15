@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { AdminButtonLink } from "@/components/admin/AdminUI";
 import { publicConfig } from "@/lib/public-config";
 
 export const dynamic = "force-dynamic";
@@ -42,9 +43,7 @@ export default async function DemoLlenaPage({ searchParams }: { searchParams: Pr
           <span>{copy.accent}</span>
         </h1>
         <p className="admin-lede">{copy.text}</p>
-        <a className="btn-led admin-submit" href="/">
-          {copy.retry}
-        </a>
+        <AdminButtonLink variant="primary" className="admin-submit" href="/">{copy.retry}</AdminButtonLink>
         <a className="admin-back-link" href={publicConfig.productUrl}>
           ← Conocer EventOS
         </a>

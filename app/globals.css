@@ -996,9 +996,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-radius-lg: 20px;
   /* Campos y ventanas (rediseño 13-10-2026): fondo un tono más oscuro que el
      panel, radio de 9 px y halo de foco de 3 px. */
-  --a-field-bg: rgba(4, 5, 14, .55);
-  --a-field-radius: 9px;
-  --a-field-h: 40px;
+  /* Caja única de los controles: los valores salen de los tokens de owncoding-ui
+     (`--c-*`), así los controles propios (Combobox, contraseña, PIN, buscador) y los
+     de la librería miden, se pintan y reaccionan igual. Un solo borde de 1 px. */
+  --a-field-bg: rgb(var(--c-ink-800));
+  --a-field-border: rgb(var(--c-interactivo));
+  --a-field-border-hover: rgb(var(--c-mute));
+  --a-field-disabled-bg: rgb(var(--c-ink-700));
+  --a-field-radius: 8px;
+  --a-field-h: 36px;
+  /* Menús y desplegables: una sola caja opaca con sombra. */
+  --a-pop-bg: var(--a-dialog-bg);
+  --a-pop-shadow: 0 0 0 1px var(--a-line-2), 0 18px 40px -12px rgba(0, 0, 0, .55);
   --a-focus-halo: rgba(90, 217, 255, .30);
   --a-danger-halo: rgba(255, 125, 146, .26);
   --a-ok-halo: rgba(82, 227, 155, .20);
@@ -1077,12 +1086,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-accent-text: #084e66;
   --a-radius: 18px;
   --a-radius-lg: 26px;
-  --a-field-bg: #ffffff;
   --a-focus-halo: rgba(11, 111, 143, .24);
   --a-danger-halo: rgba(189, 44, 71, .20);
   --a-ok-halo: rgba(11, 122, 75, .18);
   --a-dialog-backdrop: rgba(28, 34, 74, .38);
   --a-dialog-bg: #ffffff;
+  --a-pop-shadow: 0 0 0 1px var(--a-line-2), 0 18px 40px -14px rgba(32, 28, 80, .28);
   --a-shadow: 0 34px 66px -46px rgba(76, 61, 186, .55);
   --a-shadow-card: 0 26px 50px -40px rgba(76, 61, 186, .5), 0 2px 8px -4px rgba(76, 61, 186, .16);
   --a-blur: blur(18px) saturate(1.2);
@@ -1158,13 +1167,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    librería (Combobox, contraseña, PIN, buscador): los que NO llevan
    `data-oc-control`. */
 .admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-width: 0; }
-.admin-field input:not([data-oc-control]), .admin-field select:not([data-oc-control]), .admin-field textarea:not([data-oc-control]) { min-height: var(--a-field-h); padding: 9px 12px; border: 1px solid var(--a-line-control); border-radius: var(--a-field-radius); background: var(--a-field-bg); color: var(--a-text); font: 13px var(--font-body); transition: border-color .15s, box-shadow .15s, opacity .15s; }
-.admin-field input:not([data-oc-control]):focus, .admin-field select:not([data-oc-control]):focus, .admin-field textarea:not([data-oc-control]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-focus-halo); }
-.admin-field input:not([data-oc-control])::placeholder, .admin-field textarea:not([data-oc-control])::placeholder { color: var(--a-muted); opacity: 1; }
 /* Error: borde rojo + halo; va después del foco para que gane aunque tenga el cursor. */
-.admin-field input:not([data-oc-control])[aria-invalid="true"], .admin-field select:not([data-oc-control])[aria-invalid="true"], .admin-field textarea:not([data-oc-control])[aria-invalid="true"] { border-color: var(--a-danger); box-shadow: 0 0 0 3px var(--a-danger-halo); }
-.admin-field input:not([data-oc-control]):disabled, .admin-field select:not([data-oc-control]):disabled, .admin-field textarea:not([data-oc-control]):disabled,
-.admin-field input:not([data-oc-control])[readonly], .admin-field textarea:not([data-oc-control])[readonly] { opacity: .55; cursor: not-allowed; }
 /* MoneyInput de owncoding-ui (issue #99, v0.68): el componente dibuja el prefijo
    «Gs» como adorno `inicio` dentro del campo (relleno medido, sin CSS del panel) y
    el «%» de PercentField como adorno `fin`. Acá solo queda el contenedor. */
@@ -1209,7 +1212,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-password-toggle:hover { color: var(--a-accent); }
 .admin-switch { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; }
 .admin-switch-state { color: var(--a-muted-2); font-size: 12.5px; }
-.admin-card .admin-field input:not([data-oc-control]) { min-height: 42px; padding: 12px 12px; font-size: 13px; }
 .admin-google-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin: 16px 0 12px; border: 1px solid var(--a-line-2); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-weight: 700; text-decoration: none; transition: border-color .15s, color .15s; }
 .admin-google-button:hover, .admin-google-button:focus-visible { border-color: var(--a-accent); color: var(--a-accent); }
 .admin-google-button span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #4285f4; font-weight: 800; }
@@ -1427,12 +1429,97 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-menu-reason { color: var(--a-muted-2); font: 500 11.5px/1.35 var(--font-body); white-space: normal; }
 /* El «•••» de las filas con acciones es táctil como sus vecinos (44 px) en mobile. */
 @media (max-width: 720px) { .admin-actions > .admin-iconbtn, .admin-actions > .admin-btn--only-icon { min-width: 44px; min-height: 44px; } }
-.admin-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 8px 12px; border: 1px solid var(--a-line-control); border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
-.admin-btn:hover:not(:disabled) { border-color: var(--a-accent); color: var(--a-accent); }
-.admin-btn:disabled { opacity: .5; cursor: not-allowed; }
-.admin-btn--primary { border-color: transparent; background: var(--a-accent); color: #04191d; }
-.admin-btn--primary:hover:not(:disabled) { background: var(--a-accent-strong); color: #04191d; }
-.admin-btn--only-icon { width: 34px; justify-content: center; padding: 0; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   BIBLIOTECA DE PIEZAS (rediseño etapa A) — docs/DISENO-PANEL.md §16
+   Botón, chip, pestañas, campos (caja y ancho), menús y diálogo. Cada pieza se
+   define UNA vez acá; corregirla corrige todas las pantallas. `npm run check:ui`
+   impide volver a estilos sueltos en components/admin y app/(admin).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Botón: primary · secondary · ghost · danger · link; tamaños md (36) y sm (30) ── */
+.admin-btn { --btn-h: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--btn-h); padding: 0 16px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--a-text); font: 600 13px/1.2 var(--font-body); letter-spacing: 0; text-transform: none; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, background .15s, color .15s, filter .15s; }
+.admin-btn:focus-visible, .admin-iconbtn:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-btn:disabled, .admin-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.admin-btn .admin-icon { flex: 0 0 auto; }
+.admin-btn--secondary { border-color: var(--a-line-2); background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
+.admin-btn--secondary:hover:not(:disabled) { border-color: var(--a-accent); background: var(--a-accent-soft); color: var(--a-text-strong); }
+.admin-btn--ghost { color: var(--a-muted-2); }
+.admin-btn--ghost:hover:not(:disabled) { background: var(--a-accent-soft); color: var(--a-text-strong); }
+.admin-btn--primary { background: var(--a-grad-action); color: var(--a-action-ink); box-shadow: 0 12px 26px -16px color-mix(in srgb, var(--a-accent) 70%, transparent); }
+.admin-btn--primary:hover:not(:disabled) { filter: brightness(1.08); }
+.admin-btn--danger { border-color: var(--a-danger); color: var(--a-danger-text); background: transparent; }
+.admin-btn--danger:hover:not(:disabled) { background: var(--a-danger-surface); }
+.admin-btn--link { --btn-h: auto; min-height: 0; padding: 0; border-radius: 4px; color: var(--a-accent-text, var(--a-accent)); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.admin-btn--link:hover:not(:disabled) { color: var(--a-accent-strong); }
+.admin-btn--sm { --btn-h: 30px; padding: 0 12px; font-size: 12px; }
+.admin-btn--only-icon { width: var(--btn-h); padding: 0; }
+@media (max-width: 720px) { .admin-btn:not(.admin-btn--link) { --btn-h: 44px; } .admin-btn--link { min-height: 44px; } }
+
+/* ── Chip único: tonos de AdminTone y de lib/inventory-visual-state.ts ── */
+.admin-badge { --chip-base: var(--a-line-2); --chip-surface: var(--a-panel-2); --chip-text: var(--a-muted-2); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 22px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--chip-base) 45%, transparent); border-radius: 999px; background: var(--chip-surface); color: var(--chip-text); font: 600 11px/1.4 var(--font-body); letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.admin-badge .admin-icon { flex: 0 0 auto; }
+.admin-badge-text { overflow: hidden; text-overflow: ellipsis; }
+.admin-badge[data-tone="ok"] { --chip-base: var(--a-ok); --chip-surface: var(--a-ok-surface); --chip-text: var(--a-ok-text); }
+.admin-badge[data-tone="warn"] { --chip-base: var(--a-warn); --chip-surface: var(--a-warn-surface); --chip-text: var(--a-warn-text); }
+.admin-badge[data-tone="danger"] { --chip-base: var(--a-danger); --chip-surface: var(--a-danger-surface); --chip-text: var(--a-danger-text); }
+.admin-badge[data-tone="info"] { --chip-base: var(--a-info); --chip-surface: var(--a-info-surface); --chip-text: var(--a-info-text); }
+.admin-badge[data-tone="accent"] { --chip-base: var(--a-accent); --chip-surface: var(--a-accent-surface); --chip-text: var(--a-accent-text); }
+/* Devolución vencida: la misma familia roja con borde pleno y etiqueta en negrita. */
+.admin-badge[data-emphasis="true"] { border-color: var(--chip-base); box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-base) 55%, transparent); font-weight: 800; }
+.admin-badge[data-size="sm"] { min-height: 18px; padding: 1px 7px 1px 6px; font-size: 10.5px; }
+.admin-inv-chips--compact .admin-badge { white-space: normal; text-align: left; }
+
+/* ── Campos: una caja, un borde de 1 px ──
+   Reposo: borde neutro y fino (token interactivo, ≥ 3:1). Hover: apenas más
+   marcado. Foco: borde de acento + anillo, SOLO con foco. Error: borde rojo y
+   nada más. Deshabilitado: fondo apagado; solo lectura: borde punteado sin
+   fondo. Sin sombras internas ni degradados. Misma regla para los controles de
+   la librería (`data-oc-control`) y los propios (Combobox, contraseña, PIN). */
+.admin-field input:not([data-oc-control]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.sr-only), .admin-field select:not([data-oc-control]), .admin-field textarea:not([data-oc-control]) { min-height: var(--a-field-h); padding: 0 14px; border: 1px solid var(--a-field-border); border-radius: var(--a-field-radius); background: var(--a-field-bg); box-shadow: none; color: var(--a-text); font: 14px var(--font-body); transition: border-color .15s, box-shadow .15s; }
+.admin-field textarea:not([data-oc-control]) { padding: 9px 14px; }
+.admin-field input:not([data-oc-control])::placeholder, .admin-field textarea:not([data-oc-control])::placeholder { color: var(--a-muted); opacity: 1; }
+.admin-field input:not([data-oc-control]):hover:not(:disabled):not(:focus):not([aria-invalid="true"]), .admin-field select:not([data-oc-control]):hover:not(:disabled):not(:focus), .admin-field textarea:not([data-oc-control]):hover:not(:disabled):not(:focus):not([aria-invalid="true"]), .admin-root [data-oc-control]:hover:not(:disabled):not(:focus):not([aria-invalid="true"]):not([readonly]) { border-color: var(--a-field-border-hover); }
+.admin-field input:not([data-oc-control]):focus, .admin-field select:not([data-oc-control]):focus, .admin-field textarea:not([data-oc-control]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-focus-halo); }
+.admin-field input:not([data-oc-control])[aria-invalid="true"], .admin-field select:not([data-oc-control])[aria-invalid="true"], .admin-field textarea:not([data-oc-control])[aria-invalid="true"], .admin-root [data-oc-control][aria-invalid="true"] { border-color: var(--a-danger); box-shadow: none; }
+.admin-field input:not([data-oc-control]):disabled, .admin-field select:not([data-oc-control]):disabled, .admin-field textarea:not([data-oc-control]):disabled { border-color: rgb(var(--c-ink-600)); background: var(--a-field-disabled-bg); color: var(--a-muted); cursor: not-allowed; }
+.admin-field input:not([data-oc-control])[readonly], .admin-field textarea:not([data-oc-control])[readonly] { border-style: dashed; background: transparent; }
+/* Causa del «borde doble»: el panel no carga el preflight de Tailwind, así que la
+   utilidad `border` de la librería fija el ancho pero no el estilo, y el navegador
+   dibuja el `inset` nativo (dos tonos). Todo borde de la librería es sólido; solo
+   lectura queda punteado. */
+.admin-root [class~="border"], .admin-root [data-oc-control], .admin-root [data-oc-select] > select { border-style: solid; }
+.admin-root [data-oc-control][readonly] { border-style: dashed; }
+/* En reposo ningún control lleva sombra ni anillo: el halo es solo de :focus. */
+.admin-root [data-oc-control]:not(:focus):not([aria-invalid="true"]) { box-shadow: none; }
+@media (max-width: 720px) { .admin-root { --a-field-h: 44px; } .admin-field input:not([data-oc-control]), .admin-field select:not([data-oc-control]), .admin-field textarea:not([data-oc-control]) { font-size: 16px; } }
+
+/* ── Campos: ancho por tipo (`size` xs · sm · md · lg · full) ──
+   xs: código, número, %, días y hora · sm: monto y fecha · md: teléfono, RUC y
+   selects cortos · lg: nombre, correo y ciudad · full: dirección, URL y notas.
+   Tope en rem; en celular siempre el ancho completo. En la grilla de 12 columnas
+   de un diálogo cada tamaño ocupa sus columnas (ver `.admin-dialog-grid`). */
+.admin-field[data-size="xs"] { max-width: 8rem; }
+.admin-field[data-size="sm"] { max-width: 12rem; }
+.admin-field[data-size="md"] { max-width: 17rem; }
+.admin-field[data-size="lg"] { max-width: 24rem; }
+@media (max-width: 720px) { .admin-field[data-size] { max-width: none; } }
+
+/* ── Segmentado: una fila, opciones parejas (nunca parte en dos líneas) ── */
+.admin-field .admin-segmented { flex-wrap: nowrap; }
+/* El panel no carga el preflight de Tailwind: sin este reset el <button> nativo se ve como tecla gris con borde. */
+.admin-field .admin-segmented > button { flex: 1 1 0; min-width: 0; min-height: calc(var(--a-field-h) - 10px); padding-inline: 8px; border: 0; background: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-field .admin-segmented > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
+/* Celular: cada opción es un blanco táctil de 44 px, y las acciones dentro del campo también. */
+@media (max-width: 720px) {
+  .admin-field .admin-segmented { padding: 2px; }
+  .admin-field .admin-segmented > button { min-height: 44px; }
+  .admin-combobox-clear, .admin-password-toggle { top: 0; right: 0; width: 44px; height: 44px; transform: none; }
+}
+
+/* ── Menús y desplegables: una caja opaca con sombra ── */
+.admin-menu-pop, .admin-combobox-pop { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; }
+/* ═══ FIN BIBLIOTECA ═══ */
+
 /* Barras de filtros/búsqueda y formularios en línea: todos los controles
    comparten la línea de base (issues #89 y #102). Cada ítem se ancla abajo (el
    label va arriba sin correr el control), el alto de los controles se normaliza
@@ -1440,7 +1527,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    reservado. Vale igual con una o dos líneas de mensaje: el control no se mueve. */
 .admin-toolbar { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .admin-toolbar .admin-btn { min-height: 36px; margin-left: auto; }
-.admin-toolbar .admin-field input, .admin-toolbar .admin-field select { min-height: 36px; }
 .admin-toolbar .admin-viewswitch { height: 36px; padding: 2px; }
 .admin-toolbar .admin-field, .admin-inline-form .admin-field { position: relative; }
 .admin-toolbar .admin-field-hint, .admin-toolbar .admin-field-error,
@@ -1550,19 +1636,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-panel-link { margin-left: auto; color: var(--a-accent); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
 .admin-panel-link:hover { text-decoration: underline; }
 .admin-panel .admin-table-wrap { padding: 8px 12px 12px; border: 0; border-radius: 0; background: transparent; }
-.admin-badge { display: inline-flex; align-items: center; max-width: 100%; padding: 4px 8px; border: 1px solid var(--a-line-2); border-radius: 999px; color: var(--a-muted-2); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
-.admin-badge[data-tone="accent"] { color: var(--a-accent); border-color: color-mix(in srgb, var(--a-accent) 42%, transparent); background: color-mix(in srgb, var(--a-accent) 14%, transparent); }
-.admin-badge[data-tone="ok"] { color: var(--a-ok); border-color: color-mix(in srgb, var(--a-ok) 42%, transparent); background: color-mix(in srgb, var(--a-ok) 14%, transparent); }
-.admin-badge[data-tone="warn"] { color: var(--a-warn); border-color: color-mix(in srgb, var(--a-warn) 42%, transparent); background: color-mix(in srgb, var(--a-warn) 14%, transparent); }
-.admin-badge[data-tone="danger"] { color: var(--a-danger); border-color: color-mix(in srgb, var(--a-danger) 42%, transparent); background: color-mix(in srgb, var(--a-danger) 14%, transparent); }
-.admin-badge[data-tone="info"] { color: var(--a-info); border-color: color-mix(in srgb, var(--a-info) 42%, transparent); background: color-mix(in srgb, var(--a-info) 14%, transparent); }
 .admin-empty { display: grid; justify-items: center; gap: 8px; padding: 24px 16px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius-lg); color: var(--a-muted); text-align: center; }
 .admin-empty svg { color: var(--a-accent); }
 .admin-empty-title { color: var(--a-text-strong); font-size: 13px; font-weight: 700; }
 .admin-empty-hint { max-width: 46ch; font-size: 12.5px; line-height: 1.5; }
 .admin-empty-action { display: flex; justify-content: center; margin-top: 2px; }
-.admin-empty-link { padding: 0; border: 0; background: transparent; color: var(--a-accent); font: 700 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; text-decoration: none; cursor: pointer; }
-.admin-empty-link:hover { text-decoration: underline; }
 .admin-error-state { display: flex; align-items: center; gap: 8px; padding: 12px 12px; border: 1px solid color-mix(in srgb, var(--a-danger) 35%, transparent); border-radius: var(--a-radius); background: color-mix(in srgb, var(--a-danger) 8%, transparent); color: var(--a-danger); font-size: 12.5px; }
 .admin-error-state > span:first-of-type { flex: 1; min-width: 0; }
 .admin-muted { color: var(--a-muted); font-size: 12.5px; }
@@ -1811,38 +1889,61 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog--sm { width: min(440px, 100%); }
 .admin-dialog--wide { width: min(720px, 100%); }
 .admin-dialog--lg { width: min(720px, 100%); }
+.admin-dialog--xl { width: min(960px, 100%); }
 /* Ficha 360 del cliente (issue #34): panel lateral con ancho para las listas de hechos. */
 .admin-dialog--ficha { width: min(1040px, 100%); }
 .admin-dialog.admin-dialog--sheet { background: var(--a-dialog-bg); display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
 .admin-dialog-overlay--ficha .admin-dialog--sheet { height: 100vh; height: 100dvh; max-height: none; border-width: 0 0 0 1px; border-radius: var(--a-radius-lg) 0 0 var(--a-radius-lg); }
 .admin-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.admin-dialog--sheet .admin-dialog-head { flex: 0 0 auto; align-items: flex-start; gap: 12px; padding: 16px 16px 12px; background: var(--a-dialog-bg); border-bottom: 1px solid var(--a-line); }
+.admin-dialog--sheet .admin-dialog-head { flex: 0 0 auto; align-items: flex-start; gap: 12px; padding: 18px 16px 14px; background: var(--a-dialog-bg); border-bottom: 1px solid var(--a-line); }
 .admin-dialog-icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-dialog-heading { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; align-self: center; }
-.admin-dialog-head .admin-dialog-title { display: block; margin: 0; color: var(--a-text-strong); font: 600 16px/1.25 var(--font-display); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+.admin-dialog-head .admin-dialog-title { display: block; margin: 0; color: var(--a-text-strong); font: 600 17px/1.25 var(--font-display); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .admin-dialog-description { margin: 0; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.4; }
 .admin-dialog-close { flex: 0 0 auto; width: 44px; height: 44px; margin: -6px -8px -6px 0; }
-.admin-dialog-body { scroll-padding-bottom: 88px; display: grid; flex: 1 1 auto; align-content: start; gap: 12px; min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
+.admin-dialog-body { scroll-padding-bottom: 88px; display: grid; flex: 1 1 auto; align-content: start; gap: 16px; min-height: 0; padding: 18px 16px; overflow-y: auto; overscroll-behavior: contain; }
 /* Pie fijo: el nuevo (`footer`) y el de los hijos existentes (`.admin-dialog-foot`)
    se ven igual y quedan pegados abajo del cuerpo con scroll. */
 .admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-line); background: var(--a-dialog-bg); }
 .admin-dialog-footer { flex: 0 0 auto; }
+/* Pie: la acción principal a la derecha; las secundarias, ghost (sin borde). */
+.admin-dialog-footer .admin-btn--secondary, .admin-dialog-body .admin-dialog-foot .admin-btn--secondary { border-color: transparent; background: transparent; color: var(--a-muted-2); }
+.admin-dialog-footer .admin-btn--secondary:hover:not(:disabled), .admin-dialog-body .admin-dialog-foot .admin-btn--secondary:hover:not(:disabled) { background: var(--a-accent-soft); color: var(--a-text-strong); }
 /* Error o aviso de la acción: entre el cuerpo (que desplaza) y el pie fijo. */
 .admin-dialog-status { flex: 0 0 auto; padding: 8px 16px 0; background: var(--a-dialog-bg); border-top: 1px solid var(--a-line); }
 .admin-dialog-section--collapsible + .admin-dialog-section--collapsible { padding-top: 0; border-top: 0; }
 .admin-dialog-footer-note { flex: 1 1 100%; min-width: 0; }
-.admin-dialog-body .admin-dialog-foot { position: sticky; bottom: 0; margin: 4px -16px -16px; }
+.admin-dialog-body .admin-dialog-foot { position: sticky; bottom: 0; margin: 4px -16px -18px; }
 .admin-dialog-confirm { z-index: 1; display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-danger); background: var(--a-danger-surface); }
 .admin-dialog-confirm-text { display: grid; gap: 2px; color: var(--a-danger-text); font-size: 12.5px; }
 .admin-dialog-confirm-text strong { font-size: 13px; }
-.admin-btn--danger { border-color: var(--a-danger); color: var(--a-danger-text); }
-.admin-btn--danger:hover:not(:disabled) { background: var(--a-danger-surface); }
-.admin-dialog-section { display: grid; gap: 8px; min-width: 0; }
-.admin-dialog-section + .admin-dialog-section { padding-top: 12px; border-top: 1px solid var(--a-line); }
+.admin-dialog-section { display: grid; gap: 12px; min-width: 0; }
+.admin-dialog-section + .admin-dialog-section { padding-top: 8px; }
 .admin-dialog-body .admin-form-group { padding-top: 4px; }
 .admin-dialog-body .admin-form-group-title { color: var(--a-muted); font: 700 10.5px var(--font-body); letter-spacing: .1em; }
-.admin-dialog-section-title { margin: 0; color: var(--a-muted); font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
-.admin-dialog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; min-width: 0; }
+.admin-dialog-section-title { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--a-muted); font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; }
+.admin-dialog-section-title::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--a-line); }
+/* Cuerpo del diálogo: grilla de 12 columnas. Cada campo ocupa las de su `size`
+   (xs 3 · sm 4 · md 6 · lg 6 · full 12; en `lg` y `xl` 2 · 3 · 4 · 6 · 12). `columns` en la
+   sección y `AdminCol span` los pisan. Celular: una columna. */
+.admin-dialog-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-flow: row dense; align-items: start; gap: 16px 12px; min-width: 0; }
+/* Ancho por defecto con especificidad cero: lo que ya fija su propio `grid-column` (grupos de formulario, notas) lo conserva. */
+:where(.admin-dialog-grid) > :where(*) { grid-column: span 6; min-width: 0; }
+.admin-dialog-grid > [data-size="xs"] { grid-column: span 3; }
+.admin-dialog-grid > [data-size="sm"] { grid-column: span 4; }
+.admin-dialog-grid > [data-size="md"], .admin-dialog-grid > [data-size="lg"] { grid-column: span 6; }
+.admin-dialog--lg .admin-dialog-grid > [data-size="xs"], .admin-dialog--xl .admin-dialog-grid > [data-size="xs"] { grid-column: span 2; }
+.admin-dialog--lg .admin-dialog-grid > [data-size="sm"], .admin-dialog--xl .admin-dialog-grid > [data-size="sm"] { grid-column: span 3; }
+.admin-dialog--lg .admin-dialog-grid > [data-size="md"], .admin-dialog--xl .admin-dialog-grid > [data-size="md"] { grid-column: span 4; }
+.admin-dialog-grid[data-columns="1"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 12; }
+.admin-dialog-grid[data-columns="2"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 6; }
+.admin-dialog-grid[data-columns="3"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 4; }
+.admin-dialog-grid[data-columns="4"] > :is(*, [data-size]):not([data-size="full"]):not(.admin-field--wide):not(.admin-col) { grid-column: span 3; }
+.admin-dialog-grid > [data-size="full"], .admin-dialog-grid > .admin-field--wide, .admin-dialog-grid > .admin-dialog-note { grid-column: 1 / -1; }
+.admin-dialog-grid > .admin-col { grid-column: span 6; }
+.admin-dialog-grid > .admin-col[data-span="2"] { grid-column: span 2; } .admin-dialog-grid > .admin-col[data-span="3"] { grid-column: span 3; } .admin-dialog-grid > .admin-col[data-span="4"] { grid-column: span 4; } .admin-dialog-grid > .admin-col[data-span="5"] { grid-column: span 5; } .admin-dialog-grid > .admin-col[data-span="7"] { grid-column: span 7; } .admin-dialog-grid > .admin-col[data-span="8"] { grid-column: span 8; } .admin-dialog-grid > .admin-col[data-span="9"] { grid-column: span 9; } .admin-dialog-grid > .admin-col[data-span="10"] { grid-column: span 10; } .admin-dialog-grid > .admin-col[data-span="12"] { grid-column: 1 / -1; }
+.admin-col { display: grid; align-content: start; min-width: 0; }
+.admin-col > .admin-field { max-width: none; }
 @media (max-width: 767px) {
   /* Hoja de pantalla completa: alto visible real (teclado incluido, `--admin-dialog-vh`
      lo fija visualViewport), safe-area arriba y abajo, pie pegado abajo. */
@@ -1852,6 +1953,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-dialog-overlay .admin-dialog:not(.admin-dialog--sheet) { height: 100vh; height: 100dvh; }
   .admin-dialog--sheet .admin-dialog-head { padding-top: max(16px, env(safe-area-inset-top)); }
   .admin-dialog-grid { grid-template-columns: minmax(0, 1fr); }
+  /* !important a propósito: en celular manda una sola columna sobre cualquier ancho por tipo, `columns` o `AdminCol`. */
+  .admin-dialog-grid > * { grid-column: 1 / -1 !important; }
   .admin-dialog-body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); overflow-x: hidden; }
   .admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .admin-dialog-footer > .admin-btn, .admin-dialog-body .admin-dialog-foot > .admin-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
@@ -1966,7 +2069,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
 .admin-table--clientes .admin-cell--actions { overflow: visible; }
 @media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }
-.admin-table--clientes .admin-cell--actions .admin-btn--row { padding-inline: 8px; font-size: 11px; letter-spacing: 0; }
+.admin-table--clientes .admin-cell--actions .admin-btn--sm { padding-inline: 8px; font-size: 11px; letter-spacing: 0; }
 .admin-row-link { color: inherit; text-decoration: none; }
 .admin-row-link::after { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
 .admin-row-link:hover strong { text-decoration: underline; }
@@ -1984,14 +2087,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--presupuestos { --presupuestos-cols: 4.5rem minmax(8.5rem, 1fr) minmax(9rem, 1.5fr) 7.25rem 8rem 9.25rem 4.75rem 10.25rem; --admin-cols: var(--presupuestos-cols); --admin-table-min: 62rem; }
 .admin-table--presupuestos .admin-quote-title { -webkit-line-clamp: 1; }
 .admin-table--presupuestos .admin-cell--actions { overflow: visible; }
-.admin-table--presupuestos .admin-btn--row { padding-inline: 10px; letter-spacing: .04em; }
+.admin-table--presupuestos .admin-btn--sm { padding-inline: 10px; letter-spacing: .04em; }
 .admin-kpis.admin-kpis--stages { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .admin-kpis--stages .admin-kpi { flex-wrap: wrap; }
 .admin-kpis--stages .admin-kpi-label { flex-basis: 100%; }
 @media (max-width: 900px) { .admin-kpis.admin-kpis--stages { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); } }
 .admin-table--presupuestos .admin-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .admin-quote-ref { color: var(--a-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-.admin-btn--row { min-height: 32px; padding-inline: 12px; font-size: 12px; white-space: nowrap; }
 .admin-module-context-action { margin-left: auto; flex: 0 0 auto; }
 .admin-filter-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; color: var(--a-muted); font-size: 12px; }
 .admin-filter-note strong { color: var(--a-text-strong); }
@@ -2031,7 +2133,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-module-context { flex-wrap: wrap; }
   .admin-module-context-action { width: 100%; }
   .admin-module-context-action .admin-btn { width: 100%; min-height: 44px; }
-  .admin-cards-foot .admin-btn--row { min-height: 44px; }
+  .admin-cards-foot .admin-btn--sm { min-height: 44px; }
   .admin-module-context-hint, .admin-module-context-meta { display: none; }
   .admin-kpis.admin-kpis--stages { display: flex; gap: 8px; margin-inline: -16px; padding: 0 16px 4px; overflow-x: auto; scroll-snap-type: x proximity; }
   .admin-kpis.admin-kpis--stages .admin-kpi { flex: 0 0 9.5rem; scroll-snap-align: start; }
@@ -2188,8 +2290,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-subtab-count { margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--a-bg-2); color: var(--a-muted-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .admin-subtab[data-active="true"] .admin-subtab-count { background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-var-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.admin-var-chip { padding: 4px 8px; border: 1px dashed var(--a-line-2); border-radius: 8px; background: var(--a-panel-2); color: var(--a-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; cursor: pointer; }
-.admin-var-chip:hover { border-style: solid; border-color: var(--a-accent); background: var(--a-accent-soft); }
+.admin-var-chips .admin-btn { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .admin-message-preview { margin: 0; padding: 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); color: var(--a-text); font: 400 12.5px/1.55 var(--font-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 .admin-mail-preview { display: block; width: 100%; height: 440px; border: 1px solid var(--a-line); border-radius: var(--a-radius); margin-block: 12px; }
 
@@ -2214,7 +2315,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 8px 12px; }
 .admin-plan-list { display: grid; gap: 8px; }
 .admin-plan-row { display: grid; grid-template-columns: minmax(9rem, 1.4fr) minmax(8rem, 1fr) minmax(9rem, 1fr) auto; gap: 8px; align-items: end; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
-.admin-plan-row .admin-field input { min-height: 34px; }
 /* Plan de pagos en mobile (issue #141): la fila de cuota apila campos; la
    grilla de 4 columnas desbordaba el diálogo en 390. */
 @media (max-width: 720px) {
@@ -2333,8 +2433,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    la vista; la trazabilidad del presupuesto se dibuja como línea de tiempo. */
 .admin-expected-note { margin: 8px 12px 0; }
 .admin-expected-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 8px 12px; }
-.admin-linkbtn { padding: 0; border: 0; background: none; color: var(--a-accent); font: 600 12.5px var(--font-body); text-align: left; text-decoration: underline; cursor: pointer; }
-.admin-linkbtn:hover { color: var(--a-accent-strong); }
 .admin-timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .admin-timeline-group { display: grid; gap: 8px; margin-top: 4px; padding: 8px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-timeline-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2388,7 +2486,6 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    detalle despliega los campos tocados con el antes tachado y el después en
    negrita; el paginado va debajo de la tabla. */
 .admin-field--filter { flex: 0 0 auto; width: 9.5rem; }
-.admin-field--filter input { min-height: 34px; padding: 8px 8px; }
 .admin-audit-detail { position: sticky; left: 0; width: min(60rem, calc(100vw - 2.5rem)); margin-top: 8px; padding: 12px 12px; border: 1px dashed var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-audit-lines { display: grid; gap: 4px; margin: 0; }
 .admin-audit-line { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
@@ -2667,7 +2764,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-board-wrap::-webkit-scrollbar-track { background: transparent; }
 .admin-panel .admin-board-wrap { padding: 0 12px 12px; }
 .admin-board { display: flex; align-items: stretch; gap: 8px; width: 100%; }
-.admin-board-col { display: flex; flex-direction: column; gap: 8px; flex: 1 1 var(--a-board-col, 16.5rem); min-width: 11rem; max-width: 24rem; min-height: 9.5rem; padding: 8px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-bg-2); scroll-snap-align: start; transition: border-color .15s, background .15s; }
+.admin-board-col { display: flex; flex-direction: column; gap: 8px; flex: 1 1 var(--a-board-col, 16.5rem); min-width: 11rem; max-width: 24rem; min-height: 9.5rem; padding: 10px; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-bg-2); scroll-snap-align: start; transition: border-color .15s, background .15s; }
 /* Aviso del deslizamiento: solo se dibuja cuando hay columnas a la derecha. */
 .admin-board-more { display: inline-flex; align-items: center; gap: 6px; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .admin-board-more .admin-icon { color: var(--a-accent); }
@@ -2679,11 +2776,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-board-col[data-tone="ok"] .admin-board-col-dot { background: var(--a-ok); }
 .admin-board-col[data-tone="warn"] .admin-board-col-dot { background: var(--a-warn); }
 .admin-board-col[data-tone="danger"] .admin-board-col-dot { background: var(--a-danger); }
-.admin-board-col-title { color: var(--a-text-strong); font: 700 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
-.admin-board-col-count { margin-left: auto; padding: 4px 8px; border-radius: 999px; background: var(--a-panel-2); color: var(--a-muted-2); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-board-col-title { color: var(--a-text-strong); font: 700 12px var(--font-body); letter-spacing: 0; text-transform: none; }
+/* El contador de la columna tiene la misma cara que el chip neutro (`AdminBadge`). */
+.admin-board-col-count { margin-left: auto; min-width: 22px; padding: 1px 8px; border: 1px solid color-mix(in srgb, var(--a-line-2) 45%, transparent); border-radius: 999px; background: var(--a-panel-2); color: var(--a-muted-2); font: 600 11px/1.4 var(--font-body); text-align: center; font-variant-numeric: tabular-nums; }
 .admin-board-cards { display: grid; align-content: start; gap: 8px; flex: 1 1 auto; }
 .admin-board-col-empty { padding: 12px 0; color: var(--a-muted); font-size: 11px; text-align: center; }
-.admin-board-card { display: grid; gap: 8px; padding: 8px 12px; border: 1px solid var(--a-line); border-left: 3px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel); transition: border-color .15s; }
+.admin-board-card { display: grid; gap: 8px; padding: 8px 12px; border: 1px solid var(--a-line); border-left: 3px solid var(--a-line-2); border-radius: 10px; background: var(--a-panel); box-shadow: 0 1px 0 rgba(0, 0, 0, .12); transition: border-color .15s; }
 .admin-board-col[data-tone="accent"] .admin-board-card { border-left-color: var(--a-accent); }
 .admin-board-col[data-tone="info"] .admin-board-card { border-left-color: var(--a-info); }
 .admin-board-col[data-tone="ok"] .admin-board-card { border-left-color: var(--a-ok); }
@@ -2706,8 +2804,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-board-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .admin-board-card-title { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--a-text-strong); font-size: 12.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .admin-board-card-actions { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-.admin-board-card-actions .admin-btn { height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; }
-.admin-board-card-actions .admin-btn--only-icon { width: 26px; }
+.admin-board-card-actions .admin-btn { --btn-h: 28px; padding: 0 10px; font-size: 12px; }
+.admin-board-card-actions .admin-btn--only-icon { width: 28px; padding: 0; }
 .admin-board-card-actions .admin-iconbtn { width: 26px; height: 26px; }
 .admin-board-card-sub { overflow: hidden; color: var(--a-muted-2); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-board-card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -2825,7 +2923,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Ficha del producto: navegación de secciones, resumen, línea de tiempo y vínculos. */
 .admin-dialog-stack { display: grid; gap: 10px; min-width: 0; }
 .admin-dialog-section { scroll-margin-top: 56px; }
-.admin-ficha-nav { position: sticky; top: -16px; z-index: 2; display: flex; gap: 6px; margin: -16px -16px 0; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--a-line); background: var(--a-dialog-bg); scrollbar-width: none; }
+.admin-ficha-nav { position: sticky; top: -18px; z-index: 2; display: flex; gap: 6px; margin: -18px -16px 0; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--a-line); background: var(--a-dialog-bg); scrollbar-width: none; }
 .admin-ficha-nav::-webkit-scrollbar { display: none; }
 .admin-ficha-nav .admin-subtab { flex: 0 0 auto; min-height: 34px; cursor: pointer; }
 /* Pestañas de la ficha (E2): van debajo del resumen y quedan pegadas arriba al desplazarse. */
@@ -2874,18 +2972,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    (lib/inventory-visual-state.ts) y usa los tokens -surface/-text (AA medido en
    tests/inventory-visual-tokens.test.ts). */
 .admin-inv-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
-.admin-inv-chip { --chip-base: var(--a-line-2); --chip-surface: var(--a-panel-2); --chip-text: var(--a-muted-2); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px 2px 6px; border: 1px solid color-mix(in srgb, var(--chip-base) 45%, transparent); border-radius: 999px; background: var(--chip-surface); color: var(--chip-text); font-size: 11px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
-.admin-inv-chip .admin-icon { flex: 0 0 auto; }
-.admin-inv-chip-text { overflow: hidden; text-overflow: ellipsis; }
-.admin-inv-chip[data-tone="ok"] { --chip-base: var(--a-ok); --chip-surface: var(--a-ok-surface); --chip-text: var(--a-ok-text); }
-.admin-inv-chip[data-tone="warn"] { --chip-base: var(--a-warn); --chip-surface: var(--a-warn-surface); --chip-text: var(--a-warn-text); }
-.admin-inv-chip[data-tone="danger"] { --chip-base: var(--a-danger); --chip-surface: var(--a-danger-surface); --chip-text: var(--a-danger-text); }
-.admin-inv-chip[data-tone="info"] { --chip-base: var(--a-info); --chip-surface: var(--a-info-surface); --chip-text: var(--a-info-text); }
-.admin-inv-chip[data-tone="accent"] { --chip-base: var(--a-accent); --chip-surface: var(--a-accent-surface); --chip-text: var(--a-accent-text); }
 /* Devolución vencida: la misma familia roja, pero con etiqueta en negrita y borde pleno para que destaque. */
-.admin-inv-chip[data-emphasis="true"] { border-color: var(--chip-base); box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-base) 55%, transparent); font-weight: 800; }
 .admin-inv-chips--compact { justify-content: center; }
-.admin-inv-chips--compact .admin-inv-chip { padding: 1px 6px 1px 5px; border-radius: 10px; font-size: 10.5px; white-space: normal; text-align: left; }
 /* Barra segmentada: verde libres · rojo comprometidas o vencidas · naranja dañadas · azul mantenimiento. */
 .admin-inv-seg { display: flex; gap: 1px; height: 6px; min-width: 3rem; overflow: hidden; border-radius: 999px; background: var(--a-line); }
 .admin-inv-seg > span { display: block; flex: none; min-width: 2px; height: 100%; }
@@ -3099,6 +3187,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   height: 34px; padding: 0 8px; border: 1px solid #c7d3da; border-radius: 8px;
   background: #fff; color: #16232a; font: 600 12px/1 var(--font-body); min-width: 12rem;
 }
+.lbprint-terms { margin: 0 0 6px; white-space: pre-line; }
+.lbprint-terms-title { margin: 6px 0 2px; font-weight: 600; }
+.lbprint-list { margin: 0; padding-left: 18px; }
 .lbprint-sheet {
   width: min(100%, 210mm); margin: 0 auto; padding: 14mm 12mm;
   background: #fff; color: #10161a; border-radius: 3px;
@@ -4242,16 +4333,12 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-kpi-label { letter-spacing: .08em; }
 
 /* ── Controles: píldoras, degradado y campos tipo hueco ── */
-.admin-btn, .admin-searchbtn, .admin-search, .admin-filter, .admin-google-button { border-radius: 999px; }
-.admin-btn { border-color: var(--a-line-2); background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
-.admin-btn:hover:not(:disabled) { border-color: var(--a-accent); }
-.admin-btn--primary { border-color: transparent; background: var(--a-grad-action); color: var(--a-action-ink); box-shadow: 0 12px 26px -16px color-mix(in srgb, var(--a-accent) 70%, transparent); }
-.admin-btn--primary:hover:not(:disabled) { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
+.admin-searchbtn, .admin-search, .admin-filter, .admin-google-button { border-radius: 999px; }
 .admin-iconbtn { border-color: var(--a-line-2); border-radius: 999px; }
 .admin-root .btn-led { border-radius: 999px; background: var(--a-grad-action); color: var(--a-action-ink); }
 .admin-root .btn-led:hover { background: var(--a-grad-action); color: var(--a-action-ink); filter: brightness(1.08); }
 .admin-submit { min-height: 44px; }
-.admin-btn--only-icon, .admin-actions .admin-btn, .admin-actions .admin-iconbtn { border-radius: 999px; }
+.admin-actions .admin-iconbtn { border-radius: 999px; }
 .admin-search input, .admin-dialog-counter input:not([type=checkbox]) { border-radius: var(--a-radius); }
 
 /* ── Navegación ── */
@@ -4264,12 +4351,6 @@ html:has(.producto[data-theme="light"]), html:has(.producto[data-theme="light"])
 .admin-user { background: color-mix(in srgb, var(--a-panel) 70%, transparent); }
 
 /* ── Estados con color (issue #75): badges y chips ── */
-.admin-badge { padding: 4px 10px; border-color: var(--a-line-2); letter-spacing: .04em; }
-.admin-badge[data-tone="ok"] { border-color: color-mix(in srgb, var(--a-ok) 30%, transparent); background: var(--a-ok-surface); color: var(--a-ok-text); }
-.admin-badge[data-tone="warn"] { border-color: color-mix(in srgb, var(--a-warn) 30%, transparent); background: var(--a-warn-surface); color: var(--a-warn-text); }
-.admin-badge[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 30%, transparent); background: var(--a-danger-surface); color: var(--a-danger-text); }
-.admin-badge[data-tone="accent"] { border-color: color-mix(in srgb, var(--a-accent) 32%, transparent); background: color-mix(in srgb, var(--a-accent) 12%, transparent); }
-.admin-badge[data-tone="info"] { border-color: color-mix(in srgb, var(--a-info) 32%, transparent); background: color-mix(in srgb, var(--a-info) 12%, transparent); }
 .admin-note[data-tone="ok"] { color: var(--a-ok-text); }
 .admin-note[data-tone="warn"] { color: var(--a-warn-text); }
 .admin-countdown[data-tone="danger"], .admin-countdown--inline[data-tone="danger"] { color: var(--a-danger-text); }
@@ -4832,8 +4913,6 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .admin-segments .admin-subtab { flex: 0 0 auto; min-height: 44px; }
   .admin-cards-foot .admin-iconbtn { min-width: 44px; min-height: 44px; }
 }
-.admin-quote-title-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.admin-quote-title-btn:hover .admin-quote-title { text-decoration: underline; }
 
 /* ── Tienda web por empresa: portada, catálogo, carrito y seguimiento de pedido ── */
 .cp-root {
@@ -4972,10 +5051,6 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-prep .admin-badge { gap: 3px; padding-inline: 6px; }
 .admin-prep .admin-badge .admin-icon { flex: 0 0 auto; }
 .admin-event-states { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.admin-link-btn { appearance: none; min-height: 32px; padding: 0; border: 0; background: none; color: var(--a-text-strong); font: inherit; font-weight: 700; text-align: left; text-decoration: underline transparent; text-underline-offset: 3px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.admin-link-btn:hover { text-decoration-color: currentColor; }
-.admin-link-btn:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; border-radius: 4px; }
-.admin-btn--next { border-color: color-mix(in srgb, var(--a-accent) 55%, var(--a-line)); color: var(--a-text-strong); background: var(--a-accent-soft); white-space: nowrap; letter-spacing: 0; text-transform: none; font-size: 12px; padding-inline: 8px; }
 .admin-events-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: nowrap; }
 .admin-cell--actions .admin-events-actions { width: 100%; }
 

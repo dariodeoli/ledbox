@@ -18,7 +18,7 @@ export function EventQuickFields({ values, onChange, autoFocus, moreOpen = false
   layout?: "quick" | "sections";
   children?: React.ReactNode;
 }) {
-  const name = <TextField label="Nombre del evento" required autoFocus={autoFocus} maxLength={200} wide={layout === "sections"}
+  const name = <TextField label="Nombre del evento" required autoFocus={autoFocus} maxLength={200}
       value={values.name} onChange={(name) => onChange({ name })} placeholder="Ej.: Lanzamiento Samsung" />;
   const starts = <DateTimeField label="Inicio" hint="Opcional · fecha y hora del evento" value={values.startsAt} onChange={(startsAt) => onChange({ startsAt })} />;
   const ends = <DateTimeField label="Fin" value={values.endsAt} onChange={(endsAt) => onChange({ endsAt })} />;

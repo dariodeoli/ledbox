@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { promoterAvailabilityDetail, promoterAvailabilityLabel, promoterAvailabilityTone, formatNumber } from "@/lib/admin-format";
 import { promoterIsAvailable, type AdminEventPanelRow } from "@/lib/admin-types";
 import { pendingTaskEntries, taskInScope, TASK_SCOPE_LABEL, type TaskScope } from "@/lib/event-readiness";
-import { AdminBadge, AdminDataState, AdminNote, AdminSelect } from "../AdminUI";
+import { AdminBadge, AdminDataState, AdminNote, AdminSelect, AdminTabs } from "../AdminUI";
 import { ChecklistTable } from "./Checklist";
 
 const SCOPES: readonly TaskScope[] = ["pending", "overdue", "week"];
@@ -68,21 +68,13 @@ export function EventosTareas({
   return (
     <section className="admin-eventos-tareas" aria-label="Tareas de todos los eventos">
       <div className="admin-eventos-tareas-bar">
-        <nav className="admin-subtabs" aria-label="Filtrar tareas">
-          {SCOPES.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className="admin-subtab"
-              data-active={scope === key ? "true" : undefined}
-              aria-pressed={scope === key}
-              onClick={() => onScope(key)}
-            >
-              {TASK_SCOPE_LABEL[key]}
-              <span className="admin-subtab-count">{formatNumber(counts[key])}</span>
-            </button>
-          ))}
-        </nav>
+        <AdminTabs
+          filters
+          label="Filtrar tareas"
+          value={scope}
+          onChange={(key) => onScope(key as TaskScope)}
+          items={SCOPES.map((key) => ({ key, label: TASK_SCOPE_LABEL[key], count: counts[key] }))}
+        />
         <AdminSelect value={effectivePromoter} onChange={setPromoterId} label="Filtrar por promotora" options={promoterOptions} />
       </div>
 

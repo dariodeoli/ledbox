@@ -47,10 +47,12 @@ function contrast(a: string, b: string): number {
 // El paquete no la exporta por el entry: se lee el archivo publicado.
 const campoLib = readFileSync(join(root, "node_modules", "owncoding-ui", "src", "utils", "campo.js"), "utf8");
 
-test("campos: alto de la librería (44 px en celular, 36 px desde md) y 40 px solo para los controles propios", () => {
+test("campos: una sola altura (44 px en celular, 36 px desde md) para los de la librería y los propios", () => {
   assert.match(campoLib, /CAMPO_ALTURA = 'h-11 md:h-9'/, "la librería cambió la altura de los campos: revisar el panel");
-  assert.match(darkBlock, /--a-field-h:\s*40px/, "los controles propios (combobox, contraseña, PIN) conservan 40 px");
-  assert.match(darkBlock, /--a-field-radius:\s*9px/);
+  assert.match(darkBlock, /--a-field-h:\s*36px/, "los controles propios (combobox, contraseña, PIN) miden lo mismo que los de la librería");
+  assert.match(darkBlock, /--a-field-radius:\s*8px/, "mismo radio que los de la librería (rounded-lg)");
+  assert.match(darkBlock, /--a-field-border:\s*rgb\(var\(--c-interactivo\)\)/, "un solo borde fino, el token interactivo de la librería");
+  assert.match(darkBlock, /--a-field-bg:\s*rgb\(var\(--c-ink-800\)\)/, "mismo fondo que los de la librería");
   assert.match(css, /@media \(max-width: 720px\) \{ \.admin-root \{ --a-field-h: 44px; \} \}/);
   assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\)[^{]*\{[^}]*min-height:\s*var\(--a-field-h\)/);
   assert.doesNotMatch(rule(".admin-field input, .admin-field select, .admin-field textarea"), /min-height|padding|border/, "el aspecto de los campos de la librería no se pisa desde el panel");
@@ -65,8 +67,9 @@ test("campos: foco, error, válido y deshabilitado salen de la librería; los co
   assert.match(fields, /estado=\{success && !error \? "ok" : undefined\}/, "el éxito del kit pasa a estado=ok de la librería");
   // Controles propios que todavía no son de la librería.
   assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\):focus[^{]*\{[^}]*box-shadow:\s*0 0 0 3px var\(--a-focus-halo\)/, "foco: borde del acento + halo de 3 px");
-  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\)\[aria-invalid="true"\][^{]*\{[^}]*border-color:\s*var\(--a-danger\)[^}]*0 0 0 3px/, "error: borde rojo + halo");
-  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\):disabled[^{]*\{[^}]*opacity:\s*\.55/, "deshabilitado: opacidad .55");
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\)\[aria-invalid="true"\][^{]*\{[^}]*border-color:\s*var\(--a-danger\)[^}]*box-shadow:\s*none/, "error: borde rojo y nada más (sin halo)");
+  assert.match(css, /\.admin-field input:not\(\[data-oc-control\]\):disabled[^{]*\{[^}]*background:\s*var\(--a-field-disabled-bg\)/, "deshabilitado: fondo apagado, igual que el de la librería");
+  assert.match(css, /\.admin-root \[data-oc-control\]:not\(:focus\):not\(\[aria-invalid="true"\]\)\s*\{\s*box-shadow:\s*none/, "en reposo ningún control lleva sombra ni anillo: el halo es solo del foco");
   assert.match(rule(".admin-field-error"), /var\(--a-danger-text\)/);
   assert.match(rule(".admin-field-success"), /var\(--a-ok-text\)/);
   assert.match(rule(".admin-field-hint"), /font-size:\s*11\.5px/);
@@ -115,7 +118,8 @@ test("ventana: tamaños 560 / 720 / ficha lateral y hoja completa en celular", (
   assert.match(css, /\.admin-dialog-overlay--ficha\s*\{[^}]*place-items:\s*stretch end/);
   assert.match(css, /\.admin-dialog-overlay--ficha \.admin-dialog--sheet\s*\{[^}]*height:\s*100dvh/);
   assert.match(css, /@media \(max-width: 767px\) \{\s*[^{]*\.admin-dialog-overlay, \.admin-dialog-overlay--ficha \{[^}]*padding:\s*0/);
-  assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.admin-dialog--xl\s*\{\s*width:\s*min\(960px, 100%\)/);
+  assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(12, minmax\(0, 1fr\)\)/, "grilla de 12 columnas");
 });
 
 test("ventana: foco, Esc, aria-modal, trampa de Tab y confirmación sin window.confirm", () => {

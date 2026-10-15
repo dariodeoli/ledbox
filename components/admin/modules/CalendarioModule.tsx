@@ -24,7 +24,7 @@ import {
 } from "@/lib/admin-format";
 import type { AdminCalendarAlert, AdminCalendarItem, AdminEventPanelRow } from "@/lib/admin-types";
 import { AdminIcon } from "../AdminIcons";
-import {
+import { AdminButtonLink,
   AdminBadge,
   AdminButton,
   AdminDataState,
@@ -377,7 +377,7 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
               </> : null}
             </dl>
             {!selectedEvent && ["event", "event_end", "setup", "strike"].includes(selectedItem.kind) ? <AdminDataState loading={eventsLoading} error={eventsError} onRetry={onRetryEvents}><AdminNote>Ficha operativa no disponible en los datos cargados.</AdminNote></AdminDataState> : null}
-            <Link className="admin-btn" href={selectedItem.href}>Abrir ficha completa</Link>
+            <AdminButtonLink href={selectedItem.href}>Abrir ficha completa</AdminButtonLink>
           </div>
         </AdminPanel>
       ) : null}

@@ -55,7 +55,7 @@ test("cada sección tiene su página real y declara la sección", () => {
 });
 
 test("la barra de subtabs sale de la lista única de secciones", () => {
-  assert.match(moduleSource, /<AdminSubtabs[\s\S]*?items=\{FINANZAS_SECTIONS\.map/, "la barra no usa FINANZAS_SECTIONS");
+  assert.match(moduleSource, /<AdminTabs[\s\S]*?items=\{FINANZAS_SECTIONS\.map/, "la barra no usa FINANZAS_SECTIONS");
   assert.match(moduleSource, /active: item\.key === section/, "la barra no marca la sección activa");
   for (const section of SECTIONS.filter((item) => item.key !== "resumen")) {
     assert.match(moduleSource, new RegExp(`section === "${section.key}"`), `${section.key}: el render no está condicionado por sección`);
