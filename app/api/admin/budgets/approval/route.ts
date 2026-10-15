@@ -6,7 +6,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { reserveBudgetInventory, type BudgetReservation } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
-import { checkStockBeforeApproval, decideStockApproval } from "@/lib/server/approval-stock";
+import { checkStockBeforeApproval, decideStockApproval, releaseOrphanedGateReservation, snapshotEventAssignments, type AssignmentSnapshot } from "@/lib/server/approval-stock";
 
 export const runtime = "nodejs";
 import { clientDisplayName } from "@/lib/client-identity";
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
-    select: { id: true, title: true, status: true, approvedAt: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
+    select: { id: true, title: true, status: true, approvedAt: true, eventId: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
   const clientLabel = clientDisplayName(budget.client);
@@ -70,13 +70,21 @@ export async function POST(request: Request) {
     // Stock antes de aprobar (alquileres P1-3), con el lock de ítems del motor. Si falta, se
     // frena con el detalle; «Aprobar igual» (`force`) solo lo puede OWNER/ADMIN y queda auditado.
     let forcedShortage: string[] | null = null;
+    // La verificación deja el stock reservado: si la aprobación falla o pierde la carrera se deshace.
+    let gateSnapshot: AssignmentSnapshot | null = null;
     if (!budget.approvedAt) {
+      gateSnapshot = await snapshotEventAssignments(organizationId, budget.eventId);
       const gate = await checkStockBeforeApproval({ organizationId, budgetId: budget.id, context: auth.context });
       const decision = decideStockApproval(gate, body.force === true, user.role);
       if (decision.kind === "blocked") return jsonError(decision.message, 409, "stock_insufficient");
       if (decision.kind === "forbidden") return jsonError(decision.message, 403, "stock_force_forbidden");
       if (decision.kind === "forced") forcedShortage = decision.lines;
     }
+    const releaseGate = async () => {
+      if (!gateSnapshot) return;
+      try { await releaseOrphanedGateReservation({ organizationId, budgetId: budget.id, eventId: budget.eventId, before: gateSnapshot }); }
+      catch (releaseError) { console.error("[budgets/approval] no se pudo liberar la reserva de la verificación", { budgetId: budget.id, error: releaseError }); }
+    };
     // Idempotente: si ya hay una aprobación registrada, se devuelve tal cual.
     let applied: { count: number };
     try { applied = await withQuoteApproval(budget.id, organizationId, (tx) => tx.budget.updateMany({
@@ -89,9 +97,13 @@ export async function POST(request: Request) {
         approvalNote: note || null,
       },
     })); } catch (error) {
+      await releaseGate();
       if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
       throw error;
     }
+    // Perdió la carrera (otro pedido aprobó primero): lo reservado por esta verificación se libera
+    // salvo que el presupuesto ya esté aprobado (entonces la reserva es de quien ganó).
+    if (applied.count === 0) await releaseGate();
     if (applied.count > 0) {
       await recordAudit({
         context: auth.context,

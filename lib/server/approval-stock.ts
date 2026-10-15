@@ -52,6 +52,62 @@ export async function checkStockBeforeApproval(options: {
   return { ok: false, reservation, lines, message: `Falta stock para aprobar: ${lines.join(" · ")}.` };
 }
 
+const SNAPSHOT_FIELDS = { id: true, inventoryId: true, quantity: true, startsAt: true, endsAt: true, holdExpiresAt: true, releasedAt: true, budgetId: true, comboQuantity: true } as const;
+export type AssignmentSnapshot = Array<{
+  id: string; inventoryId: string; quantity: number; startsAt: Date | null; endsAt: Date | null;
+  holdExpiresAt: Date | null; releasedAt: Date | null; budgetId: string | null; comboQuantity: number;
+}>;
+
+/** Estado de las asignaciones del evento ANTES de la verificación con reserva. */
+export async function snapshotEventAssignments(organizationId: string, eventId: string | null): Promise<AssignmentSnapshot> {
+  if (!eventId) return [];
+  return db.eventInventory.findMany({ where: { eventId, event: { organizationId } }, select: SNAPSHOT_FIELDS });
+}
+
+/**
+ * La verificación `checkStockBeforeApproval` deja el stock reservado. Si después la aprobación
+ * falla o pierde la carrera, esa reserva quedaría huérfana (stock tomado por un presupuesto que
+ * no se aprobó). Acá se deshace: dentro de UNA transacción, bajo el lock del presupuesto, y solo
+ * si sigue sin aprobar (si otro pedido lo aprobó, la reserva es suya y no se toca). Devuelve las
+ * filas restauradas. Lo que ya salió (`checkedOut`) nunca se toca.
+ */
+export async function releaseOrphanedGateReservation(options: {
+  organizationId: string;
+  budgetId: string;
+  eventId: string | null;
+  before: AssignmentSnapshot;
+}): Promise<number> {
+  if (!options.eventId) return 0;
+  const eventId = options.eventId;
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${options.budgetId} FOR UPDATE`;
+    const budget = await tx.budget.findFirst({ where: { id: options.budgetId, organizationId: options.organizationId }, select: { approvedAt: true } });
+    if (!budget || budget.approvedAt) return 0;
+    const now = await tx.eventInventory.findMany({ where: { eventId, event: { organizationId: options.organizationId } }, select: { ...SNAPSHOT_FIELDS, checkedOut: true } });
+    const before = new Map(options.before.map((row) => [row.inventoryId, row]));
+    let restored = 0;
+    for (const row of now) {
+      if (row.checkedOut) continue;
+      const old = before.get(row.inventoryId);
+      if (!old) {
+        await tx.eventInventory.delete({ where: { id: row.id } });
+        restored += 1;
+        continue;
+      }
+      const same = old.quantity === row.quantity && old.startsAt?.getTime() === row.startsAt?.getTime() && old.endsAt?.getTime() === row.endsAt?.getTime()
+        && old.holdExpiresAt?.getTime() === row.holdExpiresAt?.getTime() && old.releasedAt?.getTime() === row.releasedAt?.getTime()
+        && old.budgetId === row.budgetId && old.comboQuantity === row.comboQuantity;
+      if (same) continue;
+      await tx.eventInventory.update({
+        where: { id: row.id },
+        data: { quantity: old.quantity, startsAt: old.startsAt, endsAt: old.endsAt, holdExpiresAt: old.holdExpiresAt, releasedAt: old.releasedAt, budgetId: old.budgetId, comboQuantity: old.comboQuantity },
+      });
+      restored += 1;
+    }
+    return restored;
+  });
+}
+
 /**
  * Verificación de SOLO LECTURA (misma cuenta y mismo lock que `checkStockBeforeApproval`, pero
  * la transacción siempre se deshace): no reserva, no audita. Se usa para decidir si el portal
