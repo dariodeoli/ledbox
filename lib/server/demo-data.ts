@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
+import { seedDemoInventoryTaxonomy } from "@/lib/server/demo-inventory-taxonomy";
 import { inventoryUnitPrefix } from "@/lib/field-rules";
 import { fiscalSummaryOf, grossToNet, shiftMonthKey, taxTotalsOf, type InvoiceTaxTypeValue } from "@/lib/fiscal";
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
@@ -3556,6 +3557,8 @@ async function seedDemoData(organizationId: string, base: Date, ns?: string): Pr
       await tx.organizationLogo.createMany({ data: logosData });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.inventoryUnit.createMany({ data: inventoryUnitsData });
+      // Categorías (con subcategorías), depósitos, ubicación, condición y compras del inventario (rediseño E1).
+      await seedDemoInventoryTaxonomy(tx, { organizationId, base, items: inventoryData, units: inventoryUnitsData });
       await tx.inventoryComponent.createMany({ data: inventoryComponentsData });
       for (const link of budgetItemLinks) await tx.budgetItem.update({ where: { id: link.id }, data: { inventoryId: link.inventoryId } });
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
@@ -3612,6 +3615,10 @@ export async function wipeDemoData(tx: Prisma.TransactionClient, organizationId:
   // Los componentes de combos restringen el borrado del ítem: primero se sueltan.
   await tx.inventoryComponent.deleteMany({ where: { organizationId } });
   await tx.inventoryItem.deleteMany({ where: { organizationId } });
+  // Subcategorías antes que sus categorías (la FK al padre restringe el borrado) y luego los depósitos.
+  await tx.inventoryCategory.deleteMany({ where: { organizationId, parentId: { not: null } } });
+  await tx.inventoryCategory.deleteMany({ where: { organizationId } });
+  await tx.warehouse.deleteMany({ where: { organizationId } });
   await tx.promoter.deleteMany({ where: { organizationId } });
   await tx.treasuryAccount.deleteMany({ where: { organizationId } });
   await tx.teamInvitation.deleteMany({ where: { organizationId } });

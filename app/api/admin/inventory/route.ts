@@ -41,6 +41,7 @@ import {
   confirmHold,
   releaseAssignment,
   findSubstitutes,
+  lockInventoryItems,
   insufficientMessage,
   isComboAssignment,
   isComboItem,
@@ -53,6 +54,9 @@ import {
   rangeLabel,
 } from "@/lib/server/inventory-availability";
 import { dispatchAssignment, returnAssignment } from "@/lib/server/inventory-operations";
+import { categoryWriteData, resolveInventoryCategory, type ResolveCategoryInput } from "@/lib/server/inventory-categories";
+import { readInventoryTrace } from "@/lib/server/inventory-details";
+import { resolveUnitPlacement } from "@/lib/server/inventory-units";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
 export const runtime = "nodejs";
@@ -103,11 +107,16 @@ const INVENTORY_ITEM_FIELDS = [
   "bufferBeforeMin",
   "bufferAfterMin",
   "billingUnit",
+  "categoryId",
+  "defaultWarehouseId",
+  "defaultLocation",
+  "supplierId",
+  "purchasedAt",
+  "warrantyUntil",
 ] as const;
 
 type InventoryItemUpdate = Partial<{
   name: string;
-  category: string;
   kind: InventoryKind;
   status: InventoryStatus;
   replacementCost: number;
@@ -127,7 +136,7 @@ const MAX_BUFFER_MIN = 30 * 24 * 60;
 
 /** Datos del ítem (issue #111) normalizados: `undefined` = no tocar el campo. */
 function readInventoryItemUpdate(body: Record<string, unknown>):
-  | { ok: true; data: InventoryItemUpdate }
+  | { ok: true; data: InventoryItemUpdate; taxonomy: ResolveCategoryInput | null }
   | { ok: false; error: string } {
   const data: InventoryItemUpdate = {};
   if (body.name !== undefined) {
@@ -138,9 +147,16 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
     }
     data.name = name;
   }
-  if (body.category !== undefined) {
-    if (typeof body.category !== "string") return { ok: false, error: "La categoría no es válida." };
-    data.category = body.category.trim().slice(0, 80) || "General";
+  // Categoría y subcategoría: nadie escribe `category` directo; el helper único resuelve el id y el espejo de texto.
+  let taxonomy: ResolveCategoryInput | null = null;
+  if (body.categoryId !== undefined && body.categoryId !== null && body.categoryId !== "") {
+    if (typeof body.categoryId !== "string") return { ok: false, error: "La categoría no es válida." };
+    taxonomy = { categoryId: body.categoryId };
+  } else if (body.category !== undefined || body.subcategory !== undefined) {
+    if (body.category !== undefined && typeof body.category !== "string") return { ok: false, error: "La categoría no es válida." };
+    if (body.subcategory !== undefined && body.subcategory !== null && typeof body.subcategory !== "string") return { ok: false, error: "La subcategoría no es válida." };
+    if (body.category === undefined && typeof body.subcategory === "string" && body.subcategory.trim()) return { ok: false, error: "Elegí también la categoría de la subcategoría." };
+    taxonomy = { category: body.category, subcategory: body.subcategory };
   }
   if (body.inventoryKind !== undefined) {
     const kind = String(body.inventoryKind);
@@ -204,7 +220,7 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
     if (imageUrl === false) return { ok: false, error: FIELD_MESSAGES.image };
     data.imageUrl = imageUrl;
   }
-  return { ok: true, data };
+  return { ok: true, data, taxonomy };
 }
 
 /** Reserva viva: sin liberar y con fin (propio o del evento) desde hoy en adelante, o sin fin. */
@@ -278,7 +294,7 @@ export async function GET(request: Request) {
     });
     const substitutes = await findSubstitutes({
       organizationId,
-      item: { id: item.id, category: item.category, status: item.status },
+      item: { id: item.id, category: item.category, categoryId: item.categoryId, status: item.status },
       startsAt,
       endsAt,
     });
@@ -465,18 +481,32 @@ export async function POST(request: Request) {
     const changes = readBulkChanges(isUnits ? "units" : "items", body.changes);
     if (!ids || !changes) return jsonError("Elegí de 1 a 100 registros únicos y cambios explícitos válidos. No se aplicó ningún cambio.", 400);
     let data: Record<string, unknown>;
+    let taxonomy: ResolveCategoryInput | null = null;
     if (isUnits) {
       const status = changes.status === undefined ? undefined : readInventoryUnitStatus(changes.status);
       if (changes.status !== undefined && !status) return jsonError("Estado de unidad inválido. No se aplicó ningún cambio.", 400);
       if (typeof changes.notes === "string" && changes.notes.length > MAX_UNIT_NOTES) return jsonError("Las notas de la unidad no pueden superar 400 caracteres.", 400);
-      data = { ...changes, ...(status ? { status } : {}) };
-      if (typeof data.notes === "string") data.notes = data.notes.trim() || null;
+      // Depósito, ubicación, condición, proveedor y fechas: mismas reglas y mismo 404 por id ajeno que el alta.
+      const trace = await readInventoryTrace(changes, { organizationId, allow: { warehouse: "unit", condition: true } });
+      if (!trace.ok) return jsonError(`${trace.error} No se aplicó ningún cambio.`, trace.status);
+      const { status: _status, notes, warehouseId: _w, location: _l, conditionScore: _c, supplierId: _s, purchasedAt: _p, warrantyUntil: _u, ...rest } = changes as Record<string, unknown>;
+      data = { ...rest, ...trace.values, ...(status ? { status } : {}) };
+      if (typeof notes === "string") data.notes = notes.trim() || null;
     } else {
       const item = readInventoryItemUpdate(changes);
       const prices = readInventoryPriceValues(changes);
       if (!item.ok) return jsonError(item.error, 400);
       if (!prices.ok) return jsonError(prices.error, 400);
-      data = { ...item.data, ...Object.fromEntries(Object.entries(prices.values).filter(([, value]) => value !== null)) };
+      const trace = await readInventoryTrace(changes, { organizationId, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
+      if (!trace.ok) return jsonError(`${trace.error} No se aplicó ningún cambio.`, trace.status);
+      const { location: defaultLocation, ...traceRest } = trace.values;
+      taxonomy = item.taxonomy;
+      data = {
+        ...item.data,
+        ...Object.fromEntries(Object.entries(prices.values).filter(([, value]) => value !== null)),
+        ...traceRest,
+        ...(defaultLocation !== undefined ? { defaultLocation } : {}),
+      };
     }
     // Selección completa scopeada y guardado atómico: cero cambios ante un ID ajeno/inexistente.
     const result = await db.$transaction(async tx => {
@@ -484,6 +514,11 @@ export async function POST(request: Request) {
         ? await tx.inventoryUnit.findMany({ where: { id: { in: ids }, organizationId } })
         : await tx.inventoryItem.findMany({ where: { id: { in: ids }, organizationId }, omit: { imageData: true } });
       if (before.length !== ids.length) return null;
+      if (taxonomy) {
+        const resolved = await resolveInventoryCategory(tx, organizationId, taxonomy);
+        if (!resolved) return null;
+        data = { ...data, ...categoryWriteData(resolved) };
+      }
       if (isUnits) {
         await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryUnitUpdateManyMutationInput });
         if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
@@ -540,6 +575,7 @@ export async function POST(request: Request) {
         id: true,
         name: true,
         category: true,
+        categoryId: true,
         kind: true,
         status: true,
         replacementCost: true,
@@ -552,16 +588,31 @@ export async function POST(request: Request) {
         bufferBeforeMin: true,
         bufferAfterMin: true,
         billingUnit: true,
+        defaultWarehouseId: true,
+        defaultLocation: true,
+        supplierId: true,
+        purchasedAt: true,
+        warrantyUntil: true,
+        defaultWarehouse: { select: { code: true } },
       },
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
     const dead = await deadResponse("InventoryItem", existing.id, organizationId);
     if (dead) return dead;
-    const inventory = await db.inventoryItem.update({
-      where: { id: existing.id },
-      data: update.data,
-      omit: { imageData: true },
+    const trace = await readInventoryTrace(body, { organizationId, currentWarehouseCode: existing.defaultWarehouse?.code, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
+    if (!trace.ok) return jsonError(trace.error, trace.status);
+    const { location: defaultLocation, ...traceRest } = trace.values;
+    const inventory = await db.$transaction(async (tx) => {
+      // Categoría + espejo de texto: solo el helper único las escribe.
+      const resolved = update.taxonomy ? await resolveInventoryCategory(tx, organizationId, update.taxonomy) : undefined;
+      if (resolved === null) return null;
+      return tx.inventoryItem.update({
+        where: { id: existing.id },
+        data: { ...update.data, ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
+        omit: { imageData: true },
+      });
     });
+    if (!inventory) return jsonError("La categoría no existe en esta empresa.", 404);
     const changes = auditChanges(existing, inventory, INVENTORY_ITEM_FIELDS);
     if (changes) {
       await recordAudit({
@@ -600,10 +651,15 @@ export async function POST(request: Request) {
       return jsonError(`Las notas de la unidad no pueden superar los ${MAX_UNIT_NOTES} caracteres.`, 400);
     }
 
+    const trace = await readInventoryTrace(body, { organizationId, allow: { warehouse: "unit", condition: true } });
+    if (!trace.ok) return jsonError(trace.error, trace.status);
+
     let unit;
     try {
       unit = await db.$transaction(async (tx) => {
         const code = requestedCode || (await nextInventoryUnitCode(tx, organizationId, item.name));
+        // Toda unidad nace con depósito: el pedido, el del producto o el principal de la empresa.
+        const placement = await resolveUnitPlacement(tx, organizationId, item.id, { warehouseId: trace.values.warehouseId, location: trace.values.location });
         const created = await tx.inventoryUnit.create({
           data: {
             id: randomUUID(),
@@ -613,6 +669,12 @@ export async function POST(request: Request) {
             status,
             purchaseCost: purchaseCost ?? 0,
             notes: notes || null,
+            warehouseId: placement.warehouseId,
+            location: placement.location,
+            conditionScore: trace.values.conditionScore ?? null,
+            supplierId: trace.values.supplierId ?? null,
+            purchasedAt: trace.values.purchasedAt ?? null,
+            warrantyUntil: trace.values.warrantyUntil ?? null,
           },
         });
         await syncInventoryQuantity(tx, item.id);
@@ -630,7 +692,7 @@ export async function POST(request: Request) {
       entity: "InventoryUnit",
       entityId: unit.id,
       summary: `Agregó la unidad «${unit.code}» a «${item.name}»`,
-      detail: { fields: auditPick(unit, ["code", "status", "purchaseCost", "notes"]) },
+      detail: { fields: auditPick(unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId"]) },
     });
     return Response.json({ unit }, { status: 201 });
   }
@@ -647,12 +709,21 @@ export async function POST(request: Request) {
         status: true,
         purchaseCost: true,
         notes: true,
+        warehouseId: true,
+        location: true,
+        conditionScore: true,
+        supplierId: true,
+        purchasedAt: true,
+        warrantyUntil: true,
+        warehouse: { select: { code: true } },
         inventory: { select: { name: true } },
       },
     });
     if (!existing) return jsonError("La unidad no existe en esta empresa.", 404);
 
-    const data: Prisma.InventoryUnitUpdateInput = {};
+    const trace = await readInventoryTrace(body, { organizationId, currentWarehouseCode: existing.warehouse?.code, allow: { warehouse: "unit", condition: true } });
+    if (!trace.ok) return jsonError(trace.error, trace.status);
+    const data: Prisma.InventoryUnitUncheckedUpdateInput = { ...trace.values };
     if (body.code !== undefined) {
       const code = readInventoryUnitCode(body.code);
       if (!inventoryUnitCodeValid(code)) return jsonError(FIELD_MESSAGES.unitCode, 400);
@@ -689,7 +760,7 @@ export async function POST(request: Request) {
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }
-    const changes = auditChanges(existing, unit, ["code", "status", "purchaseCost", "notes"]);
+    const changes = auditChanges(existing, unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
     if (changes) {
       await recordAudit({
         context: auth.context,
@@ -701,6 +772,50 @@ export async function POST(request: Request) {
       });
     }
     return Response.json({ unit });
+  }
+
+  if (kind === "purchase") {
+    // «Registrar compra»: unidades nuevas con proveedor, fecha, costo por unidad, garantía y depósito.
+    const inventoryId = typeof body.inventoryId === "string" ? body.inventoryId : "";
+    if (!inventoryId) return jsonError("Falta el ítem de inventario.", 400);
+    const item = await db.inventoryItem.findFirst({ where: { id: inventoryId, organizationId }, select: { id: true, name: true } });
+    if (!item) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
+    if (await isComboItem(db, organizationId, item.id)) return jsonError("Un combo no tiene unidades propias: sus unidades son las de sus componentes.", 409);
+    const dead = await deadResponse("InventoryItem", item.id, organizationId);
+    if (dead) return dead;
+    const quantity = typeof body.quantity === "number" ? body.quantity : Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) return jsonError("La cantidad comprada debe ser un entero de 1 a 500.", 400);
+    const unitCost = inventoryPriceValue(body.unitCost);
+    if (unitCost === false) return jsonError("Ingresá un costo válido en guaraníes.", 400);
+    const trace = await readInventoryTrace(body, { organizationId, allow: { warehouse: "unit", condition: true } });
+    if (!trace.ok) return jsonError(trace.error, trace.status);
+    const created = await db.$transaction(async (tx) => {
+      // Más unidades = más capacidad; el lock del ítem serializa con las confirmaciones en curso.
+      await lockInventoryItems(tx, organizationId, [item.id]);
+      await createInventoryUnits(tx, {
+        organizationId,
+        inventoryId: item.id,
+        name: item.name,
+        quantity,
+        purchaseCost: unitCost ?? 0,
+        warehouseId: trace.values.warehouseId,
+        location: trace.values.location,
+        conditionScore: trace.values.conditionScore,
+        supplierId: trace.values.supplierId,
+        purchasedAt: trace.values.purchasedAt,
+        warrantyUntil: trace.values.warrantyUntil,
+      });
+      return tx.inventoryItem.findFirstOrThrow({ where: { id: item.id }, select: { quantity: true } });
+    });
+    await recordAudit({
+      context: auth.context,
+      action: "create",
+      entity: "InventoryItem",
+      entityId: item.id,
+      summary: `Registró la compra de ${quantity} unidad${quantity === 1 ? "" : "es"} de «${item.name}»`,
+      detail: { fields: { cantidad: quantity, costoPorUnidad: unitCost ?? 0, proveedor: trace.values.supplierId ?? null, depósito: trace.values.warehouseId ?? null } },
+    });
+    return Response.json({ ok: true, added: quantity, quantity: created.quantity }, { status: 201 });
   }
 
   if (kind === "prices") {

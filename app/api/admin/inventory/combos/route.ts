@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       data: {
         name,
         category: (typeof body.category === "string" && body.category.trim().slice(0, 80)) || "Combos",
+        subcategory: typeof body.subcategory === "string" ? body.subcategory : null,
         sku: sku || null,
         ...(notes !== undefined ? { notes: notes || null } : {}),
         ...(imageUrl !== undefined ? { imageUrl } : {}),

@@ -10,6 +10,8 @@ import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { dayStart, isValidDayKey } from "@/lib/server/notifications";
 import { inventoryImageUrl, readInventoryImageUrl } from "@/lib/server/inventory-images";
 import { createInventoryUnits, isUniqueConstraintError } from "@/lib/server/inventory-units";
+import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/inventory-categories";
+import { readInventoryTrace } from "@/lib/server/inventory-details";
 import {
   FIELD_MESSAGES,
   emailValid,
@@ -207,16 +209,29 @@ export async function POST(request: Request) {
     const prices = readInventoryPriceValues(body);
     if (!prices.ok) return jsonError(prices.error, 400);
     const quantity = typeof body.quantity === "number" && Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
+    if (body.category !== undefined && typeof body.category !== "string") return jsonError("La categoría no es válida.", 400);
+    if (body.subcategory !== undefined && body.subcategory !== null && typeof body.subcategory !== "string") return jsonError("La subcategoría no es válida.", 400);
+    // Depósito y ubicación que se proponen para las unidades, proveedor, compra y garantía (todo validado contra la empresa).
+    const trace = await readInventoryTrace(body, { organizationId: auth.context.organizationId, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
+    if (!trace.ok) return jsonError(trace.error, trace.status);
     // El ítem y sus unidades nacen juntos (issue #112): `quantity` = unidades reales.
     let inventory;
     try {
       inventory = await db.$transaction(async (tx) => {
+        // Categoría y espejo de texto: solo el helper único las escribe.
+        const resolved = await resolveInventoryCategory(tx, auth.context.organizationId, { category: body.category, subcategory: body.subcategory });
+        if (!resolved) throw new Error("No se pudo resolver la categoría.");
         const created = await tx.inventoryItem.create({
           data: {
             id: randomUUID(),
             organizationId: auth.context.organizationId,
             name: itemName,
-            category: typeof body.category === "string" ? body.category.trim() : "General",
+            ...categoryWriteData(resolved),
+            defaultWarehouseId: trace.values.defaultWarehouseId ?? null,
+            defaultLocation: trace.values.location ?? null,
+            supplierId: trace.values.supplierId ?? null,
+            purchasedAt: trace.values.purchasedAt ?? null,
+            warrantyUntil: trace.values.warrantyUntil ?? null,
             sku: skuRaw || null,
             imageUrl,
             kind: body.inventoryKind === "CONSUMABLE" ? "CONSUMABLE" : body.inventoryKind === "DISPOSABLE" ? "DISPOSABLE" : "REUSABLE",
@@ -257,6 +272,9 @@ export async function POST(request: Request) {
         fields: auditPick(inventory, [
           "name",
           "category",
+          "categoryId",
+          "defaultWarehouseId",
+          "supplierId",
           "kind",
           "quantity",
           "status",

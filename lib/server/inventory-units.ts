@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, InventoryUnitStatus } from "@prisma/client";
 import { INVENTORY_UNIT_STATUSES } from "@/lib/admin-types";
 import { inventoryUnitPrefix, normalizeInventoryUnitCode } from "@/lib/field-rules";
+import { ensureDefaultWarehouse } from "@/lib/server/inventory-warehouses";
 
 /**
  * Unidades físicas del ítem de inventario (issue #112). Acá viven las reglas que
@@ -52,16 +53,52 @@ export async function nextInventoryUnitCode(
   return `${prefix}-${String(max + 1).padStart(2, "0")}`;
 }
 
+/** Datos opcionales de una unidad nueva (depósito, ubicación, condición, proveedor, compra, garantía y costo). */
+export type NewUnitDetails = {
+  /** Depósito activo ya validado contra la empresa; sin él, el del producto o el principal. */
+  warehouseId?: string | null;
+  location?: string | null;
+  conditionScore?: number | null;
+  supplierId?: string | null;
+  purchasedAt?: Date | null;
+  warrantyUntil?: Date | null;
+  purchaseCost?: number;
+};
+
+/**
+ * Dónde cae una unidad nueva: el depósito pedido, o el que propone el producto, o el principal
+ * de la empresa (que se crea solo la primera vez). Toda unidad nace con depósito.
+ */
+export async function resolveUnitPlacement(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  inventoryId: string,
+  details: Pick<NewUnitDetails, "warehouseId" | "location">,
+): Promise<{ warehouseId: string; location: string | null }> {
+  if (details.warehouseId) return { warehouseId: details.warehouseId, location: details.location ?? null };
+  const item = await tx.inventoryItem.findFirst({
+    where: { id: inventoryId, organizationId },
+    select: { defaultLocation: true, defaultWarehouse: { select: { id: true, archivedAt: true } } },
+  });
+  if (item?.defaultWarehouse && !item.defaultWarehouse.archivedAt) {
+    return { warehouseId: item.defaultWarehouse.id, location: details.location !== undefined ? details.location : item.defaultLocation };
+  }
+  const principal = await ensureDefaultWarehouse(tx, organizationId);
+  return { warehouseId: principal.id, location: details.location ?? null };
+}
+
 /**
  * Crea las unidades iniciales de un ítem nuevo: una por unidad pedida, todas
  * disponibles. El ítem ya viene creado con `quantity`; sincronizar al final deja
- * el número igual a las unidades reales.
+ * el número igual a las unidades reales. También es la «compra» de unidades
+ * nuevas: acepta depósito, ubicación, condición, proveedor, fecha, garantía y costo.
  */
 export async function createInventoryUnits(
   tx: Prisma.TransactionClient,
-  options: { organizationId: string; inventoryId: string; name: string; quantity: number },
+  options: { organizationId: string; inventoryId: string; name: string; quantity: number } & NewUnitDetails,
 ): Promise<number> {
   const quantity = Number.isInteger(options.quantity) && options.quantity > 0 ? options.quantity : 1;
+  const placement = await resolveUnitPlacement(tx, options.organizationId, options.inventoryId, options);
   for (let index = 0; index < quantity; index += 1) {
     const code = await nextInventoryUnitCode(tx, options.organizationId, options.name);
     await tx.inventoryUnit.create({
@@ -71,8 +108,14 @@ export async function createInventoryUnits(
         inventoryId: options.inventoryId,
         code,
         status: "AVAILABLE",
-        purchaseCost: 0,
+        purchaseCost: options.purchaseCost ?? 0,
         notes: null,
+        warehouseId: placement.warehouseId,
+        location: placement.location,
+        conditionScore: options.conditionScore ?? null,
+        supplierId: options.supplierId ?? null,
+        purchasedAt: options.purchasedAt ?? null,
+        warrantyUntil: options.warrantyUntil ?? null,
       },
     });
   }

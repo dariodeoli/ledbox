@@ -186,6 +186,8 @@ model Organization {
   demoLastSeenAt    DateTime?
   /// false mientras la sandbox se está sembrando (paso 2 del alta).
   demoReady         Boolean                  @default(true)
+  inventoryCategories InventoryCategory[]
+  warehouses          Warehouse[]
 
   @@index([active, createdAt])
   @@index([planId])
@@ -1488,6 +1490,8 @@ model Supplier {
   jobs             SupplierJob[]
   expenses         Expense[]
   purchaseInvoices PurchaseInvoice[]
+  inventoryItems   InventoryItem[]
+  inventoryUnits   InventoryUnit[]
 
   @@index([category, active])
   @@index([organizationId, name])
@@ -1859,10 +1863,24 @@ model InventoryItem {
   /// NULL hereda el de la empresa (`OrganizationRentalSettings`).
   bufferBeforeMin    Int?
   bufferAfterMin     Int?
+  /// Categoría (o subcategoría) del árbol de la empresa. `category` queda como espejo de
+  /// «Categoría › Subcategoría»: lo escribe un solo helper (`resolveInventoryCategory`).
+  categoryId         String?
+  categoryRef        InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Depósito y ubicación que se proponen al dar de alta unidades nuevas.
+  defaultWarehouseId String?
+  defaultWarehouse   Warehouse?       @relation("ItemDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
+  defaultLocation    String?
+  /// Lote principal: proveedor, fecha de compra y garantía (las unidades pueden tener los suyos).
+  supplierId         String?
+  supplier           Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchasedAt        DateTime?
+  warrantyUntil      DateTime?
 
   @@unique([organizationId, sku])
   @@index([status, category])
   @@index([organizationId, name])
+  @@index([organizationId, categoryId])
 
   archivedById   String?
   deletedAt      DateTime?
@@ -1887,12 +1905,67 @@ model InventoryUnit {
   notes          String?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+  /// Depósito donde está la unidad y su ubicación dentro (estante-nivel, «E3-B2»). El stock por
+  /// depósito es un `groupBy` de unidades: no hay un segundo número que pueda no cuadrar.
+  warehouseId    String?
+  warehouse      Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  location       String?
+  /// Condición 1 a 10 (CHECK en la base); se muestra «8/10 · 80 %».
+  conditionScore Int?                @db.SmallInt
+  /// Proveedor, compra y garantía de la unidad (NULL = hereda los del producto).
+  supplierId     String?
+  supplier       Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchasedAt    DateTime?
+  warrantyUntil  DateTime?
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventory      InventoryItem       @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   incidents      InventoryIncident[]
 
   @@unique([organizationId, code])
   @@index([inventoryId, status])
+  @@index([inventoryId, warehouseId, status])
+}
+
+/// Categoría de inventario de la empresa (un nivel de subcategoría: `parentId`). `key` es la ruta
+/// normalizada sin tildes ni mayúsculas («vajilla/copas») y es única por empresa.
+model InventoryCategory {
+  id             String              @id
+  organizationId String
+  name           String
+  parentId       String?
+  key            String
+  sortOrder      Int                 @default(0)
+  color          String?
+  icon           String?
+  archivedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         InventoryCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children       InventoryCategory[] @relation("CategoryTree")
+  items          InventoryItem[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId, parentId])
+}
+
+/// Depósito de la empresa (código corto «D1»). Con unidades se archiva, no se borra.
+model Warehouse {
+  id             String          @id
+  organizationId String
+  name           String
+  code           String
+  address        String?
+  sortOrder      Int             @default(0)
+  isDefault      Boolean         @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  units          InventoryUnit[]
+  defaultItems   InventoryItem[] @relation("ItemDefaultWarehouse")
+
+  @@unique([organizationId, code])
 }
 
 enum InventoryIncidentKind {

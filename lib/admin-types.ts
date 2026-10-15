@@ -1642,7 +1642,17 @@ export type AdminInventoryRow = {
   archivedAt: string | null;
   id: string;
   name: string;
+  /** Espejo de texto de «Categoría › Subcategoría» (lo escribe un solo helper). */
   category: string;
+  /** Categoría (o subcategoría) del árbol de la empresa; `null` en filas que todavía no se migraron. */
+  categoryId?: string | null;
+  /** Depósito y ubicación que se proponen al dar de alta unidades nuevas. */
+  defaultWarehouseId?: string | null;
+  defaultLocation?: string | null;
+  /** Lote principal: proveedor, compra y garantía (ISO). */
+  supplierId?: string | null;
+  purchasedAt?: string | null;
+  warrantyUntil?: string | null;
   sku: string | null;
   /** Imagen del ítem (issue #86): ruta interna o URL http(s); `null` sin imagen. */
   imageUrl: string | null;
@@ -1791,6 +1801,40 @@ export type AdminInventoryUnitRow = {
   purchaseCost: number;
   notes: string | null;
   updatedAt: string;
+  /** Depósito y ubicación dentro de él («E3-B2»). */
+  warehouseId?: string | null;
+  location?: string | null;
+  /** Condición 1 a 10. */
+  conditionScore?: number | null;
+  /** Proveedor, compra y garantía de la unidad (`null` = hereda los del producto). */
+  supplierId?: string | null;
+  purchasedAt?: string | null;
+  warrantyUntil?: string | null;
+};
+
+/** Categoría de inventario (`/api/admin/inventory/categories`). */
+export type AdminInventoryCategoryRow = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  key: string;
+  sortOrder: number;
+  color: string | null;
+  icon: string | null;
+  archivedAt: string | null;
+  itemCount: number;
+};
+
+/** Depósito de inventario (`/api/admin/inventory/warehouses`). */
+export type AdminWarehouseRow = {
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+  sortOrder: number;
+  isDefault: boolean;
+  archivedAt: string | null;
+  unitCount: number;
 };
 
 /** Ítem de `/api/admin/inventory`: incluye asignaciones, unidades y disponibilidad de hoy. */
@@ -2139,6 +2183,9 @@ export const AUDIT_ENTITIES = [
   "InventoryUnit",
   // Incidente de inventario (alquileres fase 4): daño, faltante, reparación o limpieza.
   "InventoryIncident",
+  // Categorías y depósitos de inventario (rediseño E1).
+  "InventoryCategory",
+  "Warehouse",
   "EventInventory",
   "EventTask",
   "Promoter",
