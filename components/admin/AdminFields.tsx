@@ -1455,6 +1455,7 @@ export function SwitchField({
   checked,
   onChange,
   hint,
+  stateLabels,
   error,
   wide,
   disabled,
@@ -1467,6 +1468,7 @@ export function SwitchField({
   checked: boolean;
   onChange: (checked: boolean) => void;
   hint?: string;
+  stateLabels?: { checked: string; unchecked: string };
   error?: string | null;
   wide?: boolean;
   disabled?: boolean;
@@ -1485,7 +1487,7 @@ export function SwitchField({
           onChange={(event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.checked)}
           ariaLabel={label ? undefined : ariaLabel}
         />
-        <span className="admin-switch-state">{checked ? "Sí" : "No"}</span>
+        <span className="admin-switch-state">{checked ? stateLabels?.checked ?? "Sí" : stateLabels?.unchecked ?? "No"}</span>
       </label>
     </FieldChrome>
   );

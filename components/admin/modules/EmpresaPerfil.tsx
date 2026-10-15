@@ -211,7 +211,7 @@ export function EmpresaPerfil() {
                     ariaLabel={`${WEEK_DAY_LABEL[day]}: cerrado`}
                     checked={hours[day].closed}
                     onChange={(checked) => setHours((current) => ({ ...current, [day]: { ...current[day], closed: checked } }))}
-                    hint={hours[day].closed ? "Cerrado" : "Abierto"}
+                    stateLabels={{ checked: "Cerrado", unchecked: "Abierto" }}
                     disabled={readOnly}
                   />
                 </div>
