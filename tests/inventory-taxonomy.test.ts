@@ -243,3 +243,13 @@ test("la migración es aditiva e idempotente: IF NOT EXISTS, guardas duplicate_o
   assert.match(textUpdates[0]!, /"category" IS DISTINCT FROM/, "solo toca las filas que difieren");
   assert.match(textUpdates[0]!, /"categoryId" = c\."id"/, "solo productos ya ligados a una categoría");
 });
+
+test("la migración de categorías no depende de normalize(): con PostgreSQL < 13 o sin UTF8 usa translate", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const dir = readdirSync("prisma/migrations").find((name) => name.startsWith("202610240001_"))!;
+  const sql = readFileSync(`prisma/migrations/${dir}/migration.sql`, "utf8");
+  assert.match(sql, /current_setting\('server_version_num'\)::int >= 130000 AND current_setting\('server_encoding'\) = 'UTF8'/);
+  assert.match(sql, /ELSE[\s\S]*translate\(t,/);
+  assert.doesNotMatch(sql, /\$b\$\$f\$/, "sin «$$» pegados que cierren el bloque DO");
+  assert.equal((sql.match(/normalize\(/g) ?? []).length, 1, "normalize( solo dentro de la función condicional");
+});

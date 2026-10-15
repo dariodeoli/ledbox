@@ -99,6 +99,22 @@ DO $$ BEGIN
     FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- Clave de categoría igual a `categoryKey` del runtime (NFD sin marcas combinantes, espacios colapsados,
+-- minúsculas). `normalize` existe desde PostgreSQL 13 y solo con codificación UTF8: si la base es más vieja,
+-- se usa un `translate` equivalente para los acentos latinos, así la migración nunca falla al publicar.
+DO $ledbox_key$
+BEGIN
+  IF current_setting('server_version_num')::int >= 130000 AND current_setting('server_encoding') = 'UTF8' THEN
+    EXECUTE $f$CREATE OR REPLACE FUNCTION pg_temp.ledbox_cat_key(t text) RETURNS text LANGUAGE sql IMMUTABLE AS $b$
+      SELECT lower(btrim(regexp_replace(regexp_replace(normalize(t, NFD), '[\u0300-\u036f]', '', 'g'), '\s+', ' ', 'g')))
+    $b$ $f$;
+  ELSE
+    EXECUTE $f$CREATE OR REPLACE FUNCTION pg_temp.ledbox_cat_key(t text) RETURNS text LANGUAGE sql IMMUTABLE AS $b$
+      SELECT lower(btrim(regexp_replace(translate(t, 'áàâäãåéèêëíìîïóòôöõúùûüñçÁÀÂÄÃÅÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÑÇ', 'aaaaaaeeeeiiiiooooouuuuncAAAAAAEEEEIIIIOOOOOUUUUNC'), '\s+', ' ', 'g')))
+    $b$ $f$;
+  END IF;
+END $ledbox_key$;
+
 -- Backfill de categorías: una por (empresa, texto distinto). «Vajilla > Copas»,
 -- «Vajilla / Copas» o «Vajilla › Copas» crean padre e hija; «Vajilla» y «vajilla »
 -- caen en la misma key. Ids determinísticos: correrlo de nuevo no duplica nada.
@@ -124,8 +140,8 @@ BEGIN
     FROM segs WHERE array_length(parts, 1) >= 1
   )
   SELECT org, raw, parent_name, child_name,
-    lower(btrim(regexp_replace(regexp_replace(normalize(parent_name, NFD), '[\u0300-\u036f]', '', 'g'), '\s+', ' ', 'g'))) AS parent_key,
-    CASE WHEN child_name IS NOT NULL THEN lower(btrim(regexp_replace(regexp_replace(normalize(child_name, NFD), '[\u0300-\u036f]', '', 'g'), '\s+', ' ', 'g'))) END AS child_key
+    pg_temp.ledbox_cat_key(parent_name) AS parent_key,
+    CASE WHEN child_name IS NOT NULL THEN pg_temp.ledbox_cat_key(child_name) END AS child_key
   FROM named;
 
   INSERT INTO "InventoryCategory" ("id", "organizationId", "name", "parentId", "key", "sortOrder", "createdAt", "updatedAt")
