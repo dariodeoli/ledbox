@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CompanyInfo } from "@/components/catalog-public/CompanyInfo";
+import { PriceRequestForm } from "@/components/catalog-public/PriceRequestForm";
 import { ProposalActions } from "@/components/catalog-public/ProposalActions";
 import { StoreChrome } from "@/components/catalog-public/StoreChrome";
 import { QUOTE_ITEM_STATE_LABEL, QUOTE_REQUEST_PUBLIC_COPY, formatDayKey, isQuoteItemState, isQuoteRequestStatus, preorderWhatsappUrl, quoteItemActive } from "@/lib/catalog-public";
+import { PRICE_REQUEST_LABEL } from "@/lib/price-request";
 import { loadPublicOrder } from "@/lib/server/catalog-public";
 import { dayKeyOf } from "@/lib/server/notifications";
 
@@ -98,6 +100,26 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
             );
           })}
         </ul>
+        {order.priceRequests.length > 0 ? (
+          <section className="cp-offers" aria-label="Tus pedidos de mejor precio" data-testid="price-requests">
+            <h3 className="cp-h3">Tus pedidos de mejor precio</h3>
+            {order.priceRequests.map((entry) => (
+              <div key={entry.id} className="cp-offer" data-status={entry.status}>
+                <p><span className="cp-tag">{PRICE_REQUEST_LABEL[entry.status]}</span></p>
+                <p>Pediste: {entry.comment}{entry.desiredAmount ? ` (querías pagar Gs. ${gs.format(entry.desiredAmount)} en total)` : ""}</p>
+                {(entry.status === "ACCEPTED" || entry.status === "COUNTERED") && entry.offeredAmount ? (
+                  <p data-testid="price-offer">
+                    <strong>La empresa te ofrece Gs. {gs.format(entry.offeredAmount)}</strong>
+                    {entry.originalTotal ? ` (antes Gs. ${gs.format(entry.originalTotal)})` : ""}.{" "}
+                    {entry.clientApprovedAt ? "Aprobaste esta versión: la empresa arma tu presupuesto con ese precio." : proposed ? "Aprobá la propuesta de arriba para quedarte con este precio." : ""}
+                  </p>
+                ) : null}
+                {entry.responseNote ? <p><strong>Mensaje de {order.organization.name}:</strong> {entry.responseNote}</p> : null}
+              </div>
+            ))}
+          </section>
+        ) : null}
+        {order.canRequestPrice ? <PriceRequestForm token={token} total={order.subtotal} /> : null}
         {proposed ? <ProposalActions token={token} /> : null}
         {whatsapp ? (
           <a className="cp-btn cp-btn--primary" href={whatsapp} target="_blank" rel="noopener noreferrer">

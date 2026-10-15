@@ -575,6 +575,7 @@ model QuoteRequest {
   proposedAt     DateTime?
   proposalNote   String?
   proposalApprovedAt DateTime?
+  priceRequests  QuotePriceRequest[]
 
   @@index([leadId, createdAt])
   @@index([organizationId, createdAt])
@@ -1913,6 +1914,13 @@ model InventoryItem {
   /// Descripción para el catálogo público (opcional, hasta 600 caracteres). Es lo único
   /// de texto libre que se publica: las `notes` son internas y nunca salen.
   publicDescription  String?
+  /// Orden del producto dentro de su sección en la tienda web (lo decide la empresa en
+  /// Ajustes → Tienda). Menor = primero; empate: por nombre.
+  webSortOrder       Int              @default(0)
+  /// Capacidad en personas (juegos de mesa, livings…): lo que diferencia a dos juegos parecidos en la tienda.
+  capacity           Int?
+  /// Medidas como las escribe la empresa («Ø 1,40 m», «1,60 × 0,75 m»). Texto corto.
+  dimensions         String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -2183,8 +2191,67 @@ model CatalogAccessToken {
   lastUsedAt     DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  cart           StoreCart?
 
   @@index([organizationId, clientId, revokedAt])
+}
+
+/// Carrito guardado en el servidor de un cliente con acceso al catálogo (link de acceso o
+/// mayorista): se retoma desde otro dispositivo. Solo guarda referencias (producto y cantidad),
+/// fechas y la zona elegida; el precio NUNCA se guarda: lo calcula el servidor al volver.
+model StoreCart {
+  id             String             @id
+  organizationId String
+  /// Carrito de un cliente con acceso (link de acceso o mayorista); null en el carrito de un visitante.
+  accessTokenId  String?            @unique
+  accessToken    CatalogAccessToken? @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  /// Carrito de un visitante que dejó su contacto: solo vive el hash del enlace mágico (`/tienda/<slug>/carrito/<token>`),
+  /// que vence (`expiresAt`) y se renueva al guardar. Nunca se busca por correo ni teléfono (no se enumera a nadie).
+  visitorTokenHash String?          @unique
+  visitorName    String?
+  visitorPhone   String?
+  visitorEmail   String?
+  expiresAt      DateTime?
+  /// `[{ inventoryId, quantity }]` (validado en el código).
+  items          Json
+  fromKey        String?
+  toKey          String?
+  /// "" = sin elegir, COORDINATE = «a coordinar» o el id de una zona.
+  zoneChoice     String?
+  /// Último total que vio el cliente (para avisarle si cambió al volver).
+  seenTotal      Int?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId])
+}
+
+/// Pedido de mejor precio dentro de un pedido del catálogo. El monto deseado es solo informativo:
+/// NUNCA se aplica solo. La empresa acepta, contraoferta o rechaza; si acepta o contraoferta el
+/// pedido pasa a «Propuesta enviada» y el cliente aprueba la versión final.
+model QuotePriceRequest {
+  id             String       @id
+  organizationId String
+  quoteRequestId String
+  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  comment        String
+  /// Monto total que el cliente querría pagar (PYG, entero); null = no indicó.
+  desiredAmount  Int?
+  /// Total de referencia del pedido cuando se pidió (para mostrar el antes y el después).
+  originalTotal  Int?
+  /// OPEN, ACCEPTED, COUNTERED o REJECTED (validado en el código).
+  status         String       @default("OPEN")
+  /// Monto que ofrece la empresa al aceptar o contraofertar.
+  offeredAmount  Int?
+  responseNote   String?
+  respondedAt    DateTime?
+  respondedBy    String?
+  /// Cuándo el cliente aprobó la versión final (la propuesta del pedido).
+  clientApprovedAt DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([quoteRequestId, createdAt])
+  @@index([organizationId, status])
 }
 
 /// Solicitud de acceso al catálogo (modo REQUEST): la persona pide entrar, la empresa aprueba o

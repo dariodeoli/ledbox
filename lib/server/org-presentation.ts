@@ -113,9 +113,9 @@ export async function saveOrgAppearance(context: AdminContext, body: unknown): P
   const brandColor = color.result?.color ?? null;
 
   const changes = auditChanges(
-    { template: currentAppearance.template, font: currentAppearance.font, background: currentAppearance.background, brandColor: settings?.storefrontAccent ?? null },
+    { template: currentAppearance.template, font: currentAppearance.font, background: currentAppearance.background, script: currentAppearance.script, brandColor: settings?.storefrontAccent ?? null },
     { ...parsed.appearance, brandColor },
-    ["template", "font", "background", "brandColor"],
+    ["template", "font", "background", "script", "brandColor"],
   );
   if (changes) {
     await db.organization.update({ where: { id: organizationId }, data: { appearance: parsed.appearance as unknown as Prisma.InputJsonValue } });

@@ -10,6 +10,7 @@ import { useAdminSession } from "../AdminShell";
 import { EmailField, PhoneField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { CatalogAccessModeField, CatalogAccessRequests } from "./CatalogAccessPanel";
+import { StoreOrderPanel } from "./StoreOrderPanel";
 
 /**
  * Ajustes → Tienda web: la tienda pública de la empresa (`/tienda/<slug>`). Encendido,
@@ -205,6 +206,7 @@ export function TiendaWebSettings() {
             </div>
           </form>
         ) : null}
+        {form && resource.data && hasStore(resource.data) ? <StoreOrderPanel readOnly={demo} /> : null}
       </AdminDataState>
     </div>
   );

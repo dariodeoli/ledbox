@@ -1,6 +1,7 @@
 import { PREORDER_RESPONSE_HOURS, preorderWhatsappUrl } from "@/lib/catalog-public";
 import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-public";
 import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
+import { featuredCategories } from "@/lib/featured-categories";
 import { CompanyInfo } from "./CompanyInfo";
 import { StoreChrome } from "./StoreChrome";
 
@@ -26,6 +27,13 @@ type Props = {
   wholesale?: { clientName: string } | null;
   /** Acceso aprobado de cliente final (`/acceso/<token>`): saludo con su nombre. */
   member?: { clientName: string } | null;
+  /** Foto propia de cada categoría (por nombre); sin ella se usa la del primer producto. */
+  categoryImages?: Record<string, string | null | undefined>;
+  /** Endpoint del carrito (por defecto el de `preorderPath`) y tipo de acceso; el enlace mágico del visitante usa el suyo. */
+  cartPath?: string;
+  cartScope?: "public" | "acceso" | "mayorista" | "visitor";
+  /** Base de las fichas de producto (`<base>/p/<id>`); por defecto `basePath`. */
+  fichaBase?: string;
 };
 
 const DEFAULT_TAGLINE = "Alquiler de equipos para tu evento. Elegí lo que necesitás y te respondemos con una cotización.";
@@ -59,7 +67,7 @@ const STEPS = [
   { title: "Te respondemos con la cotización", text: `En hasta ${PREORDER_RESPONSE_HOURS} horas hábiles. Recién ahí se confirma la reserva: el pedido solo no la asegura.` },
 ] as const;
 
-export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null }: Props) {
+export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null, categoryImages, cartPath, cartScope, fichaBase }: Props) {
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
   const hasContact = Boolean(whatsapp || store.email || store.profile);
@@ -112,15 +120,15 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
                 <li key={entry.category}>
                   <a className="cp-feat-card" href={`${basePath}?categoria=${encodeURIComponent(entry.category)}#catalogo`}>
                     <span className="cp-feat-photo">
-                      {entry.imageUrl ? (
+                      {categoryImages?.[entry.category] ?? entry.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={entry.imageUrl} alt="" loading="lazy" />
+                        <img src={(categoryImages?.[entry.category] ?? entry.imageUrl) as string} alt="" loading="lazy" />
                       ) : (
                         <span className="cp-feat-ph" aria-hidden="true">{initials(entry.category)}</span>
                       )}
                     </span>
                     <span className="cp-feat-name">{entry.category}</span>
-                    <span className="cp-feat-count">{entry.count} {entry.count === 1 ? "equipo" : "equipos"}</span>
+                    <span className="cp-feat-count"><span className="cp-x-chip">{entry.count} {entry.count === 1 ? "equipo" : "equipos"}</span></span>
                   </a>
                 </li>
               ))}
@@ -139,6 +147,13 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
           range={range}
           initialCategory={initialCategory}
           zones={zones}
+          template={store.appearance.template}
+          slug={store.slug}
+          cartScope={cartScope ?? (member ? "acceso" : wholesale ? "mayorista" : "public")}
+          savedCart={Boolean(member || wholesale || cartScope === "visitor")}
+          cartPath={cartPath}
+          fichaBase={fichaBase ?? basePath}
+          storeName={store.name}
         />
 
         <section id="como-funciona" className="cp-section" aria-labelledby="como">
@@ -146,7 +161,7 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
           <ol className="cp-steps">
             {STEPS.map((step, index) => (
               <li key={step.title} className="cp-step">
-                <span className="cp-step-n" aria-hidden="true">{index + 1}</span>
+                <span className="cp-step-n" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                 <h3 className="cp-step-title">{step.title}</h3>
                 <p>{step.text}</p>
               </li>
@@ -158,11 +173,14 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
           <section id="contacto" className="cp-section cp-contact" aria-labelledby="contacto-titulo">
             <h2 id="contacto-titulo" className="cp-h2 cp-h2--lg">Contacto</h2>
             <p className="cp-lead">¿Dudas o algo que no encontrás en el catálogo? Escribinos.</p>
-            <div className="cp-row">
-              {whatsapp ? <a className="cp-btn cp-btn--primary" href={whatsapp} target="_blank" rel="noopener noreferrer">WhatsApp</a> : null}
-              {store.email ? <a className="cp-btn" href={`mailto:${store.email}`}>{store.email}</a> : null}
-            </div>
-            {store.profile ? <CompanyInfo profile={store.profile} /> : null}
+            {store.profile ? (
+              <CompanyInfo profile={store.profile} whatsapp={whatsapp} email={store.email} />
+            ) : (
+              <div className="cp-row">
+                {whatsapp ? <a className="cp-btn cp-btn--primary" href={whatsapp} target="_blank" rel="noopener noreferrer">Escribir por WhatsApp</a> : null}
+                {store.email ? <a className="cp-btn" href={`mailto:${store.email}`}>{store.email}</a> : null}
+              </div>
+            )}
           </section>
         ) : null}
       </main>
@@ -174,14 +192,4 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
   );
 }
 
-/** Categorías con más equipos (hasta 6), cada una con la foto de su primer equipo que la tenga. */
-export function featuredCategories(items: ReadonlyArray<Pick<PublicCatalogItem, "category" | "imageUrl">>) {
-  const map = new Map<string, { category: string; count: number; imageUrl: string | null }>();
-  for (const item of items) {
-    const entry = map.get(item.category) ?? { category: item.category, count: 0, imageUrl: null };
-    entry.count += 1;
-    entry.imageUrl = entry.imageUrl ?? item.imageUrl;
-    map.set(item.category, entry);
-  }
-  return [...map.values()].sort((a, b) => b.count - a.count || a.category.localeCompare(b.category, "es")).slice(0, 6);
-}
+export { featuredCategories };

@@ -8,7 +8,7 @@ import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, norma
  * páginas públicas, el panel (vista previa en vivo) y los tests.
  */
 
-export const TEMPLATES = ["clasica", "minimalista", "elegante", "oscura"] as const;
+export const TEMPLATES = ["clasica", "minimalista", "elegante", "oscura", "editorial"] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 export const DEFAULT_TEMPLATE: TemplateId = "clasica";
 
@@ -17,6 +17,7 @@ export const TEMPLATE_META: Record<TemplateId, { label: string; description: str
   minimalista: { label: "Minimalista", description: "Sin recuadros, lista limpia y mucho aire entre secciones." },
   elegante: { label: "Elegante", description: "Títulos con serif, líneas finas y tarjetas sobrias." },
   oscura: { label: "Oscura", description: "Fondo oscuro siempre, con tarjetas elevadas." },
+  editorial: { label: "Catálogo editorial", description: "Fondo crema, títulos serif con acento manuscrito, verde oliva y secciones grandes por categoría, como un catálogo impreso." },
 };
 
 export function isTemplateId(value: unknown): value is TemplateId {
@@ -32,6 +33,7 @@ export const FONTS = [
   { id: "lato", label: "Lato", family: '"Lato", system-ui, sans-serif', google: "Lato:wght@400;700;900" },
   { id: "nunito", label: "Nunito", family: '"Nunito", system-ui, sans-serif', google: "Nunito:wght@400;600;700;800" },
   { id: "dm-sans", label: "DM Sans", family: '"DM Sans", system-ui, sans-serif', google: "DM+Sans:wght@400;600;700" },
+  { id: "cormorant-garamond", label: "Cormorant Garamond", family: '"Cormorant Garamond", Georgia, serif', google: "Cormorant+Garamond:wght@500;600;700" },
   { id: "playfair-display", label: "Playfair Display", family: '"Playfair Display", Georgia, serif', google: "Playfair+Display:wght@400;600;700;800" },
   { id: "merriweather", label: "Merriweather", family: '"Merriweather", Georgia, serif', google: "Merriweather:wght@400;700;900" },
 ] as const;
@@ -46,10 +48,22 @@ export function fontOf(id: unknown): (typeof FONTS)[number] {
   return FONTS.find((font) => font.id === id) ?? FONTS[0];
 }
 
+/** Tipografías serif de la lista: sirven para los títulos de la plantilla editorial. */
+const SERIF_FONTS: readonly FontId[] = ["cormorant-garamond", "playfair-display", "merriweather"];
+const EDITORIAL_HEAD = fontOf("cormorant-garamond");
+
+/** Acento manuscrito opcional de los títulos de sección (plantilla editorial). Lista cerrada de una. */
+export const SCRIPT_FONT = { label: "Allura", family: '"Allura", "Segoe Script", cursive', google: "Allura" } as const;
+
+/** Hoja de estilos de Google Fonts de las tipografías dadas; `null` si ninguna es de Google. */
+function googleHref(families: ReadonlyArray<string | null>): string | null {
+  const list = [...new Set(families.filter((family): family is string => Boolean(family)))];
+  return list.length ? `https://fonts.googleapis.com/css2?${list.map((family) => `family=${family}`).join("&")}&display=swap` : null;
+}
+
 /** Hoja de estilos de Google Fonts de la tipografía; `null` si es la del sistema. */
 export function googleFontHref(id: unknown): string | null {
-  const font = fontOf(id);
-  return font.google ? `https://fonts.googleapis.com/css2?family=${font.google}&display=swap` : null;
+  return googleHref([fontOf(id).google]);
 }
 
 export type Appearance = {
@@ -57,9 +71,11 @@ export type Appearance = {
   font: FontId;
   /** Fondo claro opcional de la tienda (`#rrggbb`); `null` = el de la plantilla. */
   background: string | null;
+  /** Acento manuscrito en los títulos de sección (solo lo usa la plantilla editorial). */
+  script: boolean;
 };
 
-export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, background: null };
+export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, background: null, script: false };
 
 /** El fondo propio tiene que ser claro: texto casi negro con contraste mínimo 7:1 (AAA). */
 export const BACKGROUND_TEXT = "#14181d";
@@ -80,7 +96,7 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const next: Appearance = { ...current };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Clásica, Minimalista, Elegante u Oscura." };
+    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Clásica, Minimalista, Elegante, Oscura o Catálogo editorial." };
     next.template = input.template;
   }
   if (input.font !== undefined) {
@@ -91,6 +107,10 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
     const background = parseBackground(input.background);
     if (!background.ok) return background;
     next.background = background.background;
+  }
+  if (input.script !== undefined) {
+    if (typeof input.script !== "boolean") return { ok: false, error: "El acento manuscrito se enciende o se apaga." };
+    next.script = input.script;
   }
   return { ok: true, appearance: next };
 }
@@ -180,7 +200,7 @@ export type AppearanceView = {
   /** Variables CSS inline del contenedor. */
   vars: Record<string, string>;
   /** Atributos `data-*` del contenedor. */
-  attrs: { "data-cp-template": TemplateId; "data-cp-bg": "custom" | "default" };
+  attrs: { "data-cp-template": TemplateId; "data-cp-bg": "custom" | "default"; "data-cp-script": "on" | "off" };
 };
 
 /** Todo lo que necesita una superficie para vestirse con la apariencia. */
@@ -188,6 +208,12 @@ export function appearanceView(appearance: Appearance): AppearanceView {
   const font = fontOf(appearance.font);
   const vars: Record<string, string> = { "--cp-font-body": font.family, "--cp-font-head": font.family };
   if (appearance.template === "elegante" && font.id === "sistema") vars["--cp-font-head"] = '"Playfair Display", Georgia, "Times New Roman", serif';
+  const editorial = appearance.template === "editorial";
+  // Editorial: los títulos van siempre en serif (la elegida, si lo es; si no, Cormorant Garamond).
+  const headFont = editorial && !SERIF_FONTS.includes(font.id) ? EDITORIAL_HEAD : font;
+  if (editorial) vars["--cp-font-head"] = headFont.family;
+  const script = editorial && appearance.script;
+  if (script) vars["--cp-font-script"] = SCRIPT_FONT.family;
   if (appearance.background && appearance.template !== "oscura") {
     vars["--cp-bg-custom"] = appearance.background;
     vars["--cp-text-custom"] = BACKGROUND_TEXT;
@@ -195,9 +221,13 @@ export function appearanceView(appearance: Appearance): AppearanceView {
   }
   return {
     template: appearance.template,
-    fontHref: googleFontHref(appearance.font),
+    fontHref: googleHref([font.google, editorial ? headFont.google : null, script ? SCRIPT_FONT.google : null]),
     vars,
-    attrs: { "data-cp-template": appearance.template, "data-cp-bg": appearance.background && appearance.template !== "oscura" ? "custom" : "default" },
+    attrs: {
+      "data-cp-template": appearance.template,
+      "data-cp-bg": appearance.background && appearance.template !== "oscura" ? "custom" : "default",
+      "data-cp-script": script ? "on" : "off",
+    },
   };
 }
 
