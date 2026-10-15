@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { inviterLosesOwnerAuthority, revokePendingOwnerInvitations } from "@/lib/server/invitations";
 import type { AdminRole } from "@prisma/client";
 import { adminRoleLabel } from "@/lib/admin-format";
 import { clearSessionCookie, hashPassword } from "@/lib/server/auth";
@@ -197,6 +198,10 @@ export async function PATCH(request: Request) {
       previousRole = current.role;
       previousActive = current.active;
       const next = await tx.adminMembership.update({ where: { id: current.id }, data: membershipData });
+      // Quien invitó como OWNER y ya no lo es (o quedó desactivado): sus invitaciones OWNER pendientes se revocan acá mismo.
+      if (inviterLosesOwnerAuthority({ role: next.role, active: next.active })) {
+        await revokePendingOwnerInvitations(tx, { organizationId, inviterId: membership.adminUserId, revokedByName: actor.name });
+      }
       // Si la cuenta pertenece a una sola empresa, el rol global acompaña al de la membresía.
       if (membershipData.role && current.user._count.memberships === 1) {
         await tx.adminUser.update({ where: { id: membership.adminUserId }, data: { role: membershipData.role } });

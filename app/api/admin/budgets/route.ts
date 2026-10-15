@@ -1,7 +1,7 @@
 import { withQuoteApproval, withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
-import { budgetItemError } from "@/lib/budget-items";
+import { budgetItemError, canSetFreeOnPurpose, FREE_ON_PURPOSE_FORBIDDEN, freeOnPurposeChanged } from "@/lib/budget-items";
 import { budgetMoneyValid, defaultDepositPlanRows, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { newBudgetDefaults, securityDepositPublic } from "@/lib/budget-security-deposit";
 import { getRentalSettings } from "@/lib/server/rental-settings";
@@ -248,6 +248,7 @@ export async function POST(request: Request) {
   if (!validInventoryIds) {
     return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
   }
+  if (!canSetFreeOnPurpose(auth.context.role) && freeOnPurposeChanged(rawItems, new Map())) return jsonError(FREE_ON_PURPOSE_FORBIDDEN, 403);
   const items = parseBudgetItems(rawItems, validInventoryIds).map((item) => ({ ...item, id: randomUUID() }));
   const snapshots = await snapshotsForLines(organizationId, items.map((item) => ({ key: item.id, inventoryId: item.inventoryId, rentalDays: item.rentalDays })));
   // Sin ítems no hay presupuesto (issue #132): el required del form se puede
@@ -676,7 +677,7 @@ async function patchBudgetItems(params: {
       subtotal: true,
       total: true,
       client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-      items: { select: { id: true, name: true, inventoryId: true, excluded: true } },
+      items: { select: { id: true, name: true, inventoryId: true, excluded: true, freeOnPurpose: true } },
     },
   });
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
@@ -687,6 +688,7 @@ async function patchBudgetItems(params: {
   if (!rawItems) return jsonError("Mandá la lista de ítems del presupuesto.", 400);
   const validInventoryIds = await resolveInventoryLinks(rawItems, organizationId);
   if (!validInventoryIds) return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
+  if (!canSetFreeOnPurpose(context.role) && freeOnPurposeChanged(rawItems, new Map(budget.items.map((item) => [item.id, item.freeOnPurpose])))) return jsonError(FREE_ON_PURPOSE_FORBIDDEN, 403);
   const parsed = parseBudgetItems(rawItems, validInventoryIds);
   if (parsed.length === 0) return jsonError("El presupuesto necesita al menos un ítem con nombre.", 400);
   if (parsed.length !== rawItems.length) return jsonError("Completá todos los ítems con cantidades y montos válidos.", 400);

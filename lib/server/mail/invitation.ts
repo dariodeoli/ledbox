@@ -1,5 +1,5 @@
 import { adminRoleLabel } from "@/lib/admin-format";
-import { invitationAcceptUrl } from "@/lib/public-config";
+import { invitationAcceptUrl, invitationValidityLabel } from "@/lib/public-config";
 import { renderMail, renderMailText, type MailBrand, type MailContent, type MailRow } from "./template";
 
 /**
@@ -25,6 +25,8 @@ export type InvitationMailInput = {
   expiresAt: Date;
   /** `true` cuando el Equipo reenvía la invitación. */
   resend?: boolean;
+  /** Para calcular los días de vigencia en pruebas; por defecto, ahora. */
+  now?: Date;
 };
 
 export type InvitationMailContent = {
@@ -47,13 +49,16 @@ export function buildInvitationMail(input: InvitationMailInput): InvitationMailC
   const url = invitationAcceptUrl(input.token);
   const expiry = formatExpiry(input.expiresAt);
   const role = adminRoleLabel(input.role);
+  const validity = invitationValidityLabel(
+    Math.max(1, Math.round((input.expiresAt.getTime() - (input.now ?? new Date()).getTime()) / 86_400_000)),
+  );
   const subject = `Invitación al equipo de ${input.organizationName} · EventOS`;
 
   const rows: MailRow[] = [
     { label: "Organización", value: input.organizationName, strong: true },
     { label: "Acceso", value: role },
     { label: "Invita", value: input.invitedByName },
-    { label: "Vigencia", value: expiry },
+    { label: "Vigencia", value: `${validity} · hasta el ${expiry}` },
   ];
 
   const content: MailContent = {
@@ -66,7 +71,7 @@ export function buildInvitationMail(input: InvitationMailInput): InvitationMailC
       `Vas a ingresar con el rol ${role}. El enlace es personal: elegí tu contraseña o continuá con Google si ya usás esa cuenta.`,
     ],
     rows,
-    cta: { label: "Aceptar invitación", url, note: `El enlace vence el ${expiry}.` },
+    cta: { label: "Aceptar invitación", url, note: `${validity}. El enlace vence el ${expiry} y sirve una sola vez.` },
     note: "Si no esperabas esta invitación, podés ignorar este correo. No se crea ningún acceso sin aceptarla.",
     preheader: `${input.organizationName} · rol ${role} · vence el ${expiry}`,
     eyebrow: "Invitación · acceso al equipo",

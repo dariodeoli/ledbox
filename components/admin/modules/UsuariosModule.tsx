@@ -6,6 +6,7 @@ import { adminRoleLabel, formatCountdown, formatDate, formatDateShort, formatDat
 import type { AdminTeamInvitation } from "@/lib/admin-types";
 import { canManageUsers, matchesQuery } from "@/lib/admin-policy";
 import { adminAvatarUrl, type AdminUserRow } from "@/lib/admin-types";
+import { invitationValidityLabel } from "@/lib/public-config";
 import { invitationFormValidity, userFormValidity } from "./usuarios-form-validity";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
@@ -625,7 +626,7 @@ function InviteDialog({
     <AdminDialog
       title="Invitar por correo"
       icon="mail"
-      description="Le mandamos el link para sumarse con el rol elegido. Vence en 7 días y queda pendiente hasta que la acepte."
+      description={`Le mandamos el link para sumarse con el rol elegido. ${invitationValidityLabel()}: sirve una sola vez y queda pendiente hasta que la acepte.`}
       size="sm"
       error={(invite !== EMPTY_INVITE ? inviteValidity.error : null) ?? (localError || (!limitError && error ? error : null))}
       dirty={invite.email !== "" || invite.role !== EMPTY_INVITE.role}

@@ -23,3 +23,24 @@ export function budgetItemError(item: { name: string; quantity: number; days: nu
 export function budgetDraftSubtotal(items: BudgetItemDraft[]): number {
   return items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.quantity) * Number(item.days) * Number(item.unitPrice)), 0);
 }
+
+/** Solo OWNER y ADMIN marcan o desmarcan «Gratis a propósito» (el 0 confirmado). */
+export function canSetFreeOnPurpose(role: string | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
+/**
+ * `true` si el body cambia «Gratis a propósito» respecto de lo guardado: un ítem
+ * nuevo con el interruptor, o uno existente con el valor distinto. Quien no
+ * puede cambiarlo recibe 403; mandar el mismo valor guardado no cuenta.
+ */
+export function freeOnPurposeChanged(rawItems: unknown[], saved: ReadonlyMap<string, boolean>): boolean {
+  return rawItems.some((raw) => {
+    if (!raw || typeof raw !== "object") return false;
+    const row = raw as Record<string, unknown>;
+    const previous = typeof row.id === "string" ? saved.get(row.id) ?? false : false;
+    return (row.freeOnPurpose === true) !== previous;
+  });
+}
+
+export const FREE_ON_PURPOSE_FORBIDDEN = "Solo un propietario o un administrador puede marcar un ítem como gratis a propósito.";

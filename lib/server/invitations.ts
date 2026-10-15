@@ -5,7 +5,7 @@ import { adminRoleLabel } from "@/lib/admin-format";
 import type { AdminInvitationAccountState, AdminInvitationPublicView, AdminTeamInvitation } from "@/lib/admin-types";
 import { FIELD_MESSAGES, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
 import { authErrorMessage, type AuthErrorCode } from "@/lib/google-auth";
-import { INVITATION_TOKEN_LENGTH, UNAMBIGUOUS_ALPHABET } from "@/lib/public-config";
+import { INVITATION_TOKEN_LENGTH, INVITATION_TTL_DAYS, UNAMBIGUOUS_ALPHABET } from "@/lib/public-config";
 import { recordAudit } from "./audit";
 import { hashPassword, tokenDigest, verifyPassword } from "./auth";
 import { db } from "./db";
@@ -34,8 +34,7 @@ import { db } from "./db";
  * - La aceptación queda auditada con el actor real (la persona que acepta).
  */
 
-/** Días de vigencia del link de invitación. */
-export const INVITATION_TTL_DAYS = 7;
+export { INVITATION_TTL_DAYS };
 
 export type InvitationWithOrganization = TeamInvitation & {
   organization: { id: string; name: string; slug: string };
@@ -75,6 +74,47 @@ export async function expireDueInvitations(organizationId: string, now: Date = n
     data: { status: "expired" },
   });
   return expired.count;
+}
+
+/**
+ * Quien invitó con rol OWNER deja de tener esa autoridad cuando su rol en la
+ * empresa ya no es OWNER o su acceso está desactivado.
+ */
+export function inviterLosesOwnerAuthority(next: { role: AdminRole; active: boolean }): boolean {
+  return next.role !== "OWNER" || !next.active;
+}
+
+/**
+ * Revoca las invitaciones OWNER pendientes que hizo `inviterId` en la empresa.
+ * Va dentro de la transacción del cambio de rol o de acceso. Devuelve cuántas revocó.
+ */
+export async function revokePendingOwnerInvitations(
+  tx: Prisma.TransactionClient,
+  input: { organizationId: string; inviterId: string; revokedByName: string; now?: Date },
+): Promise<number> {
+  const result = await tx.teamInvitation.updateMany({
+    where: { organizationId: input.organizationId, invitedById: input.inviterId, role: "OWNER", status: "pending" },
+    data: { status: "revoked", revokedAt: input.now ?? new Date(), revokedByName: input.revokedByName },
+  });
+  return result.count;
+}
+
+/**
+ * Un ADMIN no puede pisar una invitación OWNER pendiente (rol, token y quién
+ * invita) al reinvitar el mismo correo. `true` si hay que frenar.
+ */
+export async function ownerInvitationBlocksActor(input: {
+  organizationId: string;
+  email: string;
+  actorRole: AdminRole;
+  now?: Date;
+}): Promise<boolean> {
+  if (input.actorRole === "OWNER") return false;
+  const existing = await db.teamInvitation.findUnique({
+    where: { organizationId_email: { organizationId: input.organizationId, email: normalizeEmail(input.email) } },
+    select: { role: true, status: true, expiresAt: true },
+  });
+  return Boolean(existing && existing.role === "OWNER" && effectiveInvitationStatus(existing, input.now) === "pending");
 }
 
 /** Busca una invitación por el token del link (hash); `null` si no existe. */

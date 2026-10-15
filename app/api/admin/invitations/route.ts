@@ -7,6 +7,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import {
   expireDueInvitations,
+  ownerInvitationBlocksActor,
   invitationRow,
   upsertInvitation,
   type InvitationLastMail,
@@ -98,6 +99,13 @@ export async function POST(request: Request) {
   });
   if (existing?.memberships.length) {
     return jsonError(`«${existing.name}» ya es miembro del equipo de esta empresa.`, 409);
+  }
+
+  if (await ownerInvitationBlocksActor({ organizationId, email, actorRole })) {
+    return jsonError(
+      "Ya hay una invitación pendiente como Propietario para ese correo. Solo un propietario puede reemplazarla o revocarla.",
+      409,
+    );
   }
 
   const { invitation, token, created } = await upsertInvitation({
