@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { strToU8, zipSync } from "fflate";
 import sharp from "sharp";
 import {
+  DUDA_MOTIVO_LABEL,
+  dudaMotivo,
   buildPublicDescription,
   normalizeCatalog,
   parseCatalogJson,
@@ -285,4 +287,46 @@ test("el encabezado ya no tiene el botón de Carga con IA y la pantalla de Inven
   assert.match(route, /rateLimit\(/);
   assert.match(route, /requireAdminContext\(module\.capability\)/);
   assert.doesNotMatch(route, /console\.log/);
+});
+
+test("catálogo real: precio null es aviso (no bloquea), códigos con sufijo o SC-n valen y las dudas se agrupan por motivo", () => {
+  const result = plan({
+    productos: [
+      { codigo: "625-b", nombre: "Camino de mesa", precio: null, dudas: "No se lee el precio" },
+      { codigo: "129-c", nombre: "Servilleta", precio: null, dudas: null },
+      { codigo: "SC-1", nombre: "Toldo sin código", precio: null, dudas: "El código no figura en el catálogo" },
+      { codigo: "SC-2", nombre: "Mantel", precio: 5000, dudas: "Foto borrosa" },
+    ],
+  }, {}, null);
+  assert.equal(result.summary.errores, 0, "ningún error: se importan los 4");
+  assert.equal(result.summary.crear, 4);
+  const ceros = result.problems.filter((p) => p.tipo === "precio-cero");
+  assert.equal(ceros.length, 3);
+  assert.ok(ceros.every((p) => p.nivel === "aviso" && p.mensaje.includes("Consultar")));
+  const parsed = normalizeCatalog({ productos: [{ codigo: "625-b", nombre: "Camino", precio: null }] });
+  assert.ok(parsed.ok);
+  assert.equal(parsed.value.doc.productos[0].precio, null);
+  const dudas = result.problems.filter((p) => p.tipo === "duda");
+  assert.deepEqual(dudas.map((d) => d.motivo).sort(), ["codigo", "foto", "precio"]);
+  assert.equal(dudaMotivo("Cantidad de unidades dudosa"), "cantidad");
+  assert.equal(dudaMotivo("No sé qué incluye el juego"), "componentes");
+  assert.equal(dudaMotivo("algo raro"), "otro");
+  assert.ok(Object.keys(DUDA_MOTIVO_LABEL).includes("otro"));
+});
+
+test("fotos compartidas: varias fichas pueden apuntar al mismo archivo", () => {
+  const result = plan({ productos: [{ codigo: "10", nombre: "Silla A", foto: "silla.jpg" }, { codigo: "11", nombre: "Silla B", foto: "silla.jpg" }] }, {}, ["silla.jpg"]);
+  assert.equal(result.summary.fotos, 2);
+  assert.equal(result.problems.filter((p) => p.nivel === "error").length, 0);
+  assert.ok(!result.problems.some((p) => p.tipo === "foto-sobrante"));
+});
+
+test("la aplicación responde en NDJSON con progreso y la vista previa filtra dudas por motivo", () => {
+  const route = repoFile("app/api/admin/import/[modulo]/route.ts");
+  assert.match(route, /application\/x-ndjson/);
+  assert.match(route, /progreso/);
+  const panel = repoFile("components/admin/AdminImportPanel.tsx");
+  assert.match(panel, /DUDA_MOTIVO_LABEL/);
+  assert.match(panel, /Buscar en las dudas/);
+  assert.match(panel, /progreso/);
 });

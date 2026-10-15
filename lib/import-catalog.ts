@@ -97,7 +97,33 @@ export type ImportProblem = {
   codigo: string | null;
   fila: number | null;
   mensaje: string;
+  /** Solo en las dudas: motivo agrupado para filtrar en la vista previa. */
+  motivo?: DudaMotivo;
 };
+
+export const DUDA_MOTIVOS = ["precio", "foto", "codigo", "componentes", "medidas", "cantidad", "otro"] as const;
+export type DudaMotivo = (typeof DUDA_MOTIVOS)[number];
+export const DUDA_MOTIVO_LABEL: Record<DudaMotivo, string> = {
+  precio: "Precio",
+  foto: "Foto",
+  codigo: "Código o nombre",
+  componentes: "Componentes o juego",
+  medidas: "Medidas o capacidad",
+  cantidad: "Cantidad",
+  otro: "Otras",
+};
+
+/** Agrupa una duda libre de ChatGPT por motivo (palabras clave; sin match = «otro»). */
+export function dudaMotivo(text: string): DudaMotivo {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/\bprecio|\bcosto|\bvalor|gs\b|guarani|\bmoneda|\bmonto/.test(t)) return "precio";
+  if (/\bfoto|imagen|\bimg\b|borros|ilegible/.test(t)) return "foto";
+  if (/componente|juego|combo|incluye|\bset\b|compone/.test(t)) return "componentes";
+  if (/codigo|\bsku\b|nombre|duplicad|repetid/.test(t)) return "codigo";
+  if (/medida|capacidad|dimension|\bcm\b|personas|tamano/.test(t)) return "medidas";
+  if (/cantidad|stock|unidades/.test(t)) return "cantidad";
+  return "otro";
+}
 
 const problem = (nivel: ImportProblem["nivel"], tipo: ProblemKind, codigo: string | null, fila: number | null, mensaje: string): ImportProblem => ({
   nivel,
@@ -217,7 +243,7 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
   }
   const pagina = parseWholeNumber(row.pagina);
   const dudas = text(row.dudas, 500);
-  if (dudas) problems.push(problem("aviso", "duda", codigo, fila, `${nombre}: ${dudas}`));
+  if (dudas) problems.push({ ...problem("aviso", "duda", codigo, fila, `${nombre}: ${dudas}`), motivo: dudaMotivo(dudas) });
   return {
     codigo,
     nombre,
@@ -428,7 +454,7 @@ export function planCatalog(options: {
     }
 
     if (!product.precio) {
-      problems.push(problem("aviso", "precio-cero", product.codigo, product.fila, `${product.nombre}: precio ${product.precio === 0 ? "0" : "sin dato"}${existing ? "; se conserva el precio actual" : "; queda en 0 hasta que lo cargues"}.`));
+      problems.push(problem("aviso", "precio-cero", product.codigo, product.fila, `${product.nombre}: precio ${product.precio === 0 ? "0" : "sin dato"}${existing ? "; se conserva el precio actual" : "; se importa con precio 0 y la tienda lo muestra como «Consultar»"}.`));
     }
     const description = buildPublicDescription(product);
     if (description.truncated) {

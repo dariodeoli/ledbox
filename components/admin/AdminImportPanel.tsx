@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { adminApiGet, adminApiUpload } from "@/lib/admin-api";
+import { adminApiGet, adminApiUpload, clearAdminApiCache } from "@/lib/admin-api";
 import { IMPORT_MODULES, type ImportModuleId } from "@/lib/import-modules";
-import { CATALOG_LIMITS } from "@/lib/import-catalog";
+import { CATALOG_LIMITS, DUDA_MOTIVO_LABEL } from "@/lib/import-catalog";
 import { AdminBadge, AdminButton, AdminDialog } from "./AdminUI";
-import { FileField, SegmentedField, TextAreaField } from "./AdminFields";
+import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } from "./AdminFields";
 
 /**
  * Diálogo «Importar» de un módulo. Una sola interfaz con tres caminos de
@@ -15,7 +15,7 @@ import { FileField, SegmentedField, TextAreaField } from "./AdminFields";
  */
 
 type Tarjeta = { clave: string; etiqueta: string; valor: number };
-type Problema = { nivel: "error" | "aviso"; tipo: string; codigo: string | null; mensaje: string };
+type Problema = { nivel: "error" | "aviso"; tipo: string; codigo: string | null; mensaje: string; motivo?: string };
 type Fila = { codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
 type Preview = { catalogo: unknown; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
 type Resultado = {
@@ -28,6 +28,7 @@ type Resultado = {
   fallidos: Array<{ codigo: string; mensaje: string }>;
 };
 type Camino = "planilla" | "chatgpt" | "ia";
+type Progreso = { hecho: number; total: number; fase: string };
 
 const MB = 1024 * 1024;
 const ACCION_TONO = { crear: "ok", actualizar: "info", omitir: "danger" } as const;
@@ -47,6 +48,9 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   const [preview, setPreview] = useState<Preview | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [progreso, setProgreso] = useState<Progreso | null>(null);
+  const [motivo, setMotivo] = useState("todas");
+  const [busqueda, setBusqueda] = useState("");
   const lote = useMemo(() => crypto.randomUUID(), [preview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -93,11 +97,51 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   async function aplicar() {
     setBusy("aplicar");
     setError(null);
-    const respuesta = await adminApiUpload<{ resultado: Resultado }>(url, formulario("apply"), { timeoutMs: 600_000, fallbackError: "No pudimos aplicar la importación." });
-    setBusy(null);
-    if (!respuesta.ok) return setError(respuesta.error);
-    setResultado(respuesta.data.resultado);
-    onApplied?.();
+    setProgreso({ hecho: 0, total: 0, fase: "Subiendo archivos" });
+    try {
+      clearAdminApiCache();
+      const response = await fetch(url, { method: "POST", body: formulario("apply") });
+      if (!response.ok || !response.body) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(response.status === 401 || response.status === 403 ? payload.error || "No tenés permiso para importar." : payload.error || "No pudimos aplicar la importación.");
+        return;
+      }
+      // NDJSON: líneas de progreso y una final con el resultado (o el error).
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pendiente = "";
+      let terminado = false;
+      const procesar = (linea: string) => {
+        if (!linea.trim()) return;
+        const dato = JSON.parse(linea) as { progreso?: Progreso; resultado?: Resultado; error?: string };
+        if (dato.progreso) setProgreso(dato.progreso);
+        if (dato.resultado) {
+          terminado = true;
+          setResultado(dato.resultado);
+          onApplied?.();
+        }
+        if (dato.error) {
+          terminado = true;
+          setError(dato.error);
+        }
+      };
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        pendiente += decoder.decode(value, { stream: true });
+        const lineas = pendiente.split("\n");
+        pendiente = lineas.pop() ?? "";
+        lineas.forEach(procesar);
+      }
+      procesar(pendiente);
+      if (!terminado) setError("Se cortó la conexión antes de terminar. Revisá el inventario: reimportar no duplica.");
+    } catch {
+      setError("Se cortó la conexión antes de terminar. Revisá el inventario: reimportar no duplica.");
+    } finally {
+      clearAdminApiCache();
+      setBusy(null);
+      setProgreso(null);
+    }
   }
 
   async function copiar() {
@@ -116,7 +160,10 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   }
 
   const errores = preview?.problemas.filter((problema) => problema.nivel === "error") ?? [];
-  const avisos = preview?.problemas.filter((problema) => problema.nivel === "aviso") ?? [];
+  const dudas = preview?.problemas.filter((problema) => problema.tipo === "duda") ?? [];
+  const avisos = preview?.problemas.filter((problema) => problema.nivel === "aviso" && problema.tipo !== "duda") ?? [];
+  const porMotivo = dudas.reduce<Record<string, number>>((acc, duda) => ({ ...acc, [duda.motivo ?? "otro"]: (acc[duda.motivo ?? "otro"] ?? 0) + 1 }), {});
+  const dudasVisibles = dudas.filter((duda) => (motivo === "todas" || (duda.motivo ?? "otro") === motivo) && (!busqueda.trim() || `${duda.codigo} ${duda.mensaje}`.toLowerCase().includes(busqueda.trim().toLowerCase())));
   const aplicables = preview ? (preview.tarjetas.find((tarjeta) => tarjeta.clave === "crear")?.valor ?? 0) + (preview.tarjetas.find((tarjeta) => tarjeta.clave === "actualizar")?.valor ?? 0) : 0;
 
   const pie = resultado ? (
@@ -147,6 +194,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
       dirty={Boolean(preview) && !resultado}
       description={resultado ? "Importación terminada." : preview ? "Revisá la vista previa. Todavía no se guardó nada." : "Elegí cómo cargar los datos. Antes de guardar vas a ver una vista previa."}
       error={error}
+      warning={busy === "aplicar" && progreso ? `${progreso.fase}${progreso.total ? `: ${progreso.hecho} de ${progreso.total}` : "…"}` : null}
       footer={pie}
     >
       {resultado ? (
@@ -210,7 +258,29 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               </ul>
             </section>
           ) : null}
-          {errores.length === 0 && avisos.length === 0 ? <p className="admin-field-hint">Sin problemas detectados.</p> : null}
+          {dudas.length > 0 ? (
+            <section aria-label="Dudas">
+              <h3 className="admin-import-h">Dudas de la IA ({dudas.length}): revisalas antes de aplicar; no son obligatorias</h3>
+              <div className="admin-import-filters">
+                <SelectField
+                  label="Motivo"
+                  value={motivo}
+                  onChange={setMotivo}
+                  options={[{ value: "todas", label: `Todas (${dudas.length})` }, ...Object.entries(porMotivo).map(([clave, cantidad]) => ({ value: clave, label: `${DUDA_MOTIVO_LABEL[clave as keyof typeof DUDA_MOTIVO_LABEL] ?? clave} (${cantidad})` }))]}
+                />
+                <SearchField label="Buscar en las dudas" value={busqueda} onChange={setBusqueda} placeholder="Código o texto" />
+              </div>
+              <p className="admin-field-hint" aria-live="polite">Mostrando {dudasVisibles.length} de {dudas.length}</p>
+              <ul className="admin-import-problems admin-import-dudas">
+                {dudasVisibles.map((problema, index) => (
+                  <li key={`d${index}`}>
+                    <AdminBadge tone="warn">{problema.codigo ?? "General"}</AdminBadge> <AdminBadge tone="neutral">{DUDA_MOTIVO_LABEL[(problema.motivo ?? "otro") as keyof typeof DUDA_MOTIVO_LABEL] ?? "Otras"}</AdminBadge> {problema.mensaje}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {errores.length === 0 && avisos.length === 0 && dudas.length === 0 ? <p className="admin-field-hint">Sin problemas detectados.</p> : null}
           <section aria-label="Filas">
             <h3 className="admin-import-h">Filas ({preview.filas.length})</h3>
             <ul className="admin-import-rows">

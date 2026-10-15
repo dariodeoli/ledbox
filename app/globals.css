@@ -5005,3 +5005,6 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-import-file { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; overflow-wrap: anywhere; }
 .admin-import a.admin-btn { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
 @media (max-width: 767px) { .admin-import-problems, .admin-import-rows { max-height: none; } }
+.admin-import-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+.admin-import-dudas { max-height: 340px; }
+@media (max-width: 767px) { .admin-import-filters { grid-template-columns: minmax(0, 1fr); } .admin-import-dudas { max-height: none; } }

@@ -210,6 +210,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   const already = await db.auditLog.findFirst({ where: { organizationId, entity: "IaCarga", entityId: lote }, select: { id: true } });
   if (already) return jsonError("Esta importación ya se aplicó. Si cambiaste archivos, generá una vista previa nueva.", 409);
 
-  const result = await applyCatalog(context, { ...input, lote });
-  return Response.json({ resultado: result }, { status: 200 });
+  // Respuesta en NDJSON: una línea de progreso por bloque y una final con el resultado,
+  // así un catálogo grande (cientos de fotos) no queda mudo ni da timeout del proxy.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
+      try {
+        send({ progreso: { hecho: 0, total: input.products.length, fase: "Preparando" } });
+        const result = await applyCatalog(context, { ...input, lote, onProgress: (progreso) => send({ progreso }) });
+        send({ resultado: result });
+      } catch (error) {
+        console.error("[import-catalogo] Falló la aplicación:", error instanceof Error ? error.message : error);
+        send({ error: "No pudimos terminar la importación. Revisá el inventario y volvé a intentar: reimportar no duplica." });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }

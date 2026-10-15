@@ -175,7 +175,9 @@ async function photoFor(planned: PlannedProduct, photos: Map<string, Uint8Array>
   return prepared;
 }
 
-export async function applyCatalog(context: AuditContext, input: ImportInput & { lote: string }): Promise<ApplyResult> {
+export type ApplyProgress = { hecho: number; total: number; fase: string };
+
+export async function applyCatalog(context: AuditContext, input: ImportInput & { lote: string; onProgress?: (progress: ApplyProgress) => void }): Promise<ApplyResult> {
   const { organizationId } = context;
   const plan = await previewCatalog(organizationId, input);
   const failures: ApplyFailure[] = [];
@@ -186,6 +188,24 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   let updated = 0;
   let photosSaved = 0;
   let combosDone = 0;
+
+  const total = planned.length;
+  let hecho = 0;
+  const advance = (count: number, fase: string) => {
+    hecho += count;
+    input.onProgress?.({ hecho: Math.min(hecho, total), total, fase });
+  };
+  // Fichas que comparten foto: se procesa una vez y cada producto guarda su copia.
+  const prepared = new Map<string, Promise<PreparedPhoto | null>>();
+  const photoOf = (item: PlannedProduct): Promise<PreparedPhoto | null> => {
+    if (!item.foto || !input.photos) return Promise.resolve(null);
+    let promise = prepared.get(item.foto);
+    if (!promise) {
+      promise = photoFor(item, input.photos, failures);
+      prepared.set(item.foto, promise);
+    }
+    return promise;
+  };
 
   const label = (item: PlannedProduct) => `${item.product.codigo} · ${item.product.nombre}`;
   const note = (outcome: Outcome, item: PlannedProduct) => {
@@ -199,13 +219,16 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   const units = planned.filter((item) => !item.esCombo);
   for (let start = 0; start < units.length; start += BLOCK_SIZE) {
     const block = units.slice(start, start + BLOCK_SIZE);
-    const prepared = new Map<string, PreparedPhoto | null>();
-    for (const item of block) prepared.set(item.product.codigo, await photoFor(item, input.photos, failures));
+    const blockPhotos = new Map<string, PreparedPhoto | null>();
+    // Hasta 4 fotos a la vez: rápido sin disparar la memoria.
+    for (let i = 0; i < block.length; i += 4) {
+      await Promise.all(block.slice(i, i + 4).map(async (item) => blockPhotos.set(item.product.codigo, await photoOf(item))));
+    }
     try {
       const outcomes = await db.$transaction(
         async (tx) => {
           const list: Array<[PlannedProduct, Outcome]> = [];
-          for (const item of block) list.push([item, await writeUnitItem(tx, organizationId, item, prepared.get(item.product.codigo) ?? null)]);
+          for (const item of block) list.push([item, await writeUnitItem(tx, organizationId, item, blockPhotos.get(item.product.codigo) ?? null)]);
           return list;
         },
         { timeout: 60_000, maxWait: 10_000 },
@@ -215,7 +238,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       console.error("[import-catalogo] Bloque revertido, se reintenta producto por producto:", blockError instanceof Error ? blockError.message : blockError);
       for (const item of block) {
         try {
-          const outcome = await db.$transaction((tx) => writeUnitItem(tx, organizationId, item, prepared.get(item.product.codigo) ?? null), { timeout: 30_000 });
+          const outcome = await db.$transaction((tx) => writeUnitItem(tx, organizationId, item, blockPhotos.get(item.product.codigo) ?? null), { timeout: 30_000 });
           note(outcome, item);
         } catch (error) {
           const message = isUniqueConstraintError(error) ? `Ya existe un producto con el código ${item.product.codigo}.` : error instanceof Error ? error.message : "No se pudo importar.";
@@ -225,6 +248,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         }
       }
     }
+    advance(block.length, "Productos");
   }
 
   // Fase 2: juegos (combos) con el motor de combos; necesitan los ids de sus componentes.
@@ -265,7 +289,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
           idByCode.set(code, comboId);
           if (isNew) created.push({ id: comboId, etiqueta: label(item) });
         }
-        const photo = await photoFor(item, input.photos, failures);
+        const photo = await photoOf(item);
         const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo), { timeout: 30_000 });
         idByCode.set(code, comboId!);
         combosDone += 1;
@@ -276,6 +300,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         failures.push({ codigo: code, mensaje: error instanceof Error ? error.message : "No se pudo importar el juego." });
         failedProducts.add(code);
       }
+      advance(1, "Juegos");
     }
   }
 
