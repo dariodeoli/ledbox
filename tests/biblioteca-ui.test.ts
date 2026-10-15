@@ -93,7 +93,7 @@ test("diálogo: grilla de 12 columnas, tamaño xl, AdminCol, `columns` y seccion
 });
 
 test("menús: una sola caja opaca con sombra", () => {
-  assert.match(library, /\.admin-menu-pop, \.admin-combobox-pop, \.admin-company-menu, \.admin-root \.admin-field \[role="listbox"\]\s*\{[^}]*background:\s*var\(--a-pop-bg\)[^}]*box-shadow:\s*var\(--a-pop-shadow\)[^}]*backdrop-filter:\s*none/);
+  assert.match(library, /\.admin-menu-pop, \.admin-combobox-pop, \.admin-company-menu, \.admin-root \.admin-field \[role="listbox"\]:not\(\.admin-combobox-list\)\s*\{[^}]*background:\s*var\(--a-pop-bg\)[^}]*box-shadow:\s*var\(--a-pop-shadow\)[^}]*backdrop-filter:\s*none/);
   assert.match(css, /--a-pop-bg:\s*var\(--a-dialog-bg\)/);
 });
 
