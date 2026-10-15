@@ -3,8 +3,7 @@ import { Prisma } from "@prisma/client";
 import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
 import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, quoteItemActive, rentalDaysBetween } from "@/lib/catalog-public";
 import { deliveryExtraApplies, deliveryFee, deliveryLineName, orderPieces } from "@/lib/delivery-zones";
-import { loadPricedItems, quoteInventoryLine, totalTierNote } from "./line-pricing";
-import { billedDays } from "@/lib/quote-sharing";
+import { catalogLineAmounts, loadPricedItems, totalTierNote } from "./line-pricing";
 import { db } from "./db";
 import { commitInventoryAssignment, insufficientMessage } from "./inventory-availability";
 import { leadStatusAfterBudget, resolveClientFromLead } from "./lead-client";
@@ -95,13 +94,9 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const lines = activeItems.map((item, sortOrder) => {
     const linked = item.inventoryId ? priced.get(item.inventoryId) : undefined;
     // El piso de venta es interno: la tienda nunca lo muestra, así que la conversión no lo aplica.
-    const quoted = linked ? quoteInventoryLine(linked, periodDays, priceList, { applyMinimum: false }) : null;
-    const fromStore = quoted && quoted.pricing.unitPrice > 0 ? quoted : null;
-    const unitPrice = fromStore?.pricing.unitPrice || item.unitPrice || 0;
+    const { fromStore, unitPrice, days, subtotal } = catalogLineAmounts(linked, item.unitPrice, item.quantity, periodDays, priceList);
     if (unitPrice <= 0) unpricedLines += 1;
     const costPrice = (linked ? costById.get(linked.id) : 0) ?? 0;
-    // «Se cobra por evento» o escalón «total»: una sola unidad de tiempo, sin importar los días del período.
-    const days = fromStore ? fromStore.pricing.days : billedDays(linked?.billingUnit, periodDays);
     return {
       id: randomUUID(),
       sortOrder,
@@ -110,7 +105,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
       days,
       unitPrice,
       costPrice,
-      subtotal: unitPrice * item.quantity * days,
+      subtotal,
       inventoryId: linked?.id ?? null,
       ...(fromStore?.pricing.mode === "TOTAL" ? { notes: totalTierNote(periodDays) } : {}),
       ...(fromStore ? { pricingSnapshot: fromStore.snapshot as unknown as Prisma.InputJsonValue } : {}),

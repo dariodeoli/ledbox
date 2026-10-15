@@ -9,6 +9,7 @@ import {
   type PricingSnapshot,
   type AudiencePriceTier,
 } from "@/lib/price-tiers";
+import { billedDays } from "@/lib/quote-sharing";
 import { db } from "./db";
 
 /**
@@ -101,6 +102,26 @@ export function quoteInventoryLine(
     pricing: priceLine(product, rentalDays),
     snapshot: snapshotFromProduct(product, audienceOf(list), rentalDays, packageComponents(item, list, applyMinimum)),
   };
+}
+
+/**
+ * Importes de una línea de pedido del catálogo para `periodDays` días: la regla ÚNICA que usan la
+ * conversión a presupuesto y la propuesta de la empresa (sin piso de venta, como la tienda). Si el
+ * producto no tiene precio vigente se usa `fallbackUnitPrice` (el que vio el cliente).
+ */
+export function catalogLineAmounts(
+  linked: PricedItem | undefined,
+  fallbackUnitPrice: number | null | undefined,
+  quantity: number,
+  periodDays: number,
+  list: "RETAIL" | "WHOLESALE" | "FINAL",
+) {
+  const quoted = linked ? quoteInventoryLine(linked, periodDays, list, { applyMinimum: false }) : null;
+  const fromStore = quoted && quoted.pricing.unitPrice > 0 ? quoted : null;
+  const unitPrice = fromStore?.pricing.unitPrice || fallbackUnitPrice || 0;
+  // «Se cobra por evento» o escalón «total»: una sola unidad de tiempo, sin importar los días del período.
+  const days = fromStore ? fromStore.pricing.days : billedDays(linked?.billingUnit, periodDays);
+  return { fromStore, unitPrice, days, subtotal: unitPrice * quantity * days };
 }
 
 /** Nota de la línea cuando el escalón es un total cerrado: la duración se pierde en `days = 1`. */

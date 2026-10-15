@@ -4,13 +4,12 @@ import {
   RESPONDABLE_STATUSES,
   isQuoteItemState,
   isQuoteRequestStatus,
-  listDailyPrice,
   quoteItemActive,
   rentalDaysBetween,
   type QuoteItemState,
 } from "@/lib/catalog-public";
 import { publicConfig } from "@/lib/public-config";
-import { billedDays } from "@/lib/quote-sharing";
+import { deliveryFee, orderPieces } from "@/lib/delivery-zones";
 import { portalAuditContext, recordAudit } from "./audit";
 import { db } from "./db";
 import {
@@ -23,6 +22,7 @@ import {
   loadRentalSettings,
   type InventorySubstitute,
 } from "./inventory-availability";
+import { catalogLineAmounts, loadPricedItems } from "./line-pricing";
 import { sendMail, type MailActor } from "./mail";
 import { buildOrderProposalMail, buildOrderRejectedMail } from "./mail/catalog";
 import { mailBrandFor } from "./mail/org-brand";
@@ -282,7 +282,7 @@ export async function modifyQuoteRequest(
   for (const id of edits.keys()) if (!quote.items.some((item) => item.id === id)) return { ok: false, status: 404, error: "Una de las líneas no existe en este pedido." };
 
   // Sustitutos permitidos por línea: salen de la lógica de la reserva (misma categoría, con stock libre).
-  const substituteRows = new Map<string, { id: string; name: string; sku: string | null; billingUnit: "DAILY" | "EVENT"; listPrice: number; listFromDays: number; listFromPrice: number; wholesalePrice: number; wholesaleFromDays: number; wholesaleFromPrice: number }>();
+  const substituteRows = new Map<string, { id: string; name: string; sku: string | null; billingUnit: "DAILY" | "EVENT" }>();
   for (const edit of input.lines.filter((line) => line.action === "substitute")) {
     const allowed = await listQuoteItemSubstitutes(context, quote.id, edit.itemId);
     if (!allowed.ok) return allowed;
@@ -291,7 +291,7 @@ export async function modifyQuoteRequest(
     }
     const row = await db.inventoryItem.findFirst({
       where: { id: edit.substituteInventoryId, organizationId },
-      select: { id: true, name: true, sku: true, billingUnit: true, listPrice: true, listFromDays: true, listFromPrice: true, wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true },
+      select: { id: true, name: true, sku: true, billingUnit: true },
     });
     if (!row) return { ok: false, status: 409, error: "El producto de reemplazo ya no existe." };
     substituteRows.set(edit.itemId, { ...row, billingUnit: row.billingUnit === "EVENT" ? "EVENT" : "DAILY" });
@@ -330,12 +330,11 @@ export async function modifyQuoteRequest(
       const quantity = edit.quantity ?? item.quantity;
       if (quantity === item.quantity) return base;
       changes.push(`${originalName}: ${originalQuantity} → ${quantity}`);
-      const subtotal = base.unitPrice ? base.unitPrice * quantity * billedDays(base.billingUnit, days) : null;
-      return { ...base, ...remember, state: current === "SUBSTITUTED" ? "SUBSTITUTED" : "CHANGED", quantity, subtotal };
+      // El importe se recalcula más abajo con la regla única de precio de línea.
+      return { ...base, ...remember, state: current === "SUBSTITUTED" ? "SUBSTITUTED" : "CHANGED", quantity };
     }
     const substitute = substituteRows.get(item.id)!;
     const quantity = edit.quantity ?? item.quantity;
-    const unitPrice = showPrices ? listDailyPrice(substitute, list, days) || null : null;
     changes.push(`${originalName} → ${substitute.name}${quantity !== originalQuantity ? ` (${quantity})` : ""}`);
     return {
       ...base,
@@ -346,10 +345,24 @@ export async function modifyQuoteRequest(
       productName: substitute.name,
       productSlug: substitute.sku || substitute.id,
       billingUnit: substitute.billingUnit,
-      unitPrice,
-      subtotal: unitPrice ? unitPrice * quantity * billedDays(substitute.billingUnit, days) : null,
+      // El precio del sustituto sale de su lista (escalones incluidos) más abajo; no hereda el del original.
+      unitPrice: null,
+      subtotal: null,
     };
   });
+
+  // Precio de las líneas activas: MISMA función que la conversión (`catalogLineAmounts`), con los
+  // escalones vigentes de la lista del pedido y los días del pedido. Así `referenceTotal` y el
+  // subtotal de la propuesta coinciden al peso con el presupuesto que sale al convertir.
+  const pricedItems = await loadPricedItems(organizationId, planned.flatMap((line) => (quoteItemActive(line.state) && line.inventoryId ? [line.inventoryId] : [])));
+  if (showPrices) {
+    for (const line of planned) {
+      if (!quoteItemActive(line.state)) continue;
+      const amounts = catalogLineAmounts(line.inventoryId ? pricedItems.get(line.inventoryId) : undefined, line.unitPrice, line.quantity, days, list);
+      line.unitPrice = amounts.unitPrice > 0 ? amounts.unitPrice : null;
+      line.subtotal = amounts.unitPrice > 0 ? amounts.subtotal : null;
+    }
+  }
 
   const active = planned.filter((line) => quoteItemActive(line.state));
   if (active.length === 0) return { ok: false, status: 422, error: "No queda ninguna línea en el pedido. Si no tenés nada de esto disponible, rechazalo con un motivo." };
@@ -359,7 +372,12 @@ export async function modifyQuoteRequest(
   const problems = await stockShortages({ organizationId, lines: active, startsAt, endsAt });
   if (problems.length > 0) return { ok: false, status: 409, error: `No alcanza el stock para esas fechas: ${problems.join(" · ")}.` };
 
-  const total = showPrices && active.every((line) => line.subtotal !== null) ? active.reduce((sum, line) => sum + (line.subtotal ?? 0), 0) : null;
+  // Flete de la zona: igual que la conversión (línea aparte según las piezas); si la zona se borró, no se inventa.
+  const zone = quote.deliveryZoneId
+    ? await db.deliveryZone.findFirst({ where: { id: quote.deliveryZoneId, organizationId }, select: { basePrice: true, volumeThreshold: true, extraPrice: true, name: true } })
+    : null;
+  const fee = zone ? deliveryFee(zone, orderPieces(active.map((line) => ({ quantity: line.quantity, inventoryId: pricedItems.has(line.inventoryId ?? "") ? line.inventoryId : null })))) : 0;
+  const total = showPrices && active.every((line) => line.subtotal !== null) ? active.reduce((sum, line) => sum + (line.subtotal ?? 0), 0) + fee : null;
   try {
     await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "QuoteRequest" WHERE "id" = ${quote.id} FOR UPDATE`;
