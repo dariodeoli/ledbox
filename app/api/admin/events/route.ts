@@ -1,3 +1,5 @@
+import { guardEventNameChange } from "@/lib/server/event-name";
+import { QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
 import { closureBlockMessage, eventClosureBlockers } from "@/lib/server/inventory-operations";
 import { eventStatusLabel } from "@/lib/admin-format";
@@ -162,6 +164,9 @@ export async function PATCH(request: Request) {
     updated = await db.$transaction(async (tx) => {
     // Papelera: un id eliminado entre la lectura y la escritura da 404, no se edita.
     await assertLive("Event", event.id, auth.context.organizationId, tx);
+    if (parsed.data.name !== undefined) {
+      await guardEventNameChange(tx, auth.context.organizationId, event.id, parsed.data.name, event.name);
+    }
     if (closing) {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} AND "organizationId" = ${auth.context.organizationId} FOR UPDATE`;
       const message = closureBlockMessage(await eventClosureBlockers(auth.context.organizationId, event.id, tx));
@@ -186,6 +191,7 @@ export async function PATCH(request: Request) {
     return row;
     });
   } catch (error) {
+    if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
     const response = trashErrorResponse(error);
     if (response) return response;
     throw error;

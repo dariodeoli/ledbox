@@ -263,6 +263,8 @@ function liveAssignmentWhere(startOfToday: Date): Prisma.EventInventoryWhereInpu
 }
 
 /** Campos de precio de la edición en lote: si cambian en una variante, su precio pasa a ser propio. */
+class BulkFamilyCategoryConflict extends Error {}
+
 const PRICE_KEYS = ["listPrice", "wholesalePrice", "minimumPrice", "listFromDays", "listFromPrice", "wholesaleFromDays", "wholesaleFromPrice"];
 
 export async function GET(request: Request) {
@@ -571,6 +573,11 @@ export async function POST(request: Request) {
     }
     // Selección completa scopeada y guardado atómico: cero cambios ante un ID ajeno/inexistente.
     const result = await db.$transaction(async tx => {
+      // El producto se bloquea antes de tocar unidades o leer su cantidad agregada.
+      const parents = isUnits
+        ? (await tx.inventoryUnit.findMany({ where: { id: { in: ids }, organizationId }, select: { inventoryId: true } })).map(row => row.inventoryId)
+        : ids;
+      await lockInventoryItems(tx, organizationId, parents);
       const before = isUnits
         ? await tx.inventoryUnit.findMany({ where: { id: { in: ids }, organizationId } })
         : await tx.inventoryItem.findMany({ where: { id: { in: ids }, organizationId }, omit: { imageData: true } });
@@ -578,6 +585,7 @@ export async function POST(request: Request) {
       if (taxonomy) {
         const resolved = await resolveInventoryCategory(tx, organizationId, taxonomy);
         if (!resolved) return null;
+        if (before.some(row => "familyId" in row && row.familyId && "categoryId" in row && row.categoryId !== resolved.categoryId)) throw new BulkFamilyCategoryConflict();
         data = { ...data, ...categoryWriteData(resolved) };
       }
       if (isUnits) {
@@ -588,7 +596,11 @@ export async function POST(request: Request) {
         if (PRICE_KEYS.some((key) => key in data)) await markOwnPrice(tx, organizationId, ids);
       }
       return before;
+    }).catch((error: unknown) => {
+      if (error instanceof BulkFamilyCategoryConflict) return "family-category" as const;
+      throw error;
     });
+    if (result === "family-category") return jsonError("La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio.", 409);
     if (!result) return jsonError("La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.", 404);
     for (const row of result) {
       const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
@@ -728,6 +740,7 @@ export async function POST(request: Request) {
     let unit;
     try {
       unit = await db.$transaction(async (tx) => {
+        await lockInventoryItems(tx, organizationId, [item.id]);
         const code = requestedCode || (await nextInventoryUnitCode(tx, organizationId, item.name));
         // Toda unidad nace con depósito: el pedido, el del producto o el principal de la empresa.
         const placement = await resolveUnitPlacement(tx, organizationId, item.id, { warehouseId: trace.values.warehouseId, location: trace.values.location });
@@ -822,6 +835,7 @@ export async function POST(request: Request) {
     let unit;
     try {
       unit = await db.$transaction(async (tx) => {
+        await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
         const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
         if (data.status !== undefined) await syncInventoryQuantity(tx, existing.inventoryId);

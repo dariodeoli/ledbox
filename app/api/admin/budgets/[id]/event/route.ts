@@ -4,6 +4,7 @@ import { roleCan } from "@/lib/server/permissions";
 import { jsonError, readJson } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
+import { guardEventNameChange } from "@/lib/server/event-name";
 export const runtime = "nodejs";
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminContext("budgets.write");
@@ -18,18 +19,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const budget = await tx.budget.findFirst({ where: { id, organizationId: auth.context.organizationId } });
       if (!budget) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
       if (!budget.eventId) throw new QuoteComparisonError(400, "El presupuesto no tiene evento.");
-      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${budget.eventId} FOR UPDATE`;
-      // Lock every sibling in one stable order, shared with approval/signing's
-      // quote-row lock, before checking any accepted document.
-      await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "eventId" = ${budget.eventId} ORDER BY "id" FOR UPDATE`;
-      const fresh = await tx.budget.findUniqueOrThrow({ where: { id } });
-      if (fresh.eventId !== budget.eventId) throw new QuoteComparisonError(409, "El evento asociado cambió. Actualizá antes de renombrarlo.");
+      const current = await guardEventNameChange(tx, auth.context.organizationId, budget.eventId, name, body.originalName);
+      const fresh = await tx.budget.findFirstOrThrow({ where: { id, organizationId: auth.context.organizationId } });
+      if (fresh.eventId !== current.id) throw new QuoteComparisonError(409, "El evento asociado cambió. Actualizá antes de renombrarlo.");
       if (["LOST", "CANCELLED"].includes(fresh.status)) throw new QuoteComparisonError(409, "El presupuesto está cerrado.");
-      const current = await tx.event.findFirst({ where: { id: budget.eventId, organizationId: auth.context.organizationId } });
-      if (!current) throw new QuoteComparisonError(404, "Evento no encontrado.");
-      if (body.originalName !== current.name) throw new QuoteComparisonError(409, "El evento cambió. Actualizá antes de renombrarlo.");
-      const approved = await tx.budget.count({ where: { eventId: current.id, OR: [{ approvedAt: { not: null } }, { status: "APPROVED" }, { signatureRequests: { some: { status: { in: ["SIGNED", "VALIDATED"] } } } }] } });
-      if (approved) throw new QuoteComparisonError(409, "El evento aparece en una versión aceptada o firmada. Conservá su nombre y usá el ciclo de revisión.");
       return tx.event.update({ where: { id: current.id }, data: { name } });
     });
     await recordAudit({ context: auth.context, action: "update", entity: "Event", entityId: event.id, summary: `Renombró el evento compartido a «${name}» desde Presupuestos`, detail: { changes: { name: { from: body.originalName, to: name } } } });

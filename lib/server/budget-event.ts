@@ -51,6 +51,10 @@ export async function createEventForBudget(
   options: { confirmDraft?: boolean } = {},
 ): Promise<CreateEventForBudgetResult> {
   const { organizationId } = ctx;
+  // Un evento existente siempre se bloquea ANTES del presupuesto (misma guarda
+  // que el renombre público). Nunca esperar Event mientras se retiene Budget.
+  const initial = await tx.budget.findFirst({ where: { id: budgetId, organizationId }, select: { eventId: true } });
+  if (initial?.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${initial.eventId} AND "organizationId" = ${organizationId} FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} AND "organizationId" = ${organizationId} FOR UPDATE`;
   const budget = await tx.budget.findFirst({
     where: { id: budgetId, organizationId },
@@ -61,6 +65,13 @@ export async function createEventForBudget(
   });
   if (!budget) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
   if (budget.status !== "APPROVED") throw new QuoteComparisonError(409, "Solo se crea el evento de un presupuesto aprobado.");
+  if (budget.eventId !== initial?.eventId) {
+    // Otro creador pudo ganar mientras esperábamos Budget. No se toma otro lock
+    // en orden inverso; devolver el evento ya confirmado es seguro e idempotente.
+    const winner = budget.eventId ? await tx.event.findFirst({ where: { id: budget.eventId, organizationId } }) : null;
+    if (winner && winner.status !== "DRAFT" && options.confirmDraft !== false) return { outcome: "unchanged", event: winner, budget: { id: budget.id, title: budget.title, client: budget.client } };
+    throw new QuoteComparisonError(409, "El evento asociado cambió. Actualizá y reintentá.");
+  }
   const summary = { id: budget.id, title: budget.title, client: budget.client };
 
   if (budget.eventId) {
