@@ -89,11 +89,11 @@ test("Firmas y Plantillas salen del menú pero siguen siendo rutas y tienen su a
   assert.equal(adminNavLabel("/plantillas"), "Mensajes");
   assert.equal(adminNavLabel("/clientes/mensajes"), "Mensajes");
   assert.equal(adminNavIcon("/firmas"), "pen");
-  // Accesos visibles: pestaña «Firmas» en Presupuestos y «Plantillas» en Ajustes, en ambas pantallas.
+  // Firmas pertenece a Presupuestos; Mensajes a Clientes, sin salida desde Ajustes.
   assert.match(repoFile("components/admin/modules/PresupuestosTabs.tsx"), /href: "\/firmas", label: "Firmas"/);
   assert.match(repoFile("components/admin/modules/PresupuestosModule.tsx"), /<PresupuestosTabs active=\{showRequests \? "solicitudes" : "presupuestos"\}/);
   assert.match(repoFile("components/admin/modules/FirmasModule.tsx"), /<PresupuestosTabs active="firmas" \/>/);
-  assert.match(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas", label: "Plantillas"/);
+  assert.doesNotMatch(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas"/);
   assert.match(repoFile("components/admin/modules/AjustesModule.tsx"), /<AjustesTabs active=\{section\} \/>/);
   assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<ClientesTabs active="mensajes" onNavigate=/);
 });

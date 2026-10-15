@@ -26,12 +26,8 @@ const SECTIONS: ReadonlyArray<{
   { key: "eliminados", href: "/ajustes/eliminados", label: "Eliminados", icon: "trash", restricted: true },
 ];
 
-/**
- * Barra de secciones de Ajustes. Plantillas (issue #35) es una sección más pero
- * vive en su propia ruta (`/plantillas`), así que la barra es la misma en las dos
- * pantallas y Plantillas se ve para todos los roles (el API gatea por categoría).
- */
-export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantillas" | "estado" }) {
+/** Navegación de Ajustes; los mensajes se administran desde Clientes. */
+export function AjustesTabs({ active }: { active: AdminAjustesSection | "estado" }) {
   const { role } = useAdminSession();
   const canManage = canManageOrganization(role);
   return (
@@ -46,7 +42,6 @@ export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantil
             icon: item.icon,
             active: item.key === active,
           })),
-          { href: "/plantillas", label: "Plantillas", icon: "mail" as AdminIconName, active: active === "plantillas" },
         ]}
       />
     </div>

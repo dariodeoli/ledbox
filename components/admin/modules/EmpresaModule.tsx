@@ -11,7 +11,7 @@ import { useAdminSession } from "../AdminShell";
 import { AdminOrgLogo } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
-import { AdminButtonLink, AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { EmpresaPerfil } from "./EmpresaPerfil";
 
 /**
@@ -22,7 +22,7 @@ import { EmpresaPerfil } from "./EmpresaPerfil";
  * solo con sesión.
  *
  * El identificador (`slug`) no se edita: es la referencia estable de la empresa.
- * Los datos de pago siguen en Presupuestos → «Datos de pago».
+ * Los datos para recibir pagos se administran en Finanzas → Bancos y cuentas.
  */
 
 const EMPTY_LOGOS: AdminOrganizationLogos = { light: null, dark: null };
@@ -169,15 +169,6 @@ export function EmpresaModule() {
                 </AdminButton>
               </div>
             </form>
-          </AdminPanel>
-
-          <AdminPanel title="Datos de pago" icon="bank" meta="Se cargan en Presupuestos">
-            <p className="admin-field-hint">
-              Configurá banco, titular, cuenta y alias para el portal y los presupuestos.
-            </p>
-            <div className="admin-settings-actions">
-              <AdminButtonLink href="/presupuestos" title="Abrir Presupuestos para cargar los datos de pago de la empresa" icon="bank">Ir a Datos de pago</AdminButtonLink>
-            </div>
           </AdminPanel>
 
           <AdminPanel title="Logo por tema" icon="image" meta="Se usan según el fondo; en papel siempre el claro">
