@@ -18,6 +18,11 @@ import {
  * devuelve el `categoryId` junto con el espejo «Categoría › Subcategoría». Renombrar o mover una
  * categoría reescribe el texto de sus productos en la misma transacción.
  *
+ * Regla de archivadas: **asignar una categoría la reactiva** (y a su categoría padre). Es la opción
+ * más simple y honesta: si alguien escribe, importa o elige «Vajilla» a propósito, la quiere
+ * visible; crear una gemela con otro nombre rompería la `key` única, y dejar el producto en una
+ * categoría archivada la haría desaparecer de los selectores sin que nadie lo note.
+ *
  * Todo va acotado por empresa: un id ajeno no existe (404 para quien llama).
  */
 
@@ -33,16 +38,29 @@ export type ResolveCategoryInput = {
   subcategory?: unknown;
 };
 
-/** Busca o crea una categoría por `key` (sin pisarse con otro proceso: ON CONFLICT DO NOTHING). */
+/** Deja activa una categoría archivada (y su padre, para que no quede una hija activa bajo un padre archivado). */
+async function reactivate<T extends { id: string; parentId: string | null; archivedAt: Date | null }>(tx: Tx, organizationId: string, node: T): Promise<T> {
+  if (!node.archivedAt) {
+    if (!node.parentId) return node;
+    // Hija activa bajo un padre archivado (estado viejo): también se repara.
+    await tx.inventoryCategory.updateMany({ where: { organizationId, id: node.parentId, archivedAt: { not: null } }, data: { archivedAt: null } });
+    return node;
+  }
+  const ids = node.parentId ? [node.id, node.parentId] : [node.id];
+  await tx.inventoryCategory.updateMany({ where: { organizationId, id: { in: ids }, archivedAt: { not: null } }, data: { archivedAt: null } });
+  return { ...node, archivedAt: null };
+}
+
+/** Busca o crea una categoría por `key` (sin pisarse con otro proceso: ON CONFLICT DO NOTHING). Una archivada se reactiva. */
 async function findOrCreate(tx: Tx, organizationId: string, name: string, parent: { id: string; name: string } | null) {
   const key = parent ? categoryPathKey(parent.name, name) : categoryKey(name);
   const existing = await tx.inventoryCategory.findFirst({ where: { organizationId, key } });
-  if (existing) return existing;
+  if (existing) return reactivate(tx, organizationId, existing);
   await tx.inventoryCategory.createMany({
     data: [{ id: `cat_${randomUUID()}`, organizationId, name, parentId: parent?.id ?? null, key }],
     skipDuplicates: true,
   });
-  return tx.inventoryCategory.findFirstOrThrow({ where: { organizationId, key } });
+  return reactivate(tx, organizationId, await tx.inventoryCategory.findFirstOrThrow({ where: { organizationId, key } }));
 }
 
 /** Resuelve (o crea) la categoría de un producto y devuelve el id y el texto espejo. `null` = el id no es de esta empresa. */
@@ -50,6 +68,7 @@ export async function resolveInventoryCategory(tx: Tx, organizationId: string, i
   if (input.categoryId) {
     const found = await tx.inventoryCategory.findFirst({ where: { id: input.categoryId, organizationId }, include: { parent: true } });
     if (!found) return null;
+    await reactivate(tx, organizationId, found);
     const parentName = found.parent ? found.parent.name : found.name;
     const childName = found.parent ? found.name : null;
     return { categoryId: found.id, text: categoryLabel(parentName, childName), parentName, childName };

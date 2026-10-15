@@ -110,6 +110,29 @@ test("Inventario E1 (notas de QA 2.1.120) en PostgreSQL", { skip: !process.env.T
       assert.deepEqual(await db.inventoryItem.findMany({ where: { organizationId: org }, select: { id: true, category: true }, orderBy: { id: "asc" } }), before, "correrla de nuevo no cambia nada");
     });
 
+    await t.test("4) asignar una categoría archivada la reactiva (por texto, por subcategoría y por id) y nunca queda un producto en una archivada", async () => {
+      const org = await newOrg();
+      const first = await db.$transaction((tx) => categories.resolveInventoryCategory(tx, org, { category: "Mobiliario", subcategory: "Sofás" }));
+      assert.ok(first);
+      const leaf = await db.inventoryCategory.findUniqueOrThrow({ where: { id: first.categoryId } });
+      const archive = () => db.$transaction((tx) => categories.archiveInventoryCategory(tx, org, leaf.parentId!, true));
+      await archive();
+      assert.equal(await db.inventoryCategory.count({ where: { organizationId: org, archivedAt: { not: null } } }), 2, "padre e hija quedan archivadas");
+      // Por texto: misma categoría (misma id, sin gemela) y activa.
+      const again = await db.$transaction((tx) => categories.resolveInventoryCategory(tx, org, { category: "mobiliario ", subcategory: "SOFÁS" }));
+      assert.equal(again?.categoryId, first.categoryId);
+      assert.equal(await db.inventoryCategory.count({ where: { organizationId: org } }), 2, "no se crea una gemela");
+      assert.equal(await db.inventoryCategory.count({ where: { organizationId: org, archivedAt: { not: null } } }), 0);
+      // Por id.
+      await archive();
+      await db.$transaction((tx) => categories.resolveInventoryCategory(tx, org, { categoryId: first.categoryId }));
+      assert.equal(await db.inventoryCategory.count({ where: { organizationId: org, archivedAt: { not: null } } }), 0, "elegir por id también la reactiva, con su padre");
+      // Solo el padre archivado (hija activa): asignar la hija repara al padre.
+      await db.inventoryCategory.update({ where: { id: leaf.parentId! }, data: { archivedAt: new Date() } });
+      await db.$transaction((tx) => categories.resolveInventoryCategory(tx, org, { category: "Mobiliario / Sofás" }));
+      assert.equal(await db.inventoryCategory.count({ where: { organizationId: org, archivedAt: { not: null } } }), 0);
+    });
+
   } finally {
     await db.organization.deleteMany({ where: { id: { in: orgs } } });
     await db.$disconnect();
