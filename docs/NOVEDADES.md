@@ -565,3 +565,13 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 ## v2.1.118 — 2026-10-15
 
 - Inventario: el código del producto (SKU) admite un solo carácter, como «2» o «3». Los catálogos reales los usan y antes se rechazaban al importar.
+
+## v2.1.119 — 2026-10-15
+
+- Precio por días con escalones, por producto y por lista (cliente final o mayorista): por ejemplo «100.000 por día» y «desde 5 días: 300.000 en total», o «desde 3 días: 80.000 por día». La tienda, el carrito, el presupuesto y el portal calculan igual; lo ya aprobado no cambia.
+- Flete por zona (Ajustes → Alquileres → Zonas de flete): precio base por zona y un extra si el pedido supera cierta cantidad de piezas; en la tienda el cliente elige la zona o «a coordinar», y el presupuesto suma la línea «Flete».
+- Paquetes: muestran el precio del paquete, la suma por unidad y el ahorro; si falta una pieza, se sugieren reemplazos con la diferencia de precio.
+- Perfil de la empresa: teléfonos, WhatsApp, Instagram, correo, web, dirección con «Cómo llegar» en Google Maps, horarios de atención y de entrega/retiro/devolución, tipo de cuenta, medios de pago aceptados y condiciones comerciales; se muestran en la tienda, el portal, el presupuesto impreso y los correos.
+- Apariencia: plantillas (Clásica, Minimalista, Elegante, Oscura), color de marca con control de contraste, tipografía y portada para escritorio (1920×600) y para celular (1080×1350), con vista previa.
+- Acceso al catálogo: abierto, con solicitud (el cliente se registra y la empresa lo aprueba como cliente final o mayorista) o privado.
+- Pedidos de la tienda: la empresa puede aceptarlos, rechazarlos con motivo o modificarlos (cantidades, quitar, reemplazar, «ya no lo tengo») y el cliente aprueba la versión modificada desde su seguimiento.
