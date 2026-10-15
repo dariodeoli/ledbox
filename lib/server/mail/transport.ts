@@ -17,6 +17,28 @@ export function appEmailSender(): string {
   return process.env.EMAIL_FROM?.trim() || authConfig.resetSender;
 }
 
+/** Solo la dirección (`ledbox@weem.com.py`) del remitente configurado: el dominio de envío no cambia nunca. */
+export function senderAddress(): string {
+  const configured = appEmailSender();
+  return /<([^<>]+)>/.exec(configured)?.[1]?.trim() || configured.trim();
+}
+
+/** Nombre visible limpio: sin saltos de línea ni caracteres que rompan el encabezado `From`. */
+function safeDisplayName(value: string): string {
+  return value.replace(/[\r\n\t]+/g, " ").replace(/["<>\\]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+/**
+ * Remitente `Nombre <dirección>` con el dominio configurado. Una empresa sale como
+ * «<Empresa> vía EventOS»; la plataforma (sin empresa) como «EventOS».
+ */
+export function formatSender(organizationName: string | null | undefined): string {
+  const name = safeDisplayName(organizationName ?? "");
+  const display = name ? `${name} vía EventOS` : "EventOS";
+  const quoted = /[,;:@()[\]]/.test(display) ? `"${display}"` : display;
+  return `${quoted} <${senderAddress()}>`;
+}
+
 /** ¿Está configurado el proveedor de correo? (sin clave no se manda nada) */
 export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
@@ -34,6 +56,8 @@ function resendClient(): Resend {
 }
 
 export type ProviderMailPayload = {
+  /** Remitente completo; sin valor rige el configurado (`appEmailSender`). */
+  from?: string;
   to: string;
   subject: string;
   html: string;
@@ -66,7 +90,7 @@ export async function sendThroughProvider(payload: ProviderMailPayload): Promise
   try {
     const resend = resendClient();
     const result = await resend.emails.send({
-      from: appEmailSender(),
+      from: payload.from || appEmailSender(),
       to: payload.to,
       subject: payload.subject,
       html: payload.html,

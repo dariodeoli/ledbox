@@ -6,7 +6,8 @@ import { salidaPermitida } from "../demo-sandbox";
 import { rebasePortalLinks } from "@/lib/public-config";
 import type { SimulatedMail } from "@/lib/mail-preview";
 import { isSandboxOrg } from "../demo-sandbox";
-import { appEmailSender, emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
+import { mailIdentityFor, type MailIdentity } from "./org-brand";
+import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
 
 /**
  * Envío único de correo de la app (`sendMail`).
@@ -56,6 +57,13 @@ export type SendMailInput = {
   actor?: MailActor | null;
   /** Instante del intento (lo usan las pruebas y los registros). */
   now?: Date;
+  /**
+   * Correo de la plataforma (alta de empresa, reset de contraseña, alertas): sale como «EventOS»
+   * y sin `reply-to`, aunque lleve `organizationId` para el historial.
+   */
+  platform?: boolean;
+  /** Identidad ya resuelta por quien armó el correo; si falta se resuelve acá con la misma regla. */
+  identity?: MailIdentity;
 };
 
 export type SendMailResult = {
@@ -131,6 +139,9 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   const now = input.now ?? new Date();
   const actor = input.actor ?? null;
   const organizationId = input.organizationId?.trim() || null;
+  // Remitente visible y `reply-to`: «<Empresa> vía EventOS» + contacto de la empresa, o «EventOS».
+  // El dominio de envío es siempre el configurado; la salida (demo/sandbox) no cambia.
+  const identity = input.identity ?? (await mailIdentityFor(organizationId, { platform: input.platform }));
 
   // Demo (docs/DEMO-INTERACTIVA.md §3): en una sandbox, o hacia un destino `*.demo`, no sale nada.
   // Se registra «Demo: simulado» y no se toca el proveedor (ni siquiera sin clave configurada).
@@ -163,7 +174,7 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     try {
       if (await isSandboxOrg(organizationId)) {
         preview = {
-          from: appEmailSender(),
+          from: identity.from,
           to,
           subject: input.subject,
           html: rebasePortalLinks(input.html, true),
@@ -192,7 +203,7 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     sentAt: now,
   });
 
-  const outcome = await sendThroughProvider({ to, subject: input.subject, html: input.html, text: input.text });
+  const outcome = await sendThroughProvider({ from: identity.from, to, subject: input.subject, html: input.html, text: input.text, replyTo: identity.replyTo ?? undefined });
   const status: MailStatus = outcome.error ? "failed" : "sent";
   const error = outcome.error ? outcome.error.slice(0, MAX_ERROR) : null;
   if (registered) await updateMailLog(logId, { status, error, providerId: outcome.providerId });

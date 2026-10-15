@@ -11,7 +11,7 @@ import {
   upsertInvitation,
   type InvitationLastMail,
 } from "@/lib/server/invitations";
-import { buildInvitationMail, sendMail } from "@/lib/server/mail";
+import { buildInvitationMail, mailIdentityFor, sendMail } from "@/lib/server/mail";
 import { planLimitViolation } from "@/lib/server/plan-limits";
 import { canAssignTeamRole, TEAM_ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -107,8 +107,10 @@ export async function POST(request: Request) {
     inviter: { id: actor.id, name: actor.name, email: actor.email },
   });
 
+  const identity = await mailIdentityFor(organizationId);
   const content = buildInvitationMail({
     organizationName: organization.name,
+    brand: identity.brand,
     email,
     role,
     invitedByName: actor.name,
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
     html: content.html,
     text: content.text,
     organizationId,
+    identity,
     entity: "TeamInvitation",
     entityId: invitation.id,
     actor,

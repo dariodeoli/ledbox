@@ -1,7 +1,7 @@
 import { formatDateTime } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
 import { recordAudit } from "@/lib/server/audit";
-import { appEmailSender, emailConfigured, missingApiKeyMessage, renderMail, renderMailText, sendMail } from "@/lib/server/mail";
+import { emailConfigured, mailIdentityFor, missingApiKeyMessage, renderMail, renderMailText, sendMail } from "@/lib/server/mail";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     });
   }
 
+  const identity = await mailIdentityFor(organizationId);
   const content = {
     title: "Correo de prueba",
     intro: [
@@ -46,15 +47,17 @@ export async function POST(request: Request) {
     ],
     rows: [
       { label: "Empresa", value: organization.name },
-      { label: "Remitente", value: appEmailSender() },
+      { label: "Remitente", value: identity.from },
+      ...(identity.replyTo ? [{ label: "Respuestas a", value: identity.replyTo }] : []),
       { label: "Enviado", value: formatDateTime(new Date()), strong: true },
     ],
     cta: { label: "Abrir EventOS", url: publicConfig.adminUrl },
     note: "Si estás leyendo esto, el envío de correo del panel está funcionando. El intento queda en el historial de Configuración → Correo.",
-    preheader: "Prueba de envío del panel · LedBox",
+    preheader: `Prueba de envío del panel · ${organization.name}`,
     eyebrow: "Configuración · correo",
     status: { label: "Prueba de envío" },
     organization: organization.name,
+    brand: identity.brand,
     reason: `pediste una prueba de la configuración de correo de ${organization.name}`,
   };
 
@@ -65,6 +68,7 @@ export async function POST(request: Request) {
     html: renderMail(content),
     text: renderMailText(content),
     organizationId,
+    identity,
     entity: "Organization",
     entityId: organizationId,
     actor: user,

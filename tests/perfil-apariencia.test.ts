@@ -356,12 +356,16 @@ test("correos de la empresa: solo color y logo; el botón usa su color con texto
   assert.doesNotMatch(branded, /class="lb-btn"/);
   assert.match(branded, /<img src="https:\/\/ledbox\.online\/api\/catalog\/lv\/logo\/light"/);
   assert.match(branded, /color:#ffffff/, "texto blanco sobre azul oscuro");
-  // Un color de marca inválido no rompe el correo: cae a la marca de LedBox.
+  // Un color de marca inválido no rompe el correo: cae al acento de EventOS.
   assert.match(renderMail({ ...base, brand: { color: "rojo" } }), /class="lb-btn"/);
   // El logo viene escapado.
   assert.doesNotMatch(renderMail({ ...base, brand: { logoUrl: 'https://x.test/"><script>' } }), /<script>/);
-  // Sin logo público, el encabezado es el de LedBox.
-  assert.match(renderMail({ ...base, brand: { color: "#0b5cd5" } }), /alt="LedBox EventOS"/);
+  // Sin logo público, el encabezado lleva el isotipo de EventOS y solo el nombre de la empresa (nunca «LedBox»).
+  const sinLogo = renderMail({ ...base, brand: { color: "#0b5cd5", name: "La Vajilla" } });
+  assert.match(sinLogo, /alt="EventOS"/);
+  assert.match(sinLogo, />La Vajilla</);
+  assert.doesNotMatch(sinLogo, /alt="La Vajilla"/);
+  assert.doesNotMatch(sinLogo, /alt="LedBox/);
 });
 
 test("portal: el color de la empresa llega en los dos tonos y la tipografía solo si es de Google", () => {

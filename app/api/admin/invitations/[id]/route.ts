@@ -9,7 +9,7 @@ import {
   invitationRow,
   invitationTokenDigest,
 } from "@/lib/server/invitations";
-import { buildInvitationMail, sendMail } from "@/lib/server/mail";
+import { buildInvitationMail, mailIdentityFor, sendMail } from "@/lib/server/mail";
 import { canAssignTeamRole } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -83,8 +83,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     },
   });
 
+  const identity = await mailIdentityFor(organizationId);
   const content = buildInvitationMail({
     organizationName: organization.name,
+    brand: identity.brand,
     email: updated.email,
     role: updated.role,
     invitedByName: actor.name,
@@ -99,6 +101,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     html: content.html,
     text: content.text,
     organizationId,
+    identity,
     entity: "TeamInvitation",
     entityId: updated.id,
     actor,

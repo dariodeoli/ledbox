@@ -1,5 +1,5 @@
 import { formatDate, formatDateTime } from "@/lib/admin-format";
-import { renderMail, renderMailText, type MailContent } from "./template";
+import { renderMail, renderMailText, type MailBrand, type MailContent } from "./template";
 
 /**
  * Correos del portal de firma (issue #79): la solicitud al cliente con el link
@@ -10,6 +10,8 @@ import { renderMail, renderMailText, type MailContent } from "./template";
 
 export type SignatureRequestMailInput = {
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   title: string;
   recipientName: string;
   senderName: string;
@@ -55,6 +57,7 @@ export function buildSignatureRequestMail(input: SignatureRequestMailInput): Sig
     eyebrow: "Firma de documentos",
     status: { label: "Requiere tu firma", tone: "accent" },
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `te pedimos firmar el documento «${input.title}»`,
   };
   return { subject, html: renderMail(content), text: renderMailText(content) };
@@ -62,6 +65,8 @@ export function buildSignatureRequestMail(input: SignatureRequestMailInput): Sig
 
 export type SignatureCompletedMailInput = {
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   title: string;
   recipientName: string;
   code: string;
@@ -89,6 +94,7 @@ export function buildSignatureCompletedMail(input: SignatureCompletedMailInput):
     eyebrow: "Firma de documentos",
     status: { label: "Firmado y validado", tone: "success" },
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `firmaste el documento «${input.title}»`,
   };
   return { subject, html: renderMail(content), text: renderMailText(content) };
@@ -96,6 +102,8 @@ export function buildSignatureCompletedMail(input: SignatureCompletedMailInput):
 
 export type SignatureReminderMailInput = {
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   title: string;
   recipientName: string;
   senderName: string;
@@ -140,6 +148,7 @@ export function buildSignatureReminderMail(input: SignatureReminderMailInput): S
     eyebrow: "Firma de documentos",
     status: { label: "Firma pendiente", tone: "warning" },
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `te recordamos firmar el documento «${input.title}»`,
   };
   return { subject, html: renderMail(content), text: renderMailText(content) };
@@ -147,6 +156,8 @@ export function buildSignatureReminderMail(input: SignatureReminderMailInput): S
 
 export type SignatureOtpMailInput = {
   organizationName: string;
+  /** Marca de la empresa para el encabezado y el pie (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   title: string;
   code: string;
   expiresInMinutes: number;
@@ -168,6 +179,7 @@ export function buildSignatureOtpMail(input: SignatureOtpMailInput): SignatureRe
     preheader: `Código ${input.code}`,
     eyebrow: "Firma de documentos",
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `pediste el código para firmar «${input.title}»`,
   };
   return { subject, html: renderMail(content), text: renderMailText(content) };

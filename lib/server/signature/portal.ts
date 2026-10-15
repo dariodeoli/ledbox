@@ -715,9 +715,11 @@ async function notifySignatureCompleted(
   identifier: string,
 ): Promise<void> {
   if (!row.recipientEmail) return;
-  const { buildSignatureCompletedMail, sendMail } = await import("../mail");
+  const { buildSignatureCompletedMail, mailIdentityFor, sendMail } = await import("../mail");
+  const identity = await mailIdentityFor(row.organizationId);
   const content = buildSignatureCompletedMail({
     organizationName: row.organization.name,
+    brand: identity.brand,
     title: row.title,
     recipientName: row.recipientName,
     code: row.publicCode,
@@ -731,6 +733,7 @@ async function notifySignatureCompleted(
     html: content.html,
     text: content.text,
     organizationId: row.organizationId,
+    identity,
     entity: "SignatureRequest",
     entityId: row.id,
     actor: { name: row.senderName, email: row.senderEmail },
@@ -851,11 +854,12 @@ export async function sendSignatureOtp(input: {
   }
   if (!signatureCanSign(status)) throw new SignatureActionError(409, blockedMessage(status));
 
-  const { buildSignatureOtpMail, sendMail } = await import("../mail");
+  const { buildSignatureOtpMail, mailIdentityFor, sendMail } = await import("../mail");
   const { randomInt } = await import("node:crypto");
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);
-  const content = buildSignatureOtpMail({ organizationName: row.organization.name, title: row.title, code, expiresInMinutes: OTP_TTL_MS / 60_000 });
+  const identity = await mailIdentityFor(row.organizationId);
+  const content = buildSignatureOtpMail({ organizationName: row.organization.name, brand: identity.brand, title: row.title, code, expiresInMinutes: OTP_TTL_MS / 60_000 });
   const result = await sendMail({
     to: row.recipientEmail,
     subject: content.subject,
@@ -863,6 +867,7 @@ export async function sendSignatureOtp(input: {
     html: content.html,
     text: content.text,
     organizationId: row.organizationId,
+    identity,
     entity: "SignatureRequest",
     entityId: row.id,
     actor: { name: row.senderName, email: row.senderEmail },

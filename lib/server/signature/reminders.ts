@@ -2,7 +2,7 @@ import { dayKeyOf, dayStart, shiftDayKey } from "../notifications";
 import { db } from "../db";
 import { isDemoOrganizationSlug } from "../demo-data";
 import { recordAudit, type AuditContext } from "../audit";
-import { emailConfigured, sendMail } from "../mail";
+import { emailConfigured, mailIdentityFor, sendMail } from "../mail";
 import { buildSignatureReminderMail } from "../mail/signature";
 import { signaturePortalUrl } from "@/lib/public-config";
 import { appendSignatureEvent } from "./events";
@@ -192,8 +192,10 @@ export async function runDailySignatureReminders(input: {
       continue;
     }
     const daysLeft = signatureReminderDaysLeft(row.expiresAt, now);
+    const identity = await mailIdentityFor(organization.id);
     const content = buildSignatureReminderMail({
       organizationName: organization.name,
+      brand: identity.brand,
       title: row.title,
       recipientName: row.recipientName,
       senderName: row.senderName,
@@ -210,6 +212,7 @@ export async function runDailySignatureReminders(input: {
       html: content.html,
       text: content.text,
       organizationId: organization.id,
+      identity,
       entity: "SignatureRequest",
       entityId: row.id,
       actor: input.actor ? { id: input.actor.user.id, name: input.actor.user.name, email: input.actor.user.email } : null,

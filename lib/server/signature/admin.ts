@@ -4,7 +4,7 @@ import { emailValid, normalizeEmail, normalizePhone, phoneValid } from "@/lib/fi
 import { signaturePortalUrl } from "@/lib/public-config";
 import { db } from "../db";
 import { recordAudit } from "../audit";
-import { sendMail } from "../mail";
+import { mailIdentityFor, sendMail } from "../mail";
 import { buildSignatureRequestMail } from "../mail/signature";
 import type { AdminContext } from "../tenancy";
 import type { AdminSignatureRequestRow } from "@/lib/admin-types";
@@ -441,8 +441,10 @@ export async function createSignatureRequest(
     to: null,
   };
   if (recipientEmail) {
+    const identity = await mailIdentityFor(context.organizationId);
     const content = buildSignatureRequestMail({
       organizationName: context.organization.name,
+      brand: identity.brand,
       title,
       recipientName,
       senderName: context.user.name,
@@ -459,6 +461,7 @@ export async function createSignatureRequest(
       html: content.html,
       text: content.text,
       organizationId: context.organizationId,
+      identity,
       entity: "SignatureRequest",
       entityId: requestId,
       actor: context.user,
@@ -581,8 +584,10 @@ export async function resendSignatureRequest(
   if (!signatureCanSign(status)) throw new SignatureActionError(409, "La solicitud ya no está activa.");
   if (!row.recipientEmail) throw new SignatureActionError(409, "La solicitud no tiene correo cargado: compartí el link a mano.");
 
+  const identity = await mailIdentityFor(context.organizationId);
   const content = buildSignatureRequestMail({
     organizationName: row.organization.name,
+    brand: identity.brand,
     title: row.title,
     recipientName: row.recipientName,
     senderName: context.user.name,
@@ -598,6 +603,7 @@ export async function resendSignatureRequest(
     html: content.html,
     text: content.text,
     organizationId: context.organizationId,
+    identity,
     entity: "SignatureRequest",
     entityId: row.id,
     actor: context.user,

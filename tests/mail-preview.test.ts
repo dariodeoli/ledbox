@@ -30,6 +30,8 @@ function fixture(secret: string | undefined = "offline-preview-secret-not-a-real
   const cache = new Map<string, { exports: Record<string, any> }>();
   const mail = {
     appEmailSender: () => state.from,
+    // El remitente del envío y de la vista previa sale de la identidad de la empresa (un solo lugar).
+    mailIdentityFor: async () => ({ brand: { name: unsafe }, from: state.from, replyTo: null }),
     buildBudgetMail: (input: unknown) => load("lib/server/mail/budget.ts").buildBudgetMail(input),
     sendMail: async (input: Record<string, any>) => { state.sent.push(input); return { status: state.outcome, error: state.outcome === "failed" ? "offline rejection" : null }; },
   };

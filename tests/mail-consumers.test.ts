@@ -5,7 +5,7 @@ import { dirname, join, resolve, relative } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
-import { renderMail, renderMailText, type MailContent } from "../lib/server/mail/template";
+import { PLATFORM_BRAND, renderMail, renderMailText, type MailContent } from "../lib/server/mail/template";
 import { publicConfig, invitationAcceptUrl } from "../lib/public-config";
 
 const root = resolve(dirname(new URL(import.meta.url).pathname), "..");
@@ -20,10 +20,18 @@ function consumerHarness(db: Record<string, unknown> = {}, extras: Record<string
   const rendered: { kind: string; content: MailContent }[] = [];
   const sent: Record<string, unknown>[] = [];
   const audited: unknown[] = [];
+  const identities: { organizationId: string | null; platform: boolean }[] = [];
   const mail = {
     renderMail(content: MailContent) { rendered.push({ kind: "html", content }); return renderMail(content); },
     renderMailText(content: MailContent) { rendered.push({ kind: "text", content }); return renderMailText(content); },
     async sendMail(payload: Record<string, unknown>) { sent.push(payload); return { status: "sent", logId: "offline-log" }; },
+    PLATFORM_BRAND,
+    // Identidad de la empresa de prueba: marca con su nombre, `From` «<Empresa> vía EventOS» y reply-to propio.
+    async mailIdentityFor(organizationId: string | null, options: { platform?: boolean } = {}) {
+      identities.push({ organizationId, platform: Boolean(options.platform) });
+      return { brand: { name: unsafe }, from: `${unsafe} vía EventOS <offline@example.invalid>`, replyTo: "contacto@example.invalid" };
+    },
+    async mailBrandFor() { return { name: unsafe }; },
     emailConfigured: () => true,
     appEmailSender: () => "EventOS <offline@example.invalid>",
     missingApiKeyMessage: () => "offline",
@@ -76,7 +84,7 @@ function consumerHarness(db: Record<string, unknown> = {}, extras: Record<string
     assert.ok(output.html.includes("&lt;img"), "HTML must escape caller markup");
     rendered.length = 0;
   }
-  return { load, check, rendered, sent, audited };
+  return { load, check, rendered, sent, audited, identities };
 }
 
 test("invitation and resend preserve tenant, role, token URL, expiry and escaped sender through shared renderer", () => {
@@ -86,7 +94,7 @@ test("invitation and resend preserve tenant, role, token URL, expiry and escaped
     const output = buildInvitationMail({ organizationName: unsafe, invitedByName: unsafe, email: "ana@example.invalid",
       role: "OPERATIONS", token: "2A4B6C8D2E4F6G8H2J4K6M8N", expiresAt, resend });
     assert.equal(output.url, invitationAcceptUrl("2A4B6C8D2E4F6G8H2J4K6M8N"));
-    assert.equal(output.subject, `Invitación al equipo de ${unsafe} · LedBox`);
+    assert.equal(output.subject, `Invitación al equipo de ${unsafe} · EventOS`);
     assert.ok(output.text.includes(output.url));
     assert.ok(output.text.includes(new Intl.DateTimeFormat("es-PY", {
       timeZone: "America/Asuncion", day: "2-digit", month: "long", year: "numeric",
@@ -152,10 +160,16 @@ test("password reset uses shared content and keeps account tenant, encoded token
   assert.equal(h.sent.length, 1);
   const payload = h.sent[0];
   assert.equal(payload.category, "reset"); assert.equal(payload.organizationId, "tenant");
-  assert.equal(payload.to, "ana@example.invalid"); assert.equal(payload.subject, "Restablecé tu contraseña de LedBox");
+  assert.equal(payload.to, "ana@example.invalid"); assert.equal(payload.subject, "Restablecé tu contraseña de EventOS");
+  assert.equal(payload.platform, true, "el reset sale como EventOS, no con la marca de la empresa");
+  assert.equal(h.rendered[0].content.brand, PLATFORM_BRAND);
   assert.ok(String(payload.text).includes(`${publicConfig.adminUrl}/reset-password?token=token%26%3F%3Dvalue`));
   assert.ok(String(payload.text).includes("30 minutos"));
-  h.check(payload as { html: string; text: string });
+  // Correo de plataforma: no lleva el nombre de la empresa (solo el historial la guarda), así que
+  // no se usa `check` (que exige el dato de la empresa en el texto) y se verifica el render a mano.
+  assert.equal(h.rendered.length, 2);
+  assert.equal(payload.html, renderMail(h.rendered[0].content)); assert.equal(payload.text, renderMailText(h.rendered[0].content));
+  assert.ok(!String(payload.html).includes("&lt;img"), "el nombre de la empresa no viaja en un correo de plataforma");
 });
 
 test("mail test route uses real shared renderer and preserves tenant, actor, audit and sender", async () => {
@@ -171,6 +185,9 @@ test("mail test route uses real shared renderer and preserves tenant, actor, aud
   const payload = h.sent[0];
   assert.equal(payload.organizationId, "tenant"); assert.equal(payload.entityId, "tenant"); assert.equal(payload.actor, user);
   assert.equal(payload.category, "test"); assert.ok(String(payload.text).includes("offline@example.invalid"));
+  assert.deepEqual(h.identities, [{ organizationId: "tenant", platform: false }]);
+  assert.equal((payload.identity as { replyTo: string }).replyTo, "contacto@example.invalid", "reply-to de la empresa");
+  assert.equal(h.rendered[0].content.brand?.name, unsafe, "la marca del correo es la de la empresa");
   h.check(payload as { html: string; text: string });
 });
 
@@ -205,6 +222,8 @@ test("backup alert uses shared content and preserves system origin, actor and sa
   assert.equal(result.issue, "never"); assert.equal(result.sent, 1); assert.equal(h.sent.length, 1);
   const payload = h.sent[0];
   assert.equal(payload.category, "alert"); assert.equal(payload.organizationId, null);
+  assert.equal(payload.platform, true);
+  assert.equal(h.rendered[0].content.brand, PLATFORM_BRAND);
   assert.equal(payload.entity, "System"); assert.equal(payload.entityId, "backup-never");
   assert.equal((payload.actor as { id: string }).id, user.id);
   assert.ok(String(payload.text).includes(`${publicConfig.adminUrl}/sistema`));
