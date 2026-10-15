@@ -6,7 +6,7 @@ import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { isWhatsappSandbox, whatsappHref } from "@/lib/admin-format";
 import { SIMULATED_WHATSAPP_NOTICE } from "@/lib/mail-preview";
 import { MESSAGE_TEMPLATE_TARGET_CATEGORIES, type AdminMessageTemplateRow } from "@/lib/admin-types";
-import { AdminButton, AdminDialog, AdminDialogSection, AdminEmpty, AdminLoadingRows, AdminNote } from "./AdminUI";
+import { AdminButtonLink, AdminButton, AdminDialog, AdminDialogSection, AdminEmpty, AdminLoadingRows, AdminNote } from "./AdminUI";
 import { SelectField } from "./AdminFields";
 import { WhatsappIcon } from "../whatsapp/WhatsappIcon";
 
@@ -136,8 +136,8 @@ export function MessageTemplateSendDialog({
           {registered ? "Envío simulado" : "Simular envío"}
         </AdminButton>
       ) : href ? (
-        <a
-          className="admin-btn admin-btn--primary"
+        <AdminButtonLink
+          variant="primary"
           href={href}
           target="_blank"
           rel="noreferrer"
@@ -146,7 +146,7 @@ export function MessageTemplateSendDialog({
         >
           <WhatsappIcon size={15} />
           <span>Enviar por WhatsApp</span>
-        </a>
+        </AdminButtonLink>
       ) : (
         <AdminButton variant="primary" type="button" iconNode={<WhatsappIcon size={15} />} disabled>
           Enviar por WhatsApp

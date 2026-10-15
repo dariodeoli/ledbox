@@ -23,7 +23,7 @@ import {
   type OfflineSendOutcome,
 } from "@/lib/offline-queue";
 import { AdminIcon } from "./AdminIcons";
-import { AdminBadge, AdminButton, AdminEmpty, AdminNote } from "./AdminUI";
+import { AdminBadge, AdminButton, AdminEmpty, AdminNote, AdminIconButton } from "./AdminUI";
 
 /**
  * Trabajo de campo offline (issue #23).
@@ -348,22 +348,22 @@ export function AdminOfflineIndicator() {
 
   return (
     <div className="admin-offline" ref={wrapRef}>
-      <button
-        type="button"
-        className="admin-iconbtn admin-offline-toggle"
+      <AdminIconButton
+        icon={online ? "refresh" : "alert"}
+        iconSize={16}
+        className="admin-offline-toggle"
+        label={`Sincronización de campo: ${queueHeadline(summary.toUpload, summary.failed)}`}
+        title="Sincronización de campo"
         onClick={() => setOpen((current) => !current)}
-        aria-label={`Sincronización de campo: ${queueHeadline(summary.toUpload, summary.failed)}`}
         aria-expanded={open}
         aria-controls="admin-offline-panel"
-        title="Sincronización de campo"
       >
-        <AdminIcon name={online ? "refresh" : "alert"} size={16} />
         {queued > 0 ? (
           <span className="admin-offline-count" data-tone={summary.failed > 0 ? "danger" : undefined} aria-hidden="true">
             {queued > 99 ? "99+" : formatNumber(queued)}
           </span>
         ) : null}
-      </button>
+      </AdminIconButton>
 
       {open ? (
         <div className="admin-offline-panel" id="admin-offline-panel" role="region" aria-label="Sincronización de campo">

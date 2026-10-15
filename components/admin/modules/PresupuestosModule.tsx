@@ -593,7 +593,6 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           />
           <TextField
             label="Alias"
-            wide
             value={details.alias ?? ""}
             onChange={(value) => setDetails({ ...details, alias: value })}
             maxLength={60}
@@ -1036,7 +1035,7 @@ export function PresupuestosModule() {
       <span className="admin-actions">
         {primary ? (
           <AdminButton
-            className="admin-btn--row"
+            size="sm"
             busy={eventBusyId === budget.id && (primary.kind === "create_event" || primary.kind === "confirm_event")}
             title={`${primary.label}: ${budget.title}`}
             aria-label={`${primary.label}: ${budget.title}`}
@@ -1144,7 +1143,7 @@ export function PresupuestosModule() {
     const approvalState = budgetApprovalState(budget);
     return {
       id: budget.id,
-      title: <button type="button" className="admin-quote-title-btn" onClick={() => openDetail(budget.id)}><strong className="admin-quote-title">{budget.title}</strong></button>,
+      title: <AdminButton type="button" variant="link" onClick={() => openDetail(budget.id)}><strong className="admin-quote-title">{budget.title}</strong></AdminButton>,
       titleTooltip: `PRES-${budgetReference(budget.id)} · ${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`,
       subtitle: [clientDisplayName(budget.client), budget.event?.name ?? null].filter(Boolean).join(" · "),
       badges: [
@@ -1723,7 +1722,7 @@ export function PresupuestosModule() {
       {stageFilter !== "all" ? (
         <p className="admin-filter-note" role="status">
           Mostrando: <strong>{FILTER_LABEL[stageFilter]}</strong> ({formatNumber(rows.length)})
-          <button type="button" className="admin-empty-link" onClick={() => setStageFilter("all")}>Quitar filtro</button>
+          <AdminButton type="button" variant="link" onClick={() => setStageFilter("all")}>Quitar filtro</AdminButton>
         </p>
       ) : null}
         </>
@@ -1785,7 +1784,6 @@ export function PresupuestosModule() {
           />
           <TextField
             label="Título"
-            wide
             required
             maxLength={160}
             value={form.title}
@@ -1907,7 +1905,7 @@ export function PresupuestosModule() {
         empty={allBudgetRows.length === 0}
         emptyTitle="Todavía no hay presupuestos" emptyIcon="budgets"
         emptyHint="Creá un presupuesto para seguir venta, costos, margen y cobros."
-        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={() => { setFormError(""); setShowForm(true); }}>Crear presupuesto →</button> : undefined}
+        emptyAction={writable ? <AdminButton type="button" variant="link" onClick={() => { setFormError(""); setShowForm(true); }}>Crear presupuesto →</AdminButton> : undefined}
       >
         {narrow ? (
           rows.length === 0 ? (
@@ -1958,9 +1956,9 @@ export function PresupuestosModule() {
                   </AdminCell>
                   <AdminCell title={clientDisplayName(budget.client)}><span className="admin-identity"><AdminAvatar name={clientDisplayName(budget.client)} src={budget.client.logoUpdatedAt ? clientLogoUrl(budget.client.id, budget.client.logoUpdatedAt) : null} className="admin-avatar--logo" size={22} /><span>{clientDisplayName(budget.client)}</span></span></AdminCell>
                   <AdminCell title={`${budget.title}${budget.event ? ` · ${budget.event.name}` : ""}`}>
-                    <button type="button" className="admin-quote-title-btn" title={`Ver el detalle de ${budget.title}`} onClick={() => openDetail(budget.id)}>
+                    <AdminButton type="button" variant="link" title={`Ver el detalle de ${budget.title}`} onClick={() => openDetail(budget.id)}>
                       <strong className="admin-quote-title">{budget.event?.name ?? budget.title}</strong>
-                    </button>
+                    </AdminButton>
                     {budget.event ? <small className="admin-cell-sub"> · {budget.title}</small> : null}
                   </AdminCell>
                   <AdminCell end title={formatMoney(budget.total)}>
@@ -2467,7 +2465,7 @@ export function PresupuestosModule() {
           )}
         >
           <AdminDialogSection title="Evento">
-            <TextField label="Nombre del evento" wide required maxLength={160} value={eventName} onChange={setEventName} disabled={dialogBusy} />
+            <TextField label="Nombre del evento" required maxLength={160} value={eventName} onChange={setEventName} disabled={dialogBusy} />
           </AdminDialogSection>
         </AdminDialog>
       ) : null}

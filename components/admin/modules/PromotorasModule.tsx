@@ -273,7 +273,6 @@ export function PromotorasModule() {
               <TextField
                 label="Nombre"
                 required
-                wide
                 autoFocus
                 maxLength={120}
                 value={form.name}

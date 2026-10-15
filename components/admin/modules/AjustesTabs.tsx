@@ -3,7 +3,7 @@
 import { canManageOrganization } from "@/lib/admin-policy";
 import type { AdminIconName } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
-import { AdminSubtabs } from "../AdminUI";
+import { AdminTabs } from "../AdminUI";
 
 export type AdminAjustesSection = "empresa" | "apariencia" | "correo" | "alquileres" | "inventario" | "tienda" | "plan" | "usuarios" | "eliminados";
 
@@ -35,7 +35,7 @@ export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantil
   const canManage = canManageOrganization(role);
   return (
     <div className="admin-subtabs-bar">
-      <AdminSubtabs
+      <AdminTabs
         label="Secciones de Ajustes"
         items={[
           ...SECTIONS.filter((item) => canManage || !item.restricted).map((item) => ({

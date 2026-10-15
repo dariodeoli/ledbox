@@ -23,7 +23,7 @@ import { SECURITY_DEPOSIT_LABEL, isSecurityDepositStatus } from "@/lib/budget-se
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetApprovalState, collectedAmount } from "@/lib/admin-types";
 import type { AdminBudgetRow, AdminTimelineEntry } from "@/lib/admin-types";
-import { AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
+import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
 import { BudgetEventNotice } from "../BudgetEventNotice";
 import { StageTrail } from "../StageTrail";
 import { securityDepositTone } from "./BudgetSecurityDeposit";
@@ -167,7 +167,7 @@ export function BudgetDetailDialog({
       onClose={onClose}
       footer={
         <div className="admin-bd-footer">
-          <a className="admin-btn" href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Imprimir / PDF</a>
+          <AdminButtonLink href={`/imprimir/presupuesto/${budget.id}`} target="_blank" rel="noreferrer">Imprimir / PDF</AdminButtonLink>
           {actions.trashMenu && actions.trashMenu.length > 0 ? <AdminActionsMenu label={`Más acciones de ${budget.title}`} items={actions.trashMenu} /> : null}
           <span className="admin-dialog-spacer" />
           <AdminButton onClick={onClose}>Cerrar</AdminButton>

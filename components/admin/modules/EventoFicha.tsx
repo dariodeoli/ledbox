@@ -44,6 +44,7 @@ import {
   AdminSelect,
   AdminTimelineLoader,
   type AdminMenuItem,
+  AdminTabs,
 } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { DateField, DateTimeField, NumberField, TextField } from "../AdminFields";
@@ -155,7 +156,6 @@ export function EventoFicha(props: EventoFichaProps) {
   const { item, tab, onTab, onClose, writable, budget, stageBudget, budgetState, closeBusy, closeError, menuItems, onRunNext } = props;
   const { event, readiness } = item;
   const tablistId = useId();
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const counts: Record<EventDetailTab, string | null> = {
     resumen: null,
@@ -164,16 +164,6 @@ export function EventoFicha(props: EventoFichaProps) {
     personal: readiness.promoters.count > 0 ? formatNumber(readiness.promoters.count) : null,
     historial: null,
   };
-
-  function onTabKey(keyboard: React.KeyboardEvent<HTMLElement>) {
-    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(keyboard.key)) return;
-    keyboard.preventDefault();
-    const index = TABS.findIndex((entry) => entry.key === tab);
-    const next =
-      keyboard.key === "Home" ? 0 : keyboard.key === "End" ? TABS.length - 1 : (index + (keyboard.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length;
-    onTab(TABS[next].key);
-    tabRefs.current[TABS[next].key]?.focus();
-  }
 
   const when = event.startsAt ? `${formatDateTime(event.startsAt)}` : "Fecha a confirmar";
 
@@ -228,28 +218,15 @@ export function EventoFicha(props: EventoFichaProps) {
         )}
       </section>
 
-      <nav className="admin-subtabs admin-evento-tabs" role="tablist" aria-label={`Secciones del evento ${event.name}`} onKeyDown={onTabKey}>
-        {TABS.map((entry) => (
-          <button
-            key={entry.key}
-            ref={(node) => {
-              tabRefs.current[entry.key] = node;
-            }}
-            type="button"
-            role="tab"
-            id={`${tablistId}-${entry.key}`}
-            aria-selected={tab === entry.key}
-            aria-controls={`${tablistId}-panel`}
-            tabIndex={tab === entry.key ? 0 : -1}
-            className="admin-subtab"
-            data-active={tab === entry.key ? "true" : undefined}
-            onClick={() => onTab(entry.key)}
-          >
-            {entry.label}
-            {counts[entry.key] ? <span className="admin-subtab-count">{counts[entry.key]}</span> : null}
-          </button>
-        ))}
-      </nav>
+      <AdminTabs
+        className="admin-evento-tabs"
+        label={`Secciones del evento ${event.name}`}
+        value={tab}
+        onChange={(key) => onTab(key as EventDetailTab)}
+        tabId={(key) => `${tablistId}-${key}`}
+        panelId={() => `${tablistId}-panel`}
+        items={TABS.map((entry) => ({ key: entry.key, label: entry.label, count: counts[entry.key] }))}
+      />
 
       <div id={`${tablistId}-panel`} role="tabpanel" aria-labelledby={`${tablistId}-${tab}`} className="admin-evento-panel">
         {tab === "resumen" ? <ResumenTab event={event} budget={budget} stageBudget={stageBudget} budgetState={budgetState} item={item} /> : null}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminIconName } from "@/lib/admin-types";
-import { AdminSubtabs } from "../AdminUI";
+import { AdminTabs } from "../AdminUI";
 import { AuditoriaModule } from "./AuditoriaModule";
 import { SistemaModule } from "./SistemaModule";
 
@@ -23,7 +23,7 @@ export function EstadoModule({ section }: { section: AdminEstadoSection }) {
   return (
     <>
       <div className="admin-subtabs-bar">
-        <AdminSubtabs
+        <AdminTabs
           label="Secciones de Estado"
           items={SECTIONS.map((item) => ({
             href: item.href,

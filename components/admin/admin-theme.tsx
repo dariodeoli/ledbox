@@ -9,6 +9,7 @@ import {
   type AdminTheme,
 } from "@/lib/admin-theme";
 import { AdminIcon } from "./AdminIcons";
+import { AdminIconButton } from "./AdminUI";
 
 /**
  * Preferencias persistidas del panel (solo cliente): tema y sidebar de
@@ -70,9 +71,7 @@ export function AdminThemeToggle() {
 
   const label = theme === "dark" ? "Activar modo claro" : "Activar modo oscuro";
   return (
-    <button type="button" className="admin-iconbtn" onClick={toggle} title={label} aria-label={label} aria-pressed={theme === "light"}>
-      <AdminIcon name={theme === "dark" ? "sun" : "moon"} size={16} />
-    </button>
+    <AdminIconButton icon={theme === "dark" ? "sun" : "moon"} iconSize={16} label={label} onClick={toggle} aria-pressed={theme === "light"} />
   );
 }
 
@@ -103,16 +102,6 @@ export function AdminSidebarToggle() {
   const collapsed = mode === "collapsed";
   const label = collapsed ? "Expandir el menú lateral" : "Colapsar el menú lateral (solo íconos)";
   return (
-    <button
-      type="button"
-      className="admin-iconbtn admin-sidebar-collapse"
-      onClick={toggle}
-      title={label}
-      aria-label={label}
-      aria-expanded={!collapsed}
-      aria-controls="admin-sidebar"
-    >
-      <AdminIcon name="panel-left" size={16} />
-    </button>
+    <AdminIconButton icon="panel-left" iconSize={16} label={label} className="admin-sidebar-collapse" onClick={toggle} aria-expanded={!collapsed} aria-controls="admin-sidebar" />
   );
 }

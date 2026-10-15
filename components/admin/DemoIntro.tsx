@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminIcon } from "./AdminIcons";
-import { AdminDialog } from "./AdminUI";
+import { AdminButton, AdminButtonLink, AdminDialog } from "./AdminUI";
 
 /**
  * Bienvenida de la demo pública. Se abre **sola una única vez** por navegador (la
@@ -76,28 +76,22 @@ export function DemoIntro({
   const portalActions = (
     <>
       {pendingUrl ? (
-        <a
-          className="admin-btn admin-btn--primary"
+        <AdminButtonLink
+          variant="primary"
           href={pendingUrl}
           target="_blank"
           rel="noreferrer"
           title="Portal del presupuesto pendiente: proponé cantidades y días o pedí una rebaja"
-        >
-          <AdminIcon name="external" size={15} />
-          <span>Probar la autogestión</span>
-        </a>
+         icon="external">Probar la autogestión</AdminButtonLink>
       ) : null}
       {approvedUrl ? (
-        <a
-          className="admin-btn"
+        <AdminButtonLink
+         
           href={approvedUrl}
           target="_blank"
           rel="noreferrer"
           title="Portal del presupuesto aprobado: plan de pagos y datos de pago de la empresa"
-        >
-          <AdminIcon name="external" size={15} />
-          <span>Presupuesto aprobado</span>
-        </a>
+         icon="external">Presupuesto aprobado</AdminButtonLink>
       ) : null}
     </>
   );
@@ -105,21 +99,12 @@ export function DemoIntro({
   return (
     <>
       <div className="admin-demo-bar">
-        <button
-          type="button"
-          className="admin-btn"
-          onClick={() => setOpen(true)}
-          title="Ver de nuevo la bienvenida de la demo"
-        >
-          <AdminIcon name="info" size={15} />
-          <span>¿Cómo funciona la demo?</span>
-        </button>
+        <AdminButton type="button" icon="info" onClick={() => setOpen(true)} title="Ver de nuevo la bienvenida de la demo">
+          ¿Cómo funciona la demo?
+        </AdminButton>
         <div className="admin-demo-actions">
           {portalActions}
-          <Link className="admin-btn" href="/dashboard">
-            <AdminIcon name="overview" size={15} />
-            <span>Ir al inicio</span>
-          </Link>
+          <AdminButtonLink href="/dashboard" icon="overview">Ir al inicio</AdminButtonLink>
           {resetForm}
         </div>
       </div>
@@ -150,10 +135,9 @@ export function DemoIntro({
             «Reiniciar la demo» vuelve a sembrar los datos simulados con las fechas de hoy.
           </p>
           <div className="admin-dialog-actions">
-            <button type="button" className="admin-btn admin-btn--primary" onClick={startTour}>
-              <AdminIcon name="overview" size={15} />
-              <span>Empezar el recorrido</span>
-            </button>
+            <AdminButton type="button" variant="primary" icon="overview" onClick={startTour}>
+              Empezar el recorrido
+            </AdminButton>
             {portalActions}
             {resetForm}
           </div>

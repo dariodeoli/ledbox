@@ -50,7 +50,7 @@ import {
 import { AdminIcon } from "./AdminIcons";
 import { AdminSandboxStrip } from "./AdminSandboxStrip";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
-import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
+import { AdminButtonLink, AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog, AdminIconButton, AdminIconLink } from "./AdminUI";
 /**
  * Paleta del buscador (issue #67): llega diferida. Su código no entra en el
  * arranque del panel; con el shell ocioso se prefetchea el chunk para que la
@@ -799,15 +799,7 @@ export function AdminShell({
               </span>
             </Link>
             <AdminSidebarToggle />
-            <button
-              type="button"
-              className="admin-iconbtn admin-sidebar-close"
-              onClick={() => setMenuOpen(false)}
-              aria-label="Cerrar menú"
-              title="Cerrar menú"
-            >
-              <AdminIcon name="close" size={16} />
-            </button>
+            <AdminIconButton icon="close" iconSize={16} label="Cerrar menú" className="admin-sidebar-close" onClick={() => setMenuOpen(false)} />
           </div>
 
           <div className="admin-sidebar-nav" ref={navRef}>
@@ -964,17 +956,7 @@ export function AdminShell({
 
         <div className="admin-main">
           <header className="admin-topbar">
-            <button
-              type="button"
-              className="admin-iconbtn admin-menu-btn"
-              onClick={(event) => openMenu(event.currentTarget)}
-              aria-label="Abrir menú"
-              aria-controls="admin-sidebar"
-              aria-expanded={menuOpen}
-              title="Abrir menú"
-            >
-              <AdminIcon name="menu" size={18} />
-            </button>
+            <AdminIconButton icon="menu" iconSize={18} label="Abrir menú" className="admin-menu-btn" onClick={(event) => openMenu(event.currentTarget)} aria-controls="admin-sidebar" aria-expanded={menuOpen} />
 
             <div className="admin-topbar-title">
               <p className="admin-topbar-eyebrow">{eyebrow}</p>
@@ -1018,16 +1000,13 @@ export function AdminShell({
               {demoEntryPending ? null : <AdminNotificationBell />}
               <AdminOfflineIndicator />
               <AdminThemeToggle />
-              <a
-                className="admin-btn admin-hide-sm"
+              <AdminButtonLink
+                className="admin-hide-sm"
                 href={publicConfig.siteUrl}
                 target="_blank"
                 rel="noreferrer"
                 title="Abrir el sitio público en una pestaña nueva"
-              >
-                <AdminIcon name="external" size={15} />
-                <span>Ver sitio</span>
-              </a>
+               icon="external">Ver sitio</AdminButtonLink>
             </div>
           </header>
 
@@ -1157,32 +1136,24 @@ function AdminNotificationItem({ notification, writable }: { notification: Admin
         {when}
       </span>
       {whatsappLink && reminder ? (
-        <a
-          className="admin-iconbtn"
+        <AdminIconLink
           href={whatsappLink}
-          target="_blank"
-          rel="noreferrer"
-          title={`Recordar por WhatsApp: ${reminder.client}`}
-          aria-label={`Recordar por WhatsApp: ${reminder.client}`}
+          external
+          iconNode={<WhatsappIcon size={15} />}
+          label={`Recordar por WhatsApp: ${reminder.client}`}
           onClick={rememberWhatsapp}
-        >
-          <WhatsappIcon size={15} />
-        </a>
+        />
       ) : null}
       {simulatedMessage && reminder ? (
         <>
-          <button
-            type="button"
-            className="admin-iconbtn"
-            title={`Ver cómo se vería el recordatorio por WhatsApp: ${reminder.client}`}
-            aria-label={`Ver cómo se vería el recordatorio por WhatsApp: ${reminder.client}`}
+          <AdminIconButton
+            iconNode={<WhatsappIcon size={15} />}
+            label={`Ver cómo se vería el recordatorio por WhatsApp: ${reminder.client}`}
             onClick={() => {
               setSimulating(true);
               rememberWhatsapp();
             }}
-          >
-            <WhatsappIcon size={15} />
-          </button>
+          />
           {simulating ? <AdminSimulatedMessageDialog to={reminder.client} message={simulatedMessage} onClose={() => setSimulating(false)} /> : null}
         </>
       ) : null}
@@ -1288,22 +1259,22 @@ function AdminNotificationBell() {
         setOpen(false);
       }}
     >
-      <button
-        type="button"
-        className="admin-iconbtn admin-notif-toggle"
+      <AdminIconButton
+        icon="bell"
+        iconSize={16}
+        className="admin-notif-toggle"
+        label={urgent > 0 ? `Avisos: ${formatNumber(urgent)} vencidos o próximos` : "Avisos y recordatorios"}
+        title="Avisos y recordatorios"
         onClick={toggle}
-        aria-label={urgent > 0 ? `Avisos: ${formatNumber(urgent)} vencidos o próximos` : "Avisos y recordatorios"}
         aria-expanded={open}
         aria-controls="admin-notif-panel"
-        title="Avisos y recordatorios"
       >
-        <AdminIcon name="bell" size={16} />
         {urgent > 0 ? (
           <span className="admin-notif-count" aria-hidden="true">
             {urgent > 99 ? "99+" : formatNumber(urgent)}
           </span>
         ) : null}
-      </button>
+      </AdminIconButton>
 
       {open && anchor
         ? createPortal(

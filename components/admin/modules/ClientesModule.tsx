@@ -26,7 +26,7 @@ import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
-import {
+import { AdminButtonLink,
   AdminActionsMenu,
   AdminBadge,
   AdminButton,
@@ -47,6 +47,7 @@ import {
   AdminToolbar,
   AdminWhatsappLink,
   type AdminMenuItem,
+  AdminTabs,
 } from "../AdminUI";
 import { MessageTemplateSendDialog, type MessageTemplateTarget } from "../AdminMessageTemplateDialog";
 import { SearchField, TextAreaField } from "../AdminFields";
@@ -342,9 +343,9 @@ export function ClientesModule() {
         {client.metrics.overdue > 0 && waHref ? (
           <AdminWhatsappLink phone={phone} name={name} message={`Hola ${client.contactName || name}: te escribimos de LedBox por un saldo pendiente.`} />
         ) : canQuote ? (
-          <Link className="admin-btn admin-btn--row" href={quoteHref} title={`Armar un presupuesto para ${name}`} aria-label={`Nuevo presupuesto para ${name}`}>
+          <AdminButtonLink size="sm" href={quoteHref} title={`Armar un presupuesto para ${name}`} aria-label={`Nuevo presupuesto para ${name}`}>
             Nuevo presupuesto
-          </Link>
+          </AdminButtonLink>
         ) : (
           <AdminWhatsappLink phone={phone} name={name} message={clientWhatsappMessage(client.contactName || name)} />
         )}
@@ -618,21 +619,14 @@ export function ClientesModule() {
           label="Buscar clientes"
           placeholder="Buscar por nombre, RUC, teléfono o correo…"
         />
-        <div className="admin-segments" role="group" aria-label="Tipo de cliente">
-          {CLIENT_SEGMENTS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className="admin-subtab"
-              aria-pressed={segment === item.key}
-              data-active={segment === item.key ? "true" : undefined}
-              onClick={() => setSegment(item.key)}
-            >
-              {item.label}
-              <span className="admin-subtab-count">{formatNumber(segmentCounts[item.key])}</span>
-            </button>
-          ))}
-        </div>
+        <AdminTabs
+          filters
+          className="admin-segments"
+          label="Tipo de cliente"
+          value={segment}
+          onChange={(key) => setSegment(key as ClientSegment)}
+          items={CLIENT_SEGMENTS.map((item) => ({ key: item.key, label: item.label, count: segmentCounts[item.key] }))}
+        />
         <AdminSelect value={filter} onChange={setFilter} label="Filtrar la cartera" options={FILTER_OPTIONS} />
         <AdminSelect value={order} onChange={setOrder} label="Ordenar clientes por" options={ORDER_OPTIONS} />
         {/* En ancho compacto lista y cuadrícula se ven igual (tarjetas): el
@@ -728,14 +722,14 @@ export function ClientesModule() {
         empty={(allClients ?? []).length === 0}
         emptyTitle="Todavía no hay clientes" emptyIcon="clients"
         emptyHint="Registrá el primer cliente para asociarle eventos y presupuestos."
-        emptyAction={writable ? <button type="button" className="admin-empty-link" onClick={openCreate}>Registrar cliente →</button> : undefined}
+        emptyAction={writable ? <AdminButton type="button" variant="link" onClick={openCreate}>Registrar cliente →</AdminButton> : undefined}
       >
         {rows.length === 0 ? (
           <AdminEmpty
             icon="search"
             title="Sin resultados"
             hint="Probá con otro término de búsqueda o cambiá los filtros."
-            action={filtering ? <button type="button" className="admin-empty-link" onClick={clearFilters}>Quitar filtros →</button> : undefined}
+            action={filtering ? <AdminButton type="button" variant="link" onClick={clearFilters}>Quitar filtros →</AdminButton> : undefined}
           />
         ) : cardView ? (
           <AdminCardGrid label="Clientes" cards={clientCards} />

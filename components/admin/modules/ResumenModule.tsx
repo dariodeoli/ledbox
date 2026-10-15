@@ -8,7 +8,8 @@ import type { AdminResumen } from "@/lib/admin-types";
 import type { AdminResumenBoard } from "@/lib/resumen-board";
 import { buildTodayActions, TODAY_ACTIONS_LIMIT, weekEventChip, type TodayAction } from "@/lib/resumen-actions";
 import { useAdminNotifications, useAdminSession } from "../AdminShell";
-import { AdminBadge, AdminDataState, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButtonLink, AdminBadge, AdminDataState, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminNote, AdminPanel, AdminButton,
+} from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { useAdminResource } from "@/lib/admin-api";
 import { AgingBlock, BudgetsBlock, ForecastBlock, MoneyStrip, OperationBlock, TrendBlock } from "./ResumenBoard";
@@ -70,10 +71,7 @@ export function ResumenModule() {
           <p className="admin-resumen-date">{now ? capitalize(dateFormat.format(now)) : " "}</p>
         </div>
         {canCreateLead ? (
-          <Link className="admin-btn admin-btn--primary" href="/leads?nuevo=1" title="Cargar una consulta que llegó por llamada, WhatsApp o referido">
-            <AdminIcon name="plus" size={15} />
-            <span>Nuevo lead</span>
-          </Link>
+          <AdminButtonLink variant="primary" href="/leads?nuevo=1" title="Cargar una consulta que llegó por llamada, WhatsApp o referido" icon="plus">Nuevo lead</AdminButtonLink>
         ) : null}
       </header>
 
@@ -172,23 +170,15 @@ function TodayBlock({
                       <strong className="admin-today-title">{action.title}</strong>
                       {action.detail ? <span className="admin-today-detail">{action.detail}</span> : null}
                     </div>
-                    <Link className="admin-btn admin-today-action" href={action.href} title={`${action.label}: ${action.title}`}>
-                      <span>{action.label}</span>
-                      <AdminIcon name="arrow-right" size={14} />
-                    </Link>
+                    <AdminButtonLink className="admin-today-action" href={action.href} title={`${action.label}: ${action.title}`} iconEnd="arrow-right">{action.label}</AdminButtonLink>
                   </li>
                 ))}
               </ul>
               {hidden > 0 ? (
                 <div className="admin-today-more">
-                  <button
-                    type="button"
-                    className="admin-btn"
-                    aria-expanded={expanded}
-                    onClick={() => setExpanded((current) => !current)}
-                  >
-                    <span>{expanded ? "Ver menos" : `Ver todos (${formatNumber(actions.length)})`}</span>
-                  </button>
+                  <AdminButton type="button" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+                    {expanded ? "Ver menos" : `Ver todos (${formatNumber(actions.length)})`}
+                  </AdminButton>
                 </div>
               ) : null}
             </>

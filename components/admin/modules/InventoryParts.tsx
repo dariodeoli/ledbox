@@ -185,16 +185,9 @@ export function dayRangeLabel(from: string, to: string): string {
  */
 export function StateChip({ state, label, title, className }: { state: InventoryStateEntry; label?: string; title?: string; className?: string }) {
   return (
-    <span
-      className={className ? `admin-inv-chip ${className}` : "admin-inv-chip"}
-      data-tone={state.tone}
-      data-emphasis={state.emphasis ? "true" : undefined}
-      data-state={state.key}
-      title={title ?? state.hint}
-    >
-      <AdminIcon name={state.icon} size={12} />
-      <span className="admin-inv-chip-text">{label ?? state.label}</span>
-    </span>
+    <AdminBadge tone={state.tone} icon={state.icon} emphasis={state.emphasis} dataState={state.key} title={title ?? state.hint} className={className}>
+      {label ?? state.label}
+    </AdminBadge>
   );
 }
 

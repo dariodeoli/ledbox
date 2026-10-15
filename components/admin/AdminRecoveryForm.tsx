@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { AdminError, AdminSpinner, AdminSuccess } from "./AdminUI";
+import { AdminButton, AdminError, AdminSuccess } from "./AdminUI";
 import { EmailField, HoneypotField } from "./AdminFields";
 import { AdminFrame } from "./AdminFrame";
 
@@ -54,7 +54,7 @@ export function AdminRecoveryForm() {
           name="email"
         />
         <HoneypotField />
-        <button className="btn-led admin-submit" type="submit" disabled={pending}>{pending ? <><AdminSpinner label="Enviando recuperación" /> Enviando…</> : "Enviar enlace →"}</button>
+        <AdminButton variant="primary" className="admin-submit" type="submit" busy={pending} busyLabel="Enviando…">Enviar enlace →</AdminButton>
       </form>
       <Link href="/login" className="admin-back-link">← Volver al inicio de sesión</Link>
     </section>

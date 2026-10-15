@@ -59,6 +59,7 @@ import {
   AdminRow,
   AdminSelect,
   AdminTable,
+  AdminTabs,
 } from "../AdminUI";
 import { trashMenuItems } from "../TrashDialogs";
 import { DateField, DayField, MoneyField, NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
@@ -422,15 +423,6 @@ export function InventoryFicha({
   const tab: TabKey = tabs.includes(requestedTab) ? requestedTab : tabs[0];
   const tabId = (key: TabKey) => `${uid}-tab-${key}`;
   const panelId = (key: TabKey) => `${uid}-panel-${key}`;
-  const onTabKey = (event: React.KeyboardEvent<HTMLElement>) => {
-    const index = tabs.indexOf(tab);
-    const next = event.key === "ArrowRight" ? index + 1 : event.key === "ArrowLeft" ? index - 1 : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
-    if (next === null) return;
-    event.preventDefault();
-    const target = tabs[(next + tabs.length) % tabs.length];
-    setRequestedTab(target);
-    document.getElementById(tabId(target))?.focus();
-  };
   const editLabel = isCombo ? "Editar combo" : "Editar producto";
 
   return (
@@ -560,24 +552,15 @@ export function InventoryFicha({
         {item.notes ? <p className="admin-note" title="Notas internas: no se publican.">{item.notes}</p> : null}
       </AdminDialogSection>
 
-      <div className="admin-ficha-tabs admin-ficha-nav" role="tablist" aria-label={`Secciones de ${item.name}`} onKeyDown={onTabKey}>
-        {tabs.map((key) => (
-          <button
-            key={key}
-            id={tabId(key)}
-            type="button"
-            role="tab"
-            className="admin-subtab"
-            data-active={tab === key ? "true" : undefined}
-            aria-selected={tab === key}
-            aria-controls={panelId(key)}
-            tabIndex={tab === key ? 0 : -1}
-            onClick={() => setRequestedTab(key)}
-          >
-            {key === "combos" && isCombo ? "Componentes" : TAB_LABELS[key]}
-          </button>
-        ))}
-      </div>
+      <AdminTabs
+        className="admin-ficha-tabs admin-ficha-nav"
+        label={`Secciones de ${item.name}`}
+        value={tab}
+        onChange={(key) => setRequestedTab(key as TabKey)}
+        tabId={(key) => tabId(key as TabKey)}
+        panelId={(key) => panelId(key as TabKey)}
+        items={tabs.map((key) => ({ key, label: key === "combos" && isCombo ? "Componentes" : TAB_LABELS[key] }))}
+      />
 
       <TabPanel active={tab === "datos"} id={panelId("datos")} tab={tabId("datos")}>
 <AdminDialogSection title="Datos" stack>

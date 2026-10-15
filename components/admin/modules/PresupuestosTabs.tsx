@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminSubtabs } from "../AdminUI";
+import { AdminTabs } from "../AdminUI";
 
 /**
  * Pestañas de Presupuestos: la lista, las firmas (`/firmas`, issue #81) y, si el
@@ -19,7 +19,7 @@ export function PresupuestosTabs({
 }) {
   return (
     <div className="admin-subtabs-bar">
-      <AdminSubtabs
+      <AdminTabs
         label="Secciones de Presupuestos"
         items={[
           { href: "/presupuestos", label: "Presupuestos", icon: "budgets", active: active === "presupuestos" },

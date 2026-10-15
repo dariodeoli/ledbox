@@ -31,6 +31,7 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
+  AdminIconButton,
 } from "../AdminUI";
 import { EmailField, PasswordField, SearchField, SelectField, TextField } from "../AdminFields";
 import { adminSend, redirectToLogin, useAdminResource } from "@/lib/admin-api";
@@ -512,27 +513,9 @@ export function UsuariosModule() {
                   {writable ? (
                     <span className="admin-actions">
                       {canEditUser(user) ? (
-                        <button
-                          type="button"
-                          className="admin-iconbtn"
-                          onClick={() => startEdit(user)}
-                          disabled={rowBusy === user.id}
-                          title={`Editar nombre y correo: ${user.name}`}
-                          aria-label={`Editar nombre y correo: ${user.name}`}
-                        >
-                          <AdminIcon name="edit" size={15} />
-                        </button>
+                        <AdminIconButton icon="edit" label={`Editar nombre y correo: ${user.name}`} onClick={() => startEdit(user)} disabled={rowBusy === user.id} />
                       ) : null}
-                      <button
-                        type="button"
-                        className="admin-iconbtn"
-                        onClick={() => toggleActive(user)}
-                        disabled={rowBusy === user.id}
-                        title={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
-                        aria-label={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`}
-                      >
-                        <AdminIcon name="power" size={15} />
-                      </button>
+                      <AdminIconButton icon="power" label={user.active ? `Desactivar acceso de ${user.name}` : `Activar acceso de ${user.name}`} onClick={() => toggleActive(user)} disabled={rowBusy === user.id} />
                     </span>
                   ) : (
                     <span className="admin-muted">—</span>
@@ -923,29 +906,8 @@ function InvitationsPanel() {
               </AdminCell>
               <AdminCell end>
                 <span className="admin-actions">
-                  <button
-                    type="button"
-                    className="admin-iconbtn"
-                    disabled={rowBusy === invitation.id}
-                    onClick={() => void resend(invitation)}
-                    title={`Reenviar la invitación a ${invitation.email}`}
-                    aria-label={`Reenviar la invitación a ${invitation.email}`}
-                  >
-                    <AdminIcon name="refresh" size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-iconbtn"
-                    disabled={rowBusy === invitation.id}
-                    onClick={() => {
-                      setRevokeError("");
-                      setRevoking(invitation);
-                    }}
-                    title={`Revocar la invitación de ${invitation.email}`}
-                    aria-label={`Revocar la invitación de ${invitation.email}`}
-                  >
-                    <AdminIcon name="trash" size={15} />
-                  </button>
+                  <AdminIconButton icon="refresh" label={`Reenviar la invitación a ${invitation.email}`} disabled={rowBusy === invitation.id} onClick={() => void resend(invitation)} />
+                  <AdminIconButton icon="trash" label={`Revocar la invitación de ${invitation.email}`} disabled={rowBusy === invitation.id} onClick={() => { setRevokeError(""); setRevoking(invitation); }} />
                 </span>
               </AdminCell>
             </AdminRow>

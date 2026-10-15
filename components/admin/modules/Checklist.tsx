@@ -5,7 +5,7 @@ import { formatDate, formatDateShort, formatSince, isDueSoon, statusTone, taskTy
 import type { AdminEventTask } from "@/lib/admin-types";
 import { CheckboxField } from "../AdminFields";
 
-import { AdminBadge, AdminCell, AdminCountdown, AdminEmpty, AdminRow, AdminTable } from "../AdminUI";
+import { AdminBadge, AdminCell, AdminCountdown, AdminEmpty, AdminRow, AdminTable, AdminButton } from "../AdminUI";
 import { adminSend } from "@/lib/admin-api";
 import { useOfflineQueue } from "../AdminOffline";
 import { queuedActionForTask } from "@/lib/offline-queue";
@@ -62,9 +62,9 @@ export function ChecklistTable({
             {single ? null : (
               <AdminCell title={eventName}>
                 {onOpenEvent && eventId ? (
-                  <button type="button" className="admin-link-btn" onClick={() => onOpenEvent(eventId)} aria-haspopup="dialog" aria-label={`Abrir el evento ${eventName}`}>
+                  <AdminButton type="button" variant="link" onClick={() => onOpenEvent(eventId)} aria-haspopup="dialog" aria-label={`Abrir el evento ${eventName}`}>
                     {eventName}
-                  </button>
+                  </AdminButton>
                 ) : (
                   eventName
                 )}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApiGet, adminApiUpload, clearAdminApiCache } from "@/lib/admin-api";
 import { IMPORT_MODULES, type ImportModuleId } from "@/lib/import-modules";
 import { CATALOG_LIMITS, DUDA_MOTIVO_LABEL } from "@/lib/import-catalog";
-import { AdminBadge, AdminButton, AdminDialog } from "./AdminUI";
+import { AdminButtonLink, AdminBadge, AdminButton, AdminDialog } from "./AdminUI";
 import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } from "./AdminFields";
 
 /**
@@ -315,12 +315,12 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
             <>
               <p className="admin-field-hint">Descargá la plantilla con las columnas exactas, completala y subila en .xlsx o .csv.</p>
               <div className="admin-inv-actions">
-                <a className="admin-btn admin-btn--ghost" href={`${url}?formato=xlsx`} download>
+                <AdminButtonLink href={`${url}?formato=xlsx`} download>
                   Descargar plantilla (.xlsx)
-                </a>
-                <a className="admin-btn admin-btn--ghost" href={`${url}?formato=csv`} download>
+                </AdminButtonLink>
+                <AdminButtonLink href={`${url}?formato=csv`} download>
                   Descargar plantilla (.csv)
-                </a>
+                </AdminButtonLink>
               </div>
               <FileField label="Planilla completa" accept=".xlsx,.csv,text/csv" maxBytes={CATALOG_LIMITS.sheetBytes} file={planilla} onSelect={setPlanilla} hint=".xlsx o .csv, hasta 5 MB" />
             </>

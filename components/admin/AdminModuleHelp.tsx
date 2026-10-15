@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { ADMIN_ROOT_ID } from "@/lib/admin-theme";
 import { moduleHelpFor } from "@/lib/module-help";
 import { AdminIcon } from "./AdminIcons";
-import { AdminButton, AdminDialog } from "./AdminUI";
+import { AdminButton, AdminDialog, AdminIconButton } from "./AdminUI";
 
 /**
  * Ayuda contextual del módulo («¿Qué es esto?»): botón de interrogación junto al
@@ -34,18 +34,17 @@ export function AdminModuleHelp() {
 
   return (
     <>
-      <button
-        type="button"
-        className="admin-iconbtn admin-help-btn"
-        onClick={() => setOpen(true)}
-        aria-label={title}
+      <AdminIconButton
+        className="admin-help-btn"
+        label={title}
         aria-haspopup="dialog"
-        title={title}
-      >
-        <span className="admin-help-mark" aria-hidden="true">
-          ?
-        </span>
-      </button>
+        onClick={() => setOpen(true)}
+        iconNode={
+          <span className="admin-help-mark" aria-hidden="true">
+            ?
+          </span>
+        }
+      />
 
       {open
         ? createPortal(

@@ -49,7 +49,7 @@ import type {
 import { useAdminSession } from "../AdminShell";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { useAdminNarrowViewport } from "../AdminBoard";
-import {
+import { AdminButtonLink,
   AdminBadge,
   AdminButton,
   AdminCell,
@@ -67,6 +67,7 @@ import {
   AdminSelect,
   AdminTable,
   AdminToolbar,
+  AdminTabs,
 } from "../AdminUI";
 import {
   Combobox,
@@ -598,25 +599,17 @@ export function FacturacionModule() {
         />
       </AdminKpis>
 
-      <nav className="admin-subtabs" aria-label="Secciones de facturación">
-        {FISCAL_TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className="admin-subtab"
-            data-active={tab === item.value ? "true" : undefined}
-            aria-pressed={tab === item.value}
-            onClick={() => {
-              setTab(item.value);
-              setNotice(null);
-              setFormError("");
-            }}
-          >
-            <AdminIcon name={item.icon} size={13} />
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      <AdminTabs
+        filters
+        label="Secciones de facturación"
+        value={tab}
+        onChange={(key) => {
+          setTab(key as FiscalTab);
+          setNotice(null);
+          setFormError("");
+        }}
+        items={FISCAL_TABS.map((item) => ({ key: item.value, label: item.label, icon: item.icon }))}
+      />
 
       {notice ? <AdminNote tone={notice.tone}>{notice.text}</AdminNote> : null}
 
@@ -624,16 +617,16 @@ export function FacturacionModule() {
         <AdminNote tone="warn">
           <strong>Faltan datos fiscales de la empresa</strong> (RUC y razón social): son el encabezado del
           comprobante imprimible.{" "}
-          <button
+          <AdminButton
             type="button"
-            className="admin-linkbtn"
+            variant="link"
             onClick={() => {
               setTab("profile");
               setNotice(null);
             }}
           >
             Completarlos ahora
-          </button>
+          </AdminButton>
         </AdminNote>
       ) : null}
 
@@ -1704,9 +1697,9 @@ export function FacturacionModule() {
               <AdminButton icon="close" type="button" onClick={() => setDetail(null)}>
                 Cerrar
               </AdminButton>
-              <Link className="admin-btn admin-btn--primary" href={`/imprimir/factura/${detail.id}`} target="_blank" rel="noreferrer" title="Abrir el comprobante imprimible" aria-label="Abrir el comprobante imprimible">
+              <AdminButtonLink variant="primary" href={`/imprimir/factura/${detail.id}`} target="_blank" rel="noreferrer" title="Abrir el comprobante imprimible" aria-label="Abrir el comprobante imprimible">
                 <span>Ver imprimible</span>
-              </Link>
+              </AdminButtonLink>
             </>
           }
         >
@@ -1850,7 +1843,6 @@ export function FacturacionModule() {
             <AdminDialogSection title="Comprobante">
             <TextField
               label="Proveedor (razón social)"
-              wide
               required
               value={purchaseForm.reason}
               onChange={(value) => setPurchaseForm({ ...purchaseForm, reason: value })}

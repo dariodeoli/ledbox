@@ -155,7 +155,7 @@ export function ComboDialog({
     >
       <form id={formId} className="admin-form" onSubmit={(event) => void submit(event)} aria-busy={busy || undefined}>
         <AdminDialogSection title="Datos">
-        <TextField label="Nombre del combo" required maxLength={FIELD_LIMITS.name} value={name} onChange={setName} placeholder="Ej.: Kit pantalla LED 3×2" autoFocus wide disabled={busy} />
+        <TextField label="Nombre del combo" required maxLength={FIELD_LIMITS.name} value={name} onChange={setName} placeholder="Ej.: Kit pantalla LED 3×2" autoFocus disabled={busy} />
         </AdminDialogSection>
         <AdminDialogSection title="Componentes">
                   {candidates.length === 0 ? <div className="admin-field--wide"><AdminNote>Todavía no hay productos sueltos para armar el combo: cargá primero los ítems.</AdminNote></div> : null}
