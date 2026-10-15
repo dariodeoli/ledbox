@@ -353,6 +353,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   // de atrás no se mueve (ni el scroll ni el carrito).
   const pushedQuick = useRef(false);
   const quickDatesBefore = useRef<string | null>(null);
+  const quickPendingRange = useRef<{ fromKey: string; toKey: string } | null>(null);
   const quickItem = quickId ? items.find((entry) => entry.id === quickId) ?? null : null;
   const quickUrl = (id: string | null) => {
     const url = new URL(window.location.href);
@@ -363,6 +364,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const openQuick = useCallback((id: string) => {
     const params = new URLSearchParams(window.location.search);
     quickDatesBefore.current = JSON.stringify([params.get("desde"), params.get("hasta")]);
+    quickPendingRange.current = null;
     try {
       window.history.pushState(window.history.state, "", quickUrl(id));
       pushedQuick.current = true;
@@ -390,14 +392,22 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     setQuickId(id);
   }, []);
   const closeQuick = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    const currentDates = JSON.stringify([params.get("desde"), params.get("hasta")]);
-    // Si cambió el período dentro del popup, cerrar conserva esas fechas en vez de deshacerlas con «atrás».
-    if (pushedQuick.current && currentDates === quickDatesBefore.current) { window.history.back(); return; }
+    const url = new URL(window.location.href);
+    const pending = quickPendingRange.current;
+    if (pending) {
+      url.searchParams.set("desde", pending.fromKey);
+      url.searchParams.set("hasta", pending.toKey);
+    }
+    const currentDates = JSON.stringify([url.searchParams.get("desde"), url.searchParams.get("hasta")]);
+    // Si hay fechas en vuelo, cerrar debe reemplazar también la navegación RSC pendiente, no solo history.
+    if (pushedQuick.current && !pending && currentDates === quickDatesBefore.current) { window.history.back(); return; }
     pushedQuick.current = false;
-    try { window.history.replaceState(window.history.state, "", quickUrl(null)); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección al cerrar la vista rápida", failure); }
+    url.searchParams.delete("p");
+    const target = `${url.pathname}${url.search}${url.hash}`;
+    try { window.history.replaceState(window.history.state, "", target); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección al cerrar la vista rápida", failure); }
     setQuickId(null);
-  }, []);
+    router.replace(target, { scroll: false });
+  }, [router]);
   const addFromQuick = useCallback((id: string, quantity: number) => {
     setSelection((current) => ({ ...current, [id]: Math.min(MAX_QUANTITY, (current[id] ?? 0) + quantity) }));
     const name = items.find((item) => item.id === id)?.name ?? "Producto";
@@ -573,6 +583,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
             onAdd={addFromQuick}
             onNavigate={navigateQuick}
             onClose={closeQuick}
+            onApplyRange={(next) => { quickPendingRange.current = next; applyRange(next); }}
           />
         </ThemePortal>
       ) : null}

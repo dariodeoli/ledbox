@@ -67,8 +67,11 @@ test("el resumen persistente diferencia productos y unidades, con importe y conf
 test("cerrar la vista rápida conserva fechas elegidas dentro del popup", () => {
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
   assert.match(browser, /quickDatesBefore.current = JSON.stringify\(\[params.get\("desde"\), params.get\("hasta"\)\]\)/);
-  assert.match(browser, /pushedQuick.current && currentDates === quickDatesBefore.current/);
-  assert.match(browser, /replaceState\(window.history.state, "", quickUrl\(null\)\)/);
+  assert.match(browser, /pushedQuick.current && !pending && currentDates === quickDatesBefore.current/);
+  assert.match(browser, /quickPendingRange.current = next; applyRange\(next\)/);
+  assert.match(browser, /url.searchParams.set\("hasta", pending.toKey\)/);
+  assert.match(browser, /replaceState\(window.history.state, "", target\)/);
+  assert.match(browser, /router.replace\(target, \{ scroll: false \}\)/);
 });
 
 

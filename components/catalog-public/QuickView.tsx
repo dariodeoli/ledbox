@@ -42,13 +42,14 @@ type Props = {
   onAdd: (id: string, quantity: number) => void;
   onNavigate: (id: string) => void;
   onClose: () => void;
+  onApplyRange?: (range: { fromKey: string; toKey: string; days: number }) => void;
 };
 
 const money = formatGs;
 
 type Loaded = { state: "loading" } | { state: "error" } | { state: "ok"; detail: ProductDetail };
 
-export function QuickView({ item, items, showPrices, priceOf, productApi, slug, range = null, inCart, step = 1, onAdd, onNavigate, onClose }: Props) {
+export function QuickView({ item, items, showPrices, priceOf, productApi, slug, range = null, inCart, step = 1, onAdd, onNavigate, onClose, onApplyRange }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -162,7 +163,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, slug, 
                   <p className="cp-hint">{product.tags.join(" · ")}</p>
                 </section>
               ) : null}
-              {slug ? <EventPicker slug={slug} range={range} variant="panel" title="Fechas del alquiler" emptyNote="Elegí las fechas para consultar la disponibilidad." /> : null}
+              {slug ? <EventPicker slug={slug} range={range} variant="panel" onApply={onApplyRange} title="Fechas del alquiler" emptyNote="Elegí las fechas para consultar la disponibilidad." /> : null}
               {range ? (
                 <p className="cp-avail" data-tone={item.availability ?? "CONSULT"} data-testid="quick-availability">
                   {item.availability === "AVAILABLE" ? "Disponible para tu fecha" : item.availability === "LOW" ? AVAILABILITY_HINT_LABEL.LOW : "Consultar disponibilidad"}
