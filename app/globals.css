@@ -5920,7 +5920,20 @@ a.cp-footer-text { width: fit-content; display: inline-flex; align-items: center
 .cp-theme[data-store-template="minimal"] .cp-brand-name { font-weight: 700; letter-spacing: -0.02em; }
 .cp-theme[data-store-template="minimal"] .cp-footer { background: transparent; border-top-color: var(--cp-text); }
 @media (prefers-reduced-motion: reduce) { .cp-theme[data-store-scheme] .cp-x-item { transition: none; transform: none !important; } }
-/* Noche: el logo pensado para fondo claro (sistema en claro) va sobre una chapa clara para que se lea. */
-@media (prefers-color-scheme: light) {
-  .cp-theme[data-store-template="noche"] .cp-logo:not(.cp-logo--plate) { background: #eceef5; padding: 4px 10px; border-radius: 10px; }
+/* Logo: con las dos variantes se elige por esquema de la plantilla (oscuras: Oscura y Noche) o, si no lo fija, por el del sistema. */
+.cp-logo .cp-logo-ondark { display: none; }
+.cp-theme[data-cp-template="oscura"] .cp-logo-onlight, .cp-theme[data-store-scheme="dark"] .cp-logo-onlight { display: none; }
+.cp-theme[data-cp-template="oscura"] .cp-logo-ondark, .cp-theme[data-store-scheme="dark"] .cp-logo-ondark { display: block; }
+@media (prefers-color-scheme: dark) {
+  .cp-theme:not([data-store-scheme="light"]):not([data-cp-template="editorial"]) .cp-logo-onlight { display: none; }
+  .cp-theme:not([data-store-scheme="light"]):not([data-cp-template="editorial"]) .cp-logo-ondark { display: block; }
 }
+/* Logo de una sola variante pensado para fondo claro: chapa clara donde el fondo es oscuro. */
+.cp-theme[data-cp-template="oscura"] .cp-logo--plate-light, .cp-theme[data-store-scheme="dark"] .cp-logo--plate-light { background: #eceef5; padding: 4px 10px; border-radius: 10px; }
+@media (prefers-color-scheme: dark) {
+  .cp-theme:not([data-store-scheme="light"]):not([data-cp-template="editorial"]) .cp-logo--plate-light { background: #eceef5; padding: 4px 10px; border-radius: 10px; }
+}
+
+/* Categoría sin foto: degradé suave del acento y un icono de línea (caja) centrado. */
+.cp-feat-photo--empty { background: linear-gradient(145deg, color-mix(in srgb, var(--cp-accent) 16%, var(--cp-surface)), color-mix(in srgb, var(--cp-accent) 5%, var(--cp-surface))); color: var(--cp-accent); }
+.cp-feat-ico { display: block; opacity: 0.85; }
