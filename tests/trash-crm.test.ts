@@ -68,10 +68,16 @@ test("el rótulo «(eliminado)» sale de un helper compartido y se usa en cobros
   assert.equal(withDeletedLabel({ name: "Ana", deletedAt: null }).name, "Ana");
   assert.equal(withDeletedLabel({ name: "Ana", deletedAt: new Date() }).name, "Ana (eliminado)");
   assert.equal(withDeletedLabel(null), null);
-  for (const file of ["app/api/admin/finance/route.ts", "app/api/admin/finance/expected/route.ts", "app/api/admin/expenses/route.ts"]) {
+  const financeRoute = read("app/api/admin/finance/route.ts");
+  assert.match(financeRoute, /import \{ readFinanceListing \} from "@\/lib\/server\/finance-listing"/);
+  assert.match(financeRoute, /readFinanceListing\(organizationId, new URL\(request\.url\)\.searchParams\)/);
+  for (const file of ["lib/server/finance-listing.ts", "app/api/admin/finance/expected/route.ts", "app/api/admin/expenses/route.ts"]) {
     assert.ok(read(file).includes("withDeletedLabel"), file);
     assert.match(read(file), /deletedAt: true/, file);
   }
+  const listing = read("lib/server/finance-listing.ts");
+  assert.match(listing, /client: withDeletedLabel\(payment\.client\)/);
+  assert.match(listing, /supplier: withDeletedLabel\(job\.supplier\)/);
 });
 
 test("ia/anular encuentra al cliente eliminado (siempre dentro de la empresa)", () => {
