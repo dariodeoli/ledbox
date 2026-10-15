@@ -3054,10 +3054,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-inv-section-head > button { flex-wrap: wrap; }
   .admin-inv-grid { --admin-inv-card-min: 9.5rem; gap: 6px; }
   .admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; top: -6px; right: -6px; }
-  .admin-inv-range { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-left: 0; gap: 4px 8px; }
+  .admin-inv-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; margin-left: 0; gap: 4px 8px; }
   .admin-inv-range > span:first-child { grid-column: 1 / -1; }
   .admin-inv-range > span:nth-child(3) { display: none; }
-  .admin-inv-range .admin-field--filter { width: 100%; }
+  .admin-inv-range .admin-field--filter, .admin-inv-range .admin-field--filter > * { width: 100%; min-width: 0; max-width: 100%; }
+  .admin-inv-range input[type="date"] { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
   .admin-inv-actions .admin-inv-scan { order: 9; flex-basis: 100%; }
   .admin-inv-actions-end { flex: 1 1 calc(50% - 8px); }
   .admin-inv-actions-end .admin-btn { width: 100%; }
