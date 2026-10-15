@@ -167,7 +167,7 @@ export async function loadStorefront(context: PublicCatalogContext): Promise<Pub
     theme: presentation.theme,
     logos: presentation.logos,
     profile: profileHasData(presentation.profile) ? presentation.profile : null,
-    appearance: appearanceView(presentation.appearance),
+    appearance: appearanceView(presentation.appearance, presentation.accent),
     covers: {
       desktop: coverUrl(context.organization.slug, "desktop", presentation.covers.desktop),
       mobile: coverUrl(context.organization.slug, "mobile", presentation.covers.mobile),
@@ -623,7 +623,7 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
       slug: organization.slug,
       whatsappPhone: settings?.whatsappPhone ?? null,
       theme: storefrontTheme(settings?.storefrontAccent),
-      appearance: appearanceView(presentation.appearance),
+      appearance: appearanceView(presentation.appearance, presentation.accent),
       profile: profileHasData(presentation.profile) ? presentation.profile : null,
     },
     decline: quote.status === "DECLINED" ? { reason: quote.declineReason, by: quote.declinedBy === "CLIENT" ? "CLIENT" : quote.declinedBy === "COMPANY" ? "COMPANY" : null } : null,

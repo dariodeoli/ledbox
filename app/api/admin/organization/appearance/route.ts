@@ -22,10 +22,10 @@ export async function GET() {
   const { organizationId } = auth.context;
   const [row, settings, covers] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId }, select: { appearance: true, slug: true } }),
-    db.organizationRentalSettings.findUnique({ where: { organizationId }, select: { storefrontAccent: true } }),
+    db.organizationRentalSettings.findUnique({ where: { organizationId }, select: { storefrontAccent: true, storefrontTagline: true } }),
     loadCoverVersions(organizationId),
   ]);
-  return Response.json({ appearance: readAppearance(row?.appearance), brandColor: settings?.storefrontAccent ?? null, covers, slug: row?.slug ?? null });
+  return Response.json({ appearance: readAppearance(row?.appearance), brandColor: settings?.storefrontAccent ?? null, tagline: settings?.storefrontTagline ?? null, covers, slug: row?.slug ?? null });
 }
 
 export async function PATCH(request: Request) {

@@ -1,36 +1,46 @@
-import { DESIGN_TEMPLATES, TEMPLATE_TOKENS, isDesignTemplate, templateFontHref, templateVars } from "./storefront-templates";
+import {
+  DEFAULT_STORE_THEME,
+  STORE_THEMES,
+  THEMES,
+  isDisplayFont,
+  isStoreTheme,
+  resolveStoredTheme,
+  themeAttrs,
+  themeFontHref,
+  themeVars,
+  type DisplayFontId,
+  type StoreThemeId,
+} from "./storefront-templates";
 import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, normalizeHex, rgbToHex, type Rgb } from "./storefront-theme";
 
 /**
  * Apariencia de las superficies del cliente (tienda y catálogo, mayorista, seguimiento del
  * pedido, portal, presupuesto impreso y correos). Todo es una **lista cerrada** o un valor
- * validado: plantilla (solo tokens CSS, sin CSS libre), tipografía (Google Fonts de una lista),
- * color de marca con contraste AA y fondo opcional claro. Reglas puras: las usan el API, las
- * páginas públicas, el panel (vista previa en vivo) y los tests.
+ * validado: plantilla (Lienzo, Boutique, Noir o Studio: solo tokens CSS, sin CSS libre), tipografía
+ * de títulos de una lista curada, color de marca con contraste AA, barra de anuncio y modo de precio.
+ * Reglas puras: las usan el API, las páginas públicas, el panel (vista previa en vivo) y los tests.
+ *
+ * Las plantillas de versiones anteriores (clásica, minimalista, elegante, oscura, editorial, tecnológica,
+ * boutique, noche, fresca, minimal) se leen con un alias (`LEGACY_TEMPLATE_MAP`) y además las migra
+ * `202610300001_tienda_temas`: ninguna fila queda con un valor que no exista.
  */
 
-export const TEMPLATES = ["clasica", "minimalista", "elegante", "oscura", "editorial", ...DESIGN_TEMPLATES] as const;
-export type TemplateId = (typeof TEMPLATES)[number];
-export const DEFAULT_TEMPLATE: TemplateId = "clasica";
+export const TEMPLATES = STORE_THEMES;
+export type TemplateId = StoreThemeId;
+export const DEFAULT_TEMPLATE: TemplateId = DEFAULT_STORE_THEME;
 
-export const TEMPLATE_META: Record<TemplateId, { label: string; description: string }> = {
-  clasica: { label: "Clásica", description: "Portada centrada, tarjetas con borde y esquinas redondeadas." },
-  minimalista: { label: "Minimalista", description: "Sin recuadros, lista limpia y mucho aire entre secciones." },
-  elegante: { label: "Elegante", description: "Títulos con serif, líneas finas y tarjetas sobrias." },
-  oscura: { label: "Oscura", description: "Fondo oscuro siempre, con tarjetas elevadas." },
-  editorial: { label: "Catálogo editorial", description: "Fondo crema, títulos serif con acento manuscrito, verde oliva y secciones grandes por categoría, como un catálogo impreso." },
-  tecnologica: { label: TEMPLATE_TOKENS.tecnologica.label, description: TEMPLATE_TOKENS.tecnologica.description },
-  boutique: { label: TEMPLATE_TOKENS.boutique.label, description: TEMPLATE_TOKENS.boutique.description },
-  noche: { label: TEMPLATE_TOKENS.noche.label, description: TEMPLATE_TOKENS.noche.description },
-  fresca: { label: TEMPLATE_TOKENS.fresca.label, description: TEMPLATE_TOKENS.fresca.description },
-  minimal: { label: TEMPLATE_TOKENS.minimal.label, description: TEMPLATE_TOKENS.minimal.description },
+export const TEMPLATE_META: Record<TemplateId, { label: string; description: string; forWho: string }> = {
+  lienzo: { label: THEMES.lienzo.label, description: THEMES.lienzo.description, forWho: THEMES.lienzo.forWho },
+  boutique: { label: THEMES.boutique.label, description: THEMES.boutique.description, forWho: THEMES.boutique.forWho },
+  noir: { label: THEMES.noir.label, description: THEMES.noir.description, forWho: THEMES.noir.forWho },
+  studio: { label: THEMES.studio.label, description: THEMES.studio.description, forWho: THEMES.studio.forWho },
 };
 
 export function isTemplateId(value: unknown): value is TemplateId {
-  return typeof value === "string" && (TEMPLATES as readonly string[]).includes(value);
+  return isStoreTheme(value);
 }
 
-/** Tipografías permitidas. `google` es el parámetro `family` de Google Fonts (null = del sistema). */
+/** Tipografías permitidas para el portal, el presupuesto impreso y los correos. `google` es el parámetro `family` de Google Fonts (null = del sistema). La tienda usa las de su plantilla. */
 export const FONTS = [
   { id: "sistema", label: "Del sistema", family: 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif', google: null },
   { id: "inter", label: "Inter", family: '"Inter", system-ui, sans-serif', google: "Inter:wght@400;600;700;800" },
@@ -54,77 +64,89 @@ export function fontOf(id: unknown): (typeof FONTS)[number] {
   return FONTS.find((font) => font.id === id) ?? FONTS[0];
 }
 
-/** Tipografías serif de la lista: sirven para los títulos de la plantilla editorial. */
-const SERIF_FONTS: readonly FontId[] = ["cormorant-garamond", "playfair-display", "merriweather"];
-const EDITORIAL_HEAD = fontOf("cormorant-garamond");
-
-/** Acento manuscrito opcional de los títulos de sección (plantilla editorial). Lista cerrada de una. */
-export const SCRIPT_FONT = { label: "Allura", family: '"Allura", "Segoe Script", cursive', google: "Allura" } as const;
-
-/** Hoja de estilos de Google Fonts de las tipografías dadas; `null` si ninguna es de Google. */
-function googleHref(families: ReadonlyArray<string | null>): string | null {
-  const list = [...new Set(families.filter((family): family is string => Boolean(family)))];
-  return list.length ? `https://fonts.googleapis.com/css2?${list.map((family) => `family=${family}`).join("&")}&display=swap` : null;
-}
-
 /** Hoja de estilos de Google Fonts de la tipografía; `null` si es la del sistema. */
 export function googleFontHref(id: unknown): string | null {
-  return googleHref([fontOf(id).google]);
+  const family = fontOf(id).google;
+  return family ? `https://fonts.googleapis.com/css2?family=${family}&display=swap` : null;
 }
+
+/** Cómo se muestran los precios en la tienda: «por día», «c/u» (por pieza) o a cotizar (sin montos). */
+export const PRICE_MODES = ["day", "unit", "quote"] as const;
+export type PriceMode = (typeof PRICE_MODES)[number];
+export const PRICE_MODE_LABEL: Record<PriceMode, string> = { day: "Por día", unit: "Por unidad (c/u)", quote: "A cotizar" };
+export function isPriceMode(value: unknown): value is PriceMode {
+  return typeof value === "string" && (PRICE_MODES as readonly string[]).includes(value);
+}
+
+export const ANNOUNCEMENT_MAX = 140;
+export type Announcement = { on: boolean; text: string };
 
 export type Appearance = {
   template: TemplateId;
+  /** Tipografía del portal, el presupuesto impreso y los correos (la tienda usa la de su plantilla). */
   font: FontId;
-  /** Fondo claro opcional de la tienda (`#rrggbb`); `null` = el de la plantilla. */
-  background: string | null;
-  /** Acento manuscrito en los títulos de sección (solo lo usa la plantilla editorial). */
-  script: boolean;
+  /** Tipografía de títulos de la tienda; `null` = la de la plantilla. */
+  displayFont: DisplayFontId | null;
+  /** Barra de anuncio de arriba de todo (opcional). */
+  announcement: Announcement;
+  priceMode: PriceMode;
 };
 
-export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, background: null, script: false };
-
-/** El fondo propio tiene que ser claro: texto casi negro con contraste mínimo 7:1 (AAA). */
-export const BACKGROUND_TEXT = "#14181d";
-export const BACKGROUND_MIN_CONTRAST = 7;
-
-export function parseBackground(value: unknown): { ok: true; background: string | null } | { ok: false; error: string } {
-  if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return { ok: true, background: null };
-  const hex = normalizeHex(value);
-  if (!hex) return { ok: false, error: "El fondo tiene que ser un hexadecimal, por ejemplo #f6f1e8." };
-  if (contrastRatio(hex, BACKGROUND_TEXT) < BACKGROUND_MIN_CONTRAST) {
-    return { ok: false, error: "Ese fondo es muy oscuro para el texto: elegí un tono claro (o usá la plantilla Oscura)." };
-  }
-  return { ok: true, background: hex };
-}
+export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, displayFont: null, announcement: { on: false, text: "" }, priceMode: "day" };
 
 /** Valida lo que manda el panel; los campos ausentes mantienen `current`. */
 export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APPEARANCE): { ok: true; appearance: Appearance } | { ok: false; error: string } {
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-  const next: Appearance = { ...current };
+  const next: Appearance = { ...current, announcement: { ...current.announcement } };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Clásica, Minimalista, Elegante, Oscura, Catálogo editorial, Tecnológica, Boutique, Noche, Fresca o Minimal." };
+    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Lienzo, Boutique, Noir o Studio." };
     next.template = input.template;
   }
   if (input.font !== undefined) {
     if (!isFontId(input.font)) return { ok: false, error: "Elegí una tipografía de la lista." };
     next.font = input.font;
   }
-  if (input.background !== undefined) {
-    const background = parseBackground(input.background);
-    if (!background.ok) return background;
-    next.background = background.background;
+  if (input.displayFont !== undefined) {
+    if (input.displayFont === null || input.displayFont === "") next.displayFont = null;
+    else if (isDisplayFont(input.displayFont)) next.displayFont = input.displayFont;
+    else return { ok: false, error: "Elegí una tipografía de títulos de la lista." };
   }
-  if (input.script !== undefined) {
-    if (typeof input.script !== "boolean") return { ok: false, error: "El acento manuscrito se enciende o se apaga." };
-    next.script = input.script;
+  if (input.announcement !== undefined) {
+    const raw = input.announcement && typeof input.announcement === "object" && !Array.isArray(input.announcement) ? (input.announcement as Record<string, unknown>) : null;
+    if (!raw || (raw.on !== undefined && typeof raw.on !== "boolean") || (raw.text !== undefined && typeof raw.text !== "string")) {
+      return { ok: false, error: "La barra de anuncio se enciende o se apaga y lleva un texto." };
+    }
+    const text = (typeof raw.text === "string" ? raw.text : next.announcement.text).replace(/\s+/g, " ").trim();
+    if (text.length > ANNOUNCEMENT_MAX) return { ok: false, error: `El texto de la barra de anuncio no puede superar los ${ANNOUNCEMENT_MAX} caracteres.` };
+    const on = typeof raw.on === "boolean" ? raw.on : next.announcement.on;
+    if (on && !text) return { ok: false, error: "Escribí el texto de la barra de anuncio o apagala." };
+    next.announcement = { on, text };
+  }
+  if (input.priceMode !== undefined) {
+    if (!isPriceMode(input.priceMode)) return { ok: false, error: "Elegí cómo mostrar los precios: por día, por unidad o a cotizar." };
+    next.priceMode = input.priceMode;
   }
   return { ok: true, appearance: next };
 }
 
-/** Lee lo guardado (JSON de la base) tolerando filas viejas o rotas: nunca lanza. */
+/**
+ * Lee lo guardado (JSON de la base) tolerando filas viejas o rotas: nunca lanza. Las plantillas anteriores se
+ * traducen con `LEGACY_TEMPLATE_MAP` y lo que ya no existe (fondo propio, acento manuscrito) se ignora.
+ */
 export function readAppearance(stored: unknown): Appearance {
-  const parsed = parseAppearance(stored);
-  return parsed.ok ? parsed.appearance : { ...DEFAULT_APPEARANCE };
+  const record = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
+  const template = resolveStoredTheme(record.template);
+  const parsed = parseAppearance({ ...record, ...(template ? { template } : { template: undefined }) });
+  if (parsed.ok) return parsed.appearance;
+  // Una fila con un campo roto no tira todo: se conserva lo válido campo por campo.
+  const partial: Appearance = { ...DEFAULT_APPEARANCE, announcement: { ...DEFAULT_APPEARANCE.announcement } };
+  if (template) partial.template = template;
+  if (isFontId(record.font)) partial.font = record.font;
+  if (isDisplayFont(record.displayFont)) partial.displayFont = record.displayFont;
+  if (isPriceMode(record.priceMode)) partial.priceMode = record.priceMode;
+  const ann = parseAppearance({ announcement: record.announcement });
+  if (ann.ok) partial.announcement = ann.appearance.announcement;
+  return partial;
 }
 
 // ── Color de marca con control de contraste AA ───────────────────────────────
@@ -152,16 +174,12 @@ const fmt = (value: number) => value.toFixed(1).replace(".", ",");
  * versión para modo oscuro/plantilla Oscura no se guarda: `storefrontTheme` la deriva
  * aclarando este mismo color hasta AA sobre la superficie oscura. `null` = sin color (tema neutro).
  */
-export function adjustBrandColor(
-  value: unknown,
-  options: { background?: string | null } = {},
-): { ok: true; result: BrandColorResult | null } | { ok: false; error: string } {
+export function adjustBrandColor(value: unknown): { ok: true; result: BrandColorResult | null } | { ok: false; error: string } {
   if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return { ok: true, result: null };
   const requested = normalizeHex(value);
   if (!requested) return { ok: false, error: "El color de marca tiene que ser un hexadecimal, por ejemplo #0b5cd5." };
 
-  const surfaces = [STORE_SURFACE_LIGHT, ...(options.background ? [options.background] : [])];
-  const worst = (hex: string) => Math.min(...surfaces.map((surface) => contrastRatio(hex, surface)));
+  const worst = (hex: string) => contrastRatio(hex, STORE_SURFACE_LIGHT);
   if (worst(requested) >= STORE_MIN_CONTRAST) {
     return { ok: true, result: { color: requested, requested, adjusted: false, ratio: worst(requested), notice: null } };
   }
@@ -186,73 +204,31 @@ export function adjustBrandColor(
 
 // ── Variables CSS de la apariencia ───────────────────────────────────────────
 
-/** Mezcla `text` hacia `bg` hasta el contraste justo ≥ 4,5 (texto secundario sobre el fondo propio). */
-export function mutedOn(bg: string, text: string = BACKGROUND_TEXT): string {
-  const base = hexToRgb(text);
-  const to = hexToRgb(bg);
-  let best = text;
-  for (let step = 0; step <= 20; step += 1) {
-    const candidate = rgbToHex(mixToward(base, to, (step / 20) * 0.6));
-    if (contrastRatio(candidate, bg) >= STORE_MIN_CONTRAST) best = candidate;
-    else break;
-  }
-  return best;
-}
-
 export type AppearanceView = {
   template: TemplateId;
-  /** Hoja de Google Fonts a enlazar (null = tipografía del sistema). */
-  fontHref: string | null;
-  /** Variables CSS inline del contenedor. */
+  /** Hoja de Google Fonts a enlazar. */
+  fontHref: string;
+  /** Variables CSS inline del contenedor (todas con los nombres de la especificación: `--color-*`, `--font-*`…). */
   vars: Record<string, string>;
-  /** Atributos `data-*` del contenedor. */
-  attrs: {
-    "data-cp-template": TemplateId;
-    "data-cp-bg": "custom" | "default";
-    "data-cp-script": "on" | "off";
-    /** Mismo id que `data-cp-template`: engancha el CSS de las plantillas de diseño. */
-    "data-store-template": TemplateId;
-    /** Solo las plantillas de diseño fijan su esquema (claro u oscuro) sin importar el del sistema. */
-    "data-store-scheme"?: "light" | "dark";
-  };
+  /** Atributos `data-*` del contenedor: tema, esquema y variantes de layout. */
+  attrs: Record<string, string>;
+  /** Barra de anuncio: solo si está encendida y tiene texto. */
+  announcement: string | null;
+  priceMode: PriceMode;
 };
 
-/** Todo lo que necesita una superficie para vestirse con la apariencia. */
-export function appearanceView(appearance: Appearance): AppearanceView {
-  const font = fontOf(appearance.font);
-  const vars: Record<string, string> = { "--cp-font-body": font.family, "--cp-font-head": font.family };
-  if (appearance.template === "elegante" && font.id === "sistema") vars["--cp-font-head"] = '"Playfair Display", Georgia, "Times New Roman", serif';
-  const editorial = appearance.template === "editorial";
-  // Editorial: los títulos van siempre en serif (la elegida, si lo es; si no, Cormorant Garamond).
-  const headFont = editorial && !SERIF_FONTS.includes(font.id) ? EDITORIAL_HEAD : font;
-  if (editorial) vars["--cp-font-head"] = headFont.family;
-  const design = isDesignTemplate(appearance.template) ? appearance.template : null;
-  if (design) {
-    // Plantilla de diseño: sus tokens mandan; una tipografía elegida (≠ del sistema) reemplaza solo el cuerpo.
-    Object.assign(vars, templateVars(design));
-    if (font.google) vars["--cp-font-body"] = font.family;
-  }
-  const script = editorial && appearance.script;
-  if (script) vars["--cp-font-script"] = SCRIPT_FONT.family;
-  const ownBackground = appearance.template !== "oscura" && !design;
-  if (appearance.background && ownBackground) {
-    vars["--cp-bg-custom"] = appearance.background;
-    vars["--cp-text-custom"] = BACKGROUND_TEXT;
-    vars["--cp-muted-custom"] = mutedOn(appearance.background);
-  }
+/**
+ * Todo lo que necesita una superficie para vestirse con la apariencia. `brand` es el color de marca de la empresa
+ * (`storefrontAccent`): rige como color primario solo si da contraste AA con el tema (ver `themePrimary`).
+ */
+export function appearanceView(appearance: Appearance, brand: string | null = null): AppearanceView {
   return {
     template: appearance.template,
-    fontHref: design
-      ? templateFontHref(design, font.google)
-      : googleHref([font.google, editorial ? headFont.google : null, script ? SCRIPT_FONT.google : null]),
-    vars,
-    attrs: {
-      "data-cp-template": appearance.template,
-      "data-cp-bg": appearance.background && ownBackground ? "custom" : "default",
-      "data-cp-script": script ? "on" : "off",
-      "data-store-template": appearance.template,
-      ...(design ? { "data-store-scheme": TEMPLATE_TOKENS[design].scheme } : {}),
-    },
+    fontHref: themeFontHref(appearance.template, appearance.displayFont),
+    vars: themeVars(appearance.template, { brand, displayFont: appearance.displayFont }),
+    attrs: themeAttrs(appearance.template),
+    announcement: appearance.announcement.on && appearance.announcement.text ? appearance.announcement.text : null,
+    priceMode: appearance.priceMode,
   };
 }
 

@@ -5,7 +5,7 @@ import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
 import { auditChanges, recordAudit } from "./audit";
 import { db } from "./db";
 import { jsonError } from "./http";
-import { saveRentalSettings } from "./rental-settings";
+import { STOREFRONT_TAGLINE_MAX, saveRentalSettings } from "./rental-settings";
 import type { AdminContext } from "./tenancy";
 
 /**
@@ -102,24 +102,37 @@ export async function saveOrgAppearance(context: AdminContext, body: unknown): P
   const { organizationId, organization } = context;
   const record = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   const row = await db.organization.findUnique({ where: { id: organizationId }, select: { appearance: true } });
-  const settings = await db.organizationRentalSettings.findUnique({ where: { organizationId }, select: { storefrontAccent: true } });
+  const settings = await db.organizationRentalSettings.findUnique({ where: { organizationId }, select: { storefrontAccent: true, storefrontTagline: true } });
   const currentAppearance = readAppearance(row?.appearance);
   const parsed = parseAppearance(record, currentAppearance);
   if (!parsed.ok) return jsonError(parsed.error, 400);
 
   const requestedColor = record && "brandColor" in record ? record.brandColor : settings?.storefrontAccent ?? null;
-  const color = adjustBrandColor(requestedColor, { background: parsed.appearance.background });
+  const color = adjustBrandColor(requestedColor);
   if (!color.ok) return jsonError(color.error, 400);
   const brandColor = color.result?.color ?? null;
 
-  const changes = auditChanges(
-    { template: currentAppearance.template, font: currentAppearance.font, background: currentAppearance.background, script: currentAppearance.script, brandColor: settings?.storefrontAccent ?? null },
-    { ...parsed.appearance, brandColor },
-    ["template", "font", "background", "script", "brandColor"],
-  );
+  // La frase de la tienda (título del héroe) se edita acá junto con el resto; se valida con la misma regla de Tienda web.
+  let tagline = settings?.storefrontTagline ?? null;
+  if (record && "tagline" in record) {
+    if (record.tagline !== null && typeof record.tagline !== "string") return jsonError("La frase de la tienda tiene que ser un texto.", 400);
+    const phrase = (typeof record.tagline === "string" ? record.tagline : "").replace(/\s+/g, " ").trim();
+    if (phrase.length > STOREFRONT_TAGLINE_MAX) return jsonError(`La frase de la tienda no puede superar los ${STOREFRONT_TAGLINE_MAX} caracteres.`, 400);
+    tagline = phrase || null;
+  }
+
+  const flat = (a: Appearance, accent: string | null, phrase: string | null) => ({
+    template: a.template, font: a.font, displayFont: a.displayFont, anuncio: JSON.stringify(a.announcement), priceMode: a.priceMode, brandColor: accent, tagline: phrase,
+  });
+  const changes = auditChanges(flat(currentAppearance, settings?.storefrontAccent ?? null, settings?.storefrontTagline ?? null), flat(parsed.appearance, brandColor, tagline), [
+    "template", "font", "displayFont", "anuncio", "priceMode", "brandColor", "tagline",
+  ]);
   if (changes) {
     await db.organization.update({ where: { id: organizationId }, data: { appearance: parsed.appearance as unknown as Prisma.InputJsonValue } });
-    if (brandColor !== (settings?.storefrontAccent ?? null)) await saveRentalSettings(organizationId, { storefrontAccent: brandColor });
+    const settingsPatch: Record<string, unknown> = {};
+    if (brandColor !== (settings?.storefrontAccent ?? null)) settingsPatch.storefrontAccent = brandColor;
+    if (tagline !== (settings?.storefrontTagline ?? null)) settingsPatch.storefrontTagline = tagline;
+    if (Object.keys(settingsPatch).length > 0) await saveRentalSettings(organizationId, settingsPatch as Parameters<typeof saveRentalSettings>[1]);
     await recordAudit({
       context,
       action: "update",
@@ -132,6 +145,7 @@ export async function saveOrgAppearance(context: AdminContext, body: unknown): P
   return Response.json({
     appearance: parsed.appearance,
     brandColor,
+    tagline,
     brandAdjusted: color.result?.adjusted ?? false,
     brandNotice: color.result?.notice ?? null,
     unchanged: !changes,

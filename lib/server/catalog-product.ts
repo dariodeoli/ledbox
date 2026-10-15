@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { inventoryImageUrl } from "./inventory-images";
-import { loadPublicCatalogItems, type PublicCatalogContext, type PublicCatalogItem } from "./catalog-public";
+import { loadPublicCatalogItems, type PublicCatalogContext, type PublicCatalogItem, type PublicRange } from "./catalog-public";
 
 /**
  * Ficha de un producto de la tienda (`/tienda/<slug>/p/<id o código>`): solo lo que la empresa publicó en ESE
@@ -44,10 +44,11 @@ export function pickSimilar(item: Pick<PublicCatalogItem, "id" | "category">, al
   return picked.slice(0, RELATED_MAX);
 }
 
-export async function loadProductDetail(context: PublicCatalogContext, code: string): Promise<ProductDetail | null> {
+/** Con `range`, el producto trae la pista de disponibilidad indicativa para ese período (la ficha muestra «Disponible para tu fecha»). */
+export async function loadProductDetail(context: PublicCatalogContext, code: string, range: PublicRange | null = null): Promise<ProductDetail | null> {
   const wanted = code.trim();
   if (!wanted || wanted.length > 80) return null;
-  const all = await loadPublicCatalogItems(context, null);
+  const all = await loadPublicCatalogItems(context, range);
   const item = all.find((entry) => entry.id === wanted) ?? all.find((entry) => entry.sku && entry.sku.toLowerCase() === wanted.toLowerCase());
   if (!item) return null;
   const organizationId = context.organization.id;

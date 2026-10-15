@@ -42,3 +42,12 @@ cantidades, quitar, «ya no lo tengo» o reemplazar con `findSubstitutes`) y **a
 `convertQuoteRequest` (ignora líneas quitadas) más `holdQuoteRequestStock`. Cada propuesta se verifica contra la
 disponibilidad real del período (`availabilityForRange`, con tiempos y retenciones) y se vuelve a verificar cuando
 el cliente la aprueba; la retención real sigue siendo la de la conversión, bajo el candado del motor.
+
+## Tienda: sistema de temas (v2.1.127)
+
+Especificación del dueño: `docs/TIENDA-PLANTILLAS.md` y `docs/TIENDA-BOUTIQUE.md`. Cuatro plantillas (Lienzo, Boutique, Noir y Studio); las anteriores se leen con un alias (`LEGACY_TEMPLATE_MAP`) y las migra `202610300001_tienda_temas`.
+
+- **Una sola fuente de verdad.** Cada plantilla es un archivo de tokens en `lib/storefront-themes/<id>.ts` (colores, tipografías, radios, sombras, espacios, proporciones de imagen y variantes de layout) y se anota en `lib/storefront-themes/index.ts`. `StoreChrome` pone los tokens inline (`--color-*`, `--font-*`, `--radius-*`, `--shadow-*`, `--space-section`, `--container-max`, `--image-ratio-*`) y las variantes como `data-*`. El CSS (`app/tienda.css`) y los componentes (`components/catalog-public`) no llevan colores ni tamaños de letra propios: lo verifica `tests/tienda-plantillas.test.ts`.
+- **Agregar una plantilla** = un archivo de tokens + una línea en el registro (+ una regla `[data-…]` en `app/tienda.css` solo si trae una variante de layout nueva). Los tests de contraste AA, de rosa prohibido, de tokens mínimos y de hardcodes recorren TODO el registro; el selector de Apariencia las agrupa por `rubro` con una miniatura real.
+- **Personalizable por empresa** (`Organization.appearance` + `OrganizationRentalSettings`): color primario (solo si da AA con el tema), frase de la tienda (título de la portada), tipografía de títulos (lista curada), barra de anuncio, modo de precio (`day` · `unit` «c/u» con cantidades de a 10 · `quote`) y portada. El logo se carga en Mi empresa.
+- **Ganchos pendientes** (sin datos todavía): fotos de ambientación más allá de la portada, colecciones con nombre, filtros por estilo/color, reordenar secciones del inicio, badges «Nuevo» y «Popular».
