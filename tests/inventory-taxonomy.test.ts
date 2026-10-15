@@ -236,5 +236,10 @@ test("la migración es aditiva e idempotente: IF NOT EXISTS, guardas duplicate_o
   assert.match(sql, /"conditionScore" >= 1 AND "conditionScore" <= 10/);
   assert.match(sql, /ON CONFLICT DO NOTHING/);
   assert.match(sql, /"categoryId" IS NULL/, "el backfill solo toca lo que no está ligado");
-  assert.ok(!/UPDATE "InventoryItem"[^;]*SET "category"/.test(sql), "el texto `category` no se toca");
+  // El texto `category` solo se reescribe al espejo «Padre › Hija», y únicamente donde difiere (idempotente).
+  const textUpdates = [...sql.matchAll(/UPDATE "InventoryItem"[^;]*SET "category"[^;]*;/g)].map((match) => match[0]);
+  assert.equal(textUpdates.length, 1, "una sola normalización del texto");
+  assert.match(textUpdates[0]!, /' › '/);
+  assert.match(textUpdates[0]!, /"category" IS DISTINCT FROM/, "solo toca las filas que difieren");
+  assert.match(textUpdates[0]!, /"categoryId" = c\."id"/, "solo productos ya ligados a una categoría");
 });
