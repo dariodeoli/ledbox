@@ -113,7 +113,6 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
     links: [
       { href: "/clientes/mensajes", label: "Mensajes reutilizables" },
       { href: "/presupuestos", label: "Presupuestos del cliente" },
-      { href: "/eventos", label: "Eventos del cliente" },
       { href: "/finanzas", label: "Cobros y saldos" },
     ],
   },
