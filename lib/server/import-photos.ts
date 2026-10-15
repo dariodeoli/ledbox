@@ -30,7 +30,7 @@ export type PhotoZip = { photos: Map<string, Uint8Array>; problems: ImportProble
 
 /**
  * Lee `fotos.zip` sin escribir nada a disco. Topes: 60 MB comprimido, 400
- * archivos, 12 MB por foto y 320 MB descomprimido (según el tamaño declarado
+ * archivos, 12 MB por foto y 150 MB descomprimido (según el tamaño declarado
  * del encabezado, que fflate respeta como tope de salida). Las entradas que no
  * son imagen real (bytes mágicos) se ignoran con un aviso.
  */
@@ -90,7 +90,7 @@ export async function preparePhoto(bytes: Uint8Array): Promise<PreparedPhoto | n
   try {
     const { default: sharp } = await import("sharp");
     for (const quality of QUALITIES) {
-      const out = await sharp(bytes, { limitInputPixels: 80_000_000, failOn: "error" })
+      const out = await sharp(bytes, { limitInputPixels: 40_000_000, failOn: "error" })
         .rotate()
         .resize({ width: PHOTO_MAX_SIDE, height: PHOTO_MAX_SIDE, fit: "inside", withoutEnlargement: true })
         .webp({ quality })

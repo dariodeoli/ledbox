@@ -30,7 +30,7 @@ export const CATALOG_LIMITS = {
   /** Una foto cruda dentro del ZIP. */
   photoBytes: 12 * 1024 * 1024,
   /** Total descomprimido del ZIP (defensa contra bombas de compresión). */
-  zipInflatedBytes: 320 * 1024 * 1024,
+  zipInflatedBytes: 150 * 1024 * 1024,
   /** Productos por importación. */
   products: 1000,
   /** Componentes por juego. */
