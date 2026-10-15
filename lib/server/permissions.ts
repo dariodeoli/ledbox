@@ -73,6 +73,12 @@ const FINANCE_CAPABILITIES: readonly AdminCapability[] = [
 const FULL_CAPABILITIES: readonly AdminCapability[] = ADMIN_CAPABILITIES;
 const OWNER_CAPABILITIES: readonly AdminCapability[] = [...ADMIN_CAPABILITIES, "api-keys.manage"];
 
+/**
+ * «Aprobar igual» un presupuesto al que le falta stock (alquileres P1-3): solo OWNER y ADMIN.
+ * FINANCE y OPERATIONS ven el bloqueo pero no pueden saltarlo.
+ */
+export const canApproveWithoutStock = (role: AdminRole): boolean => role === "OWNER" || role === "ADMIN";
+
 export const ROLE_CAPABILITIES: Record<AdminRole, readonly AdminCapability[]> = {
   OWNER: OWNER_CAPABILITIES,
   ADMIN: FULL_CAPABILITIES,

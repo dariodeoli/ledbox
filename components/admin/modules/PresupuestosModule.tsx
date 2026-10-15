@@ -855,6 +855,9 @@ export function PresupuestosModule() {
   const [note, setNote] = useState("");
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState("");
+  /** Aviso de bloqueo por falta de stock al aprobar (alquileres P1-3); «Aprobar igual» solo OWNER/ADMIN. */
+  const [stockWarning, setStockWarning] = useState("");
+  const forceApprovalRef = useRef(false);
 
   // Autogestión (issue #14): solicitudes, plan de pagos y datos de pago.
   const [resolution, setResolution] = useState<{ request: AdminBudgetRequestRow; decision: RequestDecision } | null>(null);
@@ -1289,6 +1292,7 @@ export function PresupuestosModule() {
 
   function openApproval(budget: AdminBudgetRow, decision: ApprovalDecision) {
     setDialogError("");
+    setStockWarning("");
     setNote("");
     setApproval({ budget, decision });
   }
@@ -1496,6 +1500,9 @@ export function PresupuestosModule() {
   }
 
   async function submitApproval() {
+    // «Aprobar igual» (OWNER/ADMIN) marca la ref y vuelve a pasar por el mismo camino y la misma guarda de la nota.
+    const force = forceApprovalRef.current;
+    forceApprovalRef.current = false;
     if (!approval) return;
     const noteError = budgetApprovalNoteError(approval.decision, note);
     if (noteError) {
@@ -1508,12 +1515,19 @@ export function PresupuestosModule() {
       budgetId: approval.budget.id,
       decision: approval.decision,
       note: note.trim() || undefined,
+      ...(force ? { force: true } : {}),
     });
     setDialogBusy(false);
     if (!result.ok) {
+      if (result.code === "stock_insufficient") {
+        setStockWarning(result.error);
+        return;
+      }
+      setStockWarning("");
       setDialogError(result.error);
       return;
     }
+    setStockWarning("");
     const reservations = result.data.reservations ?? null;
     if (approval.decision === "approve" && reservations && reservations.outcomes.length > 0) {
       setReservationReport({ title: approval.budget.title, reservation: reservations });
@@ -2154,13 +2168,21 @@ export function PresupuestosModule() {
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={dialogBusy}>
                 Cancelar
               </AdminButton>
-              <AdminButton variant="primary" icon="check" type="button" busy={dialogBusy} busyLabel="Registrando…" disabled={Boolean(budgetApprovalNoteError(approval.decision, note))} onClick={() => void submitApproval()}>
-                {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
-              </AdminButton>
+              {stockWarning && (role === "OWNER" || role === "ADMIN") ? (
+                <AdminButton icon="check" type="button" busy={dialogBusy} busyLabel="Registrando…" onClick={() => { forceApprovalRef.current = true; void submitApproval(); }}>
+                  Aprobar igual
+                </AdminButton>
+              ) : null}
+              {stockWarning ? null : (
+                <AdminButton variant="primary" icon="check" type="button" busy={dialogBusy} busyLabel="Registrando…" disabled={Boolean(budgetApprovalNoteError(approval.decision, note))} onClick={() => void submitApproval()}>
+                  {approval.decision === "approve" ? "Registrar aprobación" : "Registrar pedido"}
+                </AdminButton>
+              )}
             </>
           )}
         >
           <AdminDialogSection title={approval.decision === "approve" ? "Nota" : "Cambios pedidos"}>
+          {stockWarning ? <AdminNote tone="warn">{stockWarning}</AdminNote> : null}
           <TextAreaField
             label={approval.decision === "approve" ? "Nota (opcional)" : "¿Qué cambios se piden?"}
             wide

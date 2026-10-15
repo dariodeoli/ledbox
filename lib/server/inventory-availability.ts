@@ -74,6 +74,9 @@ export type AssignmentRecord = {
   event: EventRangeRef;
   /** Devolución real: si fue después del fin del rango, la limpieza cuenta desde ahí. */
   checkedInAt?: Date | null;
+  /** Salió y todavía no volvió: si el fin planeado ya pasó, sigue afuera hasta ahora. */
+  checkedOut?: boolean;
+  checkedIn?: boolean;
 };
 
 /** Ítem mínimo para calcular disponibilidad (no hace falta la fila completa). */
@@ -324,12 +327,21 @@ export async function loadAssignments(
  * la usan la disponibilidad y el reporte de ocupación.
  */
 export function assignmentBlockedRange(
-  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event" | "checkedInAt">,
+  row: Pick<AssignmentRecord, "startsAt" | "endsAt" | "event" | "checkedInAt" | "checkedOut" | "checkedIn">,
   buffers: RentalBuffers,
+  now: Date = new Date(),
 ): { start: Date | null; end: Date | null } {
   const { start, end } = assignmentRange(row);
-  const realEnd = row.checkedInAt && end && row.checkedInAt.getTime() > end.getTime() ? row.checkedInAt : end;
+  let realEnd = row.checkedInAt && end && row.checkedInAt.getTime() > end.getTime() ? row.checkedInAt : end;
+  // Salió, no volvió y el fin planeado ya pasó: sigue afuera. El fin efectivo es
+  // max(fin, ahora) + colchón, así un equipo atrasado no figura libre ni se ofrece a otro evento.
+  if (isOutstanding(row) && end && end.getTime() < now.getTime()) realEnd = now;
   return extendedRentalRange(start, realEnd, buffers);
+}
+
+/** Salió y no volvió (misma condición que lo mantiene comprometido en `committedAssignmentWhere`). */
+export function isOutstanding(row: { checkedOut?: boolean; checkedIn?: boolean; checkedInAt?: Date | null }): boolean {
+  return Boolean(row.checkedOut) && !row.checkedIn && !row.checkedInAt;
 }
 
 /**
@@ -341,12 +353,13 @@ export function buildAvailability(
   rows: ReadonlyArray<AssignmentRecord>,
   startsAt: Date,
   endsAt: Date,
+  now: Date = new Date(),
 ): RangeAvailability {
   const buffers = item.buffers ?? NO_RENTAL_BUFFERS;
   // Se extienden los dos períodos (el pedido y el de cada asignación): entre dos
   // usos tiene que entrar la limpieza del primero más la preparación del segundo.
   const requested = extendedRentalRange(startsAt, endsAt, buffers);
-  const blockedRange = (row: AssignmentRecord) => assignmentBlockedRange(row, buffers);
+  const blockedRange = (row: AssignmentRecord) => assignmentBlockedRange(row, buffers, now);
   const conflicts = rows
     .filter((row) => {
       const { start, end } = blockedRange(row);
@@ -956,7 +969,15 @@ export type BudgetReservation = {
   /** Ítems vinculados con reserva incompleta o imposible. */
   conflicts: number;
   failed: boolean;
+  /**
+   * Solo con `strict`: faltaba stock, se deshizo todo y NO se reservó nada. Los
+   * `outcomes` son únicamente los ítems que no alcanzan.
+   */
+  blocked?: boolean;
 };
+
+/** Se lanza dentro de la transacción de una reserva estricta para deshacerla entera. */
+class StrictStockShortage extends Error {}
 
 const EMPTY_RESERVATION: BudgetReservation = {
   eventId: null,
@@ -1051,6 +1072,13 @@ export async function reserveBudgetInventory(options: {
   organizationId: string;
   budgetId: string;
   context: AuditContext;
+  /**
+   * Todo o nada: si algún ítem no alcanza (o está bloqueado), la transacción se
+   * deshace y devuelve `blocked: true` sin reservar nada. Es la verificación previa
+   * a aprobar (bajo el mismo lock de ítems que el resto de los compromisos). Sin
+   * evento o sin rango no hay nada que verificar y no bloquea.
+   */
+  strict?: boolean;
 }): Promise<BudgetReservation> {
   try {
     const budget = await db.budget.findFirst({
@@ -1113,6 +1141,7 @@ export async function reserveBudgetInventory(options: {
     };
     const commits = new Map<string, GroupCommit>();
     let atomicPhaseFailed = false;
+    let strictBlocked = false;
     if (event && range) {
       try {
       await db.$transaction(
@@ -1268,16 +1297,76 @@ export async function reserveBudgetInventory(options: {
               assignment,
             });
           }
+          if (options.strict) {
+            const short = groups.some((group) => {
+              const commit = commits.get(group.inventory.id);
+              if (!commit) return true; // bloqueado, retirado o inexistente
+              if (commit.movement) return false; // ya tiene salida o devolución: no se toca
+              return commit.reserved < group.quantity;
+            });
+            // El rollback deshace también lo que se escribió en las filas que sí alcanzaban.
+            if (short) throw new StrictStockShortage();
+          }
         },
         { timeout: Math.min(60_000, 15_000 + groups.length * 100) },
       );
       } catch (error) {
+        if (error instanceof StrictStockShortage) {
+          strictBlocked = true;
+        } else {
         // La aprobación nunca se rompe: sin la fase atómica no se reservó nada
         // (la transacción hizo rollback) y todo queda pendiente de reservar.
         atomicPhaseFailed = true;
         commits.clear();
         console.error("[reserva] Falló la fase atómica de la reserva; queda pendiente:", error instanceof Error ? error.message : error);
+        }
       }
+    }
+
+    if (strictBlocked && event && range) {
+      const shortOutcomes: ReservationOutcome[] = [];
+      for (const group of groups) {
+        const commit = commits.get(group.inventory.id);
+        if (commit?.movement || (commit && commit.reserved >= group.quantity)) continue;
+        const available = commit?.availability?.available ?? 0;
+        shortOutcomes.push({
+          itemId: group.itemIds[0],
+          itemName: group.names.join(" · "),
+          quantity: group.quantity,
+          inventoryId: group.inventory.id,
+          inventoryName: group.inventory.name,
+          inventorySku: group.inventory.sku,
+          status: commit ? "conflict" : "blocked",
+          reserved: 0,
+          available,
+          total: group.inventory._count.components > 0 ? 0 : group.inventory.quantity,
+          conflicts: commit?.availability?.conflicts ?? [],
+          substitutes: await findSubstitutes({
+            organizationId: options.organizationId,
+            item: { id: group.inventory.id, category: group.inventory.category, status: group.inventory.status },
+            startsAt: range.startsAt,
+            endsAt: range.endsAt,
+          }),
+          reason: commit
+            ? `Se piden ${group.quantity} y ${available > 0 ? `solo hay ${available} libres` : "no hay unidades libres"} en ${rangeLabel(range.startsAt, range.endsAt)}${
+                commit.availability && commit.availability.conflicts.length > 0
+                  ? ` · ocupado por ${commit.availability.conflicts.map((conflict) => `${conflict.eventName} (${conflict.quantity})`).join(", ")}`
+                  : ""
+              }.`
+            : `«${group.inventory.name}» no está disponible (mantenimiento, retirado o ya no existe).`,
+        });
+      }
+      return {
+        eventId: event.id,
+        eventName: event.name,
+        range,
+        outcomes: shortOutcomes,
+        requested,
+        reserved: 0,
+        conflicts: shortOutcomes.length,
+        failed: false,
+        blocked: true,
+      };
     }
 
     for (const group of groups) {

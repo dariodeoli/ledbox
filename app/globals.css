@@ -1934,6 +1934,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-module-context-action { margin-left: auto; flex: 0 0 auto; }
 .admin-filter-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; color: var(--a-muted); font-size: 12px; }
 .admin-filter-note strong { color: var(--a-text-strong); }
+/* Devoluciones vencidas y retenciones por vencer (alquileres P1-3). */
+.admin-overdue { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); min-width: 0; }
+.admin-overdue-block { display: grid; gap: 6px; min-width: 0; }
+.admin-overdue-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--a-text-strong); }
+.admin-overdue-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--a-text); }
+.admin-overdue-list li { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.admin-overdue-list a { color: var(--a-accent); text-decoration: underline; }
 /* Detalle del presupuesto (panel lateral): secciones apiladas, una sola vista. */
 .admin-bd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .admin-bd-section { display: grid; gap: 8px; align-content: start; margin-top: 12px; min-width: 0; }

@@ -132,6 +132,12 @@ export type AutoEventResult = {
  * en la auditoría y el panel sigue mostrando «Crear evento» como respaldo.
  * Nunca lanza. Idempotente. `actor` es quien aprobó (portal: «Portal del cliente»
  * vía `portalAuditContext`; panel: el usuario). Si ok, reserva el inventario.
+ *
+ * Stock (P1-3): esta función corre DESPUÉS de aprobar, así que no decide si se aprueba. La
+ * verificación previa con lock es `checkStockBeforeApproval` (portal, comparativas y panel);
+ * acá la reserva es la de siempre (idempotente: lo ya reservado por esa verificación queda
+ * «sin cambios») y un faltante se audita, nunca se oculta. Un evento sin rango completo no
+ * reserva nada, así que tampoco puede sobrevender.
  */
 export async function ensureEventForApprovedBudget(options: {
   organizationId: string;

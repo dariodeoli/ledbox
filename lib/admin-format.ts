@@ -1345,6 +1345,8 @@ const NOTIFICATION_KIND: Record<string, string> = {
   lead: "Lead",
   portal_request: "Solicitud del portal",
   payment_proof: "Comprobante de pago",
+  return_overdue: "Devolución vencida",
+  hold_expiring: "Retención por vencer",
 };
 
 export const notificationLevelLabel = (value: string | null | undefined) => label(NOTIFICATION_LEVEL, value);

@@ -63,7 +63,7 @@ export function percentOf(part: number, whole: number, cap = false): number | nu
  * abierto se recorta al período, igual que el motor lo trata como «abierto».
  */
 export function assignmentUnitDays(
-  row: Pick<AssignmentRecord, "quantity" | "startsAt" | "endsAt" | "event" | "checkedInAt">,
+  row: Pick<AssignmentRecord, "quantity" | "startsAt" | "endsAt" | "event" | "checkedInAt" | "checkedOut" | "checkedIn">,
   buffers: RentalBuffers,
   period: { start: Date; end: Date },
 ): number {
@@ -86,7 +86,7 @@ export type OccupancyItem = {
 /** Ocupación de un producto en el período: días-unidad comprometidos / disponibles. */
 export function occupancyRow(
   item: OccupancyItem,
-  assignments: ReadonlyArray<Pick<AssignmentRecord, "quantity" | "startsAt" | "endsAt" | "event" | "checkedInAt">>,
+  assignments: ReadonlyArray<Pick<AssignmentRecord, "quantity" | "startsAt" | "endsAt" | "event" | "checkedInAt" | "checkedOut" | "checkedIn">>,
   period: { start: Date; end: Date; days: number },
 ): AdminRentalOccupancyRow | null {
   const usable = Math.max(0, item.quantity - item.maintenance);
@@ -206,7 +206,7 @@ async function loadOccupancyRows(
     },
     take: MAX_PERIOD_ASSIGNMENTS + 1,
     orderBy: [{ inventoryId: "asc" }, { id: "asc" }],
-    select: { inventoryId: true, quantity: true, startsAt: true, endsAt: true, checkedInAt: true, event: { select: EVENT_RANGE_SELECT } },
+    select: { inventoryId: true, quantity: true, startsAt: true, endsAt: true, checkedInAt: true, checkedOut: true, checkedIn: true, event: { select: EVENT_RANGE_SELECT } },
   });
   // Corte determinista: si hay más asignaciones que el tope, el reporte lo avisa en vez de subestimar en silencio.
   const truncated = assignments.length > MAX_PERIOD_ASSIGNMENTS;

@@ -8,6 +8,7 @@ import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { reserveBudgetInventory } from "@/lib/server/inventory-availability";
 import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock } from "@/lib/server/approval-stock";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 export const runtime = "nodejs";
@@ -23,6 +24,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (body?.consent !== true || name.length < 3 || name.length > 120 || !group.budgets.some((q) => q.id === body?.budgetId)) return jsonError("Elegí una alternativa e indicá tu nombre y consentimiento.", 400);
   const evidence = approvalEvidence(request);
+  // Stock antes de aprobar la alternativa elegida (mismo lock que el resto del motor): si falta,
+  // no se aprueba ni se reserva y queda en revisión; la comparación sigue abierta para elegir otra.
+  const chosen = group.budgets.find((q) => q.id === body.budgetId);
+  if (chosen && !chosen.approvedAt) {
+    const actor = portalAuditContext(group.organizationId, name);
+    const gate = await checkStockBeforeApproval({ organizationId: group.organizationId, budgetId: chosen.id, context: actor });
+    if (!gate.ok) {
+      await sendBudgetToReviewForStock({ organizationId: group.organizationId, budgetId: chosen.id, title: chosen.title, actor, lines: gate.lines });
+      return jsonError(PORTAL_STOCK_MESSAGE, 409, "stock_insufficient");
+    }
+  }
   try {
     const updated = await db.$transaction(async (tx) => {
       const quote = await guardQuoteApproval(tx, body.budgetId, group.organizationId, undefined, code!);
