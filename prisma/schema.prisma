@@ -136,6 +136,15 @@ model Organization {
   /// establecimiento, direccion }`. Los editan OWNER/ADMIN y son el encabezado
   /// del comprobante imprimible del registro fiscal interno (no es SIFEN).
   fiscalDetails     Json?
+  /// Perfil público de la empresa (lib/org-profile.ts): contacto, ubicación con link de Maps,
+  /// horario de atención, horarios por defecto de entrega/retiro/devolución, medios de pago
+  /// aceptados y condiciones comerciales. Todo opcional; lo que falta no se muestra ni se inventa.
+  profile           Json?
+  /// Apariencia de las superficies del cliente (lib/appearance.ts): plantilla cerrada, tipografía
+  /// de una lista cerrada y fondo. El color de marca vive en `OrganizationRentalSettings.storefrontAccent`.
+  appearance        Json?
+  covers            OrganizationCover[]
+  catalogAccessRequests CatalogAccessRequest[]
   memberships       OrganizationMembership[]
   adminMemberships  AdminMembership[]
   adminSessions     AdminSession[]
@@ -453,6 +462,25 @@ model OrganizationLogo {
   @@unique([organizationId, variant])
 }
 
+/// Portada de la tienda por dispositivo: `desktop` (1920x600) y `mobile` (1080x1350). El binario
+/// ya viene comprimido y redimensionado por sharp; se sirve público desde
+/// `/api/catalog/[orgSlug]/cover/[kind]` solo si la tienda está encendida.
+model OrganizationCover {
+  id             String       @id
+  organizationId String
+  kind           String
+  mime           String
+  size           Int
+  width          Int?
+  height         Int?
+  data           Bytes
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind])
+}
+
 model Lead {
   id            String     @id
   name          String
@@ -529,6 +557,14 @@ model QuoteRequest {
   priceList      String        @default("RETAIL")
   /// Presupuesto en que se convirtió (único: convertir dos veces no es posible).
   budget         Budget?
+  /// Rechazo con motivo (lo ve el cliente en su seguimiento y por correo). `declinedBy`: COMPANY o CLIENT.
+  declineReason  String?
+  declinedAt     DateTime?
+  declinedBy     String?
+  /// Propuesta de la empresa (PROPOSED): cuándo se envió, su nota y cuándo la aprobó el cliente.
+  proposedAt     DateTime?
+  proposalNote   String?
+  proposalApprovedAt DateTime?
 
   @@index([leadId, createdAt])
   @@index([organizationId, createdAt])
@@ -550,6 +586,12 @@ model QuoteItem {
   inventoryId    String?
   inventory      InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
   quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  /// Qué hizo la empresa con la línea al modificar el pedido: KEEP, CHANGED (cantidad),
+  /// REMOVED, UNAVAILABLE («ya no lo tengo») o SUBSTITUTED (otro producto).
+  state          String       @default("KEEP")
+  /// Lo que pidió el cliente originalmente (nombre y cantidad), para mostrar el cambio.
+  originalName     String?
+  originalQuantity Int?
 
   @@index([quoteRequestId])
   @@index([inventoryId])
@@ -1993,6 +2035,9 @@ model OrganizationRentalSettings {
   storefrontTagline    String?
   storefrontAccent     String?
   storefrontEmail      String?
+  /// Quién entra al catálogo: OPEN (cualquiera), REQUEST (pide acceso y la empresa lo aprueba)
+  /// o PRIVATE (solo con el link que da la empresa). Validado en el código.
+  catalogAccessMode    String       @default("OPEN")
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -2008,6 +2053,8 @@ model CatalogAccessToken {
   organizationId String
   clientId       String
   tokenHash      String       @unique
+  /// Lista de precios que abre el link: WHOLESALE (los de hoy) o RETAIL (acceso de cliente final).
+  priceList      String       @default("WHOLESALE")
   createdAt      DateTime     @default(now())
   revokedAt      DateTime?
   lastUsedAt     DateTime?
@@ -2015,6 +2062,30 @@ model CatalogAccessToken {
   client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, clientId, revokedAt])
+}
+
+/// Solicitud de acceso al catálogo (modo REQUEST): la persona pide entrar, la empresa aprueba o
+/// rechaza desde el panel. Al aprobar se genera su link (`CatalogAccessToken`) y se le manda por correo.
+model CatalogAccessRequest {
+  id              String       @id
+  organizationId  String
+  name            String
+  company         String?
+  phone           String
+  email           String
+  /// RETAIL (cliente final) o WHOLESALE (mayorista).
+  kind            String       @default("RETAIL")
+  /// PENDING, APPROVED o REJECTED (validado en el código).
+  status          String       @default("PENDING")
+  rejectionReason String?
+  clientId        String?
+  decidedAt       DateTime?
+  decidedByName   String?
+  createdAt       DateTime     @default(now())
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, email])
 }
 
 model EventInventory {
@@ -2180,6 +2251,8 @@ enum MailCategory {
   alert
   /// Solicitud de firma al cliente (issue #79): link, código y vencimiento.
   signature
+  /// Catálogo de la empresa: acceso aprobado, pedido rechazado o propuesta modificada.
+  catalog
 }
 
 /**
