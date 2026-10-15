@@ -6,6 +6,7 @@ import { AdminNote } from "../AdminUI";
 import { SANDBOX_UNAVAILABLE } from "@/lib/mail-preview";
 import { AjustesTabs, type AdminAjustesSection } from "./AjustesTabs";
 import { AlquileresSettings } from "./AlquileresSettings";
+import { InventarioSettings } from "./InventarioSettings";
 import { CorreoModule } from "./CorreoModule";
 import { EliminadosModule } from "./EliminadosModule";
 import { EmpresaModule } from "./EmpresaModule";
@@ -38,6 +39,7 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
       {section === "empresa" && canManage ? <EmpresaModule /> : null}
       {section === "correo" && canManage ? <CorreoModule /> : null}
       {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
+      {section === "inventario" && canManage ? <InventarioSettings /> : null}
       {section === "tienda" && canManage ? (
         sandbox ? (
           // Demo: el catálogo público excluye las sandboxes; no hay tienda ni pedidos que configurar.

@@ -22,15 +22,24 @@ import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk
 import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 import { AttachmentInput, Combobox, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryThumb, KIND_PICK_OPTIONS, STATUS_PICK_OPTIONS } from "./InventoryParts";
+import {
+  CategoryPicker,
+  EMPTY_PRODUCT_TRACE,
+  ProductTraceFields,
+  categoryFormFromText,
+  dayKeyOf,
+  type InventoryTaxonomy,
+} from "./InventoryTaxonomy";
 
 /** Aviso del alta o la edición: el tono lo decide si hubo algo que advertir. */
 export type InventoryNotice = { message: string; tone: "ok" | "warn" };
 
-export type CategoryChoice = { value: string; label: string };
-
 const EMPTY_FORM = {
   name: "",
   category: "",
+  /** Segundo nivel (opcional): «Vajilla › Copas». */
+  subcategory: "",
+  ...EMPTY_PRODUCT_TRACE,
   /** SKU opcional del alta (issue #131), detrás de «Más datos». */
   sku: "",
   inventoryKind: "REUSABLE",
@@ -64,6 +73,8 @@ const EMPTY_PRICES = {
 const EMPTY_EDIT = {
   name: "",
   category: "",
+  subcategory: "",
+  ...EMPTY_PRODUCT_TRACE,
   inventoryKind: "REUSABLE",
   status: "AVAILABLE",
   replacementCost: "",
@@ -89,7 +100,13 @@ type InventoryEditForm = typeof EMPTY_EDIT;
 function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
   return {
     name: item.name,
-    category: item.category,
+    // El espejo de texto trae «Categoría › Subcategoría»: se parte para los dos campos.
+    ...categoryFormFromText(item.category),
+    defaultWarehouseId: item.defaultWarehouseId ?? "",
+    defaultLocation: item.defaultLocation ?? "",
+    supplierId: item.supplierId ?? "",
+    purchasedAt: dayKeyOf(item.purchasedAt),
+    warrantyUntil: dayKeyOf(item.warrantyUntil),
     inventoryKind: item.kind,
     status: item.status,
     replacementCost: item.replacementCost > 0 ? String(item.replacementCost) : "",
@@ -247,25 +264,13 @@ function PhotoFields({
   );
 }
 
-/** Opciones de categoría de la empresa más las creadas en este formulario. */
-function useCategoryChoices(base: readonly CategoryChoice[]) {
-  const [extras, setExtras] = useState<string[]>([]);
-  const choices = useMemo(() => {
-    const seen = new Set(base.map((choice) => choice.value));
-    for (const extra of extras) seen.add(extra);
-    return [...seen].sort((a, b) => a.localeCompare(b, "es")).map((category) => ({ value: category, label: category }));
-  }, [base, extras]);
-  const add = (query: string) => setExtras((current) => (current.includes(query) ? current : [...current, query]));
-  return { choices, add };
-}
-
 /** Alta de un producto (issues #109, #110 y #131). Las unidades se crean con código automático. */
 export function InventoryCreateDialog({
-  categories,
+  taxonomy,
   onClose,
   onCreated,
 }: {
-  categories: readonly CategoryChoice[];
+  taxonomy: InventoryTaxonomy;
   onClose: () => void;
   onCreated: (notice: InventoryNotice) => void;
 }) {
@@ -277,7 +282,6 @@ export function InventoryCreateDialog({
   const [pendingPhoto, setPendingPhoto] = useState<PreparedInventoryPhoto | null>(null);
   const [photoError, setPhotoError] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
-  const category = useCategoryChoices(categories);
   const createFormId = useId();
   const createDirty = JSON.stringify(form) !== JSON.stringify(EMPTY_FORM) || Boolean(pendingPhoto);
 
@@ -324,6 +328,12 @@ export function InventoryCreateDialog({
       kind: "inventory",
       name: form.name,
       category: form.category || "General",
+      subcategory: form.subcategory || undefined,
+      defaultWarehouseId: form.defaultWarehouseId || undefined,
+      defaultLocation: form.defaultLocation || undefined,
+      supplierId: form.supplierId || undefined,
+      purchasedAt: form.purchasedAt || undefined,
+      warrantyUntil: form.warrantyUntil || undefined,
       sku: sku || undefined,
       inventoryKind: form.inventoryKind,
       quantity: Number(form.quantity) || 1,
@@ -428,21 +438,11 @@ export function InventoryCreateDialog({
             onChange={(value) => setForm({ ...form, name: value })}
             placeholder="Ej.: Pantalla LED P3.9 500×500"
           />
-          <Combobox
-            label="Categoría"
-            help={INVENTORY_FIELD_HELP.category}
-            value={form.category}
-            onChange={(value) => setForm({ ...form, category: value })}
-            options={category.choices}
-            placeholder="Ej.: Pantallas"
-            emptyLabel="Sin categorías cargadas."
-            hint="Buscá o creá una nueva."
-            onCreate={(query) => {
-              if (!query) return;
-              category.add(query);
-              setForm((current) => ({ ...current, category: query }));
-            }}
-            createLabel={(query) => (query ? `Crear categoría «${query}»` : "Crear categoría")}
+          <CategoryPicker
+            tree={taxonomy.tree}
+            category={form.category}
+            subcategory={form.subcategory}
+            onChange={(next) => setForm((current) => ({ ...current, ...next }))}
           />
           <SelectField
             label="Tipo"
@@ -460,6 +460,10 @@ export function InventoryCreateDialog({
             onChange={(value) => setForm({ ...form, quantity: value })}
             hint="Se crean las unidades con código automático."
           />
+        </AdminDialogSection>
+
+        <AdminDialogSection title="Depósito y compra" collapsible hint="dónde se guarda, proveedor y garantía">
+          <ProductTraceFields taxonomy={taxonomy} value={form} onChange={(next) => setForm((current) => ({ ...current, ...next }))} disabled={busy} />
         </AdminDialogSection>
 
         {/* Precios por frente (issue #110): normal, umbral «desde X días» y
@@ -549,13 +553,13 @@ export function InventoryCreateDialog({
 /** Edición completa del producto (issues #90, #110 y #111): datos, costos, notas, foto y precios. */
 export function InventoryEditDialog({
   item,
-  categories,
+  taxonomy,
   onClose,
   onSaved,
   onOpenUnits,
 }: {
   item: AdminInventoryItemRow;
-  categories: readonly CategoryChoice[];
+  taxonomy: InventoryTaxonomy;
   onClose: () => void;
   onSaved: (notice: InventoryNotice) => void;
   /** Abre la ficha del producto, donde se gestionan las unidades. */
@@ -570,7 +574,6 @@ export function InventoryEditDialog({
   /** La foto subida del ítem se quita al guardar (issue #111). */
   const [editPhotoRemoved, setEditPhotoRemoved] = useState(false);
   const [editPhotoError, setEditPhotoError] = useState("");
-  const category = useCategoryChoices(categories);
   const editFormId = useId();
   // «Más opciones» abre de entrada solo si el producto ya tiene algo cargado ahí.
   const advancedOpen = [baseForm.replacementCost, baseForm.dailyCost, baseForm.notes, baseForm.bufferBeforeHours, baseForm.bufferAfterHours].some(
@@ -653,6 +656,12 @@ export function InventoryEditDialog({
       id: item.id,
       name: editForm.name,
       category: editForm.category || "General",
+      subcategory: editForm.subcategory,
+      defaultWarehouseId: editForm.defaultWarehouseId,
+      defaultLocation: editForm.defaultLocation,
+      supplierId: editForm.supplierId,
+      purchasedAt: editForm.purchasedAt,
+      warrantyUntil: editForm.warrantyUntil,
       inventoryKind: editForm.inventoryKind,
       status: editForm.status,
       replacementCost: replacementCost ?? 0,
@@ -743,21 +752,11 @@ export function InventoryEditDialog({
             onChange={(value) => setEditForm({ ...editForm, name: value })}
             placeholder="Ej.: Pantalla LED P3.9 500×500"
           />
-          <Combobox
-            label="Categoría"
-            value={editForm.category}
-            help={INVENTORY_FIELD_HELP.category}
-            onChange={(value) => setEditForm({ ...editForm, category: value })}
-            options={category.choices}
-            placeholder="Ej.: Pantallas"
-            emptyLabel="Sin categorías cargadas."
-            hint="Buscá o creá una nueva."
-            onCreate={(query) => {
-              if (!query) return;
-              category.add(query);
-              setEditForm((current) => ({ ...current, category: query }));
-            }}
-            createLabel={(query) => (query ? `Crear categoría «${query}»` : "Crear categoría")}
+          <CategoryPicker
+            tree={taxonomy.tree}
+            category={editForm.category}
+            subcategory={editForm.subcategory}
+            onChange={(next) => setEditForm((current) => ({ ...current, ...next }))}
           />
           <SelectField
             label="Tipo"
@@ -781,6 +780,10 @@ export function InventoryEditDialog({
             options={[...CATALOG_AUDIENCE_OPTIONS]}
             hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
           />
+        </AdminDialogSection>
+
+        <AdminDialogSection title="Depósito y compra" collapsible hint="dónde se guarda, proveedor y garantía">
+          <ProductTraceFields taxonomy={taxonomy} value={editForm} onChange={(next) => setEditForm((current) => ({ ...current, ...next }))} disabled={editBusy} />
         </AdminDialogSection>
 
         {/* Precios: lo que más se edita de un producto existente, justo después de los datos. */}

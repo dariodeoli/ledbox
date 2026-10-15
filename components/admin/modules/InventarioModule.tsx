@@ -30,6 +30,7 @@ import dynamic from "next/dynamic";
 import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
+import { useInventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryCreateDialog, InventoryEditDialog, type InventoryNotice } from "./InventoryItemDialogs";
 import { OverdueReturnsIndicator } from "./OverdueReturns";
 import { InventoryList } from "./InventoryList";
@@ -103,6 +104,8 @@ export function InventarioModule() {
     return `/api/admin/inventory?${search}`;
   }, [from, to]);
 
+  // Categorías, depósitos y proveedores para los formularios (rediseño E1).
+  const taxonomy = useInventoryTaxonomy();
   const resources = useAdminResource(listPath, (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[]);
   const incidentsResource = useAdminResource("/api/admin/inventory/incidents?status=open", (payload) => ((payload as { incidents?: AdminInventoryIncident[] }).incidents ?? []));
   const occupancyResource = useAdminResource("/api/admin/inventory/occupancy", (payload) => payload.occupancy as AdminInventoryOccupancy);
@@ -275,15 +278,6 @@ export function InventarioModule() {
     ];
     downloadCsv(csvFilename("inventario"), blocks);
   }
-
-  const categories = useMemo(() => {
-    const seen = new Set<string>();
-    for (const item of inventory) {
-      const category = item.category?.trim();
-      if (category) seen.add(category);
-    }
-    return [...seen].sort((a, b) => a.localeCompare(b, "es")).map((category) => ({ value: category, label: category }));
-  }, [inventory]);
 
   const incidentCount = openIncidents?.length ?? null;
   const banner = statusError
@@ -584,6 +578,7 @@ export function InventarioModule() {
           onTrash={(item) => setTrashTarget(item)}
           onChangeStatus={(item, next) => void changeStatus(item, next)}
           onChanged={reloadAll}
+          taxonomy={taxonomy}
           onOpenProduct={openFicha}
         />
       ) : null}
@@ -607,7 +602,7 @@ export function InventarioModule() {
 
       {writable && showForm ? (
         <InventoryCreateDialog
-          categories={categories}
+          taxonomy={taxonomy}
           onClose={() => setShowForm(false)}
           onCreated={(created) => {
             setNotice(created);
@@ -620,7 +615,7 @@ export function InventarioModule() {
       {writable && editItem ? (
         <InventoryEditDialog
           item={editItem}
-          categories={categories}
+          taxonomy={taxonomy}
           onClose={() => setEditItem(null)}
           onSaved={(saved) => {
             setNotice(saved);
@@ -651,6 +646,7 @@ export function InventarioModule() {
       {writable && bulkOpen && bulkItemIds.length ? (
         <InventoryBulkEditor
           target="items"
+          taxonomy={taxonomy}
           selection={bulkSelection}
           onSaved={resources.reload}
           onClose={() => setBulkOpen(false)}

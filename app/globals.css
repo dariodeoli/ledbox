@@ -2703,7 +2703,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-item-prices small { overflow: hidden; color: var(--a-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 /* Unidades físicas del ítem (issue #112): encabezado del bloque de la ficha, con su resumen y acciones. */
 .admin-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.admin-table--inventario-unidades { --inventario-unidades-cols: minmax(7rem, 1fr) 10.5rem 7rem 5.5rem; --admin-cols: var(--inventario-unidades-cols); --admin-table-min: 31.5rem; }
+.admin-table--inventario-unidades { --inventario-unidades-cols: minmax(7rem, 1fr) 10.5rem 6.5rem 8.5rem 6rem 5.5rem; --admin-cols: var(--inventario-unidades-cols); --admin-table-min: 46rem; }
+/* Stock por depósito (rediseño E1): depósito, unidades, libres, fuera de circulación y ubicaciones. */
+.admin-table--inventario-depositos { --inventario-depositos-cols: minmax(9rem, 1.4fr) 5rem 5rem 4.5rem minmax(7rem, 1fr); --admin-cols: var(--inventario-depositos-cols); --admin-table-min: 31rem; }
+/* Ajustes → Inventario (rediseño E1): categorías con subcategorías y depósitos. */
+.admin-table--ajustes-categorias { --ajustes-categorias-cols: minmax(10rem, 1fr) 5.5rem 7rem 4rem; --admin-cols: var(--ajustes-categorias-cols); --admin-table-min: 26rem; }
+.admin-table--ajustes-depositos { --ajustes-depositos-cols: 5rem minmax(9rem, 1fr) 5.5rem 7rem 4rem; --admin-cols: var(--ajustes-depositos-cols); --admin-table-min: 28rem; }
+.admin-cat-root { font-weight: 700; }
+.admin-cat-child { padding-left: 14px; color: var(--a-muted); }
+/* Datos del producto (categoría, depósito, proveedor, garantía): mismos renglones que los precios. */
+.admin-item-data { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
 
 /* ── Inventario rediseñado: acciones, indicadores que filtran, lista con foto, tarjetas y ficha ── */
 .admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

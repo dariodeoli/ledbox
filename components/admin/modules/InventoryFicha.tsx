@@ -58,8 +58,10 @@ import {
   AdminTable,
 } from "../AdminUI";
 import { trashMenuItems } from "../TrashDialogs";
-import { DateField, MoneyField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { DateField, DayField, MoneyField, NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
+import { ProductDataSection, WarehouseStockSection } from "./InventoryStockPanels";
+import { ConditionBadge, dayKeyOf, supplierOptions, unitLocationLabel, warehouseOptions, type InventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryIncidentsPanel } from "./InventoryIncidents";
 import {
   AudienceChip,
@@ -77,7 +79,9 @@ import {
 
 const SECTION_LABELS = {
   resumen: "Resumen",
+  datos: "Datos",
   disponibilidad: "Disponibilidad",
+  depositos: "Stock por depósito",
   unidades: "Unidades",
   precios: "Precios",
   tienda: "Tienda web",
@@ -93,6 +97,20 @@ export type InventoryRangeControls = {
   to: string;
   setFrom: (value: string) => void;
   setTo: (value: string) => void;
+};
+
+/** Formulario de una unidad: código, estado, costo, notas y, desde el rediseño E1, depósito, ubicación, condición y compra. */
+const EMPTY_UNIT_FORM = {
+  code: "",
+  status: "AVAILABLE",
+  purchaseCost: "",
+  notes: "",
+  warehouseId: "",
+  location: "",
+  conditionScore: "",
+  supplierId: "",
+  purchasedAt: "",
+  warrantyUntil: "",
 };
 
 /** Horas de un colchón en minutos: vacío = hereda el de la empresa. */
@@ -173,6 +191,7 @@ export function InventoryFicha({
   onTrash,
   onChangeStatus,
   onChanged,
+  taxonomy,
   onOpenProduct,
   banner,
 }: {
@@ -191,6 +210,8 @@ export function InventoryFicha({
   onTrash: (item: AdminInventoryItemRow) => void;
   onChangeStatus: (item: AdminInventoryItemRow, next: string) => void;
   onChanged: () => void;
+  /** Depósitos, categorías y proveedores de la empresa (rediseño E1). */
+  taxonomy: InventoryTaxonomy;
   onOpenProduct: (id: string) => void;
   /** Aviso del módulo (estado cambiado, archivado, error) para que se vea con la ficha abierta. */
   banner?: { tone?: "ok" | "warn" | "error"; text: string } | null;
@@ -207,7 +228,7 @@ export function InventoryFicha({
   const [unitNotice, setUnitNotice] = useState("");
   const [unitDialog, setUnitDialog] = useState<AdminInventoryUnitRow | null>(null);
   const [unitEditorOpen, setUnitEditorOpen] = useState(false);
-  const [unitForm, setUnitForm] = useState({ code: "", status: "AVAILABLE", purchaseCost: "", notes: "" });
+  const [unitForm, setUnitForm] = useState(EMPTY_UNIT_FORM);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
   const [unitDialogError, setUnitDialogError] = useState("");
   const [bulkUnitIds, setBulkUnitIds] = useState<string[]>([]);
@@ -268,7 +289,7 @@ export function InventoryFicha({
   /** Alta inline sin abandonar la ficha ni los cambios pendientes del producto. */
   function addInventoryUnit() {
     setUnitDialog(null);
-    setUnitForm({ code: "", status: "AVAILABLE", purchaseCost: "", notes: "" });
+    setUnitForm({ ...EMPTY_UNIT_FORM, warehouseId: item.defaultWarehouseId ?? "", location: item.defaultLocation ?? "" });
     setUnitDialogError("");
     setUnitEditorOpen(true);
   }
@@ -299,6 +320,12 @@ export function InventoryFicha({
       status: unit.status,
       purchaseCost: unit.purchaseCost > 0 ? String(unit.purchaseCost) : "",
       notes: unit.notes ?? "",
+      warehouseId: unit.warehouseId ?? "",
+      location: unit.location ?? "",
+      conditionScore: typeof unit.conditionScore === "number" ? String(unit.conditionScore) : "",
+      supplierId: unit.supplierId ?? "",
+      purchasedAt: dayKeyOf(unit.purchasedAt),
+      warrantyUntil: dayKeyOf(unit.warrantyUntil),
     });
   }
 
@@ -325,6 +352,13 @@ export function InventoryFicha({
       status: unitForm.status,
       purchaseCost: cost ?? 0,
       notes: unitForm.notes,
+      // Depósito (siempre tiene uno), ubicación, condición, proveedor y fechas: vacío en una unidad que se edita = quitar.
+      ...(unitForm.warehouseId ? { warehouseId: unitForm.warehouseId } : {}),
+      location: unitForm.location,
+      conditionScore: unitForm.conditionScore,
+      supplierId: unitForm.supplierId,
+      purchasedAt: unitForm.purchasedAt,
+      warrantyUntil: unitForm.warrantyUntil,
     });
     setUnitDialogBusy(false);
     if (!result.ok) {
@@ -338,8 +372,8 @@ export function InventoryFicha({
   }
 
   const sections: SectionKey[] = isCombo
-    ? ["resumen", "disponibilidad", "precios", "tienda", "combos", "historial"]
-    : ["resumen", "disponibilidad", "unidades", "precios", "tienda", "combos", "incidentes", "historial"];
+    ? ["resumen", "datos", "disponibilidad", "precios", "tienda", "combos", "historial"]
+    : ["resumen", "datos", "disponibilidad", "depositos", "unidades", "precios", "tienda", "combos", "incidentes", "historial"];
   const anchor = (key: SectionKey) => `${uid}-${key}`;
   const jump = (key: SectionKey) => document.getElementById(anchor(key))?.scrollIntoView({ behavior: "smooth", block: "start" });
   const editLabel = isCombo ? "Editar combo" : "Editar producto";
@@ -477,6 +511,10 @@ export function InventoryFicha({
         {item.notes ? <p className="admin-note" title="Notas internas: no se publican.">{item.notes}</p> : null}
       </AdminDialogSection>
 
+      <AdminDialogSection title="Datos" id={anchor("datos")} stack>
+        <ProductDataSection item={item} taxonomy={taxonomy} />
+      </AdminDialogSection>
+
       <AdminDialogSection title="Disponibilidad · próximas 4 semanas" id={anchor("disponibilidad")} stack>
         <AvailabilityTimeline item={item} />
         <div className="admin-ficha-range">
@@ -594,6 +632,12 @@ export function InventoryFicha({
       </AdminDialogSection>
 
       {isCombo ? null : (
+        <AdminDialogSection id={anchor("depositos")} stack title="Stock por depósito">
+          <WarehouseStockSection item={item} taxonomy={taxonomy} writable={writable} onChanged={onChanged} />
+        </AdminDialogSection>
+      )}
+
+      {isCombo ? null : (
         <AdminDialogSection id={anchor("unidades")} stack title={`Unidades · ${formatNumber(item.units.length)}${item.availability.maintenanceNow > 0 ? ` · ${formatNumber(item.availability.maintenanceNow)} fuera de circulación` : ""}`}>
           {/* Unidades físicas (issue #112): código, estado y costo por unidad. */}
           <div className="admin-unit-head" aria-label={`Unidades de ${item.name}`}>
@@ -651,6 +695,43 @@ export function InventoryFicha({
                 hint="Costo interno de adquisición de esta unidad; no es un presupuesto de reparación."
                 disabled={unitDialogBusy}
               />
+              <SelectField
+                label="Depósito"
+                help={INVENTORY_FIELD_HELP.warehouseId}
+                value={unitForm.warehouseId}
+                onChange={(value) => setUnitForm({ ...unitForm, warehouseId: value })}
+                options={warehouseOptions(taxonomy.warehouses, { includeEmpty: unitDialog ? "Sin cambios" : "El del producto o el principal" })}
+                disabled={unitDialogBusy}
+              />
+              <TextField
+                label="Ubicación"
+                help={INVENTORY_FIELD_HELP.location}
+                value={unitForm.location}
+                onChange={(value) => setUnitForm({ ...unitForm, location: value })}
+                maxLength={40}
+                placeholder="Ej.: E3-B2"
+                hint="Estante y nivel; se ve con el código del depósito."
+                disabled={unitDialogBusy}
+              />
+              <NumberField
+                label="Condición (1 a 10)"
+                help={INVENTORY_FIELD_HELP.conditionScore}
+                value={unitForm.conditionScore}
+                onChange={(value) => setUnitForm({ ...unitForm, conditionScore: value })}
+                maxLength={2}
+                hint="Vacío = sin evaluar."
+                disabled={unitDialogBusy}
+              />
+              <SelectField
+                label="Proveedor"
+                help={INVENTORY_FIELD_HELP.supplierId}
+                value={unitForm.supplierId}
+                onChange={(value) => setUnitForm({ ...unitForm, supplierId: value })}
+                options={supplierOptions(taxonomy.suppliers, "Como el producto")}
+                disabled={unitDialogBusy}
+              />
+              <DayField label="Fecha de compra" help={INVENTORY_FIELD_HELP.purchasedAt} value={unitForm.purchasedAt} onChange={(value) => setUnitForm({ ...unitForm, purchasedAt: value })} disabled={unitDialogBusy} />
+              <DayField label="Garantía hasta" help={INVENTORY_FIELD_HELP.warrantyUntil} value={unitForm.warrantyUntil} onChange={(value) => setUnitForm({ ...unitForm, warrantyUntil: value })} disabled={unitDialogBusy} />
               <TextAreaField
                 label="Notas de unidad"
                 help={INVENTORY_FIELD_HELP.notes}
@@ -683,6 +764,7 @@ export function InventoryFicha({
           {writable && bulkOpen && bulkUnitIds.length ? (
             <InventoryBulkEditor
               target="units"
+              taxonomy={taxonomy}
               selection={bulkUnitIds.map((id) => ({ id, label: item.units.find((unit) => unit.id === id)?.code ?? id }))}
               onSaved={onChanged}
               onClose={() => setBulkOpen(false)}
@@ -695,11 +777,11 @@ export function InventoryFicha({
           {item.units.length === 0 ? (
             <AdminNote>Sin unidades cargadas: agregá la primera para poder asignar «{item.name}» a un evento.</AdminNote>
           ) : (
-            <AdminDisclosure title="Lista de unidades" hint={`${formatNumber(item.units.length)} · código, estado y costo`} defaultOpen={item.units.length <= 12 || problems.total > 0}>
+            <AdminDisclosure title="Lista de unidades" hint={`${formatNumber(item.units.length)} · código, estado, ubicación y condición`} defaultOpen={item.units.length <= 12 || problems.total > 0}>
             <AdminTable
               view="inventario-unidades"
               label={`Unidades de ${item.name}`}
-              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Costo", end: true }, { label: "Acciones", end: true }]}
+              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Ubicación" }, { label: "Condición" }, { label: "Costo", end: true }, { label: "Acciones", end: true }]}
             >
               {item.units.map((unit) => (
                 <AdminRow key={unit.id}>
@@ -729,6 +811,12 @@ export function InventoryFicha({
                     ) : (
                       <AdminBadge tone={statusTone(unit.status)}>{inventoryStatusLabel(unit.status)}</AdminBadge>
                     )}
+                  </AdminCell>
+                  <AdminCell title={`Ubicación de ${unit.code}`}>
+                    <span className="admin-code">{unitLocationLabel(unit, taxonomy.warehouses)}</span>
+                  </AdminCell>
+                  <AdminCell title={`Condición de ${unit.code}`}>
+                    <ConditionBadge score={unit.conditionScore} />
                   </AdminCell>
                   <AdminCell end title={unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "Sin costo cargado"}>
                     {unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "—"}
