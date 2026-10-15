@@ -32,6 +32,7 @@ export const ADMIN_ROUTES = [
   // abajo porque redirigen a estas.
   "/ajustes",
   "/ajustes/empresa",
+  "/ajustes/apariencia",
   "/ajustes/correo",
   "/ajustes/alquileres",
   "/ajustes/tienda",

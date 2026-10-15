@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AccessPage } from "@/components/catalog-public/AccessPage";
 import { StoreFront } from "@/components/catalog-public/StoreFront";
 import { loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
 
@@ -22,7 +23,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: { absolute: `${name} · Tienda de alquiler` },
     description,
     openGraph: { title: `${name} · Tienda de alquiler`, description, type: "website", siteName: name, locale: "es_PY" },
-    robots: context.demo ? { index: false, follow: false } : { index: true, follow: true },
+    // Una tienda con acceso restringido no se indexa (la puerta de acceso no es el catálogo).
+    robots: context.demo || context.settings.catalogAccessMode !== "OPEN" ? { index: false, follow: false } : { index: true, follow: true },
   };
 }
 
@@ -37,6 +39,11 @@ export default async function StorePage({ params, searchParams }: PageProps) {
   const query = await searchParams;
   const context = await resolvePublicCatalog(orgSlug);
   if (!context) notFound();
+  if (context.settings.catalogAccessMode !== "OPEN") {
+    // «Con solicitud» o «Privada»: sin el link personal no se muestra el catálogo.
+    const store = await loadStorefront(context);
+    return <AccessPage store={store} demo={context.demo} endpoint={`/api/catalog/${encodeURIComponent(context.organization.slug)}/access-request`} />;
+  }
   const range = parsePublicRange(first(query.desde), first(query.hasta));
   const [store, items, zones] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context)]);
   const slug = encodeURIComponent(context.organization.slug);

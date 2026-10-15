@@ -24,6 +24,7 @@ import {
   paymentProofMimeLabel,
 } from "@/lib/admin-format";
 import { bankMark } from "@/lib/bank-mark";
+import { accountCurrencyLabel, accountTypeLabel } from "@/lib/org-profile";
 import { BankLogo } from "@/components/admin/BankLogo";
 import {
   applyPortalDemoState,
@@ -902,6 +903,8 @@ export function PortalBudgetView({
       details.holder ? `Titular: ${details.holder}` : null,
       details.ruc ? `RUC: ${details.ruc}` : null,
       details.account ? `Cuenta: ${details.account}` : null,
+      accountTypeLabel(details.accountType) ? `Tipo de cuenta: ${accountTypeLabel(details.accountType)}` : null,
+      accountCurrencyLabel(details.currency) ? `Moneda: ${accountCurrencyLabel(details.currency)}` : null,
       details.alias ? `Alias: ${details.alias}` : null,
       transferNow ? `Monto a transferir ahora: ${formatMoney(transferNow.amount)}` : null,
       `Presupuesto Nº ${budget.reference}`,
@@ -1228,6 +1231,18 @@ export function PortalBudgetView({
                 <div>
                   <dt>Cuenta</dt>
                   <dd>{destination.details.account}</dd>
+                </div>
+              ) : null}
+              {accountTypeLabel(destination.details.accountType) ? (
+                <div>
+                  <dt>Tipo de cuenta</dt>
+                  <dd>{accountTypeLabel(destination.details.accountType)}</dd>
+                </div>
+              ) : null}
+              {accountCurrencyLabel(destination.details.currency) ? (
+                <div>
+                  <dt>Moneda</dt>
+                  <dd>{accountCurrencyLabel(destination.details.currency)}</dd>
                 </div>
               ) : null}
               {destination.details.alias ? (

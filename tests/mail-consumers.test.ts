@@ -250,6 +250,8 @@ test("caller inventory has no extra provider or unreviewed email dispatch outsid
   visit("lib"); visit("app");
   assert.deepEqual(inventory, {
     "lib/platform/alta-empresa-server.ts": 1, "lib/server/reminders.ts": 1, "lib/server/resend.ts": 2,
+    // Catálogo de la empresa: acceso aprobado, pedido rechazado y propuesta (plantilla única, `lib/server/mail/catalog.ts`).
+    "lib/server/catalog-access-requests.ts": 1, "lib/server/quote-request-response.ts": 2,
     "lib/server/signature/admin.ts": 2, "lib/server/signature/portal.ts": 2,
     "lib/server/signature/reminders.ts": 1, "lib/server/system-status.ts": 1,
     "app/api/admin/budgets/send/route.ts": 1, "app/api/admin/invitations/[id]/route.ts": 1,

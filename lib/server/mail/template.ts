@@ -1,4 +1,5 @@
 import { publicConfig } from "@/lib/public-config";
+import { normalizeHex, readableOn } from "@/lib/storefront-theme";
 import { waMeLink } from "@/lib/whatsapp-link";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import { MAIL_PALETTES, MAIL_THEME_CSS } from "./theme";
@@ -57,6 +58,22 @@ export type MailContent = {
   organization?: string | null;
   /** Compact reason in the footer. */
   reason?: string | null;
+  /**
+   * Marca de la empresa (solo color y logo, el resto de la plantilla no cambia). `color` ya viene
+   * validado con contraste AA contra blanco (`adjustBrandColor`); sin marca rige la de LedBox.
+   */
+  brand?: MailBrand | null;
+};
+
+export type MailBrand = {
+  /** Color de marca `#rrggbb` para el botón y el filete de las notas. */
+  color?: string | null;
+  /** Logo público de la empresa (variante para fondo oscuro, que es el del encabezado). */
+  logoUrl?: string | null;
+  /** `true` si el logo es la variante para fondo claro: se apoya sobre una chapa blanca. */
+  logoOnPlate?: boolean;
+  /** Nombre de la empresa (texto alternativo del logo). */
+  name?: string | null;
 };
 
 const BRAND = MAIL_PALETTES.light;
@@ -107,14 +124,20 @@ function rowsHtml(rows: MailRow[]): string {
   );
 }
 
-function ctaHtml(cta: MailCta): string {
+function ctaHtml(cta: MailCta, brandColor?: string | null): string {
   const url = escapeHtml(cta.url);
   const label = escapeHtml(cta.label);
+  // Con marca de la empresa el botón usa su color y un texto legible sobre él; esas clases no
+  // entran en las reglas del modo oscuro (el botón conserva su par fondo/texto en cualquier cliente).
+  const bg = brandColor ?? BRAND.accent;
+  const ink = brandColor ? readableOn(brandColor) : BRAND.accentInk;
+  const surface = brandColor ? "lb-cta-brand" : "lb-cta-surface";
+  const button = brandColor ? "lb-btn-brand" : "lb-btn";
   return (
     `<table class="lb-cta-table" role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width:100%;margin:22px 0 0;">` +
-    `<tr><td class="lb-cta-surface" align="left" bgcolor="${BRAND.accent}" style="border-radius:7px;">` +
-    `<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="15%" fillcolor="${BRAND.accent}" strokecolor="${BRAND.accent}"><w:anchorlock/><v:textbox inset="8px,8px,8px,8px" style="mso-fit-shape-to-text:true;"><center style="color:${BRAND.accentInk};font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;word-wrap:break-word;">${label}</center></v:textbox></v:roundrect><![endif]-->` +
-    `<!--[if !mso]><!--><a class="lb-btn" href="${url}" style="display:inline-block;box-sizing:border-box;max-width:100%;min-height:44px;padding:14px 22px;border-radius:7px;background:${BRAND.accent};color:${BRAND.accentInk};font:700 14px Arial,Helvetica,sans-serif;line-height:1.4;text-decoration:none;letter-spacing:.01em;overflow-wrap:anywhere;word-break:break-word;">${label}</a><!--<![endif]-->` +
+    `<tr><td class="${surface}" align="left" bgcolor="${bg}" style="border-radius:7px;">` +
+    `<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="15%" fillcolor="${bg}" strokecolor="${bg}"><w:anchorlock/><v:textbox inset="8px,8px,8px,8px" style="mso-fit-shape-to-text:true;"><center style="color:${ink};font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;word-wrap:break-word;">${label}</center></v:textbox></v:roundrect><![endif]-->` +
+    `<!--[if !mso]><!--><a class="${button}" href="${url}" style="display:inline-block;box-sizing:border-box;max-width:100%;min-height:44px;padding:14px 22px;border-radius:7px;background:${bg};color:${ink};font:700 14px Arial,Helvetica,sans-serif;line-height:1.4;text-decoration:none;letter-spacing:.01em;overflow-wrap:anywhere;word-break:break-word;">${label}</a><!--<![endif]-->` +
     `</td></tr></table>` +
     `<p class="lb-soft" style="margin:10px 0 0;color:${BRAND.mutedSoft};font-size:12px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word;">Si el botón no abre, copiá este enlace:<br><a class="lb-link" href="${url}" style="color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;">${url}</a></p>` +
     (cta.note ? `<p class="lb-muted" style="margin:7px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.5;">${escapeHtml(cta.note)}</p>` : "")
@@ -157,6 +180,23 @@ function footerHtml(input: { organization?: string | null; reason?: string | nul
   );
 }
 
+/** Encabezado: logo de la empresa (si lo hay) o la marca de LedBox. */
+function headerBrandHtml(brand: MailBrand | null | undefined): string {
+  const logo = brand?.logoUrl?.trim();
+  if (logo) {
+    const name = escapeHtml((brand?.name ?? "").trim() || "Logo de la empresa");
+    const plate = brand?.logoOnPlate ? `background:${BRAND.card};padding:5px;border-radius:8px;` : "";
+    return (
+      `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(logo)}" height="38" alt="${name}" style="display:block;height:38px;max-width:160px;width:auto;${plate}box-sizing:content-box;"></td>` +
+      ((brand?.name ?? "").trim() ? `<td class="lb-header-ink" style="font:700 15px Arial,Helvetica,sans-serif;color:${BRAND.headerInk};">${name}</td>` : "")
+    );
+  }
+  return (
+    `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(mailLogoUrl())}" width="38" height="38" alt="LedBox EventOS" style="display:block;width:38px;height:38px;border-radius:8px;background:${BRAND.card};"></td>` +
+    `<td class="lb-header-ink" style="font:800 16px Arial,Helvetica,sans-serif;letter-spacing:2px;color:${BRAND.headerInk};">LEDBOX<span class="lb-brand-dot" style="color:${BRAND.accent};">.</span></td>`
+  );
+}
+
 /** Render the complete HTML email. */
 export function renderMail(input: MailContent): string {
   const title = escapeHtml(input.title);
@@ -164,7 +204,8 @@ export function renderMail(input: MailContent): string {
   const preheader = escapeHtml((input.preheader ?? input.title ?? "").trim());
   const intro = paragraphs(input.intro, `margin:0 0 13px;color:${BRAND.ink};font-size:14.5px;line-height:1.68;`, "lb-ink");
   const rows = rowsHtml(input.rows ?? []);
-  const cta = input.cta ? ctaHtml(input.cta) : "";
+  const brandColor = normalizeHex(input.brand?.color ?? null);
+  const cta = input.cta ? ctaHtml(input.cta, brandColor) : "";
   const note = noteHtml(input.note);
   const status = statusHtml(input.status);
 
@@ -189,7 +230,7 @@ export function renderMail(input: MailContent): string {
     `.lb-pad{padding-left:18px !important;padding-right:18px !important;}` +
     `.lb-header-pad{padding:19px 18px !important;}` +
     `.lb-title{font-size:21px !important;}` +
-    `.lb-btn{display:block !important;text-align:center !important;padding:15px 18px !important;}` +
+    `.lb-btn,.lb-btn-brand{display:block !important;text-align:center !important;padding:15px 18px !important;}` +
     `.lb-cta-table{width:100% !important;table-layout:fixed !important;}` +
     `}` +
     `</style>` +
@@ -202,8 +243,7 @@ export function renderMail(input: MailContent): string {
     `<tr><td class="lb-header lb-header-pad" style="padding:22px 28px;background:${BRAND.graphite};border-radius:13px 13px 0 0;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
     `<td align="left" style="vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(mailLogoUrl())}" width="38" height="38" alt="LedBox EventOS" style="display:block;width:38px;height:38px;border-radius:8px;background:${BRAND.card};"></td>` +
-    `<td class="lb-header-ink" style="font:800 16px Arial,Helvetica,sans-serif;letter-spacing:2px;color:${BRAND.headerInk};">LEDBOX<span class="lb-brand-dot" style="color:${BRAND.accent};">.</span></td>` +
+    headerBrandHtml(input.brand) +
     `</tr></table></td>` +
     `<td class="lb-header-muted" align="right" style="vertical-align:middle;color:${BRAND.headerMuted};font:600 11px Arial,Helvetica,sans-serif;letter-spacing:.08em;text-transform:uppercase;">EventOS</td>` +
     `</tr></table>` +

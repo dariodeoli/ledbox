@@ -3,6 +3,7 @@ import type { OrganizationRentalSettings } from "@prisma/client";
 import type { AdminRentalSettings } from "../admin-types";
 import { securityDepositAmountValid } from "../budget-security-deposit";
 import { isTrashPurgeDays } from "../trash-shared";
+import { isCatalogAccessMode } from "../catalog-access-mode";
 import { parseStorefrontAccent } from "../storefront-theme";
 import { db } from "./db";
 import { DEFAULT_HOLD_TTL_MINUTES } from "./inventory-availability";
@@ -30,6 +31,7 @@ export const RENTAL_SETTINGS_DEFAULTS: RentalSettingsView = {
   storefrontTagline: null,
   storefrontAccent: null,
   storefrontEmail: null,
+  catalogAccessMode: "OPEN",
   trashPurgeDays: null,
 };
 
@@ -60,6 +62,7 @@ export const RENTAL_SETTINGS_FIELDS = [
   "storefrontTagline",
   "storefrontAccent",
   "storefrontEmail",
+  "catalogAccessMode",
   "trashPurgeDays",
 ] as const;
 
@@ -80,6 +83,7 @@ export function toRentalSettingsView(row: OrganizationRentalSettings | null): Re
     storefrontTagline: row.storefrontTagline,
     storefrontAccent: row.storefrontAccent,
     storefrontEmail: row.storefrontEmail,
+    catalogAccessMode: isCatalogAccessMode(row.catalogAccessMode) ? row.catalogAccessMode : "OPEN",
     trashPurgeDays: row.trashPurgeDays,
   };
 }
@@ -170,6 +174,10 @@ export function parseRentalSettingsPatch(
       if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Ingresá un correo de contacto válido." };
       data.storefrontEmail = email;
     }
+  }
+  if (record.catalogAccessMode !== undefined) {
+    if (!isCatalogAccessMode(record.catalogAccessMode)) return { ok: false, error: "El acceso al catálogo tiene que ser Abierto, Con solicitud o Privado." };
+    data.catalogAccessMode = record.catalogAccessMode;
   }
   if (record.trashPurgeDays !== undefined) {
     if (record.trashPurgeDays === null || record.trashPurgeDays === "") {

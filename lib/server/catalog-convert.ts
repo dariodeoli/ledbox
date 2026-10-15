@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
-import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, rentalDaysBetween } from "@/lib/catalog-public";
+import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, quoteItemActive, rentalDaysBetween } from "@/lib/catalog-public";
 import { deliveryExtraApplies, deliveryFee, deliveryLineName, orderPieces } from "@/lib/delivery-zones";
 import { loadPricedItems, quoteInventoryLine, totalTierNote } from "./line-pricing";
 import { billedDays } from "@/lib/quote-sharing";
@@ -69,16 +69,19 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   });
   if (!quote) return { ok: false, status: 404, error: "El pedido no existe en esta empresa." };
   if (quote.budget || quote.status === "CONVERTED") return { ok: false, status: 409, error: "Este pedido ya se convirtió en presupuesto." };
+  if (quote.status === "PROPOSED") return { ok: false, status: 409, error: "Este pedido espera la aprobación del cliente: aceptalo cuando apruebe tu propuesta." };
   if (!isQuoteRequestStatus(quote.status) || !CONVERTIBLE_STATUSES.includes(quote.status)) {
     return { ok: false, status: 409, error: "Este pedido está declinado o vencido: reabrilo antes de convertirlo." };
   }
   if (!quote.lead) return { ok: false, status: 422, error: "El pedido no tiene un contacto asociado para armar el presupuesto." };
-  if (quote.items.length === 0) return { ok: false, status: 422, error: "El pedido no tiene artículos." };
+  // Las líneas quitadas o marcadas «ya no lo tengo» no entran al presupuesto (el cliente ya las vio así).
+  const activeItems = quote.items.filter((item) => quoteItemActive(item.state));
+  if (activeItems.length === 0) return { ok: false, status: 422, error: "El pedido no tiene artículos." };
   const lead = quote.lead;
 
   const settings = await getRentalSettings(organizationId);
   const periodDays = quote.startsAt && quote.endsAt ? rentalDaysBetween(dayKeyOf(quote.startsAt), dayKeyOf(quote.endsAt)) : Math.max(1, quote.durationDays ?? 1);
-  const inventoryIds = quote.items.flatMap((item) => (item.inventoryId ? [item.inventoryId] : []));
+  const inventoryIds = activeItems.flatMap((item) => (item.inventoryId ? [item.inventoryId] : []));
   const inventory = inventoryIds.length
     ? await db.inventoryItem.findMany({ where: { organizationId, id: { in: inventoryIds } }, select: { id: true, dailyCost: true } })
     : [];
@@ -89,7 +92,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const wholesale = quote.priceList === "WHOLESALE";
   const priceList = wholesale ? "WHOLESALE" : "RETAIL";
   let unpricedLines = 0;
-  const lines = quote.items.map((item, sortOrder) => {
+  const lines = activeItems.map((item, sortOrder) => {
     const linked = item.inventoryId ? priced.get(item.inventoryId) : undefined;
     // El piso de venta es interno: la tienda nunca lo muestra, así que la conversión no lo aplica.
     const quoted = linked ? quoteInventoryLine(linked, periodDays, priceList, { applyMinimum: false }) : null;
@@ -142,6 +145,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
     lead.message ? `Notas del cliente: ${lead.message}` : null,
     wholesale ? "Nació de un pedido del catálogo mayorista (precios mayoristas)." : "Nació de un pedido del catálogo público.",
     zone ? null : quote.deliveryCoordinate ? "Flete: a coordinar con el cliente." : zoneName ? `Flete: la zona «${zoneName}» ya no existe; coordinar y cargar la línea a mano.` : null,
+    quote.proposalApprovedAt ? "Pedido ajustado por la empresa y aprobado por el cliente desde su seguimiento." : null,
   ].filter(Boolean);
   const title = `${wholesale ? "Pedido mayorista" : "Pedido del catálogo"} · ${(lead.company || lead.name).trim()}`.slice(0, TITLE_MAX);
 
@@ -151,6 +155,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
       await tx.$queryRaw`SELECT "id" FROM "QuoteRequest" WHERE "id" = ${quote.id} FOR UPDATE`;
       const fresh = await tx.quoteRequest.findUniqueOrThrow({ where: { id: quote.id }, select: { status: true, budget: { select: { id: true } } } });
       if (fresh.budget || fresh.status === "CONVERTED") throw new ConvertConflict(409, "Este pedido ya se convirtió en presupuesto.");
+      if (fresh.status === "PROPOSED") throw new ConvertConflict(409, "Este pedido espera la aprobación del cliente: aceptalo cuando apruebe tu propuesta.");
       if (!isQuoteRequestStatus(fresh.status) || !CONVERTIBLE_STATUSES.includes(fresh.status)) throw new ConvertConflict(409, "Este pedido está declinado o vencido: reabrilo antes de convertirlo.");
 
       // Pedido mayorista: el cliente es el del link privado (misma empresa); si ya no existe, no se inventa otro.

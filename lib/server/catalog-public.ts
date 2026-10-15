@@ -19,6 +19,8 @@ import {
   type CatalogPrice,
 } from "@/lib/catalog-public";
 import { catalogAudienceWhere, type PriceList } from "@/lib/catalog-audience";
+import { appearanceView, type AppearanceView } from "@/lib/appearance";
+import { profileHasData, type OrgProfile } from "@/lib/org-profile";
 import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
 import { resolveCatalogAccess, type ResolvedCatalogAccess } from "./catalog-access";
 import { db } from "./db";
@@ -41,6 +43,7 @@ import { listPublicDeliveryZones, resolveDeliveryChoice } from "./delivery-zones
 import { TIER_SELECT } from "./line-pricing";
 import type { AudiencePriceTier } from "@/lib/price-tiers";
 import { deliveryFee } from "@/lib/delivery-zones";
+import { coverUrl, loadOrgPresentation } from "./org-presentation";
 
 /**
  * Catálogo público por empresa y preórdenes (alquileres fase 3).
@@ -97,8 +100,21 @@ export async function resolveWholesaleCatalog(slug: string, token: string): Prom
   const store = await resolveStore(slug);
   if (!store) return null;
   const access = await resolveCatalogAccess(slug, token);
-  if (!access || access.organization.id !== store.organization.id) return null;
+  if (!access || access.organization.id !== store.organization.id || access.priceList !== "WHOLESALE") return null;
   return { ...store, priceList: "WHOLESALE", access };
+}
+
+/**
+ * Catálogo de cliente final por link de acceso (`/tienda/<slug>/acceso/<token>`): el que recibe
+ * quien pidió acceso en una tienda «Con solicitud» o «Privada». Precios de lista (cliente final).
+ * Token inexistente, revocado, de otra empresa o de un link mayorista: `null` (404).
+ */
+export async function resolveAccessCatalog(slug: string, token: string): Promise<PublicCatalogContext | null> {
+  const store = await resolveStore(slug);
+  if (!store) return null;
+  const access = await resolveCatalogAccess(slug, token);
+  if (!access || access.organization.id !== store.organization.id || access.priceList !== "RETAIL") return null;
+  return { ...store, priceList: "RETAIL", access };
 }
 
 export type PublicStorefront = {
@@ -109,20 +125,33 @@ export type PublicStorefront = {
   whatsappPhone: string | null;
   theme: StorefrontTheme;
   logos: { light: boolean; dark: boolean };
+  /** Perfil de la empresa para el público; `null` si no cargó nada (no se dibuja el bloque). */
+  profile: OrgProfile | null;
+  /** Plantilla, tipografía y fondo (solo tokens; la vista previa del panel usa lo mismo). */
+  appearance: AppearanceView;
+  /** URLs de la portada por dispositivo; `null` si no subió esa portada. */
+  covers: { desktop: string | null; mobile: string | null };
+  accessMode: "OPEN" | "REQUEST" | "PRIVATE";
 };
 
 /** Identidad de la tienda para la portada: solo datos que la empresa cargó para el público. */
 export async function loadStorefront(context: PublicCatalogContext): Promise<PublicStorefront> {
-  const logos = await db.organizationLogo.findMany({ where: { organizationId: context.organization.id }, select: { variant: true } });
-  const variants = new Set(logos.map((logo) => logo.variant));
+  const presentation = await loadOrgPresentation(context.organization.id);
   return {
     name: context.organization.name,
     slug: context.organization.slug,
     tagline: context.settings.storefrontTagline,
     email: context.settings.storefrontEmail,
     whatsappPhone: context.settings.whatsappPhone,
-    theme: storefrontTheme(context.settings.storefrontAccent),
-    logos: { light: variants.has("light"), dark: variants.has("dark") },
+    theme: presentation.theme,
+    logos: presentation.logos,
+    profile: profileHasData(presentation.profile) ? presentation.profile : null,
+    appearance: appearanceView(presentation.appearance),
+    covers: {
+      desktop: coverUrl(context.organization.slug, "desktop", presentation.covers.desktop),
+      mobile: coverUrl(context.organization.slug, "mobile", presentation.covers.mobile),
+    },
+    accessMode: context.settings.catalogAccessMode,
   };
 }
 
@@ -474,8 +503,27 @@ export type PublicOrderView = {
   subtotal: number | null;
   /** Lista de precios del pedido: el seguimiento dice si fue un pedido mayorista. */
   priceList: "RETAIL" | "WHOLESALE";
-  organization: { name: string; slug: string; whatsappPhone: string | null; theme: StorefrontTheme };
-  items: Array<{ name: string; quantity: number }>;
+  organization: {
+    name: string;
+    slug: string;
+    whatsappPhone: string | null;
+    theme: StorefrontTheme;
+    appearance: AppearanceView;
+    profile: OrgProfile | null;
+  };
+  /** Motivo del rechazo (de la empresa o del cliente); solo con el pedido declinado. */
+  decline: { reason: string | null; by: "COMPANY" | "CLIENT" | null } | null;
+  /** Propuesta de la empresa: su nota y si el cliente ya la aprobó. */
+  proposal: { note: string | null; sentAt: string | null; approvedAt: string | null } | null;
+  items: Array<{
+    name: string;
+    quantity: number;
+    /** KEEP, CHANGED, REMOVED, UNAVAILABLE o SUBSTITUTED: qué hizo la empresa con la línea. */
+    state: string;
+    originalName: string | null;
+    originalQuantity: number | null;
+    subtotal: number | null;
+  }>;
 };
 
 /** Pedido por su token; `null` si no existe. Solo campos aptos para quien lo hizo. */
@@ -493,13 +541,19 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
       referenceTotal: true,
       priceList: true,
       organizationId: true,
-      items: { orderBy: { productName: "asc" }, select: { productName: true, quantity: true } },
+      declineReason: true,
+      declinedBy: true,
+      proposedAt: true,
+      proposalNote: true,
+      proposalApprovedAt: true,
+      items: { orderBy: { productName: "asc" }, select: { productName: true, quantity: true, state: true, originalName: true, originalQuantity: true, subtotal: true } },
     },
   });
   if (!quote?.organizationId) return null;
-  const [organization, settings] = await Promise.all([
+  const [organization, settings, presentation] = await Promise.all([
     db.organization.findUnique({ where: { id: quote.organizationId }, select: { name: true, slug: true } }),
     db.organizationRentalSettings.findUnique({ where: { organizationId: quote.organizationId }, select: { whatsappPhone: true, storefrontAccent: true } }),
+    loadOrgPresentation(quote.organizationId),
   ]);
   if (!organization) return null;
   return {
@@ -511,8 +565,24 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     location: quote.location,
     subtotal: quote.referenceTotal,
     priceList: quote.priceList === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
-    organization: { name: organization.name, slug: organization.slug, whatsappPhone: settings?.whatsappPhone ?? null, theme: storefrontTheme(settings?.storefrontAccent) },
-    items: quote.items.map((item) => ({ name: item.productName, quantity: item.quantity })),
+    organization: {
+      name: organization.name,
+      slug: organization.slug,
+      whatsappPhone: settings?.whatsappPhone ?? null,
+      theme: storefrontTheme(settings?.storefrontAccent),
+      appearance: appearanceView(presentation.appearance),
+      profile: profileHasData(presentation.profile) ? presentation.profile : null,
+    },
+    decline: quote.status === "DECLINED" ? { reason: quote.declineReason, by: quote.declinedBy === "CLIENT" ? "CLIENT" : quote.declinedBy === "COMPANY" ? "COMPANY" : null } : null,
+    proposal: quote.proposedAt ? { note: quote.proposalNote, sentAt: quote.proposedAt.toISOString(), approvedAt: quote.proposalApprovedAt?.toISOString() ?? null } : null,
+    items: quote.items.map((item) => ({
+      name: item.productName,
+      quantity: item.quantity,
+      state: item.state,
+      originalName: item.originalName,
+      originalQuantity: item.originalQuantity,
+      subtotal: item.subtotal,
+    })),
   };
 }
 

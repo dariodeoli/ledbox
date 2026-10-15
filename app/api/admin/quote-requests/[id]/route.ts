@@ -1,4 +1,4 @@
-import { QUOTE_REQUEST_STATUSES, isQuoteRequestStatus } from "@/lib/catalog-public";
+import { MANUAL_STATUSES, isQuoteRequestStatus } from "@/lib/catalog-public";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -18,8 +18,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = (await readJson(request)) as Record<string, unknown> | null;
   const status = typeof body?.status === "string" ? body.status.toUpperCase() : "";
-  if (!isQuoteRequestStatus(status) || status === "CONVERTED") {
-    return jsonError(`Estado inválido. Opciones: ${QUOTE_REQUEST_STATUSES.filter((value) => value !== "CONVERTED").join(", ")}.`, 400);
+  if (!isQuoteRequestStatus(status) || !MANUAL_STATUSES.includes(status)) {
+    return jsonError(`Estado inválido. Opciones: ${MANUAL_STATUSES.join(", ")}. «Propuesta» y «Convertido» los ponen la propuesta y la conversión.`, 400);
   }
   const quote = await db.quoteRequest.findFirst({ where: { id, organizationId: auth.context.organizationId }, select: { id: true, status: true, leadId: true } });
   if (!quote) return jsonError("El pedido no existe en esta empresa.", 404);

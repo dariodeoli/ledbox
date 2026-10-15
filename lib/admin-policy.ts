@@ -41,6 +41,7 @@ export type AdminNavGroup = {
  */
 const RESTRICTED_MODULES: Record<string, readonly AdminRole[]> = {
   "/ajustes/empresa": ["OWNER", "ADMIN"],
+  "/ajustes/apariencia": ["OWNER", "ADMIN"],
   "/ajustes/correo": ["OWNER", "ADMIN"],
   "/ajustes/alquileres": ["OWNER", "ADMIN"],
   "/ajustes/tienda": ["OWNER", "ADMIN"],

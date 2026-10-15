@@ -410,6 +410,7 @@ const MAIL_CATEGORY: Record<string, string> = {
   invitation: "Invitación",
   alert: "Alerta de sistema",
   signature: "Firma del cliente",
+  catalog: "Catálogo y pedidos",
 };
 const MAIL_STATUS: Record<string, string> = {
   sending: "Enviando",

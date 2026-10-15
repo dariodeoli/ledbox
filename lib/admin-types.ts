@@ -579,6 +579,10 @@ export type AdminPaymentDetails = {
   ruc: string | null;
   account: string | null;
   alias: string | null;
+  /** CORRIENTE (cuenta corriente) o AHORRO (caja de ahorro). */
+  accountType?: string | null;
+  /** PYG, USD, BRL o EUR. */
+  currency?: string | null;
 };
 
 export type AdminBudgetPlanPayload = {
@@ -1451,6 +1455,10 @@ export type AdminLeadItem = {
   notes: string | null;
   /** Artículo del inventario (pedidos del catálogo público); nulo en pedidos viejos. */
   inventoryId?: string | null;
+  /** Qué hizo la empresa con la línea: KEEP, CHANGED, REMOVED, UNAVAILABLE o SUBSTITUTED. */
+  state?: string;
+  originalName?: string | null;
+  originalQuantity?: number | null;
 };
 
 export type AdminLeadQuote = {
@@ -1463,7 +1471,7 @@ export type AdminLeadQuote = {
   source: string;
   createdAt: string;
   items: AdminLeadItem[];
-  /** Pedido del catálogo público (fase 3): NEW, REVIEWING, QUOTED, CONVERTED, DECLINED o EXPIRED. */
+  /** Pedido del catálogo público: NEW, REVIEWING, QUOTED, PROPOSED, APPROVED, CONVERTED, DECLINED o EXPIRED. */
   status?: string;
   startsAt?: string | null;
   endsAt?: string | null;
@@ -1474,6 +1482,12 @@ export type AdminLeadQuote = {
   clientId?: string | null;
   /** Presupuesto en que se convirtió. */
   budget?: { id: string } | null;
+  /** Rechazo con motivo (de la empresa o del cliente) y propuesta de la empresa. */
+  declineReason?: string | null;
+  declinedBy?: string | null;
+  proposedAt?: string | null;
+  proposalNote?: string | null;
+  proposalApprovedAt?: string | null;
 };
 
 export type AdminLeadRow = {
@@ -2614,6 +2628,8 @@ export type AdminRentalSettings = {
   storefrontTagline: string | null;
   storefrontAccent: string | null;
   storefrontEmail: string | null;
+  /** Quién entra al catálogo: OPEN, REQUEST (pide acceso) o PRIVATE (solo con link). */
+  catalogAccessMode: "OPEN" | "REQUEST" | "PRIVATE";
   /** Papelera: días hasta el vaciado automático de lo eliminado; `null` = nunca (docs/PAPELERA.md). */
   trashPurgeDays: number | null;
 };

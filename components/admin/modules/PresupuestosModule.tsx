@@ -98,6 +98,7 @@ import {
   NumberField,
   RucField,
   SearchField,
+  SegmentedField,
   TextAreaField,
   TextField,
   type ComboboxOption,
@@ -464,13 +465,13 @@ export function BudgetProofDialog({
  * portal los muestra recién con el presupuesto aprobado.
  */
 function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
-  const [details, setDetails] = useState<AdminPaymentDetails>({ bank: "", holder: "", ruc: "", account: "", alias: "" });
+  const [details, setDetails] = useState<AdminPaymentDetails>({ bank: "", holder: "", ruc: "", account: "", alias: "", accountType: "", currency: "" });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   // Lo último cargado o guardado: «hay cambios sin guardar» es distinto de eso.
-  const loadedRef = useRef(JSON.stringify({ bank: "", holder: "", ruc: "", account: "", alias: "" }));
+  const loadedRef = useRef(JSON.stringify({ bank: "", holder: "", ruc: "", account: "", alias: "", accountType: "", currency: "" }));
 
   useEffect(() => {
     let active = true;
@@ -491,6 +492,8 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
           ruc: result.data.paymentDetails?.ruc ?? "",
           account: result.data.paymentDetails?.account ?? "",
           alias: result.data.paymentDetails?.alias ?? "",
+          accountType: result.data.paymentDetails?.accountType ?? "",
+          currency: result.data.paymentDetails?.currency ?? "",
         };
         loadedRef.current = JSON.stringify(loaded);
         setDetails(loaded);
@@ -575,6 +578,18 @@ function PaymentDetailsDialog({ onClose }: { onClose: () => void }) {
             onChange={(value) => setDetails({ ...details, account: value })}
             maxLength={40}
             placeholder="1234567890"
+          />
+          <SegmentedField
+            label="Tipo de cuenta"
+            value={details.accountType ?? ""}
+            onChange={(value) => setDetails({ ...details, accountType: value })}
+            options={[{ value: "", label: "Sin indicar" }, { value: "CORRIENTE", label: "Corriente" }, { value: "AHORRO", label: "Caja de ahorro" }]}
+          />
+          <SegmentedField
+            label="Moneda de la cuenta"
+            value={details.currency ?? ""}
+            onChange={(value) => setDetails({ ...details, currency: value })}
+            options={[{ value: "", label: "Sin indicar" }, { value: "PYG", label: "PYG" }, { value: "USD", label: "USD" }, { value: "BRL", label: "BRL" }, { value: "EUR", label: "EUR" }]}
           />
           <TextField
             label="Alias"

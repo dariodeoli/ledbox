@@ -610,3 +610,74 @@ export function cityDepartment(value: string | null | undefined): string | null 
   if (!city) return null;
   return departamentoDe(city) || null;
 }
+
+// ── Perfil de la empresa: link de Maps y franjas horarias ────────────────────
+
+/** Mensajes del perfil de la empresa (un solo texto por regla). */
+export const PROFILE_MESSAGES = {
+  mapsUrl: "El link de Google Maps tiene que ser https://www.google.com/maps/… o https://maps.app.goo.gl/…",
+  timeRange: "Cada franja va de «desde» a «hasta» en formato 24 h (HH:MM) y «hasta» es posterior a «desde».",
+  timeOverlap: "Las franjas de un mismo día no pueden superponerse.",
+} as const;
+
+const MAPS_URL_MAX = 500;
+
+/**
+ * Normaliza un link de Google Maps y lo devuelve (`https:` obligatorio, sin
+ * usuario/clave) o `null` si no es de Google Maps. Acepta `google.com/maps…`
+ * (también `www.` y `maps.google.com`) y `maps.app.goo.gl/…`. No sigue redirecciones.
+ */
+export function normalizeGoogleMapsUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw || raw.length > MAPS_URL_MAX || /\s/.test(raw)) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname;
+  const isGoogle = (host === "google.com" || host === "www.google.com") && (path === "/maps" || path.startsWith("/maps/"));
+  const isMapsHost = host === "maps.google.com" && (path.length > 1 || url.search.length > 1);
+  const isShort = host === "maps.app.goo.gl" && path.length > 1;
+  if (!isGoogle && !isMapsHost && !isShort) return null;
+  return url.toString();
+}
+
+export function googleMapsUrlValid(value: unknown): boolean {
+  return normalizeGoogleMapsUrl(value) !== null;
+}
+
+/** `HH:MM` en 24 h → minutos desde medianoche; `null` si no es una hora válida. */
+export function timeOfDayMinutes(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+export type TimeRange = { from: string; to: string };
+
+/**
+ * Valida una lista de franjas de un día: cada una `HH:MM` → `HH:MM` con fin posterior al
+ * inicio, hasta `max` franjas y sin superponerse. Las devuelve ordenadas.
+ */
+export function parseTimeRanges(value: unknown, max = 4): { ok: true; ranges: TimeRange[] } | { ok: false; error: string } {
+  if (value === undefined || value === null) return { ok: true, ranges: [] };
+  if (!Array.isArray(value) || value.length > max) return { ok: false, error: `Hasta ${max} franjas por día.` };
+  const ranges: Array<TimeRange & { start: number; end: number }> = [];
+  for (const entry of value) {
+    const record = entry && typeof entry === "object" && !Array.isArray(entry) ? (entry as Record<string, unknown>) : {};
+    const start = timeOfDayMinutes(record.from);
+    const end = timeOfDayMinutes(record.to);
+    if (start === null || end === null || end <= start) return { ok: false, error: PROFILE_MESSAGES.timeRange };
+    ranges.push({ from: String(record.from).trim(), to: String(record.to).trim(), start, end });
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  for (let index = 1; index < ranges.length; index += 1) {
+    if (ranges[index].start < ranges[index - 1].end) return { ok: false, error: PROFILE_MESSAGES.timeOverlap };
+  }
+  return { ok: true, ranges: ranges.map(({ from, to }) => ({ from, to })) };
+}

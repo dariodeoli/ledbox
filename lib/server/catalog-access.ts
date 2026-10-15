@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 
 /**
@@ -43,15 +44,27 @@ export async function catalogAccessStatus(organizationId: string, clientId: stri
 }
 
 /** Genera un link nuevo para el cliente (revoca los vigentes). `null` si el cliente no existe o está inactivo. */
-export async function issueCatalogAccess(organizationId: string, clientId: string): Promise<{ token: string; id: string } | null> {
+export async function issueCatalogAccess(
+  organizationId: string,
+  clientId: string,
+  priceList: "WHOLESALE" | "RETAIL" = "WHOLESALE",
+): Promise<{ token: string; id: string } | null> {
   const client = await db.client.findFirst({ where: { id: clientId, organizationId, active: true }, select: { id: true } });
   if (!client) return null;
+  return db.$transaction((tx) => issueCatalogAccessTx(tx, organizationId, clientId, priceList));
+}
+
+/** Igual que `issueCatalogAccess`, dentro de la transacción del llamador (sin chequear el cliente). */
+export async function issueCatalogAccessTx(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  clientId: string,
+  priceList: "WHOLESALE" | "RETAIL" = "WHOLESALE",
+): Promise<{ token: string; id: string }> {
   const token = catalogTokenValue();
   const id = randomUUID();
-  await db.$transaction(async (tx) => {
-    await tx.catalogAccessToken.updateMany({ where: { organizationId, clientId, revokedAt: null }, data: { revokedAt: new Date() } });
-    await tx.catalogAccessToken.create({ data: { id, organizationId, clientId, tokenHash: catalogTokenHash(token) } });
-  });
+  await tx.catalogAccessToken.updateMany({ where: { organizationId, clientId, revokedAt: null }, data: { revokedAt: new Date() } });
+  await tx.catalogAccessToken.create({ data: { id, organizationId, clientId, tokenHash: catalogTokenHash(token), priceList } });
   return { token, id };
 }
 
@@ -63,6 +76,8 @@ export async function revokeCatalogAccess(organizationId: string, clientId: stri
 
 export type ResolvedCatalogAccess = {
   id: string;
+  /** Lista de precios que abre el link (WHOLESALE = los de siempre; RETAIL = acceso de cliente final). */
+  priceList: "WHOLESALE" | "RETAIL";
   organization: { id: string; name: string; slug: string };
   client: { id: string; displayName: string };
 };
@@ -79,6 +94,7 @@ export async function resolveCatalogAccess(slug: string, token: string): Promise
     where: { tokenHash: catalogTokenHash(token) },
     select: {
       id: true,
+      priceList: true,
       revokedAt: true,
       lastUsedAt: true,
       organization: { select: { id: true, name: true, slug: true, active: true } },
@@ -96,5 +112,5 @@ export async function resolveCatalogAccess(slug: string, token: string): Promise
     });
   }
   const displayName = (row.client.tradeName || row.client.company || row.client.name).trim();
-  return { id: row.id, organization: { id: row.organization.id, name: row.organization.name, slug: row.organization.slug }, client: { id: row.client.id, displayName } };
+  return { id: row.id, priceList: row.priceList === "RETAIL" ? "RETAIL" : "WHOLESALE", organization: { id: row.organization.id, name: row.organization.name, slug: row.organization.slug }, client: { id: row.client.id, displayName } };
 }

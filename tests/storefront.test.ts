@@ -158,7 +158,8 @@ test("la tienda: /catalogo redirige, el mayorista y el pedido van noindex y la t
   assert.match(legacy, /redirect\(`\/tienda\//);
   const store = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
   assert.match(store, /if \(!context\) notFound\(\)/);
-  assert.match(store, /robots: context\.demo \? \{ index: false, follow: false \} : \{ index: true, follow: true \}/);
+  // La demo y la tienda con acceso restringido (con solicitud o privada) no se indexan.
+  assert.match(store, /robots: context\.demo \|\| context\.settings\.catalogAccessMode !== "OPEN" \? \{ index: false, follow: false \} : \{ index: true, follow: true \}/);
   assert.match(store, /title: \{ absolute: `\$\{name\} · Tienda de alquiler` \}/);
   assert.match(store, /description,/);
   const wholesale = read("app/(catalogo)/tienda/[orgSlug]/mayorista/[token]/page.tsx");
@@ -180,11 +181,13 @@ test("el link mayorista se administra desde la ficha con clients.write y nunca d
   assert.match(read("lib/server/catalog-access.ts"), /where: \{ id: clientId, organizationId(, active: true)? \}/);
 });
 
-test("Ajustes tiene la sección «Tienda web» con Crear tienda, copiar link, frase y color", () => {
+test("Ajustes tiene la sección «Tienda web» con Crear tienda, copiar link, frase y acceso; el color vive en Apariencia", () => {
   const tabs = read("components/admin/modules/AjustesTabs.tsx");
   assert.match(tabs, /key: "tienda", href: "\/ajustes\/tienda", label: "Tienda web"/);
   const settings = read("components/admin/modules/TiendaWebSettings.tsx");
-  for (const text of ["Crear tienda", "Copiar link", "Frase de la portada", "Color de marca", "Tienda encendida", "Mostrar precios", "WhatsApp de la empresa"]) assert.ok(settings.includes(text), text);
+  for (const text of ["Crear tienda", "Copiar link", "Frase de la portada", "Acceso al catálogo", "Tienda encendida", "Mostrar precios", "WhatsApp de la empresa"]) assert.ok(settings.includes(text), text);
+  assert.equal(settings.includes('label="Color de marca"'), false, "el color de marca no se duplica: vive en Ajustes → Apariencia");
+  assert.match(read("components/admin/modules/AparienciaSettings.tsx"), /title="Color de marca"/);
   assert.match(read("lib/admin-policy.ts"), /"\/ajustes\/tienda": \["OWNER", "ADMIN"\]/);
   assert.match(read("lib/admin-routes.ts"), /"\/ajustes\/tienda"/);
   assert.equal(/publicCatalogEnabled/.test(read("components/admin/modules/AlquileresSettings.tsx")), false, "Alquileres ya no lleva el catálogo");

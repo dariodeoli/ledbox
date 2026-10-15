@@ -1,4 +1,5 @@
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
+import { accountCurrencyLabel, accountTypeLabel } from "@/lib/org-profile";
 import { normalizeBudgetCode, portalBudgetUrl, publicConfig } from "@/lib/public-config";
 import { parsePaymentDetails, paymentPlanOf, type PortalBudgetPaymentDetails } from "../budget-portal";
 import { renderMail, renderMailText, type MailContent, type MailRow } from "./template";
@@ -124,6 +125,8 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
     if (details.holder) rows.push({ label: "Titular", value: details.holder });
     if (details.ruc) rows.push({ label: "RUC", value: details.ruc });
     if (details.account) rows.push({ label: "Cuenta", value: details.account });
+    if (accountTypeLabel(details.accountType)) rows.push({ label: "Tipo de cuenta", value: accountTypeLabel(details.accountType)! });
+    if (accountCurrencyLabel(details.currency)) rows.push({ label: "Moneda", value: accountCurrencyLabel(details.currency)! });
     if (details.alias) rows.push({ label: "Alias", value: details.alias });
   }
 

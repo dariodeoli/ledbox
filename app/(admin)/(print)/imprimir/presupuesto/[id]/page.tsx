@@ -22,7 +22,10 @@ import { db } from "@/lib/server/db";
 import { parseFiscalDetails } from "@/lib/server/fiscal";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { PrintBankData } from "../../../_components/PrintBankData";
-import { PrintAmount, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
+import { PrintAmount, PrintCompanyInfo, PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
+import { googleFontHref, fontOf, readAppearance } from "@/lib/appearance";
+import { readOrgProfile } from "@/lib/org-profile";
+import { storefrontTheme } from "@/lib/storefront-theme";
 import { PrintToolbar } from "../../../_components/PrintToolbar";
 import { AdminImageBox } from "@/components/admin/AdminImageBox";
 import { inventoryImageUrl } from "@/lib/server/inventory-images";
@@ -66,7 +69,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
       // Solo los cobros cobrados (issue #16): un cobro a plazo pendiente no es
       // plata cobrada y no se imprime como pago del presupuesto.
       payments: { where: { status: "RECEIVED" }, orderBy: { paidAt: "asc" } },
-      organization: { select: { paymentDetails: true, fiscalDetails: true } },
+      organization: { select: { paymentDetails: true, fiscalDetails: true, profile: true, appearance: true } },
     },
   });
   if (!budget) notFound();
@@ -87,12 +90,24 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
   // En papel siempre el logo claro (issue #22); sin logo queda el monograma LB.
   const logos = await loadOrganizationLogos(auth.context.organizationId);
   const logo = logos.light ? organizationLogoUrl("light", logos.light.updatedAt) : null;
+  // Perfil y apariencia de la empresa: datos de contacto/horarios/condiciones, color de marca (ya
+  // validado con contraste AA contra blanco, que es el papel) y tipografía elegida.
+  const profile = readOrgProfile(budget.organization.profile);
+  const appearance = readAppearance(budget.organization.appearance);
+  const accent = (await db.organizationRentalSettings.findUnique({ where: { organizationId: auth.context.organizationId }, select: { storefrontAccent: true } }))?.storefrontAccent ?? null;
+  const brand = storefrontTheme(accent);
+  const fontHref = googleFontHref(appearance.font);
+  const sheetStyle = {
+    ...(brand.branded ? { "--lbprint-brand": brand.light.accent } : {}),
+    ...(appearance.font !== "sistema" ? { fontFamily: fontOf(appearance.font).family } : {}),
+  } as React.CSSProperties;
 
   return (
     <>
       <PrintToolbar backHref="/presupuestos" backLabel="Volver a Presupuestos" />
 
-      <article className="lbprint-sheet budget-print-sheet" aria-label={`Presupuesto ${budget.title}`}>
+      {fontHref ? <link rel="stylesheet" href={fontHref} /> : null}
+      <article className="lbprint-sheet budget-print-sheet" aria-label={`Presupuesto ${budget.title}`} style={sheetStyle}>
         <PrintHeader
           title="Presupuesto"
           reference={reference}
@@ -326,6 +341,8 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
             </p>
           ) : null}
         </PrintSection>
+
+        <PrintCompanyInfo profile={profile} />
 
         <PrintFooter note={`Presupuesto ${reference}`} />
       </article>
