@@ -69,3 +69,16 @@ test("selección rica oculta pintura del input pese a la mayor especificidad de 
   assert.match(rule, /color:\s*transparent\s*!important/, "la regla común con múltiples :not no debe volver a pintar texto debajo de la identidad");
   assert.match(rule, /-webkit-text-fill-color:\s*transparent/);
 });
+
+
+test("la tarjeta móvil de clientes conserva teléfono/correo al unificar identidad", () => {
+  const source = readFileSync(new URL("../components/admin/modules/ClientesModule.tsx", import.meta.url), "utf8");
+  const helper = source.slice(source.indexOf("function clientContactLine"), source.indexOf("function contractedTitle"));
+  assert.match(helper, /client\.contactPhone \|\| client\.phone/);
+  assert.match(helper, /client\.contactEmail \|\| client\.email/);
+  assert.match(helper, /return phone \|\| email \|\| ""/);
+  const cards = source.slice(source.indexOf("const clientCards:"), source.indexOf("const totals ="));
+  assert.match(cards, /const primaryContact = clientContactLine\(client\)/);
+  assert.match(cards, /subtitle: \[primaryContact,/);
+  assert.match(cards, /ClientIdentityView client=\{client\}/);
+});

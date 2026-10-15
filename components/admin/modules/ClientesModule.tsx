@@ -348,6 +348,7 @@ export function ClientesModule() {
   const clientCards: AdminCardData[] = rows.map((client): AdminCardData => {
     const name = clientPresentation(client).primary;
     const metrics = client.metrics;
+    const primaryContact = clientContactLine(client);
     return {
       id: client.id,
       title: (
@@ -358,7 +359,7 @@ export function ClientesModule() {
         </>
       ),
       titleTooltip: `${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`,
-      subtitle: clientLegalName(client) && clientLegalName(client) !== clientPresentation(client).primary ? clientLegalName(client) : null,
+      subtitle: [primaryContact, clientLegalName(client) && clientLegalName(client) !== name ? clientLegalName(client) : null].filter(Boolean).join(" · ") || null,
       badges: [
         ...(client.archivedAt ? [{ label: "Archivado", tone: "neutral" as const }] : client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
         ...(client.contactName
