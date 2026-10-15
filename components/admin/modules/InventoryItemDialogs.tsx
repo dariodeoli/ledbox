@@ -174,7 +174,7 @@ function PriceFrontFields({
   onRows: (rows: TierRow[]) => void;
 }) {
   return (
-    <div className="admin-form-group admin-form-group--prices">
+    <div className="admin-form-group admin-form-group--prices admin-field--wide">
       <span className="admin-form-group-title">{title}</span>
       <MoneyField
         label="Precio normal"
@@ -214,7 +214,7 @@ function PhotoFields({
   disabled?: boolean;
 }) {
   return (
-    <div className="admin-form-group admin-form-group--photo">
+    <div className="admin-form-group admin-form-group--photo admin-field--wide">
       <span className="admin-form-group-title">Foto</span>
       <TextField
         label="Imagen (URL)"
@@ -571,10 +571,9 @@ export function InventoryEditDialog({
   const [editPhotoRemoved, setEditPhotoRemoved] = useState(false);
   const [editPhotoError, setEditPhotoError] = useState("");
   const editFormId = useId();
-  // «Más opciones» abre de entrada solo si el producto ya tiene algo cargado ahí.
-  const advancedOpen = [baseForm.replacementCost, baseForm.dailyCost, baseForm.notes, baseForm.bufferBeforeHours, baseForm.bufferAfterHours].some(
-    (value) => Boolean(value) && value !== "0",
-  );
+  // Los costos y el proveedor solo se ven con el permiso inventory.costs (el API omite los costos al resto).
+  const showCosts = item.dailyCost !== undefined;
+  const isCombo = Boolean(item.combo);
   const editDirty = JSON.stringify(editForm) !== JSON.stringify(baseForm) || Boolean(editPendingPhoto) || editPhotoRemoved;
 
   const editPriceWarning = useMemo(() => {
@@ -644,7 +643,7 @@ export function InventoryEditDialog({
     }
     const replacementCost = inventoryPriceValue(editForm.replacementCost);
     const dailyCost = inventoryPriceValue(editForm.dailyCost);
-    if (replacementCost === false || dailyCost === false) {
+    if (showCosts && (replacementCost === false || dailyCost === false)) {
       setEditError(FIELD_MESSAGES.price);
       return;
     }
@@ -665,8 +664,8 @@ export function InventoryEditDialog({
       warrantyUntil: editForm.warrantyUntil,
       inventoryKind: editForm.inventoryKind,
       status: editForm.status,
-      replacementCost: replacementCost ?? 0,
-      dailyCost: dailyCost ?? 0,
+      // Sin permiso inventory.costs el API no devuelve costos: no se mandan para no pisarlos con 0.
+      ...(showCosts ? { replacementCost: replacementCost ?? 0, dailyCost: dailyCost ?? 0 } : {}),
       notes: editForm.notes,
       publicDescription: editForm.publicDescription,
       capacity: editForm.capacity.trim() ? Number(editForm.capacity) : null,
@@ -718,12 +717,15 @@ export function InventoryEditDialog({
     });
   }
 
+  const kindLabel = KIND_PICK_OPTIONS.find((option) => option.value === editForm.inventoryKind)?.label;
+  const subtitle = [editForm.category, kindLabel].filter(Boolean).join(" · ");
+
   return (
     <AdminDialog
-      title={`Editar producto · ${editForm.name || item.name}`}
+      title={isCombo ? "Editar combo" : "Editar producto"}
       icon="inventory"
-      size="wide"
-      description="Datos, foto, costos y precios del producto. La cantidad se gestiona por unidad."
+      size="lg"
+      description="Identidad, precios, tienda y depósito del producto. La cantidad se gestiona por unidad."
       dirty={editDirty}
       error={editError}
       warning={editPriceWarning}
@@ -739,17 +741,37 @@ export function InventoryEditDialog({
         </>
       )}
     >
+      <div className="admin-edit-hero">
+        <InventoryThumb item={{ imageUrl: editPhotoPreview }} size={64} />
+        <div className="admin-edit-hero-main">
+          <strong className="admin-edit-hero-name">{editForm.name.trim() || item.name}</strong>
+          <span className="admin-edit-hero-meta">
+            {item.sku ? `Código ${item.sku}` : "Sin código"}
+            {subtitle ? ` · ${subtitle}` : ""}
+          </span>
+        </div>
+      </div>
+
       <form id={editFormId} className="admin-form" onSubmit={(event) => void submitEditItem(event)} aria-busy={editBusy || undefined}>
-        {/* Datos del ítem (issue #111): todo editable menos la cantidad (#112). */}
-        <AdminDialogSection title="Datos">
+        <AdminDialogSection title="Identidad">
           <TextField
             label="Artículo"
             required
+            size="lg"
             maxLength={120}
             value={editForm.name}
             help={INVENTORY_FIELD_HELP.name}
             onChange={(value) => setEditForm({ ...editForm, name: value })}
             placeholder="Ej.: Pantalla LED P3.9 500×500"
+          />
+          <TextField
+            label="Código"
+            size="xs"
+            readOnly
+            onChange={() => {}}
+            value={item.sku ?? ""}
+            placeholder="Sin código"
+            help="Código del producto. Se define al darlo de alta; el de cada unidad física se gestiona en la ficha."
           />
           <CategoryPicker
             tree={taxonomy.tree}
@@ -764,29 +786,24 @@ export function InventoryEditDialog({
             onChange={(value) => setEditForm({ ...editForm, inventoryKind: value })}
             options={KIND_PICK_OPTIONS}
           />
-          <SelectField
-            label="Estado"
-            value={editForm.status}
-            help={INVENTORY_FIELD_HELP.status}
-            onChange={(value) => setEditForm({ ...editForm, status: value })}
-            options={STATUS_PICK_OPTIONS}
-          />
-          <SegmentedField
-            label="Visibilidad en la tienda"
-            help={INVENTORY_FIELD_HELP.catalogAudience}
-            value={editForm.catalogAudience}
-            onChange={(value) => setEditForm({ ...editForm, catalogAudience: value as CatalogAudience })}
-            options={[...CATALOG_AUDIENCE_OPTIONS]}
-            hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
+          <PhotoFields
+            urlValue={editForm.imageUrl}
+            onUrlChange={(value) => {
+              setEditPendingPhoto(null);
+              setEditPhotoError("");
+              setEditPhotoRemoved(false);
+              setEditForm({ ...editForm, imageUrl: value });
+            }}
+            previewUrl={editPhotoPreview}
+            hasPhoto={editHasPhoto}
+            onSelectFile={(file) => void selectEditPhoto(file)}
+            onClearPhoto={clearEditPhoto}
+            error={editPhotoError}
+            disabled={editBusy}
           />
         </AdminDialogSection>
 
-        <AdminDialogSection title="Depósito y compra" collapsible hint="dónde se guarda, proveedor y garantía">
-          <ProductTraceFields taxonomy={taxonomy} value={editForm} onChange={(next) => setEditForm((current) => ({ ...current, ...next }))} disabled={editBusy} />
-        </AdminDialogSection>
-
-        {/* Precios: lo que más se edita de un producto existente, justo después de los datos. */}
-        <AdminDialogSection title="Precios">
+        <AdminDialogSection title="Precio y cobro">
           <SegmentedField
             label="Se cobra"
             help={INVENTORY_FIELD_HELP.billingUnit}
@@ -811,7 +828,7 @@ export function InventoryEditDialog({
             onNormal={(value) => setEditForm({ ...editForm, wholesalePrice: value })}
             onRows={(wholesaleTiers) => setEditForm({ ...editForm, wholesaleTiers })}
           />
-          <div className="admin-form-group admin-form-group--min">
+          <div className="admin-form-group admin-form-group--min admin-field--wide">
             <span className="admin-form-group-title">Precio mínimo</span>
             <MoneyField
               label="Piso de venta"
@@ -821,33 +838,67 @@ export function InventoryEditDialog({
               hint="Piso de venta del ítem."
             />
           </div>
+          <p className="admin-note admin-field--wide">Precio 0 o vacío: la tienda muestra «Consultar» en vez de un monto.</p>
         </AdminDialogSection>
 
-        {/* Las unidades físicas (issue #112) se gestionan en la ficha: acá
-            solo se resume cuántas hay, para no duplicar la lista. */}
-        <AdminDialogSection title="Stock y tiempos">
+        <AdminDialogSection title="Medidas y capacidad">
+          <TextField
+            label="Medidas"
+            optional
+            size="lg"
+            value={editForm.dimensions}
+            onChange={(value) => setEditForm({ ...editForm, dimensions: value })}
+            maxLength={60}
+            hint="Ej.: Ø 1,40 m o 1,60 × 0,75 m."
+            disabled={editBusy}
+          />
+          <NumberField
+            label="Capacidad (personas)"
+            size="sm"
+            value={editForm.capacity}
+            onChange={(value) => setEditForm({ ...editForm, capacity: value.replace(/\D/g, "").slice(0, 4) })}
+            maxLength={4}
+            hint="Ej.: 8. La tienda la destaca para distinguir juegos parecidos."
+            disabled={editBusy}
+          />
+        </AdminDialogSection>
+
+        {/* Las unidades físicas (issue #112) se gestionan en la ficha: acá solo se resume cuántas hay. */}
+        <AdminDialogSection title="Stock y depósito">
           <p className="admin-note admin-field--wide">
             <span>
-              {formatNumber(unitCount)} unidad{unitCount === 1 ? "" : "es"} · código, estado y costo se
-              gestionan en la ficha del producto.
+              {isCombo
+                ? "Un combo no tiene unidades propias: se arma con sus componentes."
+                : `${formatNumber(unitCount)} unidad${unitCount === 1 ? "" : "es"} · la cantidad, el código, la condición y el costo de cada una se gestionan en la ficha del producto.`}
             </span>
-            <AdminButton
-              icon="info"
-              type="button"
-              title="Ver la ficha con las unidades"
-              onClick={() => {
-                if (editDirty) {
-                  setEditError("Guardá o cancelá los cambios antes de abrir la ficha. Tus datos siguen aquí.");
-                  return;
-                }
-                onOpenUnits(item.id);
-              }}
-            >
-              Ver unidades
-            </AdminButton>
+            {isCombo ? null : (
+              <AdminButton
+                icon="info"
+                type="button"
+                title="Ver la ficha con las unidades"
+                onClick={() => {
+                  if (editDirty) {
+                    setEditError("Guardá o cancelá los cambios antes de abrir la ficha. Tus datos siguen aquí.");
+                    return;
+                  }
+                  onOpenUnits(item.id);
+                }}
+              >
+                Ver unidades
+              </AdminButton>
+            )}
           </p>
+          <ProductTraceFields part="location" taxonomy={taxonomy} value={editForm} onChange={(next) => setEditForm((current) => ({ ...current, ...next }))} disabled={editBusy} />
+          <SelectField
+            label="Estado"
+            value={editForm.status}
+            help={INVENTORY_FIELD_HELP.status}
+            onChange={(value) => setEditForm({ ...editForm, status: value })}
+            options={STATUS_PICK_OPTIONS}
+          />
           <NumberField
             label="Tiempo antes (horas)"
+            size="sm"
             value={editForm.bufferBeforeHours}
             onChange={(value) => setEditForm({ ...editForm, bufferBeforeHours: value })}
             maxLength={3}
@@ -856,6 +907,7 @@ export function InventoryEditDialog({
           />
           <NumberField
             label="Tiempo después (horas)"
+            size="sm"
             value={editForm.bufferAfterHours}
             onChange={(value) => setEditForm({ ...editForm, bufferAfterHours: value })}
             maxLength={3}
@@ -864,40 +916,14 @@ export function InventoryEditDialog({
           />
         </AdminDialogSection>
 
-
-        {/* Foto (issues #109 y #111): se cambia subiendo otra o se quita. */}
-        <AdminDialogSection title="Fotos" collapsible defaultOpen={Boolean(item.imageUrl)} hint="foto y descripción del catálogo">
-          <PhotoFields
-            urlValue={editForm.imageUrl}
-            onUrlChange={(value) => {
-              setEditPendingPhoto(null);
-              setEditPhotoError("");
-              setEditPhotoRemoved(false);
-              setEditForm({ ...editForm, imageUrl: value });
-            }}
-            previewUrl={editPhotoPreview}
-            hasPhoto={editHasPhoto}
-            onSelectFile={(file) => void selectEditPhoto(file)}
-            onClearPhoto={clearEditPhoto}
-            error={editPhotoError}
-            disabled={editBusy}
-          />
-          <NumberField
-            label="Capacidad (personas)"
-            value={editForm.capacity}
-            onChange={(value) => setEditForm({ ...editForm, capacity: value.replace(/\D/g, "").slice(0, 4) })}
-            maxLength={4}
-            hint="Ej.: 8. La tienda la destaca para distinguir juegos parecidos."
-            disabled={editBusy}
-          />
-          <TextField
-            label="Medidas"
-            optional
-            value={editForm.dimensions}
-            onChange={(value) => setEditForm({ ...editForm, dimensions: value })}
-            maxLength={60}
-            hint="Ej.: Ø 1,40 m o 1,60 × 0,75 m."
-            disabled={editBusy}
+        <AdminDialogSection title="Tienda web">
+          <SegmentedField
+            label="Visibilidad en la tienda"
+            help={INVENTORY_FIELD_HELP.catalogAudience}
+            value={editForm.catalogAudience}
+            onChange={(value) => setEditForm({ ...editForm, catalogAudience: value as CatalogAudience })}
+            options={[...CATALOG_AUDIENCE_OPTIONS]}
+            hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
           />
           <TextAreaField
             label="Descripción para el catálogo"
@@ -913,22 +939,27 @@ export function InventoryEditDialog({
           />
         </AdminDialogSection>
 
-        {/* Costos internos, notas internas: no son precios de venta ni se publican. */}
-        <AdminDialogSection title="Más opciones" collapsible defaultOpen={advancedOpen} hint="costos internos y notas">
-          <MoneyField
-            label="Reposición"
-            help={INVENTORY_FIELD_HELP.replacementCost}
-            value={editForm.replacementCost}
-            onChange={(value) => setEditForm({ ...editForm, replacementCost: value })}
-            hint="Lo que cuesta reponer la unidad; no es un precio de venta."
-          />
-          <MoneyField
-            label="Costo diario"
-            help={INVENTORY_FIELD_HELP.dailyCost}
-            value={editForm.dailyCost}
-            onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
-            hint="Costo interno por día de uso."
-          />
+        {showCosts ? (
+          <AdminDialogSection title="Proveedor y costos">
+            <ProductTraceFields part="supplier" taxonomy={taxonomy} value={editForm} onChange={(next) => setEditForm((current) => ({ ...current, ...next }))} disabled={editBusy} />
+            <MoneyField
+              label="Reposición"
+              help={INVENTORY_FIELD_HELP.replacementCost}
+              value={editForm.replacementCost}
+              onChange={(value) => setEditForm({ ...editForm, replacementCost: value })}
+              hint="Lo que cuesta reponer la unidad; no es un precio de venta."
+            />
+            <MoneyField
+              label="Costo diario"
+              help={INVENTORY_FIELD_HELP.dailyCost}
+              value={editForm.dailyCost}
+              onChange={(value) => setEditForm({ ...editForm, dailyCost: value })}
+              hint="Costo interno por día de uso."
+            />
+          </AdminDialogSection>
+        ) : null}
+
+        <AdminDialogSection title="Notas internas">
           <TextAreaField
             label="Notas internas"
             help={INVENTORY_FIELD_HELP.notes}
@@ -938,8 +969,26 @@ export function InventoryEditDialog({
             value={editForm.notes}
             onChange={(value) => setEditForm({ ...editForm, notes: value })}
             placeholder="Estado del equipo, accesorios, ubicación en depósito…"
+            hint="No se publican."
           />
         </AdminDialogSection>
+
+        {item.combo ? (
+          <AdminDialogSection title="Componentes">
+            {item.combo.components.length === 0 ? (
+              <p className="admin-note admin-field--wide">Este combo todavía no tiene componentes cargados. Se cargan desde «Editar combo y componentes» en la lista.</p>
+            ) : (
+              <ul className="admin-edit-components admin-field--wide">
+                {item.combo.components.map((component) => (
+                  <li key={component.componentId}>
+                    <span>{component.name}</span>
+                    <span className="admin-cell-sub">× {formatNumber(component.quantity)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AdminDialogSection>
+        ) : null}
       </form>
     </AdminDialog>
   );

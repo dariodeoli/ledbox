@@ -135,3 +135,11 @@ test("candado check:ui: frena bordes y tamaños de campo definidos fuera del blo
   assert.match(result.out, /app\/globals\.css:4/);
   assert.doesNotMatch(result.out, /globals\.css:2:/);
 });
+
+test("diálogos con pestañas: el cuerpo del diálogo no deja que la barra de pestañas se aplaste", () => {
+  const body = css.match(/^\.admin-dialog-body \{[^}]*\}/m)?.[0] ?? "";
+  assert.match(body, /display:\s*grid/);
+  // Un hijo con overflow-x (la barra) tiene mínimo automático 0 y, sin esto, colapsa al desbordar el contenido.
+  assert.match(body, /grid-auto-rows:\s*max-content/);
+  assert.match(css, /^\.admin-ficha-nav \{[^}]*position:\s*sticky[^}]*overflow-x:\s*auto/m);
+});

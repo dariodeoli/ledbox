@@ -137,15 +137,20 @@ export function ProductTraceFields({
   value,
   onChange,
   disabled,
+  part = "all",
 }: {
   taxonomy: InventoryTaxonomy;
   value: ProductTraceForm;
   onChange: (next: ProductTraceForm) => void;
   disabled?: boolean;
+  /** `location`: depósito y ubicación; `supplier`: proveedor, compra y garantía; `all` (default): todo junto. */
+  part?: "all" | "location" | "supplier";
 }) {
   const patch = (partial: Partial<ProductTraceForm>) => onChange({ ...value, ...partial });
   return (
     <>
+      {part !== "supplier" ? (
+        <>
       <SelectField
         label="Depósito por defecto"
         help={INVENTORY_FIELD_HELP.defaultWarehouseId}
@@ -164,6 +169,10 @@ export function ProductTraceFields({
         hint="Estante y nivel. Se propone al dar de alta unidades."
         disabled={disabled}
       />
+        </>
+      ) : null}
+      {part !== "location" ? (
+        <>
       <SelectField
         label="Proveedor"
         help={INVENTORY_FIELD_HELP.supplierId}
@@ -174,6 +183,8 @@ export function ProductTraceFields({
       />
       <DayField label="Fecha de compra" help={INVENTORY_FIELD_HELP.purchasedAt} value={value.purchasedAt} onChange={(next) => patch({ purchasedAt: next })} disabled={disabled} />
       <DayField label="Garantía hasta" help={INVENTORY_FIELD_HELP.warrantyUntil} value={value.warrantyUntil} onChange={(next) => patch({ warrantyUntil: next })} disabled={disabled} />
+        </>
+      ) : null}
     </>
   );
 }

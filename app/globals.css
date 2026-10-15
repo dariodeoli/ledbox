@@ -1901,7 +1901,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-head .admin-dialog-title { display: block; margin: 0; color: var(--a-text-strong); font: 600 17px/1.25 var(--font-display); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .admin-dialog-description { margin: 0; color: var(--a-muted-2); font-size: 12.5px; line-height: 1.4; }
 .admin-dialog-close { flex: 0 0 auto; width: 44px; height: 44px; margin: -6px -8px -6px 0; }
-.admin-dialog-body { scroll-padding-bottom: 88px; display: grid; flex: 1 1 auto; align-content: start; gap: 16px; min-height: 0; padding: 18px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.admin-dialog-body { scroll-padding-bottom: 88px; display: grid; grid-auto-rows: max-content; flex: 1 1 auto; align-content: start; gap: 16px; min-height: 0; padding: 18px 16px; overflow-y: auto; overscroll-behavior: contain; }
 /* Pie fijo: el nuevo (`footer`) y el de los hijos existentes (`.admin-dialog-foot`)
    se ven igual y quedan pegados abajo del cuerpo con scroll. */
 .admin-dialog-footer, .admin-dialog-body .admin-dialog-foot { z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--a-line); background: var(--a-dialog-bg); }
@@ -2923,6 +2923,13 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Ficha del producto: navegación de secciones, resumen, línea de tiempo y vínculos. */
 .admin-dialog-stack { display: grid; gap: 10px; min-width: 0; }
 .admin-dialog-section { scroll-margin-top: 56px; }
+.admin-edit-hero { display: flex; align-items: center; gap: 14px; min-width: 0; padding-bottom: 14px; border-bottom: 1px solid var(--a-line); }
+.admin-edit-hero-main { display: grid; gap: 2px; min-width: 0; }
+.admin-edit-hero-name { color: var(--a-text-strong); font: 700 17px/1.25 var(--font-display, var(--font-body)); overflow-wrap: anywhere; }
+.admin-edit-hero-meta { color: var(--a-muted-2); font-size: 12.5px; overflow-wrap: anywhere; }
+.admin-edit-components { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-edit-components li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--a-line); border-radius: 8px; font-size: 13px; }
+/* Sin `grid-auto-rows: max-content` en el cuerpo del diálogo, una barra con overflow-x (mínimo automático 0) se aplasta cuando el contenido desborda. */
 .admin-ficha-nav { position: sticky; top: -18px; z-index: 2; display: flex; gap: 6px; margin: -18px -16px 0; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--a-line); background: var(--a-dialog-bg); scrollbar-width: none; }
 .admin-ficha-nav::-webkit-scrollbar { display: none; }
 .admin-ficha-nav .admin-subtab { flex: 0 0 auto; min-height: 34px; cursor: pointer; }
