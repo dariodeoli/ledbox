@@ -1,3 +1,4 @@
+import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { skuConflictMessage } from "@/lib/server/trash-ops";
@@ -228,6 +229,7 @@ export async function POST(request: Request) {
             wholesaleFromDays: prices.values.wholesaleFromDays ?? 0,
             wholesaleFromPrice: prices.values.wholesaleFromPrice ?? 0,
             minimumPrice: prices.values.minimumPrice ?? 0,
+            billingUnit: readBillingUnit(body.billingUnit) ?? "DAILY",
           },
         });
         await createInventoryUnits(tx, {
@@ -269,6 +271,7 @@ export async function POST(request: Request) {
           "wholesaleFromDays",
           "wholesaleFromPrice",
           "minimumPrice",
+          "billingUnit",
         ]),
       },
     });

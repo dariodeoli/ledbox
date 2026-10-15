@@ -61,7 +61,7 @@ function textField(value: unknown, max: number): string | null {
 }
 
 /** Datos del artículo de inventario que el panel dibuja junto al ítem del presupuesto. */
-const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true, quantity: true, status: true, imageUrl: true, imageMime: true, updatedAt: true } as const;
+const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true, quantity: true, status: true, billingUnit: true, imageUrl: true, imageMime: true, updatedAt: true } as const;
 
 /**
  * `GET /api/admin/budgets`: presupuestos de la empresa activa. Los escalares
@@ -150,7 +150,8 @@ type ParsedBudgetItem = {
  * ítems. El id se conserva solo si viene como texto (el PATCH lo valida contra
  * los ítems reales del presupuesto).
  */
-function parseBudgetItems(rawItems: unknown[], validInventoryIds: Set<string>): ParsedBudgetItem[] {
+function parseBudgetItems(rawItems: unknown[], links: InventoryLinks): ParsedBudgetItem[] {
+  const validInventoryIds = links.valid;
   return rawItems.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const value = item as Record<string, unknown>;
@@ -163,22 +164,26 @@ function parseBudgetItems(rawItems: unknown[], validInventoryIds: Set<string>): 
     const inventoryId = typeof value.inventoryId === "string" && validInventoryIds.has(value.inventoryId.trim()) ? value.inventoryId.trim() : null;
     const id = typeof value.id === "string" && value.id.trim() ? value.id.trim() : null;
     if (budgetItemError({ name, quantity, days, unitPrice, costPrice })) return [];
+    // Producto «por evento»: una sola unidad de tiempo, sin importar lo que mande el cliente.
+    const billed = inventoryId && links.perEvent.has(inventoryId) ? 1 : days;
     return [{
       notes: textField(value.notes, 400),
       id,
       name,
       quantity: Math.max(1, quantity),
-      days: Math.max(1, days),
+      days: Math.max(1, billed),
       unitPrice: Math.max(0, unitPrice),
       costPrice: Math.max(0, costPrice),
-      subtotal: Math.max(0, quantity * days * unitPrice),
+      subtotal: Math.max(0, quantity * billed * unitPrice),
       inventoryId,
     }];
   });
 }
 
 /** Vínculos de inventario válidos de la empresa activa para los ítems del body. */
-async function resolveInventoryLinks(rawItems: unknown[], organizationId: string): Promise<Set<string> | null> {
+type InventoryLinks = { valid: Set<string>; perEvent: Set<string> };
+
+async function resolveInventoryLinks(rawItems: unknown[], organizationId: string): Promise<InventoryLinks | null> {
   const inventoryIds = [...new Set(
     rawItems.flatMap((item) => {
       const value = item && typeof item === "object" ? (item as Record<string, unknown>).inventoryId : null;
@@ -186,10 +191,11 @@ async function resolveInventoryLinks(rawItems: unknown[], organizationId: string
     }),
   )];
   const inventoryItems = inventoryIds.length > 0
-    ? await db.inventoryItem.findMany({ where: { id: { in: inventoryIds }, organizationId }, select: { id: true } })
+    ? await db.inventoryItem.findMany({ where: { id: { in: inventoryIds }, organizationId }, select: { id: true, billingUnit: true } })
     : [];
   const valid = new Set(inventoryItems.map((item) => item.id));
-  return inventoryIds.some((id) => !valid.has(id)) ? null : valid;
+  const perEvent = new Set(inventoryItems.filter((item) => item.billingUnit === "EVENT").map((item) => item.id));
+  return inventoryIds.some((id) => !valid.has(id)) ? null : { valid, perEvent };
 }
 
 export async function POST(request: Request) {

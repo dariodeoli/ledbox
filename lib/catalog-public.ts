@@ -1,6 +1,6 @@
 import { whatsappHref } from "./admin-format";
 import type { PriceList } from "./catalog-audience";
-import { quoteProductPrice } from "./quote-sharing";
+import { isEventBilled, quoteProductPrice } from "./quote-sharing";
 
 /**
  * Catálogo público por empresa y preórdenes (alquileres fase 3). Reglas puras,
@@ -106,30 +106,32 @@ export const MAX_PREORDER_DAYS = 90;
 // ── Precio de referencia ─────────────────────────────────────────────────────
 
 /** Campos de precio de venta de cliente final; nunca costos ni mayorista. */
-export type CatalogPriceFields = { listPrice: number; listFromDays: number; listFromPrice: number };
+export type CatalogPriceFields = { listPrice: number; listFromDays: number; listFromPrice: number; billingUnit?: string | null };
 
 /**
  * Precio que ve el público, neutro respecto de la lista: en el catálogo de cliente
  * final sale de los campos de lista y en el mayorista de los campos mayoristas, pero
  * el DTO nunca dice de cuál (ni expone el otro).
  */
-export type CatalogPrice = { unit: number; fromDays: number; fromPrice: number };
+export type CatalogPrice = { unit: number; fromDays: number; fromPrice: number; /** «Se cobra por evento»: el precio no se multiplica por los días. */ perEvent?: boolean };
 
 type TieredFields = {
+  billingUnit: string | null;
   listPrice: number; listFromDays: number; listFromPrice: number;
   wholesalePrice: number; wholesaleFromDays: number; wholesaleFromPrice: number;
 };
 
 /** Precio de la lista elegida a partir de una fila de inventario. */
 export function catalogPriceFor(row: Partial<TieredFields>, list: PriceList): CatalogPrice {
-  return list === "WHOLESALE"
+  const base = list === "WHOLESALE"
     ? { unit: row.wholesalePrice ?? 0, fromDays: row.wholesaleFromDays ?? 0, fromPrice: row.wholesaleFromPrice ?? 0 }
     : { unit: row.listPrice ?? 0, fromDays: row.listFromDays ?? 0, fromPrice: row.listFromPrice ?? 0 };
+  return isEventBilled(row.billingUnit) ? { ...base, perEvent: true } : base;
 }
 
 /** Precio por día de un `CatalogPrice` para `days` días; 0 = sin precio cargado («Consultar»). */
 export function catalogDailyPrice(price: CatalogPrice, days: number): number {
-  return quoteProductPrice({ listPrice: price.unit, listFromDays: price.fromDays, listFromPrice: price.fromPrice }, Math.max(1, days), "FINAL");
+  return quoteProductPrice({ listPrice: price.unit, listFromDays: price.fromDays, listFromPrice: price.fromPrice, billingUnit: price.perEvent ? "EVENT" : null }, Math.max(1, days), "FINAL");
 }
 
 /** Precio por día de la lista elegida directo desde una fila de inventario. */
@@ -142,7 +144,7 @@ export function referenceDailyPrice(item: CatalogPriceFields, days: number): num
   return quoteProductPrice(item, Math.max(1, days), "FINAL");
 }
 
-export type PreorderLine = { name: string; quantity: number; unitPrice: number | null };
+export type PreorderLine = { name: string; quantity: number; unitPrice: number | null; /** Se cobra por evento: no se multiplica por los días. */ perEvent?: boolean };
 
 /** Subtotal estimado; `null` si algún artículo no tiene precio (no se inventa). */
 export function estimatedSubtotal(lines: ReadonlyArray<PreorderLine>, days: number): number | null {
@@ -150,7 +152,7 @@ export function estimatedSubtotal(lines: ReadonlyArray<PreorderLine>, days: numb
   let total = 0;
   for (const line of lines) {
     if (!line.unitPrice || line.unitPrice <= 0) return null;
-    total += line.unitPrice * line.quantity * Math.max(1, days);
+    total += line.unitPrice * line.quantity * (line.perEvent ? 1 : Math.max(1, days));
   }
   return total;
 }

@@ -1251,6 +1251,7 @@ export type AdminBudgetReservation = {
   reserved: number;
   conflicts: number;
   failed: boolean;
+  blocked?: boolean;
 };
 
 // ── Comprobantes de pago (issue #17) ────────────────────────────────────────
@@ -1671,6 +1672,8 @@ export type AdminInventoryRow = {
   /** Precio mayorista desde `wholesaleFromDays` días. */
   wholesaleFromPrice: number;
   minimumPrice: number;
+  /** «Se cobra»: DAILY (por día) o EVENT (una sola vez por evento). */
+  billingUnit: string;
   notes: string | null;
   updatedAt: string;
   /** Solo en combos: sin unidades propias, «libres» es lo que se puede armar. */
@@ -1723,6 +1726,8 @@ export type AdminInventoryLink = {
   listPrice?: number;
   listFromDays?: number;
   listFromPrice?: number;
+  /** DAILY o EVENT: con EVENT el ítem del presupuesto va con días = 1. */
+  billingUnit?: string;
   id: string;
   name: string;
   sku: string | null;
@@ -2294,7 +2299,9 @@ export type AdminNotificationKind =
   | "lead"
   | "portal_request"
   | "reservation"
-  | "payment_proof";
+  | "payment_proof"
+  | "return_overdue"
+  | "hold_expiring";
 
 export type AdminNotification = {
   id: string;

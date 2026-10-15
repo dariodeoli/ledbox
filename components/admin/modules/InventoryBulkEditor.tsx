@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
+import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
 import { adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS } from "@/lib/catalog-audience";
 import { MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
@@ -77,6 +77,7 @@ export function InventoryBulkEditor({ target, selection, onSaved, onClear, onClo
             : field.type === "days" ? <NumberField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={4} hint="0 = sin regla; hasta 3650 días." disabled={busy} />
             : field.type === "notes" ? <TextAreaField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={target === "units" ? 400 : 2000} disabled={busy} />
             : field.type === "text" ? <TextField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} maxLength={field.key === "category" ? 80 : 2000} disabled={busy} />
+            : field.type === "billing" ? <SegmentedField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[...BILLING_UNIT_OPTIONS]} disabled={busy} />
             : field.type === "audience" ? <SegmentedField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[...CATALOG_AUDIENCE_OPTIONS]} disabled={busy} />
             : <SelectField label={field.label} help={help} value={draft.value} onChange={value => change(field.key, { value })} options={[{ value: "", label: "Elegir valor" }, ...options]} disabled={busy} /> : null}
         </AdminDisclosure>;

@@ -99,7 +99,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const days = range?.days ?? 1;
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
   const unitFor = (item: CatalogItemView) => (item.price ? catalogDailyPrice(item.price, days) : 0);
-  const lines = chosen.map((item) => ({ name: item.name, quantity: selection[item.id], unitPrice: unitFor(item) || null }));
+  const lines = chosen.map((item) => ({ name: item.name, quantity: selection[item.id], unitPrice: unitFor(item) || null, perEvent: Boolean(item.price?.perEvent) }));
   const subtotal = showPrices && range ? estimatedSubtotal(lines, days) : null;
   const count = chosen.reduce((sum, item) => sum + (selection[item.id] ?? 0), 0);
 
@@ -186,7 +186,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
                     {item.sku ? <p className="cp-sku">SKU {item.sku}</p> : null}
                     {item.description ? <p className="cp-desc">{item.description}</p> : null}
                     <p className="cp-price">
-                      {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>por día</span></>) : "Consultar"}
+                      {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>{item.price?.perEvent ? "por evento" : "por día"}</span></>) : "Consultar"}
                     </p>
                     {item.availability ? (
                       <p><span className={`cp-chip ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span></p>

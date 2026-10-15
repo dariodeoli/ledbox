@@ -18,7 +18,7 @@ import type { AdminApiResponse, AdminInventoryItemRow } from "@/lib/admin-types"
 import type { PreparedInventoryPhoto } from "@/lib/inventory-image";
 import { adminApiUpload, adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS, effectiveAudience, type CatalogAudience } from "@/lib/catalog-audience";
-import { INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
+import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
 import { AttachmentInput, Combobox, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryThumb, KIND_PICK_OPTIONS, STATUS_PICK_OPTIONS } from "./InventoryParts";
@@ -38,6 +38,8 @@ const EMPTY_FORM = {
   /** Alcance en la tienda web: arranca oculto, nada se publica solo. */
   catalogAudience: "HIDDEN" as CatalogAudience,
   imageUrl: "",
+  /** «Se cobra»: por día (default) o por evento. */
+  billingUnit: "DAILY",
   listPrice: "",
   listFromDays: "0",
   listFromPrice: "",
@@ -73,6 +75,7 @@ const EMPTY_EDIT = {
   /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
   bufferBeforeHours: "",
   bufferAfterHours: "",
+  billingUnit: "DAILY",
   ...EMPTY_PRICES,
 };
 
@@ -96,6 +99,7 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     catalogAudience: effectiveAudience(item),
     bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
     bufferAfterHours: bufferHoursText(item.bufferAfterMin),
+    billingUnit: item.billingUnit === "EVENT" ? "EVENT" : "DAILY",
     // La caja de la URL manual no precarga la ruta de la foto subida: son cosas
     // distintas (la subida se cambia o se quita con sus botones).
     imageUrl: item.imageUploaded ? "" : item.imageUrl ?? "",
@@ -325,6 +329,7 @@ export function InventoryCreateDialog({
       quantity: Number(form.quantity) || 1,
       catalogAudience: form.catalogAudience,
       imageUrl: image,
+      billingUnit: form.billingUnit,
       listPrice: prices.values.listPrice ?? 0,
       listFromDays: prices.values.listFromDays ?? 0,
       listFromPrice: prices.values.listFromPrice ?? 0,
@@ -460,6 +465,14 @@ export function InventoryCreateDialog({
         {/* Precios por frente (issue #110): normal, umbral «desde X días» y
             precio desde esos días; el mínimo es el piso de venta. */}
         <AdminDialogSection title="Precios" collapsible hint="final, mayorista y mínimo">
+          <SegmentedField
+            label="Se cobra"
+            help={INVENTORY_FIELD_HELP.billingUnit}
+            value={form.billingUnit}
+            onChange={(value) => setForm({ ...form, billingUnit: value })}
+            options={[...BILLING_UNIT_OPTIONS]}
+            hint="Por evento: el precio no se multiplica por los días."
+          />
           <PriceFrontFields
             title="Precio cliente final"
             normalValue={form.listPrice}
@@ -648,6 +661,7 @@ export function InventoryEditDialog({
       publicDescription: editForm.publicDescription,
       catalogAudience: editForm.catalogAudience,
       imageUrl: image,
+      billingUnit: editForm.billingUnit,
       // Solo se mandan los tiempos que la persona cambió (no se pisa un valor en minutos no enteros).
       ...(editForm.bufferBeforeHours !== original.bufferBeforeHours
         ? { bufferBeforeMin: editForm.bufferBeforeHours === "" ? null : Number(editForm.bufferBeforeHours) * 60 }
@@ -771,6 +785,14 @@ export function InventoryEditDialog({
 
         {/* Precios: lo que más se edita de un producto existente, justo después de los datos. */}
         <AdminDialogSection title="Precios">
+          <SegmentedField
+            label="Se cobra"
+            help={INVENTORY_FIELD_HELP.billingUnit}
+            value={editForm.billingUnit}
+            onChange={(value) => setEditForm({ ...editForm, billingUnit: value })}
+            options={[...BILLING_UNIT_OPTIONS]}
+            hint="Por evento: el precio no se multiplica por los días."
+          />
           <PriceFrontFields
             title="Precio cliente final"
             normalValue={editForm.listPrice}

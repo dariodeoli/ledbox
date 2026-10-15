@@ -1,3 +1,4 @@
+import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
@@ -101,6 +102,7 @@ const INVENTORY_ITEM_FIELDS = [
   "imageUrl",
   "bufferBeforeMin",
   "bufferAfterMin",
+  "billingUnit",
 ] as const;
 
 type InventoryItemUpdate = Partial<{
@@ -117,6 +119,7 @@ type InventoryItemUpdate = Partial<{
   imageUrl: string | null;
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
+  billingUnit: "DAILY" | "EVENT";
 }>;
 
 /** Tope de un colchón de preparación: 30 días en minutos. */
@@ -190,6 +193,11 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
       return { ok: false, error: "El tiempo debe ser un número entero de minutos entre 0 y 43200 (30 días)." };
     }
     data[field] = minutes;
+  }
+  if (body.billingUnit !== undefined) {
+    const billingUnit = readBillingUnit(body.billingUnit);
+    if (!billingUnit) return { ok: false, error: "«Se cobra» debe ser por día o por evento." };
+    data.billingUnit = billingUnit;
   }
   if (body.imageUrl !== undefined) {
     const imageUrl = readInventoryImageUrl(body.imageUrl);
@@ -543,6 +551,7 @@ export async function POST(request: Request) {
         imageUrl: true,
         bufferBeforeMin: true,
         bufferAfterMin: true,
+        billingUnit: true,
       },
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);

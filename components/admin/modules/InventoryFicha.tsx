@@ -757,6 +757,11 @@ export function InventoryFicha({
       <AdminDialogSection title="Precios" id={anchor("precios")} stack>
         <dl className="admin-item-prices">
           <div>
+            <dt>Se cobra</dt>
+            <dd>{item.billingUnit === "EVENT" ? "Por evento" : "Por día"}</dd>
+            {item.billingUnit === "EVENT" ? <small>Precio único: no se multiplica por los días.</small> : null}
+          </div>
+          <div>
             <dt>Cliente final</dt>
             <dd>{priceText(item.listPrice)}</dd>
             {item.listFromPrice > 0 && item.listFromDays > 0 ? (
