@@ -61,9 +61,12 @@ test("la lista: una acción visible por fila («Ficha») y el resto en «••�
   for (const action of ["Editar producto", "Editar combo y componentes", "Archivar producto"]) {
     assert.ok(list.includes(action), `el menú conserva «${action}»`);
   }
-  // Estado editable solo con permiso; sin permiso, un chip.
-  assert.match(list, /writable \? \(\s*<AdminSelect/);
-  assert.match(list, /<StockMeter summary=\{summary\}/);
+  // E2: el estado de la lista es el chip del mapa único (derivado, ícono + texto); el estado
+  // manual del producto sigue editable, solo con permiso, desde la ficha.
+  assert.match(list, /<StateChips visual=\{visual\} \/>/);
+  assert.doesNotMatch(list, /<AdminSelect/, "la lista ya no edita el estado en línea");
+  assert.match(moduleFile("InventoryFicha.tsx"), /writable \? \(\s*<AdminSelect/);
+  assert.match(list, /<StockMeter summary=\{stockSummary\(item, rangeActive\)\}/);
   assert.match(list, /<AudienceChip item=\{item\} \/>/);
 });
 
@@ -140,7 +143,9 @@ test("la ficha pide solo las reservas vivas y el tope de 1000 no deja afuera las
   assert.match(route, /soloVivas \? \[\{ startsAt: \{ sort: "asc", nulls: "last" \} \}/);
   // Sin el parámetro el historial sigue igual: más recientes primero.
   assert.match(route, /\[\{ startsAt: "desc" \}, \{ id: "asc" \}\]/);
-  assert.match(read("components/admin/modules/InventarioModule.tsx"), /new URLSearchParams\(\{ vivas: "1" \}\)/);
+  // E2: la lista es liviana (sin asignaciones) y la ficha pide su detalle con las vivas del producto.
+  assert.match(read("components/admin/modules/InventarioModule.tsx"), /new URLSearchParams\(\{ vivas: "1", itemId: selectedId \}\)/);
+  assert.match(route, /searchParams\.get\("itemId"\)/);
 });
 
 test("el formulario de edición congela su línea base al montar", () => {

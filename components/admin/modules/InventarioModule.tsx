@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatDateShort, formatNumber, inventoryKindLabel, inventoryStatusLabel } from "@/lib/admin-format";
-import { canImportCatalog, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { canImportCatalog, canWriteOperations } from "@/lib/admin-policy";
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
-import type { AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy } from "@/lib/admin-types";
+import type { AdminInventoryGridRow, AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy, AdminInventoryRow } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
+import { EMPTY_GRID_FILTERS, activeFilterCount, applyInventoryFilters, categoryFilterOptions, type InventoryGridFilters } from "@/lib/inventory-grid-view";
+import { INVENTORY_STATE_FILTER_OPTIONS } from "@/lib/inventory-visual-state";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminActionsMenu,
   AdminButton,
   AdminDataState,
+  AdminDialog,
   AdminDisclosure,
   AdminEmpty,
   AdminKpi,
@@ -23,6 +26,8 @@ import {
 import { DateField, SearchField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { useInventoryGrid, useUnitCodeMatches } from "./InventoryGridData";
+import { InventoryByCategory, InventoryCompactGrid } from "./InventoryTiles";
 import { InventoryIncidentsDialog } from "./InventoryIncidents";
 import { AdminViewSwitch, useAdminModuleView, useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid } from "../AdminCards";
@@ -31,14 +36,15 @@ import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
 import { useInventoryTaxonomy } from "./InventoryTaxonomy";
-import { InventoryCreateDialog, InventoryEditDialog, type InventoryNotice } from "./InventoryItemDialogs";
+import { InventoryCreateDialog, InventoryEditDialog, type InventoryEditable, type InventoryNotice } from "./InventoryItemDialogs";
 import { OverdueReturnsIndicator } from "./OverdueReturns";
 import { InventoryList } from "./InventoryList";
 import { TrashDialog, trashMenuItems } from "../TrashDialogs";
-import { KIND_OPTIONS, STATUS_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
+import { KIND_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
+import { supplierOptions, warehouseOptions } from "./InventoryTaxonomy";
 
-/** Vistas del inventario (issue #57): lista densa y cuadrícula de tarjetas. */
-const INVENTARIO_VIEWS = ["list", "grid"] as const;
+/** Vistas del inventario: lista densa, cuadrícula compacta y «Por categoría» (rediseño E2). */
+const INVENTARIO_VIEWS = ["list", "grid", "category"] as const;
 
 /** Tope de la edición en lote: el mismo que valida el API. */
 const BULK_LIMIT = 100;
@@ -65,63 +71,81 @@ export function InventarioModule() {
   const productParam = searchParams.get("producto")?.trim() ?? "";
   const handledProductParam = useRef("");
 
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("ALL");
-  const [status, setStatus] = useState("ALL");
+  const [filters, setFilters] = useState<InventoryGridFilters>(EMPTY_GRID_FILTERS);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [focus, setFocus] = useState<InventoryFocus>("all");
+  const { focus } = filters;
+  const setFilter = <K extends keyof InventoryGridFilters>(key: K, value: InventoryGridFilters[K]) => setFilters((current) => ({ ...current, [key]: value }));
+  const setFocus = (next: InventoryFocus) => setFilter("focus", next);
   const [showForm, setShowForm] = useState(false);
   const [incidentsOpen, setIncidentsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [comboDialog, setComboDialog] = useState<{ item: AdminInventoryItemRow | null } | null>(null);
-  const [editItem, setEditItem] = useState<AdminInventoryItemRow | null>(null);
+  const [comboDialog, setComboDialog] = useState<{ item: AdminInventoryRow | null } | null>(null);
+  const [editItem, setEditItem] = useState<InventoryEditable | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [notice, setNotice] = useState<InventoryNotice | null>(null);
   const [statusError, setStatusError] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [archiveBusyId, setArchiveBusyId] = useState("");
   /** Producto que se está por mandar a la papelera (diálogo de eliminar). */
-  const [trashTarget, setTrashTarget] = useState<AdminInventoryItemRow | null>(null);
+  const [trashTarget, setTrashTarget] = useState<Pick<AdminInventoryRow, "id" | "name"> | null>(null);
   const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS);
   /** Ancho compacto (issue #151): las tarjetas de la cuadrícula, siempre. */
   const narrow = useAdminNarrowViewport();
+  /** Barra fija de búsqueda y filtros: su alto fija dónde se pegan los encabezados de «Por categoría». */
+  const barRef = useRef<HTMLDivElement>(null);
 
   const writable = canWriteOperations(role);
   const canImport = writable && canImportCatalog(role) && !demo;
   const canReadAudit = role === "OWNER" || role === "ADMIN";
   const rangeActive = Boolean(from && to);
 
-  // La lista viaja con el rango cuando está completo: el API devuelve la
-  // disponibilidad de cada ítem en ese rango además de la de hoy.
-  const listPath = useMemo(() => {
-    const params = new URLSearchParams({ vivas: "1" });
-    if (from) params.set("startsAt", `${from}T00:00`);
-    if (to) params.set("endsAt", `${to}T23:59`);
-    const search = params.toString();
-    return `/api/admin/inventory?${search}`;
-  }, [from, to]);
-
-  // Categorías, depósitos y proveedores para los formularios (rediseño E1).
+  // Categorías, depósitos y proveedores para los filtros y los formularios (rediseño E1).
   const taxonomy = useInventoryTaxonomy();
-  const resources = useAdminResource(listPath, (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[]);
+  // Lista liviana por páginas (E2): sin unidades ni asignaciones; con el rango, la disponibilidad de ese rango.
+  const resources = useInventoryGrid({ from: from && to ? from : "", to: from && to ? to : "" });
   const incidentsResource = useAdminResource("/api/admin/inventory/incidents?status=open", (payload) => ((payload as { incidents?: AdminInventoryIncident[] }).incidents ?? []));
   const occupancyResource = useAdminResource("/api/admin/inventory/occupancy", (payload) => payload.occupancy as AdminInventoryOccupancy);
+  const unitMatchIds = useUnitCodeMatches(filters.query);
+
+  // Ficha: el detalle completo (unidades y asignaciones) se pide solo del producto abierto.
+  const detailPath = useMemo(() => {
+    const params = new URLSearchParams({ vivas: "1", itemId: selectedId });
+    if (from) params.set("startsAt", `${from}T00:00`);
+    if (to) params.set("endsAt", `${to}T23:59`);
+    return `/api/admin/inventory?${params.toString()}`;
+  }, [selectedId, from, to]);
+  const detailResource = useAdminResource(detailPath, (payload) => ((payload.inventory ?? [])[0] ?? null) as AdminInventoryItemRow | null, { enabled: Boolean(selectedId) });
 
   const inventory = useMemo(() => resources.data ?? [], [resources.data]);
-  const selected = useMemo(() => inventory.find((item) => item.id === selectedId) ?? null, [inventory, selectedId]);
+  const detail = detailResource.data && detailResource.data.id === selectedId ? detailResource.data : null;
   const openIncidents = incidentsResource.data;
   const openIncidentIds = useMemo(() => new Set((openIncidents ?? []).map((incident) => incident.inventoryId)), [openIncidents]);
   // El «ahora» de los filtros por fecha cambia con cada recarga de datos.
   const now = useMemo(() => new Date(), [resources.data]);
-  const focusContext = useMemo(() => ({ openIncidentIds, now }), [openIncidentIds, now]);
+  const filterContext = useMemo(() => ({ openIncidentIds, now, unitMatchIds, categoryTree: taxonomy.tree }), [openIncidentIds, now, unitMatchIds, taxonomy.tree]);
+  // Los productos livianos con detalle más reciente (la ficha abierta se refresca sola al guardar).
+  const selectedRow = useMemo(() => inventory.find((item) => item.id === selectedId) ?? null, [inventory, selectedId]);
+
+  // Alto de la barra fija → variable CSS que usan los encabezados pegajosos de «Por categoría».
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const root = bar.parentElement;
+    const apply = () => root?.style.setProperty("--admin-inv-bar-h", getComputedStyle(bar).position === "sticky" ? `${bar.offsetHeight}px` : "0px");
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   function reloadAll() {
     resources.reload();
     incidentsResource.reload();
     occupancyResource.reload();
+    if (selectedId) detailResource.reload();
   }
 
   /** Abre la ficha y deja el link `?producto=<id>` en la barra de direcciones. */
@@ -153,18 +177,17 @@ export function InventarioModule() {
     }
   }, [productParam, resources.loading, resources.data]);
 
-  const searched = useMemo(
-    () =>
-      inventory
-        .filter((item) => (kind === "ALL" ? true : item.kind === kind))
-        .filter((item) => (status === "ALL" ? true : item.status === status))
-        .filter((item) => matchesQuery(query, [item.name, item.category, item.sku, item.status])),
-    [inventory, kind, status, query],
-  );
-  const activeSearched = useMemo(() => searched.filter((item) => !item.archivedAt), [searched]);
-  const rows = useMemo(() => activeSearched.filter((item) => itemInFocus(item, focus, focusContext)), [activeSearched, focus, focusContext]);
-  const archivedRows = useMemo(() => searched.filter((item) => Boolean(item.archivedAt)), [searched]);
-  const counts = useMemo(() => tabCounts(activeSearched, focusContext), [activeSearched, focusContext]);
+  // Filtros combinados con «Y». Las pestañas cuentan sobre lo filtrado sin el foco.
+  const showingArchived = filters.state === "archived";
+  const baseRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all" }, filterContext, { archived: showingArchived }), [inventory, filters, filterContext, showingArchived]);
+  const rows = useMemo(() => baseRows.filter((item) => itemInFocus(item, filters.focus, filterContext)), [baseRows, filters.focus, filterContext]);
+  const archivedRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all", state: "ALL" }, filterContext, { archived: true }), [inventory, filters, filterContext]);
+  const counts = useMemo(() => tabCounts(baseRows, filterContext), [baseRows, filterContext]);
+  const filtersActive = activeFilterCount(filters, rangeActive);
+  const categoryOptions = useMemo(() => categoryFilterOptions(taxonomy.tree), [taxonomy.tree]);
+  const stateOptions = useMemo(() => [{ value: "ALL", label: "Todos los estados" }, ...INVENTORY_STATE_FILTER_OPTIONS], []);
+  const warehouseChoices = useMemo(() => warehouseOptions(taxonomy.warehouses, { includeEmpty: "Todos los depósitos" }), [taxonomy.warehouses]);
+  const supplierChoices = useMemo(() => supplierOptions(taxonomy.suppliers, "Todos los proveedores"), [taxonomy.suppliers]);
 
   const totals = useMemo(() => {
     const active = inventory.filter((item) => !item.archivedAt);
@@ -192,10 +215,10 @@ export function InventarioModule() {
   }
 
   function toggleFocus(next: InventoryFocus) {
-    setFocus((current) => (current === next ? "all" : next));
+    setFocus(focus === next ? "all" : next);
   }
 
-  async function archiveItem(item: AdminInventoryItemRow, restore = false) {
+  async function archiveItem(item: Pick<AdminInventoryRow, "id" | "name">, restore = false) {
     if (archiveBusyId) return;
     setArchiveBusyId(item.id);
     setStatusError("");
@@ -211,7 +234,7 @@ export function InventarioModule() {
     resources.reload();
   }
 
-  async function changeStatus(item: AdminInventoryItemRow, next: string) {
+  async function changeStatus(item: Pick<AdminInventoryRow, "id" | "name">, next: string) {
     setStatusBusyId(item.id);
     setStatusError("");
     setNotice(null);
@@ -227,9 +250,9 @@ export function InventarioModule() {
 
   /** CSV del inventario filtrado: cantidades y costos reales de cada ítem. */
   function exportInventory() {
-    const free = (item: AdminInventoryItemRow) => (rangeActive ? (item.availability.range?.available ?? 0) : item.availability.availableNow);
-    const committed = (item: AdminInventoryItemRow) => (rangeActive ? (item.availability.range?.committed ?? 0) : item.availability.committedNow);
-    const conflict = (item: AdminInventoryItemRow) => (rangeActive ? (item.availability.range?.overcommitted ?? false) : item.availability.overcommittedNow);
+    const free = (item: AdminInventoryGridRow) => (rangeActive ? (item.availability.range?.available ?? 0) : item.availability.availableNow);
+    const committed = (item: AdminInventoryGridRow) => (rangeActive ? (item.availability.range?.committed ?? 0) : item.availability.committedNow);
+    const conflict = (item: AdminInventoryGridRow) => (rangeActive ? (item.availability.range?.overcommitted ?? false) : item.availability.overcommittedNow);
     const blocks: CsvBlock[] = [
       {
         title: rangeActive ? `Inventario · ${from} a ${to}` : "Inventario",
@@ -300,9 +323,12 @@ export function InventarioModule() {
             Nuevo combo
           </AdminButton>
         ) : null}
+        <AdminButton icon="search" disabled title="Escanear el código de un producto o unidad: próximamente" aria-label="Escanear: próximamente">
+          Escanear · próximamente
+        </AdminButton>
         {canImport ? (
           <AdminButton icon="upload" onClick={() => setImportOpen(true)} aria-haspopup="dialog" title="Cargar productos, juegos y fotos desde una planilla, ChatGPT o la IA de LedBox">
-            Importar catálogo
+            Importar
           </AdminButton>
         ) : null}
         <AdminButton
@@ -402,48 +428,67 @@ export function InventarioModule() {
         ) : null}
       </nav>
 
-      <AdminToolbar>
-        <SearchField value={query} onChange={setQuery} label="Buscar inventario" placeholder="Buscar por artículo, categoría o SKU…" />
-        <AdminSelect value={kind} onChange={setKind} label="Filtrar por tipo" options={KIND_OPTIONS} />
-        <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
-        <div className="admin-field--filter">
-          <DateField
-            label="Disponible desde"
-            help="Inicio del rango para consultar unidades libres; no crea reservas."
-            max={to || undefined}
-            value={from}
-            onChange={setFrom}
-            title="Primer día del rango de disponibilidad"
-          />
-        </div>
-        <div className="admin-field--filter">
-          <DateField
-            label="Hasta"
-            help="Fin del rango de disponibilidad; no cambia las fechas de las asignaciones existentes."
-            min={from || undefined}
-            value={to}
-            onChange={setTo}
-            title="Último día del rango de disponibilidad"
-          />
-        </div>
-        {rangeActive ? (
-          <AdminButton
-            icon="close"
-            title="Quitar el rango y volver a la disponibilidad de hoy"
-            aria-label="Quitar el rango de disponibilidad"
-            onClick={() => {
-              setFrom("");
-              setTo("");
-            }}
-          >
-            Hoy
-          </AdminButton>
-        ) : null}
-        {narrow ? null : <AdminViewSwitch view={view} onChange={setView} label="Vista de inventario" views={INVENTARIO_VIEWS} />}
-      </AdminToolbar>
+      <div className="admin-inv-bar" ref={barRef}>
+        <AdminToolbar>
+          <SearchField value={filters.query} onChange={(value) => setFilter("query", value)} label="Buscar inventario" placeholder="Nombre, SKU o código de unidad…" />
+          <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
+          <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
+          <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Filtrar por depósito" options={warehouseChoices} />
+          <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
+          <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} />
+          <div className="admin-inv-range">
+          <div className="admin-field--filter">
+            <DateField
+              label="Disponible desde"
+              max={to || undefined}
+              value={from}
+              onChange={setFrom}
+              title="Primer día del rango para consultar unidades libres; no crea reservas"
+            />
+          </div>
+          <div className="admin-field--filter">
+            <DateField
+              label="Hasta"
+              min={from || undefined}
+              value={to}
+              onChange={setTo}
+              title="Último día del rango de disponibilidad; no cambia las fechas de las asignaciones existentes"
+            />
+          </div>
+          </div>
+          {rangeActive ? (
+            <AdminButton
+              icon="close"
+              title="Quitar el rango y volver a la disponibilidad de hoy"
+              aria-label="Quitar el rango de disponibilidad"
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+            >
+              Hoy
+            </AdminButton>
+          ) : null}
+          {filtersActive > 0 ? (
+            <AdminButton
+              icon="close"
+              title="Quitar la búsqueda y todos los filtros"
+              aria-label={`Limpiar ${filtersActive} filtros`}
+              onClick={() => {
+                setFilters(EMPTY_GRID_FILTERS);
+                setFrom("");
+                setTo("");
+              }}
+            >
+              Limpiar filtros
+            </AdminButton>
+          ) : null}
+          <AdminViewSwitch view={view} onChange={setView} label="Vista de inventario" views={INVENTARIO_VIEWS} labels={{ list: "Lista", grid: "Cuadrícula", category: "Por categoría" }} />
+        </AdminToolbar>
+      </div>
 
-      {notice && !selected ? <AdminNote tone={notice.tone}>{notice.message}</AdminNote> : null}
-      {statusError && !selected ? <AdminNote tone="error">{statusError}</AdminNote> : null}
+      {notice && !selectedId ? <AdminNote tone={notice.tone}>{notice.message}</AdminNote> : null}
+      {statusError && !selectedId ? <AdminNote tone="error">{statusError}</AdminNote> : null}
       {rangeActive ? <AdminNote>Disponibilidad entre {dayRangeLabel(from, to)}; «Unidades disponibles hoy» sigue siendo la de hoy.</AdminNote> : null}
       {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
@@ -469,8 +514,15 @@ export function InventarioModule() {
         </div>
       ) : null}
 
+      {resources.loading && resources.data ? (
+        <AdminNote>
+          Cargando el resto del inventario… {formatNumber(inventory.length)}
+          {resources.total != null ? ` de ${formatNumber(resources.total)}` : ""} productos.
+        </AdminNote>
+      ) : null}
+
       <AdminDataState
-        loading={resources.loading}
+        loading={resources.loading && !resources.data}
         error={resources.error}
         onRetry={resources.reload}
         empty={inventory.length === 0}
@@ -481,16 +533,20 @@ export function InventarioModule() {
       >
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda, otra pestaña o cambiá los filtros." />
+        ) : view === "grid" ? (
+          <InventoryCompactGrid rows={rows} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} onToggleBulk={toggleBulk} onOpen={openFicha} />
+        ) : view === "category" ? (
+          <InventoryByCategory rows={rows} tree={taxonomy.tree} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} onToggleBulk={toggleBulk} onOpen={openFicha} />
         ) : (
           <InventoryList
             rows={rows}
-            cards={view === "grid" || narrow}
+            warehouses={taxonomy.warehouses}
+            cards={narrow}
             writable={writable}
             rangeActive={rangeActive}
             from={from}
             to={to}
             bulkIds={bulkItemIds}
-            statusBusyId={statusBusyId}
             archiveBusyId={archiveBusyId}
             onToggleBulk={toggleBulk}
             onOpen={openFicha}
@@ -498,7 +554,6 @@ export function InventarioModule() {
             onEditCombo={(item) => setComboDialog({ item })}
             onArchive={(item) => void archiveItem(item)}
             onTrash={(item) => setTrashTarget(item)}
-            onChangeStatus={(item, next) => void changeStatus(item, next)}
           />
         )}
       </AdminDataState>
@@ -560,16 +615,16 @@ export function InventarioModule() {
         )}
       </AdminDisclosure>
 
-      {selected ? (
+      {selectedId && detail ? (
         <InventoryFicha
-          key={selected.id}
-          item={selected}
+          key={detail.id}
+          item={detail}
           inventory={inventory}
           writable={writable}
           canReadAudit={canReadAudit}
           range={{ from, to, setFrom, setTo }}
-          statusBusy={statusBusyId === selected.id}
-          archiveBusy={archiveBusyId === selected.id}
+          statusBusy={statusBusyId === detail.id}
+          archiveBusy={archiveBusyId === detail.id}
           banner={banner}
           onClose={closeFicha}
           onEdit={setEditItem}
@@ -581,6 +636,27 @@ export function InventarioModule() {
           taxonomy={taxonomy}
           onOpenProduct={openFicha}
         />
+      ) : selectedId ? (
+        <AdminDialog
+          title={selectedRow?.name ?? "Producto"}
+          icon="inventory"
+          size="ficha"
+          onClose={closeFicha}
+          footer={({ requestClose }) => (
+            <>
+              <span className="admin-dialog-spacer" />
+              <AdminButton type="button" icon="close" onClick={requestClose}>
+                Cerrar
+              </AdminButton>
+            </>
+          )}
+        >
+          {detailResource.error ? (
+            <AdminNote tone="error">{detailResource.error}</AdminNote>
+          ) : (
+            <AdminNote>Cargando la ficha del producto…</AdminNote>
+          )}
+        </AdminDialog>
       ) : null}
 
       {writable && trashTarget ? (

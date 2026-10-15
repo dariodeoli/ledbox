@@ -1,18 +1,22 @@
 "use client";
 
 import { tiersForAudience } from "@/lib/price-tiers";
-import { formatNumber, inventoryKindLabel, inventoryStatusLabel, statusTone } from "@/lib/admin-format";
+import { formatNumber, inventoryKindLabel } from "@/lib/admin-format";
+import { formatInventoryLocation } from "@/lib/field-rules";
 import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
 import { stockSummary } from "@/lib/inventory-view";
-import type { AdminInventoryItemRow } from "@/lib/admin-types";
+import { locationSummary } from "@/lib/inventory-grid-view";
+import { inventoryVisualState } from "@/lib/inventory-visual-state";
+import type { AdminInventoryGridRow, AdminWarehouseRow } from "@/lib/admin-types";
 import { trashMenuItems } from "../TrashDialogs";
-import { AdminActionsMenu, AdminBadge, AdminButton, AdminCell, AdminRow, AdminSelect, AdminTable, type AdminMenuItem } from "../AdminUI";
+import { AdminActionsMenu, AdminBadge, AdminButton, AdminCell, AdminRow, AdminTable, type AdminMenuItem } from "../AdminUI";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
-import { AudienceChip, InventoryThumb, PriceValue, RowCheck, STATUS_PICK_OPTIONS, StockMeter, dayRangeLabel, pricesTitle } from "./InventoryParts";
+import { AudienceChip, InventoryThumb, PriceValue, RowCheck, SegmentedMeter, StateChips, StockMeter, dayRangeLabel, pricesTitle } from "./InventoryParts";
 
 export type InventoryListProps = {
-  rows: AdminInventoryItemRow[];
+  rows: AdminInventoryGridRow[];
+  warehouses: readonly AdminWarehouseRow[];
   /** Tarjetas con foto (celular y opción de escritorio) o tabla de columnas alineadas. */
   cards: boolean;
   writable: boolean;
@@ -20,19 +24,17 @@ export type InventoryListProps = {
   from: string;
   to: string;
   bulkIds: string[];
-  statusBusyId: string;
   archiveBusyId: string;
   onToggleBulk: (id: string) => void;
   onOpen: (id: string) => void;
-  onEdit: (item: AdminInventoryItemRow) => void;
-  onEditCombo: (item: AdminInventoryItemRow) => void;
-  onArchive: (item: AdminInventoryItemRow) => void;
-  onTrash: (item: AdminInventoryItemRow) => void;
-  onChangeStatus: (item: AdminInventoryItemRow, next: string) => void;
+  onEdit: (item: AdminInventoryGridRow) => void;
+  onEditCombo: (item: AdminInventoryGridRow) => void;
+  onArchive: (item: AdminInventoryGridRow) => void;
+  onTrash: (item: AdminInventoryGridRow) => void;
 };
 
 /** Texto completo del stock de una fila para el `title`: libres, comprometidas y eventos que chocan. */
-function stockTitle(item: AdminInventoryItemRow, rangeActive: boolean, from: string, to: string): string {
+function stockTitle(item: AdminInventoryGridRow, rangeActive: boolean, from: string, to: string): string {
   const { committedNow, availableNow, range } = item.availability;
   const available = rangeActive ? range?.available : availableNow;
   const committed = rangeActive ? range?.committed : committedNow;
@@ -45,8 +47,23 @@ function stockTitle(item: AdminInventoryItemRow, rangeActive: boolean, from: str
   }${conflicts.length > 0 ? ` · ${conflicts.map((conflict) => `${conflict.eventName} (${formatNumber(conflict.quantity)})`).join(", ")}` : ""}`;
 }
 
-function isOvercommitted(item: AdminInventoryItemRow, rangeActive: boolean): boolean {
+function isOvercommitted(item: AdminInventoryGridRow, rangeActive: boolean): boolean {
   return rangeActive ? (item.availability.range?.overcommitted ?? false) : item.availability.overcommittedNow;
+}
+
+/** Libres sobre el total: «12/40» con la barra segmentada (hoy) o el medidor del rango (con «Disponible desde/hasta»). */
+function StockCell({ item, rangeActive }: { item: AdminInventoryGridRow; rangeActive: boolean }) {
+  const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
+  if (rangeActive || item.combo) return <StockMeter summary={stockSummary(item, rangeActive)} combo={Boolean(item.combo)} />;
+  return (
+    <span className="admin-meter admin-inv-stock">
+      <span className="admin-meter-figures admin-nowrap">
+        <strong>{formatNumber(visual.free)}</strong>
+        <small> / {formatNumber(visual.total)}</small>
+      </span>
+      <SegmentedMeter visual={visual} />
+    </span>
+  );
 }
 
 /**
@@ -55,9 +72,9 @@ function isOvercommitted(item: AdminInventoryItemRow, rangeActive: boolean): boo
  * visible («Ficha»); el resto de las acciones vive en el menú «•••».
  */
 export function InventoryList(props: InventoryListProps) {
-  const { rows, cards, writable, rangeActive, from, to, bulkIds, statusBusyId, archiveBusyId } = props;
+  const { rows, cards, writable, rangeActive, from, to, bulkIds, archiveBusyId, warehouses } = props;
 
-  function menuFor(item: AdminInventoryItemRow): AdminMenuItem[] {
+  function menuFor(item: AdminInventoryGridRow): AdminMenuItem[] {
     if (!writable) return [];
     return [
       ...(item.combo
@@ -86,24 +103,7 @@ export function InventoryList(props: InventoryListProps) {
     ];
   }
 
-  function statusControl(item: AdminInventoryItemRow) {
-    return writable ? (
-      <AdminSelect
-        className="admin-filter admin-filter--cell"
-        value={item.status}
-        disabled={statusBusyId === item.id}
-        onChange={(value) => props.onChangeStatus(item, value)}
-        label={`Cambiar estado: ${item.name}`}
-        title={`Cambiar estado: ${item.name}`}
-        options={STATUS_PICK_OPTIONS}
-        tone={statusTone(item.status)}
-      />
-    ) : (
-      <AdminBadge tone={statusTone(item.status)}>{inventoryStatusLabel(item.status)}</AdminBadge>
-    );
-  }
-
-  function rowActions(item: AdminInventoryItemRow) {
+  function rowActions(item: AdminInventoryGridRow) {
     const items = menuFor(item);
     return (
       <span className="admin-actions">
@@ -120,7 +120,7 @@ export function InventoryList(props: InventoryListProps) {
     );
   }
 
-  function identity(item: AdminInventoryItemRow, size: number) {
+  function identity(item: AdminInventoryGridRow, size: number) {
     return (
       <button type="button" className="admin-inv-product" title={`Abrir la ficha de ${item.name}`} onClick={() => props.onOpen(item.id)}>
         <InventoryThumb item={item} size={size} />
@@ -140,8 +140,9 @@ export function InventoryList(props: InventoryListProps) {
       <AdminCardGrid
         label="Inventario"
         cards={rows.map((item): AdminCardData => {
-          const summary = stockSummary(item, rangeActive);
           const overcommitted = isOvercommitted(item, rangeActive);
+          const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
+          const place = locationSummary(item.stock, warehouses, formatInventoryLocation);
           return {
             id: item.id,
             title: identity(item, 48),
@@ -154,10 +155,11 @@ export function InventoryList(props: InventoryListProps) {
             fields: [
               {
                 label: rangeActive ? "Libres en el rango" : "Libres hoy",
-                value: <StockMeter summary={summary} combo={Boolean(item.combo)} />,
+                value: <StockCell item={item} rangeActive={rangeActive} />,
                 title: stockTitle(item, rangeActive, from, to),
               },
-              { label: "Estado", value: statusControl(item), title: inventoryStatusLabel(item.status) },
+              { label: "Estado", value: <StateChips visual={visual} /> },
+              { label: "Ubicación", value: place.text, title: place.title },
               { label: "Tienda", value: <AudienceChip item={item} /> },
               {
                 label: "Precio de lista",
@@ -193,6 +195,7 @@ export function InventoryList(props: InventoryListProps) {
         { label: "Sel." },
         { label: "Producto" },
         { label: "Categoría" },
+        { label: "Ubicación" },
         { label: rangeActive ? "Libres en rango" : "Libres hoy" },
         { label: "Estado" },
         { label: "Lista", end: true },
@@ -202,8 +205,9 @@ export function InventoryList(props: InventoryListProps) {
       ]}
     >
       {rows.map((item) => {
-        const summary = stockSummary(item, rangeActive);
         const overcommitted = isOvercommitted(item, rangeActive);
+        const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
+        const place = locationSummary(item.stock, warehouses, formatInventoryLocation);
         return (
           <AdminRow key={item.id}>
             <AdminCell className="admin-cell--check">
@@ -218,15 +222,20 @@ export function InventoryList(props: InventoryListProps) {
             </AdminCell>
             <AdminCell title={item.sku ? `${item.name} · ${item.sku}` : item.name}>{identity(item, 36)}</AdminCell>
             <AdminCell title={item.category}>{item.category}</AdminCell>
+            <AdminCell title={place.title}>
+              <span className="admin-code">{place.text}</span>
+            </AdminCell>
             <AdminCell title={stockTitle(item, rangeActive, from, to)}>
-              <StockMeter summary={summary} combo={Boolean(item.combo)} />
+              <StockCell item={item} rangeActive={rangeActive} />
               {overcommitted ? (
                 <AdminBadge tone="danger" title={rangeActive ? "Hay más unidades comprometidas en el rango que las que tiene el producto." : "Hay más unidades asignadas a eventos vigentes que las que tiene el producto."}>
                   Conflicto
                 </AdminBadge>
               ) : null}
             </AdminCell>
-            <AdminCell title={writable ? `Cambiar estado: ${item.name}` : `Estado: ${inventoryStatusLabel(item.status)}`}>{statusControl(item)}</AdminCell>
+            <AdminCell title={visual.state.hint}>
+              <StateChips visual={visual} />
+            </AdminCell>
             <AdminCell end title={pricesTitle(item)}>
               <PriceValue normal={item.listPrice} tiers={tiersForAudience(item.priceTiers, "RETAIL")} />
             </AdminCell>

@@ -159,7 +159,7 @@ export type StockSummary = {
  * Stock libre / total de una fila. Un combo no tiene unidades propias: su «libre»
  * es lo que se puede armar y no lleva barra. El tono sale del libre real.
  */
-export function stockSummary(item: AdminInventoryItemRow, rangeActive: boolean): StockSummary {
+export function stockSummary(item: Pick<InventoryRowLike, "combo" | "availability"> & { quantity: number }, rangeActive: boolean): StockSummary {
   const range = item.availability.range ?? null;
   const free = rangeActive ? (range?.available ?? null) : item.availability.availableNow;
   if (item.combo) return { free, total: null, percent: null, tone: free === 0 ? "danger" : "ok" };
@@ -241,7 +241,7 @@ export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
 };
 
 /** Productos de la lista que usan al producto dado como componente. */
-export function combosUsing(inventory: ReadonlyArray<AdminInventoryItemRow>, itemId: string): AdminInventoryItemRow[] {
+export function combosUsing<T extends Pick<AdminInventoryRow, "archivedAt" | "combo">>(inventory: ReadonlyArray<T>, itemId: string): T[] {
   return inventory.filter((candidate) => !candidate.archivedAt && candidate.combo?.components.some((component) => component.componentId === itemId));
 }
 

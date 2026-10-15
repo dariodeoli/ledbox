@@ -1904,6 +1904,9 @@ export type AdminInventoryItemRow = AdminInventoryRow & {
   availability: AdminInventoryAvailabilityNow;
 };
 
+/** Producto con su disponibilidad de hoy: lo común a la fila liviana y a la completa. */
+export type AdminInventoryListed = AdminInventoryRow & { availability: AdminInventoryAvailabilityNow };
+
 /**
  * Fila liviana de `/api/admin/inventory?fields=grid` (rediseño E2): sin unidades ni asignaciones,
  * con los agregados por `groupBy`. La ficha trae el detalle (`AdminInventoryItemRow`).

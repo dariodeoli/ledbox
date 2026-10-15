@@ -10,7 +10,8 @@ test("Inventario E2 en PostgreSQL: payload liviano, agregados por groupBy, pagin
   process.env.DATABASE_URL = url.toString();
   const { db } = await import("../lib/server/db");
   const { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } = await import("../lib/server/inventory-grid");
-  const { inventoryVisualState } = await import("../lib/inventory-visual-state");
+  const { inventoryVisualState: visualOf } = await import("../lib/inventory-visual-state");
+  const inventoryVisualState = (row: { archivedAt: Date | null } & Omit<Parameters<typeof visualOf>[0], "archivedAt">) => visualOf({ ...row, archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null });
 
   const orgs: string[] = [];
   const newOrg = async (label: string) => {

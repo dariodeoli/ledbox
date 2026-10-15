@@ -4,6 +4,7 @@ import { tierLabel, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { formatDateShort, formatMoney, formatNumber, formatTime } from "@/lib/admin-format";
 import { CATALOG_AUDIENCE_LABEL, effectiveAudience } from "@/lib/catalog-audience";
 import { AUDIENCE_TONE, type StockSummary } from "@/lib/inventory-view";
+import type { InventorySegment, InventoryStateEntry, InventoryVisualState } from "@/lib/inventory-visual-state";
 import type { AdminInventoryRow } from "@/lib/admin-types";
 import { AdminBadge } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
@@ -176,4 +177,48 @@ export function rangeStamp(start: string | null, end: string | null): string {
 /** Rango pedido en la vista por rango: `21-sept. 00:00 → 23-sept. 23:59`. */
 export function dayRangeLabel(from: string, to: string): string {
   return `${formatDateShort(`${from}T00:00`)} 00:00 → ${formatDateShort(`${to}T23:59`)} 23:59`;
+}
+
+/**
+ * Chip de estado del inventario: ícono + texto, con el tono del mapa único
+ * (`lib/inventory-visual-state.ts`). Nunca decide un estado: solo dibuja el que le dan.
+ */
+export function StateChip({ state, label, title, className }: { state: InventoryStateEntry; label?: string; title?: string; className?: string }) {
+  return (
+    <span
+      className={className ? `admin-inv-chip ${className}` : "admin-inv-chip"}
+      data-tone={state.tone}
+      data-emphasis={state.emphasis ? "true" : undefined}
+      data-state={state.key}
+      title={title ?? state.hint}
+    >
+      <AdminIcon name={state.icon} size={12} />
+      <span className="admin-inv-chip-text">{label ?? state.label}</span>
+    </span>
+  );
+}
+
+/** Estado principal y, si hay, la marca «Reservado desde dd/mm» (acento · calendario). */
+export function StateChips({ visual, compact }: { visual: InventoryVisualState; compact?: boolean }) {
+  return (
+    <span className={compact ? "admin-inv-chips admin-inv-chips--compact" : "admin-inv-chips"}>
+      <StateChip state={visual.state} />
+      {visual.reserved ? <StateChip state={visual.reserved} title="Tiene una reserva a futuro." /> : null}
+    </span>
+  );
+}
+
+const SEGMENT_NAMES: Record<InventorySegment["key"], string> = { free: "libres", rented: "comprometidas", damaged: "dañadas", maintenance: "en mantenimiento" };
+
+/** Barra segmentada de un producto repartido (verde libres · rojo · naranja · azul) con su texto accesible. */
+export function SegmentedMeter({ visual }: { visual: InventoryVisualState }) {
+  if (visual.segments.length === 0) return null;
+  const summary = visual.segments.map((segment) => `${formatNumber(segment.count)} ${SEGMENT_NAMES[segment.key]}`).join(", ");
+  return (
+    <span className="admin-inv-seg" role="img" aria-label={`${summary} de ${formatNumber(visual.total)}`} title={`${summary} de ${formatNumber(visual.total)}`}>
+      {visual.segments.map((segment) => (
+        <span key={segment.key} data-tone={segment.tone} style={{ width: `${(segment.count / visual.total) * 100}%` }} />
+      ))}
+    </span>
+  );
 }
