@@ -64,6 +64,7 @@ export type BudgetDetailActions = {
   onSend?: () => void;
   onEdit?: () => void;
   onPlan?: () => void;
+  onCollect?: () => void;
   onDeposit?: () => void;
   onInventory?: () => void;
   onEventName?: () => void;
@@ -211,6 +212,7 @@ export function BudgetDetailDialog({
 
         <Section title="Condiciones" actions={
           <>
+            {actions.onCollect ? <AdminButton icon="finance" onClick={actions.onCollect}>Cobrar en Finanzas</AdminButton> : null}
             {actions.onPlan ? <AdminButton icon="clock" onClick={actions.onPlan}>Plan de pagos</AdminButton> : null}
             {actions.onDeposit ? <AdminButton icon="wallet" onClick={actions.onDeposit}>{budget.securityDeposit ? "Garantía" : "Definir garantía"}</AdminButton> : null}
           </>

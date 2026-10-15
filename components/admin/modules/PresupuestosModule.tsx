@@ -1182,6 +1182,8 @@ export function PresupuestosModule() {
       onSend: writable ? () => openSend(budget) : undefined,
       onEdit: writable ? () => setPricing(budget) : undefined,
       onPlan: writable ? () => openPlan(budget) : undefined,
+      onCollect: writable && budget.status === "APPROVED" && primary?.kind !== "collect" && primary?.kind !== "review_proof"
+        ? () => router.push(`/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`) : undefined,
       onDeposit: writable ? () => setDepositBudget(budget) : undefined,
       onInventory: writable ? () => setLinksBudget(budget) : undefined,
       onEventName: writable && canCreateEvent && budget.event ? () => { setEventEdit(budget); setEventName(budget.event!.name); setDialogError(""); } : undefined,
