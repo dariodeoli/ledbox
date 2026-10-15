@@ -24,7 +24,7 @@ function fixture(secret: string | undefined = "offline-preview-secret-not-a-real
   const budget = { id: "budget", title: unsafe, publicToken: "ABCD-EFGH-JKLM-NPQR-STUV", status: "SENT",
     subtotal: 100000, discount: 0, total: 100000, advanceAmount: 0, paymentTerms: null, installmentsJson: [],
     approvedAt: null as Date | null, validUntil: new Date("2026-10-20T18:00:00Z"),
-    client: { name: unsafe, company: null, tradeName: null, legalName: null }, event: { name: "Evento" },
+    client: { name: unsafe, company: null, tradeName: null, legalName: null }, event: { name: "Evento", startsAt: null as Date | null, endsAt: null as Date | null },
     items: [{ name: unsafe, quantity: 2, days: 1, subtotal: 100000, sortOrder: 0 }],
     organization: { name: unsafe, paymentDetails: { bank: "PRIVATE-BANK", account: "PRIVATE-ACCOUNT" } } };
   const cache = new Map<string, { exports: Record<string, any> }>();
@@ -117,11 +117,13 @@ test("missing confirmation, ambiguous action or forged preview cannot dispatch",
   assert.equal(f.state.sent.length, 0); assert.equal(f.state.audits.length, 0);
 });
 
-test("changed recipient/message/server amount/approval/portal/sender invalidates confirmation without auto resend", async () => {
+test("changed recipient/message/server amount/approval/portal/sender/event dates invalidates confirmation without auto resend", async () => {
   const changes = [
     (f: ReturnType<typeof fixture>) => ({ to: "other@example.invalid" }),
     (f: ReturnType<typeof fixture>) => ({ message: "Different message" }),
     (f: ReturnType<typeof fixture>) => { f.budget.total++; return {}; },
+    (f: ReturnType<typeof fixture>) => { f.budget.event.startsAt = new Date("2027-02-20T15:00:00Z"); return {}; },
+    (f: ReturnType<typeof fixture>) => { f.budget.event.endsAt = new Date("2027-02-21T15:00:00Z"); return {}; },
     (f: ReturnType<typeof fixture>) => { f.budget.approvedAt = new Date(); return {}; },
     (f: ReturnType<typeof fixture>) => { f.budget.publicToken = "BCDE-FGHJ-KLMN-PQRS-TUVW"; return {}; },
     (f: ReturnType<typeof fixture>) => { f.state.from = "Changed <changed@example.invalid>"; return {}; },

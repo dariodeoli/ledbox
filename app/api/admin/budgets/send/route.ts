@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     where: { id: budgetId, organizationId },
     include: {
       client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-      event: { select: { name: true } },
+      event: { select: { name: true, startsAt: true, endsAt: true } },
       items: { orderBy: { name: "asc" }, select: { sortOrder: true, name: true, quantity: true, days: true, subtotal: true, unitPrice: true, excluded: true, freeOnPurpose: true } },
       organization: { select: { name: true, paymentDetails: true } },
     },

@@ -1,6 +1,7 @@
 "use client";
 import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
+import { inputDateTime } from "./EventoFicha";
 import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
 import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
 import { budgetEventPrompt } from "@/lib/budget-event";
@@ -95,6 +96,7 @@ import { SignatureDialog } from "./SignatureDialog";
 import {
   CheckboxField,
   Combobox,
+  DateTimeField,
   EmailField,
   MoneyField,
   NumberField,
@@ -917,6 +919,11 @@ export function PresupuestosModule() {
   const mailInFlight = useRef(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [sendStartsAt, setSendStartsAt] = useState("");
+  const [sendEndsAt, setSendEndsAt] = useState("");
+  const [sendDatesBusy, setSendDatesBusy] = useState(false);
+  const sendDatesInFlight = useRef(false);
+  const sendDatesDirty = Boolean(sendBudget && (sendStartsAt !== inputDateTime(sendBudget.event?.startsAt) || sendEndsAt !== inputDateTime(sendBudget.event?.endsAt)));
   /** Envío por WhatsApp con plantilla (issue #35) para el cliente del presupuesto. */
   const [templateTarget, setTemplateTarget] = useState<MessageTemplateTarget | null>(null);
 
@@ -1401,12 +1408,35 @@ export function PresupuestosModule() {
     setSendTo(normalizeEmail(budget.client.email ?? ""));
     setSendMessage("");
     setSendError("");
+    setSendStartsAt(inputDateTime(budget.event?.startsAt));
+    setSendEndsAt(inputDateTime(budget.event?.endsAt));
     setSendBudget(budget);
+  }
+
+  async function saveSendDates() {
+    if (!sendBudget || sendDatesInFlight.current || mailInFlight.current || sendBusy || linkBusy) return;
+    if ([sendStartsAt, sendEndsAt].some(value => value && !Number.isFinite(new Date(value).getTime()))) { setSendError("Ingresá fechas válidas."); return; }
+    if (sendStartsAt && sendEndsAt && new Date(sendEndsAt) < new Date(sendStartsAt)) { setSendError("El fin no puede ser anterior al inicio."); return; }
+    sendDatesInFlight.current = true; setSendDatesBusy(true); setSendError(""); setSendPreview(null);
+    try {
+      const result = await adminSend<{ event: NonNullable<AdminBudgetRow["event"]> }>(`/api/admin/budgets/${sendBudget.id}/schedule`, {
+        startsAt: sendStartsAt ? new Date(sendStartsAt).toISOString() : null,
+        endsAt: sendEndsAt ? new Date(sendEndsAt).toISOString() : null,
+        originalEventId: sendBudget.event?.id ?? null,
+        originalStartsAt: sendBudget.event?.startsAt ?? null,
+        originalEndsAt: sendBudget.event?.endsAt ?? null,
+      }, "PATCH");
+      if (!result.ok) { setSendError(result.error); return; }
+      setSendBudget({ ...sendBudget, event: result.data.event });
+      setSendStartsAt(inputDateTime(result.data.event.startsAt)); setSendEndsAt(inputDateTime(result.data.event.endsAt));
+      setNotice("Fechas del evento guardadas. El correo todavía no se envió.");
+      budgetsResource.reload(); events.reload();
+    } finally { sendDatesInFlight.current = false; setSendDatesBusy(false); }
   }
 
   /** Genera el link del portal desde el diálogo de envío (sin link no hay correo). */
   async function generateLinkForSend() {
-    if (!sendBudget || linkBusy || mailInFlight.current) return;
+    if (!sendBudget || linkBusy || sendDatesInFlight.current || mailInFlight.current) return;
     setSendPreview(null);
     setLinkBusy(true);
     setSendError("");
@@ -1427,7 +1457,8 @@ export function PresupuestosModule() {
 
   /** First click previews only; a separate click confirms the exact payload. */
   async function sendBudgetMail() {
-    if (!sendBudget || linkBusy || mailInFlight.current) return;
+    if (!sendBudget || linkBusy || sendDatesInFlight.current || mailInFlight.current) return;
+    if (sendDatesDirty) { setSendError("Guardá las fechas antes de previsualizar el correo."); return; }
     const to = normalizeEmail(sendTo);
     if (!emailValid(to)) {
       setSendError(FIELD_MESSAGES.email);
@@ -2076,8 +2107,8 @@ export function PresupuestosModule() {
           description="El correo lleva el link del portal con el código, el resumen de ítems, total y validez, y la hoja imprimible."
           error={sendError || (!sendBudget.publicToken ? "Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el destino de aprobación." : "")}
           warning={!emailValid(sendBudget.client.email ?? "") ? "El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá." : undefined}
-          dirty={sendMessage.trim() !== ""}
-          onClose={() => { if (!sendBusy && !linkBusy) setSendBudget(null); }}
+          dirty={sendMessage.trim() !== "" || sendDatesDirty}
+          onClose={() => { if (!sendBusy && !linkBusy && !sendDatesBusy) setSendBudget(null); }}
           footer={({ requestClose }) => (
             <>
               {!sendBudget.publicToken ? (
@@ -2085,7 +2116,7 @@ export function PresupuestosModule() {
                   Generar link del portal
                 </AdminButton>
               ) : null}
-              <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy}>
+              <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy || sendDatesBusy}>
                 Cancelar
               </AdminButton>
               <AdminButton
@@ -2094,7 +2125,7 @@ export function PresupuestosModule() {
                 type="button"
                 busy={sendBusy}
                 busyLabel={sendPreview ? "Enviando…" : "Preparando…"}
-                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy}
+                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy || sendDatesBusy || sendDatesDirty}
                 onClick={() => void sendBudgetMail()}
               >
                 {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
@@ -2129,6 +2160,12 @@ export function PresupuestosModule() {
             </div>
           </dl>
 
+          {canCreateEvent ? <><AdminDialogSection title="Fechas del evento (opcional)">
+            <DateTimeField label="Inicio del evento" size="md" value={sendStartsAt} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
+            <DateTimeField label="Fin del evento" size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
+            <AdminButton icon="check" type="button" busy={sendDatesBusy} busyLabel="Guardando…" disabled={!sendDatesDirty || sendBusy || linkBusy} onClick={() => void saveSendDates()}>Guardar fechas</AdminButton>
+          </AdminDialogSection><AdminNote>Guardar fechas no aprueba el presupuesto ni reserva inventario.</AdminNote></> : null}
+
           <AdminDialogSection title="Destinatario">
           <EmailField
             label="Destinatario"
@@ -2139,7 +2176,7 @@ export function PresupuestosModule() {
               setSendPreview(null);
               setSendError("");
             }}
-            disabled={sendBusy || linkBusy}
+            disabled={sendBusy || linkBusy || sendDatesBusy}
             error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
             hint="Podés cambiarlo: el correo se envía solo a esta dirección."
           />
@@ -2155,7 +2192,7 @@ export function PresupuestosModule() {
               setSendError("");
             }}
             maxLength={600}
-            disabled={sendBusy || linkBusy}
+            disabled={sendBusy || linkBusy || sendDatesBusy}
             rows={3}
             placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
           />

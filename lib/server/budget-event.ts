@@ -48,7 +48,11 @@ export async function createEventForBudget(
   tx: Prisma.TransactionClient,
   ctx: EventPlanContext,
   budgetId: string,
-  options: { confirmDraft?: boolean } = {},
+  options: {
+    confirmDraft?: boolean;
+    /** Alta explícita desde el envío: no aprueba ni reserva. Reutiliza tareas, límites y vínculo atómico. */
+    scheduleDraft?: { startsAt: Date | null; endsAt: Date | null };
+  } = {},
 ): Promise<CreateEventForBudgetResult> {
   const { organizationId } = ctx;
   // Un evento existente siempre se bloquea ANTES del presupuesto (misma guarda
@@ -64,7 +68,9 @@ export async function createEventForBudget(
     },
   });
   if (!budget) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
-  if (budget.status !== "APPROVED") throw new QuoteComparisonError(409, "Solo se crea el evento de un presupuesto aprobado.");
+  if (budget.status !== "APPROVED" && (!options.scheduleDraft || !["DRAFT", "SENT", "NEGOTIATING"].includes(budget.status))) {
+    throw new QuoteComparisonError(409, options.scheduleDraft ? "Solo se guardan fechas de presupuestos abiertos o aprobados." : "Solo se crea el evento de un presupuesto aprobado.");
+  }
   if (budget.eventId !== initial?.eventId) {
     // Otro creador pudo ganar mientras esperábamos Budget. No se toma otro lock
     // en orden inverso; devolver el evento ya confirmado es seguro e idempotente.
@@ -95,6 +101,7 @@ export async function createEventForBudget(
       organizationId,
       clientId: budget.clientId,
       ...data,
+      ...(options.scheduleDraft ? { ...options.scheduleDraft, status: budget.status === "APPROVED" ? "CONFIRMED" as const : "DRAFT" as const } : {}),
       tasks: {
         create: [
           { id: randomUUID(), type: "SETUP", title: "Confirmar montaje y acceso al lugar" },
