@@ -316,20 +316,21 @@ test("Familias de variantes en PostgreSQL: migración, agrupar, concurrencia, ai
       await assert.rejects(() => db.inventoryItem.update({ where: { id: b.id }, data: { familyId: ok.familyId, variantKey: "color=rojo", variantOptions: { color: "Rojo" } } }), /Unique|unique/);
     });
 
-    await t.test("10) la demo carga completa con Plato Arabesco y Zapato Ola", async () => {
+    await t.test("10) la demo carga cuatro familias completas y reponer no duplica", async () => {
       const { ensureDemoData, DEMO_ORGANIZATION_ID } = await import("../lib/server/demo-data");
       await ensureDemoData({ reset: true } as never);
       const views = await families.listFamilyViews(db, DEMO_ORGANIZATION_ID);
-      assert.deepEqual(views.map((f) => [f.name, f.variants.length]).sort(), [["Plato Arabesco", 2], ["Zapato Ola", 4]]);
+      const expectedFamilies = [["Mantel de lino", 3], ["Plato Arabesco", 2], ["Silla Cross", 3], ["Zapato Ola", 4]];
+      assert.deepEqual(views.map((f) => [f.name, f.variants.length]).sort(), expectedFamilies);
       const plato = views.find((f) => f.name === "Plato Arabesco")!;
       assert.deepEqual(plato.variants.map((v) => v.name).sort(), ["Plato Arabesco · Lila", "Plato Arabesco · Verde"]);
       assert.ok(plato.categoryId, "la familia tiene la categoría de sus productos");
       const zapato = views.find((f) => f.name === "Zapato Ola")!;
       assert.deepEqual(zapato.variants.map((v) => v.name).sort(), ["Zapato Ola · Blanco · 35", "Zapato Ola · Blanco · 36", "Zapato Ola · Negro · 35", "Zapato Ola · Negro · 36"]);
       assert.equal(zapato.variants.find((v) => v.name.endsWith("Negro · 35"))!.quantity, 1);
-      for (const variant of [...plato.variants, ...zapato.variants]) assert.equal(await db.inventoryUnit.count({ where: { inventoryId: variant.id } }), variant.quantity);
+      for (const variant of views.flatMap((f) => f.variants)) assert.equal(await db.inventoryUnit.count({ where: { inventoryId: variant.id } }), variant.quantity);
       await ensureDemoData({ reset: true } as never);
-      assert.equal((await families.listFamilyViews(db, DEMO_ORGANIZATION_ID)).length, 2, "reponer no duplica");
+      assert.deepEqual((await families.listFamilyViews(db, DEMO_ORGANIZATION_ID)).map((f) => [f.name, f.variants.length]).sort(), expectedFamilies, "reponer no duplica");
     });
   } finally {
     // Se limpian las empresas de la prueba (la demo queda como estaba).
