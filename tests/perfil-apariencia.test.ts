@@ -215,7 +215,7 @@ test("fondo propio: solo claro (contraste ≥ 7:1 con el texto) y el texto secun
 // ── Apariencia ───────────────────────────────────────────────────────────────
 
 test("apariencia: plantilla y tipografía de listas cerradas; lo demás se rechaza", () => {
-  assert.deepEqual([...TEMPLATES], ["clasica", "minimalista", "elegante", "oscura", "editorial"]);
+  assert.deepEqual([...TEMPLATES], ["clasica", "minimalista", "elegante", "oscura", "editorial", "tecnologica", "boutique", "noche", "fresca", "minimal"]);
   const ok = parseAppearance({ template: "elegante", font: "playfair-display", background: "#f6f1e8" });
   assert.deepEqual(ok, { ok: true, appearance: { template: "elegante", font: "playfair-display", background: "#f6f1e8", script: false } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);

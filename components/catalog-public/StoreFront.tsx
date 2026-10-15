@@ -6,7 +6,6 @@ import { CompanyInfo } from "./CompanyInfo";
 import { locationLine } from "@/lib/org-profile";
 import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
 import { StoreHeader, storeNavLinks } from "./StoreHeader";
-import { storeInitials } from "./StoreLogo";
 import { StoreChrome } from "./StoreChrome";
 
 /**
@@ -88,12 +87,15 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
               {featured.map((entry) => (
                 <li key={entry.category}>
                   <a className="cp-feat-card" href={`${basePath}?categoria=${encodeURIComponent(entry.category)}#catalogo`}>
-                    <span className="cp-feat-photo">
+                    <span className={categoryImages?.[entry.category] ?? entry.imageUrl ? "cp-feat-photo" : "cp-feat-photo cp-feat-photo--empty"}>
                       {categoryImages?.[entry.category] ?? entry.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={(categoryImages?.[entry.category] ?? entry.imageUrl) as string} alt="" loading="lazy" />
                       ) : (
-                        <span className="cp-feat-ph" aria-hidden="true">{storeInitials(entry.category)}</span>
+                        <svg className="cp-feat-ico" viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9L12 3Z" />
+                          <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
+                        </svg>
                       )}
                     </span>
                     <span className="cp-feat-name">{entry.category}</span>

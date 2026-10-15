@@ -19,6 +19,7 @@ import {
   type TemplateId,
 } from "@/lib/appearance";
 import { normalizeHex } from "@/lib/storefront-theme";
+import { TEMPLATE_TOKENS, isDesignTemplate, templateAccent } from "@/lib/storefront-templates";
 import { useAdminSession } from "../AdminShell";
 import { FileField, SegmentedField, SelectField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
@@ -202,6 +203,11 @@ export function AparienciaSettings() {
                     {TEMPLATES.map((id) => (
                       <button key={id} type="button" className="admin-template-card" aria-pressed={template === id} disabled={demo} onClick={() => { setTemplate(id); setNotice(""); }}>
                         <strong>{TEMPLATE_META[id].label}</strong>
+                        {isDesignTemplate(id) ? (
+                          <span className="admin-template-swatches" aria-hidden="true" data-testid={`template-swatch-${id}`}>
+                            {TEMPLATE_TOKENS[id].swatch.map((color, index) => <i key={index} style={{ background: color }} />)}
+                          </span>
+                        ) : null}
                         <span>{TEMPLATE_META[id].description}</span>
                       </button>
                     ))}
@@ -218,7 +224,7 @@ export function AparienciaSettings() {
                       placeholder="#0b5cd5"
                       autoCapitalize="none"
                       error={colorFieldError}
-                      hint={template === "editorial" ? "Hexadecimal. Vacío, la plantilla editorial usa un verde oliva oscuro." : "Hexadecimal. Vacío, la tienda usa un tema neutro."}
+                      hint={template === "editorial" ? "Hexadecimal. Vacío, la plantilla editorial usa un verde oliva oscuro." : isDesignTemplate(template) ? "Hexadecimal. Vacío, o si no da contraste suficiente con la plantilla, se usa el acento propio de la plantilla." : "Hexadecimal. Vacío, la tienda usa un tema neutro."}
                       disabled={demo}
                     />
                     <div className="admin-field">
@@ -232,6 +238,11 @@ export function AparienciaSettings() {
                   </div>
                   {brand.ok && brand.result?.adjusted ? (
                     <AdminNote tone="warn"><span data-testid="brand-adjusted">{brand.result.notice}</span></AdminNote>
+                  ) : brandHex && isDesignTemplate(template) ? (
+                    <p className="admin-field-hint" data-testid="accent-preview">
+                      <span className="admin-store-swatch" style={{ background: templateAccent(template, brandHex).accent }} aria-hidden="true" />{" "}
+                      {templateAccent(template, brandHex).fromBrand ? "Con esta plantilla se usa tu color de marca." : "Tu color no da contraste suficiente con esta plantilla: se usa su acento propio."}
+                    </p>
                   ) : brandHex ? (
                     <p className="admin-field-hint" data-testid="accent-preview">
                       <span className="admin-store-swatch" style={{ background: brandHex }} aria-hidden="true" /> Contraste suficiente. En modo oscuro se aclara solo.
@@ -245,7 +256,7 @@ export function AparienciaSettings() {
                     {template === "editorial" ? (
                       <SwitchField label="Acento manuscrito" checked={script} onChange={(checked) => { setScript(checked); setNotice(""); }} hint="Los títulos de sección llevan una línea manuscrita (Allura), como en un catálogo impreso." disabled={demo} />
                     ) : null}
-                    <SwitchField label="Fondo propio" checked={bgOn} onChange={(checked) => { setBgOn(checked); setNotice(""); }} hint="Un color claro de fondo. Para fondo oscuro usá la plantilla Oscura." disabled={demo} />
+                    <SwitchField label="Fondo propio" checked={bgOn} onChange={(checked) => { setBgOn(checked); setNotice(""); }} hint={isDesignTemplate(template) ? "Esta plantilla trae su propio fondo." : "Un color claro de fondo. Para fondo oscuro usá la plantilla Oscura."} disabled={demo || isDesignTemplate(template)} />
                     {bgOn ? (
                       <TextField label="Color de fondo" value={background} onChange={(value) => { setBackground(value); setNotice(""); }} maxLength={7} placeholder="#f6f1e8" autoCapitalize="none" error={!backgroundCheck.ok ? backgroundCheck.error : null} disabled={demo} />
                     ) : null}
