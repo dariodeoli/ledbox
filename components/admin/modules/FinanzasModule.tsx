@@ -630,7 +630,7 @@ function ExpectedReviewDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={row.budget.client} /></dd>
           </div>
           <div>
             <dt>Presupuesto</dt>
@@ -846,7 +846,7 @@ function ExpectedSplitDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={row.budget.client} /></dd>
           </div>
           <div>
             <dt>Concepto</dt>
@@ -982,7 +982,7 @@ function CollectPaymentDialog({
         <dl className="admin-dialog-facts">
           <div>
             <dt>Cliente</dt>
-            <dd>{label}</dd>
+            <dd><ClientIdentityView client={payment.client} /></dd>
           </div>
           <div>
             <dt>Monto</dt>

@@ -594,8 +594,8 @@ export type AdminBudgetRequestRow = {
     subtotal: number;
     discount: number;
     total: number;
-    /** Referencia mínima del cliente (el API de solicitudes solo manda nombre y empresa). */
-    client: Pick<AdminClientRef, "name" | "company">;
+    /** Identidad comercial mínima; sin notas ni bytes de imagen. */
+    client: Pick<AdminClientRef, "id" | "name" | "company" | "tradeName" | "legalName" | "contactName" | "type" | "logoUpdatedAt">;
     items: Array<Pick<AdminBudgetItem, "id" | "name" | "quantity" | "days" | "unitPrice" | "excluded">>;
   };
 };

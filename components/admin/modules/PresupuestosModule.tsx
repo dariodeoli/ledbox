@@ -2128,7 +2128,7 @@ export function PresupuestosModule() {
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
-              <dd>{clientDisplayName(sendBudget.client)}</dd>
+              <dd><ClientIdentityView client={sendBudget.client} /></dd>
             </div>
             <div>
               <dt>Total</dt>
@@ -2344,7 +2344,7 @@ export function PresupuestosModule() {
           <dl className="admin-dialog-facts">
             <div>
               <dt>Cliente</dt>
-              <dd>{clientDisplayName(resolution.request.budget.client)}</dd>
+              <dd><ClientIdentityView client={resolution.request.budget.client} /></dd>
             </div>
             <div>
               <dt>Presupuesto</dt>

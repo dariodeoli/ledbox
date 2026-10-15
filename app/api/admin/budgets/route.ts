@@ -1,3 +1,4 @@
+import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
 import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
@@ -123,7 +124,7 @@ export async function GET() {
             subtotal: true,
             discount: true,
             total: true,
-            client: { select: { name: true, company: true, tradeName: true, legalName: true } },
+            client: { select: CLIENT_IDENTITY_SELECT },
             items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, freeOnPurpose: true } },
           },
         },
@@ -135,7 +136,7 @@ export async function GET() {
     const { logo, ...client } = budget.client;
     const { _count, ...row } = budget;
     return { ...row, inventoryLinksLocked: Boolean(budget.approvedAt || budget.status === "APPROVED" || _count.signatureRequests), equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
-  }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
+  }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, client: clientIdentityDTO(request.budget.client), items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
 type ParsedBudgetItem = {
