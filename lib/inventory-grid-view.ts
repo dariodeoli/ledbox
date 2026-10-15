@@ -19,10 +19,12 @@ export type InventoryGridFilters = {
   /** Clave del mapa de estados (`rented`, `overdue`…), `reserved` o `ALL`. */
   state: string;
   supplierId: string;
+  /** Id de la familia de variantes (`""` = todas). */
+  familyId: string;
   focus: InventoryFocus;
 };
 
-export const EMPTY_GRID_FILTERS: InventoryGridFilters = { query: "", kind: "ALL", categoryId: "", warehouseId: "", state: "ALL", supplierId: "", focus: "all" };
+export const EMPTY_GRID_FILTERS: InventoryGridFilters = { query: "", kind: "ALL", categoryId: "", warehouseId: "", state: "ALL", supplierId: "", familyId: "", focus: "all" };
 
 export type InventoryFilterContext = InventoryFocusContext & {
   /** Productos con una unidad cuyo código coincide con la búsqueda (viene del API). */
@@ -54,6 +56,7 @@ export function activeFilterCount(filters: InventoryGridFilters, rangeActive: bo
     filters.warehouseId !== "",
     filters.state !== "ALL",
     filters.supplierId !== "",
+    filters.familyId !== "",
     filters.focus !== "all",
     rangeActive,
   ].filter(Boolean).length;
@@ -75,6 +78,7 @@ export function applyInventoryFilters(
     if (Boolean(row.archivedAt) !== wantArchived) return false;
     if (filters.kind !== "ALL" && row.kind !== filters.kind) return false;
     if (filters.categoryId && !(row.categoryId && scope.has(row.categoryId))) return false;
+    if (filters.familyId && row.familyId !== filters.familyId) return false;
     if (filters.warehouseId && !row.stock.locations.some((place) => place.warehouseId === filters.warehouseId)) return false;
     if (filters.supplierId && row.supplierId !== filters.supplierId && !row.stock.supplierIds.includes(filters.supplierId)) return false;
     if (!wantArchived && !inventoryStateMatches(row, filters.state)) return false;
@@ -98,6 +102,13 @@ export function categoryFilterOptions(tree: readonly CategoryNode[], allLabel = 
     }
   }
   return options;
+}
+
+/** Opciones del filtro «Familia»: las familias que tienen al menos una variante en la lista, por nombre. */
+export function familyFilterOptions(rows: ReadonlyArray<Pick<AdminInventoryGridRow, "familyId" | "familyName">>, allLabel = "Todas las familias"): CategoryFilterOption[] {
+  const families = new Map<string, string>();
+  for (const row of rows) if (row.familyId && row.familyName) families.set(row.familyId, row.familyName);
+  return [{ value: "", label: allLabel }, ...[...families].sort((a, b) => a[1].localeCompare(b[1], "es")).map(([value, label]) => ({ value, label }))];
 }
 
 export type CategorySection = {

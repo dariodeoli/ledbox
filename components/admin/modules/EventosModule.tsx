@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import {
   daysUntilDue,
@@ -11,7 +12,7 @@ import {
   formatTime,
   whatsappReachable,
 } from "@/lib/admin-format";
-import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { canImportCatalog, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import {
   type AdminBudgetRow,
@@ -133,8 +134,10 @@ function compareEventUrgency(a: EventItem, b: EventItem): number {
   return eventUrgency(a) >= 4 ? timeB - timeA : timeA - timeB;
 }
 
+const AdminImportPanel = dynamic(() => import("../AdminImportPanel").then((mod) => mod.AdminImportPanel), { ssr: false });
+
 export function EventosModule() {
-  const { role } = useAdminSession();
+  const { role, demo } = useAdminSession();
   const { actions: queuedActions } = useOfflineQueue();
   const operations = useAdminResource(
     "/api/admin/event-ops?fields=panel",
@@ -243,6 +246,8 @@ export function EventosModule() {
   const forceFormId = useId();
 
   const writable = canWriteOperations(role);
+  const canImport = writable && canImportCatalog(role) && !demo;
+  const [importOpen, setImportOpen] = useState(false);
   const allEvents = useMemo(() => operations.data ?? [], [operations.data]);
   // Lo archivado sale de las listas activas, del calendario y de los indicadores: solo se ve con el filtro «Archivados».
   const events = useMemo(() => allEvents.filter((event) => !event.archivedAt), [allEvents]);
@@ -627,6 +632,11 @@ export function EventosModule() {
         {activeView === "calendar" ? null : (
           <AdminSelect value={status} onChange={setStatus} label="Filtrar por estado" options={STATUS_OPTIONS} />
         )}
+        {canImport ? (
+          <AdminButton icon="upload" onClick={() => setImportOpen(true)} aria-haspopup="dialog" title="Cargar eventos con sus productos desde una planilla, ChatGPT o la IA de LedBox">
+            Importar
+          </AdminButton>
+        ) : null}
         {writable ? (
           <AdminButton variant="primary" icon="plus" onClick={startNewEvent} aria-haspopup="dialog">
             Nuevo evento
@@ -634,6 +644,7 @@ export function EventosModule() {
         ) : null}
       </AdminToolbar>
       )}
+      {canImport && importOpen ? <AdminImportPanel moduloId="eventos" onClose={() => setImportOpen(false)} onApplied={() => operations.reload()} /> : null}
 
       {focus && activeView !== "calendar" && section === "eventos" ? (
         <div className="admin-focus-bar" role="status">

@@ -135,7 +135,7 @@ test("mejor precio: la respuesta de la empresa exige lo que corresponde a cada a
 test("plantilla: la editorial pasa a Boutique y la empresa elige entre las 4 plantillas nuevas", () => {
   assert.ok((TEMPLATES as readonly string[]).includes("boutique"));
   assert.match(TEMPLATE_META.boutique.label, /boutique/i);
-  assert.equal(DEFAULT_APPEARANCE.template, "lienzo");
+  assert.equal(DEFAULT_APPEARANCE.template, "boutique");
   assert.equal(readAppearance({ template: "editorial", font: "cormorant-garamond" }).template, "boutique", "alias de lectura");
   const parsed = parseAppearance({ template: "boutique", font: "cormorant-garamond" });
   assert.ok(parsed.ok && parsed.appearance.template === "boutique");
@@ -154,7 +154,7 @@ test("plantilla: Boutique usa serif en títulos, la manuscrita decorativa y fond
   assert.match(view.vars["--font-display"], /Cormorant/);
   assert.ok(view.fontHref.includes("Cormorant") && view.fontHref.includes("Pinyon"));
   assert.equal(view.vars["--color-bg"], "#F6F2EA");
-  const otros = appearanceView({ ...DEFAULT_APPEARANCE, template: "noir" });
+  const otros = appearanceView({ ...DEFAULT_APPEARANCE, template: "escenario" });
   assert.ok(!otros.fontHref.includes("Pinyon"));
 });
 

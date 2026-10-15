@@ -64,9 +64,11 @@ import {
 import { trashMenuItems } from "../TrashDialogs";
 import { DateField, DayField, MoneyField, NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
+import { InventoryVariantsTab, type GroupableItem } from "./InventoryFamilies";
 import { ProductDataSection, SupplierWarrantySection, WarehouseStockSection } from "./InventoryStockPanels";
 import { ConditionBadge, dayKeyOf, supplierOptions, unitLocationLabel, warehouseOptions, type InventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryIncidentsPanel } from "./InventoryIncidents";
+import { ProductStorefrontPanel } from "./ProductStorefrontPanel";
 import {
   AudienceChip,
   InventoryThumb,
@@ -86,6 +88,7 @@ import {
 /** Pestañas de la ficha (rediseño E2, §5.8). «Tienda web» y «Combos» solo aparecen si aplican. */
 const TAB_LABELS = {
   datos: "Datos",
+  variantes: "Variantes",
   disponibilidad: "Disponibilidad",
   depositos: "Stock por depósito",
   unidades: "Unidades",
@@ -223,6 +226,7 @@ export function InventoryFicha({
   onChanged,
   taxonomy,
   onOpenProduct,
+  onGroupFamily,
   banner,
 }: {
   item: AdminInventoryItemRow;
@@ -243,6 +247,8 @@ export function InventoryFicha({
   /** Depósitos, categorías y proveedores de la empresa (rediseño E1). */
   taxonomy: InventoryTaxonomy;
   onOpenProduct: (id: string) => void;
+  /** Abre «Agrupar en familia» con este producto (pestaña «Variantes» de un producto suelto). */
+  onGroupFamily?: (item: GroupableItem) => void;
   /** Aviso del módulo (estado cambiado, archivado, error) para que se vea con la ficha abierta. */
   banner?: { tone?: "ok" | "warn" | "error"; text: string } | null;
 }) {
@@ -410,6 +416,7 @@ export function InventoryFicha({
     ? ["datos", "disponibilidad", "precios", ...(audience !== "HIDDEN" ? (["tienda"] as const) : []), "combos", "cronologia"]
     : [
         "datos",
+        "variantes",
         "disponibilidad",
         "depositos",
         "unidades",
@@ -566,7 +573,23 @@ export function InventoryFicha({
 <AdminDialogSection title="Datos" stack>
         <ProductDataSection item={item} taxonomy={taxonomy} />
       </AdminDialogSection>
+      <ProductStorefrontPanel itemId={item.id} name={item.name} mainImageUrl={item.imageUrl ?? null} writable={writable} onChanged={onChanged} />
 </TabPanel>
+
+      <TabPanel active={tab === "variantes"} id={panelId("variantes")} tab={tabId("variantes")}>
+        <InventoryVariantsTab
+          itemId={item.id}
+          itemName={item.name}
+          itemSku={item.sku}
+          familyId={item.familyId}
+          isCombo={isCombo}
+          inventory={inventory}
+          writable={writable}
+          onChanged={onChanged}
+          onOpenProduct={onOpenProduct}
+          onGroup={(target) => onGroupFamily?.(target)}
+        />
+      </TabPanel>
 
       <TabPanel active={tab === "disponibilidad"} id={panelId("disponibilidad")} tab={tabId("disponibilidad")}>
 <AdminDialogSection title="Disponibilidad · próximas 4 semanas" stack>

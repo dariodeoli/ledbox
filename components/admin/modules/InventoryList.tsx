@@ -103,18 +103,29 @@ export function InventoryList(props: InventoryListProps) {
     ];
   }
 
-  function rowActions(item: AdminInventoryGridRow) {
+  /** Un clic abre la ficha; Ctrl/Cmd/Shift-clic suma o quita el producto de la selección (sin abrirla). */
+  function activate(item: AdminInventoryGridRow, event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
+    if (writable && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+      if (bulkIds.length < 100 || bulkIds.includes(item.id)) props.onToggleBulk(item.id);
+      return;
+    }
+    props.onOpen(item.id);
+  }
+
+  function rowActions(item: AdminInventoryGridRow, withOpen: boolean) {
     const items = menuFor(item);
     return (
       <span className="admin-actions">
-        <AdminButton
-          type="button"
-          title={`Abrir la ficha de ${item.name}`}
-          aria-label={`Abrir la ficha de ${item.name}`}
-          onClick={() => props.onOpen(item.id)}
-        >
-          Ficha
-        </AdminButton>
+        {withOpen ? (
+          <AdminButton
+            type="button"
+            title={`Abrir la ficha de ${item.name}`}
+            aria-label={`Abrir la ficha de ${item.name}`}
+            onClick={() => props.onOpen(item.id)}
+          >
+            Ficha
+          </AdminButton>
+        ) : null}
         {items.length ? <AdminActionsMenu label={`Más acciones de ${item.name}`} items={items} /> : null}
       </span>
     );
@@ -122,11 +133,17 @@ export function InventoryList(props: InventoryListProps) {
 
   function identity(item: AdminInventoryGridRow, size: number) {
     return (
-      <button type="button" className="admin-inv-product" title={`Abrir la ficha de ${item.name}`} onClick={() => props.onOpen(item.id)}>
+      <button type="button" className="admin-inv-product" title={`Abrir la ficha de ${item.name}`} onClick={(event) => activate(item, event)}>
         <InventoryThumb item={item} size={size} />
         <span className="admin-inv-product-text">
           <strong>{item.name}</strong>
           <small className="admin-code">
+            {item.familyId ? (
+              <AdminBadge size="sm" tone="info" title={item.familyName ? `Variante de la familia ${item.familyName}` : "Variante de una familia"}>
+                Familia
+              </AdminBadge>
+            ) : null}
+            {item.familyId ? " " : ""}
             {item.sku ? `SKU ${item.sku}` : item.combo ? `Combo · ${formatNumber(item.combo.components.length)} componentes` : inventoryKindLabel(item.kind)}
           </small>
         </span>
@@ -177,7 +194,7 @@ export function InventoryList(props: InventoryListProps) {
                     onToggle={() => props.onToggleBulk(item.id)}
                   />
                 ) : null}
-                {rowActions(item)}
+                {rowActions(item, true)}
               </>
             ),
           };
@@ -201,7 +218,7 @@ export function InventoryList(props: InventoryListProps) {
         { label: "Lista", end: true },
         { label: "Mayorista", end: true },
         { label: "Tienda" },
-        { label: "Acciones", end: true },
+        { label: "Más", end: true },
       ]}
     >
       {rows.map((item) => {
@@ -209,7 +226,7 @@ export function InventoryList(props: InventoryListProps) {
         const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
         const place = locationSummary(item.stock, warehouses, formatInventoryLocation);
         return (
-          <AdminRow key={item.id}>
+          <AdminRow key={item.id} selected={bulkIds.includes(item.id)} onActivate={(event) => activate(item, event)}>
             <AdminCell className="admin-cell--check">
               {writable ? (
                 <RowCheck
@@ -246,7 +263,7 @@ export function InventoryList(props: InventoryListProps) {
               <AudienceChip item={item} />
             </AdminCell>
             <AdminCell end className="admin-cell--actions">
-              {rowActions(item)}
+              {rowActions(item, false)}
             </AdminCell>
           </AdminRow>
         );

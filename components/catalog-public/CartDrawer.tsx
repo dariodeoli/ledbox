@@ -185,6 +185,7 @@ export function CartDrawer(props: {
             <header className="cp-drawer-head">
               <div>
                 <h2 id="pedido-titulo" className="cp-drawer-title">{step === 1 ? `${props.wholesale ? "Tu pedido mayorista" : "Tu pedido"} (${pieces})` : "Tus datos"}</h2>
+                {step === 1 ? <p className="cp-hint cp-num" data-testid="cart-count">{lines.length} {lines.length === 1 ? "producto" : "productos"} · {pieces} {pieces === 1 ? "unidad" : "unidades"}</p> : null}
                 {props.wholesale && props.clientName ? <p className="cp-hint">A nombre de {props.clientName}</p> : null}
               </div>
               <button type="button" className="cp-btn cp-btn--icon cp-btn--ghost" onClick={props.onClose} aria-label="Cerrar el pedido"><XIcon name="close" size={20} /></button>
@@ -307,7 +308,7 @@ export function CartDrawer(props: {
               {error ? <p className="cp-error" role="alert">{error}</p> : null}
             </div>
             <footer className="cp-drawer-foot">
-              <div className="cp-row">
+              <div className="cp-cart-actions">
                 {step === 2 ? <button type="button" className="cp-btn" onClick={() => setStep(1)}>Volver</button> : <button type="button" className="cp-btn" onClick={props.onClose}>Seguir eligiendo</button>}
                 {step === 1 ? (
                   <button type="submit" className="cp-btn cp-btn--primary" disabled={!stepOneReady} title={!range ? "Elegí las fechas del evento para continuar" : undefined}>Continuar con tus datos</button>

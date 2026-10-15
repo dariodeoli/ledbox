@@ -2149,13 +2149,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: 2.25rem minmax(10rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) minmax(8.5rem, 1.1fr) minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 6.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
+.admin-table--inventario { --inventario-cols: 2.25rem minmax(11rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) 16rem minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 3.25rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
 /* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
+.admin-table--inventario .admin-table-row { min-height: 40px; margin-top: 4px; }
+.admin-table--inventario .admin-inv-chips { flex-wrap: nowrap; }
+.admin-table-row[data-clickable="true"] { cursor: pointer; }
+.admin-table-row[data-selected="true"] { border-color: var(--a-accent); box-shadow: inset 0 0 0 1px var(--a-accent); }
 .admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
 .admin-table--inventario-rangos { --inventario-rangos-cols: minmax(9rem, 1.5fr) 12.5rem 5rem; --admin-cols: var(--inventario-rangos-cols); --admin-table-min: 27.5rem; }
+.admin-table--inventario-variantes { --inventario-variantes-cols: minmax(10rem, 2fr) minmax(6rem, 1fr) 5.5rem minmax(7.5rem, 1fr) 5.5rem; --admin-cols: var(--inventario-variantes-cols); --admin-table-min: 38rem; }
 .admin-table--inventario-sustitutos { --inventario-sustitutos-cols: minmax(10rem, 1.5fr) minmax(7rem, 1fr) 7rem 5rem 7rem; --admin-cols: var(--inventario-sustitutos-cols); --admin-table-min: 38rem; }
 /* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
    pendiente y con qué eventos choca. */
@@ -2883,12 +2888,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .admin-inv-actions .admin-btn { min-height: 38px; }
 .admin-inv-actions-end { margin-left: auto; }
-/* Cinco indicadores: etiqueta completa arriba y valor con su nota debajo. */
-.admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); }
-.admin-kpis--inventario .admin-kpi { flex-wrap: wrap; }
+/* Cinco indicadores en UNA fila compacta (escritorio): etiqueta arriba (recorta, el texto completo
+   va en el aria-label), valor con su nota en la misma línea. En celular, dos por fila. */
+.admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.admin-kpis--inventario .admin-kpi { flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-height: 0; padding: 5px 10px 6px; }
 .admin-kpis--inventario .admin-kpi-label { flex-basis: 100%; }
-.admin-kpis--inventario .admin-kpi-note { white-space: normal; }
-.admin-kpis--inventario .admin-kpi-label-text { overflow: visible; white-space: normal; line-height: 1.25; }
+.admin-kpis--inventario .admin-kpi-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.admin-kpis--inventario .admin-kpi-value { font-size: 17px; }
+.admin-kpis--inventario .admin-kpi-note { white-space: nowrap; }
+@media (max-width: 1100px) { .admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); } }
 /* Indicador que filtra: un botón con la misma caja que el KPI estático. */
 /* Producto: foto chica + nombre y SKU en dos líneas; todo el bloque abre la ficha. */
 .admin-inv-product { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -2989,23 +2997,31 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-seg > [data-tone="warn"] { background: var(--a-warn); }
 .admin-inv-seg > [data-tone="info"] { background: var(--a-info); }
 .admin-inv-stock { min-width: 4.5rem; }
-.admin-inv-bar .admin-toolbar > .admin-search { flex: 2 1 12rem; min-width: 0; max-width: 20rem; }
-.admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 0; max-width: 12.5rem; }
+.admin-inv-bar .admin-toolbar { gap: 6px; }
+.admin-inv-bar .admin-toolbar > .admin-search { flex: 1.4 1 10rem; min-width: 0; max-width: 15rem; }
+.admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 7rem; max-width: 12rem; }
 .admin-inv-bar .admin-toolbar > .admin-viewswitch { margin-left: auto; }
-.admin-inv-range { display: flex; flex: 0 1 auto; align-items: flex-end; gap: 8px; min-width: 0; }
+/* Pestañas y rango «Disponible desde/hasta» comparten una fila baja, pegada a la barra de búsqueda. */
+.admin-inv-subbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.admin-inv-range { display: flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; margin-left: auto; color: var(--a-muted); font-size: 12px; }
 /* Barra fija de búsqueda y filtros (en celular fluye con la página para no comerse la pantalla). */
-.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 8px 0 4px; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 4px 0; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
 /* Cuadrícula compacta: foto de 64 px, nombre en 2 líneas, código, chip y «libres/total». */
-.admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 132px), 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 11rem), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .admin-inv-tile { position: relative; min-width: 0; border: var(--a-panel-line); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
 .admin-inv-tile[data-selected="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 1px var(--a-accent); }
-.admin-inv-tile-open { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; height: 100%; min-height: 44px; padding: 10px 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: center; cursor: pointer; }
+.admin-inv-tile-open { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; height: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.admin-inv-tile-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.admin-inv-tile-head > :first-child { flex: none; }
+.admin-inv-tile-text { display: grid; align-content: start; gap: 2px; min-width: 0; flex: 1; }
+.admin-inv-tile .admin-inv-chips--compact { justify-content: flex-start; }
+.admin-inv-tile:has(.admin-inv-tile-check) .admin-inv-tile-text { padding-right: 20px; }
 .admin-inv-tile-open:hover { background: var(--a-accent-soft); }
 .admin-inv-tile-open:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
-.admin-inv-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; min-height: 2.5em; overflow: hidden; color: var(--a-text-strong); font-size: 12px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.admin-inv-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; overflow: hidden; color: var(--a-text-strong); font-size: 12px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .admin-inv-tile-code { max-width: 100%; overflow: hidden; color: var(--a-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.admin-inv-tile-check { position: absolute; top: 0; left: 0; z-index: 1; }
-.admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; }
+.admin-inv-tile-check { position: absolute; top: 2px; right: 2px; z-index: 1; }
+.admin-inv-tile-check .admin-rowcheck { width: 32px; height: 32px; }
 .admin-inv-tile .admin-meter { width: 100%; min-width: 0; }
 .admin-inv-tile .admin-meter-figures { font-size: 12px; }
 .admin-inv-tile-unit { margin-left: 2px; }
@@ -3026,6 +3042,17 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-inv-bar .admin-viewswitch-btn { width: 44px; height: 44px; }
   .admin-inv-bar { position: static; padding: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .admin-inv-section-head > button { flex-wrap: wrap; }
+  .admin-inv-grid { --admin-inv-card-min: 9.5rem; gap: 6px; }
+  .admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; top: -6px; right: -6px; }
+  .admin-inv-range { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-left: 0; gap: 4px 8px; }
+  .admin-inv-range > span:first-child { grid-column: 1 / -1; }
+  .admin-inv-range > span:nth-child(3) { display: none; }
+  .admin-inv-range .admin-field--filter { width: 100%; }
+  .admin-inv-actions .admin-inv-scan { order: 9; flex-basis: 100%; }
+  .admin-inv-actions-end { flex: 1 1 calc(50% - 8px); }
+  .admin-inv-actions-end .admin-btn { width: 100%; }
+  .admin-inv-subbar .admin-inv-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; scrollbar-width: thin; }
+  .admin-inv-subbar .admin-inv-tabs > * { flex: none; }
   .admin-inv-section-count { margin-left: 22px; }
 }
 @media (max-width: 720px) {
@@ -3033,8 +3060,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-kpis--inventario .admin-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .admin-inv-actions .admin-btn:first-child { flex: 1 1 100%; }
   .admin-bulkbar { bottom: calc(var(--a-bottomnav, 72px) + 8px); }
-  .admin-inv-actions .admin-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
-  .admin-inv-actions-end { flex: 1 1 100%; margin-left: 0; }
+  .admin-inv-actions .admin-btn { flex: 1 1 calc(50% - 8px); justify-content: center; min-height: 44px; }
+  .admin-inv-actions-end { margin-left: 0; }
   .admin-cards .admin-btn, .admin-cards .admin-iconbtn, .admin-bulkbar .admin-btn { min-height: 44px; }
   .admin-cards .admin-iconbtn { min-width: 44px; }
   .admin-cards .admin-rowcheck { width: 44px; height: 44px; }
@@ -3380,8 +3407,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   --p-warn: #fbc35f;
   --p-danger: #ff7d92;
   --p-info: #a78bfa;
-  --p-grad-action: linear-gradient(120deg, #5ad9ff, #a78bfa);
-  --p-action-ink: #0d1026;
+  /* Acción primaria: color SÓLIDO (nunca gris ni apagado); la empresa puede reemplazarlo. */
+  --p-action: #38bdf8;
+  --p-action-ink: #04202c;
   --ink: #0d1026;
   --p-glass: rgba(10, 10, 19, .55);
   --p-shadow: 0 30px 64px -40px rgba(0, 0, 0, .9);
@@ -3420,7 +3448,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   --p-warn: #7a5005;
   --p-danger: #a82640;
   --p-info: #4f46e5;
-  --p-grad-action: linear-gradient(120deg, #0b6f8f, #4f46e5);
+  --p-action: #0a6a8a;
   --p-action-ink: #ffffff;
   --ink: #ffffff;
   --p-glass: rgba(255, 255, 255, .66);
@@ -3475,7 +3503,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-error { color: var(--p-danger); font-size: 12.5px; line-height: 1.5; }
 .portal-btn { justify-self: start; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--line-control); border-radius: 999px; background: transparent; color: var(--text); font: 700 11px var(--font-body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s, filter .15s; }
 .portal-btn:hover:not(:disabled) { border-color: var(--led); color: var(--led); }
-.portal-btn--primary { border-color: transparent; background: var(--p-grad-action); color: var(--p-action-ink); }
+.portal-btn--primary { border-color: transparent; background: var(--p-action); color: var(--p-action-ink); }
 .portal-btn--primary:hover:not(:disabled) { border-color: transparent; color: var(--p-action-ink); filter: brightness(1.08); }
 .portal-btn--primary:active:not(:disabled) { filter: brightness(.96); }
 .portal-btn--primary:disabled { filter: saturate(.55); }
@@ -3498,14 +3526,14 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-budget-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .portal-nowrap { white-space: nowrap; }
 .portal-budget-grid { display: grid; gap: 16px; }
-.portal-budget-main { display: grid; gap: 16px; min-width: 0; }
+.portal-budget-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 /* Columna lateral (total, saldo y acción principal): solo desde 1024 px. En
    celular y tablet la acción principal queda fija abajo (`.portal-mobile-sticky`). */
 .portal-budget-aside { display: none; min-width: 0; }
 .portal-card-head { display: grid; gap: 8px; }
 /* «Qué tenés que hacer ahora» (rediseño 13-10-2026): una sola tarjeta con la
    única acción pendiente según el estado real; el tono marca el acento. */
-.portal-next { gap: 12px; border-color: var(--border-2); border-left: 4px solid var(--led); }
+.portal-next { gap: 12px; border-color: var(--border-2); border-left: 4px solid var(--p-action); }
 .portal-next[data-tone="ok"] { border-left-color: var(--p-ok); }
 .portal-next[data-tone="warn"] { border-left-color: var(--p-warn); }
 .portal-next[data-tone="danger"] { border-left-color: var(--p-danger); }
@@ -3513,7 +3541,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-next[data-tone="neutral"] { border-left-color: var(--border-2); }
 .portal-next-eyebrow { color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .portal-next-body { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; }
-.portal-next-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--led-soft); color: var(--led); }
+.portal-next-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--p-action); color: var(--p-action-ink); }
 .portal-next[data-tone="ok"] .portal-next-icon { background: color-mix(in srgb, var(--p-ok) 12%, transparent); color: var(--p-ok); }
 .portal-next[data-tone="warn"] .portal-next-icon { background: color-mix(in srgb, var(--p-warn) 12%, transparent); color: var(--p-warn); }
 .portal-next[data-tone="danger"] .portal-next-icon { background: color-mix(in srgb, var(--p-danger) 12%, transparent); color: var(--p-danger); }
@@ -3554,13 +3582,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-decision-option { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; min-height: 82px; padding: 13px 14px; border: 1px solid var(--border-2); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
 .portal-decision-option:hover { border-color: var(--led-dim); transform: translateY(-1px); }
 .portal-decision-option:focus-within { outline: 2px solid var(--led); outline-offset: 2px; }
-.portal-decision-option[data-active="true"] { border-color: var(--led); background: var(--led-soft); }
+.portal-decision-option[data-active="true"] { border-color: var(--p-action); background: color-mix(in srgb, var(--p-action) 14%, var(--surface-2)); box-shadow: 0 0 0 1px var(--p-action); }
+.portal-decision-option[data-active="true"] .portal-decision-option-title { color: var(--text-strong); }
 .portal-decision-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .portal-decision-option-copy { display: grid; align-content: start; gap: 4px; min-width: 0; pointer-events: none; }
 .portal-decision-option-title { font-size: 14px; font-weight: 800; }
 .portal-decision-option-helper { color: var(--muted-2); font-size: 12px; line-height: 1.45; }
-.portal-decision-option-mark { display: block; width: 19px; height: 19px; margin-top: 1px; border: 2px solid var(--line-control); border-radius: 50%; background: transparent; pointer-events: none; }
-.portal-decision-option[data-active="true"] .portal-decision-option-mark { border-color: var(--led); box-shadow: inset 0 0 0 4px var(--surface-2); background: var(--led); }
+.portal-decision-option-mark { display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border: 2px solid var(--line-control); border-radius: 50%; background: transparent; color: var(--p-action-ink); pointer-events: none; }
+.portal-decision-option-mark svg { opacity: 0; }
+.portal-decision-option[data-active="true"] .portal-decision-option-mark { border-color: var(--p-action); background: var(--p-action); }
+.portal-decision-option[data-active="true"] .portal-decision-option-mark svg { opacity: 1; }
 .portal-submit-state { color: var(--muted-2); font-size: 12px; line-height: 1.45; }
 .portal-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: portal-spin .7s linear infinite; }
 @keyframes portal-spin { to { transform: rotate(360deg); } }
@@ -3655,7 +3686,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-consent-purpose a:hover { text-decoration: underline; }
 
 /* Autogestión del presupuesto (issue #14): editor de ítems, rebaja, solicitudes y pago */
-.portal-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; }
+.portal-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 12px; align-items: start; }
 .portal-form-row--discount { align-items: end; }
 .portal-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal-form-actions .portal-btn { flex: 0 1 auto; }
@@ -3749,7 +3780,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-request-response { padding: 8px 10px; border-radius: var(--p-radius); background: var(--surface); color: var(--muted-2); font-size: 12.5px; line-height: 1.5; }
 /* Comprobantes de pago (issue #17): el archivo se elige acá, se comprime en el
    navegador y se sube por token; el listado muestra el estado real del cobro. */
-.portal-field input[type="file"] { padding: 9px 10px; font-size: 13px; cursor: pointer; }
+.portal-field input[type="file"] { min-height: 46px; padding: 5px 8px; font-size: 12.5px; cursor: pointer; }
 .portal-field input[type="file"]::file-selector-button { margin-right: 10px; padding: 8px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 700 10px var(--font-body); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .portal-field input[type="file"]::file-selector-button:hover { border-color: var(--led); color: var(--led); }
 .portal-proofs { display: grid; gap: 8px; list-style: none; }
@@ -3893,7 +3924,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .portal-mobile-sticky { position: fixed; right: 0; bottom: 0; left: 0; z-index: 90; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right)); border-top: 1px solid var(--border-2); background: var(--p-glass); -webkit-backdrop-filter: var(--p-blur); backdrop-filter: var(--p-blur); box-shadow: var(--p-shadow); }
   .portal-mobile-sticky-total { display: grid; gap: 1px; min-width: 0; }
   .portal-mobile-sticky-total strong { color: var(--text); font-size: 17px; }
-  .portal-budget--sticky .portal-card--action, .portal-budget--sticky .portal-card--pay { scroll-margin-top: 24px; scroll-margin-bottom: 110px; }
+  .portal-budget--sticky .portal-card--action, .portal-budget--sticky .portal-card--pay { scroll-margin-bottom: 110px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5143,9 +5174,9 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Portal del cliente: color y tipografía de la empresa (el tono sale del tema claro u oscuro). */
 .portal-brandscope { display: contents; }
-.portal-brandscope[data-branded="true"] { --pb-led: var(--pb-d); --pb-on: var(--pb-d-on); }
-.portal[data-theme="light"] .portal-brandscope[data-branded="true"] { --pb-led: var(--pb-l); --pb-on: var(--pb-l-on); }
-.portal-brandscope[data-branded="true"] { --led: var(--pb-led); --led-dim: var(--pb-led); --led-soft: color-mix(in srgb, var(--pb-led) 14%, transparent); --p-grad-action: linear-gradient(120deg, var(--pb-led), var(--pb-led)); --p-action-ink: var(--pb-on); }
+.portal-brandscope[data-branded="true"] { --pb-led: var(--pb-d); --pb-on: var(--pb-d-on); --pb-act: var(--pb-a-d); --pb-act-on: var(--pb-a-d-on); }
+.portal[data-theme="light"] .portal-brandscope[data-branded="true"] { --pb-led: var(--pb-l); --pb-on: var(--pb-l-on); --pb-act: var(--pb-a-l); --pb-act-on: var(--pb-a-l-on); }
+.portal-brandscope[data-branded="true"] { --led: var(--pb-led); --led-dim: var(--pb-led); --led-soft: color-mix(in srgb, var(--pb-led) 14%, transparent); --p-action: var(--pb-act); --p-action-ink: var(--pb-act-on); }
 .portal-brandscope { font-family: var(--pb-font, var(--font-body)); }
 .portal-company { margin-top: 16px; }
 .portal-company .portal-facts { gap: 10px; }
@@ -5257,3 +5288,109 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Logo de una sola variante pensado para fondo claro: chapa clara donde el fondo es oscuro. */
 /* Chips de la tarjeta: el texto largo baja de línea en vez de cortarse («PANTALLAS Y TÓTEM…»). */
 /* Tecnológica: la etiqueta «ALQUILER» queda sobre la foto, nunca encima del texto de ahorro, que vive en el pie de la tarjeta. */
+
+/* Familias de variantes (docs/VARIANTES.md): muestra de color siempre junto al texto, filas de «Agrupar en familia». */
+.admin-fam-swatch { display: inline-block; flex: none; width: 12px; height: 12px; margin-right: 6px; border: 1px solid var(--a-line-strong, var(--a-muted)); border-radius: 50%; vertical-align: -1px; }
+.admin-fam-options { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.admin-fam-option { display: inline-flex; align-items: center; }
+.admin-fam-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.admin-fam-rows { display: grid; gap: 10px; }
+.admin-fam-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: 8px; }
+.admin-fam-row-title { margin: 0; overflow-wrap: anywhere; }
+.admin-fam-row-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 10px; }
+.admin-fam-row-pair { display: grid; gap: 8px; align-content: start; }
+.admin-fam-preview { margin: 0; color: var(--a-muted); font-size: 12px; overflow-wrap: anywhere; }
+.admin-fam-preview strong { color: var(--a-text-strong); }
+.admin-fam-legend { margin: 4px 0 0; color: var(--a-muted); font-size: 12px; }
+/* Tienda web (parte 2): fotos extra del producto, selector de productos de una colección */
+.admin-storefront-panel { display: grid; gap: 16px; min-width: 0; }
+.admin-photo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.admin-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 56px; min-width: 0; }
+.admin-photo-meta { display: grid; gap: 2px; flex: 1 1 10rem; min-width: 0; }
+.admin-photo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-photo-actions .admin-btn { min-height: 44px; }
+.admin-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 280px; overflow-y: auto; border: 1px solid var(--a-line); border-radius: 10px; padding: 4px 10px; }
+.admin-pick-list:empty { display: none; }
+.admin-pick-list .admin-check { min-height: 44px; display: flex; align-items: center; }
+.admin-cover-frame[data-ratio="4-3"] { aspect-ratio: 4 / 3; }
+.admin-cover-frame[data-ratio="4-5"] { aspect-ratio: 4 / 5; max-width: 220px; }
+/* ── Portal: anclas, resumen y contacto (15-10-2026) ──
+   El encabezado es pegajoso: toda ancla del portal deja su bloque justo debajo de él
+   (scroll-margin-top = altura del encabezado), así «Pagar» o «Tu decisión» no quedan cortados. */
+.portal { --portal-top-h: 67px; }
+.portal [id], .portal-card, .portal-banner { scroll-margin-top: calc(var(--portal-top-h) + 8px); }
+.portal-summary { gap: 14px; }
+.portal-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.portal-summary-facts { display: grid; gap: 10px; margin: 0; }
+.portal-summary-facts dt { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.portal-summary-facts dd { margin: 2px 0 0; color: var(--text); font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.portal-summary-terms { white-space: pre-line; }
+.portal-summary-mobile { display: block; min-width: 0; }
+@media (min-width: 1024px) { .portal-summary-mobile { display: none; } }
+.portal-contact-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.portal-contact-actions .portal-btn { justify-self: auto; letter-spacing: .08em; }
+.portal-contact-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.portal-contact-list li { display: flex; align-items: center; gap: 12px; min-height: 44px; min-width: 0; color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.portal-contact-list .admin-icon, .portal-contact-list svg { flex: 0 0 auto; color: var(--muted-2); }
+.portal-contact-list a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 480px) { .portal-contact-actions .portal-btn { width: 100%; } }
+.portal-link { color: var(--led-dim); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.portal-link:hover { color: var(--text-strong); }
+
+/* Portal: controles unidos y compactos; cada etiqueta conserva su selector completo. */
+.portal-table--items .budget-client-quantity { display: flex; flex-wrap: wrap; align-items: start; gap: 8px 12px; margin-top: 4px; }
+.portal-quantity-group { display: grid; gap: 4px; align-content: start; }
+.portal-quantity-label { color: var(--muted-2); font-size: 11px; line-height: 1.3; }
+.portal-table--items .portal-stepper { display: inline-grid; grid-template-columns: 30px 38px 30px; gap: 0; border: 1px solid var(--line-control); border-radius: 8px; overflow: hidden; }
+.portal-table--items .portal-step { width: 30px; height: 32px; padding: 0; border: 0; border-radius: 0; font-size: 14px; }
+.portal-table--items .portal-stepper input { box-sizing: border-box; width: 38px; height: 32px; min-height: 0; padding: 0 2px; border: 0; border-inline: 1px solid var(--border-2); border-radius: 0; font-size: 12px; }
+.portal-table--items .portal-stepper:focus-within { outline: 2px solid var(--p-action); outline-offset: 2px; }
+.portal-table--items .portal-item-thumb { width: 48px; height: 48px; border-radius: 8px; }
+.portal-table--items td { justify-content: flex-start; }
+.portal-table--items td[data-label="Precio unitario"], .portal-table--items td[data-label="Total"] { align-items: flex-end; text-align: right; }
+.portal-table--items th.portal-num { text-align: right; }
+.portal-table--items tbody tr { padding: 10px; gap: 8px 12px; }
+.portal-table--items td.portal-item-cell { gap: 6px; }
+@media (max-width: 720px) {
+  .portal-table--items tbody tr { gap: 10px 8px; }
+  .portal-table--items td[data-label="Precio unitario"] { align-items: flex-start; text-align: left; }
+}
+@media (pointer: coarse) {
+  .portal-table--items .portal-stepper { grid-template-columns: 44px 38px 44px; }
+  .portal-table--items .portal-step { width: 44px; height: 44px; }
+  .portal-table--items .portal-stepper input { height: 44px; }
+}
+.portal-table--items thead tr { padding-inline: 10px; }
+.portal-table--items td.portal-item-action-cell { justify-content: flex-start; }
+
+/* Detalle del portal: una lista continua, con la información secundaria desplegable. */
+.portal-table--items tbody { gap: 0; border: 1px solid var(--border-2); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.portal-table--items tbody tr { padding: 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.portal-table--items tbody tr:last-child { border-bottom: 0; }
+.portal-table--items tbody tr[data-changed="true"] { box-shadow: inset 3px 0 var(--p-action); }
+.portal-table--items .portal-item-thumb { width: 40px; height: 40px; }
+.portal-table--items .portal-item-identity { gap: 8px; }
+.portal-table--items .portal-item-text { gap: 2px; }
+.portal-table--items .portal-item-name { font-size: 12.5px; line-height: 1.4; }
+.portal-package-note { font-size: 11px; line-height: 1.4; color: var(--muted-2); }
+.portal-package-note summary { cursor: pointer; }
+.portal-package-note summary:focus-visible { outline: 2px solid var(--p-action); outline-offset: 2px; }
+.portal-package-note .portal-item-note { margin: 4px 0; }
+.portal-table--items .budget-client-quantity { margin-top: 2px; gap: 6px 10px; }
+.portal-table--items .portal-quantity-group { display: flex; align-items: center; gap: 5px; }
+.portal-table--items .portal-quantity-label { font-size: 10.5px; }
+.portal-table--items .portal-item-action { width: 32px; height: 32px; }
+.portal-table--items:has(.portal-item-action-cell) { --budget-client-cols: minmax(0, 1fr) minmax(90px, .34fr) minmax(90px, .34fr) 32px; }
+@media (max-width: 720px) {
+  .portal-table--items tbody tr { padding: 10px; gap: 8px; }
+  .portal-table--items .portal-quantity-group { display: grid; gap: 3px; }
+  .portal-table--items .budget-client-quantity { gap: 8px 12px; }
+}
+@media (pointer: coarse) {
+  .portal-table--items .portal-quantity-group { display: grid; gap: 3px; }
+  .portal-table--items .portal-item-action { width: 44px; height: 44px; }
+  .portal-table--items:has(.portal-item-action-cell) { --budget-client-cols: minmax(0, 1fr) minmax(90px, .34fr) minmax(90px, .34fr) 44px; }
+}
+/* Barra móvil: el acceso no ocupa el ancho reservado al monto pendiente. */
+.portal-mobile-sticky .portal-mobile-sticky-action { flex: 0 0 auto; width: auto; min-width: 9rem; }
+.portal-mobile-sticky .portal-mobile-sticky-total { flex: 1 1 0; min-width: 0; }

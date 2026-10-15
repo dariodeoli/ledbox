@@ -11,12 +11,13 @@ import {
   type DisplayFontId,
   type StoreThemeId,
 } from "./storefront-templates";
+import { DEFAULT_HOME, parseHome, readHome, type HomeConfig } from "./store-home";
 import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, normalizeHex, rgbToHex, type Rgb } from "./storefront-theme";
 
 /**
  * Apariencia de las superficies del cliente (tienda y catálogo, mayorista, seguimiento del
  * pedido, portal, presupuesto impreso y correos). Todo es una **lista cerrada** o un valor
- * validado: plantilla (Lienzo, Boutique, Noir o Studio: solo tokens CSS, sin CSS libre), tipografía
+ * validado: plantilla (Boutique y seis rubros especializados: solo tokens CSS, sin CSS libre), tipografía
  * de títulos de una lista curada, color de marca con contraste AA, barra de anuncio y modo de precio.
  * Reglas puras: las usan el API, las páginas públicas, el panel (vista previa en vivo) y los tests.
  *
@@ -29,18 +30,9 @@ export const TEMPLATES = STORE_THEMES;
 export type TemplateId = StoreThemeId;
 export const DEFAULT_TEMPLATE: TemplateId = DEFAULT_STORE_THEME;
 
-export const TEMPLATE_META: Record<TemplateId, { label: string; description: string; forWho: string }> = {
-  lienzo: { label: THEMES.lienzo.label, description: THEMES.lienzo.description, forWho: THEMES.lienzo.forWho },
-  boutique: { label: THEMES.boutique.label, description: THEMES.boutique.description, forWho: THEMES.boutique.forWho },
-  noir: { label: THEMES.noir.label, description: THEMES.noir.description, forWho: THEMES.noir.forWho },
-  studio: { label: THEMES.studio.label, description: THEMES.studio.description, forWho: THEMES.studio.forWho },
-  jardin: { label: THEMES.jardin.label, description: THEMES.jardin.description, forWho: THEMES.jardin.forWho },
-  marmol: { label: THEMES.marmol.label, description: THEMES.marmol.description, forWho: THEMES.marmol.forWho },
-  terracota: { label: THEMES.terracota.label, description: THEMES.terracota.description, forWho: THEMES.terracota.forWho },
-  nordico: { label: THEMES.nordico.label, description: THEMES.nordico.description, forWho: THEMES.nordico.forWho },
-  gala: { label: THEMES.gala.label, description: THEMES.gala.description, forWho: THEMES.gala.forWho },
-  brisa: { label: THEMES.brisa.label, description: THEMES.brisa.description, forWho: THEMES.brisa.forWho },
-};
+export const TEMPLATE_META = Object.fromEntries(
+  STORE_THEMES.map((id) => [id, { label: THEMES[id].label, description: THEMES[id].description, forWho: THEMES[id].forWho }]),
+) as Record<TemplateId, { label: string; description: string; forWho: string }>;
 
 export function isTemplateId(value: unknown): value is TemplateId {
   return isStoreTheme(value);
@@ -96,17 +88,20 @@ export type Appearance = {
   /** Barra de anuncio de arriba de todo (opcional). */
   announcement: Announcement;
   priceMode: PriceMode;
+  /** Inicio de la tienda: orden y visibilidad de las secciones, bloque editorial y textos de inspiración. */
+  home: HomeConfig;
 };
 
-export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, displayFont: null, announcement: { on: false, text: "" }, priceMode: "day" };
+export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, displayFont: null, announcement: { on: false, text: "" }, priceMode: "day", home: DEFAULT_HOME };
 
 /** Valida lo que manda el panel; los campos ausentes mantienen `current`. */
 export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APPEARANCE): { ok: true; appearance: Appearance } | { ok: false; error: string } {
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-  const next: Appearance = { ...current, announcement: { ...current.announcement } };
+  const next: Appearance = { ...current, announcement: { ...current.announcement }, home: current.home };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Lienzo, Boutique, Noir o Studio." };
-    next.template = input.template;
+    const template = resolveStoredTheme(input.template);
+    if (!template) return { ok: false, error: "Elegí una plantilla de la lista de Ajustes → Apariencia." };
+    next.template = template;
   }
   if (input.font !== undefined) {
     if (!isFontId(input.font)) return { ok: false, error: "Elegí una tipografía de la lista." };
@@ -132,6 +127,11 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
     if (!isPriceMode(input.priceMode)) return { ok: false, error: "Elegí cómo mostrar los precios: por día, por unidad o a cotizar." };
     next.priceMode = input.priceMode;
   }
+  if (input.home !== undefined) {
+    const home = parseHome(input.home, current.home);
+    if (!home.ok) return home;
+    next.home = home.home;
+  }
   return { ok: true, appearance: next };
 }
 
@@ -142,10 +142,10 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
 export function readAppearance(stored: unknown): Appearance {
   const record = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
   const template = resolveStoredTheme(record.template);
-  const parsed = parseAppearance({ ...record, ...(template ? { template } : { template: undefined }) });
-  if (parsed.ok) return parsed.appearance;
+  const parsed = parseAppearance({ ...record, home: undefined, ...(template ? { template } : { template: undefined }) });
+  if (parsed.ok) return { ...parsed.appearance, home: readHome(record.home) };
   // Una fila con un campo roto no tira todo: se conserva lo válido campo por campo.
-  const partial: Appearance = { ...DEFAULT_APPEARANCE, announcement: { ...DEFAULT_APPEARANCE.announcement } };
+  const partial: Appearance = { ...DEFAULT_APPEARANCE, announcement: { ...DEFAULT_APPEARANCE.announcement }, home: readHome(record.home) };
   if (template) partial.template = template;
   if (isFontId(record.font)) partial.font = record.font;
   if (isDisplayFont(record.displayFont)) partial.displayFont = record.displayFont;
@@ -221,6 +221,7 @@ export type AppearanceView = {
   /** Barra de anuncio: solo si está encendida y tiene texto. */
   announcement: string | null;
   priceMode: PriceMode;
+  home: HomeConfig;
 };
 
 /**
@@ -235,6 +236,7 @@ export function appearanceView(appearance: Appearance, brand: string | null = nu
     attrs: themeAttrs(appearance.template),
     announcement: appearance.announcement.on && appearance.announcement.text ? appearance.announcement.text : null,
     priceMode: appearance.priceMode,
+    home: appearance.home,
   };
 }
 

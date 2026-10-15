@@ -200,11 +200,11 @@ test("color de marca: el tema oscuro del portal se deriva aclarando hasta AA sob
 // ── Apariencia ───────────────────────────────────────────────────────────────
 
 test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; lo demás se rechaza", () => {
-  assert.deepEqual([...TEMPLATES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa"]);
+  assert.deepEqual([...TEMPLATES], ["boutique", "escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
   const ok = parseAppearance({ template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "  Envíos   a todo Asunción " }, priceMode: "unit" });
-  assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit" } });
+  assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit", home: DEFAULT_APPEARANCE.home } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);
-  assert.equal(parseAppearance({ template: "clasica" }).ok, false, "los nombres viejos solo se leen de la base, no se aceptan del panel");
+  assert.equal(parseAppearance({ template: "clasica" }).ok, true, "los nombres anteriores se normalizan a una de las siete vigentes");
   assert.equal(parseAppearance({ font: "Comic Sans" }).ok, false);
   assert.equal(parseAppearance({ displayFont: "Comic Sans" }).ok, false);
   assert.equal(parseAppearance({ priceMode: "gratis" }).ok, false);
@@ -213,10 +213,10 @@ test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; 
   assert.equal(parseAppearance({ template: "<style>x</style>" }).ok, false, "nada de CSS libre");
   assert.deepEqual(readAppearance("basura"), DEFAULT_APPEARANCE);
   // Los campos ausentes mantienen lo actual.
-  const current = { ...DEFAULT_APPEARANCE, template: "noir" as const };
+  const current = { ...DEFAULT_APPEARANCE, template: "escenario" as const };
   assert.deepEqual(parseAppearance({ font: "inter" }, current), { ok: true, appearance: { ...current, font: "inter" } });
   // Lo guardado por versiones anteriores (fondo propio, acento manuscrito, plantillas viejas) se lee sin romper.
-  assert.deepEqual(readAppearance({ template: "oscura", font: "inter", background: "#f6f1e8", script: true }), { ...DEFAULT_APPEARANCE, template: "noir", font: "inter" });
+  assert.deepEqual(readAppearance({ template: "oscura", font: "inter", background: "#f6f1e8", script: true }), { ...DEFAULT_APPEARANCE, template: "escenario", font: "inter" });
 });
 
 test("apariencia: solo tokens CSS (variables y data-*) y fuentes de Google desde una lista cerrada", () => {

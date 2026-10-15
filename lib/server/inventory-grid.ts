@@ -264,6 +264,14 @@ export async function listInventoryGrid(options: GridPageOptions) {
       : null;
   const rentalSettings = range ? await loadRentalSettings(organizationId) : null;
   const extras = await loadGridExtras({ organizationId, itemIds: ids, assignments, now });
+  // Familia de las variantes de la página (nombre y código para el chip y el filtro); una sola consulta.
+  const familyIds = [...new Set(items.flatMap((item) => (item.familyId ? [item.familyId] : [])))];
+  const families = new Map(
+    (familyIds.length
+      ? await db.inventoryFamily.findMany({ where: { organizationId, id: { in: familyIds }, deletedAt: null }, select: { id: true, name: true, code: true } })
+      : []
+    ).map((family) => [family.id, family]),
+  );
 
   const inventory = items.map((item) => {
     const { imageMime, _count, priceTiers, ...row } = item;
@@ -281,8 +289,11 @@ export async function listInventoryGrid(options: GridPageOptions) {
         )
       : null;
     const extra = extras.get(item.id)!;
+    const family = item.familyId ? families.get(item.familyId) : undefined;
     return {
       ...row,
+      familyName: family?.name ?? null,
+      familyCode: family?.code ?? null,
       priceTiers,
       imageUrl: inventoryImageUrl(item),
       imageUploaded: Boolean(imageMime),

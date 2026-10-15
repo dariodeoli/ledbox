@@ -47,7 +47,7 @@ test("parser: catálogo válido, juegos y dudas como aviso", () => {
   assert.equal(result.value.doc.productos.length, 2);
   assert.equal(result.value.doc.productos[0].cobro, "dia", "sin «cobro» rige por día (lo normal en alquileres)");
   const preview = plan(base);
-  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, incompletos: 0, convertidos: 0, estadosMantenimiento: 0, estadosDanadas: 0, estadosPerdidas: 0, estadosDisponibles: 0, fotos: 2, fotosCategoria: 0, errores: 0, avisos: 1 });
+  assert.deepEqual(preview.summary, { total: 2, crear: 2, actualizar: 0, omitidos: 0, juegos: 1, incompletos: 0, convertidos: 0, estadosMantenimiento: 0, estadosDanadas: 0, estadosPerdidas: 0, estadosDisponibles: 0, fotos: 2, fotosCategoria: 0, fotosExtra: 0, colecciones: 0, fotosColeccion: 0, conEstilo: 0, errores: 0, avisos: 1 });
   assert.ok(preview.problems.some((p) => p.tipo === "duda" && p.mensaje.includes("poco legible")));
 });
 

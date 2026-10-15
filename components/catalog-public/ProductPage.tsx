@@ -91,7 +91,7 @@ export function ProductPage({ store, detail, showPrices: showPricesProp, basePat
       <main className="cp-page" data-testid="product-page">
         <div className="cp-container cp-main-pad">
           <div className="cp-ficha-grid">
-            <ProductGallery images={item.imageUrl ? [item.imageUrl] : []} name={item.name} />
+            <ProductGallery images={[...(item.imageUrl ? [item.imageUrl] : []), ...item.gallery]} name={item.name} />
             <div className="cp-panel">
               <nav className="cp-crumbs" aria-label="Ruta">
                 <a href={basePath}>Inicio</a><span aria-hidden="true">/</span>

@@ -49,7 +49,7 @@ export default async function PortalBudgetPage({
       headFacts={<PortalHeadFacts budget={budget} />}
       timeline={budget.timeline.length > 0 ? <PortalTimeline entries={budget.timeline} /> : null}
     />
-    <PortalCompanyInfo company={budget.company} />
+    <PortalCompanyInfo company={budget.company} reference={budget.reference} />
     </PortalBrandScope>
   );
 }

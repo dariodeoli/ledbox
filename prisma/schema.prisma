@@ -116,92 +116,95 @@ model PlanChangeRequest {
 }
 
 model Organization {
-  id                String                   @id
-  name              String
-  slug              String                   @unique
-  active            Boolean                  @default(true)
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  id                    String                      @id
+  name                  String
+  slug                  String                      @unique
+  active                Boolean                     @default(true)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
   /// Datos de pago de la empresa (issue #14): `{ bank, holder, ruc, account, alias }`.
   /// Solo OWNER/ADMIN los configuran y la API pública los entrega con el presupuesto aprobado.
-  paymentDetails    Json?
+  paymentDetails        Json?
   /// Plan comercial vigente (issue #42). `null` = todavía sin asignar: la capa de
   /// tenancy le pone el plan por defecto la primera vez y los límites aplican igual.
-  planId            String?
+  planId                String?
   /// Inicio del plan vigente (lo dibuja la página de Plan).
-  planStartedAt     DateTime?
-  plan              Plan?                    @relation(fields: [planId], references: [id], onDelete: SetNull)
-  planRequests      PlanChangeRequest[]
+  planStartedAt         DateTime?
+  plan                  Plan?                       @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planRequests          PlanChangeRequest[]
   /// Datos fiscales de la empresa (issue #41): `{ ruc, razonSocial, timbrado,
   /// establecimiento, direccion }`. Los editan OWNER/ADMIN y son el encabezado
   /// del comprobante imprimible del registro fiscal interno (no es SIFEN).
-  fiscalDetails     Json?
+  fiscalDetails         Json?
   /// Perfil público de la empresa (lib/org-profile.ts): contacto, ubicación con link de Maps,
   /// horario de atención, horarios por defecto de entrega/retiro/devolución, medios de pago
   /// aceptados y condiciones comerciales. Todo opcional; lo que falta no se muestra ni se inventa.
-  profile           Json?
+  profile               Json?
   /// Apariencia de las superficies del cliente (lib/appearance.ts): plantilla cerrada, tipografía
   /// de una lista cerrada y fondo. El color de marca vive en `OrganizationRentalSettings.storefrontAccent`.
-  appearance        Json?
-  covers            OrganizationCover[]
+  appearance            Json?
+  covers                OrganizationCover[]
+  inventoryImages       InventoryImage[]
+  collections           Collection[]
   catalogAccessRequests CatalogAccessRequest[]
-  memberships       OrganizationMembership[]
-  adminMemberships  AdminMembership[]
-  adminSessions     AdminSession[]
-  apiTokens         ApiToken[]
-  catalogAccessTokens CatalogAccessToken[]
-  logos             OrganizationLogo[]
-  leads             Lead[]
-  quotes            QuoteRequest[]
-  clients           Client[]
-  events            Event[]
-  budgets           Budget[]
-  changeRequests    BudgetChangeRequest[]
-  clientPayments    ClientPayment[]
-  expectedPayments  ExpectedPayment[]
-  paymentReminders  PaymentReminderLog[]
-  paymentProofs     BudgetPaymentProof[]
-  budgetAttachments BudgetAttachment[]
-  mailLogs          MailLog[]
-  messageTemplates  MessageTemplate[]
-  signatureRequests SignatureRequest[]
-  signatureEvents   SignatureEvent[]
-  signatureEvidence SignatureEvidence[]
-  suppliers         Supplier[]
-  supplierJobs      SupplierJob[]
-  inventoryItems    InventoryItem[]
-  inventoryUnits    InventoryUnit[]
-  inventoryIncidents InventoryIncident[]
-  deliveryNotes      DeliveryNote[]
-  deliveryNotePhotos DeliveryNotePhoto[]
-  inventoryComponents InventoryComponent[]
-  inventoryPriceTiers InventoryPriceTier[]
-  deliveryZones     DeliveryZone[]
-  rentalCharges     RentalCharge[]
-  rentalSettings    OrganizationRentalSettings?
-  promoters         Promoter[]
-  auditLogs         AuditLog[]
-  treasuryAccounts  TreasuryAccount[]
-  treasuryMovements TreasuryMovement[]
-  expenses          Expense[]
-  bankStatements    BankStatement[]
-  bankStatementRows BankStatementRow[]
-  idempotencyKeys   IdempotencyKey[]
-  teamInvitations   TeamInvitation[]
-  invoices          Invoice[]
-  purchaseInvoices  PurchaseInvoice[]
-  fiscalPeriods     FiscalPeriod[]
-  invoiceSequence   InvoiceSequence?
+  memberships           OrganizationMembership[]
+  adminMemberships      AdminMembership[]
+  adminSessions         AdminSession[]
+  apiTokens             ApiToken[]
+  catalogAccessTokens   CatalogAccessToken[]
+  logos                 OrganizationLogo[]
+  leads                 Lead[]
+  quotes                QuoteRequest[]
+  clients               Client[]
+  events                Event[]
+  budgets               Budget[]
+  changeRequests        BudgetChangeRequest[]
+  clientPayments        ClientPayment[]
+  expectedPayments      ExpectedPayment[]
+  paymentReminders      PaymentReminderLog[]
+  paymentProofs         BudgetPaymentProof[]
+  budgetAttachments     BudgetAttachment[]
+  mailLogs              MailLog[]
+  messageTemplates      MessageTemplate[]
+  signatureRequests     SignatureRequest[]
+  signatureEvents       SignatureEvent[]
+  signatureEvidence     SignatureEvidence[]
+  suppliers             Supplier[]
+  supplierJobs          SupplierJob[]
+  inventoryItems        InventoryItem[]
+  inventoryUnits        InventoryUnit[]
+  inventoryIncidents    InventoryIncident[]
+  deliveryNotes         DeliveryNote[]
+  deliveryNotePhotos    DeliveryNotePhoto[]
+  inventoryComponents   InventoryComponent[]
+  inventoryPriceTiers   InventoryPriceTier[]
+  deliveryZones         DeliveryZone[]
+  rentalCharges         RentalCharge[]
+  rentalSettings        OrganizationRentalSettings?
+  promoters             Promoter[]
+  auditLogs             AuditLog[]
+  treasuryAccounts      TreasuryAccount[]
+  treasuryMovements     TreasuryMovement[]
+  expenses              Expense[]
+  bankStatements        BankStatement[]
+  bankStatementRows     BankStatementRow[]
+  idempotencyKeys       IdempotencyKey[]
+  teamInvitations       TeamInvitation[]
+  invoices              Invoice[]
+  purchaseInvoices      PurchaseInvoice[]
+  fiscalPeriods         FiscalPeriod[]
+  invoiceSequence       InvoiceSequence?
   /// Demo (docs/DEMO-INTERACTIVA.md): `isDemo` marca la vitrina (slug `demo`, solo lectura) y las
   /// sandboxes por visitante (`demoParentId` = vitrina; escriben, pero con las salidas cortadas).
-  isDemo            Boolean                  @default(false)
-  demoParentId      String?
-  demoExpiresAt     DateTime?
-  demoLastSeenAt    DateTime?
+  isDemo                Boolean                     @default(false)
+  demoParentId          String?
+  demoExpiresAt         DateTime?
+  demoLastSeenAt        DateTime?
   /// false mientras la sandbox se está sembrando (paso 2 del alta).
-  demoReady         Boolean                  @default(true)
-  inventoryCategories InventoryCategory[]
-  warehouses          Warehouse[]
+  demoReady             Boolean                     @default(true)
+  inventoryCategories   InventoryCategory[]
+  inventoryFamilies     InventoryFamily[]
+  warehouses            Warehouse[]
 
   @@index([active, createdAt])
   @@index([planId])
@@ -258,37 +261,37 @@ model AppSession {
 }
 
 model AdminUser {
-  id                  String               @id
-  name                String
-  email               String               @unique
-  passwordHash        String
-  role                AdminRole            @default(ADMIN)
-  active              Boolean              @default(true)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                    String               @id
+  name                  String
+  email                 String               @unique
+  passwordHash          String
+  role                  AdminRole            @default(ADMIN)
+  active                Boolean              @default(true)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
   /// PIN de desbloqueo del panel (issue #21): hash bcrypt de 4–6 dígitos, nunca
   /// en claro ni en logs. Sin PIN no hay bloqueo rápido (el auto-bloqueo no aplica).
-  pinHash             String?
-  pinUpdatedAt        DateTime?
+  pinHash               String?
+  pinUpdatedAt          DateTime?
   /// Preferencia de auto-bloqueo por inactividad (issue #21), por usuario:
   /// `autoLockEnabled = false` es «nunca» y `autoLockMinutes` la opción elegida.
-  autoLockEnabled     Boolean              @default(true)
-  autoLockMinutes     Int                  @default(10)
-  sessions            AdminSession[]
-  memberships         AdminMembership[]
-  passwordResetTokens PasswordResetToken[]
-  avatar              AdminUserAvatar?
+  autoLockEnabled       Boolean              @default(true)
+  autoLockMinutes       Int                  @default(10)
+  sessions              AdminSession[]
+  memberships           AdminMembership[]
+  passwordResetTokens   PasswordResetToken[]
+  avatar                AdminUserAvatar?
   /// Última actividad en el panel (docs/SUPERADMIN.md §3): a lo sumo una escritura por hora de Paraguay.
-  lastActiveAt        DateTime?
+  lastActiveAt          DateTime?
   /// Prueba real de control del correo (Google, invitación por correo o reset de clave).
   /// Vuelve a null cuando cambia el correo de la cuenta.
-  emailVerifiedAt     DateTime?
+  emailVerifiedAt       DateTime?
   /// Empresa predeterminada al iniciar sesión (elegida en Mi perfil). Sin FK a propósito: se valida
   /// en código contra una membresía activa de una empresa activa y no demo; si deja de valer se usa la primera.
   defaultOrganizationId String?
-  activityDays        AdminActivityDay[]
+  activityDays          AdminActivityDay[]
   /// Visitante de una sandbox de la demo: empresa a la que pertenece (se purga con ella).
-  demoOrganizationId  String?
+  demoOrganizationId    String?
 
   @@index([demoOrganizationId])
 }
@@ -489,22 +492,22 @@ model OrganizationCover {
 }
 
 model Lead {
-  id            String     @id
-  name          String
-  phone         String
-  email         String
-  company       String?
-  ruc           String?
-  reason        String?
-  eventDate     DateTime?
-  location      String?
-  message       String?
+  id             String     @id
+  name           String
+  phone          String
+  email          String
+  company        String?
+  ruc            String?
+  reason         String?
+  eventDate      DateTime?
+  location       String?
+  message        String?
   /**
    * Notas internas del equipo comercial (no las escribe el sitio público).
    */
-  internalNotes String?
-  source        String     @default("website")
-  consentAt     DateTime
+  internalNotes  String?
+  source         String     @default("website")
+  consentAt      DateTime
   /**
    * Constancia de consentimiento (Ley 7593/2025, brecha B2): canal por el que
    * se aceptó (p. ej. `sitio-web`) y versión del aviso vigente al aceptar.
@@ -513,71 +516,71 @@ model Lead {
   consentChannel String?
   consentVersion String?
   status         LeadStatus @default(NEW)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   quoteRequests  QuoteRequest[]
   budgets        Budget[]
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
+  archivedAt   DateTime?
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
+
   @@index([status, createdAt])
   @@index([email])
   @@index([organizationId, createdAt])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
 }
 
 model QuoteRequest {
-  id             String        @id
-  leadId         String?
-  referenceTotal Int?
-  currency       String        @default("PYG")
-  durationDays   Int?
-  eventDate      DateTime?
-  location       String?
-  source         String        @default("website")
-  createdAt      DateTime      @default(now())
-  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  items          QuoteItem[]
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  id                 String              @id
+  leadId             String?
+  referenceTotal     Int?
+  currency           String              @default("PYG")
+  durationDays       Int?
+  eventDate          DateTime?
+  location           String?
+  source             String              @default("website")
+  createdAt          DateTime            @default(now())
+  lead               Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  items              QuoteItem[]
+  organizationId     String?
+  organization       Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   /// Pedido del catálogo público (fase 3): NEW, REVIEWING, QUOTED, CONVERTED, DECLINED
   /// o EXPIRED (validado en el código). Los pedidos viejos del sitio quedan en NEW.
-  status         String        @default("NEW")
-  startsAt       DateTime?
-  endsAt         DateTime?
+  status             String              @default("NEW")
+  startsAt           DateTime?
+  endsAt             DateTime?
   /// Token del seguimiento público `/pedido/<token>` (solo lectura).
-  publicToken    String?       @unique
-  clientId       String?
-  client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  publicToken        String?             @unique
+  clientId           String?
+  client             Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   /// Plazo prometido para responder; nace con el pedido, nunca se inventa después.
-  respondBy      DateTime?
+  respondBy          DateTime?
   /// Lista de precios aplicada al pedido: RETAIL (cliente final) o WHOLESALE
   /// (catálogo mayorista). El presupuesto convertido usa la misma lista.
-  priceList      String        @default("RETAIL")
+  priceList          String              @default("RETAIL")
   /// Zona de flete elegida en la tienda (opcional). El nombre queda copiado: si la zona se edita
   /// o se borra, el pedido conserva lo que vio el cliente. `deliveryCoordinate` = «a coordinar».
-  deliveryZoneId   String?
-  deliveryZoneName String?
-  deliveryCoordinate Boolean    @default(false)
+  deliveryZoneId     String?
+  deliveryZoneName   String?
+  deliveryCoordinate Boolean             @default(false)
   /// Presupuesto en que se convirtió (único: convertir dos veces no es posible).
-  budget         Budget?
+  budget             Budget?
   /// Rechazo con motivo (lo ve el cliente en su seguimiento y por correo). `declinedBy`: COMPANY o CLIENT.
-  declineReason  String?
-  declinedAt     DateTime?
-  declinedBy     String?
+  declineReason      String?
+  declinedAt         DateTime?
+  declinedBy         String?
   /// Propuesta de la empresa (PROPOSED): cuándo se envió, su nota y cuándo la aprobó el cliente.
-  proposedAt     DateTime?
-  proposalNote   String?
+  proposedAt         DateTime?
+  proposalNote       String?
   proposalApprovedAt DateTime?
-  priceRequests  QuotePriceRequest[]
+  priceRequests      QuotePriceRequest[]
 
   @@index([leadId, createdAt])
   @@index([organizationId, createdAt])
@@ -585,23 +588,23 @@ model QuoteRequest {
 }
 
 model QuoteItem {
-  id             String       @id
-  quoteRequestId String
-  productSlug    String
-  productName    String
-  quantity       Int
-  duration       Int?
-  billingUnit    BillingUnit
-  unitPrice      Int?
-  subtotal       Int?
-  notes          String?
+  id               String         @id
+  quoteRequestId   String
+  productSlug      String
+  productName      String
+  quantity         Int
+  duration         Int?
+  billingUnit      BillingUnit
+  unitPrice        Int?
+  subtotal         Int?
+  notes            String?
   /// Artículo del inventario de la empresa (catálogo público); NULL en pedidos viejos.
-  inventoryId    String?
-  inventory      InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
-  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  inventoryId      String?
+  inventory        InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  quoteRequest     QuoteRequest   @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   /// Qué hizo la empresa con la línea al modificar el pedido: KEEP, CHANGED (cantidad),
   /// REMOVED, UNAVAILABLE («ya no lo tengo») o SUBSTITUTED (otro producto).
-  state          String       @default("KEEP")
+  state            String         @default("KEEP")
   /// Lo que pidió el cliente originalmente (nombre y cantidad), para mostrar el cambio.
   originalName     String?
   originalQuantity Int?
@@ -635,13 +638,13 @@ model WebView {
 
 /// Sesiones de la demo pública (evento `demo_start`), aparte de las métricas del negocio.
 model DemoSession {
-  id          String   @id
-  visitorHash String
-  sessionId   String?
-  startedAt   DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
-  durationSec Int      @default(0)
-  modules     String[] @default([])
+  id              String   @id
+  visitorHash     String
+  sessionId       String?
+  startedAt       DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  durationSec     Int      @default(0)
+  modules         String[] @default([])
   sandboxOrgId    String?
   actions         Int      @default(0)
   actionsByEntity Json?
@@ -794,66 +797,66 @@ enum PromoterAvailability {
 }
 
 model Client {
-  id             String          @id
-  organizationId String
-  type           ClientType      @default(FINAL)
-  name           String
-  company        String?
-  ruc            String?
+  id                  String               @id
+  organizationId      String
+  type                ClientType           @default(FINAL)
+  name                String
+  company             String?
+  ruc                 String?
   /// Identidad comercial explícita; name/company históricos no se convierten.
-  tradeName      String?
+  tradeName           String?
   /// Razón social oficial o manual, independiente de fantasía y contacto.
-  legalName      String?
-  billingEmail   String?
-  city           String?
-  department     String?
-  address        String?
-  addressReference String?
-  locationUrl    String?
+  legalName           String?
+  billingEmail        String?
+  city                String?
+  department          String?
+  address             String?
+  addressReference    String?
+  locationUrl         String?
   /// Contactos adicionales por función: [{ name, role, phone, email }].
-  contacts       Json            @default("[]")
+  contacts            Json                 @default("[]")
   /// Snapshot confirmado de OwnData, con procedencia/fecha; nunca inferido.
-  rucSnapshot    Json?
-  email          String?
-  phone          String?
+  rucSnapshot         Json?
+  email               String?
+  phone               String?
   /**
    * Persona encargada del cliente (issue #36): nombre, cargo y contacto
    * directo. Conviven con los datos generales del cliente; si un dato falta no
    * se completa con otro campo.
    */
-  contactName    String?
-  contactRole    String?
-  contactPhone   String?
-  contactEmail   String?
+  contactName         String?
+  contactRole         String?
+  contactPhone        String?
+  contactEmail        String?
   /// Sitio web normalizado (`https://…`); el link se dibuja en la ficha.
-  website        String?
+  website             String?
   /// Usuario de Instagram sin `@`; el link se arma con `instagramHref`.
-  instagram      String?
+  instagram           String?
   /// WhatsApp propio cuando difiere del teléfono general (mismo formato).
-  whatsapp       String?
-  notes          String?
-  active         Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  events         Event[]
+  whatsapp            String?
+  notes               String?
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events              Event[]
   catalogAccessTokens CatalogAccessToken[]
-  budgets        Budget[]
-  payments       ClientPayment[]
-  logo           ClientLogo?
-  invoices       Invoice[]
-  quoteRequests  QuoteRequest[]
+  budgets             Budget[]
+  payments            ClientPayment[]
+  logo                ClientLogo?
+  invoices            Invoice[]
+  quoteRequests       QuoteRequest[]
+
+  archivedAt   DateTime?
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
 
   @@index([type, active])
   @@index([createdAt])
   @@index([organizationId, createdAt])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
 }
 
@@ -875,91 +878,91 @@ model ClientLogo {
 }
 
 model Event {
-  id             String           @id
-  organizationId String
-  clientId       String
-  name           String
-  location       String?
-  city           String?
-  department     String?
-  address        String?
-  addressReference String?
-  locationUrl    String?
-  venueContactName String?
+  id                String              @id
+  organizationId    String
+  clientId          String
+  name              String
+  location          String?
+  city              String?
+  department        String?
+  address           String?
+  addressReference  String?
+  locationUrl       String?
+  venueContactName  String?
   venueContactPhone String?
   venueContactEmail String?
-  responsibleName String?
-  responsiblePhone String?
-  responsibleEmail String?
-  modality       String?
-  attendees      Int?
-  setupAt        DateTime?
-  startsAt       DateTime?
-  endsAt         DateTime?
-  strikeAt       DateTime?
-  status         EventStatus      @default(DRAFT)
-  notes          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client         Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budgets        Budget[]
-  assignments    EventInventory[]
-  incidents      InventoryIncident[]
-  tasks          EventTask[]
-  supplierJobs   SupplierJob[]
-  expenses       Expense[]
-  invoices       Invoice[]
+  responsibleName   String?
+  responsiblePhone  String?
+  responsibleEmail  String?
+  modality          String?
+  attendees         Int?
+  setupAt           DateTime?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  strikeAt          DateTime?
+  status            EventStatus         @default(DRAFT)
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budgets           Budget[]
+  assignments       EventInventory[]
+  incidents         InventoryIncident[]
+  tasks             EventTask[]
+  supplierJobs      SupplierJob[]
+  expenses          Expense[]
+  invoices          Invoice[]
+
+  archivedAt    DateTime?
+  archivedById  String?
+  deletedAt     DateTime?
+  deletedById   String?
+  deleteReason  String?
+  anonymizedAt  DateTime?
+  deliveryNotes DeliveryNote[]
 
   @@index([startsAt, status])
   @@index([clientId, createdAt])
   @@index([organizationId, startsAt])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
-  deliveryNotes   DeliveryNote[]
   @@index([organizationId, deletedAt])
   @@index([createdAt])
 }
 
 model Budget {
-  id                   String                @id
-  organizationId       String
-  clientId             String
-  eventId              String?
+  id                      String                @id
+  organizationId          String
+  clientId                String
+  eventId                 String?
   /// Lead del que nació el presupuesto (Lead → Presupuesto); se limpia si se borra el lead.
-  leadId               String?
+  leadId                  String?
   /// Pedido del catálogo público del que nació (único: se convierte una sola vez).
-  quoteRequestId       String?               @unique
-  quoteRequest         QuoteRequest?         @relation(fields: [quoteRequestId], references: [id], onDelete: SetNull)
-  title                String
-  status               CommercialStatus      @default(DRAFT)
-  subtotal             Int                   @default(0)
-  discount             Int                   @default(0)
-  total                Int                   @default(0)
-  costEstimate         Int                   @default(0)
+  quoteRequestId          String?               @unique
+  quoteRequest            QuoteRequest?         @relation(fields: [quoteRequestId], references: [id], onDelete: SetNull)
+  title                   String
+  status                  CommercialStatus      @default(DRAFT)
+  subtotal                Int                   @default(0)
+  discount                Int                   @default(0)
+  total                   Int                   @default(0)
+  costEstimate            Int                   @default(0)
   // Costos internos (issue #65): materiales y mano de obra se guardan aparte
   // del costo por ítem (`BudgetItem.costPrice`) y del estimado (`costEstimate`).
   // Nunca salen al cliente: el portal y el imprimible los excluyen por contrato.
-  materialCost         Int                   @default(0)
-  laborCost            Int                   @default(0)
-  validUntil           DateTime?
+  materialCost            Int                   @default(0)
+  laborCost               Int                   @default(0)
+  validUntil              DateTime?
   /// Fecha de entrega comprometida (issue #65); la vigencia es `validUntil`.
-  deliveryAt           DateTime?
+  deliveryAt              DateTime?
   /// Condición de IVA del presupuesto (issue #65): `GRAVADA_10`, `GRAVADA_5` o `EXENTA`.
-  ivaType              String?
+  ivaType                 String?
   /// Garantía ofrecida al cliente (issue #65), texto libre.
-  warranty             String?
-  notes                String?
+  warranty                String?
+  notes                   String?
   // Plan de pagos (issue #14): anticipo y cuotas visibles en el portal.
   // `installmentsJson` guarda `[{ label, amount, dueAt }]` (dueAt `YYYY-MM-DD`).
-  advanceAmount        Int                   @default(0)
-  paymentTerms         String?
-  installmentsJson     Json?
+  advanceAmount           Int                   @default(0)
+  paymentTerms            String?
+  installmentsJson        Json?
   /// Depósito de garantía del alquiler (PYG). Opcional y APARTE del total: no se
   /// factura ni cuenta como cobro. Estado: PENDING, HELD, RETURNED, KEPT_PARTIAL o KEPT.
   securityDeposit         Int?
@@ -974,84 +977,84 @@ model Budget {
   // Portal del cliente (issue #12): token público del presupuesto y evidencia
   // de la aprobación digital o manual. El token es la única credencial del
   // link y se puede regenerar o revocar desde el panel.
-  publicToken          String?               @unique
-  publicTokenCreatedAt DateTime?
+  publicToken             String?               @unique
+  publicTokenCreatedAt    DateTime?
   /// Primera vista del link del portal (issue #33): se sella una sola vez, la
   /// primera vez que el cliente abre el presupuesto; los accesos posteriores no
   /// la mueven. Es el hito real de la cronología y nunca se inventa.
-  viewedAt             DateTime?
-  approvedAt           DateTime?
-  approvedByName       String?
-  approvalMethod       String?
-  approvalIp           String?
-  approvalUserAgent    String?
-  approvalNote         String?
-  revisionRequestedAt  DateTime?
-  revisionNote         String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client               Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  event                Event?                @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  lead                 Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  items                BudgetItem[]
-  payments             ClientPayment[]
-  changeRequests       BudgetChangeRequest[]
-  paymentProofs        BudgetPaymentProof[]
+  viewedAt                DateTime?
+  approvedAt              DateTime?
+  approvedByName          String?
+  approvalMethod          String?
+  approvalIp              String?
+  approvalUserAgent       String?
+  approvalNote            String?
+  revisionRequestedAt     DateTime?
+  revisionNote            String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  organization            Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client                  Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  event                   Event?                @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  lead                    Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  items                   BudgetItem[]
+  payments                ClientPayment[]
+  changeRequests          BudgetChangeRequest[]
+  paymentProofs           BudgetPaymentProof[]
   /// Adjuntos internos del presupuesto (issue #65): el PDF original u otro archivo.
-  attachments          BudgetAttachment[]
-  referenceLinks       BudgetReferenceLink[]
-  comparisonId         String?
-  comparisonLabel      String?
-  comparison           QuoteComparison?      @relation(fields: [comparisonId], references: [id], onDelete: Restrict)
+  attachments             BudgetAttachment[]
+  referenceLinks          BudgetReferenceLink[]
+  comparisonId            String?
+  comparisonLabel         String?
+  comparison              QuoteComparison?      @relation(fields: [comparisonId], references: [id], onDelete: Restrict)
   /// Pagos esperados del plan (issue #28): anticipo, cuotas y saldo.
-  expectedPayments     ExpectedPayment[]
-  invoices             Invoice[]
+  expectedPayments        ExpectedPayment[]
+  invoices                Invoice[]
   /// Solicitudes de firma del cliente (issue #79) sobre este presupuesto.
-  signatureRequests    SignatureRequest[]
+  signatureRequests       SignatureRequest[]
   /// Cargos de la devolución (alquileres P1-4): recargo, roturas, faltantes, lavado y personalizados.
-  rentalCharges        RentalCharge[]
+  rentalCharges           RentalCharge[]
+
+  archivedAt   DateTime?
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
   @@index([organizationId, leadId])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
   @@index([approvedAt])
 }
 
 model BudgetItem {
-  id          String         @id
-  budgetId    String
+  id              String         @id
+  budgetId        String
   /// Orden explícito de edición (#173 A15); NULL conserva el orden recibido del query histórico.
-  sortOrder   Int?
-  name        String
-  quantity    Int            @default(1)
-  days        Int            @default(1)
-  unitPrice   Int
-  costPrice   Int            @default(0)
+  sortOrder       Int?
+  name            String
+  quantity        Int            @default(1)
+  days            Int            @default(1)
+  unitPrice       Int
+  costPrice       Int            @default(0)
   /// Línea conservada, excluida de los totales validados y las reservas.
-  excluded    Boolean        @default(false)
-  subtotal    Int
-  notes       String?
+  excluded        Boolean        @default(false)
+  subtotal        Int
+  notes           String?
   /// Vínculo opcional con el inventario (issue #18): al aprobar el presupuesto,
   /// los ítems vinculados reservan stock del evento con el rango del evento.
   /// Sin vínculo el ítem no reserva nada.
-  inventoryId String?
+  inventoryId     String?
   /// Snapshot de precios de la línea (escalones por días y paquete de un combo) tomado al
   /// crearla: el portal y el cambio de días recalculan con ESTO, nunca con el inventario vivo.
   pricingSnapshot Json?
   /// Gratis a propósito: una línea con precio unitario 0 queda «falta precio» (bloquea enviar,
   /// aprobar y cobrar) salvo que el equipo confirme explícitamente que no se cobra.
-  freeOnPurpose Boolean      @default(false)
-  budget      Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  inventory   InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  freeOnPurpose   Boolean        @default(false)
+  budget          Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  inventory       InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
 
   @@index([budgetId])
   @@index([inventoryId])
@@ -1097,55 +1100,55 @@ model BudgetChangeRequest {
  * - `chequeDate`: fecha del cheque cuando el método es cheque.
  */
 model ClientPayment {
-  id                String               @id
-  organizationId    String
-  clientId          String
-  budgetId          String?
-  amount            Int
-  status            ClientPaymentStatus  @default(RECEIVED)
-  paidAt            DateTime?
-  collectedAt       DateTime?
-  method            String?
-  reference         String?
-  invoiceNumber     String?
-  invoiceIssuedAt   DateTime?
-  dueAt             DateTime?
-  chequeDate        DateTime?
-  notes             String?
-  createdAt         DateTime             @default(now())
+  id                 String               @id
+  organizationId     String
+  clientId           String
+  budgetId           String?
+  amount             Int
+  status             ClientPaymentStatus  @default(RECEIVED)
+  paidAt             DateTime?
+  collectedAt        DateTime?
+  method             String?
+  reference          String?
+  invoiceNumber      String?
+  invoiceIssuedAt    DateTime?
+  dueAt              DateTime?
+  chequeDate         DateTime?
+  notes              String?
+  createdAt          DateTime             @default(now())
   /**
    * Snapshot inmutable del cobro al confirmarlo (issue #20): fecha real,
    * monto, método, referencia y los nombres del cliente, presupuesto y cuenta
    * tal como estaban al momento. Si después se renombra el cliente o la cuenta,
    * o se edita el presupuesto, la historia del cobro no cambia.
    */
-  collectedSnapshot Json?
+  collectedSnapshot  Json?
   /**
    * Cuenta de tesorería donde entra el cobro (issue #27).
    */
-  treasuryAccountId String?
+  treasuryAccountId  String?
   /**
    * Origen del cobro cuando NO es un pago común del presupuesto (alquileres P1-4):
    * `deposit_retained` (garantía de daños retenida: ingreso por cargos) y `rental_extra`
    * (cobro de un cargo extra de la liquidación) entran a tesorería pero NO bajan el saldo
    * del alquiler. `deposit_reserve` (garantía de reserva) sí es parte del pago. `null` = común.
    */
-  origin            String?
-  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  budget            Budget?              @relation(fields: [budgetId], references: [id], onDelete: SetNull)
-  treasuryAccount   TreasuryAccount?     @relation(fields: [treasuryAccountId], references: [id], onDelete: SetNull)
-  reminders         PaymentReminderLog[]
-  proofs            BudgetPaymentProof[]
+  origin             String?
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client             Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  budget             Budget?              @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  treasuryAccount    TreasuryAccount?     @relation(fields: [treasuryAccountId], references: [id], onDelete: SetNull)
+  reminders          PaymentReminderLog[]
+  proofs             BudgetPaymentProof[]
   /// Pago esperado que se confirmó con este cobro (issue #28); 1:1 opcional.
-  expectedPayment   ExpectedPayment?     @relation("ExpectedPaymentConfirmation")
+  expectedPayment    ExpectedPayment?     @relation("ExpectedPaymentConfirmation")
   /**
    * Concepto del plan que este cobro imputa (issue #129): la seña o un cobro
    * parcial; el cobro completo también queda enlazado acá. Un cobro libre
    * (sin plan) queda en `null`.
    */
-  expectedPaymentId String?
-  expectedPaymentRef ExpectedPayment?    @relation("ExpectedPaymentPartialPayments", fields: [expectedPaymentId], references: [id], onDelete: SetNull)
+  expectedPaymentId  String?
+  expectedPaymentRef ExpectedPayment?     @relation("ExpectedPaymentPartialPayments", fields: [expectedPaymentId], references: [id], onDelete: SetNull)
 
   @@index([clientId, paidAt])
   @@index([organizationId, paidAt])
@@ -1568,15 +1571,15 @@ model Supplier {
   inventoryItems   InventoryItem[]
   inventoryUnits   InventoryUnit[]
 
+  archivedAt   DateTime?
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
+
   @@index([category, active])
   @@index([organizationId, name])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
 }
 
@@ -1870,7 +1873,7 @@ model BankStatementRow {
 }
 
 model InventoryItem {
-  id                 String           @id
+  id                 String               @id
   organizationId     String
   name               String
   category           String
@@ -1882,54 +1885,54 @@ model InventoryItem {
   /// por `/api/inventory-images/<id>`. La URL manual (`imageUrl`) tiene prioridad.
   imageData          Bytes?
   imageMime          String?
-  kind               InventoryKind    @default(REUSABLE)
-  status             InventoryStatus  @default(AVAILABLE)
+  kind               InventoryKind        @default(REUSABLE)
+  status             InventoryStatus      @default(AVAILABLE)
   /// Archivo organizativo del producto; no altera disponibilidad ni reservas.
   archivedAt         DateTime?
   /// «Visible en la web» (issue #111): la landing es estática hoy; el flag queda
   /// listo para el catálogo dinámico. Por defecto, nada se publica solo.
-  visibleOnWeb       Boolean          @default(false)
+  visibleOnWeb       Boolean              @default(false)
   /// Alcance en la tienda web de la empresa: HIDDEN, RETAIL (cliente final),
   /// WHOLESALE (mayorista) o BOTH. `visibleOnWeb` se mantiene sincronizado
   /// (= alcance distinto de HIDDEN). NULL = fila vieja: rige `visibleOnWeb`.
   catalogAudience    String?
   /// Cantidad = unidades activas (issue #112): se sincroniza con `units`
   /// (las retiradas no cuentan) para no romper los contratos existentes.
-  quantity           Int              @default(1)
-  replacementCost    Int              @default(0)
-  dailyCost          Int              @default(0)
+  quantity           Int                  @default(1)
+  replacementCost    Int                  @default(0)
+  dailyCost          Int                  @default(0)
   /// Precios de venta en guaraníes (issues #90 y #110). Cada frente tiene su
   /// precio normal y, si hay regla, el umbral de días y el precio desde ahí;
   /// `minimumPrice` es el piso. En 0 no están cargados: los define el dueño.
-  listPrice          Int              @default(0)
+  listPrice          Int                  @default(0)
   /// Días desde los que aplica `listFromPrice` (final por duración); 0 = sin regla.
-  listFromDays       Int              @default(0)
+  listFromDays       Int                  @default(0)
   /// Precio final desde `listFromDays` días.
-  listFromPrice      Int              @default(0)
-  wholesalePrice     Int              @default(0)
+  listFromPrice      Int                  @default(0)
+  wholesalePrice     Int                  @default(0)
   /// Días desde los que aplica `wholesaleFromPrice` (umbral del mayorista).
-  wholesaleFromDays  Int              @default(0)
+  wholesaleFromDays  Int                  @default(0)
   /// Precio mayorista desde `wholesaleFromDays` días.
-  wholesaleFromPrice Int              @default(0)
+  wholesaleFromPrice Int                  @default(0)
   /// Piso de venta del ítem.
-  minimumPrice       Int              @default(0)
+  minimumPrice       Int                  @default(0)
   /// «Se cobra»: DAILY = el precio se multiplica por los días del alquiler; EVENT = precio
   /// único por evento (días = 1 en tienda, cotización y presupuesto). Default DAILY.
-  billingUnit        BillingUnit      @default(DAILY)
+  billingUnit        BillingUnit          @default(DAILY)
   notes              String?
   /// Descripción para el catálogo público (opcional, hasta 600 caracteres). Es lo único
   /// de texto libre que se publica: las `notes` son internas y nunca salen.
   publicDescription  String?
   /// Orden del producto dentro de su sección en la tienda web (lo decide la empresa en
   /// Ajustes → Tienda). Menor = primero; empate: por nombre.
-  webSortOrder       Int              @default(0)
+  webSortOrder       Int                  @default(0)
   /// Capacidad en personas (juegos de mesa, livings…): lo que diferencia a dos juegos parecidos en la tienda.
   capacity           Int?
   /// Medidas como las escribe la empresa («Ø 1,40 m», «1,60 × 0,75 m»). Texto corto.
   dimensions         String?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments        EventInventory[]
   /// Combo: componentes que arma (este ítem es el padre) y combos que lo usan.
   components         InventoryComponent[] @relation("ComboParent")
@@ -1942,10 +1945,10 @@ model InventoryItem {
   incidents          InventoryIncident[]
   /// Unidades retenidas por incidentes abiertos sin unidad con código (daño o faltante por
   /// cantidad). Se mantiene bajo el lock del ítem y se descuenta de la capacidad.
-  incidentHold       Int              @default(0)
+  incidentHold       Int                  @default(0)
   /// Juego (combo) importado o creado sin piezas: es un juego pero su composición está por
   /// cargar. No tiene stock propio ni se puede reservar; se limpia al guardarle componentes.
-  comboIncomplete    Boolean          @default(false)
+  comboIncomplete    Boolean              @default(false)
   /// Tiempo de colchón antes/después del evento para este producto (minutos).
   /// NULL hereda el de la empresa (`OrganizationRentalSettings`).
   bufferBeforeMin    Int?
@@ -1953,27 +1956,44 @@ model InventoryItem {
   /// Categoría (o subcategoría) del árbol de la empresa. `category` queda como espejo de
   /// «Categoría › Subcategoría»: lo escribe un solo helper (`resolveInventoryCategory`).
   categoryId         String?
-  categoryRef        InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryRef        InventoryCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   /// Depósito y ubicación que se proponen al dar de alta unidades nuevas.
   defaultWarehouseId String?
-  defaultWarehouse   Warehouse?       @relation("ItemDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
+  defaultWarehouse   Warehouse?           @relation("ItemDefaultWarehouse", fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
   defaultLocation    String?
   /// Lote principal: proveedor, fecha de compra y garantía (las unidades pueden tener los suyos).
   supplierId         String?
-  supplier           Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplier           Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchasedAt        DateTime?
   warrantyUntil      DateTime?
+  /// Familia de variantes (docs/VARIANTES.md): cada variante es un producto completo (código, unidades,
+  /// foto, precio); la familia solo las agrupa. `variantOptions` = `{"color":"Verde"}`, `variantKey` la
+  /// combinación normalizada (`color=verde|talle=35`, única por familia mientras la variante esté viva).
+  familyId           String?
+  family             InventoryFamily?     @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  variantOptions     Json?
+  variantKey         String?
+  /// `true` = el precio de esta variante lo cargó la persona: «mismo precio para todas» no lo pisa.
+  variantOwnPrice    Boolean              @default(false)
+  variantSortOrder   Int                  @default(0)
+  /// Tienda web (parte 2): «Destacado» (sección Destacados del inicio) y estilos o colores para filtrar.
+  featured           Boolean              @default(false)
+  tags               String[]             @default([])
+  /// Fotos extra del producto (la principal sigue en `imageUrl`/`imageData`).
+  extraImages        InventoryImage[]
+  collectionLinks    CollectionItem[]
+
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
 
   @@unique([organizationId, sku])
+  @@index([organizationId, familyId])
   @@index([status, category])
   @@index([organizationId, name])
   @@index([organizationId, categoryId])
-
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
 }
 
@@ -2036,6 +2056,7 @@ model InventoryCategory {
   parent         InventoryCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children       InventoryCategory[] @relation("CategoryTree")
   items          InventoryItem[]
+  families       InventoryFamily[]
 
   @@unique([organizationId, key])
   @@index([organizationId, parentId])
@@ -2118,6 +2139,9 @@ model InventoryComponent {
   parentId       String
   componentId    String
   quantity       Int
+  /// «Cualquier variante» (etapa D de docs/VARIANTES.md): `componentId` es la variante de referencia.
+  /// Se crea apagada; ningún flujo la prende todavía.
+  anyVariant     Boolean       @default(false)
   createdAt      DateTime      @default(now())
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent         InventoryItem @relation("ComboParent", fields: [parentId], references: [id], onDelete: Cascade)
@@ -2139,9 +2163,9 @@ enum InventoryUnitStatus {
 /// Ajustes de alquiler por empresa (1:1). Los tiempos son minutos; `depositPercent`
 /// NULL = sin política de seña.
 model OrganizationRentalSettings {
-  id                   String       @id
-  organizationId       String       @unique
-  depositPercent       Int?
+  id                     String       @id
+  organizationId         String       @unique
+  depositPercent         Int?
   /// Depósito de garantía por defecto (PYG) de los presupuestos nuevos; NULL = sin garantía.
   securityDepositDefault Int?
   /// Política de garantía: NONE (no se usa), OPTIONAL (se elige en cada presupuesto) o ALWAYS (se propone siempre).
@@ -2166,28 +2190,28 @@ model OrganizationRentalSettings {
   cancellationPolicy     Json?
   /// Condiciones del alquiler (portal e impreso).
   rentalTerms            String?
-  holdTtlMinutes       Int          @default(2880)
-  deliveryBufferMin    Int          @default(0)
-  returnBufferMin      Int          @default(0)
-  prepBufferMin        Int          @default(0)
-  transportBufferMin   Int          @default(0)
-  cleaningBufferMin    Int          @default(0)
-  publicCatalogEnabled Boolean      @default(false)
-  publicShowPrices     Boolean      @default(true)
-  whatsappPhone        String?
+  holdTtlMinutes         Int          @default(2880)
+  deliveryBufferMin      Int          @default(0)
+  returnBufferMin        Int          @default(0)
+  prepBufferMin          Int          @default(0)
+  transportBufferMin     Int          @default(0)
+  cleaningBufferMin      Int          @default(0)
+  publicCatalogEnabled   Boolean      @default(false)
+  publicShowPrices       Boolean      @default(true)
+  whatsappPhone          String?
   /// Tienda web de la empresa: frase de la portada, color de marca (`#rrggbb`)
   /// y correo de contacto. Todo opcional; sin valor no se muestra ni se inventa.
-  storefrontTagline    String?
-  storefrontAccent     String?
-  storefrontEmail      String?
+  storefrontTagline      String?
+  storefrontAccent       String?
+  storefrontEmail        String?
   /// Quién entra al catálogo: OPEN (cualquiera), REQUEST (pide acceso y la empresa lo aprueba)
   /// o PRIVATE (solo con el link que da la empresa). Validado en el código.
-  catalogAccessMode    String       @default("OPEN")
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogAccessMode      String       @default("OPEN")
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   /// Días hasta la purga de la papelera; NULL = sin purga.
-  trashPurgeDays Int?
+  trashPurgeDays         Int?
 }
 
 /// Link privado del catálogo mayorista de un cliente: identifica al cliente sin
@@ -2214,28 +2238,28 @@ model CatalogAccessToken {
 /// mayorista): se retoma desde otro dispositivo. Solo guarda referencias (producto y cantidad),
 /// fechas y la zona elegida; el precio NUNCA se guarda: lo calcula el servidor al volver.
 model StoreCart {
-  id             String             @id
-  organizationId String
+  id               String              @id
+  organizationId   String
   /// Carrito de un cliente con acceso (link de acceso o mayorista); null en el carrito de un visitante.
-  accessTokenId  String?            @unique
-  accessToken    CatalogAccessToken? @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+  accessTokenId    String?             @unique
+  accessToken      CatalogAccessToken? @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
   /// Carrito de un visitante que dejó su contacto: solo vive el hash del enlace mágico (`/tienda/<slug>/carrito/<token>`),
   /// que vence (`expiresAt`) y se renueva al guardar. Nunca se busca por correo ni teléfono (no se enumera a nadie).
-  visitorTokenHash String?          @unique
-  visitorName    String?
-  visitorPhone   String?
-  visitorEmail   String?
-  expiresAt      DateTime?
+  visitorTokenHash String?             @unique
+  visitorName      String?
+  visitorPhone     String?
+  visitorEmail     String?
+  expiresAt        DateTime?
   /// `[{ inventoryId, quantity }]` (validado en el código).
-  items          Json
-  fromKey        String?
-  toKey          String?
+  items            Json
+  fromKey          String?
+  toKey            String?
   /// "" = sin elegir, COORDINATE = «a coordinar» o el id de una zona.
-  zoneChoice     String?
+  zoneChoice       String?
   /// Último total que vio el cliente (para avisarle si cambió al volver).
-  seenTotal      Int?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  seenTotal        Int?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@index([organizationId])
 }
@@ -2244,25 +2268,25 @@ model StoreCart {
 /// NUNCA se aplica solo. La empresa acepta, contraoferta o rechaza; si acepta o contraoferta el
 /// pedido pasa a «Propuesta enviada» y el cliente aprueba la versión final.
 model QuotePriceRequest {
-  id             String       @id
-  organizationId String
-  quoteRequestId String
-  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
-  comment        String
+  id               String       @id
+  organizationId   String
+  quoteRequestId   String
+  quoteRequest     QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  comment          String
   /// Monto total que el cliente querría pagar (PYG, entero); null = no indicó.
-  desiredAmount  Int?
+  desiredAmount    Int?
   /// Total de referencia del pedido cuando se pidió (para mostrar el antes y el después).
-  originalTotal  Int?
+  originalTotal    Int?
   /// OPEN, ACCEPTED, COUNTERED o REJECTED (validado en el código).
-  status         String       @default("OPEN")
+  status           String       @default("OPEN")
   /// Monto que ofrece la empresa al aceptar o contraofertar.
-  offeredAmount  Int?
-  responseNote   String?
-  respondedAt    DateTime?
-  respondedBy    String?
+  offeredAmount    Int?
+  responseNote     String?
+  respondedAt      DateTime?
+  respondedBy      String?
   /// Cuándo el cliente aprobó la versión final (la propuesta del pedido).
   clientApprovedAt DateTime?
-  createdAt      DateTime     @default(now())
+  createdAt        DateTime     @default(now())
 
   @@index([quoteRequestId, createdAt])
   @@index([organizationId, status])
@@ -2293,46 +2317,46 @@ model CatalogAccessRequest {
 }
 
 model EventInventory {
-  id              String        @id
-  eventId         String
-  inventoryId     String
-  quantity        Int           @default(1)
+  id                 String              @id
+  eventId            String
+  inventoryId        String
+  quantity           Int                 @default(1)
   /// Rango en el que el equipo queda comprometido con el evento. Si falta, se
   /// usa el rango del evento (montaje → desmontaje) para calcular disponibilidad.
-  startsAt        DateTime?
-  endsAt          DateTime?
-  checkedOut      Boolean       @default(false)
-  checkedIn       Boolean       @default(false)
-  checkedOutAt    DateTime?
-  checkedInAt     DateTime?
-  conditionOut    String?
-  conditionIn     String?
+  startsAt           DateTime?
+  endsAt             DateTime?
+  checkedOut         Boolean             @default(false)
+  checkedIn          Boolean             @default(false)
+  checkedOutAt       DateTime?
+  checkedInAt        DateTime?
+  conditionOut       String?
+  conditionIn        String?
   /// Unidades que volvieron dañadas y unidades que no volvieron, con su detalle.
-  damagedQuantity Int           @default(0)
-  missingQuantity Int           @default(0)
-  damageNotes     String?
+  damagedQuantity    Int                 @default(0)
+  missingQuantity    Int                 @default(0)
+  damageNotes        String?
   /// Empresa dueña de la asignación (backfill desde el evento; NULL en filas viejas).
-  organizationId  String?
+  organizationId     String?
   /// Retención: NULL = firme; con fecha, deja de contar al vencer (vencimiento perezoso).
-  holdExpiresAt   DateTime?
+  holdExpiresAt      DateTime?
   /// Presupuesto que originó la asignación, si lo hay.
-  budgetId        String?
+  budgetId           String?
   /// Asignación liberada: no compromete stock.
-  releasedAt      DateTime?
-  returnedQuantity Int          @default(0)
+  releasedAt         DateTime?
+  returnedQuantity   Int                 @default(0)
   /// Unidades despachadas (acumulado de salidas parciales). 0 = nada salió todavía.
-  checkoutQuantity Int          @default(0)
-  checkedOutById  String?
-  checkoutNote    String?
-  checkedInById   String?
-  incidents       InventoryIncident[]
+  checkoutQuantity   Int                 @default(0)
+  checkedOutById     String?
+  checkoutNote       String?
+  checkedInById      String?
+  incidents          InventoryIncident[]
   /// Unidades de esta fila que vienen de combos comprometidos en el mismo evento
   /// (el resto es asignación suelta). En la fila del propio combo queda en 0.
-  comboQuantity   Int           @default(0)
+  comboQuantity      Int                 @default(0)
   /// Sustituciones autorizadas de un componente del combo: { componenteOriginal: sustituto }.
   comboSubstitutions Json?
-  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  inventory       InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  event              Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  inventory          InventoryItem       @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, inventoryId])
   @@index([inventoryId, startsAt, endsAt])
@@ -2357,16 +2381,16 @@ model Promoter {
   organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   tasks            EventTask[]
 
+  archivedAt   DateTime?
+  archivedById String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deleteReason String?
+  anonymizedAt DateTime?
+
   @@index([active, name])
   @@index([organizationId, name])
   @@index([organizationId, availability])
-
-  archivedAt     DateTime?
-  archivedById   String?
-  deletedAt      DateTime?
-  deletedById    String?
-  deleteReason   String?
-  anonymizedAt   DateTime?
   @@index([organizationId, deletedAt])
 }
 
@@ -2934,30 +2958,30 @@ enum DeliveryNoteKind {
 /// firmado acumula las líneas de los movimientos; firmado, `linesSnapshot` y la firma no cambian
 /// nunca más (lo garantiza también un trigger de la base).
 model DeliveryNote {
-  id             String           @id
-  organizationId String
-  eventId        String
-  kind           DeliveryNoteKind
-  number         Int
+  id              String              @id
+  organizationId  String
+  eventId         String
+  kind            DeliveryNoteKind
+  number          Int
   /// [{ assignmentId, inventoryId, name, sku, ordered, moved, damaged, missing }]
-  linesSnapshot  Json
-  notes          String?
-  createdById    String?
-  createdAt      DateTime         @default(now())
-  signerName     String?
-  signerDocument String?
+  linesSnapshot   Json
+  notes           String?
+  createdById     String?
+  createdAt       DateTime            @default(now())
+  signerName      String?
+  signerDocument  String?
   /// Trazo de la firma DRAWN (PNG) capturado en el celular del operador.
-  signatureData  Bytes?
-  signatureMime  String?
-  signedAt       DateTime?
-  signedById     String?
-  signedIp       String?
+  signatureData   Bytes?
+  signatureMime   String?
+  signedAt        DateTime?
+  signedById      String?
+  signedIp        String?
   signedUserAgent String?
   /// Condiciones del alquiler vigentes al firmar (congeladas).
-  termsSnapshot  String?
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  event          Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  photos         DeliveryNotePhoto[]
+  termsSnapshot   String?
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event           Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photos          DeliveryNotePhoto[]
 
   @@unique([organizationId, number])
   @@index([organizationId, eventId, kind, signedAt])
@@ -2983,4 +3007,87 @@ model DeliveryNotePhoto {
 model DeliveryNoteCounter {
   organizationId String @id
   last           Int    @default(0)
+}
+
+/// Familia de variantes de producto (docs/VARIANTES.md): el «padre» que agrupa productos que solo
+/// difieren en color, talle, etc. No es un `InventoryItem`: nunca entra en disponibilidad, presupuestos
+/// ni conteos. `axes` = `[{ key, label, values: [{ value, swatch? }] }]` (≤ 2 ejes). Un único escritor
+/// (`lib/server/inventory-families.ts`) reescribe nombre y categoría de las variantes.
+model InventoryFamily {
+  id                String             @id
+  organizationId    String
+  name              String
+  code              String
+  categoryId        String?
+  category          InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  publicDescription String?
+  /// Variante cuya foto es la portada (sin duplicar binarios); se valida contra la empresa.
+  coverItemId       String?
+  axes              Json
+  webSortOrder      Int                @default(0)
+  archivedAt        DateTime?
+  deletedAt         DateTime?
+  deletedById       String?
+  deleteReason      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items             InventoryItem[]
+
+  @@index([organizationId, code])
+  @@index([organizationId, deletedAt])
+}
+
+/// Foto extra de un producto (tienda, parte 2). La foto principal queda en `InventoryItem`; estas son
+/// las siguientes, en `position` ascendente. Mismo pipeline de compresión que la foto de producto.
+model InventoryImage {
+  id             String        @id
+  organizationId String
+  itemId         String
+  position       Int           @default(0)
+  alt            String?
+  mime           String
+  size           Int
+  data           Bytes
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, position])
+  @@index([organizationId])
+}
+
+/// Colección con nombre de la tienda («Verde Bosque», «Colección Rayas»): foto de ambientación,
+/// orden y productos. Siempre de una empresa; el slug es único dentro de ella.
+model Collection {
+  id             String           @id
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  visible        Boolean          @default(true)
+  sortOrder      Int              @default(0)
+  imageMime      String?
+  imageData      Bytes?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items          CollectionItem[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, sortOrder])
+}
+
+model CollectionItem {
+  collectionId   String
+  itemId         String
+  organizationId String
+  position       Int           @default(0)
+  collection     Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, itemId])
+  @@index([itemId])
+  @@index([organizationId])
 }

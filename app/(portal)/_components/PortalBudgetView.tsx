@@ -58,6 +58,7 @@ import {
   portalStage,
   portalStatusChip,
   portalTransferDestination,
+  portalHowToPay,
 } from "@/lib/portal-view";
 
 /**
@@ -280,7 +281,9 @@ function PortalDecisionOptions({
                   {option.helper}
                 </span>
               </span>
-              <span className="portal-decision-option-mark" aria-hidden="true" />
+              <span className="portal-decision-option-mark" aria-hidden="true">
+                <AdminIcon name="check" size={13} />
+              </span>
             </label>
           );
         })}
@@ -348,10 +351,13 @@ function Stepper({
 function PortalPackageNote({ summary, quantity }: { summary: PackageSummary; quantity: number }) {
   if (summary.incomplete || summary.packageTotal <= 0) return null;
   return (
-    <small className="portal-item-note portal-package-note" data-testid="portal-package">
-      Paquete: {formatMoney(summary.packageTotal)} por unidad · piezas por separado: {formatMoney(summary.unitSum)}
-      {summary.savings > 0 ? <> · <strong>ahorrás {formatMoney(summary.savings * quantity)}</strong></> : null}
-    </small>
+    <details className="portal-package-note" data-testid="portal-package">
+      <summary>Paquete{summary.savings > 0 ? <> · ahorrás {formatMoney(summary.savings * quantity)}</> : " · ver composición"}</summary>
+      <small className="portal-item-note">
+        Paquete: {formatMoney(summary.packageTotal)} por unidad · piezas por separado: {formatMoney(summary.unitSum)}
+        {summary.savings > 0 ? <> · <strong>ahorrás {formatMoney(summary.savings * quantity)}</strong></> : null}
+      </small>
+    </details>
   );
 }
 
@@ -687,6 +693,88 @@ export function PortalBudgetView({
         };
     }
   })();
+
+  /** Tarjeta «Tu presupuesto»: total, saldo, cómo se paga, fechas del evento y estado. */
+  const howToPay = portalHowToPay(budget.paymentPlan, budget.total);
+  const summaryCard = (titleId: string, withAction: boolean) => (
+    <div className="portal-card portal-summary" aria-labelledby={withAction ? undefined : titleId} role={withAction ? undefined : "region"}>
+      <div className="portal-summary-head">
+        <PortalCardTitle id={titleId} icon="overview">
+          Tu presupuesto
+        </PortalCardTitle>
+        <span className="portal-chip" data-tone={statusChip.tone}>
+          {statusChip.label}
+        </span>
+      </div>
+      <div className="portal-totals portal-totals--aside">
+        <div className="portal-total-row portal-total-row--strong">
+          <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
+          <span className="portal-num">{formatMoney(summaryTotal)}</span>
+        </div>
+        {approved && (budget.collectedAmount ?? 0) > 0 ? (
+          <div className="portal-total-row">
+            <span>Cobrado</span>
+            <span className="portal-num">{formatMoney(budget.collectedAmount ?? 0)}</span>
+          </div>
+        ) : null}
+        {approved ? (
+          <div className="portal-total-row">
+            <span>Saldo</span>
+            <span className="portal-num">{formatMoney(balance)}</span>
+          </div>
+        ) : null}
+      </div>
+      <dl className="portal-summary-facts">
+        {howToPay ? (
+          <div>
+            <dt>{itemsChanged ? "Plan del presupuesto original" : "Cómo se paga"}</dt>
+            <dd>{howToPay}</dd>
+            {itemsChanged ? <dd>El equipo revisará el plan de pagos junto con tus cambios.</dd> : null}
+          </div>
+        ) : null}
+        {budget.paymentPlan.terms ? (
+          <div>
+            <dt>Condiciones de pago</dt>
+            <dd className="portal-summary-terms">{budget.paymentPlan.terms}</dd>
+          </div>
+        ) : null}
+        {budget.event?.startsAt ? (
+          <div>
+            <dt>Fecha del evento</dt>
+            <dd>{formatDateTime(budget.event.startsAt)}</dd>
+          </div>
+        ) : null}
+        {stage === "authorize" && budget.validUntil ? (
+          <div>
+            <dt>Vigencia</dt>
+            <dd>
+              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
+                {formatCountdown(budget.validUntil, "client")}
+              </span>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      {withAction ? (
+        stickyKind === "authorize" ? (
+          <button
+            type="button"
+            className="portal-btn portal-btn--primary portal-btn--block portal-print-hide"
+            onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            aria-controls="portal-action"
+          >
+            Ir a la decisión
+          </button>
+        ) : stickyKind === "pay" ? (
+          <a className="portal-btn portal-btn--primary portal-btn--block portal-print-hide" href="#portal-pay">
+            Ver cómo pagar
+          </a>
+        ) : (
+          <p className="portal-help">{nextStep.title}.</p>
+        )
+      ) : null}
+    </div>
+  );
 
   /** Avance real del plan de cobros: confirmados sobre el total vigente. */
   const paymentProgress = (() => {
@@ -1416,6 +1504,9 @@ export function PortalBudgetView({
             {headFacts}
           </header>
 
+          {/* Celular y tablet: la misma tarjeta «Tu presupuesto», sin repetir la acción (ya está en «Qué tenés que hacer ahora») */}
+          <div className="portal-summary-mobile">{summaryCard("portal-summary-mobile", false)}</div>
+
           {/* Confirmación inmediata de la autorización: próximos pasos y descarga */}
           {justApproved ? (
             <section className="portal-banner portal-banner--ok portal-success" ref={approvedRef} tabIndex={-1} aria-labelledby="portal-approved">
@@ -1536,11 +1627,6 @@ export function PortalBudgetView({
                                 {current.excluded ? <small className="portal-item-note">Retirado / no incluido</small> : null}
                                 {item.notes ? <details><summary>Detalles</summary><p className="portal-item-note">{item.notes}</p></details> : null}
                                 {shown.package && !current.excluded ? <PortalPackageNote summary={shown.package} quantity={current.quantity} /> : null}
-                                <div className="budget-client-quantity">
-                                  <span>Cantidad</span>
-                                  {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
-                                  {item.usesDays || item.days > 1 ? <><span>Días</span>{canEdit && !current.excluded ? <Stepper value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onType={(text) => setDraftField(item.id, "days", text)} /> : <span>{formatNumber(item.days)}</span>}</> : null}
-                                </div>
                                 {changed ? (
                                   <small className="portal-item-note">
                                     Antes: {formatNumber(item.quantity)} × {formatNumber(item.days)} d · subtotal{" "}
@@ -1549,6 +1635,12 @@ export function PortalBudgetView({
                                 ) : null}
                               </span>
                             </span>
+                          <div className="budget-client-quantity">
+                            <span className="portal-quantity-group"><span className="portal-quantity-label">Cantidad</span>
+                            {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
+                            </span>
+                            {item.usesDays || item.days > 1 ? <span className="portal-quantity-group"><span className="portal-quantity-label">Días</span>{canEdit && !current.excluded ? <Stepper value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onType={(text) => setDraftField(item.id, "days", text)} /> : <span>{formatNumber(item.days)}</span>}</span> : null}
+                          </div>
                           </td>
                           <td className="portal-num" data-label="Precio unitario">{formatMoney(shown.unitPrice)}{shown.periodTotal ? <small className="portal-item-note">total por {formatNumber(current.days)} {current.days === 1 ? "día" : "días"}</small> : null}</td>
                           <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(shown.total)}</td>
@@ -2030,52 +2122,9 @@ export function PortalBudgetView({
           </section>
         </div>
 
-        {/* Escritorio: total, saldo y acción principal siempre a la vista */}
+        {/* Escritorio: total, saldo, cómo se paga y acción principal siempre a la vista */}
         <aside className="portal-budget-aside" aria-labelledby="portal-summary">
-          <div className="portal-card portal-summary">
-            <PortalCardTitle id="portal-summary" icon="overview">
-              Tu presupuesto
-            </PortalCardTitle>
-            <div className="portal-totals portal-totals--aside">
-              <div className="portal-total-row portal-total-row--strong">
-                <span>{itemsChanged ? "Total con tus cambios" : "Total"}</span>
-                <span className="portal-num">{formatMoney(summaryTotal)}</span>
-              </div>
-              {approved && (budget.collectedAmount ?? 0) > 0 ? (
-                <div className="portal-total-row">
-                  <span>Cobrado</span>
-                  <span className="portal-num">{formatMoney(budget.collectedAmount ?? 0)}</span>
-                </div>
-              ) : null}
-              {approved ? (
-                <div className="portal-total-row">
-                  <span>Saldo</span>
-                  <span className="portal-num">{formatMoney(balance)}</span>
-                </div>
-              ) : null}
-            </div>
-            {stage === "authorize" && budget.validUntil ? (
-              <span className="portal-countdown" data-tone={countdownTone(budget.validUntil)}>
-                {formatCountdown(budget.validUntil, "client")}
-              </span>
-            ) : null}
-            {stickyKind === "authorize" ? (
-              <button
-                type="button"
-                className="portal-btn portal-btn--primary portal-btn--block portal-print-hide"
-                onClick={() => actionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                aria-controls="portal-action"
-              >
-                Ir a la decisión
-              </button>
-            ) : stickyKind === "pay" ? (
-              <a className="portal-btn portal-btn--primary portal-btn--block portal-print-hide" href="#portal-pay">
-                Ver cómo pagar
-              </a>
-            ) : (
-              <p className="portal-help">{nextStep.title}.</p>
-            )}
-          </div>
+          {summaryCard("portal-summary", true)}
         </aside>
       </div>
 

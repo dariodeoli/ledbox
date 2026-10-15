@@ -1,6 +1,6 @@
 import type { AdminTone } from "./admin-format";
-import { countdownDays, formatCountdown, formatDate, formatDateTime } from "./admin-format";
-import type { PortalBudgetPaymentDetails } from "./server/budget-portal";
+import { countdownDays, formatCountdown, formatDate, formatDateTime, formatMoney } from "./admin-format";
+import type { PortalBudgetPaymentDetails, PortalBudgetPaymentPlan } from "./server/budget-portal";
 
 /**
  * Reglas de presentación del presupuesto en el portal del cliente. Son puras
@@ -138,4 +138,24 @@ export function portalTransferDestination(details: PortalBudgetPaymentDetails | 
     kind: "coordinate",
     message: "A coordinar: el equipo de LedBox te pasa los datos bancarios. Escribinos respondiendo el correo con el que te enviamos el presupuesto.",
   };
+}
+
+/**
+ * «Cómo se paga», en una línea y solo con lo que el presupuesto ya tiene: la seña sale del plan
+ * (que nace de la política de seña de la empresa) y el porcentaje es el real, `seña / total`,
+ * sin redondear de más: si no es entero, se muestra el monto sin porcentaje. No calcula nada nuevo.
+ */
+export function portalHowToPay(plan: Pick<PortalBudgetPaymentPlan, "advanceAmount" | "installments">, total: number): string | null {
+  if (!(total > 0)) return null;
+  const advance = Math.max(0, Math.round(plan.advanceAmount || 0));
+  if (advance > 0 && advance >= total) return `Pago total de ${formatMoney(total)} con la aprobación`;
+  if (advance > 0) {
+    const exact = (advance * 100) / total;
+    const whole = Math.round(exact);
+    const head = Math.abs(exact - whole) < 0.05 ? `Seña ${whole} %: ${formatMoney(advance)}` : `Seña de ${formatMoney(advance)}`;
+    return `${head} con la aprobación · saldo según el plan de pagos`;
+  }
+  if (plan.installments.length > 1) return `${plan.installments.length} pagos acordados · el primero de ${formatMoney(plan.installments[0].amount)}`;
+  if (plan.installments.length === 1) return `${plan.installments[0].label}: ${formatMoney(plan.installments[0].amount)}`;
+  return `Pago único de ${formatMoney(total)}`;
 }

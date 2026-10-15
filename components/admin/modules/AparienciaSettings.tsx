@@ -24,16 +24,18 @@ import { normalizeHex } from "@/lib/storefront-theme";
 import { DISPLAY_FONTS, THEMES, isDisplayFont, themePrimary } from "@/lib/storefront-templates";
 import { themesByRubro } from "@/lib/storefront-themes";
 import { useAdminSession } from "../AdminShell";
-import { FileField, SegmentedField, SelectField, SwitchField, TextField } from "../AdminFields";
+import { FileField, SelectField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminButtonLink, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { StorePreview } from "./StorePreview";
+import { EMPTY_HOME_PHOTOS, HomeLayoutPanels, type HomePhotoStates } from "./HomeLayoutPanels";
+import { DEFAULT_HOME, HOME_PHOTO_SLOTS, type HomeConfig, type HomePhotoSlot } from "@/lib/store-home";
 
 /**
  * Ajustes → Apariencia: cómo se ve la empresa para sus clientes (tienda y catálogo, mayorista, seguimiento del pedido,
  * portal, presupuesto impreso y correos; en los correos solo el color y el logo). Todo sale de listas cerradas y tokens
  * CSS, nunca CSS libre:
  *
- * - **Plantilla**: Lienzo, Boutique, Noir o Studio, agrupadas por rubro y con una vista previa real de cada una.
+ * - **Plantilla**: Boutique y seis rubros especializados, agrupadas por rubro y con una vista previa real de cada una.
  * - **Color de marca** (primario) con control automático de contraste AA (≥ 4,5:1): si no alcanza se ajusta y se avisa.
  * - **Títulos**: tipografía de una lista curada. **Frase** de la tienda (título del héroe).
  * - **Barra de anuncio**: encendida o apagada, con su texto. **Modo de precio**: por día, por unidad o a cotizar.
@@ -50,7 +52,7 @@ const PRESET_COLORS = ["#0b5cd5", "#0f766e", "#b45309", "#9f1239", "#6d28d9", "#
 type CoverState = { file: File | null; previewUrl: string | null; remove: boolean; dims: { width: number; height: number } | null };
 const EMPTY_COVER: CoverState = { file: null, previewUrl: null, remove: false, dims: null };
 
-type Loaded = { appearance: Appearance; brandColor: string | null; tagline: string | null; covers: Record<CoverKind, string | null>; slug: string | null };
+type Loaded = { appearance: Appearance; brandColor: string | null; tagline: string | null; covers: Record<CoverKind, string | null>; homePhotos: Record<HomePhotoSlot, string | null>; slug: string | null };
 
 function readImageSize(url: string): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
@@ -79,7 +81,8 @@ export function AparienciaSettings() {
   const [color, setColor] = useState("");
   const [covers, setCovers] = useState<Record<CoverKind, CoverState>>({ desktop: EMPTY_COVER, mobile: EMPTY_COVER });
   const [coverError, setCoverError] = useState<Record<CoverKind, string>>({ desktop: "", mobile: "" });
-  const [frame, setFrame] = useState<"desktop" | "mobile">("desktop");
+  const [home, setHome] = useState<HomeConfig>(DEFAULT_HOME);
+  const [homePhotos, setHomePhotos] = useState<HomePhotoStates>(EMPTY_HOME_PHOTOS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -96,6 +99,8 @@ export function AparienciaSettings() {
     setTagline(initial.tagline ?? "");
     setColor(initial.brandColor ?? "");
     setCovers({ desktop: EMPTY_COVER, mobile: EMPTY_COVER });
+    setHome(initial.appearance.home);
+    setHomePhotos(EMPTY_HOME_PHOTOS);
   }, [initial]);
 
   useEffect(
@@ -105,7 +110,7 @@ export function AparienciaSettings() {
     [],
   );
 
-  const effective: Appearance = { template, font, displayFont: isDisplayFont(displayFont) ? displayFont : null, announcement: { on: annOn, text: annText.trim() }, priceMode };
+  const effective: Appearance = { template, font, displayFont: isDisplayFont(displayFont) ? displayFont : null, announcement: { on: annOn, text: annText.trim() }, priceMode, home };
   const brand = useMemo(() => adjustBrandColor(color), [color]);
   const brandHex = brand.ok ? brand.result?.color ?? null : null;
   const colorFieldError = !brand.ok ? brand.error : null;
@@ -120,7 +125,9 @@ export function AparienciaSettings() {
     priceMode !== initial!.appearance.priceMode ||
     tagline.trim() !== (initial!.tagline ?? "") ||
     (normalizeHex(color) ?? null) !== (initial!.brandColor ?? null) ||
-    COVER_KINDS.some((kind) => covers[kind].file || covers[kind].remove)
+    COVER_KINDS.some((kind) => covers[kind].file || covers[kind].remove) ||
+    JSON.stringify(home) !== JSON.stringify(initial!.appearance.home) ||
+    HOME_PHOTO_SLOTS.some((slot) => homePhotos[slot].file || homePhotos[slot].remove)
   );
   const invalid = Boolean(colorFieldError) || Boolean(annError) || COVER_KINDS.some((kind) => coverError[kind]);
 
@@ -173,10 +180,32 @@ export function AparienciaSettings() {
         }
       }
     }
+    // 1b) Fotos del inicio (editorial e inspiración), igual que las portadas.
+    for (const slot of HOME_PHOTO_SLOTS) {
+      const photo = homePhotos[slot];
+      if (photo.remove && !photo.file) {
+        const removed = await adminSend(`/api/admin/organization/appearance/home-photos/${slot}`, undefined, "DELETE");
+        if (!removed.ok) {
+          setBusy(false);
+          setError(`${slot}: ${removed.error}`);
+          return;
+        }
+      }
+      if (photo.file) {
+        const form = new FormData();
+        form.append("file", photo.file, photo.file.name);
+        const uploaded = await adminApiUpload(`/api/admin/organization/appearance/home-photos/${slot}`, form, { timeoutMs: 60_000 });
+        if (!uploaded.ok) {
+          setBusy(false);
+          setError(`${slot}: ${uploaded.error}`);
+          return;
+        }
+      }
+    }
     // 2) Plantilla, tipografía, fondo y color (el servidor vuelve a validar el contraste).
     const result = await adminSend<{ appearance: Appearance; brandColor: string | null; tagline: string | null; brandNotice: string | null }>(
       "/api/admin/organization/appearance",
-      { template, font, displayFont: effective.displayFont, announcement: effective.announcement, priceMode, tagline: tagline.trim(), brandColor: color.trim() ? color : null },
+      { template, font, displayFont: effective.displayFont, announcement: effective.announcement, priceMode, home, tagline: tagline.trim(), brandColor: color.trim() ? color : null },
       "PATCH",
     );
     setBusy(false);
@@ -190,7 +219,6 @@ export function AparienciaSettings() {
 
   const savedUrl = (kind: CoverKind) => (initial?.covers[kind] ? `/api/admin/organization/appearance/covers/${kind}?v=${encodeURIComponent(initial.covers[kind]!)}` : null);
   const coverSrc = (kind: CoverKind) => (covers[kind].remove ? null : covers[kind].previewUrl ?? savedUrl(kind));
-  const previewCover = coverSrc(frame) ?? (coverSrc(frame === "desktop" ? "mobile" : "desktop"));
   const storeUrl = organization?.slug ? `/tienda/${organization.slug}` : null;
 
   return (
@@ -217,7 +245,9 @@ export function AparienciaSettings() {
                         <div className="admin-template-grid">
                           {group.themes.map((theme) => (
                             <button key={theme.id} type="button" className="admin-template-card" aria-pressed={template === theme.id} disabled={demo} onClick={() => { setTemplate(theme.id as TemplateId); setNotice(""); }} data-testid={`template-${theme.id}`}>
-                              <StorePreview frame="mobile" size="thumb" appearance={{ ...effective, template: theme.id as TemplateId }} brandColor={brandHex} name={organization?.name ?? ""} coverSrc={null} tagline={tagline.trim() || null} />
+                              <span className="admin-template-swatches" aria-hidden="true">
+                                {theme.swatch.map((swatch, index) => <i key={index} style={{ background: swatch }} />)}
+                              </span>
                               <strong>{TEMPLATE_META[theme.id as TemplateId].label}</strong>
                               <span>{theme.forWho}</span>
                               <span>{theme.description}</span>
@@ -256,7 +286,7 @@ export function AparienciaSettings() {
                   ) : brandHex ? (
                     <p className="admin-field-hint" data-testid="accent-preview">
                       <span className="admin-store-swatch" style={{ background: themePrimary(template, brandHex).primary }} aria-hidden="true" />{" "}
-                      {themePrimary(template, brandHex).fromBrand ? "Con esta plantilla se usa tu color de marca." : "Tu color no da contraste suficiente con esta plantilla: se usa su color propio."}
+                      {themePrimary(template, brandHex).fromBrand ? "Con esta plantilla se usa tu color de marca." : "Tu color es neutro o no da contraste suficiente con esta plantilla: se usa su color propio."}
                     </p>
                   ) : null}
                   <div className="admin-settings-grid">
@@ -302,6 +332,8 @@ export function AparienciaSettings() {
                   </div>
                 </AdminPanel>
 
+                <HomeLayoutPanels home={home} onHome={(next) => { setHome(next); setNotice(""); }} photos={homePhotos} onPhotos={(next) => { setHomePhotos(next); setNotice(""); }} versions={initial.homePhotos} disabled={demo} />
+
                 <AdminPanel title="Portada" icon="image" meta="Dos archivos separados · JPG, PNG o WebP · máximo 2 MB cada uno">
                   <div className="admin-settings">
                     {COVER_KINDS.map((kind) => {
@@ -325,12 +357,12 @@ export function AparienciaSettings() {
                           <div className="admin-cover-frame" data-kind={kind} style={{ aspectRatio: `${spec.width} / ${spec.height}` }}>
                             {src ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={src} alt={`Vista previa de la ${spec.label.toLowerCase()} con su recorte`} />
+                              <img src={src} alt={`Vista previa de la ${spec.label.toLowerCase()} centrada en el formato recomendado`} />
                             ) : (
                               <span>Sin portada: se usa el encabezado simple</span>
                             )}
                           </div>
-                          {dims ? <p className="admin-field-hint">Tu imagen mide {dims.width} × {dims.height} px{ratioOff ? ` y no tiene la proporción recomendada: se recorta como ves arriba.` : "."}{dims.width < spec.width * 0.6 ? " Es más chica que la recomendada y puede verse borrosa." : ""}</p> : null}
+                          {dims ? <p className="admin-field-hint">Tu imagen mide {dims.width} × {dims.height} px{ratioOff ? ` y no tiene la proporción recomendada: se centra para ocupar el formato de portada.` : "."}{dims.width < spec.width * 0.6 ? " Es más chica que la recomendada y puede verse borrosa." : ""}</p> : null}
                           {src ? (
                             <AdminButton type="button" icon="trash" disabled={demo} onClick={() => setCovers((current) => ({ ...current, [kind]: { ...EMPTY_COVER, remove: true } }))}>
                               Quitar {spec.label.toLowerCase()}
@@ -345,14 +377,13 @@ export function AparienciaSettings() {
 
               <AdminPanel title="Vista previa en vivo" icon="eye" meta="Con datos de ejemplo; todavía no está publicada">
                 <div className="admin-settings">
-                  <SegmentedField
-                    ariaLabel="Dispositivo de la vista previa"
-                    value={frame}
-                    onChange={(value) => setFrame(value as "desktop" | "mobile")}
-                    options={[{ value: "desktop", label: "Escritorio" }, { value: "mobile", label: "Celular" }]}
-                  />
-                  <StorePreview frame={frame} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverSrc={previewCover} tagline={tagline.trim() || null} />
-                  {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si no tiene portada de {frame === "desktop" ? "escritorio" : "celular"}, usa la otra.</p> : null}
+                  {(["desktop", "mobile"] as const).map((device) => (
+                    <section key={device} className="admin-settings" aria-label={`Vista previa en ${device === "desktop" ? "computadora" : "celular"}`}>
+                      <h3>{device === "desktop" ? "Computadora · 1920 × 600" : "Celular · 1080 × 1350"}</h3>
+                      <StorePreview frame={device} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
+                    </section>
+                  ))}
+                  {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si falta una portada, usa la otra centrada.</p> : null}
                 </div>
               </AdminPanel>
             </div>

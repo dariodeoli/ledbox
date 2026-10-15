@@ -2,45 +2,53 @@
 
 import "../../../app/tienda.css";
 import { appearanceView, type Appearance } from "@/lib/appearance";
-import { THEMES } from "@/lib/storefront-templates";
 import { categoryDatum, formatGs, priceUnitLabel } from "@/lib/storefront-ui";
 import { ProductPlaceholder, XIcon } from "../../catalog-public/StoreIcons";
 import { StoreChrome } from "../../catalog-public/StoreChrome";
 
+/** Datos ficticios de cada rubro, únicamente para distinguir las plantillas en Apariencia. */
+const PREVIEW_EXAMPLES: Record<string, { categories: string[]; products: string[] }> = {
+  boutique: { categories: ["Ceremonia", "Recepción"], products: ["Arco de boda de ejemplo", "Mesa de novios de ejemplo"] },
+  escenario: { categories: ["Sonido", "Iluminación"], products: ["Sistema de sonido de ejemplo", "Cabezal móvil de ejemplo"] },
+  corporativo: { categories: ["Conferencias", "Stands"], products: ["Atril de ejemplo", "Stand modular de ejemplo"] },
+  industrial: { categories: ["Estructuras", "Generadores"], products: ["Carpa de ejemplo", "Generador de ejemplo"] },
+  gourmet: { categories: ["Vajilla", "Catering"], products: ["Juego de platos de ejemplo", "Chafing de ejemplo"] },
+  kids: { categories: ["Juegos", "Mobiliario infantil"], products: ["Inflable de ejemplo", "Mesa infantil de ejemplo"] },
+  fiesta: { categories: ["Fiestas", "Pista y barras"], products: ["Barra de ejemplo", "Pista de baile de ejemplo"] },
+};
+
 /**
  * Vista previa en vivo de la tienda con la apariencia que se está editando (antes de guardar). Usa **las mismas clases y
  * tokens CSS** que la tienda real (`.cp-*`, `--color-*`…): plantilla, color primario, tipografía de títulos, barra de anuncio,
- * frase y modo de precio. El contenido es de ejemplo y está rotulado. Con `size="thumb"` es la miniatura de la tarjeta de
- * plantilla (la misma página, reducida): se ve exactamente lo que el cliente va a ver.
+ * frase y modo de precio. El contenido es de ejemplo y está rotulado; el ancho se adapta al panel sin recortar sus precios ni controles.
  */
 export function StorePreview({
   frame,
   appearance,
   brandColor,
   name,
-  coverSrc,
+  coverDesktop,
+  coverMobile,
   tagline,
-  size = "full",
 }: {
   frame: "desktop" | "mobile";
   appearance: Appearance;
   brandColor: string | null;
   name: string;
-  coverSrc: string | null;
+  coverDesktop?: string | null;
+  coverMobile?: string | null;
   tagline?: string | null;
-  size?: "full" | "thumb";
 }) {
   const view = appearanceView(appearance, brandColor);
-  const layout = THEMES[appearance.template].layout;
   const shownName = name || "Tu empresa";
-  const photoHero = layout.hero === "photo" && Boolean(coverSrc);
+  const mobile = frame === "mobile";
+  const cover = mobile ? (coverMobile ?? coverDesktop ?? null) : (coverDesktop ?? coverMobile ?? null);
+  const photoHero = Boolean(cover);
   const showPrices = appearance.priceMode !== "quote";
-  const mobile = frame === "mobile" || size === "thumb";
   const unitText = priceUnitLabel(appearance.priceMode, "PER_DAY", null);
-  const examples = [
-    { name: "Producto de ejemplo", price: 250000, capacity: "8 personas" },
-    { name: "Otro producto de ejemplo", price: 120000, capacity: null },
-  ];
+  // Solo ejemplos rotulados del selector: elegir plantilla nunca modifica el catálogo real de la empresa.
+  const niche = PREVIEW_EXAMPLES[appearance.template] ?? PREVIEW_EXAMPLES.boutique;
+  const examples = niche.products.map((name, index) => ({ name, price: index === 0 ? 250000 : 120000 }));
   const body = (
     <StoreChrome appearance={view}>
       <div className="cp-hd" aria-hidden="true">
@@ -56,11 +64,11 @@ export function StorePreview({
         </div>
       </div>
       <div className="cp-page">
-        <section className="cp-hero" data-cover={coverSrc ? "yes" : "no"}>
-          {coverSrc ? (
+        <section className="cp-hero" data-cover={cover ? "yes" : "no"}>
+          {cover ? (
             <div className="cp-hero-media">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverSrc} alt="" />
+              <img src={cover} alt="" />
             </div>
           ) : null}
           <div className="cp-hero-inner">
@@ -77,7 +85,7 @@ export function StorePreview({
         </section>
         <div className="cp-container cp-preview-body">
           <div className="cp-catgrid">
-            {["Categoría de ejemplo", "Otra categoría"].map((label) => (
+            {niche.categories.map((label) => (
               <span className="cp-catcard" key={label}>
                 <span className="cp-catcard-media"><ProductPlaceholder size={36} /></span>
                 <span className="cp-catcard-body">
@@ -92,7 +100,6 @@ export function StorePreview({
               <li className="cp-tile" key={example.name}>
                 <div className="cp-tile-media">
                   <ProductPlaceholder />
-                  {example.capacity ? <span className="cp-tile-badge"><XIcon name="users" size={14} />{example.capacity}</span> : null}
                 </div>
                 <div className="cp-tile-body">
                   <p className="cp-tile-meta">COD #101 · Ejemplo</p>
@@ -111,13 +118,6 @@ export function StorePreview({
       </div>
     </StoreChrome>
   );
-  if (size === "thumb") {
-    return (
-      <div className="cp-root cp-thumb" data-testid={`store-thumb-${appearance.template}`} aria-hidden="true" inert>
-        <div className="cp-thumb-scale">{body}</div>
-      </div>
-    );
-  }
   return (
     <div className="cp-root cp-preview" data-frame={mobile ? "mobile" : "desktop"} data-testid={`store-preview-${frame}`} role="img" aria-label={`Vista previa de la tienda en ${frame === "desktop" ? "escritorio" : "celular"}, con datos de ejemplo`}>
       {body}

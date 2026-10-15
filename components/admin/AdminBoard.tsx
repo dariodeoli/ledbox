@@ -46,7 +46,7 @@ function viewFromParam(value: string | null): AdminModuleView | null {
 }
 
 /**
- * Vista recordada por usuario y módulo (`localStorage`); por defecto, lista.
+ * Vista recordada por usuario y módulo (`localStorage`); por defecto, lista (o `fallback`, la vista inicial cuando todavía no hay una guardada).
  * `views` acota lo que el módulo ofrece (`["list","grid"]` para la cuadrícula);
  * pasá una constante estable del módulo. Un `?vista=` en la URL manda sobre lo
  * recordado (issue #56) y una vista guardada que el módulo ya no ofrece se
@@ -55,8 +55,9 @@ function viewFromParam(value: string | null): AdminModuleView | null {
 export function useAdminModuleView(
   module: string,
   views: readonly AdminModuleView[] = DEFAULT_MODULE_VIEWS,
+  fallback: AdminModuleView = "list",
 ): [AdminModuleView, (view: AdminModuleView) => void] {
-  const [view, setView] = useState<AdminModuleView>("list");
+  const [view, setView] = useState<AdminModuleView>(fallback);
   const viewsKey = views.join("|");
 
   useEffect(() => {

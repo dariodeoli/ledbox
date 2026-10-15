@@ -1,6 +1,7 @@
 import { readAppearance } from "@/lib/appearance";
 import { db } from "@/lib/server/db";
 import { readJson } from "@/lib/server/http";
+import { loadHomePhotoVersions } from "@/lib/server/home-photos";
 import { loadCoverVersions, saveOrgAppearance } from "@/lib/server/org-presentation";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -20,12 +21,13 @@ export async function GET() {
   const auth = await requireAdminContext("org.manage");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const [row, settings, covers] = await Promise.all([
+  const [row, settings, covers, homePhotos] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId }, select: { appearance: true, slug: true } }),
     db.organizationRentalSettings.findUnique({ where: { organizationId }, select: { storefrontAccent: true, storefrontTagline: true } }),
     loadCoverVersions(organizationId),
+    loadHomePhotoVersions(organizationId),
   ]);
-  return Response.json({ appearance: readAppearance(row?.appearance), brandColor: settings?.storefrontAccent ?? null, tagline: settings?.storefrontTagline ?? null, covers, slug: row?.slug ?? null });
+  return Response.json({ appearance: readAppearance(row?.appearance), brandColor: settings?.storefrontAccent ?? null, tagline: settings?.storefrontTagline ?? null, covers, homePhotos, slug: row?.slug ?? null });
 }
 
 export async function PATCH(request: Request) {

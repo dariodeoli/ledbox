@@ -1,5 +1,5 @@
 /** Iconos de línea (SVG) de la tienda. Decorativos: el dato siempre va escrito al lado. */
-export type XIconName = "users" | "ruler" | "puzzle" | "tag" | "cart" | "close" | "box" | "search" | "check" | "plus" | "minus" | "bag" | "alert";
+export type XIconName = "users" | "ruler" | "puzzle" | "tag" | "cart" | "close" | "box" | "search" | "check" | "plus" | "minus" | "bag" | "alert" | "prev" | "next" | "filter";
 
 const PATHS: Record<XIconName, string> = {
   users: "M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 5.2a3 3 0 0 1 0 5.6",
@@ -14,6 +14,9 @@ const PATHS: Record<XIconName, string> = {
   plus: "M12 5v14M5 12h14",
   minus: "M5 12h14",
   bag: "M6 8h12l1 12H5zM9 8V6a3 3 0 0 1 6 0v2",
+  prev: "M15 5l-7 7 7 7",
+  next: "M9 5l7 7-7 7",
+  filter: "M4 6h16M7 12h10M10 18h4",
   alert: "M12 8v5M12 16.5h.01M10.3 4.2 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z",
 };
 

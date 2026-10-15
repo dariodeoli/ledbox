@@ -34,7 +34,7 @@ test("migración 202610300001_tienda_temas: reescribe solo la plantilla vieja, c
     const first = await snapshot();
     for (const [legacy, id] of rows) {
       const stored = JSON.parse(first[id]) as Record<string, unknown>;
-      assert.equal(stored.template, LEGACY_TEMPLATE_MAP[legacy], `${legacy} → ${LEGACY_TEMPLATE_MAP[legacy]}`);
+      assert.equal(readAppearance(stored).template, LEGACY_TEMPLATE_MAP[legacy], `${legacy} → ${LEGACY_TEMPLATE_MAP[legacy]}`);
       assert.equal(stored.font, "inter", "las demás claves se conservan");
       assert.equal(readAppearance(stored).template, LEGACY_TEMPLATE_MAP[legacy]);
     }

@@ -4,12 +4,13 @@ import { jsonError } from "@/lib/server/http";
 import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { canImportCatalog } from "@/lib/admin-policy";
-import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
+import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogCollection, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
 import { claimImportLote, readBodyLimited, settleImportLote } from "@/lib/server/import-lote";
 import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
 import { ImportZipError, readPhotoZip } from "@/lib/server/import-photos";
 import { applyCatalog, previewCatalog, type ImportInput } from "@/lib/server/import-catalog";
+import { importarEventos } from "@/lib/server/import-eventos-http";
 import { analizarImportacion } from "@/lib/server/import-ia";
 import { cuotaArchivosOk, salidaPermitida } from "@/lib/server/demo-sandbox";
 import { IaError, iaConfig, iaProviderDeConfig } from "@/lib/server/ia-carga";
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
  *   normalizado (`catalogo`) y la misma vista previa; `apply` recibe ese
  *   `catalogo` (lo que se vio es lo que se aplica) y el mismo `zip`.
  *
- * Solo OWNER y ADMIN con `inventory.write`. Todo acotado a la empresa activa.
+ * Solo OWNER y ADMIN con la capacidad del módulo (`inventory.write`; `events.write` en eventos). Todo acotado a la empresa activa.
  */
 
 const TOTAL_BODY_MAX = CATALOG_LIMITS.zipBytes + CATALOG_LIMITS.jsonBytes + CATALOG_LIMITS.sheetBytes + 1024 * 1024;
@@ -86,7 +87,7 @@ const textOf = (form: FormData, key: string): string => {
   return typeof value === "string" ? value : "";
 };
 
-type Source = { ok: true; products: CatalogProduct[]; categories: CatalogCategory[]; problems: ImportProblem[]; empresa: string | null } | { ok: false; response: Response };
+type Source = { ok: true; products: CatalogProduct[]; categories: CatalogCategory[]; collections: CatalogCollection[]; problems: ImportProblem[]; empresa: string | null } | { ok: false; response: Response };
 
 async function readSource(module: ImportModule, form: FormData, accion: string, context: { demo: boolean; organizationId: string }): Promise<Source> {
   const fail = (message: string, status = 400, code?: string): Source => ({ ok: false, response: jsonError(message, status, code) });
@@ -104,7 +105,7 @@ async function readSource(module: ImportModule, form: FormData, accion: string, 
     if (file.size > CATALOG_LIMITS.jsonBytes) return fail("El JSON supera los 2 MB.", 413);
     const parsed = parseCatalogJson(await file.text());
     if (!parsed.ok) return fail(parsed.error);
-    return { ok: true, products: parsed.value.doc.productos, categories: parsed.value.doc.categorias, problems: parsed.value.problems, empresa: parsed.value.doc.empresa };
+    return { ok: true, products: parsed.value.doc.productos, categories: parsed.value.doc.categorias, collections: parsed.value.doc.colecciones, problems: parsed.value.problems, empresa: parsed.value.doc.empresa };
   } else if (fuente === "planilla") {
     const file = fileOf(form, "planilla");
     if (!file) return fail("Elegí la planilla (.xlsx o .csv).");
@@ -133,7 +134,7 @@ async function readSource(module: ImportModule, form: FormData, accion: string, 
   }
   const normalized = normalizeCatalog(raw);
   if (!normalized.ok) return fail(normalized.error);
-  return { ok: true, products: normalized.value.doc.productos, categories: normalized.value.doc.categorias, problems: normalized.value.problems, empresa: normalized.value.doc.empresa };
+  return { ok: true, products: normalized.value.doc.productos, categories: normalized.value.doc.categorias, collections: normalized.value.doc.colecciones, problems: normalized.value.problems, empresa: normalized.value.doc.empresa };
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ modulo: string }> }) {
@@ -159,6 +160,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   const limited = await rateLimit(accion === "apply" ? `import-aplicar:${organizationId}` : `import-vista:${organizationId}`, accion === "apply" ? CATALOG_LIMITS.applyRate : CATALOG_LIMITS.previewRate);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
+  // Eventos con productos: validación y aplicación propias (lib/server/import-eventos*.ts).
+  if (module.id === "eventos") return importarEventos(module, context, form, accion);
+
   const source = await readSource(module, form, accion, context);
   if (!source.ok) return source.response;
 
@@ -178,12 +182,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       throw error;
     }
   }
-  const input: ImportInput = { products: source.products, categories: source.categories, parseProblems: source.problems, photos, photoProblems };
+  const input: ImportInput = { products: source.products, categories: source.categories, collections: source.collections, parseProblems: source.problems, photos, photoProblems };
 
   if (accion === "preview") {
     const plan = await previewCatalog(organizationId, input);
     return Response.json({
-      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}) },
+      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
       estados:
@@ -197,6 +201,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         { clave: "juegos", etiqueta: "Juegos (combos)", valor: plan.summary.juegos },
         { clave: "fotos", etiqueta: "Fotos", valor: plan.summary.fotos },
         ...(plan.categories.length ? [{ clave: "fotosCategoria", etiqueta: "Fotos de categoría", valor: plan.summary.fotosCategoria }] : []),
+        ...(plan.summary.fotosExtra ? [{ clave: "fotosExtra", etiqueta: "Fotos extra de producto", valor: plan.summary.fotosExtra }] : []),
+        ...(plan.summary.colecciones ? [{ clave: "colecciones", etiqueta: "Colecciones", valor: plan.summary.colecciones }] : []),
+        ...(plan.summary.conEstilo ? [{ clave: "conEstilo", etiqueta: "Productos con estilo", valor: plan.summary.conEstilo }] : []),
         ...(plan.summary.incompletos ? [{ clave: "incompletos", etiqueta: "Juegos incompletos", valor: plan.summary.incompletos }] : []),
         ...(plan.summary.convertidos ? [{ clave: "convertidos", etiqueta: "Unidades que pasan a juego", valor: plan.summary.convertidos }] : []),
         { clave: "omitidos", etiqueta: "Se omiten", valor: plan.summary.omitidos },

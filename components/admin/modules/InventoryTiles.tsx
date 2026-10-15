@@ -35,10 +35,21 @@ function InventoryTile({ item, writable, rangeActive, selected, selectionFull, o
           <RowCheck checked={selected} disabled={selectionFull && !selected} label={`Seleccionar producto ${item.name}`} onToggle={() => onToggleBulk(item.id)} />
         </span>
       ) : null}
-      <button type="button" className="admin-inv-tile-open" title={`Abrir la ficha de ${item.name}`} aria-label={`Abrir la ficha de ${item.name}`} onClick={() => onOpen(item.id)}>
-        <InventoryThumb item={item} size={64} />
+      <button type="button" className="admin-inv-tile-open" title={`Abrir la ficha de ${item.name}`} aria-label={`Abrir la ficha de ${item.name}`} onClick={(event) => {
+          // Ctrl/Cmd/Shift-clic: suma o quita de la selección sin abrir la ficha.
+          if (writable && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+            if (!selectionFull || selected) onToggleBulk(item.id);
+            return;
+          }
+          onOpen(item.id);
+        }}>
+        <span className="admin-inv-tile-head">
+        <InventoryThumb item={item} size={52} />
+        <span className="admin-inv-tile-text">
         <strong className="admin-inv-tile-name">{item.name}</strong>
         <small className="admin-code admin-inv-tile-code">{code}</small>
+        </span>
+        </span>
         <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} compact />
         {rangeActive || item.combo ? (
           <StockMeter summary={stockSummary(item, rangeActive)} combo={Boolean(item.combo)} />

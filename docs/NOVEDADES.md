@@ -648,3 +648,15 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Importar catálogo: ahora podés indicar cuántas unidades están en mantenimiento, dañadas o perdidas (columnas «En mantenimiento», «Dañadas» y «Perdidas»). Una planilla anterior sin esas columnas sigue valiendo.
 - La frase de la portada se edita solo en Ajustes → Apariencia (se quitó el campo repetido de Tienda web).
 - Buscador de fechas: el campo «Invitados» queda alineado con los demás.
+
+## v2.1.129 — 2026-10-15
+
+- Tienda: siete plantillas elegidas por rubro: Boutique (eventos, vajilla y decoración), Escenario (producción y sonido), Corporativo (empresas), Fiesta (eventos sociales), Gourmet (catering), Kids (infantil) e Industrial (carpas y estructuras). Se retiraron las anteriores del selector; las tiendas que las usaban pasan a una alternativa compatible.
+- Fotos de productos y categorías cuadradas, completas sobre fondo claro. Los nombres quedan debajo y el botón principal conserva un color legible en todas las plantillas.
+- Portadas separadas para computadora (1920 × 600) y celular (1080 × 1350), con vista previa de ambas en Apariencia y una alternativa centrada si falta un archivo.
+- Tienda más compacta: fechas, días, invitados, filtros y pedido alineados; cantidades y subtotales claros; aviso pequeño para guardar el carrito, sin tapar otras ventanas ni la confirmación de agregado.
+- Portal del cliente: selectores de cantidad y días compactos y alineados, montos ordenados, acciones con color, anclas que respetan el encabezado, resumen del presupuesto y contacto con WhatsApp, ubicación e Instagram.
+- Inventario más ágil y familias de variantes en el panel: agrupar productos, elegir opciones y administrar precios comunes o propios, conservando unidades y reservas.
+- Tienda con colecciones, galería de producto, etiquetas y filtros, destacados y orden de las secciones del inicio.
+- Importación de eventos con reservas: vista previa y aplicación desde JSON, planilla o IA. Reimportar no duplica; no se cambia la fecha de un evento reservado sin reprogramarlo antes desde Eventos.
+- Seguridad: protección de altas y agrupaciones simultáneas, aislamiento entre empresas y actualización de la lectura de archivos ZIP importados.
