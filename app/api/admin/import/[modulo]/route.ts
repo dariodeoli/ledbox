@@ -149,7 +149,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   if (!body.ok) return jsonError("Los archivos superan el tamaño permitido (JSON 2 MB, ZIP 60 MB).", 413);
   let form: FormData;
   try {
-    form = await new Response(body.bytes, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
+    form = await new Response(new Blob([body.bytes as BlobPart]), { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
   } catch {
     return jsonError("No pudimos leer los archivos enviados.", 400);
   }
