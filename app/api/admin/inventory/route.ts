@@ -792,24 +792,31 @@ export async function POST(request: Request) {
     if (unitCost === false) return jsonError("Ingresá un costo válido en guaraníes.", 400);
     const trace = await readInventoryTrace(body, { organizationId, allow: { warehouse: "unit", condition: true } });
     if (!trace.ok) return jsonError(trace.error, trace.status);
-    const created = await db.$transaction(async (tx) => {
-      // Más unidades = más capacidad; el lock del ítem serializa con las confirmaciones en curso.
-      await lockInventoryItems(tx, organizationId, [item.id]);
-      await createInventoryUnits(tx, {
-        organizationId,
-        inventoryId: item.id,
-        name: item.name,
-        quantity,
-        purchaseCost: unitCost ?? 0,
-        warehouseId: trace.values.warehouseId,
-        location: trace.values.location,
-        conditionScore: trace.values.conditionScore,
-        supplierId: trace.values.supplierId,
-        purchasedAt: trace.values.purchasedAt,
-        warrantyUntil: trace.values.warrantyUntil,
+    let created: { quantity: number };
+    try {
+      created = await db.$transaction(async (tx) => {
+        // Más unidades = más capacidad; el lock del ítem serializa con las confirmaciones en curso.
+        await lockInventoryItems(tx, organizationId, [item.id]);
+        await createInventoryUnits(tx, {
+          organizationId,
+          inventoryId: item.id,
+          name: item.name,
+          quantity,
+          purchaseCost: unitCost ?? 0,
+          warehouseId: trace.values.warehouseId,
+          location: trace.values.location,
+          conditionScore: trace.values.conditionScore,
+          supplierId: trace.values.supplierId,
+          purchasedAt: trace.values.purchasedAt,
+          warrantyUntil: trace.values.warrantyUntil,
+        });
+        return tx.inventoryItem.findFirstOrThrow({ where: { id: item.id }, select: { quantity: true } });
       });
-      return tx.inventoryItem.findFirstOrThrow({ where: { id: item.id }, select: { quantity: true } });
-    });
+    } catch (error) {
+      // Colisión de código de unidad (otra compra o alta en curso): se reintenta, no es un error del servidor.
+      if (isUniqueConstraintError(error)) return jsonError("Un código de unidad ya está en uso; reintentá la compra.", 409);
+      throw error;
+    }
     await recordAudit({
       context: auth.context,
       action: "create",
