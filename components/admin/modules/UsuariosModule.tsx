@@ -47,6 +47,10 @@ const ROLE_OPTIONS = [
 const ASSIGNABLE_ROLES = ["ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
 const ROLE_SELECT_OPTIONS = ASSIGNABLE_ROLES.map((value) => ({ value, label: adminRoleLabel(value) }));
+/** «Propietario» solo se ofrece si quien opera es OWNER (el servidor lo vuelve a exigir). */
+const OWNER_SELECT_OPTIONS = [...ROLE_SELECT_OPTIONS, { value: "OWNER", label: adminRoleLabel("OWNER") }];
+const OWNER_ROLE_HINT = "Propietario: puede todo, incluso borrar la empresa y gestionar otros propietarios.";
+const OWNER_CONFIRM_MESSAGE = "Propietario puede todo, incluso borrar la empresa y gestionar otros propietarios.";
 
 const EMPTY_FORM = { name: "", email: "", password: "", role: "VIEWER" };
 
@@ -86,6 +90,9 @@ export function UsuariosModule() {
   const [editError, setEditError] = useState("");
 
   const writable = canManageUsers(role);
+  const roleOptions = role === "OWNER" ? OWNER_SELECT_OPTIONS : ROLE_SELECT_OPTIONS;
+  /** Asignar Propietario pide confirmación (AdminConfirmDialog) antes de enviar. */
+  const [ownerConfirm, setOwnerConfirm] = useState<{ name: string; run: () => void } | null>(null);
   const createValidity = userFormValidity(form, "create");
   const editValidity = userFormValidity(editForm, "edit");
   const createFormId = useId();
@@ -117,11 +124,15 @@ export function UsuariosModule() {
     return user.role !== "OWNER" || role === "OWNER";
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(event?: React.FormEvent<HTMLFormElement>, ownerConfirmed = false) {
+    event?.preventDefault();
     if (!writable || busy) return;
     if (createValidity.error) {
       setFormError(createValidity.error);
+      return;
+    }
+    if (form.role === "OWNER" && !ownerConfirmed) {
+      setOwnerConfirm({ name: createValidity.name, run: () => void submit(undefined, true) });
       return;
     }
     setBusy(true);
@@ -200,6 +211,14 @@ export function UsuariosModule() {
     users.reload();
   }
 
+  function changeRole(user: AdminUserRow, value: string) {
+    if (value === "OWNER" && user.role !== "OWNER") {
+      setOwnerConfirm({ name: user.name, run: () => void patch(user, { role: value }) });
+      return;
+    }
+    void patch(user, { role: value });
+  }
+
   /** Usuario cuyo (des)activado espera confirmación (diálogo propio, nunca confirm() nativo). */
   const [toggleTarget, setToggleTarget] = useState<AdminUserRow | null>(null);
 
@@ -212,7 +231,7 @@ export function UsuariosModule() {
   // de rol del que sí puede editarlo vive entre los datos; las acciones, al pie.
   const userCards: AdminCardData[] = rows.map((user) => {
     const self = user.id === sessionUser?.id;
-    const roleEditable = writable && user.role !== "OWNER";
+    const roleEditable = writable && (user.role !== "OWNER" || (role === "OWNER" && !self));
     return {
       id: user.id,
       title: (
@@ -243,10 +262,10 @@ export function UsuariosModule() {
               className="admin-filter admin-filter--cell"
               value={user.role}
               disabled={rowBusy === user.id}
-              onChange={(value) => void patch(user, { role: value })}
+              onChange={(value) => changeRole(user, value)}
               label={`Rol de ${user.name}`}
               title={`Rol de ${user.name}`}
-              options={ROLE_SELECT_OPTIONS}
+              options={roleOptions}
             />
           ) : (
             <AdminBadge tone={statusTone(user.role)}>{adminRoleLabel(user.role)}</AdminBadge>
@@ -310,6 +329,22 @@ export function UsuariosModule() {
       {rowError ? <AdminNote tone="error">{rowError}</AdminNote> : null}
 
       {writable ? <InvitationsPanel /> : null}
+
+      {ownerConfirm ? (
+        <AdminConfirmDialog
+          title={`Dar el rol Propietario a ${ownerConfirm.name}`}
+          message={OWNER_CONFIRM_MESSAGE}
+          confirmLabel="Dar rol Propietario"
+          icon="lock"
+          danger
+          onConfirm={() => {
+            const target = ownerConfirm;
+            setOwnerConfirm(null);
+            target.run();
+          }}
+          onClose={() => setOwnerConfirm(null)}
+        />
+      ) : null}
 
       {toggleTarget ? (
         <AdminConfirmDialog
@@ -385,7 +420,8 @@ export function UsuariosModule() {
                 label="Rol"
                 value={form.role}
                 onChange={(value) => setForm({ ...form, role: value })}
-                options={ROLE_SELECT_OPTIONS}
+                options={roleOptions}
+                hint={form.role === "OWNER" ? OWNER_ROLE_HINT : undefined}
               />
             </AdminDialogSection>
           </form>
@@ -488,17 +524,17 @@ export function UsuariosModule() {
                 </AdminCell>
                 <AdminCell title={user.email}>{user.email}</AdminCell>
                 <AdminCell>
-                  {user.role === "OWNER" || !writable ? (
+                  {!writable || (user.role === "OWNER" && (role !== "OWNER" || user.id === sessionUser?.id)) ? (
                     <AdminBadge tone={statusTone(user.role)}>{adminRoleLabel(user.role)}</AdminBadge>
                   ) : (
                     <AdminSelect
                       className="admin-filter admin-filter--cell"
                       value={user.role}
                       disabled={rowBusy === user.id}
-                      onChange={(value) => void patch(user, { role: value })}
+                      onChange={(value) => changeRole(user, value)}
                       label={`Rol de ${user.name}`}
                       title={`Rol de ${user.name}`}
-                      options={ROLE_SELECT_OPTIONS}
+                      options={roleOptions}
                     />
                   )}
                 </AdminCell>
@@ -564,12 +600,15 @@ function inviteDeliveryNotice(status: string, error?: string | null): { tone: "o
 
 /** Diálogo del panel: correo + rol. Contrato común (foco, Escape, clic afuera). */
 function InviteDialog({
+  isOwner,
   busy,
   error,
   limitError,
   onClose,
   onSubmit,
 }: {
+  /** Solo un OWNER puede invitar como Propietario. */
+  isOwner: boolean;
   busy: boolean;
   error: string;
   /** El error es el tope del plan (issue #42): se muestra con el acceso a Plan. */
@@ -580,20 +619,26 @@ function InviteDialog({
   const formId = useId();
   const [invite, setInvite] = useState(EMPTY_INVITE);
   const [localError, setLocalError] = useState("");
+  const [confirmOwner, setConfirmOwner] = useState(false);
   const inviteValidity = invitationFormValidity(invite.email);
 
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submit(event?: React.FormEvent<HTMLFormElement>, ownerConfirmed = false) {
+    event?.preventDefault();
     if (busy) return;
     if (inviteValidity.error) {
       setLocalError(inviteValidity.error);
       return;
     }
     setLocalError("");
+    if (invite.role === "OWNER" && !ownerConfirmed) {
+      setConfirmOwner(true);
+      return;
+    }
     onSubmit({ email: inviteValidity.email, role: invite.role });
   }
 
   return (
+    <>
     <AdminDialog
       title="Invitar por correo"
       icon="mail"
@@ -633,12 +678,28 @@ function InviteDialog({
           label="Rol"
           value={invite.role}
           onChange={(value) => setInvite({ ...invite, role: value })}
-          options={ROLE_SELECT_OPTIONS}
-          hint="El propietario no se invita por correo."
+          options={isOwner ? OWNER_SELECT_OPTIONS : ROLE_SELECT_OPTIONS}
+          hint={invite.role === "OWNER" ? OWNER_ROLE_HINT : undefined}
         />
         </AdminDialogSection>
       </form>
+
     </AdminDialog>
+      {confirmOwner ? (
+        <AdminConfirmDialog
+          title={`Invitar a ${inviteValidity.email || "esta persona"} como Propietario`}
+          message={OWNER_CONFIRM_MESSAGE}
+          confirmLabel="Invitar como Propietario"
+          icon="lock"
+          danger
+          onConfirm={() => {
+            setConfirmOwner(false);
+            submit(undefined, true);
+          }}
+          onClose={() => setConfirmOwner(false)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -678,6 +739,7 @@ function RevokeInviteDialog({
  * fila lo dice y la invitación sigue guardada.
  */
 function InvitationsPanel() {
+  const { role: sessionRole } = useAdminSession();
   const compact = useAdminNarrowViewport();
   const invitations = useAdminResource("/api/admin/invitations", (payload) => payload.invitations ?? []);
   const [showInvite, setShowInvite] = useState(false);
@@ -844,6 +906,7 @@ function InvitationsPanel() {
 
       {showInvite ? (
         <InviteDialog
+          isOwner={sessionRole === "OWNER"}
           busy={inviteBusy}
           error={inviteError}
           limitError={inviteLimit}

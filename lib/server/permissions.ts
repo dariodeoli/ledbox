@@ -97,6 +97,16 @@ export const ADMIN_ROLES: readonly AdminRole[] = ["OWNER", "ADMIN", "FINANCE", "
 /** Roles que se pueden asignar desde el panel (OWNER solo nace del seed/backfill). */
 export const ASSIGNABLE_ROLES: readonly AdminRole[] = ["ADMIN", "FINANCE", "OPERATIONS", "VIEWER"];
 
+/** Roles que se pueden dar a una persona del equipo (alta, invitación, cambio de rol).
+ * OWNER solo lo asigna otro OWNER (`canAssignTeamRole`); las claves de servicio
+ * siguen usando `ASSIGNABLE_ROLES` y nunca son OWNER. */
+export const TEAM_ASSIGNABLE_ROLES: readonly AdminRole[] = ["OWNER", ...ASSIGNABLE_ROLES];
+
+/** Un ADMIN no puede otorgar Propietario: solo un OWNER. */
+export function canAssignTeamRole(actorRole: AdminRole, target: AdminRole): boolean {
+  return target !== "OWNER" || actorRole === "OWNER";
+}
+
 export function roleCan(role: AdminRole, capability: AdminCapability): boolean {
   return ROLE_CAPABILITIES[role].includes(capability);
 }

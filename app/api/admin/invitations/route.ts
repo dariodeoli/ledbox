@@ -13,7 +13,7 @@ import {
 } from "@/lib/server/invitations";
 import { buildInvitationMail, sendMail } from "@/lib/server/mail";
 import { planLimitViolation } from "@/lib/server/plan-limits";
-import { ASSIGNABLE_ROLES } from "@/lib/server/permissions";
+import { canAssignTeamRole, TEAM_ASSIGNABLE_ROLES } from "@/lib/server/permissions";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
 export const runtime = "nodejs";
@@ -30,12 +30,12 @@ export const dynamic = "force-dynamic";
  *   volver a invitar el mismo correo.
  *
  * Capacidad `users.manage`: solo OWNER/ADMIN invitan, y el rol debe estar entre
- * los asignables (`OWNER` nunca se invita, igual que el alta manual de usuarios).
+ * los asignables; `OWNER` solo lo puede invitar otro OWNER (403 para un ADMIN).
  * Todo queda auditado con el actor real de la sesión.
  */
 
 function isAssignableRole(value: unknown): value is AdminRole {
-  return typeof value === "string" && (ASSIGNABLE_ROLES as readonly string[]).includes(value);
+  return typeof value === "string" && (TEAM_ASSIGNABLE_ROLES as readonly string[]).includes(value);
 }
 
 /** Último correo de cada invitación, para no mostrar un envío viejo como vigente. */
@@ -74,16 +74,17 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
-  const { organizationId, organization, user: actor } = auth.context;
+  const { organizationId, organization, user: actor, role: actorRole } = auth.context;
 
   const body = (await readJson(request)) as Record<string, unknown>;
   const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   const invalidEmail = emailError(email);
   if (invalidEmail) return jsonError(invalidEmail, 400);
   if (!isAssignableRole(body.role)) {
-    return jsonError("Elegí un rol válido para la invitación (el propietario no se invita por correo).", 400);
+    return jsonError("Elegí un rol válido para la invitación.", 400);
   }
   const role = body.role;
+  if (!canAssignTeamRole(actorRole, role)) return jsonError("Solo un propietario puede invitar con el rol Propietario.", 403);
 
   // Límite del plan (issue #42): la invitación reserva un lugar del cupo de
   // usuarios, así el tope no se rompe al aceptarla.
