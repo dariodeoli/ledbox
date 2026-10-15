@@ -14,7 +14,7 @@ export function AccessPage({ store, demo, endpoint }: { store: PublicStorefront;
   return (
     <StoreChrome theme={store.theme} appearance={store.appearance}>
       <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={`/tienda/${encodeURIComponent(store.slug)}`} nav={[]} cart={null} />
-      <main className="cp-main cp-narrow">
+      <main className="cp-container cp-main-pad cp-narrow">
         {store.covers.desktop || store.covers.mobile ? (
           <picture className="cp-cover" data-testid="store-cover">
             {store.covers.mobile ? <source media="(max-width: 640px)" srcSet={store.covers.mobile} /> : null}
@@ -25,7 +25,7 @@ export function AccessPage({ store, demo, endpoint }: { store: PublicStorefront;
         <header className="cp-header">
           <p className="cp-eyebrow">Tienda de alquiler</p>
           <h1 className="cp-h1">{store.name}</h1>
-          {store.tagline ? <p className="cp-tagline">{store.tagline}</p> : null}
+          {store.tagline ? <p className="cp-hero-sub">{store.tagline}</p> : null}
         </header>
         <AccessGate mode={mode} organizationName={store.name} endpoint={endpoint} whatsappUrl={whatsapp} demo={demo} />
         {store.profile ? <section className="cp-card"><CompanyInfo profile={store.profile} /></section> : null}

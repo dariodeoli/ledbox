@@ -4,8 +4,8 @@ import { moveId, moveIdBefore, parseStorefrontOrder, sortStorefrontItems, sortVa
 import { EMPTY_STORE_CART, readLocalStoreCart, sanitizeStoreCart, serializeStoreCart, storeCartKey, writeLocalStoreCart } from "../lib/store-cart";
 import { parsePriceAmount, parsePriceRequest, parsePriceResponse } from "../lib/price-request";
 import { DEFAULT_APPEARANCE, FONTS, TEMPLATES, TEMPLATE_META, appearanceView, parseAppearance, readAppearance } from "../lib/appearance";
-import { contrastRatio, storefrontTheme } from "../lib/storefront-theme";
-import { EDITORIAL_BG, EDITORIAL_BRAND, editorialTheme } from "../lib/storefront-editorial";
+import { contrastRatio } from "../lib/storefront-theme";
+import { THEMES, themePrimary } from "../lib/storefront-templates";
 
 // ── Orden ───────────────────────────────────────────────────────────────────
 
@@ -130,45 +130,42 @@ test("mejor precio: la respuesta de la empresa exige lo que corresponde a cada a
   assert.equal(parsePriceResponse({ action: "borrar" }, request).ok, false);
 });
 
-// ── Plantilla editorial ─────────────────────────────────────────────────────
+// ── Plantilla Boutique (heredera de «Catálogo editorial») ───────────────────
 
-test("plantilla: «Catálogo editorial» es una plantilla más y la elige la empresa", () => {
-  assert.ok((TEMPLATES as readonly string[]).includes("editorial"));
-  assert.match(TEMPLATE_META.editorial.label, /editorial/i);
-  assert.equal(DEFAULT_APPEARANCE.template, "clasica");
-  const parsed = parseAppearance({ template: "editorial", font: "cormorant-garamond", script: true });
-  assert.ok(parsed.ok && parsed.appearance.template === "editorial" && parsed.appearance.script === true);
+test("plantilla: la editorial pasa a Boutique y la empresa elige entre las 4 plantillas nuevas", () => {
+  assert.ok((TEMPLATES as readonly string[]).includes("boutique"));
+  assert.match(TEMPLATE_META.boutique.label, /boutique/i);
+  assert.equal(DEFAULT_APPEARANCE.template, "lienzo");
+  assert.equal(readAppearance({ template: "editorial", font: "cormorant-garamond" }).template, "boutique", "alias de lectura");
+  const parsed = parseAppearance({ template: "boutique", font: "cormorant-garamond" });
+  assert.ok(parsed.ok && parsed.appearance.template === "boutique");
   assert.equal(parseAppearance({ template: "otra" }).ok, false);
-  assert.equal(parseAppearance({ script: "sí" }).ok, false);
 });
 
-test("plantilla: tipografías de lista cerrada (serif editorial y manuscrita)", () => {
+test("plantilla: tipografías de lista cerrada (serif de Boutique y de títulos)", () => {
   assert.ok(FONTS.some((font) => font.id === "cormorant-garamond"));
   assert.equal(parseAppearance({ font: "comic-sans" }).ok, false);
-  // Filas viejas sin `script` siguen leyéndose.
-  assert.equal(readAppearance({ template: "elegante", font: "inter" }).script, false);
+  assert.equal(readAppearance({ template: "elegante", font: "inter" }).template, "boutique");
 });
 
-test("plantilla: la vista editorial usa serif en títulos, activa el manuscrito y fondo crema", () => {
-  const view = appearanceView({ template: "editorial", font: "sistema", background: null, script: true });
-  assert.equal(view.attrs["data-cp-template"], "editorial");
-  assert.equal(view.attrs["data-cp-script"], "on");
-  assert.match(view.vars["--cp-font-head"], /Cormorant/);
-  assert.ok(view.fontHref?.includes("Cormorant"));
-  assert.ok(view.fontHref?.includes("family=Allura"));
-  const sinScript = appearanceView({ template: "editorial", font: "sistema", background: null, script: false });
-  assert.equal(sinScript.attrs["data-cp-script"], "off");
-  assert.ok(!sinScript.fontHref?.includes("Allura"));
+test("plantilla: Boutique usa serif en títulos, la manuscrita decorativa y fondo crema", () => {
+  const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "boutique" });
+  assert.equal(view.attrs["data-store-theme"], "boutique");
+  assert.match(view.vars["--font-display"], /Cormorant/);
+  assert.ok(view.fontHref.includes("Cormorant") && view.fontHref.includes("Pinyon"));
+  assert.equal(view.vars["--color-bg"], "#F6F2EA");
+  const otros = appearanceView({ ...DEFAULT_APPEARANCE, template: "noir" });
+  assert.ok(!otros.fontHref.includes("Pinyon"));
 });
 
 test("plantilla: verde oliva por defecto con contraste AA sobre crema y blanco; la marca de la empresa manda", () => {
-  assert.ok(contrastRatio(EDITORIAL_BRAND, EDITORIAL_BG) >= 4.5, "oliva sobre crema");
-  assert.ok(contrastRatio(EDITORIAL_BRAND, "#ffffff") >= 4.5, "oliva sobre blanco");
-  const sinMarca = editorialTheme(storefrontTheme(null));
-  assert.equal(sinMarca.light.accent, EDITORIAL_BRAND);
-  assert.ok(contrastRatio(sinMarca.light.on, sinMarca.light.accent) >= 4.5, "texto de la etiqueta de precio");
-  const conMarca = storefrontTheme("#0b5cd5");
-  assert.equal(editorialTheme(conMarca).light.accent, "#0b5cd5");
+  const { colors } = THEMES.boutique;
+  assert.ok(contrastRatio(colors.primary, colors.bg) >= 4.5, "oliva sobre crema");
+  assert.ok(contrastRatio(colors.primary, "#ffffff") >= 4.5, "oliva sobre blanco");
+  const sinMarca = themePrimary("boutique", null);
+  assert.equal(sinMarca.primary, colors.primary);
+  assert.ok(contrastRatio(sinMarca.onPrimary, sinMarca.primary) >= 4.5, "texto del botón");
+  assert.equal(themePrimary("boutique", "#0b5cd5").primary, "#0b5cd5");
 });
 
 // ── Contacto del visitante y sugeridos de la ficha ──────────────────────────

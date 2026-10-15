@@ -187,7 +187,7 @@ test("Ajustes tiene la sección «Tienda web» con Crear tienda, copiar link, fr
   const settings = read("components/admin/modules/TiendaWebSettings.tsx");
   for (const text of ["Crear tienda", "Copiar link", "Frase de la portada", "Acceso al catálogo", "Tienda encendida", "Mostrar precios", "WhatsApp de la empresa"]) assert.ok(settings.includes(text), text);
   assert.equal(settings.includes('label="Color de marca"'), false, "el color de marca no se duplica: vive en Ajustes → Apariencia");
-  assert.match(read("components/admin/modules/AparienciaSettings.tsx"), /title="Color de marca"/);
+  assert.match(read("components/admin/modules/AparienciaSettings.tsx"), /label="Color de marca \(botones y enlaces\)"/);
   assert.match(read("lib/admin-policy.ts"), /"\/ajustes\/tienda": \["OWNER", "ADMIN"\]/);
   assert.match(read("lib/admin-routes.ts"), /"\/ajustes\/tienda"/);
   assert.equal(/publicCatalogEnabled/.test(read("components/admin/modules/AlquileresSettings.tsx")), false, "Alquileres ya no lleva el catálogo");
@@ -195,12 +195,14 @@ test("Ajustes tiene la sección «Tienda web» con Crear tienda, copiar link, fr
 
 test("la portada de la tienda tiene sus secciones y no copia la marca de LedBox", () => {
   const front = read("components/catalog-public/StoreFront.tsx");
-  for (const text of ["Cómo funciona", "Categorías", "Contacto", "Ver catálogo", "Elegí tus equipos"]) assert.ok(front.includes(text) || read("components/catalog-public/CatalogBrowser.tsx").includes(text), text);
+  for (const text of ["Cómo funciona", "Categorías", "Contacto", "Ver catálogo", "Elegí tus productos"]) assert.ok(front.includes(text) || read("components/catalog-public/CatalogBrowser.tsx").includes(text), text);
   assert.equal((front.match(/<li key=\{step\.title\}/g) ?? []).length, 1);
   assert.match(front, /const STEPS = \[/);
   assert.equal(/ledbox/i.test(front.replace(/\/\*[\s\S]*?\*\//g, "")), false, "ninguna marca de LedBox en la tienda de la empresa");
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
-  assert.match(browser, /className="cp-bar"/);
-  assert.match(browser, /className="cp-cats"/);
-  assert.match(browser, /type="search"/);
+  assert.match(browser, /<OrderBar/);
+  assert.match(read("components/catalog-public/OrderBar.tsx"), /className="cp-bar"/);
+  assert.match(browser, /<FilterBar/);
+  assert.match(read("components/catalog-public/FilterBar.tsx"), /cp-filter-chips/);
+  assert.match(read("components/catalog-public/FilterBar.tsx"), /type="search"/);
 });

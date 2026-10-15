@@ -13,7 +13,7 @@ import {
  * Perfil de la empresa para el público, en tarjetas con icono: ubicación con «Cómo llegar», teléfonos uno por línea con
  * botón para llamar, WhatsApp destacado con el color de marca, correo, web e Instagram, horarios en tabla, entrega/retiro,
  * medios de pago como chips y condiciones en un bloque plegable. Solo dibuja lo que la empresa cargó: nada se inventa.
- * Todo con tokens de la plantilla (`--cp-*`). Componente de servidor.
+ * Todo con los tokens del tema. Componente de servidor.
  */
 
 type IconName = "pin" | "phone" | "clock" | "truck" | "card" | "doc" | "mail" | "chat" | "globe" | "instagram";
@@ -58,8 +58,8 @@ export function CompanyInfo({ profile, headingId = "empresa-info", whatsapp: wha
   const mail = email ?? contact.email;
   const online = Boolean(mail || contact.website || contact.instagram);
   return (
-    <div className="cp-info" role="group" aria-labelledby={headingId}>
-      <h3 id={headingId} className="cp-h3 cp-h3--plain">Sobre la empresa</h3>
+    <div className="cp-company" role="group" aria-labelledby={headingId}>
+      <h3 id={headingId} className="cp-h3">Sobre la empresa</h3>
       <div className="cp-icards">
         {wa || phones.length > 0 || online ? (
           <InfoCard icon="chat" title="Escribinos o llamanos">
@@ -115,7 +115,7 @@ export function CompanyInfo({ profile, headingId = "empresa-info", whatsapp: wha
         {methods.length > 0 ? (
           <InfoCard icon="card" title="Medios de pago">
             <ul className="cp-plain cp-chips">
-              {methods.map((method) => <li key={method} className="cp-x-chip">{method}</li>)}
+              {methods.map((method) => <li key={method} className="cp-chip cp-chip--muted">{method}</li>)}
             </ul>
           </InfoCard>
         ) : null}

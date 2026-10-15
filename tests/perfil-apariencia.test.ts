@@ -5,15 +5,14 @@ import {
   COVER_ASPECT,
   COVER_MAX_BYTES,
   COVER_SPEC,
+  DEFAULT_APPEARANCE,
   FONTS,
   TEMPLATES,
   adjustBrandColor,
   appearanceView,
   checkCoverFile,
   googleFontHref,
-  mutedOn,
   parseAppearance,
-  parseBackground,
   readAppearance,
   sniffImageMime,
 } from "../lib/appearance";
@@ -191,55 +190,46 @@ test("color de marca: pasa si ya cumple AA; si no, se oscurece lo mínimo, llega
   assert.equal(adjustBrandColor("#12").ok, false);
 });
 
-test("color de marca con fondo propio: también se verifica contra ese fondo", () => {
-  const beige = "#f6f1e8";
-  const result = adjustBrandColor("#a67c52", { background: beige });
-  assert.ok(result.ok && result.result);
-  if (result.ok && result.result) {
-    assert.ok(contrastRatio(result.result.color, "#ffffff") >= 4.5);
-    assert.ok(contrastRatio(result.result.color, beige) >= 4.5);
-  }
-  // El tema deriva el tono oscuro aclarando hasta AA sobre la superficie oscura.
+test("color de marca: el tema oscuro del portal se deriva aclarando hasta AA sobre la superficie oscura", () => {
+  // (El fondo propio de la tienda se retiró con las 4 plantillas nuevas: cada una trae su fondo.)
   const theme = storefrontTheme("#0b5cd5");
   assert.equal(theme.branded, true);
   assert.ok(contrastRatio(theme.dark.accent, "#171b20") >= 4.5);
 });
 
-test("fondo propio: solo claro (contraste ≥ 7:1 con el texto) y el texto secundario mantiene AA", () => {
-  assert.deepEqual(parseBackground(""), { ok: true, background: null });
-  assert.deepEqual(parseBackground("#F6F1E8"), { ok: true, background: "#f6f1e8" });
-  for (const bad of ["#0e1114", "#444444", "azul", "#777"]) assert.equal(parseBackground(bad).ok, false, bad);
-  for (const bg of ["#f6f1e8", "#ffffff", "#e8f0fe"]) assert.ok(contrastRatio(mutedOn(bg), bg) >= 4.5, bg);
-});
-
 // ── Apariencia ───────────────────────────────────────────────────────────────
 
-test("apariencia: plantilla y tipografía de listas cerradas; lo demás se rechaza", () => {
-  assert.deepEqual([...TEMPLATES], ["clasica", "minimalista", "elegante", "oscura", "editorial", "tecnologica", "boutique", "noche", "fresca", "minimal"]);
-  const ok = parseAppearance({ template: "elegante", font: "playfair-display", background: "#f6f1e8" });
-  assert.deepEqual(ok, { ok: true, appearance: { template: "elegante", font: "playfair-display", background: "#f6f1e8", script: false } });
+test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; lo demás se rechaza", () => {
+  assert.deepEqual([...TEMPLATES], ["lienzo", "boutique", "noir", "studio"]);
+  const ok = parseAppearance({ template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "  Envíos   a todo Asunción " }, priceMode: "unit" });
+  assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit" } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);
+  assert.equal(parseAppearance({ template: "clasica" }).ok, false, "los nombres viejos solo se leen de la base, no se aceptan del panel");
   assert.equal(parseAppearance({ font: "Comic Sans" }).ok, false);
+  assert.equal(parseAppearance({ displayFont: "Comic Sans" }).ok, false);
+  assert.equal(parseAppearance({ priceMode: "gratis" }).ok, false);
+  assert.equal(parseAppearance({ announcement: { on: true, text: "" } }).ok, false, "encendida exige texto");
+  assert.equal(parseAppearance({ announcement: { on: false, text: "x".repeat(141) } }).ok, false);
   assert.equal(parseAppearance({ template: "<style>x</style>" }).ok, false, "nada de CSS libre");
-  assert.deepEqual(readAppearance("basura"), { template: "clasica", font: "sistema", background: null, script: false });
+  assert.deepEqual(readAppearance("basura"), DEFAULT_APPEARANCE);
   // Los campos ausentes mantienen lo actual.
-  assert.deepEqual(parseAppearance({ font: "inter" }, { template: "oscura", font: "sistema", background: null, script: false }), { ok: true, appearance: { template: "oscura", font: "inter", background: null, script: false } });
+  const current = { ...DEFAULT_APPEARANCE, template: "noir" as const };
+  assert.deepEqual(parseAppearance({ font: "inter" }, current), { ok: true, appearance: { ...current, font: "inter" } });
+  // Lo guardado por versiones anteriores (fondo propio, acento manuscrito, plantillas viejas) se lee sin romper.
+  assert.deepEqual(readAppearance({ template: "oscura", font: "inter", background: "#f6f1e8", script: true }), { ...DEFAULT_APPEARANCE, template: "noir", font: "inter" });
 });
 
 test("apariencia: solo tokens CSS (variables y data-*) y fuentes de Google desde una lista cerrada", () => {
-  const view = appearanceView({ template: "elegante", font: "playfair-display", background: "#f6f1e8", script: false });
-  assert.equal(view.attrs["data-cp-template"], "elegante");
-  assert.equal(view.attrs["data-cp-bg"], "custom");
-  assert.ok(Object.keys(view.vars).every((key) => key.startsWith("--cp-")), "solo variables --cp-*");
-  assert.match(view.fontHref ?? "", /^https:\/\/fonts\.googleapis\.com\/css2\?family=Playfair\+Display/);
+  const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "boutique", font: "playfair-display" });
+  assert.equal(view.attrs["data-store-theme"], "boutique");
+  assert.ok(Object.keys(view.vars).every((key) => key.startsWith("--")), "solo variables CSS");
+  assert.ok(!Object.keys(view.vars).some((key) => key.startsWith("--cp-")), "sin el sistema viejo --cp-*");
+  assert.match(view.fontHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Cormorant\+Garamond/);
   assert.equal(googleFontHref("sistema"), null);
   assert.equal(googleFontHref("no-existe"), null);
   for (const font of FONTS) if (font.google) assert.match(googleFontHref(font.id)!, /^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;@=.]+&display=swap$/);
-  // La plantilla oscura ignora el fondo claro.
-  assert.equal(appearanceView({ template: "oscura", font: "sistema", background: "#f6f1e8", script: false }).attrs["data-cp-bg"], "default");
-  // Las plantillas existen en la hoja de estilos (o son la base).
-  const css = read("app/globals.css");
-  for (const id of ["minimalista", "elegante", "oscura", "editorial"]) assert.ok(css.includes(`.cp-theme[data-cp-template="${id}"]`), id);
+  assert.equal(appearanceView({ ...DEFAULT_APPEARANCE, announcement: { on: true, text: "Hola" } }).announcement, "Hola");
+  assert.equal(appearanceView({ ...DEFAULT_APPEARANCE, announcement: { on: false, text: "Hola" } }).announcement, null);
 });
 
 // ── Portada ──────────────────────────────────────────────────────────────────

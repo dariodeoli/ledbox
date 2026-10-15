@@ -1,30 +1,25 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { AppearanceView } from "@/lib/appearance";
-import { editorialTheme } from "@/lib/storefront-editorial";
-import { designTemplateTheme, isDesignTemplate } from "@/lib/storefront-templates";
-import { storefrontThemeVars, type StorefrontTheme } from "@/lib/storefront-theme";
+import { DEFAULT_APPEARANCE, appearanceView, type AppearanceView } from "@/lib/appearance";
+import type { StorefrontTheme } from "@/lib/storefront-theme";
 
 /**
- * Contenedor de toda superficie pública de la empresa (tienda, seguimiento, acceso): aplica el
- * color de marca, la plantilla (atributo `data-cp-template`, solo tokens CSS) y la tipografía
- * elegida (hoja de Google Fonts de una lista cerrada). Componente de servidor.
+ * Contenedor de toda superficie pública de la empresa (tienda, ficha, seguimiento, acceso): pone los tokens del tema
+ * (`--color-*`, `--font-*`, `--radius-*`…) y sus variantes de layout (`data-*`) calculados en `lib/appearance.ts`, enlaza
+ * las tipografías (lista cerrada de Google Fonts) y dibuja la barra de anuncio si la empresa la encendió.
+ * `theme` ya no se usa (el color de marca entra por `appearance`); se acepta para no romper a quien lo pasa.
+ * Componente de servidor.
  */
-export function StoreChrome({ theme, appearance, children }: { theme: StorefrontTheme; appearance: AppearanceView | null; children: ReactNode }) {
-  // Plantilla editorial: sin color de marca rige el verde oliva; con color, manda el de la empresa.
-  // Plantillas de diseño: el color de marca manda solo si da contraste AA; si no, el acento de la plantilla.
-  const effective =
-    appearance?.template === "editorial" ? editorialTheme(theme)
-    : appearance && isDesignTemplate(appearance.template) ? designTemplateTheme(appearance.template, theme)
-    : theme;
-  const style = { ...storefrontThemeVars(effective), ...(appearance?.vars ?? {}) } as CSSProperties;
+export function StoreChrome({ appearance, children }: { theme?: StorefrontTheme; appearance: AppearanceView | null; children: ReactNode }) {
+  const view = appearance ?? appearanceView(DEFAULT_APPEARANCE);
   return (
-    <div className="cp-theme" style={style} {...(appearance?.attrs ?? {})}>
-      {appearance?.fontHref ? (
-        <>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link rel="stylesheet" href={appearance.fontHref} />
-        </>
+    <div className="cp-theme" style={view.vars as CSSProperties} {...view.attrs}>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link rel="stylesheet" href={view.fontHref} />
+      {view.announcement ? (
+        <div className="cp-announce" role="note" data-testid="store-announcement">
+          <p>{view.announcement}</p>
+        </div>
       ) : null}
       {children}
     </div>

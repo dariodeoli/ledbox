@@ -1,27 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   catalogLine,
   catalogTierHints,
   estimatedSubtotal,
-  formatDayKey,
   type AvailabilityHint,
   type CatalogPrice,
 } from "@/lib/catalog-public";
-import { deliveryExtraApplies, deliveryFee, deliveryRateText } from "@/lib/delivery-zones";
+import type { PriceMode } from "@/lib/appearance";
 import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tiers";
-import { PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
-import { parseVisitorContact, selfShareLinks } from "@/lib/store-contact";
 import { readLocalStoreCart, sanitizeStoreCart, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
-import type { CartLineView, CartView } from "@/lib/server/store-cart";
-import { CityField, DayField, EmailField, PhoneField, TextAreaField, TextField } from "@/components/admin/AdminFields";
+import type { CartView } from "@/lib/server/store-cart";
+import { MAX_QUANTITY, formatGs, priceUnitLabel, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { cardSpecs } from "@/lib/catalog-card";
+import { CartDrawer, type Done } from "./CartDrawer";
+import { ContactPanel } from "./ContactPanel";
+import { EventPicker } from "./EventPicker";
+import { FilterBar } from "./FilterBar";
+import { OrderBar } from "./OrderBar";
 import { ProductTile } from "./ProductTile";
 import { QuickView, type QuickPrice } from "./QuickView";
-import { XIcon } from "./StoreIcons";
-import { ThemePortal, useModalBehavior } from "./ThemePortal";
+import { EmptyState } from "./StoreStates";
+import { useStoreToast } from "./StoreToast";
+import { ThemePortal } from "./ThemePortal";
 
 /**
  * Catálogo de la tienda web de una empresa, carrito y armado de la preorden (sin
@@ -61,8 +64,8 @@ type Props = {
   range: { fromKey: string; toKey: string; days: number } | null;
   initialCategory: string | null;
   zones?: CatalogZoneView[];
-  /** Plantilla de la tienda (`editorial` dibuja secciones grandes y tarjetas de catálogo impreso). */
-  template?: string;
+  /** Modo de precio de la empresa: por día, por unidad (c/u, de a 10) o a cotizar. */
+  priceMode?: PriceMode;
   /** Slug de la empresa y tipo de acceso: separan el carrito guardado de cada tienda. */
   slug: string;
   cartScope?: "public" | "acceso" | "mayorista" | "visitor";
@@ -75,27 +78,10 @@ type Props = {
   storeName?: string;
 };
 
-type Done =
-  | { kind: "saved"; respondBy: string; trackingPath: string; whatsappUrl: string | null; priceRequested: boolean }
-  | { kind: "simulated"; message: string };
-
-const gs = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
-const money = (value: number) => `Gs. ${gs.format(value)}`;
-const respondFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "America/Asuncion", weekday: "long", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const money = formatGs;
+const PAGE_SIZE = 24;
 
 const norm = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
-function todayKey(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Asuncion", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  return parts;
-}
-
-/** «por día», «por evento» o «total por 5 días» según cómo se cobra esa cantidad de días. */
-function unitLabel(mode: "BASE" | "PER_DAY" | "TOTAL" | "EVENT" | undefined, days: number | null): string {
-  if (mode === "EVENT") return "por evento";
-  if (mode === "TOTAL") return days ? `total por ${days} ${days === 1 ? "día" : "días"}` : "total";
-  return "por día";
-}
 
 /** Suma por unidad de las piezas del paquete y ahorro, con la misma regla de días de cada pieza. */
 function packageOf(item: CatalogItemView, days: number): PackageSummary | null {
@@ -112,12 +98,6 @@ function packageOf(item: CatalogItemView, days: number): PackageSummary | null {
   return packageSummary(product, components, days);
 }
 
-/** «Sector Living › Lounge» → sección grande «Sector Living» y subsección «Lounge». */
-function splitCategory(name: string): { root: string; sub: string | null } {
-  const [root, ...rest] = name.split("›").map((part) => part.trim());
-  return { root: root || name, sub: rest.length ? rest.join(" › ") : null };
-}
-
 /** `COD #527` a partir del SKU (sin repetir «COD» si el SKU ya lo trae). */
 const codeOf = (sku: string) => `COD #${sku.replace(/^cod\s*#?\s*/i, "")}`;
 
@@ -126,10 +106,9 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], template, slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const editorial = template === "editorial";
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
   const [visitorToken, setVisitorToken] = useState<string | null>(null);
   const cartPath = cartPathProp ?? (visitorToken ? `/api/catalog/${encodeURIComponent(slug)}/carrito/${visitorToken}/cart` : preorderPath.replace(/\/preorder$/, "/cart"));
@@ -140,9 +119,10 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const contactAsked = useRef(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
-  const [from, setFrom] = useState(range?.fromKey ?? "");
-  const [to, setTo] = useState(range?.toKey ?? "");
-  const [dateMsg, setDateMsg] = useState("");
+  const [sort, setSort] = useState<SortKey>("destacados");
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [revalidateFailed, setRevalidateFailed] = useState(false);
+  const { toast, show: showToast } = useStoreToast();
   const [selection, setSelection] = useState<Record<string, number>>({});
   // Flete: "" = no elegí, COORDINATE = «a coordinar», o el id de una zona (vive acá para guardarse con el carrito).
   const [zoneChoice, setZoneChoice] = useState("");
@@ -152,7 +132,6 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [view, setView] = useState<CartView | null>(null);
   const [cartNotice, setCartNotice] = useState("");
   const seenTotal = useRef<number | null>(null);
-  const today = useMemo(todayKey, []);
 
   // Un link de categoría (`?categoria=`) también mueve el filtro cuando ya se estaba en la página.
   useEffect(() => {
@@ -204,9 +183,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       setZoneChoice(state.zone === "COORDINATE" || zones.some((zone) => zone.id === state.zone) ? state.zone : "");
       seenTotal.current = kept.length > 0 ? state.seenTotal : null;
       if (kept.length > 0 && !range && state.from && state.to) {
-        if (state.to >= todayKey()) {
-          setFrom(state.from);
-          setTo(state.to);
+        if (state.to >= todayKeyPY()) {
           const shared = new URLSearchParams(window.location.search).get("p");
           const extra = `${initialCategory ? `&categoria=${encodeURIComponent(initialCategory)}` : ""}${shared ? `&p=${encodeURIComponent(shared)}` : ""}`;
           router.replace(`${pathname}?desde=${encodeURIComponent(state.from)}&hasta=${encodeURIComponent(state.to)}${extra}${window.location.hash || "#catalogo"}`, { scroll: false });
@@ -227,23 +204,6 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     const needle = norm(query.trim());
     return items.filter((item) => (!category || item.category === category) && (!needle || norm(`${item.name} ${item.sku ?? ""} ${item.category} ${item.description ?? ""}`).includes(needle)));
   }, [items, query, category]);
-  const groups = useMemo(() => {
-    const map = new Map<string, CatalogItemView[]>();
-    for (const item of visible) map.set(item.category, [...(map.get(item.category) ?? []), item]);
-    return [...map.entries()];
-  }, [visible]);
-  // Editorial: secciones grandes por categoría raíz y, dentro, subsecciones (el orden es el que decide la empresa).
-  const editorialGroups = useMemo(() => {
-    const roots = new Map<string, Map<string | null, CatalogItemView[]>>();
-    for (const [name, rows] of groups) {
-      const { root, sub } = splitCategory(name);
-      const subs = roots.get(root) ?? new Map<string | null, CatalogItemView[]>();
-      subs.set(sub, [...(subs.get(sub) ?? []), ...rows]);
-      roots.set(root, subs);
-    }
-    return [...roots.entries()].map(([root, subs]) => ({ root, subs: [...subs.entries()] }));
-  }, [groups]);
-
   const days = range?.days ?? 1;
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
   // Misma regla de días que el presupuesto (escalones por día o total, evento): `lib/price-tiers.ts`.
@@ -337,9 +297,11 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         if (next.total !== null) seenTotal.current = next.total;
         if (notices.length > 0) setCartNotice(notices.join(" "));
         setView(next);
+        setRevalidateFailed(false);
       } catch (error) {
         if ((error as { name?: string })?.name === "AbortError") return;
         console.error("tienda: no se pudo revalidar el carrito; se muestran los precios del catálogo", error);
+        setRevalidateFailed(true);
         setView(null);
       }
     }, 250);
@@ -348,17 +310,18 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, selectionKey, range?.fromKey, range?.toKey, zoneChoice, cartPath]);
 
-  function applyDates(event: FormEvent) {
-    event.preventDefault();
-    if (!from || !to) { setDateMsg("Elegí las dos fechas (dd/mm/aaaa) para ver la disponibilidad."); return; }
-    const extra = category ? `&categoria=${encodeURIComponent(category)}` : "";
-    router.replace(`${pathname}?desde=${encodeURIComponent(from)}&hasta=${encodeURIComponent(to)}${extra}#catalogo`, { scroll: false });
+  /** Fechas elegidas en el pedido: se aplican a toda la tienda (la dirección las lleva al servidor, que calcula la disponibilidad). */
+  function applyRange(next: { fromKey: string; toKey: string }) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("desde", next.fromKey);
+    params.set("hasta", next.toKey);
+    router.replace(`${pathname}?${params.toString()}${window.location.hash}`, { scroll: false });
   }
   const setQuantity = useCallback((id: string, next: number) => {
     setSelection((current) => {
       const copy = { ...current };
       if (next <= 0) delete copy[id];
-      else copy[id] = Math.min(99, next);
+      else copy[id] = Math.min(MAX_QUANTITY, next);
       return copy;
     });
   }, []);
@@ -394,7 +357,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     setQuickId(null);
   }, []);
   const addFromQuick = useCallback((id: string, quantity: number) => {
-    setSelection((current) => ({ ...current, [id]: Math.min(99, (current[id] ?? 0) + quantity) }));
+    setSelection((current) => ({ ...current, [id]: Math.min(MAX_QUANTITY, (current[id] ?? 0) + quantity) }));
   }, []);
   // Enlace compartido (`?p=<id>`) y botón «atrás» del navegador.
   useEffect(() => {
@@ -413,28 +376,52 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     const unit = unitFor(item);
     const pack = showPrices && unit > 0 && item.package ? packageOf(item, days) : null;
     const saving = pack && !pack.incomplete && pack.packageTotal > 0 && pack.savings > 0 ? { savings: pack.savings, unitSum: pack.unitSum } : null;
-    return { unit, unitText: unit > 0 ? unitLabel(pricingFor(item)?.mode, range ? days : null) : "", tierHints: showPrices ? catalogTierHints(item.price) : [], saving };
+    return { unit, unitText: unit > 0 ? priceUnitLabel(priceMode, pricingFor(item)?.mode, range ? days : null) : "", tierHints: showPrices ? catalogTierHints(item.price) : [], saving };
   };
+
+  // Orden y paginación: «Destacados» respeta el orden de la empresa por categoría; cualquier otro orden es una lista plana.
+  const flat = sort !== "destacados";
+  const ordered = useMemo(
+    () => (flat ? sortCatalog(visible.map((item) => ({ item, name: item.name, capacity: item.capacity ?? null, unit: item.price ? catalogLine(item.price, days).unitPrice : 0 })), sort).map((row) => row.item) : visible),
+    [flat, visible, sort, days],
+  );
+  const page = ordered.slice(0, shown);
+  const pageGroups = useMemo(() => {
+    const map = new Map<string, CatalogItemView[]>();
+    for (const item of page) map.set(item.category, [...(map.get(item.category) ?? []), item]);
+    return [...map.entries()];
+  }, [page]);
+  const unitMode = priceMode === "unit";
 
   function renderItem(item: CatalogItemView) {
     const price = priceOf(item);
+    const isPackage = Boolean(item.package?.length);
     return (
       <ProductTile
         key={item.id}
         item={item}
         specs={cardSpecs(item)}
-        isPackage={Boolean(item.package?.length)}
+        isPackage={isPackage}
         showPrices={showPrices}
+        perUnit={unitMode}
+        step={quantityStep(priceMode, isPackage)}
         unit={price.unit}
         unitText={price.unitText}
         saving={price.saving}
         tierHint={price.tierHints[0] ?? null}
+        pieces={item.package?.length ? piecesText(item.package) : null}
         quantity={selection[item.id] ?? 0}
         fichaHref={fichaBase ? `${fichaBase}/p/${encodeURIComponent(item.id)}` : null}
         onOpen={openQuick}
         onQuantity={setQuantity}
+        onAdd={addFromTile}
       />
     );
+  }
+
+  function addFromTile(id: string, quantity: number) {
+    addFromQuick(id, quantity);
+    showToast("Agregado al pedido", { label: "Ver pedido", onClick: () => { setDone(null); setOpen(true); } });
   }
 
   // Sin fechas la barra igual muestra plata: la suma por día (o por evento) × cantidad con los precios públicos ya cargados.
@@ -446,101 +433,72 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       if (unit > 0) { sum += unit * (selection[item.id] ?? 0); priced += 1; if (item.price?.perEvent) events += 1; } else missing += 1;
     }
     if (priced === 0) return null;
-    return { sum, missing, unit: events === priced ? "por evento" : events > 0 ? "por día o evento" : "por día" };
+    return { sum, missing, unit: events === priced ? "por evento" : events > 0 ? "por día o evento" : priceMode === "unit" ? "c/u" : "por día" };
   })();
+  const barText = showPrices
+    ? !range
+      ? perDay ? `${money(perDay.sum)} ${perDay.unit} · elegí fechas para el total` : "Elegí fechas para el total"
+      : view && view.total !== null ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : "Confirmamos el monto en la cotización"
+    : null;
 
   return (
     <section id="catalogo" className="cp-section cp-catalog" aria-labelledby="catalogo-titulo">
       <div className="cp-section-head">
         <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Catálogo de alquiler"}</p>
-        <h2 id="catalogo-titulo" className="cp-h2 cp-h2--lg">Elegí tus equipos</h2>
+        <h2 id="catalogo-titulo" className="cp-h2">Elegí tus productos</h2>
         {wholesale ? <p className="cp-lead">Precios mayoristas, solo para vos{clientName ? ` (${clientName})` : ""}. No compartas este link.</p> : null}
       </div>
 
-      <div className="cp-filterbar cp-fields" role="search" aria-label="Fechas y búsqueda">
-        <form className="cp-filterbar-dates" onSubmit={applyDates} aria-labelledby="fechas">
-          <h3 id="fechas" className="cp-filterbar-title">Fechas del alquiler</h3>
-          <div className="cp-filterbar-row">
-            <DayField label="Desde" value={from} min={today} size="full" required onChange={(value) => { setFrom(value); if (value && to && value > to) setTo(value); setDateMsg(""); }} />
-            <DayField label="Hasta" value={to} min={from || today} size="full" required onChange={(value) => { setTo(value); setDateMsg(""); }} />
-            <button className="cp-btn cp-btn--primary cp-filterbar-go" type="submit">Ver disponibilidad</button>
-          </div>
-          <p className={dateMsg ? "cp-hint cp-hint--error" : "cp-hint"} role={dateMsg ? "alert" : undefined}>
-            {dateMsg || (range
-              ? `Período: ${formatDayKey(range.fromKey)} al ${formatDayKey(range.toKey)} (${range.days} ${range.days === 1 ? "día" : "días"}). La disponibilidad es indicativa: la confirmamos al cotizar.`
-              : "Elegí las fechas para ver la disponibilidad indicativa de cada equipo.")}
-          </p>
-        </form>
-        <div className="cp-filterbar-search">
-          <TextField ariaLabel="Buscar equipos por nombre o código" type="search" size="full" placeholder="Buscar por nombre o código" value={query} onChange={setQuery} autoComplete="off" />
-        </div>
-      </div>
+      <EventPicker slug={slug} range={range} variant="bar" />
 
-      {categories.length > 1 ? (
-        <div className="cp-cats" role="group" aria-label="Filtrar por categoría" tabIndex={-1}>
-          <button type="button" className="cp-cat" aria-pressed={category === null} onClick={() => setCategory(null)}>Todas</button>
-          {categories.map((name) => (
-            <button key={name} type="button" className="cp-cat" aria-pressed={category === name} onClick={() => setCategory(category === name ? null : name)}>{name}</button>
-          ))}
-        </div>
-      ) : null}
+      <FilterBar categories={categories} category={category} onCategory={(value) => { setCategory(value); setShown(PAGE_SIZE); }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} />
+      {items.length > 0 ? <p className="cp-results" role="status" data-testid="results-count">{ordered.length === 1 ? "Mostrando 1 producto" : `Mostrando ${ordered.length} productos`}</p> : null}
       {cartNotice ? (
         <p className="cp-note" role="status" data-testid="cart-notice">
           {cartNotice} <button type="button" className="cp-link cp-linkbtn" onClick={() => setCartNotice("")}>Entendido</button>
         </p>
       ) : null}
 
-      {items.length === 0 ? <p className="cp-empty">Todavía no hay equipos publicados en este catálogo.</p> : null}
-      {items.length > 0 && visible.length === 0 ? <p className="cp-empty">No encontramos equipos con esos filtros.</p> : null}
-      {editorial
-        ? editorialGroups.map(({ root, subs }) => (
-            <section key={root} className="cp-group cp-ed-group" aria-label={root}>
-              <header className="cp-ed-head"><h3 className="cp-ed-title">{root}</h3></header>
-              {subs.map(([sub, rows]) => (
-                <div key={sub ?? "_"} className="cp-ed-sub">
-                  {sub ? <h4 className="cp-ed-subtitle">{sub}</h4> : null}
-                  <ul className="cp-grid cp-ed-grid">{rows.map(renderItem)}</ul>
-                </div>
-              ))}
-            </section>
-          ))
-        : groups.map(([groupName, rows]) => (
+      {items.length === 0 ? <EmptyState icon="box" title="Todavía no hay productos publicados" text="Cuando la empresa publique su catálogo lo vas a ver acá." /> : null}
+      {items.length > 0 && visible.length === 0 ? (
+        <EmptyState icon="search" title="No encontramos productos con esos filtros" text="Probá con otra palabra o quitá los filtros." action={{ label: "Limpiar filtros", onClick: () => { setQuery(""); setCategory(null); setShown(PAGE_SIZE); } }} />
+      ) : null}
+      {flat
+        ? page.length > 0 ? <ul className="cp-grid" aria-label="Productos">{page.map(renderItem)}</ul> : null
+        : pageGroups.map(([groupName, rows]) => (
             <section key={groupName} className="cp-group" aria-label={groupName}>
-              <h3 className="cp-h3">{groupName}</h3>
+              <div className="cp-group-head">
+                <h3 className="cp-group-title">{groupName}</h3>
+                <span className="cp-group-count">{visible.filter((item) => item.category === groupName).length}</span>
+              </div>
               <ul className="cp-grid">{rows.map(renderItem)}</ul>
             </section>
           ))}
-
-      {count > 0 ? (
-        <aside className="cp-bar" aria-label="Tu pedido">
-          <span className="cp-bar-badge" aria-hidden="true">{count}</span>
-          <p className="cp-bar-text">
-            <strong>{count} {count === 1 ? "equipo" : "equipos"}{perDay ? ` · ${money(perDay.sum)} ${perDay.unit}${perDay.missing > 0 ? " + a cotizar" : ""}` : ""}</strong>
-            {showPrices ? (
-              <span>{!range ? "Elegí fechas para el total" : view && view.total !== null ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : "Subtotal a cotizar"}</span>
-            ) : null}
-          </p>
-          <button type="button" className="cp-btn cp-btn--primary" onClick={() => { setDone(null); setOpen(true); }}>
-            Ver pedido
-          </button>
-        </aside>
+      {ordered.length > shown ? (
+        <div className="cp-loadmore">
+          <button type="button" className="cp-btn" onClick={() => setShown((value) => value + PAGE_SIZE)}>Mostrar más productos</button>
+          <span className="cp-hint">Viendo {shown} de {ordered.length}</span>
+        </div>
       ) : null}
+
+      {count > 0 ? <OrderBar count={count} text={barText} onOpen={() => { setDone(null); setOpen(true); }} /> : null}
+      {toast}
 
       {contactOpen ? (
         <ThemePortal>
-        <ContactPanel
-          slug={slug}
-          storeName={storeName ?? organizationName}
-          getCart={currentState}
-          onClose={() => {
-            try { window.sessionStorage.setItem(`${visitorKey}:skip`, "1"); } catch { /* sin almacenamiento */ }
-            setContactOpen(false);
-          }}
-          onSaved={(token) => {
-            try { window.localStorage.setItem(visitorKey, token); } catch { console.error("tienda: no se pudo recordar el enlace del carrito en este navegador"); }
-            setVisitorToken(token);
-          }}
-        />
+          <ContactPanel
+            slug={slug}
+            storeName={storeName ?? organizationName}
+            getCart={currentState}
+            onClose={() => {
+              try { window.sessionStorage.setItem(`${visitorKey}:skip`, "1"); } catch { /* sin almacenamiento */ }
+              setContactOpen(false);
+            }}
+            onSaved={(token) => {
+              try { window.localStorage.setItem(visitorKey, token); } catch { console.error("tienda: no se pudo recordar el enlace del carrito en este navegador"); }
+              setVisitorToken(token);
+            }}
+          />
         </ThemePortal>
       ) : null}
 
@@ -554,7 +512,8 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
             productApi={preorderPath.replace(/\/preorder$/, "/product/")}
             fichaHref={fichaBase ? `${fichaBase}/p/${encodeURIComponent(quickItem.id)}` : null}
             inCart={selection[quickItem.id] ?? 0}
-            onAdd={addFromQuick}
+            step={quantityStep(priceMode, Boolean(quickItem.package?.length))}
+            onAdd={(id, quantity) => { addFromQuick(id, quantity); showToast("Agregado al pedido"); }}
             onNavigate={navigateQuick}
             onClose={closeQuick}
           />
@@ -563,456 +522,32 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
       {open ? (
         <ThemePortal>
-        <PreorderDialog
-          preorderPath={preorderPath}
-          organizationName={organizationName}
-          wholesale={wholesale}
-          clientName={clientName}
-          range={range}
-          lines={chosen.map((item) => ({ id: item.id, name: item.name, sku: item.sku, quantity: selection[item.id], imageUrl: item.imageUrl, pieces: item.package?.length ? piecesText(item.package) : null }))}
-          onQuantity={setQuantity}
-          localSubtotal={localSubtotal}
-          perDay={perDay}
-          view={view}
-          showPrices={showPrices}
-          zones={zones}
-          zoneChoice={zoneChoice}
-          onZone={setZoneChoice}
-          done={done}
-          onDone={setDone}
-          // El pedido ya se envió: el carrito (navegador y servidor) se vacía en el acto, aunque cierren con Esc.
-          onSent={() => { setSelection({}); setZoneChoice(""); setView(null); seenTotal.current = null; setCartNotice(""); }}
-          onClose={() => setOpen(false)}
-          onFinish={() => { setOpen(false); setDone(null); }}
-        />
+          <CartDrawer
+            slug={slug}
+            preorderPath={preorderPath}
+            wholesale={wholesale}
+            clientName={clientName}
+            range={range}
+            onRange={applyRange}
+            lines={chosen.map((item) => ({ id: item.id, name: item.name, sku: item.sku, quantity: selection[item.id], imageUrl: item.imageUrl, pieces: item.package?.length ? piecesText(item.package) : null, step: quantityStep(priceMode, Boolean(item.package?.length)) }))}
+            onQuantity={setQuantity}
+            localSubtotal={localSubtotal}
+            perDay={perDay}
+            view={view}
+            showPrices={showPrices}
+            priceMode={priceMode}
+            zones={zones}
+            zoneChoice={zoneChoice}
+            onZone={setZoneChoice}
+            done={done}
+            onDone={setDone}
+            // El pedido ya se envió: el carrito (navegador y servidor) se vacía en el acto, aunque cierren con Esc.
+            onSent={() => { setSelection({}); setZoneChoice(""); setView(null); seenTotal.current = null; setCartNotice(""); }}
+            onClose={() => setOpen(false)}
+            onFinish={() => { setOpen(false); setDone(null); }}
+          />
         </ThemePortal>
       ) : null}
     </section>
-  );
-}
-
-function CartLineDetail({ line, days }: { line: CartLineView | undefined; days: number }) {
-  if (!line) return null;
-  if (line.unitPrice === null) return <span className="cp-hint">Precio a cotizar</span>;
-  const fixed = line.mode === "TOTAL" || line.mode === "EVENT";
-  return (
-    <span className="cp-hint cp-cart-price">
-      {fixed ? `${money(line.unitPrice)} ${line.mode === "EVENT" ? "por evento" : `total por ${days} ${days === 1 ? "día" : "días"}`}` : `${money(line.unitPrice)} × ${line.days} ${line.days === 1 ? "día" : "días"}`}
-      {line.quantity > 1 ? ` × ${line.quantity}` : ""} = <strong>{line.subtotal !== null ? money(line.subtotal) : "a cotizar"}</strong>
-      {line.tier ? <> · escalón {line.tier}</> : null}
-      {line.availability === "CONSULT" ? <> · <span className="cp-chip cp-chip--muted">Consultar disponibilidad</span></> : null}
-    </span>
-  );
-}
-
-function PreorderDialog(props: {
-  preorderPath: string;
-  organizationName: string;
-  wholesale: boolean;
-  clientName: string | null;
-  range: Props["range"];
-  lines: Array<{ id: string; name: string; sku: string | null; quantity: number; imageUrl: string | null; pieces: string | null }>;
-  onQuantity: (id: string, next: number) => void;
-  localSubtotal: number | null;
-  /** Sin fechas: suma por día (o por evento) con los precios públicos; con fechas es null. */
-  perDay: { sum: number; missing: number; unit: string } | null;
-  view: CartView | null;
-  showPrices: boolean;
-  zones: CatalogZoneView[];
-  zoneChoice: string;
-  onZone: (value: string) => void;
-  done: Done | null;
-  onDone: (done: Done) => void;
-  onSent: () => void;
-  onClose: () => void;
-  onFinish: () => void;
-}) {
-  const { range, lines, localSubtotal, perDay, view, showPrices, done, zones, zoneChoice } = props;
-  const zone = zones.find((entry) => entry.id === zoneChoice) ?? null;
-  const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
-  // Flete y total: los del servidor (revalidados); sin red, el cálculo local con la misma regla.
-  const fee = view ? view.delivery.fee : showPrices && zone ? deliveryFee(zone, pieces) : null;
-  const subtotal = view ? view.itemsSubtotal : localSubtotal;
-  const total = subtotal !== null ? subtotal + (fee ?? 0) : null;
-  const viewLines = new Map((view?.lines ?? []).map((line) => [line.id, line]));
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [place, setPlace] = useState("");
-  const [city, setCity] = useState("");
-  const [department, setDepartment] = useState("");
-  const [notes, setNotes] = useState("");
-  const [step, setStep] = useState<1 | 2>(1);
-  const [askPrice, setAskPrice] = useState(false);
-  const [priceComment, setPriceComment] = useState("");
-  const [priceAmount, setPriceAmount] = useState("");
-  const [trap, setTrap] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const attempt = useRef<{ key: string; payload: string } | null>(null);
-  const first = useRef<HTMLInputElement>(null);
-  const dialog = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    dialog.current?.focus();
-    const previous = document.activeElement as HTMLElement | null;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose();
-      if (event.key === "Tab" && dialog.current) {
-        const nodes = [...dialog.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input:not([tabindex='-1']),textarea,select")];
-        if (nodes.length === 0) return;
-        const firstNode = nodes[0];
-        const lastNode = nodes[nodes.length - 1];
-        if (event.shiftKey && document.activeElement === firstNode) { event.preventDefault(); lastNode.focus(); }
-        else if (!event.shiftKey && document.activeElement === lastNode) { event.preventDefault(); firstNode.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!range) { setError("Elegí las fechas del alquiler antes de enviar el pedido."); return; }
-    if (location.length < 2) { setError("Contanos dónde es el evento: ciudad o dirección."); return; }
-    const amount = askPrice ? parsePriceAmount(priceAmount.trim()) : null;
-    if (askPrice && priceComment.trim().length < 3) { setError("Contanos por qué pedís un mejor precio (al menos 3 caracteres)."); return; }
-    if (amount === "invalid") { setError("El monto que querés pagar tiene que ser un número entero en guaraníes."); return; }
-    setError("");
-    const payload = {
-      name, phone, email, location, notes,
-      from: range.fromKey, to: range.toKey,
-      items: lines.map((line) => ({ inventoryId: line.id, quantity: line.quantity })),
-      ...(zone ? { deliveryZoneId: zone.id } : zoneChoice === "COORDINATE" ? { deliveryCoordinate: true } : {}),
-      // El monto deseado es solo un pedido: la empresa lo acepta, lo contraoferta o lo rechaza; nunca se aplica solo.
-      ...(askPrice ? { priceRequest: { comment: priceComment.trim(), desiredAmount: amount } } : {}),
-      website: trap,
-    };
-    const serialized = JSON.stringify(payload);
-    // La misma clave solo se reutiliza para reenviar EXACTAMENTE el mismo pedido.
-    if (!attempt.current || attempt.current.payload !== serialized) attempt.current = { key: crypto.randomUUID(), payload: serialized };
-    setBusy(true);
-    try {
-      const response = await fetch(props.preorderPath, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.current.key },
-        body: serialized,
-      });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-      if (response.status === 429) { setError("Hiciste muchos intentos seguidos. Esperá unos minutos y volvé a probar."); return; }
-      if (!response.ok) { setError(typeof data.error === "string" && data.error !== "Invalid request." ? data.error : "Revisá tus datos: algún campo no es válido."); return; }
-      if (data.simulated === true) { props.onDone({ kind: "simulated", message: String(data.message ?? "Esto es una demo: no se guardó nada.") }); return; }
-      const preorder = data.preorder as { respondBy: string; trackingPath: string; whatsappUrl: string | null };
-      props.onDone({ kind: "saved", respondBy: preorder.respondBy, trackingPath: preorder.trackingPath, whatsappUrl: preorder.whatsappUrl, priceRequested: askPrice });
-      props.onSent();
-    } catch (failure) {
-      console.error("tienda: no se pudo enviar el pedido", failure);
-      setError("No pudimos enviar el pedido. Revisá tu conexión y reintentá: no se duplica.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // El lugar del evento: dirección o referencia + ciudad y departamento (el departamento se completa al elegir la ciudad).
-  const location = [place.trim(), city.trim(), department.trim()].filter(Boolean).join(", ");
-  const stepOneReady = Boolean(range) && lines.length > 0;
-  const priceOk = !askPrice || priceComment.trim().length >= 3;
-  const totalLabel = showPrices ? (total !== null ? money(total) : "A cotizar") : null;
-  // Sin fechas no hay total: se muestra lo que cuesta por día y se pide elegir fechas (antes decía «A cotizar» con un total en el pie).
-  const perDayText = !range && perDay ? `${money(perDay.sum)} ${perDay.unit}${perDay.missing > 0 ? " + a cotizar" : ""}` : null;
-
-  return (
-    <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
-      <div className="cp-drawer" role="dialog" aria-modal="true" aria-labelledby="pedido-titulo" ref={dialog} tabIndex={-1}>
-        {done ? (
-          <>
-            <header className="cp-drawer-head">
-              <h2 id="pedido-titulo" className="cp-h2">{done.kind === "saved" ? "Recibimos tu pedido" : "Demo: no se guardó nada"}</h2>
-              <button type="button" className="cp-btn cp-btn--icon" onClick={props.onFinish} aria-label="Cerrar">×</button>
-            </header>
-            <div className="cp-drawer-body cp-done" data-testid="preorder-done">
-              {done.kind === "saved" ? (
-                <>
-                  <p>
-                    Recibimos tu pedido. <strong>Todavía NO es una reserva confirmada</strong>: te respondemos antes de{" "}
-                    <strong>{respondFormat.format(new Date(done.respondBy))}</strong>.
-                  </p>
-                  {done.priceRequested ? <p>Pediste un mejor precio: la empresa te responde en tu seguimiento. Nada cambia hasta que apruebes la versión final.</p> : null}
-                  <p className="cp-hint">Podés seguirlo en cualquier momento con este link (guardalo):</p>
-                  <p><a className="cp-link cp-wrap" href={done.trackingPath}>{done.trackingPath}</a></p>
-                  {done.whatsappUrl ? (
-                    <a className="cp-btn cp-btn--primary" href={done.whatsappUrl} target="_blank" rel="noopener noreferrer">
-                      Enviar el resumen por WhatsApp
-                    </a>
-                  ) : null}
-                </>
-              ) : (
-                <p>{done.message}</p>
-              )}
-            </div>
-            <footer className="cp-drawer-foot"><button type="button" className="cp-btn" onClick={props.onFinish}>Cerrar</button></footer>
-          </>
-        ) : (
-          <form onSubmit={step === 2 ? submit : (event) => { event.preventDefault(); if (stepOneReady && priceOk) { setError(""); setStep(2); } else if (!priceOk) setError("Contanos por qué pedís un mejor precio (al menos 3 caracteres)."); }} className="cp-drawer-form">
-            <header className="cp-drawer-head">
-              <div>
-                <h2 id="pedido-titulo" className="cp-h2">{step === 1 ? (props.wholesale ? "Tu pedido mayorista" : "Tu pedido") : "Tus datos"}</h2>
-                <p className="cp-hint" data-testid="cart-range">
-                  {range ? <>Del {formatDayKey(range.fromKey)} al {formatDayKey(range.toKey)} · <strong>{range.days} {range.days === 1 ? "día" : "días"}</strong></> : "Sin fechas todavía"}
-                  {props.wholesale && props.clientName ? ` · a nombre de ${props.clientName}` : ""}
-                </p>
-              </div>
-              <button type="button" className="cp-btn cp-btn--icon" onClick={props.onClose} aria-label="Cerrar el pedido">×</button>
-            </header>
-            <div className="cp-drawer-body">
-              {step === 1 ? (
-                <>
-                  {!range ? <p className="cp-error" role="alert">Elegí las fechas del alquiler antes de enviar el pedido.</p> : null}
-                  <table className="cp-table" aria-label="Equipos del pedido">
-                    <thead>
-                      <tr>
-                        <th scope="col">Producto</th>
-                        {showPrices ? <th scope="col" className="cp-num">Unitario</th> : null}
-                        {showPrices ? <th scope="col" className="cp-num">Total</th> : null}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((line) => {
-                        const priced = viewLines.get(line.id);
-                        const fixed = priced?.mode === "TOTAL" || priced?.mode === "EVENT";
-                        return (
-                          <tr key={line.id} data-testid="cart-line">
-                            <td className="cp-table-main">
-                              <span className="cp-cart-thumb" aria-hidden="true">
-                                {line.imageUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={line.imageUrl} alt="" loading="lazy" />
-                                ) : null}
-                              </span>
-                              <span className="cp-cart-info">
-                                <strong className="cp-cart-name">{line.name}</strong>
-                                {line.sku ? <span className="cp-hint">{codeOf(line.sku)}</span> : null}
-                                <span className="cp-qty" role="group" aria-label={`Cantidad de ${line.name}`}>
-                                  <button type="button" className="cp-btn cp-btn--icon" onClick={() => { if (line.quantity <= 1 && lines.length === 1) props.onClose(); props.onQuantity(line.id, line.quantity - 1); }} aria-label={`Quitar una unidad de ${line.name}`}>−</button>
-                                  <output aria-live="polite">{line.quantity}</output>
-                                  <button type="button" className="cp-btn cp-btn--icon" onClick={() => props.onQuantity(line.id, line.quantity + 1)} aria-label={`Agregar una unidad de ${line.name}`}>+</button>
-                                </span>
-                                {showPrices && range ? <span className="cp-hint">{priced?.mode === "EVENT" ? "Por evento" : `${range.days} ${range.days === 1 ? "día" : "días"}`}{priced?.availability === "CONSULT" ? " · consultar disponibilidad" : ""}</span> : null}
-                                {showPrices && priced?.unitPrice ? <span className="cp-hint cp-unit-sm">{money(priced.unitPrice)} {priced.mode === "EVENT" ? "por evento" : fixed && range ? `total por ${range.days} ${range.days === 1 ? "día" : "días"}` : "por día"}</span> : null}
-                                {priced?.tier ? <span className="cp-x-chip cp-tier-chip">Escalón {priced.tier}</span> : null}
-                                {line.pieces ? <details className="cp-includes"><summary>Incluye</summary><p className="cp-hint">{line.pieces}</p></details> : null}
-                              </span>
-                            </td>
-                            {showPrices ? (
-                              <td className="cp-num" data-label="Unitario">
-                                {priced?.unitPrice ? money(priced.unitPrice) : "A cotizar"}
-                                {priced?.unitPrice ? <small className="cp-hint">{priced.mode === "EVENT" ? "por evento" : fixed && range ? `total por ${range.days} ${range.days === 1 ? "día" : "días"}` : "por día"}</small> : null}
-                              </td>
-                            ) : null}
-                            {showPrices ? <td className="cp-num cp-num--strong" data-label="Total">{priced?.subtotal ? money(priced.subtotal) : "—"}</td> : null}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {zones.length > 0 ? (
-                    <label className="cp-field">
-                      <span>Flete (opcional)</span>
-                      <select value={zoneChoice} onChange={(e) => props.onZone(e.target.value)} aria-describedby="flete-ayuda">
-                        <option value="">Lo defino después</option>
-                        {zones.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{showPrices && entry.basePrice > 0 ? ` · ${money(entry.basePrice)}` : ""}</option>)}
-                        <option value="COORDINATE">A coordinar</option>
-                      </select>
-                      <small id="flete-ayuda" className="cp-hint">
-                        {zone && showPrices
-                          ? `Flete estimado ${money(fee ?? 0)}${deliveryExtraApplies(zone, pieces) ? ` (incluye recargo por más de ${zone.volumeThreshold} piezas)` : zone.volumeThreshold !== null && zone.extraPrice ? ` (${deliveryRateText(zone).split(" + ")[1]})` : ""}.`
-                          : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Si elegís la zona te mostramos el flete estimado."}
-                      </small>
-                    </label>
-                  ) : null}
-                  {showPrices ? (
-                    <dl className="cp-summary" data-testid="cart-summary" aria-label="Resumen del pedido">
-                      {view && view.tierSavings > 0 && subtotal !== null ? (
-                        <>
-                          <div><dt>Subtotal a precio de lista</dt><dd className="cp-num">{money(subtotal + view.tierSavings)}</dd></div>
-                          <div><dt>Descuento por escalón de días</dt><dd className="cp-num cp-num--ok">− {money(view.tierSavings)}</dd></div>
-                        </>
-                      ) : null}
-                      <div><dt>Subtotal de equipos</dt><dd className="cp-num">{subtotal !== null && range ? money(subtotal) : perDayText ?? (range ? "A cotizar" : "—")}</dd></div>
-                      {zoneChoice ? (
-                        <div><dt>Flete{zone ? ` · ${zone.name}` : ""}</dt><dd className="cp-num">{zoneChoice === "COORDINATE" ? "A coordinar" : fee !== null ? money(fee) : "—"}</dd></div>
-                      ) : null}
-                      <div className="cp-summary-total"><dt>Total estimado</dt><dd className="cp-num">{total !== null && range ? money(total) : range ? "A cotizar" : "Elegí fechas para el total"}</dd></div>
-                    </dl>
-                  ) : null}
-                  {showPrices ? <p className="cp-hint">Los precios no incluyen instalación ni cargos extra; la cotización los confirma. Los montos son los de hoy, calculados por el servidor.</p> : null}
-                  {showPrices ? (
-                    <div className="cp-price-ask" data-testid="price-ask">
-                      <label className="cp-check">
-                        <input type="checkbox" checked={askPrice} onChange={(e) => setAskPrice(e.target.checked)} aria-controls="mejor-precio" />
-                        <span>Pedir un mejor precio</span>
-                      </label>
-                      {askPrice ? (
-                        <div id="mejor-precio" className="cp-price-ask-fields">
-                          <label className="cp-field"><span>¿Por qué lo pedís?</span><textarea value={priceComment} onChange={(e) => setPriceComment(e.target.value)} maxLength={PRICE_COMMENT_MAX} rows={2} required placeholder="Ej.: somos clientes frecuentes, es para un evento grande." /></label>
-                          <label className="cp-field"><span>Monto que querías pagar en total, en Gs. (opcional)</span><input inputMode="numeric" value={priceAmount} onChange={(e) => setPriceAmount(e.target.value.replace(/[^\d.\s]/g, "").slice(0, 16))} placeholder="Ej.: 1.200.000" /></label>
-                          <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <p className="cp-hint">Para responderte necesitamos tus datos. No es una reserva: te confirmamos disponibilidad y precio.</p>
-                  <div className="cp-fields cp-fields-grid" data-testid="cart-fields">
-                    <TextField label="Nombre y apellido" required value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
-                    <PhoneField label="WhatsApp" required value={phone} onChange={setPhone} />
-                    <EmailField label="Correo" required value={email} onChange={setEmail} />
-                    <CityField label="Ciudad" required value={city} onChange={setCity} onSelect={(selected, dept) => { setCity(selected); setDepartment(dept); }} />
-                    <TextField label="Lugar del evento" required={!city.trim()} value={place} onChange={setPlace} maxLength={160} autoComplete="street-address" placeholder="Dirección, salón o referencia" hint={department ? `Departamento: ${department}` : undefined} />
-                    <TextAreaField label="Comentarios" optional wide value={notes} onChange={setNotes} maxLength={1000} rows={3} />
-                  </div>
-                  <input className="cp-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
-                  <p className="cp-legal">Al enviar aceptás que usemos estos datos solo para responder tu pedido.</p>
-                </>
-              )}
-              {error ? <p className="cp-error" role="alert">{error}</p> : null}
-            </div>
-            <footer className="cp-drawer-foot">
-              {showPrices ? (
-                <p className="cp-drawer-total" data-testid="cart-total">
-                  {!range ? (
-                    <>
-                      <strong>{perDayText ?? "Total a cotizar"}</strong>
-                      <small className="cp-hint"> Elegí fechas para el total</small>
-                    </>
-                  ) : (
-                    <strong>{total !== null ? `Total estimado: ${totalLabel}` : "Subtotal: a cotizar"}</strong>
-                  )}
-                </p>
-              ) : null}
-              <div className="cp-row">
-                {step === 2 ? <button type="button" className="cp-btn" onClick={() => setStep(1)}>Volver</button> : <button type="button" className="cp-btn" onClick={props.onClose}>Seguir eligiendo</button>}
-                {step === 1 ? (
-                  <button type="submit" className="cp-btn cp-btn--primary" disabled={!stepOneReady}>Continuar</button>
-                ) : (
-                  <button type="submit" className="cp-btn cp-btn--primary" disabled={busy || !range}>{busy ? "Enviando…" : "Enviar pedido"}</button>
-                )}
-              </div>
-            </footer>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Panel lateral al agregar el primer producto: pide nombre y WhatsApp o correo (con uno alcanza) para guardar el carrito en
- * el servidor y retomarlo desde otro dispositivo con un enlace. También se puede «seguir sin datos» (carrito solo en este
- * navegador). El servidor valida, limita intentos y no revela si un contacto ya existe. El enlace se muestra una vez y la
- * persona se lo manda a sí misma (WhatsApp o correo desde su propio dispositivo): la tienda no envía nada por su cuenta.
- */
-function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { slug: string; storeName: string; getCart: () => CartSnapshot; onClose: () => void; onSaved: (token: string) => void }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [trap, setTrap] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<{ url: string; share: { whatsapp: string | null; mailto: string | null } } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
-  useModalBehavior(panel, onClose);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const checked = parseVisitorContact({ name, phone, email });
-    if (!checked.ok) { setError(checked.error); return; }
-    setError("");
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/catalog/${encodeURIComponent(slug)}/cart/visitor`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, ...getCart(), website: trap }),
-      });
-      const data = (await response.json().catch(() => ({}))) as { token?: string; url?: string; share?: { whatsapp: string | null; mailto: string | null }; error?: string; simulated?: boolean; message?: string };
-      if (response.status === 429) { setError("Hiciste muchos intentos seguidos. Esperá unos minutos o seguí sin datos."); return; }
-      if (data.simulated) { setError(data.message ?? "Esto es una demo: no se guardó tu carrito."); return; }
-      if (!response.ok || !data.token || !data.url) { setError(data.error ?? "No pudimos guardar tu carrito. Probá de nuevo o seguí sin datos."); return; }
-      onSaved(data.token);
-      setResult({ url: data.url, share: data.share ?? { whatsapp: null, mailto: null } });
-    } catch (failure) {
-      console.error("tienda: no se pudo crear el carrito guardado", failure);
-      setError("No pudimos conectar. Revisá tu conexión o seguí sin datos.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copy() {
-    if (!result) return;
-    try {
-      await navigator.clipboard.writeText(result.url);
-      setCopied(true);
-    } catch {
-      setError("No pudimos copiar: seleccioná el enlace y copialo a mano.");
-    }
-  }
-
-  return (
-    <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cp-drawer cp-drawer--narrow" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel} tabIndex={-1}>
-        {result ? (
-          <>
-            <header className="cp-drawer-head">
-              <h2 id="contacto-carrito" className="cp-h2">Guardamos tu carrito</h2>
-              <button type="button" className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar"><XIcon name="close" size={20} /></button>
-            </header>
-            <div className="cp-drawer-body cp-done" data-testid="visitor-cart-done">
-              <p>Con este enlace lo retomás desde cualquier dispositivo durante 30 días. Guardalo: no lo volvemos a mostrar.</p>
-              <p><a className="cp-link cp-wrap" href={result.url}>{result.url}</a></p>
-              <div className="cp-row">
-                <button type="button" className="cp-btn" onClick={() => void copy()}>{copied ? "Enlace copiado" : "Copiar enlace"}</button>
-                {result.share.whatsapp ? <a className="cp-btn" href={result.share.whatsapp} target="_blank" rel="noopener noreferrer">Enviármelo por WhatsApp</a> : null}
-                {result.share.mailto ? <a className="cp-btn" href={result.share.mailto}>Enviármelo por correo</a> : null}
-              </div>
-              <p className="cp-legal">Estos botones abren tu propia app de mensajes: nosotros no enviamos nada por vos.</p>
-              {error ? <p className="cp-error" role="alert">{error}</p> : null}
-            </div>
-            <footer className="cp-drawer-foot">
-              <button type="button" className="cp-btn cp-btn--primary cp-btn--block" onClick={onClose}>Seguir eligiendo</button>
-            </footer>
-          </>
-        ) : (
-          <form onSubmit={submit} className="cp-drawer-form">
-            <header className="cp-drawer-head">
-              <h2 id="contacto-carrito" className="cp-h2">¿Guardamos tu carrito?</h2>
-              <button type="button" className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar sin guardar"><XIcon name="close" size={20} /></button>
-            </header>
-            <div className="cp-drawer-body">
-              <p className="cp-drawer-lead">Dejanos tu nombre y un WhatsApp o un correo, y retomá este carrito desde otro dispositivo con un enlace. Sin cuenta ni contraseña.</p>
-              <div className="cp-fields cp-form-stack">
-                <TextField label="Nombre y apellido" required size="full" value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
-                <PhoneField label="WhatsApp" size="full" value={phone} onChange={setPhone} />
-                <EmailField label="Correo" size="full" value={email} onChange={setEmail} hint="Con el WhatsApp o el correo alcanza." />
-              </div>
-              <input className="cp-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
-              {error ? <p className="cp-error" role="alert">{error}</p> : null}
-            </div>
-            <footer className="cp-drawer-foot">
-              <p className="cp-legal">Usamos tus datos solo para guardar tu carrito. Para enviar el pedido igual te los pedimos.</p>
-              <div className="cp-stack-actions">
-                <button type="submit" className="cp-btn cp-btn--primary" disabled={busy}>{busy ? "Guardando…" : "Guardar mi carrito"}</button>
-                <button type="button" className="cp-btn cp-btn--ghost" onClick={onClose}>Seguir sin datos</button>
-              </div>
-            </footer>
-          </form>
-        )}
-      </div>
-    </div>
   );
 }

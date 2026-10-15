@@ -98,7 +98,7 @@ test("perfil, apariencia, acceso al catálogo y respuesta al pedido en PostgreSQ
     await t.test("apariencia: plantilla y fuente cerradas; el color ilegible se ajusta a AA, se avisa y se guarda ajustado", async () => {
       const a = await seed();
       const b = await seed();
-      const res = await saveOrgAppearance(a.ctx, { template: "elegante", font: "playfair-display", brandColor: "#ffd400" });
+      const res = await saveOrgAppearance(a.ctx, { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Entregas en Asunción" }, priceMode: "unit", tagline: "Espacios que se sienten", brandColor: "#ffd400" });
       assert.equal(res.status, 200);
       const body = (await res.json()) as { brandColor: string; brandAdjusted: boolean; brandNotice: string };
       assert.equal(body.brandAdjusted, true);
@@ -108,17 +108,23 @@ test("perfil, apariencia, acceso al catálogo y respuesta al pedido en PostgreSQ
       const settings = await db.organizationRentalSettings.findUniqueOrThrow({ where: { organizationId: a.org } });
       assert.equal(settings.storefrontAccent, body.brandColor, "se guarda el color ya ajustado");
       assert.equal((await db.organizationRentalSettings.findUniqueOrThrow({ where: { organizationId: b.org } })).storefrontAccent, null);
-      const stored = (await db.organization.findUniqueOrThrow({ where: { id: a.org }, select: { appearance: true } })).appearance as { template: string; font: string };
-      assert.deepEqual([stored.template, stored.font], ["elegante", "playfair-display"]);
+      const stored = (await db.organization.findUniqueOrThrow({ where: { id: a.org }, select: { appearance: true } })).appearance as { template: string; font: string; displayFont: string; priceMode: string; announcement: { on: boolean; text: string } };
+      assert.deepEqual([stored.template, stored.font, stored.displayFont, stored.priceMode], ["boutique", "playfair-display", "fraunces", "unit"]);
+      assert.deepEqual(stored.announcement, { on: true, text: "Entregas en Asunción" });
+      assert.equal(settings.storefrontTagline, "Espacios que se sienten", "la frase se guarda donde la lee la tienda");
+      assert.equal((await saveOrgAppearance(a.ctx, { announcement: { on: true, text: "" } })).status, 400);
+      assert.equal((await saveOrgAppearance(a.ctx, { priceMode: "gratis" })).status, 400);
+      assert.equal((await saveOrgAppearance(a.ctx, { tagline: "x".repeat(200) })).status, 400);
       assert.equal((await saveOrgAppearance(a.ctx, { template: "neon" })).status, 400);
       assert.equal((await saveOrgAppearance(a.ctx, { font: "Comic Sans" })).status, 400);
-      assert.equal((await saveOrgAppearance(a.ctx, { background: "#101010" })).status, 400);
       // El color sigue vigente cuando solo se cambia la plantilla.
-      const keep = await saveOrgAppearance(a.ctx, { template: "oscura" });
+      const keep = await saveOrgAppearance(a.ctx, { template: "noir" });
       assert.equal(((await keep.json()) as { brandColor: string }).brandColor, body.brandColor);
       // La tienda la lee completa.
       const store = await loadStorefront((await resolvePublicCatalog(a.slug))!);
-      assert.equal(store.appearance.template, "oscura");
+      assert.equal(store.appearance.template, "noir");
+      assert.equal(store.appearance.priceMode, "unit");
+      assert.equal(store.appearance.announcement, "Entregas en Asunción");
       assert.equal(store.theme.branded, true);
     });
 

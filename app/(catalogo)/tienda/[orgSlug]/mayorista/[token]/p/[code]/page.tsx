@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductPage } from "@/components/catalog-public/ProductPage";
 import { loadProductDetail } from "@/lib/server/catalog-product";
-import { loadStorefront, resolveWholesaleCatalog } from "@/lib/server/catalog-public";
+import { loadPublicZones, loadStorefront, parsePublicRange, resolveWholesaleCatalog } from "@/lib/server/catalog-public";
 
 export const dynamic = "force-dynamic";
 
-type PageProps = { params: Promise<{ orgSlug: string; code: string; token: string }> };
+type PageProps = { params: Promise<{ orgSlug: string; code: string; token: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
+const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 const PRIVATE_ROBOTS = { index: false, follow: false, nocache: true } as const;
 
@@ -19,13 +20,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 /** Ficha de producto (`/tienda/<slug>/mayorista/<token>/p/<id o código>`): 404 si la tienda, el link o el producto no existen en ESE catálogo. */
-export default async function ProductRoute({ params }: PageProps) {
+export default async function ProductRoute({ params, searchParams }: PageProps) {
+  const query = await searchParams;
   const { orgSlug, code, token } = await params;
   const context = await resolveWholesaleCatalog(orgSlug, token);
   if (!context || !context.access) notFound();
   
-  const detail = await loadProductDetail(context, code);
+  const range = parsePublicRange(first(query.desde), first(query.hasta));
+  const detail = await loadProductDetail(context, code, range);
   if (!detail) notFound();
+  const zones = (await loadPublicZones(context)).map((zone) => zone.name);
   const store = await loadStorefront(context);
   const slug = encodeURIComponent(context.organization.slug);
   return (
@@ -35,6 +39,8 @@ export default async function ProductRoute({ params }: PageProps) {
       showPrices={context.settings.publicShowPrices}
       basePath={`/tienda/${slug}/mayorista/${encodeURIComponent(token)}`}
       scope="mayorista"
+      range={range ? { fromKey: range.fromKey, toKey: range.toKey, days: range.days } : null}
+      zones={zones}
       cartPath={`/api/catalog/${slug}/mayorista/${encodeURIComponent(token)}/cart`}
       wholesale
     />

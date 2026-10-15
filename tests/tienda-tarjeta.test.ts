@@ -49,7 +49,7 @@ test("tarjeta: mismo resultado que el importador para el mismo texto", () => {
 
 // ── Anatomía de la tarjeta y vista rápida ─────────────────────────────────────
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { pickSimilar } from "../lib/server/catalog-product";
@@ -63,39 +63,56 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const item = { id: "i1", name: "Sofá de dos cuerpos", category: "Sector Living › Lounge", sku: "527", imageUrl: "/x.png", description: "Medidas: 1,80 m. Descripción larga que NO va en la tarjeta.", capacity: 2, dimensions: "1,80 m", price: null, availability: "LOW" as const, package: null };
 const tile = async (overrides: Record<string, unknown> = {}) =>
   renderToStaticMarkup(createElement(await loadTile(), {
-    item, specs: cardSpecs(item), isPackage: false, showPrices: true, unit: 150000, unitText: "por día", saving: null, tierHint: null, quantity: 0,
-    fichaHref: "/tienda/demo/p/i1", onOpen: () => {}, onQuantity: () => {}, ...overrides,
+    item, specs: cardSpecs(item), isPackage: false, showPrices: true, perUnit: false, step: 1, unit: 150000, unitText: "por día", saving: null, tierHint: null, pieces: null, quantity: 0,
+    fichaHref: "/tienda/demo/p/i1", onOpen: () => {}, onQuantity: () => {}, onAdd: () => {}, ...overrides,
   } as never));
 
-test("tarjeta: sin bloque «Incluye» ni descripción y con chips, precio y botones", async () => {
-  const html = await tile({ item: { ...item, package: [{ name: "Silla", quantity: 4, price: { unit: 1000 } }] }, isPackage: true });
+test("tarjeta: sin bloque «Incluye» ni descripción; foto con capacidad, código, nombre, dato, precio sin caja y UN botón", async () => {
+  const html = await tile({ item: { ...item, package: [{ name: "Silla", quantity: 4, price: { unit: 1000 } }] }, isPackage: true, pieces: "4 × Silla" });
   assert.ok(!/Incluye/i.test(html), "la tarjeta no muestra «Incluye»");
   assert.ok(!html.includes("Descripción larga"), "la tarjeta no muestra la descripción");
-  assert.ok(!/cp-x-desc|cp-x-specs|catalog-pieces/.test(html), "sin contenedores reservados para Incluye o descripción");
-  assert.match(html, /COD #527/);
-  assert.match(html, />Juego</);
-  assert.match(html, /Medidas<\/span> 1,80 m/);
-  assert.match(html, /Capacidad<\/span> 2 personas/);
+  assert.match(html, /COD #527 · Juego/);
+  assert.match(html, /cp-tile-badge[^>]*>.*2 personas/, "capacidad como badge sobre la foto");
+  assert.match(html, /4 × Silla/, "dato clave de una línea: las piezas del juego");
   assert.match(html, /Gs\. 150\.000/);
   assert.match(html, /por día/);
   assert.match(html, /Pocas unidades/);
-  assert.match(html, /Agregar al pedido/);
-  assert.match(html, /Ver más/);
-  // El nombre y la foto abren la vista rápida (con enlace a la ficha como respaldo sin JavaScript).
-  assert.equal((html.match(/href="\/tienda\/demo\/p\/i1"/g) ?? []).length, 3);
+  assert.match(html, /Agregar<\/button>/);
+  assert.ok(!/Ver más/.test(html), "se quitó «Ver más»");
+  assert.equal((html.match(/<button/g) ?? []).length, 1, "un solo botón en la tarjeta");
+  // La tarjeta ENTERA abre la vista rápida (enlace estirado, con la ficha como respaldo sin JavaScript).
+  assert.equal((html.match(/href="\/tienda\/demo\/p\/i1"/g) ?? []).length, 1);
+  assert.match(html, /cp-tile-open/);
+});
+
+test("tarjeta: sin foto, ícono del tema y nunca letras sueltas", async () => {
+  const html = await tile({ item: { ...item, imageUrl: null, name: "Kiosko Touch" } });
+  assert.match(html, /cp-ph/);
+  assert.ok(!/>KI<|>GE<|>KT</.test(html), "nada de iniciales");
+  for (const file of readdirSync(new URL("../components/catalog-public/", import.meta.url)).filter((name) => name.endsWith(".tsx"))) {
+    assert.ok(!/slice\(0, 2\)\.toUpperCase\(\)/.test(read(`components/catalog-public/${file}`)), `${file}: sin iniciales como foto`);
+  }
 });
 
 test("tarjeta: no reserva espacio para lo que no existe", async () => {
   const bare = { ...item, capacity: null, dimensions: null, description: null, availability: null };
   const html = await tile({ item: bare, specs: cardSpecs(bare) });
-  assert.ok(!/cp-tile-specs/.test(html), "sin medidas ni capacidad no hay fila de chips");
-  assert.ok(!/cp-tile-status/.test(html), "sin estado no hay chip de estado");
+  assert.ok(!/cp-tile-badge/.test(html), "sin capacidad no hay badge");
+  assert.ok(!/cp-tile-datum/.test(html), "sin piezas ni medidas no hay renglón de dato");
+  assert.ok(!/cp-tile-avail|cp-tile-flag/.test(html), "sin estado no hay línea de disponibilidad");
   assert.ok(!/cp-tile-sub/.test(html), "sin ahorro ni escalón no hay renglón extra");
   const sinPrecio = await tile({ item: bare, specs: cardSpecs(bare), showPrices: false, unit: 0 });
-  assert.match(sinPrecio, /Consultar precio/);
+  assert.match(sinPrecio, /A cotizar/);
+  const sinMonto = await tile({ item: bare, specs: cardSpecs(bare), unit: 0 });
+  assert.match(sinMonto, /Consultar precio/);
 });
 
-test("tarjeta: combo con ahorro muestra «Ahorrás» y «Por separado» tachado; con pedido muestra la cantidad", async () => {
+test("tarjeta: «c/u» con selector de a 10; combo con ahorro muestra «Ahorrás» y «Por separado»; con pedido, la cantidad", async () => {
+  const porUnidad = await tile({ perUnit: true, step: 10, unit: 2500, unitText: "c/u" });
+  assert.match(porUnidad, /Gs\. 2\.500/);
+  assert.match(porUnidad, /c\/u/);
+  assert.match(porUnidad, /Agregar 10 unidades/);
+  assert.ok(!/cp-tile-add"/.test(porUnidad), "en «c/u» hay selector, no «+ Agregar»");
   const html = await tile({ saving: { savings: 50000, unitSum: 200000 }, quantity: 3 });
   assert.match(html, /Ahorrás Gs\. 50\.000/);
   assert.match(html, /Por separado <s>Gs\. 200\.000<\/s>/);
@@ -119,10 +136,11 @@ test("vista rápida y cajones: URL ?p=, atrás cierra, portal por encima del enc
   assert.equal((browser.match(/<ThemePortal>/g) ?? []).length, 3, "carrito, guardar carrito y vista rápida salen por el portal");
   assert.match(browser, /Elegí fechas para el total/);
   assert.match(browser, /por día o evento/);
+  assert.match(browser, /<OrderBar/, "barra del pedido compacta");
   const quick = read("components/catalog-public/QuickView.tsx");
-  for (const text of ["Opciones similares", "Abrir página del producto", "Incluye", 'aria-modal="true"', "Agregar al pedido"]) assert.ok(quick.includes(text), text);
-  const css = read("app/globals.css");
-  assert.match(css, /\.cp-overlay \{ position: fixed; inset: 0; z-index: 60;/);
+  for (const text of ["Opciones similares", "Ver la ficha completa", "Incluye", 'aria-modal="true"', "Agregar al pedido"]) assert.ok(quick.includes(text), text);
+  const css = read("app/tienda.css");
+  assert.match(css, /\.cp-overlay \{ position: fixed; inset: 0; z-index: var\(--z-overlay\);/);
   assert.match(css, /\.cp-btn--primary\[disabled\]/);
   const portal = read("components/catalog-public/ThemePortal.tsx");
   assert.match(portal, /closest\("\.cp-theme"\)/);

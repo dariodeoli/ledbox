@@ -5,7 +5,10 @@ import { capacityText, cardSpecs } from "@/lib/catalog-card";
 import type { ProductDetail } from "@/lib/server/catalog-product";
 import type { CatalogItemView } from "./CatalogBrowser";
 import { skuLabel } from "./ProductTile";
-import { XIcon } from "./StoreIcons";
+import { ProductPlaceholder, XIcon } from "./StoreIcons";
+import { Stepper } from "./Stepper";
+import { QuickViewSkeleton } from "./StoreSkeletons";
+import { formatGs, MAX_QUANTITY } from "@/lib/storefront-ui";
 import { useModalBehavior } from "./ThemePortal";
 
 /**
@@ -29,17 +32,18 @@ type Props = {
   fichaHref: string | null;
   /** Cantidad de este producto que ya está en el pedido. */
   inCart: number;
+  /** De a cuánto sube la cantidad (10 en las piezas «c/u»). */
+  step?: number;
   onAdd: (id: string, quantity: number) => void;
   onNavigate: (id: string) => void;
   onClose: () => void;
 };
 
-const gs = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
-const money = (value: number) => `Gs. ${gs.format(value)}`;
+const money = formatGs;
 
 type Loaded = { state: "loading" } | { state: "error" } | { state: "ok"; detail: ProductDetail };
 
-export function QuickView({ item, items, showPrices, priceOf, productApi, fichaHref, inCart, onAdd, onNavigate, onClose }: Props) {
+export function QuickView({ item, items, showPrices, priceOf, productApi, fichaHref, inCart, step = 1, onAdd, onNavigate, onClose }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -47,11 +51,11 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
 
   const cache = useRef(new Map<string, ProductDetail>());
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(step);
   const [added, setAdded] = useState(0);
 
   useEffect(() => {
-    setQuantity(1);
+    setQuantity(step);
     setAdded(0);
     body.current?.scrollTo({ top: 0 });
     const hit = cache.current.get(item.id);
@@ -72,7 +76,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
       }
     })();
     return () => controller.abort();
-  }, [item.id, productApi]);
+  }, [item.id, productApi, step]);
 
   const specs = useMemo(() => cardSpecs(item), [item]);
   const price = priceOf(item);
@@ -91,7 +95,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
       <div className="cp-qv" role="dialog" aria-modal="true" aria-labelledby="qv-titulo" ref={panel} tabIndex={-1} data-testid="quick-view">
         <header className="cp-qv-head">
           <p className="cp-qv-kicker">Vista rápida</p>
-          <button type="button" ref={closeButton} className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar la vista rápida"><XIcon name="close" size={20} /></button>
+          <button type="button" ref={closeButton} className="cp-btn cp-btn--icon cp-btn--ghost" onClick={onClose} aria-label="Cerrar la vista rápida"><XIcon name="close" size={20} /></button>
         </header>
         <div className="cp-qv-body" ref={body}>
           <div className="cp-qv-main">
@@ -100,26 +104,23 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.imageUrl} alt={item.name} />
               ) : (
-                <span className="cp-tile-ph" aria-hidden="true">{item.name.slice(0, 2).toUpperCase()}</span>
+                <ProductPlaceholder size={56} />
               )}
             </div>
             <div className="cp-qv-info">
-              <p className="cp-x-chips">
-                <span className="cp-x-chip cp-x-chip--cod">{item.sku ? skuLabel(item.sku) : "Sin código"}</span>
-                <span className="cp-x-chip">{isPackage ? "Juego" : item.category.split("›")[0].trim()}</span>
-              </p>
+              <p className="cp-panel-meta">{item.sku ? skuLabel(item.sku) : "Sin código"} · {isPackage ? "Juego" : item.category.split("›")[0].trim()}</p>
               <h2 id="qv-titulo" className="cp-qv-name">{item.name}</h2>
               {specs.dimensions || specs.capacity ? (
-                <ul className="cp-tile-specs">
-                  {specs.dimensions ? <li className="cp-tile-spec"><XIcon name="ruler" size={16} /><span><span className="cp-x-k">Medidas</span> {specs.dimensions}</span></li> : null}
-                  {specs.capacity ? <li className="cp-tile-spec"><XIcon name="users" size={16} /><span><span className="cp-x-k">Capacidad</span> {capacityText(specs.capacity)}</span></li> : null}
+                <ul className="cp-plain">
+                  {specs.dimensions ? <li className="cp-hint"><XIcon name="ruler" size={14} /> Medidas: {specs.dimensions}</li> : null}
+                  {specs.capacity ? <li className="cp-hint"><XIcon name="users" size={14} /> Capacidad: {capacityText(specs.capacity)}</li> : null}
                 </ul>
               ) : null}
               <div className="cp-qv-price">
                 {showPrices && price.unit > 0 ? (
-                  <span className="cp-x-pricetext"><span className="cp-tile-amount cp-qv-amount">{money(price.unit)}</span><span className="cp-ed-unit">{price.unitText}</span></span>
+                  <span className="cp-panel-price"><span className="cp-price-lg">{money(price.unit)}</span><span className="cp-price-unit">{price.unitText}</span></span>
                 ) : (
-                  <span className="cp-ed-unit">Consultar precio</span>
+                  <span className="cp-price-unit">{showPrices ? "Consultar precio" : "A cotizar"}</span>
                 )}
                 {price.saving ? <p className="cp-tile-sub"><strong className="cp-tile-save">Ahorrás {money(price.saving.savings)}</strong> · Por separado <s>{money(price.saving.unitSum)}</s></p> : null}
                 {showPrices && price.tierHints.length > 0 ? (
@@ -130,16 +131,11 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
               </div>
               {detail && detail.includes.length > 0 ? (
                 <section aria-labelledby="qv-incluye" className="cp-qv-sec">
-                  <h3 id="qv-incluye" className="cp-qv-h"><XIcon name="puzzle" size={16} />Incluye</h3>
-                  <ul className="cp-qv-includes" data-testid="quick-includes">
+                  <h3 id="qv-incluye" className="cp-qv-h">Incluye</h3>
+                  <ul className="cp-checks" data-testid="quick-includes">
                     {detail.includes.map((part) => (
-                      <li key={`${part.name}-${part.sku ?? ""}`} className="cp-include">
-                        <span className="cp-cart-thumb" aria-hidden="true">
-                          {part.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={part.imageUrl} alt="" loading="lazy" />
-                          ) : null}
-                        </span>
+                      <li key={`${part.name}-${part.sku ?? ""}`}>
+                        <XIcon name="check" size={16} />
                         <span><strong>{part.quantity} × {part.name}</strong>{part.sku ? <small className="cp-hint"> {skuLabel(part.sku)}</small> : null}</span>
                       </li>
                     ))}
@@ -152,33 +148,34 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
                   <div className="cp-pre">{descriptionLines.join("\n")}</div>
                 </section>
               ) : null}
-              {loaded.state === "loading" ? <p className="cp-hint" role="status">Cargando piezas y opciones similares…</p> : null}
+              {loaded.state === "loading" ? <><QuickViewSkeleton /><span className="cp-sr" role="status">Cargando piezas y opciones similares…</span></> : null}
               {loaded.state === "error" ? <p className="cp-hint" role="status">No pudimos cargar las piezas y las opciones similares. Probá abrir la página del producto.</p> : null}
-              {fichaHref ? <a className="cp-link cp-qv-open" href={fichaHref}>Abrir página del producto</a> : null}
+              {fichaHref ? <a className="cp-link cp-qv-open" href={fichaHref}>Ver la ficha completa</a> : null}
             </div>
           </div>
           {similar.length > 0 ? (
-            <aside className="cp-qv-side" aria-labelledby="qv-similares" data-testid="quick-similar">
+            <aside className="cp-qv-side cp-qv-sec" aria-labelledby="qv-similares" data-testid="quick-similar">
               <h3 id="qv-similares" className="cp-qv-h">Opciones similares</h3>
-              <ul className="cp-qv-list">
+              <ul className="cp-rail">
                 {similar.map((entry) => {
                   const entryPrice = priceOf(entry);
                   return (
                     <li key={entry.id}>
-                      <button type="button" className="cp-qv-mini" onClick={() => onNavigate(entry.id)} aria-label={`Ver ${entry.name}`}>
-                        <span className="cp-qv-mini-photo" aria-hidden="true">
+                      <div className="cp-mini">
+                        <button type="button" className="cp-mini-open" onClick={() => onNavigate(entry.id)} aria-label={`Ver ${entry.name}`} />
+                        <div className="cp-mini-media">
                           {entry.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={entry.imageUrl} alt="" loading="lazy" />
                           ) : (
-                            <span className="cp-tile-ph">{entry.name.slice(0, 2).toUpperCase()}</span>
+                            <ProductPlaceholder size={28} />
                           )}
-                        </span>
-                        <span className="cp-qv-mini-text">
-                          <span className="cp-qv-mini-name">{entry.name}</span>
-                          <span className="cp-qv-mini-price">{showPrices && entryPrice.unit > 0 ? `${money(entryPrice.unit)} ${entryPrice.unitText}` : "Consultar precio"}</span>
-                        </span>
-                      </button>
+                        </div>
+                        <div className="cp-mini-body">
+                          <span className="cp-mini-name">{entry.name}</span>
+                          <span className="cp-hint">{showPrices && entryPrice.unit > 0 ? `${money(entryPrice.unit)} ${entryPrice.unitText}` : "Consultar precio"}</span>
+                        </div>
+                      </div>
                     </li>
                   );
                 })}
@@ -187,12 +184,8 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, fichaH
           ) : null}
         </div>
         <footer className="cp-qv-foot">
-          <div className="cp-qty" role="group" aria-label={`Cantidad de ${item.name}`}>
-            <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Quitar una unidad">−</button>
-            <output aria-live="polite">{quantity}</output>
-            <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity((q) => Math.min(99, q + 1))} aria-label="Agregar una unidad">+</button>
-          </div>
-          <button type="button" className="cp-btn cp-btn--primary cp-qv-add" onClick={add}>Agregar al pedido</button>
+          <Stepper label={item.name} value={quantity} step={step} min={step} max={MAX_QUANTITY} onChange={setQuantity} />
+          <button type="button" className="cp-btn cp-btn--primary cp-btn--lg cp-qv-add" onClick={add}>Agregar al pedido</button>
           <p className="cp-qv-note" role="status">
             {added > 0 ? `Agregaste ${added} ${added === 1 ? "unidad" : "unidades"}. En tu pedido: ${inCart}.` : inCart > 0 ? `Ya tenés ${inCart} en tu pedido.` : "Un pedido no es una reserva: te respondemos con la cotización."}
           </p>

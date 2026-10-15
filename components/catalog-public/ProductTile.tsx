@@ -1,19 +1,17 @@
 import { AVAILABILITY_HINT_LABEL, type AvailabilityHint } from "@/lib/catalog-public";
 import { capacityText, type CardSpecs } from "@/lib/catalog-card";
+import { MAX_QUANTITY, formatGs } from "@/lib/storefront-ui";
 import type { CatalogItemView } from "./CatalogBrowser";
-import { XIcon } from "./StoreIcons";
+import { ProductPlaceholder, XIcon } from "./StoreIcons";
+import { Stepper } from "./Stepper";
 
 /**
- * Tarjeta compacta de producto de la tienda. De arriba hacia abajo: foto cuadrada, chips (código y categoría o «Juego»),
- * nombre (hasta 2 líneas), chips con icono de medidas y capacidad (solo si existen), precio compacto, estado y botones.
- * SIN «Incluye» ni descripción (viven en la vista rápida) y sin reservar espacio para lo que no existe: la altura la marca
- * la tarjeta más alta de la fila y el precio con los botones quedan anclados abajo (`margin-top: auto`).
- * Componente puro (sin estado): lo dibuja `CatalogBrowser`.
+ * Tarjeta de producto de la tienda. Orden fijo y sin huecos: foto (con el badge de capacidad encima) → código y categoría
+ * (texto chico) → nombre (2 líneas) → dato clave de una línea (piezas del juego o medidas) → precio sin caja → acción.
+ * La tarjeta ENTERA abre la vista rápida (un enlace estirado, que también sirve sin JavaScript); el único botón es
+ * «+ Agregar» (o, en piezas que se cobran «c/u», un selector de a 10). Sin «Ver más», sin descripción ni «Incluye» (viven en
+ * la vista rápida) y sin reservar espacio para lo que no existe: el pie queda anclado abajo. Componente puro.
  */
-
-const AVAILABILITY_TONE: Record<AvailabilityHint, string> = { AVAILABLE: "cp-chip--ok", LOW: "cp-chip--warn", CONSULT: "cp-chip--muted" };
-const gs = new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 });
-const money = (value: number) => `Gs. ${gs.format(value)}`;
 
 /** `COD #527` a partir del SKU (sin repetir «COD» si el SKU ya lo trae). */
 export const skuLabel = (sku: string) => `COD #${sku.replace(/^cod\s*#?\s*/i, "")}`;
@@ -23,83 +21,82 @@ export type TileProps = {
   specs: CardSpecs;
   isPackage: boolean;
   showPrices: boolean;
+  /** «Por unidad» (c/u) en el modo de precio de la empresa. */
+  perUnit: boolean;
+  /** De a cuánto sube la cantidad (10 en «c/u»). */
+  step: number;
   unit: number;
   unitText: string;
   /** Solo en combos con ahorro real: ahorro y suma de las piezas por separado. */
   saving: { savings: number; unitSum: number } | null;
   tierHint: string | null;
+  /** Texto de las piezas del juego (composición), una línea. */
+  pieces: string | null;
   quantity: number;
   /** Enlace a la ficha (`<base>/p/<id>`): sirve sin JavaScript; con JavaScript abre la vista rápida. */
   fichaHref: string | null;
   onOpen: (id: string) => void;
   onQuantity: (id: string, next: number) => void;
+  onAdd: (id: string, quantity: number) => void;
 };
 
-export function ProductTile({ item, specs, isPackage, showPrices, unit, unitText, saving, tierHint, quantity, fichaHref, onOpen, onQuantity }: TileProps) {
+export function ProductTile({ item, specs, isPackage, showPrices, perUnit, step, unit, unitText, saving, tierHint, pieces, quantity, fichaHref, onOpen, onQuantity, onAdd }: TileProps) {
   const open = (event: React.MouseEvent) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     onOpen(item.id);
   };
-  // `label` vacío: el texto visible ya dice qué es; `null`: duplicado decorativo (la foto), fuera del orden de tabulación.
-  const opener = (className: string, label: string | null, children: React.ReactNode) => {
-    const extra = label === null ? { "aria-hidden": true as const, tabIndex: -1 } : label ? { "aria-label": label } : {};
-    return fichaHref ? (
-      <a className={className} href={fichaHref} onClick={open} {...extra}>{children}</a>
-    ) : (
-      <button type="button" className={className} onClick={() => onOpen(item.id)} {...extra}>{children}</button>
-    );
-  };
+  const label = `Ver ${item.name}`;
+  const datum = pieces ?? specs.dimensions;
+  const priced = showPrices && unit > 0;
+  const low = item.availability === "LOW";
+  const showStepper = (perUnit && !isPackage) || quantity > 0;
   return (
-    <li className="cp-item cp-x-item cp-tile" data-testid="catalog-item">
-      {opener("cp-photo cp-tile-photo", null, item.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.imageUrl} alt="" loading="lazy" />
+    <li className="cp-tile" data-testid="catalog-item">
+      {fichaHref ? (
+        <a className="cp-tile-open" href={fichaHref} onClick={open} aria-label={label} />
       ) : (
-        <span className="cp-tile-ph" aria-hidden="true">{item.name.slice(0, 2).toUpperCase()}</span>
-      ))}
-      <div className="cp-item-body">
-        <div className="cp-x-chips">
-          <span className="cp-x-chip cp-x-chip--cod">{item.sku ? skuLabel(item.sku) : "Sin código"}</span>
-          <span className="cp-x-chip">{isPackage ? "Juego" : item.category.split("›")[0].trim()}</span>
-        </div>
-        <h4 className="cp-item-name">{opener("cp-x-namelink", "", item.name)}</h4>
-        {specs.dimensions || specs.capacity ? (
-          <ul className="cp-tile-specs" aria-label="Medidas y capacidad">
-            {specs.dimensions ? <li className="cp-tile-spec" data-testid="catalog-dimensions"><XIcon name="ruler" size={16} /><span><span className="cp-x-k">Medidas</span> {specs.dimensions}</span></li> : null}
-            {specs.capacity ? <li className="cp-tile-spec" data-testid="catalog-capacity"><XIcon name="users" size={16} /><span><span className="cp-x-k">Capacidad</span> {capacityText(specs.capacity)}</span></li> : null}
-          </ul>
+        <button type="button" className="cp-tile-open" onClick={() => onOpen(item.id)} aria-label={label} />
+      )}
+      <div className="cp-tile-media">
+        {item.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <ProductPlaceholder />
+        )}
+        {specs.capacity ? <span className="cp-tile-badge" data-testid="catalog-capacity"><XIcon name="users" size={14} />{capacityText(specs.capacity)}</span> : null}
+        {low ? <span className="cp-tile-flag">Pocas unidades</span> : null}
+      </div>
+      <div className="cp-tile-body">
+        <p className="cp-tile-meta">{item.sku ? skuLabel(item.sku) : "Sin código"} · {isPackage ? "Juego" : item.category.split("›")[0].trim()}</p>
+        <h4 className="cp-tile-name">{item.name}</h4>
+        {datum ? <p className="cp-tile-datum" data-testid={pieces ? "catalog-pieces" : "catalog-dimensions"}>{datum}</p> : null}
+        {item.availability && !low ? <p className="cp-tile-avail" data-tone={item.availability}>{AVAILABILITY_HINT_LABEL[item.availability as AvailabilityHint]}</p> : null}
+        {saving ? (
+          <p className="cp-tile-sub" data-testid="catalog-package"><strong className="cp-tile-save" data-testid="catalog-saving">Ahorrás {formatGs(saving.savings)}</strong> · Por separado <s>{formatGs(saving.unitSum)}</s></p>
+        ) : tierHint ? (
+          <p className="cp-tile-sub">{tierHint}</p>
         ) : null}
         <div className="cp-tile-foot">
           <div className="cp-tile-price">
-            <div className="cp-tile-pricerow">
-              {showPrices && unit > 0 ? (
-                <span className="cp-x-pricetext"><span className="cp-tile-amount">{money(unit)}</span><span className="cp-ed-unit">{unitText}</span></span>
-              ) : (
-                <span className="cp-ed-unit">Consultar precio</span>
-              )}
-              {item.availability ? <span className={`cp-chip cp-tile-status ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span> : null}
-            </div>
-            {saving ? (
-              <p className="cp-tile-sub" data-testid="catalog-package"><strong className="cp-tile-save" data-testid="catalog-saving">Ahorrás {money(saving.savings)}</strong> · Por separado <s>{money(saving.unitSum)}</s></p>
-            ) : tierHint ? (
-              <p className="cp-tile-sub">{tierHint}</p>
-            ) : null}
+            {priced ? (
+              <>
+                <span className="cp-price" data-testid="catalog-price">{formatGs(unit)}</span>
+                <span className="cp-price-unit">{unitText}</span>
+              </>
+            ) : (
+              <span className="cp-price-unit">{showPrices ? "Consultar precio" : "A cotizar"}</span>
+            )}
           </div>
           <div className="cp-tile-actions">
-            {quantity > 0 ? (
-              <div className="cp-qty" role="group" aria-label={`Cantidad de ${item.name}`}>
-                <button type="button" className="cp-btn cp-btn--icon" onClick={() => onQuantity(item.id, quantity - 1)} aria-label={`Quitar una unidad de ${item.name}`}>−</button>
-                <output aria-live="polite">{quantity}</output>
-                <button type="button" className="cp-btn cp-btn--icon" onClick={() => onQuantity(item.id, quantity + 1)} aria-label={`Agregar una unidad de ${item.name}`}>+</button>
-              </div>
+            {showStepper ? (
+              <Stepper label={item.name} value={quantity} step={step} max={MAX_QUANTITY} onChange={(next) => onQuantity(item.id, next)} />
             ) : (
-              <button type="button" className="cp-btn cp-btn--primary cp-tile-add" onClick={() => onQuantity(item.id, 1)} aria-label={`Agregar ${item.name} al pedido`}>
-                <span className="cp-tile-add-long">Agregar al pedido</span>
-                <span className="cp-tile-add-short"><XIcon name="cart" size={16} />Agregar</span>
+              <button type="button" className="cp-btn cp-tile-add" onClick={() => onAdd(item.id, step)} aria-label={`Agregar ${item.name} al pedido`}>
+                <XIcon name="plus" size={16} />Agregar
               </button>
             )}
-            {opener("cp-btn cp-tile-more", `Ver más de ${item.name}`, "Ver más")}
           </div>
         </div>
       </div>

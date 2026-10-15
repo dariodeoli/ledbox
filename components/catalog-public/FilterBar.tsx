@@ -1,0 +1,42 @@
+"use client";
+
+import { SelectField, TextField } from "@/components/admin/AdminFields";
+import { SORT_OPTIONS, isSortKey, type SortKey } from "@/lib/storefront-ui";
+
+/**
+ * Barra de filtros sticky del catálogo: chips de categoría con scroll horizontal y fade en los bordes, orden (destacados,
+ * precio, nombre, capacidad) y buscador. Presentacional: el estado vive en `CatalogBrowser`.
+ */
+export function FilterBar({ categories, category, onCategory, sort, onSort, query, onQuery, showPrices }: {
+  categories: string[];
+  category: string | null;
+  onCategory: (value: string | null) => void;
+  sort: SortKey;
+  onSort: (value: SortKey) => void;
+  query: string;
+  onQuery: (value: string) => void;
+  showPrices: boolean;
+}) {
+  return (
+    <div className="cp-filter cp-fields" role="search" aria-label="Filtrar y ordenar el catálogo" data-testid="filter-bar">
+      {categories.length > 1 ? (
+        <div className="cp-filter-chips" role="group" aria-label="Filtrar por categoría" tabIndex={-1}>
+          <button type="button" className="cp-cat" aria-pressed={category === null} onClick={() => onCategory(null)}>Todas</button>
+          {categories.map((name) => (
+            <button key={name} type="button" className="cp-cat" aria-pressed={category === name} onClick={() => onCategory(category === name ? null : name)}>{name}</button>
+          ))}
+        </div>
+      ) : null}
+      <div className="cp-filter-tools">
+        <TextField id="buscar-catalogo" ariaLabel="Buscar productos por nombre o código" type="search" size="full" placeholder="Buscar producto" value={query} onChange={onQuery} autoComplete="off" />
+        <SelectField
+          ariaLabel="Ordenar productos"
+          size="full"
+          value={sort}
+          onChange={(value) => { if (isSortKey(value)) onSort(value); }}
+          options={SORT_OPTIONS.filter((option) => showPrices || !option.value.startsWith("precio")).map((option) => ({ value: option.value, label: option.label }))}
+        />
+      </div>
+    </div>
+  );
+}

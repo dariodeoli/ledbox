@@ -36,7 +36,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   return (
     <StoreChrome theme={order.organization.theme} appearance={order.organization.appearance}>
     <StoreHeader name={order.organization.name} slug={order.organization.slug} homeHref={`/tienda/${encodeURIComponent(order.organization.slug)}`} nav={[]} cart={null} />
-    <main className="cp-main cp-narrow">
+    <main className="cp-container cp-main-pad cp-narrow">
       <header className="cp-header">
         <p className="cp-eyebrow">{order.organization.name}{order.priceList === "WHOLESALE" ? " · Pedido mayorista" : ""}</p>
         <h1 className="cp-h1">Seguimiento de tu pedido</h1>
