@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CityField, EmailField, PhoneField, TextAreaField, TextField } from "@/components/admin/AdminFields";
+import { CityField, EmailField, MoneyField, PhoneField, SelectField, TextAreaField, TextField } from "@/components/admin/AdminFields";
 import { deliveryExtraApplies, deliveryFee, deliveryRateText } from "@/lib/delivery-zones";
-import { PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
+import { PRICE_AMOUNT_MAX, PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
 import type { PriceMode } from "@/lib/appearance";
 import { formatGs, priceUnitLabel } from "@/lib/storefront-ui";
 import type { CartView } from "@/lib/server/store-cart";
@@ -235,19 +235,13 @@ export function CartDrawer(props: {
                     })}
                   </ul>
                   {zones.length > 0 ? (
-                    <label className="cp-field">
-                      <span>Flete (opcional)</span>
-                      <select value={zoneChoice} onChange={(e) => props.onZone(e.target.value)} aria-describedby="flete-ayuda">
-                        <option value="">Lo defino después</option>
-                        {zones.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{showPrices && entry.basePrice > 0 ? ` · ${formatGs(entry.basePrice)}` : ""}</option>)}
-                        <option value="COORDINATE">A coordinar</option>
-                      </select>
-                      <small id="flete-ayuda" className="cp-hint">
-                        {zone && showPrices
+                    <div className="cp-fields">
+                      <SelectField label="Flete (opcional)" size="full" value={zoneChoice} onChange={props.onZone}
+                        options={[{ value: "", label: "Lo defino después" }, ...zones.map((entry) => ({ value: entry.id, label: `${entry.name}${showPrices && entry.basePrice > 0 ? ` · ${formatGs(entry.basePrice)}` : ""}` })), { value: "COORDINATE", label: "A coordinar" }]}
+                        hint={zone && showPrices
                           ? `Flete estimado ${formatGs(fee ?? 0)}${deliveryExtraApplies(zone, pieces) ? ` (incluye recargo por más de ${zone.volumeThreshold} piezas)` : zone.volumeThreshold !== null && zone.extraPrice ? ` (${deliveryRateText(zone).split(" + ")[1] ?? ""})` : ""}`
-                          : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Si elegís la zona te mostramos el flete estimado."}
-                      </small>
-                    </label>
+                          : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Si elegís la zona te mostramos el flete estimado."} />
+                    </div>
                   ) : null}
                   {showPrices ? (
                     <dl className="cp-summary" data-testid="cart-summary" aria-label="Resumen del pedido">
@@ -281,9 +275,9 @@ export function CartDrawer(props: {
                         <span>Pedir un mejor precio</span>
                       </label>
                       {askPrice ? (
-                        <div id="mejor-precio" className="cp-price-ask-fields">
-                          <label className="cp-field"><span>¿Por qué lo pedís?</span><textarea value={priceComment} onChange={(e) => setPriceComment(e.target.value)} maxLength={PRICE_COMMENT_MAX} rows={2} required placeholder="Ej.: somos clientes frecuentes" /></label>
-                          <label className="cp-field"><span>Monto que querías pagar en total, en Gs. (opcional)</span><input inputMode="numeric" value={priceAmount} onChange={(e) => setPriceAmount(e.target.value.replace(/[^\d.\s]/g, "").slice(0, 16))} placeholder="Ej.: 1.200.000" /></label>
+                        <div id="mejor-precio" className="cp-price-ask-fields cp-fields">
+                          <TextAreaField label="¿Por qué lo pedís?" size="full" value={priceComment} onChange={setPriceComment} maxLength={PRICE_COMMENT_MAX} rows={2} required placeholder="Ej.: somos clientes frecuentes" />
+                          <MoneyField label="Monto que querías pagar en total (opcional)" size="full" value={priceAmount} onChange={setPriceAmount} limit={PRICE_AMOUNT_MAX} placeholder="Ej.: 1.200.000" />
                           <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
                         </div>
                       ) : null}
