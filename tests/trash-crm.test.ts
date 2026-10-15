@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { archivedFieldsForActive, crmActionCapability, CRM_MODELS, CRM_SEGMENTS } from "../lib/server/trash-crm";
 import { roleCan } from "../lib/server/permissions";
 import { deletedLabel, withDeletedLabel } from "../lib/deleted-label";
+import { clientIdentityDTO } from "../lib/server/client-identity";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -68,6 +69,13 @@ test("el rótulo «(eliminado)» sale de un helper compartido y se usa en cobros
   assert.equal(withDeletedLabel({ name: "Ana", deletedAt: null }).name, "Ana");
   assert.equal(withDeletedLabel({ name: "Ana", deletedAt: new Date() }).name, "Ana (eliminado)");
   assert.equal(withDeletedLabel(null), null);
+  const deletedAt = new Date("2026-10-01T12:00:00Z");
+  const client = withDeletedLabel(clientIdentityDTO({ id: "client-qa", name: "Ana", tradeName: "Aurora", deletedAt, logo: { updatedAt: deletedAt } }));
+  assert.equal(client.name, "Ana (eliminado)", "proyectar la identidad no borra el rótulo histórico");
+  assert.equal(client.deletedAt, deletedAt, "la presentación comercial conserva el estado eliminado explícito");
+  assert.equal(client.tradeName, "Aurora", "el DTO no reescribe nombres comerciales");
+  assert.equal(client.logoUpdatedAt, deletedAt.toISOString());
+  assert.equal("logo" in client, false, "la proyección conserva sólo la versión del logo");
   const financeRoute = read("app/api/admin/finance/route.ts");
   assert.match(financeRoute, /import \{ readFinanceListing \} from "@\/lib\/server\/finance-listing"/);
   assert.match(financeRoute, /readFinanceListing\(organizationId, new URL\(request\.url\)\.searchParams\)/);
@@ -76,7 +84,7 @@ test("el rótulo «(eliminado)» sale de un helper compartido y se usa en cobros
     assert.match(read(file), /deletedAt: true/, file);
   }
   const listing = read("lib/server/finance-listing.ts");
-  assert.match(listing, /client: withDeletedLabel\(payment\.client\)/);
+  assert.match(listing, /client: withDeletedLabel\(clientIdentityDTO\(payment\.client\)\)/);
   assert.match(listing, /supplier: withDeletedLabel\(job\.supplier\)/);
 });
 
