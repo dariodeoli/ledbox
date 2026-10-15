@@ -9,7 +9,7 @@ test("Inventario E2 en PostgreSQL: payload liviano, agregados por groupBy, pagin
   assert.ok(["127.0.0.1", "localhost"].includes(url.hostname), "solo una base local descartable");
   process.env.DATABASE_URL = url.toString();
   const { db } = await import("../lib/server/db");
-  const { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } = await import("../lib/server/inventory-grid");
+  const { GridCursorError, encodeGridCursor, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } = await import("../lib/server/inventory-grid");
   const { inventoryVisualState: visualOf } = await import("../lib/inventory-visual-state");
   const inventoryVisualState = (row: { archivedAt: Date | null } & Omit<Parameters<typeof visualOf>[0], "archivedAt">) => visualOf({ ...row, archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null });
 
@@ -109,6 +109,20 @@ test("Inventario E2 en PostgreSQL: payload liviano, agregados por groupBy, pagin
       assert.deepEqual(seen, ["Copa", "Mesa", "Plato", "Silla"]);
     });
 
+    await t.test("3b) cursor vencido: si el producto del cursor se borró entre dos páginas sigue desde el siguiente", async () => {
+      const org = await newOrg("cursor");
+      const created = [];
+      for (const name of ["Alfa", "Beta", "Delta", "Gama"]) created.push(await addItem(org, name));
+      const first = await listInventoryGrid({ organizationId: org, limit: 2, now });
+      assert.deepEqual(first.inventory.map((row) => row.name), ["Alfa", "Beta"]);
+      assert.ok(first.nextCursor);
+      await db.inventoryItem.delete({ where: { id: created[1].id } });
+      const second = await listInventoryGrid({ organizationId: org, limit: 2, cursor: first.nextCursor, now });
+      assert.deepEqual(second.inventory.map((row) => row.name), ["Delta", "Gama"], "no falla ni repite: sigue por (nombre, id)");
+      assert.equal(second.nextCursor, null);
+      await assert.rejects(listInventoryGrid({ organizationId: org, cursor: "no-es-un-cursor", now }), GridCursorError);
+    });
+
     await t.test("4) más de 300 productos: sin tope, páginas de 300 como máximo", async () => {
       const big = await newOrg("grande");
       await db.inventoryItem.createMany({
@@ -137,7 +151,9 @@ test("Inventario E2 en PostgreSQL: payload liviano, agregados por groupBy, pagin
       await addUnits(b, bItem.id, "COP", ["AVAILABLE"]);
       const pageB = await listInventoryGrid({ organizationId: b, now });
       assert.deepEqual(pageB.inventory.map((row) => row.name), ["Copa de B"]);
-      await assert.rejects(listInventoryGrid({ organizationId: b, cursor: copa.id, now }), GridCursorError);
+      await assert.rejects(listInventoryGrid({ organizationId: b, cursor: copa.id, now }), GridCursorError, "un id suelto ya no es un cursor válido");
+      const forged = await listInventoryGrid({ organizationId: b, cursor: encodeGridCursor({ name: "A", id: copa.id }), now });
+      assert.deepEqual(forged.inventory.map((row) => row.name), ["Copa de B"], "un cursor armado con datos de A solo recorre la empresa B");
       assert.deepEqual(await matchInventoryByUnitCode(a, "cop-0"), [copa.id], "insensible a mayúsculas y solo de la empresa A");
       assert.deepEqual(await matchInventoryByUnitCode(b, "COP-01"), [bItem.id]);
       assert.deepEqual(await matchInventoryByUnitCode(a, "x"), [], "menos de dos caracteres no busca");

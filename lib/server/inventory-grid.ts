@@ -183,6 +183,21 @@ export type GridPageOptions = {
 
 export class GridCursorError extends Error {}
 
+/** Cursor opaco por `(name, id)`: no depende de que el último producto siga existiendo. */
+export function encodeGridCursor(item: { name: string; id: string }): string {
+  return Buffer.from(JSON.stringify([item.name, item.id]), "utf8").toString("base64url");
+}
+
+export function decodeGridCursor(cursor: string): { name: string; id: string } {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (Array.isArray(parsed) && parsed.length === 2 && typeof parsed[0] === "string" && typeof parsed[1] === "string") return { name: parsed[0], id: parsed[1] };
+  } catch {
+    // cae al error de abajo
+  }
+  throw new GridCursorError("El cursor no es válido. Recargá el inventario.");
+}
+
 export function readGridLimit(raw: string | null): number {
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 1) return GRID_DEFAULT_LIMIT;
@@ -195,23 +210,24 @@ export async function listInventoryGrid(options: GridPageOptions) {
   const now = options.now ?? new Date();
   const limit = Math.min(Math.max(1, Math.floor(options.limit ?? GRID_DEFAULT_LIMIT)), GRID_MAX_LIMIT);
 
-  if (options.cursor) {
-    const exists = await db.inventoryItem.findFirst({ where: { id: options.cursor, organizationId }, select: { id: true } });
-    if (!exists) throw new GridCursorError("El cursor no pertenece a esta empresa.");
-  }
+  // El cursor lleva (nombre, id) del último producto: sigue desde el siguiente aunque ese producto
+  // se haya borrado entre dos páginas, y siempre dentro de la empresa pedida.
+  const after = options.cursor ? decodeGridCursor(options.cursor) : null;
   const [rows, total] = await Promise.all([
     db.inventoryItem.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
+      },
       orderBy: [{ name: "asc" }, { id: "asc" }],
       take: limit + 1,
-      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
       omit: { imageData: true },
       include: {
         priceTiers: { orderBy: [{ audience: "asc" }, { fromDays: "asc" }], select: { audience: true, fromDays: true, mode: true, price: true } },
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
     }),
-    options.cursor ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId } }),
+    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId } }),
   ]);
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
@@ -289,7 +305,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
   const rangeCapacities = range && definitions.size > 0 ? await comboCapacitiesForRange({ organizationId, comboIds: [...definitions.keys()], startsAt: range.start, endsAt: range.end }) : null;
   return {
     inventory: withComboAvailability(inventory, definitions, rangeCapacities),
-    nextCursor: hasMore ? items[items.length - 1].id : null,
+    nextCursor: hasMore ? encodeGridCursor(items[items.length - 1]) : null,
     ...(total === undefined ? {} : { total }),
   };
 }
