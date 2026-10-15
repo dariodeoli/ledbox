@@ -162,6 +162,7 @@ capturas por tarea, con datos locales (nunca tokens ni datos reales de clientes)
 ## 8. Seguridad (siempre)
 
 - **Navegador: nunca probar contra producción** (app.ledbox.online, ledbox.online, clientes., demo.). Antes de cada login o formulario, confirmar que la URL es `localhost` o `*.localhost`. Dos agentes mandaron por error un login de prueba a producción (401, sin efecto).
+- **Diseño: verificar el flujo real, no la pantalla quieta.** Toda tarea visual de tienda o panel recorre el flujo que usa el dueño (por ej. elegir producto → Agregar → panel de datos → carrito → enviar) a 1280 y 390 px, con capturas guardadas en PNG, y el agente MIRA cada captura antes de reportar. No está terminado si algo queda cortado bajo el header, con labels pegados, inputs de distinto ancho, botones primarios grises o huecos vacíos. El integrador mira las capturas antes de pasarle la versión al dueño.
 
 - Nunca leer `.env` ni pedir/pegar tokens o contraseñas. Los secretos de producción los carga el dueño.
 - Nunca tocar la base de producción ni correr migraciones contra ella.
