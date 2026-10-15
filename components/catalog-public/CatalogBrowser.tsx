@@ -127,6 +127,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const cartKey = storeCartKey(slug, cartScope === "visitor" ? "public" : cartScope);
   const visitorKey = `ledbox-store-visitor:${slug.trim().toLowerCase()}`;
   const [contactOpen, setContactOpen] = useState(false);
+  const [quickId, setQuickId] = useState<string | null>(null);
   const contactAsked = useRef(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
@@ -275,7 +276,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   // Primer producto sin identificar (tienda abierta): se ofrece guardar el carrito dejando el contacto. Una sola vez por visita.
   useEffect(() => {
-    if (!ready || contactAsked.current || count === 0 || saved || cartScope !== "public") return;
+    if (!ready || contactAsked.current || count === 0 || saved || cartScope !== "public" || quickId || open) return;
     contactAsked.current = true;
     try {
       if (window.sessionStorage.getItem(`${visitorKey}:skip`)) return;
@@ -284,7 +285,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     }
     setContactOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, count, saved, cartScope]);
+  }, [ready, count, saved, cartScope, quickId, open]);
 
   // Revalidar al volver y al cambiar el carrito: el servidor devuelve precio, escalón, flete, total y stock de HOY.
   useEffect(() => {
@@ -349,7 +350,6 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   // Vista rápida: popup con la ficha. La URL lleva `?p=<id>` (se puede compartir), «atrás» lo cierra y el catálogo
   // de atrás no se mueve (ni el scroll ni el carrito).
-  const [quickId, setQuickId] = useState<string | null>(null);
   const pushedQuick = useRef(false);
   const quickItem = quickId ? items.find((entry) => entry.id === quickId) ?? null : null;
   const quickUrl = (id: string | null) => {
@@ -530,7 +530,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       </div>
 
       {count > 0 ? <OrderBar count={count} text={barText} onOpen={() => { setDone(null); setOpen(true); }} /> : null}
-      {toast}
+      {!contactOpen && !open && !quickItem && !filtersOpen ? toast : null}
       {filtersOpen ? <FiltersDrawer props={filterProps} onClose={() => setFiltersOpen(false)} onClear={() => changeFilters(EMPTY_FILTERS)} /> : null}
 
       {contactOpen ? (

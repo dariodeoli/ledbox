@@ -32,8 +32,9 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
         </div>
       ) : null}
       <div className="cp-filter-tools">
-        <TextField id="buscar-catalogo" ariaLabel="Buscar productos por nombre o código" type="search" size="full" placeholder="Buscar producto" value={query} onChange={onQuery} autoComplete="off" />
+        <TextField id="buscar-catalogo" label="Buscar productos" ariaLabel="Buscar productos por nombre o código" type="search" size="full" placeholder="Buscar producto" value={query} onChange={onQuery} autoComplete="off" />
         <SelectField
+          label="Ordenar"
           ariaLabel="Ordenar productos"
           size="full"
           value={sort}

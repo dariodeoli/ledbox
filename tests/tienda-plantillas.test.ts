@@ -364,3 +364,21 @@ test("las fotos de producto conservan margen y fondo claro incluso al pasar el m
   assert.match(css, /\.cp-colcard\[data-media="product"\] \.cp-colcard-media img \{[^}]*object-fit: contain; padding: 5%/);
   assert.match(css, /\.cp-btn--on-image \{[^}]*background: var\(--color-primary\)/);
 });
+
+
+test("controles compactos: fecha canónica y montos/cantidades en columnas sin perder área táctil", () => {
+  assert.match(read("components/catalog-public/EventPicker.tsx"), /<DayField label="Fecha del evento"/);
+  assert.match(css, /--a-field-h: var\(--tap\)/);
+  assert.match(css, /\.cp-cart-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.cp-cart-actions \{[^}]*grid-template-columns: 1fr/);
+  assert.match(read("components/catalog-public/CartDrawer.tsx"), /data-testid="cart-count"/);
+});
+
+test("guardar carrito es un popup acotado y espera que se cierre la vista rápida", () => {
+  const contact = read("components/catalog-public/ContactPanel.tsx");
+  assert.match(contact, /cp-overlay--contact/);
+  assert.match(css, /\.cp-contact \{[^}]*height: auto; max-height:/);
+  const browser = read("components/catalog-public/CatalogBrowser.tsx");
+  assert.match(browser, /cartScope !== "public" \|\| quickId \|\| open/);
+  assert.match(browser, /!contactOpen && !open && !quickItem && !filtersOpen \? toast : null/);
+});

@@ -61,8 +61,8 @@ export function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { s
   }
 
   return (
-    <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cp-drawer cp-drawer--narrow" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel} tabIndex={-1}>
+    <div className="cp-overlay cp-overlay--contact" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="cp-drawer cp-drawer--narrow cp-contact" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel} tabIndex={-1} data-testid="save-cart-dialog">
         {result ? (
           <>
             <header className="cp-drawer-head">
@@ -91,7 +91,7 @@ export function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { s
               <button type="button" className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar sin guardar"><XIcon name="close" size={20} /></button>
             </header>
             <div className="cp-drawer-body">
-              <p className="cp-drawer-lead">Dejanos tu nombre y un WhatsApp o un correo, y retomá este carrito desde otro dispositivo con un enlace. Sin cuenta ni contraseña.</p>
+              <p className="cp-drawer-lead">Guardalo con tu nombre y WhatsApp o correo para retomarlo desde otro dispositivo. Sin crear una cuenta.</p>
               <div className="cp-fields cp-form-stack">
                 <TextField label="Nombre y apellido" required size="full" value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
                 <PhoneField label="WhatsApp" size="full" value={phone} onChange={setPhone} />
