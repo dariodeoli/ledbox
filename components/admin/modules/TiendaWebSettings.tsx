@@ -10,6 +10,7 @@ import { useAdminSession } from "../AdminShell";
 import { EmailField, PhoneField, SwitchField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { CatalogAccessModeField, CatalogAccessRequests } from "./CatalogAccessPanel";
+import { CollectionsSettings } from "./CollectionsSettings";
 import { StoreOrderPanel } from "./StoreOrderPanel";
 
 /**
@@ -197,6 +198,7 @@ export function TiendaWebSettings() {
             </div>
           </form>
         ) : null}
+        {form && resource.data && hasStore(resource.data) ? <CollectionsSettings readOnly={demo} /> : null}
         {form && resource.data && hasStore(resource.data) ? <StoreOrderPanel readOnly={demo} /> : null}
       </AdminDataState>
     </div>

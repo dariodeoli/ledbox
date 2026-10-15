@@ -51,3 +51,11 @@ Especificación del dueño: `docs/TIENDA-PLANTILLAS.md` y `docs/TIENDA-BOUTIQUE.
 - **Agregar una plantilla** = un archivo de tokens + una línea en el registro (+ una regla `[data-…]` en `app/tienda.css` solo si trae una variante de layout nueva). Los tests de contraste AA, de rosa prohibido, de tokens mínimos y de hardcodes recorren TODO el registro; el selector de Apariencia las agrupa por `rubro` con una miniatura real.
 - **Personalizable por empresa** (`Organization.appearance` + `OrganizationRentalSettings`): color primario (solo si da AA con el tema), frase de la tienda (título de la portada), tipografía de títulos (lista curada), barra de anuncio, modo de precio (`day` · `unit` «c/u» con cantidades de a 10 · `quote`) y portada. El logo se carga en Mi empresa.
 - **Ganchos pendientes** (sin datos todavía): fotos de ambientación más allá de la portada, colecciones con nombre, filtros por estilo/color, reordenar secciones del inicio, badges «Nuevo» y «Popular».
+
+## Tienda, parte 2 (migración `202610310001_tienda_parte2`)
+
+- **Varias fotos por producto**: `InventoryImage` (orden y texto alternativo); la foto principal sigue en el producto y es la primera de la galería. Ficha del producto → «Tienda web» (`ProductStorefrontPanel`): subir, ordenar con Subir/Bajar y quitar, hasta 8 extra. Tienda: miniaturas, zoom y carrusel con puntos en móvil (ficha y vista rápida).
+- **Colecciones**: `Collection`/`CollectionItem`; Ajustes → Tienda web → Colecciones. Landing `/tienda/<slug>/c/<coleccion>`, bloque en el inicio y filtro del catálogo.
+- **Inicio** (`Organization.appearance.home`, `lib/store-home.ts`): orden y visibilidad de secciones (portada, categorías, destacados, editorial y colecciones, catálogo, cómo funciona, inspiración, contacto; el catálogo no se oculta), bloque editorial e inspiración con sus fotos (`OrganizationCover` con las ranuras `editorial` e `inspiracion-1..3`). Una sección sin contenido no se dibuja.
+- **Destacado y estilos** por producto (`featured`, `tags`) y filtros del catálogo: capacidad, precio por día, estilo, colección y «Disponible en mis fechas» (barra lateral; cajón en el celular).
+- Lo que sigue sin datos: badges «Nuevo» y «Popular».

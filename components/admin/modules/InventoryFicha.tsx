@@ -68,6 +68,7 @@ import { InventoryVariantsTab, type GroupableItem } from "./InventoryFamilies";
 import { ProductDataSection, SupplierWarrantySection, WarehouseStockSection } from "./InventoryStockPanels";
 import { ConditionBadge, dayKeyOf, supplierOptions, unitLocationLabel, warehouseOptions, type InventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryIncidentsPanel } from "./InventoryIncidents";
+import { ProductStorefrontPanel } from "./ProductStorefrontPanel";
 import {
   AudienceChip,
   InventoryThumb,
@@ -572,6 +573,7 @@ export function InventoryFicha({
 <AdminDialogSection title="Datos" stack>
         <ProductDataSection item={item} taxonomy={taxonomy} />
       </AdminDialogSection>
+      <ProductStorefrontPanel itemId={item.id} name={item.name} mainImageUrl={item.imageUrl ?? null} writable={writable} onChanged={onChanged} />
 </TabPanel>
 
       <TabPanel active={tab === "variantes"} id={panelId("variantes")} tab={tabId("variantes")}>

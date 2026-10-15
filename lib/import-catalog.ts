@@ -10,6 +10,8 @@
 
 import { PRICE_TIER_MAX_DAYS, PRICE_TIER_MAX_ROWS, PRICE_TIER_PRICE_MAX, sortTiers, type PriceTier } from "@/lib/price-tiers";
 import { categoryPathKey, parseCategoryInput } from "@/lib/inventory-categories";
+import { COLLECTIONS_MAX, COLLECTION_DESCRIPTION_MAX, COLLECTION_NAME_MAX, COLLECTION_ORDER_MAX, collectionSlug } from "@/lib/collections";
+import { TAGS_MAX, parseTags } from "@/lib/store-tags";
 import {
   FIELD_LIMITS,
   FIELD_MESSAGES,
@@ -40,6 +42,8 @@ export const CATALOG_LIMITS = {
   products: 1000,
   /** Categorías declaradas por importación. */
   categories: 200,
+  /** Fotos extra por producto (además de la principal). */
+  extraPhotos: 8,
   /** Componentes por juego. */
   components: 60,
   /** Llamadas por empresa y ventana (15 min). */
@@ -83,9 +87,29 @@ export type CatalogProduct = {
   descripcion: string | null;
   componentes: CatalogComponent[];
   foto: string | null;
+  /**
+   * Fotos extra, en orden (`"fotos": ["527.jpg", "527-2.jpg"]`). `null` = el archivo no trae el campo (no se tocan las
+   * que ya tiene); una lista, aunque vacía, las reemplaza. Si no hay `foto`, la primera de `fotos` es la principal.
+   */
+  fotos: string[] | null;
+  /** Nombres de las colecciones del producto (`"colecciones"`), o `null` si el archivo no trae el campo. */
+  colecciones: string[] | null;
+  /** Estilos o colores para filtrar (`"estilo"`), o `null` si el archivo no trae el campo. */
+  estilo: string[] | null;
   pagina: number | null;
   dudas: string | null;
   /** Posición (1-based) en el archivo de origen. */
+  fila: number;
+};
+
+/** Colección declarada en la sección opcional `colecciones` del JSON (`[{ nombre, descripcion, foto, orden }]`). */
+export type CatalogCollection = {
+  nombre: string;
+  descripcion: string | null;
+  /** Nombre de la foto de ambientación dentro del ZIP, o `null`. */
+  foto: string | null;
+  orden: number | null;
+  /** Posición (1-based) en la lista `colecciones`. */
   fila: number;
 };
 
@@ -103,7 +127,7 @@ export type CatalogCategory = {
   fila: number;
 };
 
-export type CatalogDoc = { empresa: string | null; moneda: string; productos: CatalogProduct[]; categorias: CatalogCategory[] };
+export type CatalogDoc = { empresa: string | null; moneda: string; productos: CatalogProduct[]; categorias: CatalogCategory[]; colecciones: CatalogCollection[] };
 
 export type ProblemKind =
   | "codigo-repetido"
@@ -126,6 +150,12 @@ export type ProblemKind =
   | "categoria-invalida"
   | "categoria-repetida"
   | "categoria-foto-faltante"
+  | "coleccion-invalida"
+  | "coleccion-repetida"
+  | "coleccion-foto-faltante"
+  | "coleccion-sin-declarar"
+  | "estilo-invalido"
+  | "fotos-exceso"
   | "juego-no-convertible"
   | "juego-convertido"
   | "deposito-invalido"
@@ -346,6 +376,63 @@ export function normalizeCategories(raw: unknown, problems: ImportProblem[]): Ca
   return list;
 }
 
+/** Lista de textos desde un arreglo o un texto separado por comas, punto y coma o barra vertical. `undefined`/`null` = el campo no vino. */
+function textList(raw: unknown): string[] | null {
+  if (raw === undefined || raw === null) return null;
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,;|\n]/) : [];
+  return list.flatMap((entry) => {
+    const value = typeof entry === "string" || typeof entry === "number" ? text(entry, 160) : null;
+    return value ? [value] : [];
+  });
+}
+
+const simpleFileName = (name: string) => !/[\\/]|\.\./.test(name);
+
+/**
+ * Sección opcional `colecciones: [{ nombre, descripcion, foto, orden }]`. Nunca bloquea la importación: una entrada
+ * inservible se descarta con un aviso. La clave de comparación es el slug (sin tildes ni mayúsculas); repetidas se ignoran.
+ */
+export function normalizeCollections(raw: unknown, problems: ImportProblem[]): CatalogCollection[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    problems.push(problem("aviso", "coleccion-invalida", null, null, "La sección «colecciones» no es una lista: se ignora."));
+    return [];
+  }
+  if (raw.length > COLLECTIONS_MAX) {
+    problems.push(problem("aviso", "coleccion-invalida", null, null, `Hay ${raw.length} colecciones: el máximo es ${COLLECTIONS_MAX}; se ignora la sección.`));
+    return [];
+  }
+  const seen = new Set<string>();
+  const list: CatalogCollection[] = [];
+  raw.forEach((entry, index) => {
+    const fila = index + 1;
+    const row = entry && typeof entry === "object" && !Array.isArray(entry) ? (entry as Record<string, unknown>) : null;
+    const nombre = row ? text(row.nombre, COLLECTION_NAME_MAX + 1) : null;
+    if (!row || !nombre || nombre.length > COLLECTION_NAME_MAX || !collectionSlug(nombre)) {
+      problems.push(problem("aviso", "coleccion-invalida", null, fila, `Colección ${fila}: falta un «nombre» válido (hasta ${COLLECTION_NAME_MAX} caracteres, con letras o números); se ignora.`));
+      return;
+    }
+    const key = collectionSlug(nombre);
+    if (seen.has(key)) {
+      problems.push(problem("aviso", "coleccion-repetida", null, fila, `Colección «${nombre}» repetida en la lista: se usa la primera.`));
+      return;
+    }
+    seen.add(key);
+    let orden: number | null = null;
+    if (row.orden !== undefined && row.orden !== null && row.orden !== "") {
+      const value = Number(row.orden);
+      if (Number.isInteger(value) && value >= 0 && value <= COLLECTION_ORDER_MAX) orden = value;
+      else problems.push(problem("aviso", "coleccion-invalida", null, fila, `Colección «${nombre}»: «orden» tiene que ser un entero de 0 a ${COLLECTION_ORDER_MAX}; se ignora el orden.`));
+    }
+    const descripcion = text(row.descripcion, COLLECTION_DESCRIPTION_MAX);
+    const fotoRaw = text(row.foto, 160);
+    const foto = fotoRaw && simpleFileName(fotoRaw) ? fotoRaw : null;
+    if (fotoRaw && !foto) problems.push(problem("aviso", "foto-invalida", null, fila, `Colección «${nombre}»: el nombre de foto «${fotoRaw}» no es un archivo simple; se ignora.`));
+    list.push({ nombre: nombre.replace(/\s+/g, " "), descripcion, foto, orden, fila });
+  });
+  return list;
+}
+
 /** Convierte un producto crudo; `null` cuando no sirve (y deja el error). */
 function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]): CatalogProduct | null {
   const fila = index + 1;
@@ -409,6 +496,50 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
   if (fotoRaw && /[\\/]|\.\./.test(fotoRaw)) {
     problems.push(problem("aviso", "foto-invalida", codigo, fila, `Código ${codigo}: el nombre de foto «${fotoRaw}» no es un archivo simple; se ignora.`));
   }
+  // Varias fotos: `fotos` además de `foto`. La principal es `foto` (o la primera de `fotos`); el resto son extras, sin repetir.
+  let principal: string | null = fotoRaw && simpleFileName(fotoRaw) ? fotoRaw : null;
+  let fotos: string[] | null = null;
+  const fotosRaw = textList(row.fotos);
+  if (fotosRaw !== null) {
+    const valid: string[] = [];
+    for (const name of fotosRaw) {
+      if (!simpleFileName(name)) {
+        problems.push(problem("aviso", "foto-invalida", codigo, fila, `Código ${codigo}: el nombre de foto «${name}» no es un archivo simple; se ignora.`));
+        continue;
+      }
+      if (!valid.some((other) => other.toLowerCase() === name.toLowerCase())) valid.push(name);
+    }
+    if (!principal && valid.length > 0) principal = valid.shift()!;
+    fotos = valid.filter((name) => !principal || name.toLowerCase() !== principal.toLowerCase());
+    if (fotos.length > CATALOG_LIMITS.extraPhotos) {
+      problems.push(problem("aviso", "fotos-exceso", codigo, fila, `Código ${codigo}: trae ${fotos.length + 1} fotos y el máximo es ${CATALOG_LIMITS.extraPhotos + 1} (la principal y ${CATALOG_LIMITS.extraPhotos} más); se usan las primeras.`));
+      fotos = fotos.slice(0, CATALOG_LIMITS.extraPhotos);
+    }
+  }
+  // Colecciones y estilos: opcionales; ausente = no se toca, lista = se suman (colecciones) o se reemplazan (estilo).
+  const coleccionesRaw = textList(row.colecciones);
+  let colecciones: string[] | null = null;
+  if (coleccionesRaw !== null) {
+    const seenSlugs = new Set<string>();
+    colecciones = [];
+    for (const name of coleccionesRaw) {
+      const slug = collectionSlug(name);
+      if (!slug || name.length > COLLECTION_NAME_MAX) {
+        problems.push(problem("aviso", "coleccion-invalida", codigo, fila, `Código ${codigo}: la colección «${name}» no es un nombre válido; se ignora.`));
+        continue;
+      }
+      if (seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+      colecciones.push(name.replace(/\s+/g, " "));
+    }
+  }
+  const estiloRaw = textList(row.estilo);
+  let estilo: string[] | null = null;
+  if (estiloRaw !== null) {
+    const parsed = parseTags(estiloRaw);
+    estilo = parsed.tags;
+    if (parsed.ignored.length > 0) problems.push(problem("aviso", "estilo-invalido", codigo, fila, `Código ${codigo}: estos estilos no entran (máximo ${TAGS_MAX}, hasta 24 caracteres cada uno): ${parsed.ignored.join(", ")}.`));
+  }
   // Categoría y subcategoría: por separado o en una sola columna con «/», «>» o «›».
   const categoryPath = parseCategoryInput(row.categoria === null || row.categoria === undefined ? "" : String(row.categoria), row.subcategoria === null || row.subcategoria === undefined ? "" : String(row.subcategoria));
   // Depósito (código) y ubicación: opcionales; un valor mal escrito avisa y se ignora, nunca se inventa.
@@ -448,7 +579,10 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     capacidad: text(row.capacidad, 120),
     descripcion: text(row.descripcion, 2000),
     componentes: componentes.list,
-    foto: fotoRaw && !/[\\/]|\.\./.test(fotoRaw) ? fotoRaw : null,
+    foto: principal,
+    fotos,
+    colecciones,
+    estilo,
     pagina: pagina === false ? null : pagina,
     dudas,
     fila,
@@ -480,7 +614,8 @@ export function normalizeCatalog(raw: unknown): { ok: true; value: NormalizeResu
     if (product) productos.push(product);
   });
   const categorias = normalizeCategories(head.categorias, problems);
-  return { ok: true, value: { doc: { empresa: text(head.empresa, FIELD_LIMITS.company), moneda, productos, categorias }, problems } };
+  const colecciones = normalizeCollections(head.colecciones, problems);
+  return { ok: true, value: { doc: { empresa: text(head.empresa, FIELD_LIMITS.company), moneda, productos, categorias, colecciones }, problems } };
 }
 
 /** Parsea el texto de `catalogo.json` (con el tope de 2 MB). */
@@ -645,6 +780,8 @@ export type PlannedProduct = {
   convertir: boolean;
   /** Nombre (clave) de la foto dentro del ZIP, si se encontró. */
   foto: string | null;
+  /** Fotos extra encontradas en el ZIP, en orden; `null` = el archivo no trae `fotos` (no se tocan las que ya tiene). */
+  fotosExtra: string[] | null;
   publicDescription: string | null;
   /** Unidades a tener (solo unidades): `cantidad` o 1. */
   unidades: number;
@@ -671,6 +808,13 @@ export type CatalogSummary = {
   fotos: number;
   /** Fotos de categoría encontradas en el ZIP. */
   fotosCategoria: number;
+  /** Fotos extra de productos encontradas en el ZIP. */
+  fotosExtra: number;
+  /** Colecciones distintas (declaradas o usadas por algún producto) y fotos de colección encontradas. */
+  colecciones: number;
+  fotosColeccion: number;
+  /** Productos con estilos para filtrar. */
+  conEstilo: number;
   errores: number;
   avisos: number;
 };
@@ -678,7 +822,10 @@ export type CatalogSummary = {
 /** Categoría del archivo ya cruzada con el ZIP: `foto` es la clave de la foto encontrada. */
 export type PlannedCategory = { category: CatalogCategory; foto: string | null };
 
-export type CatalogPlan = { items: PlannedProduct[]; categories: PlannedCategory[]; problems: ImportProblem[]; summary: CatalogSummary };
+/** Colección del archivo (declarada o inferida de los productos) ya cruzada con el ZIP. */
+export type PlannedCollection = { nombre: string; descripcion: string | null; orden: number | null; foto: string | null; declarada: boolean };
+
+export type CatalogPlan = { items: PlannedProduct[]; categories: PlannedCategory[]; collections: PlannedCollection[]; problems: ImportProblem[]; summary: CatalogSummary };
 
 /**
  * Plan puro: decide qué se crea, qué se actualiza y qué se omite, y junta los
@@ -696,6 +843,8 @@ export function planCatalog(options: {
   warehouseCodes?: ReadonlySet<string> | null;
   /** Sección opcional `categorias` del archivo. */
   categories?: ReadonlyArray<CatalogCategory>;
+  /** Sección opcional `colecciones` del archivo. */
+  collections?: ReadonlyArray<CatalogCollection>;
 }): CatalogPlan {
   const problems: ImportProblem[] = [...(options.parseProblems ?? []), ...(options.photoProblems ?? [])];
   const seen = new Map<string, CatalogProduct>();
@@ -729,6 +878,7 @@ export function planCatalog(options: {
       incompleto,
       convertir: false,
       foto: null,
+      fotosExtra: null,
       publicDescription: null,
       unidades: esCombo ? 0 : product.cantidad ?? 1,
       existingId: existing?.id ?? null,
@@ -829,7 +979,17 @@ export function planCatalog(options: {
       if (foto) usedPhotos.add(foto);
       else if (product.foto) problems.push(problem("aviso", "foto-faltante", product.codigo, product.fila, `${product.nombre}: la foto «${product.foto}» no está en el ZIP.`));
     }
-    return { ...base, foto, publicDescription: description.text };
+    // Fotos extra: solo las que están en el ZIP; la que falta avisa y el resto se importa.
+    let fotosExtra: string[] | null = null;
+    if (Array.isArray(product.fotos) && options.photoNames) {
+      fotosExtra = [];
+      for (const name of product.fotos) {
+        const key = photoKey(name);
+        if (options.photoNames.has(key)) { fotosExtra.push(key); usedPhotos.add(key); }
+        else problems.push(problem("aviso", "foto-faltante", product.codigo, product.fila, `${product.nombre}: la foto «${name}» no está en el ZIP.`));
+      }
+    }
+    return { ...base, foto, fotosExtra, publicDescription: description.text };
   });
 
   // Un juego cuyo componente del archivo fue omitido por error tampoco se puede armar.
@@ -841,12 +1001,17 @@ export function planCatalog(options: {
       if (!blocked) continue;
       item.accion = "omitir";
       item.foto = null;
+      item.fotosExtra = null;
       changed = true;
       problems.push(problem("error", "componente-inexistente", item.product.codigo, item.product.fila, `${item.product.nombre}: el componente ${blocked.codigo} tiene errores y no se importa, así que el juego tampoco.`));
     }
   }
   usedPhotos.clear();
-  for (const item of items) if (item.foto && item.accion !== "omitir") usedPhotos.add(item.foto);
+  for (const item of items) {
+    if (item.accion === "omitir") continue;
+    if (item.foto) usedPhotos.add(item.foto);
+    for (const name of item.fotosExtra ?? []) usedPhotos.add(name);
+  }
 
   // Fotos de categoría: mismo ZIP, nombre exacto (sin distinguir mayúsculas ni carpeta).
   const categories: PlannedCategory[] = (options.categories ?? []).map((category) => {
@@ -861,6 +1026,38 @@ export function planCatalog(options: {
     return { category, foto };
   });
   for (const entry of categories) if (entry.foto) usedPhotos.add(entry.foto);
+
+  // Colecciones: las declaradas más las que nombran los productos que se importan (se crean si faltan).
+  const collections: PlannedCollection[] = [];
+  const bySlug = new Map<string, PlannedCollection>();
+  for (const declared of options.collections ?? []) {
+    let foto: string | null = null;
+    if (declared.foto && options.photoNames) {
+      const key = photoKey(declared.foto);
+      if (options.photoNames.has(key)) foto = key;
+      else problems.push(problem("aviso", "coleccion-foto-faltante", null, declared.fila, `Colección «${declared.nombre}»: la foto «${declared.foto}» no está en el ZIP.`));
+    } else if (declared.foto) {
+      problems.push(problem("aviso", "coleccion-foto-faltante", null, declared.fila, `Colección «${declared.nombre}»: declara la foto «${declared.foto}» pero no subiste el ZIP.`));
+    }
+    const entry: PlannedCollection = { nombre: declared.nombre, descripcion: declared.descripcion, orden: declared.orden, foto, declarada: true };
+    bySlug.set(collectionSlug(declared.nombre), entry);
+    collections.push(entry);
+    if (foto) usedPhotos.add(foto);
+  }
+  for (const item of items) {
+    if (item.accion === "omitir") continue;
+    for (const name of item.product.colecciones ?? []) {
+      const slug = collectionSlug(name);
+      if (bySlug.has(slug)) continue;
+      const entry: PlannedCollection = { nombre: name, descripcion: null, orden: null, foto: null, declarada: false };
+      bySlug.set(slug, entry);
+      collections.push(entry);
+    }
+  }
+  if (collections.length > COLLECTIONS_MAX) {
+    problems.push(problem("aviso", "coleccion-invalida", null, null, `El archivo usa ${collections.length} colecciones y el máximo por empresa es ${COLLECTIONS_MAX}; se importan las primeras.`));
+    collections.length = COLLECTIONS_MAX;
+  }
 
   if (!options.photoNames) {
     const declared = items.filter((item) => item.accion !== "omitir" && item.product.foto);
@@ -888,10 +1085,14 @@ export function planCatalog(options: {
     estadosDisponibles: live.reduce((sum, item) => sum + ADJUSTABLE_STATES.reduce((acc, state) => acc + (item.estados?.aDisponible[state] ?? 0), 0), 0),
     fotos: live.filter((item) => item.foto).length,
     fotosCategoria: categories.filter((entry) => entry.foto).length,
+    fotosExtra: live.reduce((sum, item) => sum + (item.fotosExtra?.length ?? 0), 0),
+    colecciones: collections.length,
+    fotosColeccion: collections.filter((entry) => entry.foto).length,
+    conEstilo: live.filter((item) => (item.product.estilo?.length ?? 0) > 0).length,
     errores: problems.filter((entry) => entry.nivel === "error").length,
     avisos: problems.filter((entry) => entry.nivel === "aviso").length,
   };
-  return { items, categories, problems, summary };
+  return { items, categories, collections, problems, summary };
 }
 
 /** Códigos que el plan necesita conocer en la base: los del archivo y los de sus componentes. */

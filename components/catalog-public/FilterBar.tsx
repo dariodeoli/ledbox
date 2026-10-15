@@ -1,13 +1,14 @@
 "use client";
 
 import { SelectField, TextField } from "@/components/admin/AdminFields";
+import { XIcon } from "./StoreIcons";
 import { SORT_OPTIONS, isSortKey, type SortKey } from "@/lib/storefront-ui";
 
 /**
  * Barra de filtros sticky del catálogo: chips de categoría con scroll horizontal y fade en los bordes, orden (destacados,
  * precio, nombre, capacidad) y buscador. Presentacional: el estado vive en `CatalogBrowser`.
  */
-export function FilterBar({ categories, category, onCategory, sort, onSort, query, onQuery, showPrices }: {
+export function FilterBar({ categories, category, onCategory, sort, onSort, query, onQuery, showPrices, activeFilters = 0, onOpenFilters }: {
   categories: string[];
   category: string | null;
   onCategory: (value: string | null) => void;
@@ -16,6 +17,9 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
   query: string;
   onQuery: (value: string) => void;
   showPrices: boolean;
+  /** Cantidad de filtros del cajón en uso y cómo abrirlo (solo celular y tableta). */
+  activeFilters?: number;
+  onOpenFilters?: () => void;
 }) {
   return (
     <div className="cp-filter cp-fields" role="search" aria-label="Filtrar y ordenar el catálogo" data-testid="filter-bar">
@@ -37,6 +41,11 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
           options={SORT_OPTIONS.filter((option) => showPrices || !option.value.startsWith("precio")).map((option) => ({ value: option.value, label: option.label }))}
         />
       </div>
+      {onOpenFilters ? (
+        <button type="button" className="cp-btn cp-filter-open" onClick={onOpenFilters} aria-haspopup="dialog" data-testid="filters-open">
+          <XIcon name="filter" size={18} /> Filtrar{activeFilters > 0 ? ` (${activeFilters})` : ""}
+        </button>
+      ) : null}
     </div>
   );
 }

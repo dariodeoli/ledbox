@@ -5298,3 +5298,15 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-fam-preview { margin: 0; color: var(--a-muted); font-size: 12px; overflow-wrap: anywhere; }
 .admin-fam-preview strong { color: var(--a-text-strong); }
 .admin-fam-legend { margin: 4px 0 0; color: var(--a-muted); font-size: 12px; }
+/* Tienda web (parte 2): fotos extra del producto, selector de productos de una colección */
+.admin-storefront-panel { display: grid; gap: 16px; min-width: 0; }
+.admin-photo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.admin-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 56px; min-width: 0; }
+.admin-photo-meta { display: grid; gap: 2px; flex: 1 1 10rem; min-width: 0; }
+.admin-photo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-photo-actions .admin-btn { min-height: 44px; }
+.admin-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 280px; overflow-y: auto; border: 1px solid var(--a-line); border-radius: 10px; padding: 4px 10px; }
+.admin-pick-list:empty { display: none; }
+.admin-pick-list .admin-check { min-height: 44px; display: flex; align-items: center; }
+.admin-cover-frame[data-ratio="4-3"] { aspect-ratio: 4 / 3; }
+.admin-cover-frame[data-ratio="4-5"] { aspect-ratio: 4 / 5; max-width: 220px; }

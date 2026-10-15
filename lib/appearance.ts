@@ -11,6 +11,7 @@ import {
   type DisplayFontId,
   type StoreThemeId,
 } from "./storefront-templates";
+import { DEFAULT_HOME, parseHome, readHome, type HomeConfig } from "./store-home";
 import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, normalizeHex, rgbToHex, type Rgb } from "./storefront-theme";
 
 /**
@@ -96,14 +97,16 @@ export type Appearance = {
   /** Barra de anuncio de arriba de todo (opcional). */
   announcement: Announcement;
   priceMode: PriceMode;
+  /** Inicio de la tienda: orden y visibilidad de las secciones, bloque editorial y textos de inspiración. */
+  home: HomeConfig;
 };
 
-export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, displayFont: null, announcement: { on: false, text: "" }, priceMode: "day" };
+export const DEFAULT_APPEARANCE: Appearance = { template: DEFAULT_TEMPLATE, font: DEFAULT_FONT, displayFont: null, announcement: { on: false, text: "" }, priceMode: "day", home: DEFAULT_HOME };
 
 /** Valida lo que manda el panel; los campos ausentes mantienen `current`. */
 export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APPEARANCE): { ok: true; appearance: Appearance } | { ok: false; error: string } {
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-  const next: Appearance = { ...current, announcement: { ...current.announcement } };
+  const next: Appearance = { ...current, announcement: { ...current.announcement }, home: current.home };
   if (input.template !== undefined) {
     if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Lienzo, Boutique, Noir o Studio." };
     next.template = input.template;
@@ -132,6 +135,11 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
     if (!isPriceMode(input.priceMode)) return { ok: false, error: "Elegí cómo mostrar los precios: por día, por unidad o a cotizar." };
     next.priceMode = input.priceMode;
   }
+  if (input.home !== undefined) {
+    const home = parseHome(input.home, current.home);
+    if (!home.ok) return home;
+    next.home = home.home;
+  }
   return { ok: true, appearance: next };
 }
 
@@ -142,10 +150,10 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
 export function readAppearance(stored: unknown): Appearance {
   const record = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
   const template = resolveStoredTheme(record.template);
-  const parsed = parseAppearance({ ...record, ...(template ? { template } : { template: undefined }) });
-  if (parsed.ok) return parsed.appearance;
+  const parsed = parseAppearance({ ...record, home: undefined, ...(template ? { template } : { template: undefined }) });
+  if (parsed.ok) return { ...parsed.appearance, home: readHome(record.home) };
   // Una fila con un campo roto no tira todo: se conserva lo válido campo por campo.
-  const partial: Appearance = { ...DEFAULT_APPEARANCE, announcement: { ...DEFAULT_APPEARANCE.announcement } };
+  const partial: Appearance = { ...DEFAULT_APPEARANCE, announcement: { ...DEFAULT_APPEARANCE.announcement }, home: readHome(record.home) };
   if (template) partial.template = template;
   if (isFontId(record.font)) partial.font = record.font;
   if (isDisplayFont(record.displayFont)) partial.displayFont = record.displayFont;
@@ -221,6 +229,7 @@ export type AppearanceView = {
   /** Barra de anuncio: solo si está encendida y tiene texto. */
   announcement: string | null;
   priceMode: PriceMode;
+  home: HomeConfig;
 };
 
 /**
@@ -235,6 +244,7 @@ export function appearanceView(appearance: Appearance, brand: string | null = nu
     attrs: themeAttrs(appearance.template),
     announcement: appearance.announcement.on && appearance.announcement.text ? appearance.announcement.text : null,
     priceMode: appearance.priceMode,
+    home: appearance.home,
   };
 }
 

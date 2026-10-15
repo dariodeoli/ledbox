@@ -21,9 +21,14 @@ export type PreparedCover =
   | { ok: false; status: number; error: string };
 
 export async function prepareCover(bytes: Uint8Array, kind: CoverKind): Promise<PreparedCover> {
+  return prepareImage(bytes, COVER_SPEC[kind].width);
+}
+
+/** Misma receta para cualquier foto de la tienda (portada, inspiración, editorial, colecciones): `width` es el ancho máximo. */
+export async function prepareImage(bytes: Uint8Array, width: number): Promise<PreparedCover> {
   const checked = checkCoverFile(bytes);
   if (!checked.ok) return { ok: false, status: checked.error === COVER_MESSAGES.tooBig ? 413 : 400, error: checked.error };
-  const spec = COVER_SPEC[kind];
+  const spec = { width };
   try {
     const { default: sharp } = await import("sharp");
     const meta = await sharp(bytes, { limitInputPixels: 40_000_000, failOn: "error" }).metadata();

@@ -10,6 +10,10 @@ import { locationLine } from "@/lib/org-profile";
 import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
 import { StoreHeader, storeNavLinks } from "./StoreHeader";
 import { StoreChrome } from "./StoreChrome";
+import { CollectionsSection, EditorialBlock, FeaturedSection, InspirationSection } from "./HomeSections";
+import { editorialHasContent, visibleSections, type HomeSectionId } from "@/lib/store-home";
+import type { PublicCollection } from "@/lib/server/catalog-public";
+import { Fragment, type ReactNode } from "react";
 
 /**
  * Tienda web de una empresa (portada + catálogo). Componente de servidor: arma la
@@ -40,6 +44,11 @@ type Props = {
   cartScope?: "public" | "acceso" | "mayorista" | "visitor";
   /** Base de las fichas de producto (`<base>/p/<id>`); por defecto `basePath`. */
   fichaBase?: string;
+  /** Colecciones visibles con productos publicados. */
+  collections?: PublicCollection[];
+  /** Ruta de la tienda pública para las landings `/c/<coleccion>`; sin ella (mayorista, acceso) las colecciones solo filtran el catálogo. */
+  collectionsBase?: string | null;
+  initialCollection?: string | null;
 };
 
 const DEFAULT_TITLE = "Alquiler para tu próximo evento";
@@ -52,7 +61,7 @@ const STEPS = [
   { title: "Confirmá y disfrutá", text: "Si te conviene, confirmamos la reserva y coordinamos la entrega y el retiro." },
 ] as const;
 
-export function StoreFront({ store, items, showPrices: showPricesProp, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null, categoryImages, cartPath, cartScope, fichaBase }: Props) {
+export function StoreFront({ store, items, showPrices: showPricesProp, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null, categoryImages, cartPath, cartScope, fichaBase, collections = [], collectionsBase = null, initialCollection = null }: Props) {
   const priceMode = store.appearance.priceMode;
   // «A cotizar»: la tienda no muestra montos aunque la empresa los tenga cargados.
   const showPrices = showPricesProp && priceMode !== "quote";
@@ -66,17 +75,18 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   }
   const categoryHref = (name: string) => `${basePath}?categoria=${encodeURIComponent(name)}#catalogo`;
   const hasContact = Boolean(whatsapp || store.email || store.profile);
-  const nav = storeNavLinks("", { contact: hasContact, categories: featured.length > 1 ? featured.slice(0, 3).map((entry) => ({ name: entry.category, href: categoryHref(entry.category) })) : [] });
+  const home = store.appearance.home;
+  const order = visibleSections(home);
+  const shownIds = new Set<HomeSectionId>(order);
+  const nav = storeNavLinks("", { contact: hasContact && shownIds.has("contacto"), howItWorks: shownIds.has("como-funciona"), categories: featured.length > 1 ? featured.slice(0, 3).map((entry) => ({ name: entry.category, href: categoryHref(entry.category) })) : [] });
   const hasCover = Boolean(store.covers.desktop || store.covers.mobile);
   const photoHero = layout.hero === "photo" && hasCover;
   const title = store.tagline || DEFAULT_TITLE;
   const sub = wholesale ? `Hola ${wholesale.clientName}. Este es tu catálogo con precios mayoristas.` : member ? `Hola ${member.clientName}. ${DEFAULT_SUB}` : DEFAULT_SUB;
 
-  return (
-    <StoreChrome theme={store.theme} appearance={store.appearance}>
-      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={basePath} nav={nav} cart="button" cartScope={cartScope === "acceso" || cartScope === "mayorista" ? cartScope : "public"} searchHref={`${basePath}#catalogo`} />
-
-      <main className="cp-page">
+  const featuredItems = items.filter((item) => item.featured).slice(0, 8);
+  const hasCollections = collections.length > 0;
+  const heroNode = (
         <section className="cp-hero" aria-labelledby="titulo" data-cover={hasCover ? "yes" : "no"} data-testid="store-hero">
           {hasCover ? (
             <picture className="cp-hero-media" data-testid="store-cover">
@@ -93,14 +103,16 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               {demo ? <p className="cp-note" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
               <div className="cp-hero-actions">
                 <a className={photoHero ? "cp-btn cp-btn--lg cp-btn--on-image" : "cp-btn cp-btn--lg cp-btn--primary"} href="#catalogo">Ver catálogo</a>
-                <a className={photoHero ? "cp-btn cp-btn--lg cp-btn--ghost-image" : "cp-btn cp-btn--lg"} href="#como-funciona">Cómo funciona</a>
+                {shownIds.has("como-funciona") ? <a className={photoHero ? "cp-btn cp-btn--lg cp-btn--ghost-image" : "cp-btn cp-btn--lg"} href="#como-funciona">Cómo funciona</a> : null}
               </div>
             </div>
             <EventPicker slug={store.slug} range={range} variant="hero" restore />
           </div>
         </section>
-
-        <div className="cp-container cp-sections">
+  );
+  const sectionNodes: Record<Exclude<HomeSectionId, "hero">, ReactNode> = {
+    categorias: (
+      <>
           {featured.length > 1 ? (
             <section className="cp-section" aria-labelledby="categorias">
               <div className="cp-section-head">
@@ -123,7 +135,16 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               </div>
             </section>
           ) : null}
-
+      </>
+    ),
+    destacados: <FeaturedSection items={featuredItems} fichaBase={fichaBase ?? basePath} showPrices={showPrices} priceMode={priceMode} />,
+    colecciones: (
+      <>
+        {editorialHasContent(home.editorial) ? <EditorialBlock editorial={home.editorial} photo={store.homePhotos.editorial} ctaHref={collectionsBase && hasCollections ? "#colecciones" : "#catalogo"} /> : null}
+        {collectionsBase && hasCollections ? <CollectionsSection collections={collections} items={items} base={collectionsBase} /> : null}
+      </>
+    ),
+    catalogo: (
           <CatalogBrowser
             organizationName={store.name}
             showPrices={showPrices}
@@ -142,8 +163,11 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             cartPath={cartPath}
             fichaBase={fichaBase ?? basePath}
             storeName={store.name}
+            collections={collections.map((entry) => ({ slug: entry.slug, name: entry.name }))}
+            initialCollection={initialCollection}
           />
-
+    ),
+    "como-funciona": (
           <section id="como-funciona" className="cp-section cp-block-sand" aria-labelledby="como">
             <div className="cp-section-head">
               <p className="cp-eyebrow">Paso a paso</p>
@@ -159,7 +183,10 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               ))}
             </ol>
           </section>
-
+    ),
+    inspiracion: <InspirationSection inspiration={home.inspiration} photos={[store.homePhotos["inspiracion-1"], store.homePhotos["inspiracion-2"], store.homePhotos["inspiracion-3"]]} instagram={store.profile?.contact.instagram ?? null} />,
+    contacto: (
+      <>
           {zones.length > 0 ? (
             <section className="cp-section" aria-labelledby="zonas" data-testid="delivery-zones">
               <div className="cp-section-head">
@@ -170,7 +197,6 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               <ul className="cp-zones">{zones.map((zone) => <li key={zone.id}>{zone.name}</li>)}</ul>
             </section>
           ) : null}
-
           {hasContact ? (
             <section id="contacto" className="cp-section cp-contact" aria-labelledby="contacto-titulo">
               <div className="cp-section-head">
@@ -188,7 +214,26 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               )}
             </section>
           ) : null}
-        </div>
+      </>
+    ),
+  };
+  // Se agrupan las secciones seguidas dentro de un mismo contenedor; la portada va a sangre, fuera de él.
+  const groups: Array<{ kind: "hero" } | { kind: "sections"; nodes: ReactNode[] }> = [];
+  for (const id of order) {
+    if (id === "hero") { groups.push({ kind: "hero" }); continue; }
+    const last = groups[groups.length - 1];
+    const node = <Fragment key={id}>{sectionNodes[id]}</Fragment>;
+    if (last && last.kind === "sections") last.nodes.push(node);
+    else groups.push({ kind: "sections", nodes: [node] });
+  }
+
+  return (
+    <StoreChrome theme={store.theme} appearance={store.appearance}>
+      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={basePath} nav={nav} cart="button" cartScope={cartScope === "acceso" || cartScope === "mayorista" ? cartScope : "public"} searchHref={`${basePath}#catalogo`} />
+
+      <main className="cp-page">
+        {!shownIds.has("hero") ? <h1 className="cp-sr">{store.name}</h1> : null}
+        {groups.map((group, index) => (group.kind === "hero" ? <Fragment key={`hero-${index}`}>{heroNode}</Fragment> : <div key={`group-${index}`} className="cp-container cp-sections">{group.nodes}</div>))}
       </main>
 
       <StoreFooter

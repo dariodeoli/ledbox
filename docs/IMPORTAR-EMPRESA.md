@@ -97,6 +97,34 @@ Sección opcional `categorias` (al mismo nivel que `productos`), para darle foto
 - Reimportar actualiza la foto de la categoría por nombre (la reemplaza); no crea duplicados.
 - La vista previa muestra «N fotos de categoría» (las que se encontraron en el ZIP) y avisa las que no están.
 
+### Tienda, parte 2: varias fotos, colecciones y estilos (migración `202610310001_tienda_parte2`)
+
+Tres campos opcionales por producto y una sección opcional del archivo. Ninguno bloquea: lo inservible se descarta con un aviso. Los campos ausentes **no tocan** lo que el producto ya tiene.
+
+```json
+{
+  "codigo": "527",
+  "nombre": "Lounge Oslo",
+  "foto": "527.jpg",
+  "fotos": ["527.jpg", "527-2.jpg", "527-3.jpg"],
+  "colecciones": ["Verde Bosque", "Colección Rayas"],
+  "estilo": ["Natural", "Rattan"]
+}
+```
+
+```json
+"colecciones": [
+  { "nombre": "Verde Bosque", "descripcion": "Tonos de selva.", "foto": "col-verde-bosque.jpg", "orden": 10 }
+]
+```
+
+- `fotos`: lista ordenada de archivos del mismo ZIP, además de `foto`. La principal es `foto` (o, si no hay, la primera de `fotos`) y no se repite entre las extra. Hasta 8 extra por producto (9 con la principal); las que sobran se descartan con aviso. Una lista, aunque sea corta, **reemplaza** las fotos extra que ya tenía; reimportar las mismas fotos no escribe nada. Nombres simples (sin carpetas ni `../`). Si el archivo no está en el ZIP, avisa y se importa el resto.
+- `colecciones` (por producto): nombres de colecciones. Se comparan sin tildes ni mayúsculas; la que no existe se **crea** y el producto se **suma** (nunca se saca de otras). También sirve un texto con comas o `;` (planilla).
+- Sección `colecciones` (al mismo nivel que `productos`): `nombre`, `descripcion` (hasta 400), `foto` (en el mismo ZIP) y `orden` (0 a 9999, menor = primero). Opcional: solo hace falta para darle descripción, foto u orden. Máximo 40 colecciones por empresa; repetidas o sin nombre se descartan con aviso.
+- `estilo`: lista de estilos o colores para el filtro de la tienda (hasta 8 por producto, 24 caracteres cada uno; «Rattan» y «rattán» son el mismo). Ausente = no se toca; `[]` = los limpia.
+- La vista previa muestra «Fotos extra de producto», «Colecciones» y «Productos con estilo». Todo queda en la empresa activa; las colecciones nuevas nacen visibles.
+- No cargado por importación (se hace en el panel): «Destacado» del producto (Inventario → ficha → Tienda web), el orden de las secciones del inicio, el bloque editorial y las fotos de inspiración (Ajustes → Apariencia).
+
 Campos adicionales soportados pero no ejercitados en este lote: subcategoria, deposito, ubicacion y precios_dias. No agregarlos por inventar información. precios_dias usa `[{"desde_dias":5,"modo":"total","precio":300000}]`, con modo dia o total, únicamente cuando hay una tarifa documentada. No deducir descuentos.
 
 ### Estados de unidades (opcional, solo `tipo: unidad`)
@@ -206,7 +234,7 @@ No atribuir una causa a un error solo por su color o mensaje genérico: conserva
 
 ## Orden breve para futuras IAs
 
-Prepará catalogo.json y fotos.zip conforme a esta guía. Conservá códigos únicos y estables, nombres comerciales y datos comprobados. Precios y existencias desconocidos van null, con dudas claras; stock confirmado agotado va 0. Combos solo con componentes completos y unidades reales; composición incompleta va [] y se advierte. Precio de combo es comercial, nunca la suma automática. Fotos cuadradas 1200 × 1200 centradas con margen blanco, código.jpg en la raíz del ZIP. Si querés foto por categoría, agregá la sección opcional `categorias` (`nombre`, `foto`, `orden`) y las fotos `cat-<slug>.jpg` de 1200 × 1200, cuadradas, con una imagen representativa del rubro, centradas y con margen, en el mismo ZIP. Estados de unidades (solo `tipo: unidad`): `en_mantenimiento`, `danadas` y `perdidas` son opcionales, enteros ≥ 0 y su suma no puede superar `cantidad`; ausente = no tocar, 0 = devolver a disponible, y nunca se mueven unidades asignadas a eventos ni retiradas. No los inventes: solo si el cliente informa piezas en reparación, rotas o perdidas. Separá logo, portadas y perfil. Entregá resumen de productos, categorías, precios faltantes, cantidades faltantes, combos completos/incompletos y dudas. No inventes datos ni publiques la tienda sin instrucción. Marcá lo no probado como no probado.
+Prepará catalogo.json y fotos.zip conforme a esta guía. Conservá códigos únicos y estables, nombres comerciales y datos comprobados. Precios y existencias desconocidos van null, con dudas claras; stock confirmado agotado va 0. Combos solo con componentes completos y unidades reales; composición incompleta va [] y se advierte. Precio de combo es comercial, nunca la suma automática. Fotos cuadradas 1200 × 1200 centradas con margen blanco, código.jpg en la raíz del ZIP. Si querés foto por categoría, agregá la sección opcional `categorias` (`nombre`, `foto`, `orden`) y las fotos `cat-<slug>.jpg` de 1200 × 1200, cuadradas, con una imagen representativa del rubro, centradas y con margen, en el mismo ZIP. Estados de unidades (solo `tipo: unidad`): `en_mantenimiento`, `danadas` y `perdidas` son opcionales, enteros ≥ 0 y su suma no puede superar `cantidad`; ausente = no tocar, 0 = devolver a disponible, y nunca se mueven unidades asignadas a eventos ni retiradas. No los inventes: solo si el cliente informa piezas en reparación, rotas o perdidas. Varias fotos por producto: `fotos` (lista ordenada, hasta 8 extra, mismas reglas de nombre y de ZIP que `foto`); no repitas fotos entre productos sin explicarlo en dudas. Colecciones con nombre: `colecciones` por producto y, si hay descripción, foto u orden, la sección `colecciones` (`nombre`, `descripcion`, `foto`, `orden`); solo agrupá productos que combinan de verdad. Estilo o color para filtrar: `estilo` por producto (hasta 8 palabras cortas, p. ej. Natural, Rattan, Verde); ausente = no se toca. No inventes colecciones ni estilos: solo los que el cliente nombra. Separá logo, portadas y perfil. Entregá resumen de productos, categorías, colecciones, fotos extra, precios faltantes, cantidades faltantes, combos completos/incompletos y dudas. No inventes datos ni publiques la tienda sin instrucción. Marcá lo no probado como no probado.
 
 ## Cambios desde v2.1.121
 
