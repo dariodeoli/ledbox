@@ -124,6 +124,33 @@ números ya agregados). SQL: `(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Am
 - **Cupones y gracia**: no aplica hasta #182 (no hay cobro de suscripciones). Se diseña con PagaYa sobre
   `Plan`/`plan-limits`, sin sistema de planes paralelo.
 
+## 4b. Alta de empresa («Nueva empresa»)
+Primera escritura del panel. `/superadmin/empresas/nueva` (page + server action `crearEmpresaAction`, ambas con
+`requirePlatformAdmin()` y rate limit de 10 altas por 15 min) pide nombre, slug (sugerido desde el nombre, único,
+sin reservados como `demo`/`admin`/`api`), plan vigente y una lista de **invitados** (1 a 10; cada fila con correo y rol dueño o administrador, se agregan y quitan filas). Sin ningún dueño, la empresa queda con los administradores invitados. `lib/platform/alta-empresa.ts` es la parte pura
+(slug y validación) y `alta-empresa-server.ts` escribe.
+- **Una transacción**: `Organization` (activa, plan y `planStartedAt`, plantillas de mensajes de arranque como el seed; sin
+  inventario ni datos de pago de LedBox), una invitación por persona con `upsertInvitation` (la misma de `lib/server/invitations.ts`:
+  token de 24 caracteres, solo su hash en la base, 7 días) y auditoría con actor «Plataforma». El correo sale **después** de
+  confirmar; si el proveedor falla, el alta queda y se avisa para reenviar.
+- **Sin contraseñas**: no se crea `AdminUser` ni membresía. La persona acepta con el link (cuenta nueva) o, si el correo ya
+  tiene cuenta, `joinTeam` solo suma la membresía con el rol invitado (verifica su contraseña o su Google).
+- **El link no se muestra**: el panel de equipo tampoco lo muestra (solo viaja por correo y en la base queda el hash), así que
+  el resultado muestra el estado real del correo (enviado / falló / no configurado). «Reenviar invitación» (detalle de la
+  empresa, una por invitación sin aceptar) genera token nuevo y 7 días más; el link viejo deja de servir. Rate limit propio (10 por 15 min).
+- **Correo del dueño de la plataforma**: la alta SÍ permite invitar a `PLATFORM_OWNER_EMAIL` como dueño de otra empresa,
+  porque lo decide el propio dueño de la plataforma desde un panel que ya exige su sesión verificada. `ownerEmailConflict`
+  sigue bloqueando a las empresas (`/api/admin/users`) y la cuenta del dueño no cambia de correo: aceptar solo le suma membresía.
+
+## 4c. Empresa predeterminada
+`AdminUser.defaultOrganizationId` (migración `202610200001_user_default_organization`, sin FK: se valida en código). Mi perfil
+tiene el selector «Empresa predeterminada» (`PATCH /api/admin/profile/default-organization`). Solo vale una empresa con
+membresía activa, empresa activa y que no sea la demo (`selectableMembershipWhere` en `lib/server/tenancy.ts`, el único lugar
+donde sumar `isDemo: false` cuando entren las sandboxes de la demo interactiva); una ajena responde 403. Al iniciar sesión
+(`resolveActiveOrganizationId`, también el callback de Google) se abre esa empresa; si dejó de valer, la primera membresía activa.
+Cambiar de empresa dentro del panel no modifica la predeterminada. `resolveDefaultOrganizationId` es otra cosa (empresa que
+recibe los leads públicos) y no se toca.
+
 ## 5. Seguridad
 - CSV: `csvCell` neutraliza las celdas de texto que empiezan con `= + @ \t \r`, o con `-` seguido de algo
   que no sea número, anteponiendo `'` (vale para todos los CSV del panel).

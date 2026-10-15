@@ -144,6 +144,8 @@ export type UpsertInvitationInput = {
   /** Actor real del panel que invita (lo audita el llamador). */
   inviter: { id: string; name: string; email: string };
   now?: Date;
+  /** Transacción del llamador (alta de empresa desde plataforma); sin ella usa la conexión normal. */
+  tx?: Prisma.TransactionClient;
 };
 
 export type UpsertInvitationResult = {
@@ -159,6 +161,7 @@ export type UpsertInvitationResult = {
  * (rol, token, vencimiento, quién invita) y vuelve a `pending`.
  */
 export async function upsertInvitation(input: UpsertInvitationInput): Promise<UpsertInvitationResult> {
+  const client = input.tx ?? db;
   const email = normalizeEmail(input.email);
   const now = input.now ?? new Date();
   const token = createInvitationToken();
@@ -180,26 +183,26 @@ export async function upsertInvitation(input: UpsertInvitationInput): Promise<Up
   };
   // Upsert por la clave única (correo + empresa): dos invitaciones simultáneas
   // del mismo correo no pueden duplicar la fila.
-  const existing = await db.teamInvitation.findUnique({
+  const existing = await client.teamInvitation.findUnique({
     where: { organizationId_email: { organizationId: input.organizationId, email } },
     select: { id: true },
   });
   if (existing) {
-    const invitation = await db.teamInvitation.update({
+    const invitation = await client.teamInvitation.update({
       where: { id: existing.id },
       data: { ...base, sentCount: { increment: 1 } },
     });
     return { invitation, token, created: false };
   }
   try {
-    const invitation = await db.teamInvitation.create({
+    const invitation = await client.teamInvitation.create({
       data: { id: randomUUID(), organizationId: input.organizationId, ...base, sentCount: 1 },
     });
     return { invitation, token, created: true };
   } catch (error) {
     // Otra invitación del mismo correo ganó la carrera: se actualiza la suya.
     if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
-    const invitation = await db.teamInvitation.update({
+    const invitation = await client.teamInvitation.update({
       where: { organizationId_email: { organizationId: input.organizationId, email } },
       data: { ...base, sentCount: { increment: 1 } },
     });

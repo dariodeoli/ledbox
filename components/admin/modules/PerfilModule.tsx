@@ -10,7 +10,7 @@ import { normalizePersonName, personNameValid } from "@/lib/field-rules";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
-import { PasswordField, TextField } from "../AdminFields";
+import { PasswordField, SelectField, TextField } from "../AdminFields";
 import { AdminButton, AdminBadge, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { AdminPinSettings } from "../AdminPinSettings";
@@ -80,6 +80,31 @@ export function PerfilModule() {
     setNotice("Guardamos tu nombre: ya se ve en el chip del panel.");
     profile.reload();
     reload();
+  }
+
+  const organizations: Array<{ id: string; name: string }> = data?.organizations ?? [];
+  const [defaultOrg, setDefaultOrg] = useState("");
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [defaultError, setDefaultError] = useState("");
+  useEffect(() => {
+    if (data) setDefaultOrg(data.defaultOrganizationId ?? "");
+  }, [data]);
+
+  async function saveDefaultOrganization(value: string) {
+    const previous = defaultOrg;
+    setDefaultOrg(value);
+    setSavingDefault(true);
+    setDefaultError("");
+    setNotice("");
+    const result = await adminSend("/api/admin/profile/default-organization", { organizationId: value || null }, "PATCH");
+    setSavingDefault(false);
+    if (!result.ok) {
+      setDefaultOrg(previous);
+      setDefaultError(result.error);
+      return;
+    }
+    setNotice(value ? "Listo: al iniciar sesión se abre esa empresa." : "Quitamos tu empresa predeterminada: se abre la primera.");
+    profile.reload();
   }
 
   async function uploadAvatar(image: PreparedIdentityImage) {
@@ -293,6 +318,21 @@ export function PerfilModule() {
           </form>
         </AdminPanel>
       </AdminDataState>
+
+      {/* Empresa predeterminada: la que se abre al iniciar sesión. Cambiar de empresa en el panel no la modifica. */}
+      {organizations.length > 0 ? (
+        <AdminPanel title="Empresa predeterminada" icon="building">
+          <SelectField
+            label="Empresa predeterminada"
+            value={defaultOrg}
+            disabled={readOnly || savingDefault}
+            error={defaultError}
+            hint="Es la empresa que se abre al iniciar sesión. Cambiar de empresa dentro del panel no modifica esta elección."
+            options={[{ value: "", label: "La primera de mis empresas" }, ...organizations.map((org) => ({ value: org.id, label: org.name }))]}
+            onChange={(value) => void saveDefaultOrganization(value)}
+          />
+        </AdminPanel>
+      ) : null}
 
       {/* Seguridad del panel (issue #21): PIN y auto-bloqueo por inactividad. */}
       <AdminPinSettings />
