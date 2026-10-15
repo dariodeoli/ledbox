@@ -3,7 +3,8 @@ import { variantDisplayName, variantKey, type FamilyAxis } from "@/lib/inventory
 
 /**
  * Familias de variantes de la demo (docs/VARIANTES.md): «Plato Arabesco» en verde y lila, y «Zapato Ola»
- * en negro/blanco, talles 35 y 36. Cada variante es un producto completo con sus unidades; la familia solo
+ * en negro/blanco, talles 35 y 36, más manteles de lino y sillas Cross en tres colores.
+ * Cada variante es un producto completo con sus unidades; la familia solo
  * las agrupa. Los ids son `demo_*` (la sandbox los reescribe). La categoría de la familia se completa
  * después de sembrar la taxonomía, copiándola de sus productos.
  */
@@ -11,10 +12,30 @@ import { variantDisplayName, variantKey, type FamilyAxis } from "@/lib/inventory
 type DemoVariant = { key: string; options: Record<string, string>; quantity: number; price: number; wholesale: number; sku: string; unitPrefix: string };
 type DemoFamily = { id: string; name: string; code: string; category: string; axes: FamilyAxis[]; billingUnit: "DAILY" | "EVENT"; replacementCost: number; dailyCost: number; description: string; variants: DemoVariant[] };
 
-const COLORS: Record<string, string> = { Verde: "#4B6B3A", Lila: "#9B7BB8", Negro: "#1F1F1F", Blanco: "#F5F5F5" };
+const COLORS: Record<string, string> = { Verde: "#4B6B3A", Lila: "#9B7BB8", Negro: "#1F1F1F", Arena: "#D8C7A5", Oliva: "#68764C", Natural: "#C7A77A", Blanco: "#F5F5F5" };
 const colorAxis = (values: string[]): FamilyAxis => ({ key: "color", label: "Color", values: values.map((value) => ({ value, swatch: COLORS[value] })) });
 
 const FAMILIES: DemoFamily[] = [
+  {
+    id: "demo_fam_mantel_lino", name: "Mantel de lino", code: "MANTEL-LINO", category: "Mantelería",
+    axes: [colorAxis(["Blanco", "Arena", "Oliva"])], billingUnit: "DAILY", replacementCost: 180_000, dailyCost: 8_000,
+    description: "Mantel de lino 3 × 3 m. Colores para bodas y eventos corporativos.",
+    variants: [
+      { key: "blanco", options: { color: "Blanco" }, quantity: 16, price: 45_000, wholesale: 35_000, sku: "LIN-BLA", unitPrefix: "LIN-BLA" },
+      { key: "arena", options: { color: "Arena" }, quantity: 12, price: 48_000, wholesale: 38_000, sku: "LIN-ARE", unitPrefix: "LIN-ARE" },
+      { key: "oliva", options: { color: "Oliva" }, quantity: 8, price: 50_000, wholesale: 40_000, sku: "LIN-OLI", unitPrefix: "LIN-OLI" },
+    ],
+  },
+  {
+    id: "demo_fam_silla_cross", name: "Silla Cross", code: "SILLA-CROSS", category: "Mobiliario / Sillas",
+    axes: [colorAxis(["Blanco", "Natural", "Negro"])], billingUnit: "DAILY", replacementCost: 520_000, dailyCost: 3_000,
+    description: "Silla Cross con almohadón. Cada color tiene stock y precio propio.",
+    variants: [
+      { key: "blanco", options: { color: "Blanco" }, quantity: 24, price: 22_000, wholesale: 18_000, sku: "CRS-BLA", unitPrefix: "CRS-BLA" },
+      { key: "natural", options: { color: "Natural" }, quantity: 32, price: 25_000, wholesale: 20_000, sku: "CRS-NAT", unitPrefix: "CRS-NAT" },
+      { key: "negro", options: { color: "Negro" }, quantity: 16, price: 25_000, wholesale: 20_000, sku: "CRS-NEG", unitPrefix: "CRS-NEG" },
+    ],
+  },
   {
     id: "demo_fam_plato_arabesco",
     name: "Plato Arabesco",
@@ -82,7 +103,7 @@ export function buildDemoFamilies(organizationId: string, createdAt: Date): {
         familyId: family.id,
         variantOptions: variant.options as Prisma.InputJsonValue,
         variantKey: variantKey(variant.options, family.axes),
-        variantOwnPrice: false,
+        variantOwnPrice: family.id === "demo_fam_mantel_lino" || family.id === "demo_fam_silla_cross",
         variantSortOrder: index,
         createdAt,
       });
