@@ -236,7 +236,13 @@ export function ClientesModule() {
   // La lista trae las métricas reales de cada cliente (issue #34): deuda
   // vencida, monto contratado y última actividad salen del mismo payload, sin
   // una segunda llamada a finanzas.
-  const clientsResource = useAdminResource("/api/admin/clients", (payload) => ({
+  const [query, setQuery] = useState("");
+  const [serverQuery, setServerQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setServerQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const clientsResource = useAdminResource(`/api/admin/clients?q=${encodeURIComponent(serverQuery)}`, (payload) => ({
     list: payload.clients ?? [],
     truncated: payload.truncated === true,
   }));
@@ -246,7 +252,6 @@ export function ClientesModule() {
   const clients = { ...clientsResource, data: activeClients };
   const archivedClients = useMemo(() => (allClients ?? []).filter((client) => Boolean(client.archivedAt)), [allClients]);
   const truncated = clientsResource.data?.truncated === true;
-  const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<ClientSegment>("ALL");
   const [kpi, setKpi] = useState<ClientKpiKey | null>(null);
   const [filter, setFilter] = useState("ALL");
@@ -297,6 +302,8 @@ export function ClientesModule() {
           client.contactName,
           client.contactEmail,
           client.contactPhone,
+          client.billingEmail,
+          client.whatsapp,
         ]),
       );
     return sortClients(list, order);
@@ -608,7 +615,7 @@ export function ClientesModule() {
       </AdminKpis>
       {truncated ? (
         <AdminNote tone="warn">
-          Mostrando los primeros 200 clientes: los indicadores no incluyen el resto. Afiná con la búsqueda.
+          Mostrando hasta 200 coincidencias: los indicadores corresponden a estos resultados. La búsqueda consulta toda la cartera.
         </AdminNote>
       ) : null}
 

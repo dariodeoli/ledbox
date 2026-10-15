@@ -42,12 +42,13 @@ test("la foto de categoría tiene que ser cuadrada (2 % de tolerancia)", () => {
 
 test("la regla está cableada en enviar, aprobar (panel, portal, comparación, firma) y cobrar", () => {
   assert.match(repoFile("app/api/admin/budgets/send/route.ts"), /missingPriceNames\(budget\.items\)[\s\S]{0,160}"enviar"/);
-  assert.match(repoFile("app/api/admin/budgets/approval/route.ts"), /budgetPriceGate\(organizationId, budget\.id, "aprobar"\)/);
-  assert.match(repoFile("app/api/admin/budgets/route.ts"), /status === "APPROVED" \|\| status === "SENT"/);
+  assert.match(repoFile("lib/server/budget-approval.ts"), /budgetPriceGate\(organizationId, budget\.id, "aprobar"\)/);
+  assert.match(repoFile("app/api/admin/budgets/route.ts"), /setBudgetCommercialStatus\(auth\.context, body\)/);
+  assert.match(repoFile("lib/server/budget-approval.ts"), /status === "APPROVED"[\s\S]*applyManualBudgetDecision[\s\S]*status === "SENT"/);
   assert.match(repoFile("app/api/portal/budget/[token]/approve/route.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("app/api/portal/comparison/[token]/approve/route.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("lib/server/signature/admin.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("lib/server/signature/portal.ts"), /budgetPriceGate\(/);
   assert.match(repoFile("app/api/admin/finance/route.ts"), /budgetPriceGate\(organizationId, budget\.id, "cobrar", tx\)/);
-  assert.match(repoFile("lib/server/expected-payments.ts"), /budgetPriceGate\(input\.organizationId, expected\.budgetId, "cobrar"\)/);
+  assert.match(repoFile("lib/server/expected-payments.ts"), /budgetPriceGate\(input\.organizationId, expected\.budgetId, "cobrar", database\)/);
 });

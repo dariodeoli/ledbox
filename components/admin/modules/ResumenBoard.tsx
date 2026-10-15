@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatMoney, formatMoneyCompact, formatMonthKey, formatNumber } from "@/lib/admin-format";
-import { AGING_PARAMS, conversionRate, type AdminResumenBoard, type AgingKey } from "@/lib/resumen-board";
+import { AGING_PARAMS, type AdminResumenBoard, type AgingKey } from "@/lib/resumen-board";
 import type { AdminResumen } from "@/lib/admin-types";
 import { AdminBadge, AdminEmpty, AdminErrorState, AdminPanel } from "../AdminUI";
 import { ChartBarList, type ChartBarItem } from "../charts/ChartBarList";
@@ -296,20 +296,19 @@ export function BudgetsBlock({ resource }: { resource: Resource }) {
               )}
               {funnel ? (
                 <>
-                  <h3 className="admin-board-sub">Embudo de {formatMonthKey(resource.data?.resumen?.month)}</h3>
+                  <h3 className="admin-board-sub">Actividad de {formatMonthKey(resource.data?.resumen?.month)}</h3>
                   <ChartBarList
-                    label="Embudo del mes: leads, presupuestos, aprobados y eventos"
+                    label="Actividad del mes: leads, presupuestos, aprobados y eventos"
                     items={stages.map((stage) => {
-                      const rate = stage.from === null ? null : conversionRate(stage.from, stage.count);
                       return {
                         key: stage.key,
                         label: stage.label,
                         value: stage.count,
                         valueLabel: formatNumber(stage.count),
-                        detail: rate === null ? undefined : `${new Intl.NumberFormat("es-PY", { maximumFractionDigits: 1 }).format(rate)} % de la etapa anterior`,
+                        detail: "Registros del mes",
                         tone: "accent" as const,
                         href: stage.href,
-                        title: `${stage.label} del mes. Es la relación entre cantidades del mes, no el seguimiento de cada lead. Ver la lista`,
+                        title: `${stage.label} del mes. Conteo independiente; no representa una tasa de conversión. Ver la lista`,
                       };
                     })}
                   />

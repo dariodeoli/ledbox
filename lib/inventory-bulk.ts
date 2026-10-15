@@ -60,6 +60,9 @@ export const ITEM_BULK_FIELDS = [
   { key: "wholesaleFromPrice", label: "Precio mayorista desde esos días (heredado, sin efecto)", type: "money", clear: true },
   { key: "minimumPrice", label: "Precio mínimo", type: "money", clear: true },
 ] as const;
+/** Compatibilidad de API conservada; la UI ofrece solo tarifas vigentes. */
+export const ITEM_BULK_UI_FIELDS = ITEM_BULK_FIELDS.filter(field =>
+  !["listFromDays", "listFromPrice", "wholesaleFromDays", "wholesaleFromPrice"].includes(field.key));
 export const UNIT_BULK_FIELDS = [
   { key: "status", label: "Estado", type: "status", clear: false },
   { key: "warehouseId", label: "Depósito", type: "warehouse", clear: false },

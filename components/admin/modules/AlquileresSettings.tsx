@@ -92,7 +92,7 @@ export function AlquileresSettings() {
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} rows={4}>
         {form ? (
-          <form className="admin-settings" onSubmit={(event) => void save(event)}>
+          <form className="admin-settings admin-settings-sections" onSubmit={(event) => void save(event)}>
             <AdminPanel title="Seña y retenciones" icon="calendar">
               <div className="admin-settings-grid">
                 <NumberField

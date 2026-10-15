@@ -1,6 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
-import { matchesQuery } from "@/lib/admin-policy";
+import { useEffect, useMemo, useState } from "react";
 import { formatNumber, inventoryStatusLabel } from "@/lib/admin-format";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
 import type { AdminInventoryItemRow, AdminInventoryLink } from "@/lib/admin-types";
@@ -36,16 +35,20 @@ export function InventoryLinkPicker({
   onSelect: (item: AdminInventoryLink | null) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(query.trim()), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   const path = useMemo(() => {
-    if (!range) return "/api/admin/inventory";
-    const params = new URLSearchParams({ startsAt: range.startsAt, endsAt: range.endsAt });
+    const params = new URLSearchParams({ fields: "grid", limit: "6", q: search });
+    if (range) { params.set("startsAt", range.startsAt); params.set("endsAt", range.endsAt); }
     return `/api/admin/inventory?${params.toString()}`;
-  }, [range]);
+  }, [range, search]);
   const inventory = useAdminResource(path, (payload) => (payload.inventory ?? []) as AdminInventoryItemRow[]);
 
   const candidates = useMemo(() => {
     return (inventory.data ?? [])
-      .filter((item) => matchesQuery(query, [item.name, item.category, item.sku]))
       .map((item) => ({
         item,
         available: range ? (item.availability.range?.available ?? 0) : item.availability.availableNow,

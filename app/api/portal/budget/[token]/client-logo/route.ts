@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const { token } = await params;
   const code = normalizeBudgetCode(token);
   if (!code) return jsonError("Logo no encontrado.", 404);
-  const budget = await db.budget.findUnique({ where: { publicToken: code }, select: { clientId: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
+  const budget = await db.budget.findUnique({ where: { publicToken: code, deletedAt: null, client: { deletedAt: null } }, select: { clientId: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
   if (!budget || !quotePortalAvailable(budget)) return jsonError("Logo no encontrado.", 404);
   if (await sandboxHiddenHere(budget.organizationId)) return jsonError("Logo no encontrado.", 404);
   const logo = await db.clientLogo.findFirst({ where: { clientId: budget.clientId, client: { organizationId: budget.organizationId, deletedAt: null } }, select: { data: true, mime: true } });

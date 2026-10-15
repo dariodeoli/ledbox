@@ -34,9 +34,10 @@ export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantil
   const { role } = useAdminSession();
   const canManage = canManageOrganization(role);
   return (
-    <div className="admin-subtabs-bar">
+    <div className="admin-subtabs-bar admin-settings-nav">
       <AdminTabs
         label="Secciones de Ajustes"
+        compact
         items={[
           ...SECTIONS.filter((item) => canManage || !item.restricted).map((item) => ({
             href: item.href,

@@ -88,3 +88,19 @@ test("Por cobrar acepta ?cliente=<id>, lo valida contra los cobros cargados y la
   const ficha = readFileSync(join(root, "components/admin/modules/ClienteFichaModule.tsx"), "utf8");
   assert.match(ficha, /`\/finanzas\/por-cobrar\?cliente=\$\{encodeURIComponent\(client\.id\)\}`/);
 });
+
+test("Cobrar conserva el presupuesto y permite cobrar futuros o sin vencimiento", () => {
+  const budgets = readFileSync(join(root, "components/admin/modules/PresupuestosModule.tsx"), "utf8");
+  assert.match(budgets, /\/finanzas\/por-confirmar\?presupuesto=\$\{encodeURIComponent\(budget\.id\)\}/);
+  assert.match(moduleSource, /searchParams\.get\("presupuesto"\)/);
+  assert.match(moduleSource, /\?budgetId=\$\{encodeURIComponent\(presupuestoParam\)\}/);
+  assert.match(moduleSource, /presupuestoParam\s*\? \["AWAITING", "PROOF", "PARTIAL"\]\.includes\(row\.status\)/);
+  assert.match(moduleSource, /const overdue = row\.status !== "PROOF" && expectedPaymentNeedsAction\(row\)/);
+});
+
+test("confirmación parcial usa clave estable y la ruta comparte la transacción idempotente", () => {
+  const route = readFileSync(join(root, "app/api/admin/finance/expected/route.ts"), "utf8");
+  assert.match(moduleSource, /idempotencyKey: expectedAttempt\.current\.key/);
+  assert.match(route, /scope: "finance:expected:confirm"/);
+  assert.match(route, /confirmExpectedPayment\(\{[\s\S]*?\btx,[\s\S]*?\bafterCommit,/);
+});

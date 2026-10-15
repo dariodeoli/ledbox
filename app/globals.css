@@ -1518,6 +1518,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 /* ── Menús y desplegables: una caja opaca con sombra ── */
 .admin-menu-pop, .admin-combobox-pop { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; }
+/* Ajustes usa las mismas piezas con una línea inferior, sin cambiar su teclado,
+   validación ni área táctil. La piel vive junto al campo canónico. */
+.admin-settings-content .admin-field :is([data-oc-control], input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-radius: 0; border-width: 0 0 1px; background-color: transparent;
+}
+.admin-settings-content .admin-field:has(select) { max-width: none; }
+.admin-settings-content .admin-field :is([data-oc-control], input, select, textarea):focus-visible {
+  outline: 2px solid var(--a-accent); outline-offset: 2px;
+}
+
 /* ═══ FIN BIBLIOTECA ═══ */
 
 /* Barras de filtros/búsqueda y formularios en línea: todos los controles
@@ -2340,7 +2350,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-facts, .admin-dialog-facts { display: grid; gap: 8px; margin: 0; padding: 12px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
 .admin-facts > div, .admin-dialog-facts > div { display: grid; grid-template-columns: minmax(6.5rem, 8rem) minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .admin-facts dt, .admin-dialog-facts dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.admin-facts dd, .admin-dialog-facts dd { margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
+.admin-facts dd, .admin-dialog-facts dd { min-width: 0; margin: 0; color: var(--a-text); font-size: 12.5px; overflow-wrap: anywhere; }
 .admin-dialog-table { display: grid; gap: 0; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); overflow: hidden; }
 .admin-dialog-table-head, .admin-dialog-table-row { display: grid; grid-template-columns: minmax(8rem, 1.4fr) 6rem minmax(8rem, 1.1fr) 7rem; gap: 8px; align-items: center; padding: 8px 12px; }
 .admin-dialog-table-head { border-bottom: 1px solid var(--a-line); color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
@@ -3044,10 +3054,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-inv-section-head > button { flex-wrap: wrap; }
   .admin-inv-grid { --admin-inv-card-min: 9.5rem; gap: 6px; }
   .admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; top: -6px; right: -6px; }
-  .admin-inv-range { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-left: 0; gap: 4px 8px; }
+  .admin-inv-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; margin-left: 0; gap: 4px 8px; }
   .admin-inv-range > span:first-child { grid-column: 1 / -1; }
   .admin-inv-range > span:nth-child(3) { display: none; }
-  .admin-inv-range .admin-field--filter { width: 100%; }
+  .admin-inv-range .admin-field--filter, .admin-inv-range .admin-field--filter > * { width: 100%; min-width: 0; max-width: 100%; }
+  .admin-inv-range input[type="date"] { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
   .admin-inv-actions .admin-inv-scan { order: 9; flex-basis: 100%; }
   .admin-inv-actions-end { flex: 1 1 calc(50% - 8px); }
   .admin-inv-actions-end .admin-btn { width: 100%; }
@@ -3067,6 +3078,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-cards .admin-rowcheck { width: 44px; height: 44px; }
   .admin-cards .admin-actions { flex-wrap: wrap; }
   .admin-cards .admin-filter--cell { height: 44px; max-width: 100%; }
+  .admin-ficha-nav.admin-ficha-tabs { flex-wrap: nowrap; min-width: 0; max-width: calc(100% + 32px); overflow-x: auto; }
+  .admin-ficha-nav.admin-ficha-tabs .admin-subtab { flex: 0 0 auto; min-width: 44px; white-space: nowrap; scroll-margin-inline: 8px; }
   .admin-ficha-nav .admin-subtab, .admin-inv-tabs .admin-subtab { min-height: 44px; }
   .admin-timeline-list li { grid-template-columns: auto minmax(0, 1fr); }
   .admin-timeline-when { grid-column: 2; white-space: normal; }
@@ -5397,3 +5410,62 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Barra móvil: el acceso no ocupa el ancho reservado al monto pendiente. */
 .portal-mobile-sticky .portal-mobile-sticky-action { flex: 0 0 auto; width: auto; min-width: 9rem; }
 .portal-mobile-sticky .portal-mobile-sticky-total { flex: 1 1 0; min-width: 0; }
+
+/* Ajustes: navegación y contenido densos. Todo queda acotado a esta área. */
+.admin-settings-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
+.admin-settings-content, .admin-settings-content > *, .admin-settings-sections > * { min-width: 0; }
+.admin-settings-layout .admin-settings-nav { position: sticky; top: 12px; padding: 0; }
+.admin-settings-layout .admin-settings-nav .admin-subtabs { display: grid; gap: 3px; }
+.admin-settings-layout .admin-settings-nav .admin-subtab { justify-content: flex-start; width: 100%; padding: 8px 10px; text-align: left; }
+.admin-settings-content .admin-panel-head { flex-wrap: wrap; gap: 5px 8px; padding: 10px 12px; }
+.admin-settings-content .admin-panel-title { margin: 0; font-size: 13px; letter-spacing: 0; text-transform: none; }
+.admin-settings-content .admin-panel-meta { flex-basis: 100%; padding-left: 28px; line-height: 1.4; }
+.admin-settings-content .admin-panel-action { margin-left: auto; }
+.admin-settings-content .admin-panel-head:has(.admin-panel-action) .admin-panel-meta { flex-basis: auto; padding-left: 0; }
+.admin-settings-content .admin-settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); align-items: start; gap: 10px 14px; }
+.admin-settings-sections { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-sections > :is(.admin-settings-actions, .admin-note, .admin-data-state) { grid-column: 1 / -1; }
+.admin-settings-content .admin-settings-actions { gap: 8px; }
+.admin-settings-content .admin-hours { gap: 2px; }
+.admin-settings-content .admin-hours-day { gap: 4px; padding: 6px 0; }
+.admin-settings-content .admin-hours-head { gap: 6px; }
+.admin-settings-content .admin-hours-head strong { font-size: 12px; }
+.admin-settings-content .admin-ranges-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 6px; width: 100%; }
+.admin-settings-content .admin-ranges-row .admin-field { min-width: 0; }
+.admin-settings-content .admin-ranges { width: 100%; }
+.admin-settings-content .admin-ranges > .admin-btn { justify-self: start; }
+.admin-settings-content .admin-appearance-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.admin-settings-content .admin-template-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+.admin-settings-covers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.admin-settings-covers > * { min-width: 0; }
+.admin-settings-previews { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-previews h3 { margin: 0; font-size: 12px; }
+.admin-settings-wide { grid-column: 1 / -1; }
+@media (min-width: 1180px) {
+  .admin-settings-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-settings-content--empresa .admin-settings-sections:first-child > .admin-panel:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 1600px) {
+  .admin-settings-content .admin-appearance-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .admin-settings-previews { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 980px) {
+  .admin-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .admin-settings-layout .admin-settings-nav { position: static; min-width: 0; }
+  .admin-settings-layout .admin-settings-nav .admin-subtabs { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 2px 2px 6px; }
+  .admin-settings-layout .admin-settings-nav .admin-subtab { flex: 0 0 auto; width: auto; min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .admin-settings-content .admin-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-settings-covers, .admin-settings-previews { grid-template-columns: minmax(0, 1fr); }
+  .admin-settings-content .admin-panel-meta { padding-left: 0; }
+}
+
+.admin-settings-profile { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-profile > :is(.admin-account-head, .admin-note) { grid-column: 1 / -1; }
+@media (min-width: 1180px) {
+  .admin-settings-profile { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Los nombres de comprobantes deben caber en la ficha móvil. */
+.admin-dialog-facts dd :is(a, .admin-btn) { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: start; }

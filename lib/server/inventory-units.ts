@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, InventoryUnitStatus } from "@prisma/client";
 import { INVENTORY_UNIT_STATUSES } from "@/lib/admin-types";
 import { inventoryUnitPrefix, normalizeInventoryUnitCode } from "@/lib/field-rules";
+import { lockInventoryItems } from "./inventory-availability";
 import { ensureDefaultWarehouse } from "@/lib/server/inventory-warehouses";
 
 /**
@@ -23,6 +24,8 @@ export const MAX_UNIT_NOTES = 400;
 /**
  * Cantidad del ítem = unidades activas (issue #112): las retiradas no cuentan y
  * la columna `quantity` se sincroniza para no romper los contratos existentes.
+ * El llamador debe tomar lockInventoryItems ANTES de mutar unidades; bloquear
+ * recién acá no protege una escritura previa ni evita deadlocks de unidades.
  */
 export async function syncInventoryQuantity(tx: Prisma.TransactionClient, inventoryId: string): Promise<number> {
   const quantity = await tx.inventoryUnit.count({ where: { inventoryId, status: { not: "RETIRED" } } });
@@ -97,6 +100,7 @@ export async function createInventoryUnits(
   tx: Prisma.TransactionClient,
   options: { organizationId: string; inventoryId: string; name: string; quantity: number } & NewUnitDetails,
 ): Promise<number> {
+  await lockInventoryItems(tx, options.organizationId, [options.inventoryId]);
   const quantity = Number.isInteger(options.quantity) && options.quantity > 0 ? options.quantity : 1;
   const placement = await resolveUnitPlacement(tx, options.organizationId, options.inventoryId, options);
   for (let index = 0; index < quantity; index += 1) {

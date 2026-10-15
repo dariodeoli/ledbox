@@ -189,7 +189,7 @@ export function PerfilModule() {
   };
 
   return (
-    <div className="admin-module-page">
+    <div className="admin-module-page admin-settings-content admin-settings-profile">
       <section className="admin-account-head" aria-label="Tu identidad en el panel">
         <AdminAvatar name={identity.name} src={avatarSrc} size={40} />
         <span className="admin-account-head-copy">
@@ -238,7 +238,7 @@ export function PerfilModule() {
                 value={data?.email ?? ""}
                 onChange={() => {}}
                 readOnly
-                hint="El correo es tu identidad de acceso: lo cambia un OWNER/ADMIN del equipo."
+                hint="El correo identifica tu cuenta. Se administra en Usuarios con permiso de propietario o administrador; las cuentas compartidas las edita su titular."
               />
               <div className="admin-settings-actions">
                 <AdminButton

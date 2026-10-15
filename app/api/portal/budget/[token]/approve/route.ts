@@ -13,7 +13,8 @@ import { ensureEventForApprovedBudget } from "@/lib/server/budget-event";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 import { PORTAL_PRICE_MESSAGE } from "@/lib/budget-price-gate";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
-import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock } from "@/lib/server/approval-stock";
+import { checkStockBeforeApproval, PORTAL_STOCK_MESSAGE, sendBudgetToReviewForStock, snapshotEventAssignments, releaseOrphanedGateReservation } from "@/lib/server/approval-stock";
+import { readApprovalVersion, lockApprovalVersion, assertApprovalVersion } from "@/lib/server/approval-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +33,8 @@ const MAX_NOTE = 600;
  *
  * Con la primera aprobación se reserva el stock de los ítems vinculados al
  * inventario usando el rango del evento (issue #18). El conflicto de
- * disponibilidad no bloquea la aprobación: queda auditado con el actor real y
- * el equipo lo ve en los avisos del panel (nunca en la respuesta pública).
+ * disponibilidad bloquea con 409 antes de aprobar. Stock, fechas y composición
+ * se revalidan bajo locks; aprobación y plan de pagos confirman juntos.
  *
  * Al aprobar también se generan los pagos esperados del plan (issue #28):
  * anticipo, cuotas y saldo quedan como `ExpectedPayment` en `AWAITING` para que
@@ -48,10 +49,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const code = normalizeBudgetCode(token);
   const budget = code
     ? await db.budget.findUnique({
-        where: { publicToken: code },
+        where: { publicToken: code, deletedAt: null, client: { deletedAt: null } },
         select: {
           id: true,
           title: true,
+          eventId: true,
           status: true,
           approvedAt: true,
           validUntil: true,
@@ -74,6 +76,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (name.length < 3) return jsonError("Ingresá tu nombre y apellido.", 400);
   if (name.length > MAX_NAME) return jsonError(`El nombre no puede superar los ${MAX_NAME} caracteres.`, 400);
   if (note.length > MAX_NOTE) return jsonError(`El comentario no puede superar los ${MAX_NOTE} caracteres.`, 400);
+
+  const before = await readApprovalVersion(db, budget.organizationId, budget.id);
+  if (!before) return jsonError("No encontramos ese presupuesto.", 404);
+  const assignments = await snapshotEventAssignments(budget.organizationId, budget.eventId);
+  const releaseGate = () => releaseOrphanedGateReservation({ organizationId: budget.organizationId, budgetId: budget.id, eventId: budget.eventId, before: assignments });
 
   // Stock antes de aprobar (alquileres P1-3): con el mismo lock de ítems del motor se
   // verifica (y reserva, todo o nada) lo que pide el presupuesto. Si falta, NO se aprueba
@@ -103,23 +110,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // que dos pedidos simultáneos se pisen (el segundo recibe la ya registrada).
   const evidence = approvalEvidence(request);
   let updated: { count: number };
-  try { updated = await withQuoteApproval(budget.id, budget.organizationId, (tx) => tx.budget.updateMany({
-    where: { id: budget.id, publicToken: code, approvedAt: null, status: { notIn: ["LOST", "CANCELLED"] } },
-    data: {
-      status: "APPROVED",
-      approvedAt: new Date(),
-      approvedByName: name,
-      approvalMethod: "digital",
-      approvalIp: evidence.ip,
-      approvalUserAgent: evidence.userAgent,
-      approvalNote: note || null,
-    },
-  }), code!);
-
+  try {
+    updated = await withQuoteApproval(budget.id, budget.organizationId, async (tx) => {
+      const current = await readApprovalVersion(tx, budget.organizationId, budget.id);
+      if (!current) throw new QuoteComparisonError(404, "No encontramos ese presupuesto.");
+      if (current.approvedAt) return { count: 0 };
+      assertApprovalVersion(before, current);
+      const priceBlock = await budgetPriceGate(budget.organizationId, budget.id, "aprobar", tx);
+      if (priceBlock) throw new QuoteComparisonError(409, PORTAL_PRICE_MESSAGE, "price_missing");
+      const applied = await tx.budget.updateMany({
+        where: { id: budget.id, publicToken: code, approvedAt: null, status: { notIn: ["LOST", "CANCELLED"] } },
+        data: {
+          status: "APPROVED", approvedAt: new Date(), approvedByName: name,
+          approvalMethod: "digital", approvalIp: evidence.ip,
+          approvalUserAgent: evidence.userAgent, approvalNote: note || null,
+        },
+      });
+      if (applied.count) await syncBudgetExpectedPayments({ tx, organizationId: budget.organizationId, budgetId: budget.id });
+      return applied;
+    }, code!, { beforeBudgetLock: (tx) => lockApprovalVersion(tx, before) });
   } catch (error) {
-    if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
+    await releaseGate();
+    if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status, error.code);
     throw error;
   }
+  if (!updated.count) await releaseGate();
   const payload = await loadPublicBudget(code);
   if (!payload) return jsonError("No encontramos ese presupuesto.", 404);
   if (updated.count > 0) {
@@ -151,14 +166,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         console.error("[portal/approve] la reserva quedó pendiente", { budgetId: budget.id, error });
       }
     }
-    // Pagos esperados del plan (issue #28): el cliente ya puede ver el estado
-    // real de cada concepto en el portal y el equipo los confirma en Finanzas.
-    await syncBudgetExpectedPayments({
-      organizationId: budget.organizationId,
-      budgetId: budget.id,
-      actor: portalAuditContext(budget.organizationId, name, budget.client?.email),
-      reason: "aprobación del cliente",
-    });
   }
   return Response.json({ budget: payload, alreadyApproved: updated.count === 0 });
 }

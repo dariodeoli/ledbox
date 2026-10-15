@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryStatus, type InventoryUnitStatus } from "@prisma/client";
 import { db } from "./db";
 import { recordAudit, type AuditContext } from "./audit";
+import { lockLiveEvent } from "./event-lock";
+export { lockLiveEvent } from "./event-lock";
 
 /**
  * Fuente única de la disponibilidad del inventario (issue #18).
@@ -428,30 +430,19 @@ export async function lockInventoryItems(
   tx: Prisma.TransactionClient,
   organizationId: string,
   inventoryIds: ReadonlyArray<string>,
+  options?: { mode: "no-key-update" },
 ): Promise<Set<string>> {
   const ids = [...new Set(inventoryIds)].sort();
   if (ids.length === 0) return new Set();
+  const lock = options?.mode === "no-key-update" ? Prisma.sql`FOR NO KEY UPDATE` : Prisma.sql`FOR UPDATE`;
   const rows = await tx.$queryRaw<Array<{ id: string }>>(
-    Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
+    Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(ids)}) ORDER BY "id" ${lock}`,
   );
   const locked = new Set(rows.map((row) => row.id));
   await settleExpiredComboContributions(tx, organizationId, [...locked]);
   return locked;
 }
 
-/**
- * Bloquea la fila del evento (vivo, de la empresa) con `FOR UPDATE`. Orden de locks
- * documentado: ítems (por id) -> evento. `trashEvent` toma solo el lock del evento y
- * nunca el de ítems, así que no hay ciclo posible. Si la papelera gana la carrera, el
- * `deletedAt IS NULL` se reevalúa al soltarse el lock y no devuelve fila (event-missing);
- * si gana la asignación, la guarda de `trashEvent` ve la reserva abierta y bloquea.
- */
-export async function lockLiveEvent(tx: Prisma.TransactionClient, organizationId: string, eventId: string): Promise<boolean> {
-  const rows = await tx.$queryRaw<Array<{ id: string }>>(
-    Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${eventId} AND "organizationId" = ${organizationId} AND "deletedAt" IS NULL FOR UPDATE`,
-  );
-  return rows.length > 0;
-}
 
 /** Sustituciones guardadas en la fila del combo: { componenteOriginal: sustituto }. */
 export function parseComboSubstitutions(value: unknown): Record<string, string> {

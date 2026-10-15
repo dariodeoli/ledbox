@@ -183,10 +183,10 @@ test("P1-3: las líneas de faltante son legibles y las rutas de aprobación pasa
   );
   const portal = repoFile("app/api/portal/budget/[token]/approve/route.ts");
   const comparison = repoFile("app/api/portal/comparison/[token]/approve/route.ts");
-  const panel = repoFile("app/api/admin/budgets/approval/route.ts");
+  const panel = repoFile("lib/server/budget-approval.ts");
   for (const [name, source] of [["portal", portal], ["comparativa", comparison], ["panel", panel]] as const) {
     assert.ok(source.indexOf("checkStockBeforeApproval(") > 0, `${name}: verifica stock`);
-    assert.ok(source.indexOf("checkStockBeforeApproval(") < source.indexOf("tx.budget.updateMany"), `${name}: antes de aprobar`);
+    assert.ok(source.indexOf("checkStockBeforeApproval(") < source.search(/tx\.budget\.update(?:Many)?\(/), `${name}: antes de aprobar`);
   }
   assert.match(repoFile("lib/server/approval-stock.ts"), /Hay piezas sin disponibilidad para esas fechas; el equipo te contacta\./);
   assert.match(portal, /jsonError\(PORTAL_STOCK_MESSAGE, 409, "stock_insufficient"\)/);

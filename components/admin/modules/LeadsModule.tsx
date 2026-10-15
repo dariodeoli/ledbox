@@ -127,9 +127,16 @@ type LeadMutation = { lead: AdminLeadRow; client: { id: string; name: string; co
 
 export function LeadsModule() {
   const { role } = useAdminSession();
-  const leads = useAdminResource("/api/leads", (payload) => payload.leads ?? []);
-
   const [query, setQuery] = useState("");
+  const [serverQuery, setServerQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setServerQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const resource = useAdminResource(`/api/leads?q=${encodeURIComponent(serverQuery)}`, (payload) => ({
+    list: payload.leads ?? [], truncated: payload.truncated === true,
+  }));
+  const leads = { ...resource, data: resource.data?.list ?? null };
   const [status, setStatus] = useState("ALL");
   const [selectedId, setSelectedId] = useState("");
   const [draftStatus, setDraftStatus] = useState("NEW");
@@ -464,12 +471,13 @@ export function LeadsModule() {
   return (
     <div className="admin-module-page">
       <AdminKpis state={kpiState(leads)} label="Indicadores de leads">
-        <AdminKpi label="Leads" icon="leads" value={formatNumber(totals.total)} note="últimos 100 ingresos" />
+        <AdminKpi label="Leads" icon="leads" value={formatNumber(totals.total)} note="resultados mostrados" />
         <AdminKpi label="Nuevos" icon="plus" value={formatNumber(totals.new)} note="por contactar" tone={totals.new > 0 ? "accent" : undefined} />
         <AdminKpi label="Cotizados" icon="budgets" value={formatNumber(totals.quoted)} note="en pipeline" tone={totals.quoted > 0 ? "warn" : undefined} />
         <AdminKpi label="Ganados" icon="check" value={formatNumber(totals.won)} note="convertidos en cliente" tone={totals.won > 0 ? "ok" : undefined} />
       </AdminKpis>
 
+      {resource.data?.truncated ? <AdminNote tone="warn">Mostrando hasta 100 coincidencias. La búsqueda consulta todos los leads; los indicadores corresponden a estos resultados.</AdminNote> : null}
       <AdminToolbar>
         <SearchField
           value={query}

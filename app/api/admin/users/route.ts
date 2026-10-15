@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { canEditTeamAccount, SHARED_ACCOUNT_EDIT_ERROR } from "@/lib/team-account-policy";
 import { inviterLosesOwnerAuthority, revokePendingOwnerInvitations } from "@/lib/server/invitations";
 import type { AdminRole } from "@prisma/client";
 import { adminRoleLabel } from "@/lib/admin-format";
@@ -49,6 +50,7 @@ export async function GET() {
           email: true,
           active: true,
           avatar: { select: { updatedAt: true } },
+          _count: { select: { memberships: true } },
         },
       },
     },
@@ -61,6 +63,7 @@ export async function GET() {
     role: membership.role,
     active: membership.user.active && membership.active,
     createdAt: membership.createdAt,
+    sharedAccount: membership.user._count.memberships > 1,
     avatarUpdatedAt: membership.user.avatar?.updatedAt.toISOString() ?? null,
   }));
   return Response.json({ users });
@@ -194,6 +197,9 @@ export async function PATCH(request: Request) {
       const current = await guardUserOwnerChange(tx, {
         organizationId, adminUserId: membership.adminUserId, actorId: actor.id, actorRole, patch: membershipData,
       });
+      if (Object.keys(accountData).length > 0 && !canEditTeamAccount({
+        actorId: actor.id, userId: current.adminUserId, membershipCount: current.user._count.memberships,
+      })) throw new UserOwnerGuardError(SHARED_ACCOUNT_EDIT_ERROR, 403);
       currentAccountActive = current.user.active;
       previousRole = current.role;
       previousActive = current.active;

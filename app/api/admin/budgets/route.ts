@@ -1,4 +1,4 @@
-import { withQuoteApproval, withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
+import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { budgetItemError, canSetFreeOnPurpose, FREE_ON_PURPOSE_FORBIDDEN, freeOnPurposeChanged } from "@/lib/budget-items";
@@ -9,8 +9,7 @@ import { suggestDepositForOrder } from "@/lib/server/rental-settlement";
 import { isDepositPurpose } from "@/lib/rental-charges";
 import { SecurityDepositError, equipmentReturnByEvent, setBudgetSecurityDeposit, transitionBudgetSecurityDeposit } from "@/lib/server/security-deposit";
 import { assertBudgetPlanLedger, recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
-import { CommercialStatus, Prisma } from "@prisma/client";
-import { budgetStatusLabel } from "@/lib/admin-format";
+import { Prisma } from "@prisma/client";
 import { INVOICE_TAX_TYPES } from "@/lib/fiscal";
 import type { AdminInvoiceTaxType } from "@/lib/admin-types";
 import { requireAdminContext, type AdminContext } from "@/lib/server/tenancy";
@@ -20,8 +19,7 @@ import { db } from "@/lib/server/db";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
-import { budgetPriceGate } from "@/lib/server/budget-price-gate";
-import { incompleteGameLines } from "@/lib/server/approval-stock";
+import { setBudgetCommercialStatus } from "@/lib/server/budget-approval";
 import { readRentalDays, snapshotsForLines } from "@/lib/server/line-pricing";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
@@ -99,6 +97,7 @@ export async function GET() {
         event: true,
         lead: { select: { id: true, createdAt: true } },
         items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } },
+        _count: { select: { signatureRequests: { where: { status: { in: ["SIGNED", "VALIDATED"] } } } } },
         expectedPayments: { where: { status: { not: "CANCELLED" } }, orderBy: [{ installmentNumber: "asc" }, { createdAt: "asc" }], select: { status: true, concept: true, label: true, amount: true, paidAmount: true } },
         payments: true,
         // Adjuntos internos (issue #65): metadatos, el binario se sirve aparte
@@ -133,7 +132,8 @@ export async function GET() {
   const returns = await equipmentReturnByEvent(organizationId, [...new Set(budgets.flatMap((budget) => (budget.eventId && budget.securityDeposit ? [budget.eventId] : [])))]);
   return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault, securityDepositMode: rental.securityDepositMode, securityDepositCalc: rental.securityDepositCalc, securityDepositPercent: rental.securityDepositPercent }, budgets: budgets.map((budget) => {
     const { logo, ...client } = budget.client;
-    return { ...budget, equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
+    const { _count, ...row } = budget;
+    return { ...row, inventoryLinksLocked: Boolean(budget.approvedAt || budget.status === "APPROVED" || _count.signatureRequests), equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
   }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
@@ -382,9 +382,8 @@ export async function POST(request: Request) {
  * `PATCH /api/admin/budgets` (issues #14, #18 y #26).
  *
  * - `status`: estado comercial desde el tablero (issue #26). Set idempotente,
- *   con la capacidad `budgets.write` y auditoría; no toca la aprobación del
- *   portal (`approvedAt`/`approvalMethod`): la evidencia de aprobación sigue
- *   siendo del flujo de `/api/admin/budgets/approval` y del portal.
+ *   con la capacidad `budgets.write` y auditoría. APPROVED usa la aprobación
+ *   manual compartida (evidencia, stock, evento y plan), igual que el botón.
  * - `kind: "item-link"`: vincula (o desvincula con `inventoryId: null`) un ítem
  *   del presupuesto con un artículo del inventario de la empresa activa. Solo el
  *   vínculo reserva stock al aprobar; sin vínculo el ítem no toca el inventario.
@@ -414,93 +413,58 @@ async function patchBudget(request: Request) {
   await assertLive("Budget", budgetId, organizationId);
 
   if (body.status !== undefined) {
-    const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
-    if (!Object.values(CommercialStatus).includes(status as CommercialStatus)) return jsonError("El estado del presupuesto no es válido.", 400);
-    const budget = await db.budget.findFirst({
-      where: { id: budgetId, organizationId },
-      select: { id: true, title: true, status: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
-    });
-    if (!budget) return jsonError("Presupuesto no encontrado.", 404);
-    if (budget.status === status) {
-      return Response.json({ budget: { id: budget.id, status: budget.status }, unchanged: true });
-    }
-    // «Falta precio»: ni enviar ni aprobar a mano un presupuesto con líneas en 0 sin confirmar.
-    if (status === "APPROVED" || status === "SENT") {
-      const priceBlock = await budgetPriceGate(organizationId, budget.id, status === "SENT" ? "enviar" : "aprobar");
-      if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
-    }
-    // Juego incompleto (sin piezas): tampoco se aprueba a mano.
-    if (status === "APPROVED") {
-      const incomplete = await incompleteGameLines(organizationId, budget.id);
-      if (incomplete.length) return jsonError(`No se puede aprobar: ${incomplete.join(" · ")}.`, 409, "combo_incomplete");
-    }
-    if (budget.status === "APPROVED" && status !== "APPROVED") return jsonError("El presupuesto ya está aprobado: no se puede reabrir para cambiar sus condiciones.", 409);
-    let updated: { id: string; status: CommercialStatus };
-    try {
-      updated = status === "APPROVED"
-        ? await withQuoteApproval(budget.id, organizationId, (tx) => tx.budget.update({ where: { id: budget.id }, data: { status: status as CommercialStatus }, select: { id: true, status: true } }))
-        : await db.budget.update({ where: { id: budget.id }, data: { status: status as CommercialStatus }, select: { id: true, status: true } });
-    } catch (error) {
-      if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
-      throw error;
-    }
-    await recordAudit({
-      context: auth.context,
-      action: "status",
-      entity: "Budget",
-      entityId: budget.id,
-      summary: `Cambió el estado del presupuesto «${budget.title}» del cliente «${budget.client.company?.trim() || budget.client.name}» a ${budgetStatusLabel(updated.status)}`,
-      detail: { changes: { status: { from: budget.status, to: updated.status } } },
-    });
-    return Response.json({ budget: updated });
+    return setBudgetCommercialStatus(auth.context, body);
   }
 
   if (body.kind === "item-link") {
     const itemId = typeof body.itemId === "string" ? body.itemId : "";
     if (!itemId) return jsonError("Falta el ítem.", 400);
     const rawInventoryId = typeof body.inventoryId === "string" ? body.inventoryId.trim() : "";
-    const budget = await db.budget.findFirst({
-      where: { id: budgetId, organizationId },
-      select: {
-        id: true,
-        title: true,
-        client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-        items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
-      },
-    });
-    if (!budget) return jsonError("Presupuesto no encontrado.", 404);
-    const item = budget.items.find((row) => row.id === itemId);
-    if (!item) return jsonError("El ítem no pertenece a este presupuesto.", 404);
-    const inventory = rawInventoryId
-      ? await db.inventoryItem.findFirst({ where: { id: rawInventoryId, organizationId }, select: { id: true, name: true } })
-      : null;
-    if (rawInventoryId && !inventory) return jsonError("El artículo de inventario no existe en esta empresa.", 404);
-    if (item.inventoryId === (inventory?.id ?? null)) {
-      return Response.json({ item: { id: item.id, inventoryId: item.inventoryId }, unchanged: true });
-    }
-    const updated = await db.budgetItem.update({
-      where: { id: item.id },
-      data: { inventoryId: inventory?.id ?? null },
-      select: { id: true, name: true, inventoryId: true, inventory: { select: INVENTORY_LINK_SELECT } },
-    });
-    await recordAudit({
-      context: auth.context,
-      action: "update",
-      entity: "Budget",
-      entityId: budget.id,
-      summary: inventory
-        ? `Vinculó «${item.name}» del presupuesto «${budget.title}» con «${inventory.name}» del inventario`
-        : `Quitó el vínculo con inventario de «${item.name}» del presupuesto «${budget.title}»`,
-      detail: {
-        changes: {
-          inventoryId: {
-            from: item.inventory?.name ?? null,
-            to: inventory?.name ?? null,
+    return withQuoteCommercialEdit(budgetId, organizationId, true, async (tx) => {
+      const budget = await tx.budget.findFirst({
+        where: { id: budgetId, organizationId },
+        select: {
+          id: true,
+          title: true,
+          client: { select: { name: true, company: true, tradeName: true, legalName: true } },
+          items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
+        },
+      });
+      if (!budget) return jsonError("Presupuesto no encontrado.", 404);
+      const item = budget.items.find((row) => row.id === itemId);
+      if (!item) return jsonError("El ítem no pertenece a este presupuesto.", 404);
+      const inventory = rawInventoryId
+        ? await tx.inventoryItem.findFirst({ where: { id: rawInventoryId, organizationId }, select: { id: true, name: true } })
+        : null;
+      if (rawInventoryId && !inventory) return jsonError("El artículo de inventario no existe en esta empresa.", 404);
+      if (item.inventoryId === (inventory?.id ?? null)) {
+        return Response.json({ item: { id: item.id, inventoryId: item.inventoryId }, unchanged: true });
+      }
+      const updated = await tx.budgetItem.update({
+        where: { id: item.id },
+        data: { inventoryId: inventory?.id ?? null },
+        select: { id: true, name: true, inventoryId: true, inventory: { select: INVENTORY_LINK_SELECT } },
+      });
+      await tx.budget.update({ where: { id: budget.id }, data: { updatedAt: new Date() } });
+      await recordAudit({
+        context: auth.context,
+        action: "update",
+        entity: "Budget",
+        entityId: budget.id,
+        summary: inventory
+          ? `Vinculó «${item.name}» del presupuesto «${budget.title}» con «${inventory.name}» del inventario`
+          : `Quitó el vínculo con inventario de «${item.name}» del presupuesto «${budget.title}»`,
+        detail: {
+          changes: {
+            inventoryId: {
+              from: item.inventory?.name ?? null,
+              to: inventory?.name ?? null,
+            },
           },
         },
-      },
+      }, tx);
+      return Response.json({ item: updated });
     });
-    return Response.json({ item: updated });
   }
 
   if (body.kind === "security-deposit" || body.kind === "security-deposit-status") {

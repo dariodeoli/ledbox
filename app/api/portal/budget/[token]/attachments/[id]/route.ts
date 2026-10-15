@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   const { token, id } = await params;
   const code = normalizeBudgetCode(token);
   if (!code) return jsonError("Adjunto no encontrado.", 404);
-  const budget = await db.budget.findUnique({ where: { publicToken: code }, select: { id: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
+  const budget = await db.budget.findUnique({ where: { publicToken: code, deletedAt: null, client: { deletedAt: null } }, select: { id: true, organizationId: true, status: true, validUntil: true, approvedAt: true } });
   if (!budget || !quotePortalAvailable(budget)) return jsonError("Adjunto no encontrado.", 404);
   if (await sandboxHiddenHere(budget.organizationId)) return jsonError("Adjunto no encontrado.", 404);
   const file = await db.budgetAttachment.findFirst({ where: { id, budgetId: budget.id, organizationId: budget.organizationId, clientVisible: true, mime: "application/pdf", budget: { publicToken: code } }, select: { name: true, data: true, mime: true } });

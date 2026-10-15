@@ -1,4 +1,5 @@
 "use client";
+import { Combobox } from "../AdminFields";
 
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -134,6 +135,7 @@ export type EventoFichaProps = {
   budgetState: "loading" | "error" | "ready";
   promoters: AdminPromoterOption[];
   inventoryItems: AdminInventoryOption[];
+  onSearchInventory: (query: string) => void;
   queuedActions: readonly OfflineAction[];
   /** Aviso del último despacho/devolución (también cuando quedó en cola). */
   flash: string;
@@ -520,7 +522,7 @@ function PersonalTab({ event, writable, promoters, onReload }: { event: AdminEve
 }
 
 function EquiposTab(props: EventoFichaProps) {
-  const { item, writable, inventoryItems, queuedActions, flash, incidentsKey, onMovement, onReload, onReloadInventory, onIncidentsChanged } = props;
+  const { item, writable, inventoryItems, onSearchInventory, queuedActions, flash, incidentsKey, onMovement, onReload, onReloadInventory, onIncidentsChanged } = props;
   const event = item.event;
   const assignments = event.assignments;
   const assignedUnits = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
@@ -534,6 +536,13 @@ function EquiposTab(props: EventoFichaProps) {
     [event.setupAt, event.startsAt, event.strikeAt, event.endsAt],
   );
   const [assignForm, setAssignForm] = useState(defaultForm);
+  const [selectedInventory, setSelectedInventory] = useState<{ value: string; label: string } | null>(null);
+  const inventoryChoices = inventoryItems.map((entry) => ({ value: entry.id, label: `${entry.name}${entry.sku ? ` · ${entry.sku}` : ""} · ${formatNumber(entry.availability.availableNow)} libres` }));
+  if (assignForm.inventoryId && !inventoryChoices.some((choice) => choice.value === assignForm.inventoryId)) {
+    const existing = assignments.find((row) => row.inventory.id === assignForm.inventoryId)?.inventory;
+    const chosen = selectedInventory?.value === assignForm.inventoryId ? selectedInventory : existing ? { value: existing.id, label: existing.name } : null;
+    if (chosen) inventoryChoices.push(chosen);
+  }
   const [editingId, setEditingId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -647,21 +656,14 @@ function EquiposTab(props: EventoFichaProps) {
 
       {writable ? (
         <form className="admin-inline-form" onSubmit={submit}>
-          <AdminSelect
-            className=""
+          <Combobox
+            onSearch={onSearchInventory}
             required
             value={assignForm.inventoryId}
-            onChange={(value) => setAssignForm({ ...assignForm, inventoryId: value })}
+            onChange={(value) => { setSelectedInventory(inventoryChoices.find((choice) => choice.value === value) ?? null); setAssignForm({ ...assignForm, inventoryId: value }); }}
             label="Ítem de inventario"
-            title="Ítem de inventario"
             disabled={Boolean(editingId)}
-            options={[
-              { value: "", label: "Ítem de inventario…" },
-              ...inventoryItems.map((entry) => ({
-                value: entry.id,
-                label: `${entry.name}${entry.sku ? ` · ${entry.sku}` : ""} · ${formatNumber(entry.availability.availableNow)} libres`,
-              })),
-            ]}
+            options={inventoryChoices}
           />
           <NumberField
             ariaLabel="Cantidad de unidades"

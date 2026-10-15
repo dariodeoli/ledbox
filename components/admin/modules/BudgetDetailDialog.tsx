@@ -1,5 +1,6 @@
 "use client";
 
+import { budgetDepositAmount } from "@/lib/budget-payment-plan";
 import { useEffect, useState } from "react";
 import {
   budgetApprovalLabel,
@@ -201,7 +202,7 @@ export function BudgetDetailDialog({
         }>
           <dl className="admin-dialog-facts">
             <div><dt>Total</dt><dd><strong>{formatMoney(budget.total)}</strong>{budget.discount > 0 ? ` · descuento ${formatMoney(budget.discount)}` : ""}</dd></div>
-            <div><dt>Seña</dt><dd>{budget.advanceAmount > 0 ? formatMoney(budget.advanceAmount) : "Sin seña definida"}</dd></div>
+            <div><dt>Seña</dt><dd>{budgetDepositAmount(budget) > 0 ? formatMoney(budgetDepositAmount(budget)) : "Sin seña definida"}</dd></div>
             <div><dt>Cobrado</dt><dd>{formatMoney(paid)} · saldo {formatMoney(balance)}</dd></div>
             <div><dt>Margen</dt><dd title={`Costo interno ${formatMoney(internalCost.total)}`}>{formatMoney(budget.total - internalCost.total)}</dd></div>
             <div><dt>Plan de pagos</dt><dd>{planSummary(budget)}</dd></div>

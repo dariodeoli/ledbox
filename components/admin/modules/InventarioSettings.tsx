@@ -34,7 +34,7 @@ export function InventarioSettings() {
   const [editWarehouse, setEditWarehouse] = useState<AdminWarehouseRow | null>(null);
 
   return (
-    <div className="admin-stack">
+    <div className="admin-settings-sections">
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       <AdminPanel title="Categorías" icon="inventory" meta="Categoría › Subcategoría">

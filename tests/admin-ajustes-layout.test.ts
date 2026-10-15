@@ -38,7 +38,7 @@ test("el respiro inferior lo aporta el layout base, no la barra", () => {
 });
 
 test("las cuatro secciones se renderizan después de la barra", () => {
-  assert.ok(ajustesTabs.includes('className="admin-subtabs-bar"'), "falta la barra de sub-tabs");
+  assert.match(ajustesTabs, /className="admin-subtabs-bar(?: [^"]+)?"/, "falta la barra de sub-tabs");
   const bar = ajustes.indexOf("<AjustesTabs ");
   assert.ok(bar > 0, "Ajustes no dibuja la barra");
   for (const section of ["EmpresaModule", "CorreoModule", "PlanModule", "UsuariosModule"]) {

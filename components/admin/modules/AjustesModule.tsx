@@ -34,25 +34,27 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
   const canManage = canManageOrganization(role);
 
   return (
-    <>
+    <div className="admin-settings-layout">
       <AjustesTabs active={section} />
+      <div className={`admin-settings-content admin-settings-content--${section}`}>
 
-      {section === "empresa" && canManage ? <EmpresaModule /> : null}
-      {section === "apariencia" && canManage ? <AparienciaSettings /> : null}
-      {section === "correo" && canManage ? <CorreoModule /> : null}
-      {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
-      {section === "inventario" && canManage ? <InventarioSettings /> : null}
-      {section === "tienda" && canManage ? (
-        sandbox ? (
-          // Demo: el catálogo público excluye las sandboxes; no hay tienda ni pedidos que configurar.
-          <AdminNote>{SANDBOX_UNAVAILABLE}: la demo no tiene tienda web pública ni pedidos del catálogo.</AdminNote>
-        ) : (
-          <TiendaWebSettings />
-        )
-      ) : null}
-      {section === "plan" ? <PlanModule /> : null}
-      {section === "usuarios" && canManage ? <UsuariosModule /> : null}
-      {section === "eliminados" && canManage ? <EliminadosModule /> : null}
-    </>
+        {section === "empresa" && canManage ? <EmpresaModule /> : null}
+        {section === "apariencia" && canManage ? <AparienciaSettings /> : null}
+        {section === "correo" && canManage ? <CorreoModule /> : null}
+        {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
+        {section === "inventario" && canManage ? <InventarioSettings /> : null}
+        {section === "tienda" && canManage ? (
+          sandbox ? (
+            // Demo: el catálogo público excluye las sandboxes; no hay tienda ni pedidos que configurar.
+            <AdminNote>{SANDBOX_UNAVAILABLE}: la demo no tiene tienda web pública ni pedidos del catálogo.</AdminNote>
+          ) : (
+            <TiendaWebSettings />
+          )
+        ) : null}
+        {section === "plan" ? <PlanModule /> : null}
+        {section === "usuarios" && canManage ? <UsuariosModule /> : null}
+        {section === "eliminados" && canManage ? <EliminadosModule /> : null}
+      </div>
+    </div>
   );
 }

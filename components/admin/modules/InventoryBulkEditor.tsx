@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP, ITEM_BULK_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
+import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP, ITEM_BULK_UI_FIELDS, UNIT_BULK_FIELDS } from "@/lib/inventory-bulk";
 import { adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS } from "@/lib/catalog-audience";
 import { DayField, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
@@ -26,7 +26,7 @@ export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onCl
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const fields = target === "items" ? ITEM_BULK_FIELDS : UNIT_BULK_FIELDS;
+  const fields = target === "items" ? ITEM_BULK_UI_FIELDS : UNIT_BULK_FIELDS;
   const change = (key: string, patch: Partial<Draft>) => setDrafts(current => ({ ...current, [key]: { ...(current[key] ?? { mode: "keep", value: "" }), ...patch } }));
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,7 +67,7 @@ export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onCl
     </>}
   >
     <p className="admin-note">Selección explícita ({selection.length}): {selection.map(row => row.label).join(" · ")}</p>
-    <AdminNote>No cambiar conserva cada valor. Vaciar borra textos opcionales o deja un importe/umbral en 0. El lote se guarda completo: ante un error no se aplica ningún cambio. Los códigos, nombres y cantidades derivadas se editan individualmente.</AdminNote>
+    <AdminNote>No cambiar conserva cada valor. Vaciar borra textos opcionales o deja un importe/umbral en 0. El lote se guarda completo: ante un error no se aplica ningún cambio. Los códigos, nombres y cantidades derivadas se editan individualmente. Los precios por duración se cargan en «Precio por días» del producto.</AdminNote>
     <form id={formId} className="admin-form" onSubmit={event => void submit(event)}>
       <AdminDialogSection title="Campos a cambiar" stack>
       {fields.map(field => {

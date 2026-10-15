@@ -46,6 +46,19 @@ test("seña por evento en PostgreSQL: más de 200 presupuestos, solo cobros RECE
     const foreignBudget = await budget(B, foreign, "APPROVED", 100_000, new Date(Date.UTC(2033, 0, 2)));
     await pay(B, foreignBudget, 100_000, "RECEIVED");
 
+    // Seña estructurada del alta: se conserva en installmentsJson, no en advanceAmount.
+    const structured = await event(A, "Seña del formulario");
+    const structuredBudget = await budget(A, structured, "APPROVED", 0, new Date(Date.UTC(2033, 0, 1)));
+    const { defaultDepositPlanRows } = await import("../lib/budget-payment-plan");
+    await db.budget.update({ where: { id: structuredBudget }, data: { installmentsJson: defaultDepositPlanRows(50, 240000)! } });
+    const structuredRow = (await loadEventReadiness(A.id, [structured]))[0];
+    assert.equal(structuredRow.advanceAmount, 120000);
+    assert.equal(structuredRow.collected, 0);
+    await pay(A, structuredBudget, 120000, "RECEIVED");
+    assert.equal((await loadEventReadiness(A.id, [structured]))[0].collected, 120000);
+    // El resto de los casos sigue acotado a los eventos originales.
+    await db.event.delete({ where: { id: structured } });
+
     const all = await loadEventReadiness(A.id, null);
     assert.equal(all.length, 2, "solo los eventos de la empresa activa");
     const row = all.find((r) => r.eventId === target)!;

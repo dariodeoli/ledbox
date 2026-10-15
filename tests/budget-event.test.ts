@@ -104,7 +104,7 @@ test("create-event: events.write, acotado a la empresa, FOR UPDATE, 404/409 y re
 test("aprobar crea el evento solo, después de la aprobación, en todos los caminos; el botón queda de respaldo", () => {
   for (const file of [
     "app/api/portal/budget/[token]/approve/route.ts",
-    "app/api/admin/budgets/approval/route.ts",
+    "lib/server/budget-approval.ts",
     "app/api/portal/comparison/[token]/approve/route.ts",
     "lib/server/signature/portal.ts",
   ]) {
@@ -115,7 +115,7 @@ test("aprobar crea el evento solo, después de la aprobación, en todos los cami
   // Solo bajo `count > 0` y después de la transacción de aprobación, en los 4 caminos.
   const guards: Array<[string, RegExp, RegExp]> = [
     ["app/api/portal/budget/[token]/approve/route.ts", /if \(updated\.count > 0\) \{[\s\S]*ensureEventForApprovedBudget\(/, /withQuoteApproval\([\s\S]*ensureEventForApprovedBudget\(/],
-    ["app/api/admin/budgets/approval/route.ts", /if \(applied\.count > 0\) \{[\s\S]*ensureEventForApprovedBudget\(/, /withQuoteApproval\([\s\S]*ensureEventForApprovedBudget\(/],
+    ["lib/server/budget-approval.ts", /if \(applied\.count > 0\) \{[\s\S]*ensureEventForApprovedBudget\(/, /withQuoteApproval\([\s\S]*ensureEventForApprovedBudget\(/],
     ["app/api/portal/comparison/[token]/approve/route.ts", /if \(updated\.count\) \{[\s\S]*ensureEventForApprovedBudget\(/, /db\.\$transaction\([\s\S]*ensureEventForApprovedBudget\(/],
     ["lib/server/signature/portal.ts", /if \(grouped\?\.comparisonId\) \{[\s\S]*ensureEventForApprovedBudget\(/, /\$transaction\([\s\S]*ensureEventForApprovedBudget\(/],
   ];

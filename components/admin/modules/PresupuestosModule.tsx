@@ -1,4 +1,5 @@
 "use client";
+import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
 import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
 import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
@@ -41,7 +42,7 @@ import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody } from "./BudgetSecurityDeposit";
 import { BudgetPaymentPlanEditor, conditionDrafts, conditionPayload, type BudgetConditionDraft } from "./BudgetPaymentPlanEditor";
 import { budgetDraftSubtotal, budgetItemError, type BudgetItemDraft } from "@/lib/budget-items";
-import { budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { budgetDepositAmount, budgetMoneyValid, resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
 import { BUDGET_APPROVAL_NOTE_MAX, budgetApprovalNoteError } from "@/lib/budget-approval-validation";
 import { clientDisplayName } from "@/lib/client-identity";
 import { ClientQuickCreateDialog, EventQuickCreateDialog } from "./BudgetQuickCreate";
@@ -636,9 +637,11 @@ function ItemLinksDialog({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const range = eventAvailabilityRange(budget.event);
+  const locked = Boolean(budget.inventoryLinksLocked || budget.approvedAt || budget.status === "APPROVED" || !budgetInPlay(budget));
   const linkedCount = budget.items.filter((item) => links[item.id]).length;
 
   async function save(item: AdminBudgetRow["items"][number], inventory: AdminInventoryLink | null) {
+    if (locked) return;
     setBusyId(item.id);
     setError("");
     setNotice("");
@@ -675,6 +678,7 @@ function ItemLinksDialog({
         </AdminButton>
       }
     >
+      {locked ? <AdminNote>Los vínculos de un presupuesto aprobado, firmado o cerrado se conservan. Para preparar la entrega y asignar equipos, usá <a href="/eventos">Eventos</a>.</AdminNote> : null}
       <p className="admin-dialog-text">
         Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
         panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
@@ -686,7 +690,7 @@ function ItemLinksDialog({
       </p>
       <p className="admin-dialog-text">
         {formatNumber(linkedCount)} de {formatNumber(budget.items.length)} ítems vinculados. Los conflictos de disponibilidad
-        no bloquean la aprobación: quedan auditados y el equipo los ve en los avisos y en Inventario (con sustitutos).
+        bloquean la aprobación: ajustá las cantidades o elegí sustitutos. Solo el propietario puede autorizar una excepción explícita, que queda auditada.
       </p>
 
       <AdminDialogSection title="Ítems del presupuesto" stack>
@@ -720,7 +724,7 @@ function ItemLinksDialog({
                     busy={busy}
                     title={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
                     aria-label={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
-                    disabled={busy}
+                    disabled={busy || locked}
                     onClick={() => setOpenId(open ? "" : item.id)}
                   >
                     {link ? "Cambiar" : "Vincular"}
@@ -730,13 +734,13 @@ function ItemLinksDialog({
                       icon="close"
                       title={`Quitar el vínculo de «${item.name}»`}
                       aria-label={`Quitar el vínculo de «${item.name}»`}
-                      disabled={busy}
+                      disabled={busy || locked}
                       onClick={() => void save(item, null)}
                     />
                   ) : null}
                 </span>
               </div>
-              {open ? (
+              {open && !locked ? (
                 <InventoryLinkPicker
                   label={`Artículo de inventario para «${item.name}»`}
                   hint={
@@ -746,7 +750,7 @@ function ItemLinksDialog({
                   }
                   range={range}
                   selected={link}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onSelect={(next) => void save(item, next)}
                 />
               ) : null}
@@ -795,11 +799,6 @@ export function PresupuestosModule() {
   // se pide completo a propósito: el rango de disponibilidad del issue #18
   // (setupAt/strikeAt/endsAt) todavía no viaja en el selector; si OPS lo agrega,
   // el alta puede recortar la respuesta sin tocar nada más.
-  const clients = useAdminResource(
-    "/api/admin/clients?fields=selector",
-    (payload) => (payload as { clients?: AdminClientOption[] }).clients ?? [],
-    { enabled: showForm },
-  );
   const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? [], { enabled: showForm });
   const [notice, setNotice] = useState("");
   const writableForLead = canWriteFinance(role);
@@ -926,6 +925,7 @@ export function PresupuestosModule() {
   const canCreateClient = canWriteClients(role);
   const canCreateEvent = canWriteOperations(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
+  const clients = useClientSelector(form.clientId);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const eventOptions = useMemo(() => events.data ?? [], [events.data]);
   const portalToken = portalBudget?.publicToken ?? null;
@@ -1006,9 +1006,16 @@ export function PresupuestosModule() {
 
   const moveBudget = useCallback(async (budget: AdminBudgetRow, nextStatus: string) => {
     setBoardError("");
-    const result = await adminSend("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
-    return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
-  }, []);
+    const result = await adminSend<AdminBudgetPortalPayload>("/api/admin/budgets", { budgetId: budget.id, status: nextStatus }, "PATCH");
+    if (!result.ok) return { ok: false as const, error: result.error };
+    if (nextStatus === "APPROVED" && result.data.reservations?.outcomes.length) {
+      setReservationReport({ title: budget.title, reservation: result.data.reservations });
+    }
+    // El movimiento puede crear evento y pagos: releer el objeto completo evita
+    // dejar «Crear evento» o acciones de borrador sobre la tarjeta aprobada.
+    budgetsResource.reload();
+    return { ok: true as const };
+  }, [budgetsResource.reload]);
   const board = useAdminBoardMove({ rows: boardRows, move: moveBudget, onError: setBoardError });
 
   /** Siguiente acción lógica del presupuesto según su etapa y los permisos del rol. */
@@ -1024,7 +1031,7 @@ export function PresupuestosModule() {
       case "create_event": return void createEventFor(budget);
       case "confirm_event": return void confirmEventFor(budget);
       case "collect":
-      case "review_proof": return router.push("/finanzas");
+      case "review_proof": return router.push(`/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`);
     }
   }
 
@@ -1069,6 +1076,7 @@ export function PresupuestosModule() {
   const boardCards: AdminBoardCardData[] = board.rows.map((budget) => {
     const paid = collectedAmount(budget.payments);
     const balance = budget.total - paid;
+    const advance = budgetDepositAmount(budget);
     const approvalState = budgetApprovalState(budget);
     const stage = budgetPipelineStage(budget);
     return {
@@ -1114,7 +1122,7 @@ export function PresupuestosModule() {
       ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget), title: `Enviar por correo: ${budget.title} · ${budget.client.email || "el cliente no tiene correo cargado"}` }] : []),
       ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
       ...(prompt && canCreateEvent ? [prompt === "create" ? { label: "Crear evento", icon: "events" as const, onClick: () => void createEventFor(budget) } : { label: "Confirmar evento", icon: "check" as const, onClick: () => void confirmEventFor(budget) }] : []),
-      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: "/finanzas", title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
+      ...(writable && budget.status === "APPROVED" ? [{ label: "Cobrar en Finanzas", icon: "finance" as const, href: `/finanzas/por-confirmar?presupuesto=${encodeURIComponent(budget.id)}`, title: `Registrar el cobro de ${budget.title} en Finanzas` }] : []),
       ...(writable ? [
         { label: "Editar ítems, precio y documentos", icon: "edit" as const, onClick: () => setPricing(budget) },
         { label: "Plan de pagos", icon: "clock" as const, onClick: () => openPlan(budget) },
@@ -1140,6 +1148,7 @@ export function PresupuestosModule() {
   const budgetCards: AdminCardData[] = rows.map((budget) => {
     const paid = collectedAmount(budget.payments);
     const balance = budget.total - paid;
+    const advance = budgetDepositAmount(budget);
     const approvalState = budgetApprovalState(budget);
     return {
       id: budget.id,
@@ -1152,7 +1161,7 @@ export function PresupuestosModule() {
       ],
       fields: [
         { label: "Monto", value: <strong>{formatMoney(budget.total)}</strong>, title: formatMoney(budget.total) },
-        { label: budget.advanceAmount > 0 && paid < budget.advanceAmount ? "Seña" : "Saldo", value: formatMoney(budget.advanceAmount > 0 && paid < budget.advanceAmount ? budget.advanceAmount - paid : balance), title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)} · saldo ${formatMoney(balance)}` },
+        { label: advance > 0 && paid < advance ? "Seña" : "Saldo", value: formatMoney(advance > 0 && paid < advance ? advance - paid : balance), title: `Total ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)} · saldo ${formatMoney(balance)}` },
         {
           label: "Vence",
           value: budget.validUntil ? (
@@ -1759,6 +1768,7 @@ export function PresupuestosModule() {
             value={form.clientId}
             onChange={(value) => setForm({ ...form, clientId: value })}
             options={clientChoices}
+            onSearch={clients.onSearch}
             placeholder="Buscá por nombre o empresa…"
             emptyLabel={
               clients.loading
@@ -1946,7 +1956,8 @@ export function PresupuestosModule() {
             {rows.map((budget) => {
               const paid = collectedAmount(budget.payments);
               const balance = budget.total - paid;
-              const advanceDue = Math.max(0, budget.advanceAmount - paid);
+              const advance = budgetDepositAmount(budget);
+              const advanceDue = Math.max(0, advance - paid);
               const approvalState = budgetApprovalState(budget);
               const stage = budgetPipelineStage(budget);
               return (
@@ -1964,7 +1975,7 @@ export function PresupuestosModule() {
                   <AdminCell end title={formatMoney(budget.total)}>
                     <strong>{formatMoney(budget.total)}</strong>
                   </AdminCell>
-                  <AdminCell end title={`Saldo ${formatMoney(balance)} de ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}${budget.advanceAmount > 0 ? ` · seña ${formatMoney(budget.advanceAmount)}` : ""}`}>
+                  <AdminCell end title={`Saldo ${formatMoney(balance)} de ${formatMoney(budget.total)} · cobrado ${formatMoney(paid)}${advance > 0 ? ` · seña ${formatMoney(advance)}` : ""}`}>
                     {balance === 0 && budget.total > 0 ? "Cobrado" : (
                       <>
                         <small className="admin-cell-sub">{advanceDue > 0 ? "seña " : "saldo "}</small>

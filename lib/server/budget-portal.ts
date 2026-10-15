@@ -800,7 +800,7 @@ export async function loadPublicBudget(
 ): Promise<PortalBudget | null> {
   const code = normalizeBudgetCode(token);
   if (!code) return null;
-  const budget = await db.budget.findUnique({ where: { publicToken: code }, include: portalInclude });
+  const budget = await db.budget.findUnique({ where: { publicToken: code, deletedAt: null, client: { deletedAt: null } }, include: portalInclude });
   if (!budget) return null;
   // Una sandbox de la demo solo se ve en el host demo (docs/DEMO-INTERACTIVA.md §3).
   if (await sandboxHiddenHere(budget.organizationId)) return null;

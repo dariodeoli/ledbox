@@ -107,16 +107,20 @@ export async function POST(request: Request) {
   return Response.json({ lead: { id: lead.id, createdAt: lead.createdAt } }, { status: 201 });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
-  const leads = await db.lead.findMany({
-    where: { organizationId: auth.context.organizationId },
-    orderBy: { createdAt: "desc" },
-    take: 100,
+  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
+  const fields = ["name", "company", "email", "phone", "ruc", "reason", "location", "message"] as const;
+  const search = query ? { OR: fields.map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
+  const fetched = await db.lead.findMany({
+    where: { organizationId: auth.context.organizationId, ...search },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 101,
     include: LEAD_INCLUDE,
   });
-  return Response.json({ leads });
+  return Response.json({ leads: fetched.slice(0, 100), truncated: fetched.length > 100 });
 }
 
 /**
@@ -127,30 +131,32 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const auth = await requireAdminContext("clients.write");
   if (!auth.ok) return auth.response;
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const raw = await readJson(request);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return jsonError("Datos del lead inválidos.", 400);
+  const body = raw as Record<string, unknown>;
 
   const id = typeof body.id === "string" ? body.id.trim() : "";
-  if (!id) return jsonError("Lead id is required.", 400);
+  if (!id) return jsonError("Elegí el lead que querés actualizar.", 400);
 
   const lead = await db.lead.findFirst({ where: { id, organizationId: auth.context.organizationId } });
-  if (!lead) return jsonError("Lead not found.", 404);
+  if (!lead) return jsonError("No encontramos ese lead en la empresa activa.", 404);
 
   // Solo se revalida lo que cambia; el resto del lead queda intacto (legacy).
   const data: { status?: LeadStatus; internalNotes?: string | null } = {};
   if ("status" in body) {
     const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
-    if (!Object.values(LeadStatus).includes(status as LeadStatus)) return jsonError("Invalid lead status.", 400);
+    if (!Object.values(LeadStatus).includes(status as LeadStatus)) return jsonError("Estado del lead inválido.", 400);
     data.status = status as LeadStatus;
   }
   if ("internalNotes" in body) {
-    if (body.internalNotes !== null && typeof body.internalNotes !== "string") return jsonError("Invalid internal notes.", 400);
+    if (body.internalNotes !== null && typeof body.internalNotes !== "string") return jsonError("Las notas internas deben ser texto.", 400);
     const notes = typeof body.internalNotes === "string" ? body.internalNotes.trim() : "";
-    if (notes.length > MAX_INTERNAL_NOTES) return jsonError("Internal notes are too long.", 400);
+    if (notes.length > MAX_INTERNAL_NOTES) return jsonError("Las notas internas superan el largo permitido.", 400);
     data.internalNotes = notes || null;
   }
 
   const convert = body.convertToClient === true;
-  if (!convert && Object.keys(data).length === 0) return jsonError("Nothing to update.", 400);
+  if (!convert && Object.keys(data).length === 0) return jsonError("No hay cambios para guardar.", 400);
 
   let result;
   try {
@@ -169,6 +175,9 @@ export async function PATCH(request: Request) {
         client = resolved.client;
         clientCreated = resolved.created;
       }
+      // El lock del resolver puede esperar a otra conversión: revalidar que
+      // el lead siga vigente antes de confirmar también la creación del cliente.
+      await assertLive("Lead", lead.id, auth.context.organizationId, tx);
       data.status = LeadStatus.WON;
     }
 

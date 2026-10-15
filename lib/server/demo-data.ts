@@ -3,6 +3,7 @@ import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import { seedDemoInventoryTaxonomy } from "@/lib/server/demo-inventory-taxonomy";
+import { buildDemoEventBusiness } from "@/lib/server/demo-event-business";
 import { buildDemoFamilies } from "@/lib/server/demo-families";
 import { inventoryUnitPrefix } from "@/lib/field-rules";
 import { fiscalSummaryOf, grossToNet, shiftMonthKey, taxTotalsOf, type InvoiceTaxTypeValue } from "@/lib/fiscal";
@@ -1265,6 +1266,8 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     avatars >= COLLABORATORS.length + 1 &&
     upcoming >= 3;
   if (!complete) return false;
+  // El marcador refresca sólo la vitrina vieja; las sandboxes conservan las ediciones de su visitante.
+  if (!(await db.inventoryItem.findFirst({ where: { organizationId: organization.id, id: "demo_inv_rental_mesa_ocho" }, select: { id: true } }))) return false;
   return dayKeyOf(organization.updatedAt) === dayKeyOf(new Date());
 }
 
@@ -1664,6 +1667,18 @@ async function seedDemoData(organizationId: string, base: Date, ns?: string): Pr
     contactNameOf: (clientId) => clientContact(clientId).name,
     tk,
   });
+  const rentalDemo = buildDemoEventBusiness(organizationId, base);
+  tasksData.push(...rentalDemo.tasks);
+  completion.clients.push(...rentalDemo.clients);
+  completion.events.push(...rentalDemo.events);
+  completion.budgetSeeds.push(...rentalDemo.budgetSeeds);
+  completion.inventoryItems.push(...rentalDemo.inventoryItems);
+  completion.inventoryUnits.push(...rentalDemo.inventoryUnits);
+  completion.inventoryComponents.push(...rentalDemo.inventoryComponents);
+  completion.assignments.push(...rentalDemo.assignments);
+  completion.incidents.push(...rentalDemo.incidents);
+  completion.payments.push(...rentalDemo.payments);
+  completion.expectedPayments.push(...rentalDemo.expectedPayments);
   eventsData.push(...completion.events);
   clientsData.push(...completion.clients);
   promotersData.push(...completion.promoters);
@@ -2312,8 +2327,8 @@ async function seedDemoData(organizationId: string, base: Date, ns?: string): Pr
   // anticipo a un proveedor, gasto— o de la transferencia del cheque ya cobrado
   // en efectivo; el saldo se deriva, nunca se guarda. ──
   const clientLabelOf = (clientId: string) => {
-    const client = CLIENT_BY_ID.get(clientId);
-    return client ? clientLabel({ name: client.name, company: client.company }) : "Cliente";
+    const client = clientsData.find((row) => row.id === clientId);
+    return client ? clientLabel({ name: client.name, company: client.company ?? null }) : "Cliente";
   };
   const supplierNameOf = (supplierId: string | null) => SUPPLIERS.find((supplier) => supplier.id === supplierId)?.name ?? "Proveedor";
   const movement = (

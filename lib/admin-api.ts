@@ -17,9 +17,11 @@ const SEND_TIMEOUT_MS = 20_000;
 type CacheEntry = { storedAt: number; data: unknown };
 const getCache = new Map<string, CacheEntry>();
 let redirectingToLogin = false;
+let cacheGeneration = 0;
 
 /** Vacía la caché corta de GET (la usan las mutaciones y el cambio de sesión). */
 export function clearAdminApiCache(): void {
+  cacheGeneration += 1;
   getCache.clear();
   // Los GET en vuelo ya no se comparten: quien pida después del cambio va a la red.
   inFlightGets.clear();
@@ -145,9 +147,10 @@ export async function adminApiGet<T = AdminApiResponse>(
     if (joined) return joined as Promise<AdminApiResult<T>>;
   }
 
+  const generation = cacheGeneration;
   const request = (async (): Promise<AdminApiResult<T>> => {
     const outcome = await requestJson(path, { timeoutMs: GET_TIMEOUT_MS, signal: options.signal });
-    if (!outcome) {
+    if (!outcome || options.signal?.aborted) {
       return { ok: false, error: "No pudimos conectar con el panel.", aborted: Boolean(options.signal?.aborted) };
     }
     if (outcome.status === 401 || outcome.status === 403) {
@@ -171,7 +174,7 @@ export async function adminApiGet<T = AdminApiResponse>(
       const message = typeof outcome.payload.error === "string" ? outcome.payload.error : options.fallbackError || "No pudimos cargar los datos.";
       return { ok: false, error: message };
     }
-    getCache.set(path, { storedAt: Date.now(), data: outcome.payload });
+    if (generation === cacheGeneration && !options.signal?.aborted) getCache.set(path, { storedAt: Date.now(), data: outcome.payload });
     return { ok: true, data: outcome.payload as T };
   })();
 
@@ -280,6 +283,8 @@ export function useAdminResource<T>(
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
   const pickRef = useRef(pick);
+  const requestId = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     pickRef.current = pick;
@@ -287,9 +292,14 @@ export function useAdminResource<T>(
 
   const load = useCallback(
     async (loadOptions?: { fresh?: boolean }) => {
+      const id = ++requestId.current;
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       setLoading(true);
       setError("");
-      const result = await adminApiGet<AdminApiResponse>(path, { fresh: loadOptions?.fresh ?? false });
+      const result = await adminApiGet<AdminApiResponse>(path, { fresh: loadOptions?.fresh ?? false, signal: controller.signal });
+      if (controller.signal.aborted || id !== requestId.current) return;
       if (!result.ok) {
         if (!result.sessionInvalid) setError(result.error);
         setLoading(false);
@@ -302,7 +312,14 @@ export function useAdminResource<T>(
   );
 
   useEffect(() => {
-    if (enabled) void load();
+    if (enabled) {
+      setData(null);
+      void load();
+    } else setLoading(false);
+    return () => {
+      requestId.current += 1;
+      controllerRef.current?.abort();
+    };
   }, [enabled, load]);
 
   // Refresco global (issue #120): la «Carga con IA» avisa y cada recurso

@@ -77,3 +77,17 @@ test("B1 provisional selection evaluates the canonical plan without changing the
   const invalid = resolveBudgetPaymentPlan(original.rows, 100001);
   assert.equal(invalid.ok, false); assert.equal(JSON.stringify(original.rows), serialized);
 });
+
+
+test("la seña estructurada del alta se reconoce sin duplicarla como anticipo", async () => {
+  const { budgetDepositAmount, defaultDepositPlanRows } = await import("../lib/budget-payment-plan");
+  const rows = defaultDepositPlanRows(50, 240000)!;
+  const budget = { advanceAmount: 0, installmentsJson: rows };
+  assert.equal(budgetDepositAmount(budget), 120000);
+  assert.equal(rows.reduce((sum, row) => sum + row.amount, 0), 240000);
+  assert.equal(budget.advanceAmount, 0, "no se escribe otro anticipo sobre el plan existente");
+  assert.equal(budgetDepositAmount({ advanceAmount: 30000, installmentsJson: rows }), 30000);
+  assert.equal(budgetDepositAmount({ installmentsJson: [{ label: "Cuota 1", amount: 120000 }] }), 0);
+  assert.equal(budgetDepositAmount({ installmentsJson: [{ label: "Seña 30 %", amount: 72000 }] }), 72000);
+  assert.equal(budgetDepositAmount({ installmentsJson: [{ label: "Seña", amount: -1 }] }), 0);
+});
