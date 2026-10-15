@@ -613,3 +613,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tienda: el mismo pie en todas las páginas, con tus datos y «Desarrollado por OwnCoding · EventOS v2.1.124». Botón de WhatsApp que no tapa el pedido.
 - Invitaciones: el link sirve una sola vez y vence a los 7 días (se muestra en el panel y en el correo). Si quien invitó deja de ser propietario, sus invitaciones de propietario pendientes se cancelan solas.
 - «Gratis a propósito» en un presupuesto: solo propietario y administración.
+
+## v2.1.125 — 2026-10-15
+
+- Ficha del producto: la barra de pestañas ya no queda tapada en Unidades y Cronología (vale para todas las ventanas con pestañas).
+- «Editar producto» rediseñado: foto, nombre y código arriba; secciones Identidad · Precio y cobro · Medidas y capacidad · Stock y depósito · Tienda web · Proveedor y costos · Notas; dos columnas en computadora y una en celular, con Guardar siempre visible.
+- Sin permiso de costos, guardar un producto ya no pisa los costos con 0.
