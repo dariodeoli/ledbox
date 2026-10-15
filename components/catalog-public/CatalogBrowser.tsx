@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  AVAILABILITY_HINT_LABEL,
   catalogLine,
   catalogTierHints,
   estimatedSubtotal,
@@ -18,6 +17,11 @@ import { parseVisitorContact, selfShareLinks } from "@/lib/store-contact";
 import { readLocalStoreCart, sanitizeStoreCart, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartLineView, CartView } from "@/lib/server/store-cart";
 import { CityField, DayField, EmailField, PhoneField, TextAreaField, TextField } from "@/components/admin/AdminFields";
+import { cardSpecs } from "@/lib/catalog-card";
+import { ProductTile } from "./ProductTile";
+import { QuickView, type QuickPrice } from "./QuickView";
+import { XIcon } from "./StoreIcons";
+import { ThemePortal, useModalBehavior } from "./ThemePortal";
 
 /**
  * Catálogo de la tienda web de una empresa, carrito y armado de la preorden (sin
@@ -80,7 +84,6 @@ const money = (value: number) => `Gs. ${gs.format(value)}`;
 const respondFormat = new Intl.DateTimeFormat("es-PY", { timeZone: "America/Asuncion", weekday: "long", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 const norm = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const AVAILABILITY_TONE: Record<AvailabilityHint, string> = { AVAILABLE: "cp-chip--ok", LOW: "cp-chip--warn", CONSULT: "cp-chip--muted" };
 
 function todayKey(): string {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Asuncion", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -109,30 +112,6 @@ function packageOf(item: CatalogItemView, days: number): PackageSummary | null {
   return packageSummary(product, components, days);
 }
 
-/** Iconos de línea (SVG) de la ficha del producto. Decorativos: el dato siempre va escrito al lado. */
-function XIcon({ name }: { name: "users" | "ruler" | "puzzle" | "tag" }) {
-  const paths: Record<typeof name, string> = {
-    users: "M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 5.2a3 3 0 0 1 0 5.6",
-    ruler: "M3 15.5 15.5 3 21 8.5 8.5 21zM7 12l2.5 2.5M10 9l2 2M13 6l2.5 2.5",
-    puzzle: "M10 4a2 2 0 1 1 4 0v1h4v4h-1a2 2 0 1 0 0 4h1v4h-4v-1a2 2 0 1 0-4 0v1H6v-4H5a2 2 0 1 1 0-4h1V5h4z",
-    tag: "M3 12V4h8l9 9-8 8zM7.5 8.5h.01",
-  };
-  return (
-    <svg className="cp-x-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d={paths[name]} />
-    </svg>
-  );
-}
-
-function Placeholder() {
-  return (
-    <svg className="cp-ph" viewBox="0 0 64 48" role="img" aria-label="Sin foto" focusable="false">
-      <rect x="6" y="6" width="52" height="30" rx="3" fill="none" stroke="currentColor" strokeWidth="2" />
-      <path d="M24 42h16M32 36v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 /** «Sector Living › Lounge» → sección grande «Sector Living» y subsección «Lounge». */
 function splitCategory(name: string): { root: string; sub: string | null } {
   const [root, ...rest] = name.split("›").map((part) => part.trim());
@@ -141,10 +120,6 @@ function splitCategory(name: string): { root: string; sub: string | null } {
 
 /** `COD #527` a partir del SKU (sin repetir «COD» si el SKU ya lo trae). */
 const codeOf = (sku: string) => `COD #${sku.replace(/^cod\s*#?\s*/i, "")}`;
-
-/** Medidas, capacidad y demás datos: una línea por renglón de la descripción que cargó la empresa. */
-const specLines = (description: string | null | undefined) =>
-  (description ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 8);
 
 /** «2 × Sofá p/2 + 4 × Sillón + Mesa baja»: las piezas del juego, tal como las cargó la empresa. */
 const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map((part) => (part.quantity > 1 ? `${part.quantity} × ${part.name}` : part.name)).join(" + ");
@@ -232,8 +207,9 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         if (state.to >= todayKey()) {
           setFrom(state.from);
           setTo(state.to);
-          const extra = initialCategory ? `&categoria=${encodeURIComponent(initialCategory)}` : "";
-          router.replace(`${pathname}?desde=${encodeURIComponent(state.from)}&hasta=${encodeURIComponent(state.to)}${extra}#catalogo`, { scroll: false });
+          const shared = new URLSearchParams(window.location.search).get("p");
+          const extra = `${initialCategory ? `&categoria=${encodeURIComponent(initialCategory)}` : ""}${shared ? `&p=${encodeURIComponent(shared)}` : ""}`;
+          router.replace(`${pathname}?desde=${encodeURIComponent(state.from)}&hasta=${encodeURIComponent(state.to)}${extra}${window.location.hash || "#catalogo"}`, { scroll: false });
         } else {
           notices.push("Las fechas que habías elegido ya pasaron: elegí fechas nuevas para ver la disponibilidad.");
         }
@@ -387,79 +363,91 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     });
   }, []);
 
-  function renderItem(item: CatalogItemView) {
+  // Vista rápida: popup con la ficha. La URL lleva `?p=<id>` (se puede compartir), «atrás» lo cierra y el catálogo
+  // de atrás no se mueve (ni el scroll ni el carrito).
+  const [quickId, setQuickId] = useState<string | null>(null);
+  const pushedQuick = useRef(false);
+  const quickItem = quickId ? items.find((entry) => entry.id === quickId) ?? null : null;
+  const quickUrl = (id: string | null) => {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("p", id);
+    else url.searchParams.delete("p");
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+  const openQuick = useCallback((id: string) => {
+    try {
+      window.history.pushState(window.history.state, "", quickUrl(id));
+      pushedQuick.current = true;
+    } catch (failure) {
+      console.error("tienda: no se pudo actualizar la dirección de la vista rápida", failure);
+      pushedQuick.current = false;
+    }
+    setQuickId(id);
+  }, []);
+  const navigateQuick = useCallback((id: string) => {
+    try { window.history.replaceState(window.history.state, "", quickUrl(id)); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección de la vista rápida", failure); }
+    setQuickId(id);
+  }, []);
+  const closeQuick = useCallback(() => {
+    if (pushedQuick.current) { window.history.back(); return; }
+    try { window.history.replaceState(window.history.state, "", quickUrl(null)); } catch (failure) { console.error("tienda: no se pudo actualizar la dirección al cerrar la vista rápida", failure); }
+    setQuickId(null);
+  }, []);
+  const addFromQuick = useCallback((id: string, quantity: number) => {
+    setSelection((current) => ({ ...current, [id]: Math.min(99, (current[id] ?? 0) + quantity) }));
+  }, []);
+  // Enlace compartido (`?p=<id>`) y botón «atrás» del navegador.
+  useEffect(() => {
+    const sync = () => {
+      const id = new URLSearchParams(window.location.search).get("p");
+      if (!id) pushedQuick.current = false;
+      setQuickId(id && items.some((entry) => entry.id === id) ? id : null);
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [items]);
+
+  // Precio, ahorro y escalones de un producto para los días elegidos (tarjeta y vista rápida usan lo mismo).
+  const priceOf = (item: CatalogItemView): QuickPrice => {
     const unit = unitFor(item);
-    const quantity = selection[item.id] ?? 0;
-    const unitText = unit > 0 ? unitLabel(pricingFor(item)?.mode, range ? days : null) : "";
     const pack = showPrices && unit > 0 && item.package ? packageOf(item, days) : null;
-    const savings = pack && !pack.incomplete && pack.packageTotal > 0 && pack.savings > 0 ? pack : null;
-    const specs = specLines(item.description);
-    const pieces = item.package?.length ? piecesText(item.package) : null;
-    // Anatomía fija (misma altura y posición en toda la fila): foto cuadrada, chips, nombre, detalle con espacio
-    // reservado y pie anclado al fondo con precio, disponibilidad y botón. Si falta un dato se reserva el lugar.
+    const saving = pack && !pack.incomplete && pack.packageTotal > 0 && pack.savings > 0 ? { savings: pack.savings, unitSum: pack.unitSum } : null;
+    return { unit, unitText: unit > 0 ? unitLabel(pricingFor(item)?.mode, range ? days : null) : "", tierHints: showPrices ? catalogTierHints(item.price) : [], saving };
+  };
+
+  function renderItem(item: CatalogItemView) {
+    const price = priceOf(item);
     return (
-      <li key={item.id} className="cp-item cp-x-item" data-testid="catalog-item">
-        <div className="cp-photo">
-          {item.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.imageUrl} alt={item.name} loading="lazy" />
-          ) : (
-            <Placeholder />
-          )}
-          {savings ? <span className="cp-save" data-testid="catalog-saving">Ahorrás {money(savings.savings)}</span> : null}
-        </div>
-        <div className="cp-item-body">
-          <div className="cp-x-chips">
-            <span className="cp-x-chip cp-x-chip--cod">{item.sku ? codeOf(item.sku) : "Sin código"}</span>
-            <span className="cp-x-chip">{item.package?.length ? "Juego" : item.category.split("›")[0].trim()}</span>
-          </div>
-          <h4 className="cp-item-name">{fichaBase ? <a className="cp-x-namelink" href={`${fichaBase}/p/${encodeURIComponent(item.id)}`}>{item.name}</a> : item.name}</h4>
-          <div className="cp-x-diff">
-            {item.capacity ? (
-              <span className="cp-x-cap" data-testid="catalog-capacity"><XIcon name="users" />{item.capacity} {item.capacity === 1 ? "persona" : "personas"}</span>
-            ) : null}
-          </div>
-          <ul className="cp-x-specs" data-testid={pieces ? "catalog-pieces" : undefined}>
-            <li className="cp-x-spec">{item.dimensions ? (<><XIcon name="ruler" /><span><span className="cp-x-k">Medidas</span> {item.dimensions}</span></>) : null}</li>
-            <li className="cp-x-spec">{pieces ? (<><XIcon name="puzzle" /><span><span className="cp-x-k">Incluye</span> {pieces}</span></>) : null}</li>
-          </ul>
-          <p className="cp-x-desc">{specs.length > 0 ? specs.join(" · ") : ""}</p>
-          <div className="cp-x-foot">
-            <div className="cp-x-pricebox">
-              <XIcon name="tag" />
-              {showPrices && unit > 0 ? (
-                <span className="cp-x-pricetext">
-                  <span className="cp-ed-tag">{money(unit)}</span>
-                  <span className="cp-ed-unit">{unitText}</span>
-                </span>
-              ) : (
-                <span className="cp-ed-unit">Consultar precio</span>
-              )}
-            </div>
-            <p className="cp-x-sub">
-              {savings ? <span data-testid="catalog-package">Por separado <s>{money(savings.unitSum)}</s></span> : null}
-              {!savings && showPrices ? catalogTierHints(item.price)[0] ?? "" : null}
-            </p>
-            <p className="cp-x-avail">
-              {item.availability ? <span className={`cp-chip ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span> : null}
-            </p>
-            <div className="cp-x-actions">
-              {quantity > 0 ? (
-                <div className="cp-qty" role="group" aria-label={`Cantidad de ${item.name}`}>
-                  <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity - 1)} aria-label={`Quitar una unidad de ${item.name}`}>−</button>
-                  <output aria-live="polite">{quantity}</output>
-                  <button type="button" className="cp-btn cp-btn--icon" onClick={() => setQuantity(item.id, quantity + 1)} aria-label={`Agregar una unidad de ${item.name}`}>+</button>
-                </div>
-              ) : (
-                <button type="button" className="cp-btn cp-btn--primary" onClick={() => setQuantity(item.id, 1)} aria-label={`Agregar ${item.name} al pedido`}>Agregar al pedido</button>
-              )}
-              {fichaBase ? <a className="cp-btn" href={`${fichaBase}/p/${encodeURIComponent(item.id)}`} aria-label={`Ver la ficha de ${item.name}`}>Ver ficha</a> : null}
-            </div>
-          </div>
-        </div>
-      </li>
+      <ProductTile
+        key={item.id}
+        item={item}
+        specs={cardSpecs(item)}
+        isPackage={Boolean(item.package?.length)}
+        showPrices={showPrices}
+        unit={price.unit}
+        unitText={price.unitText}
+        saving={price.saving}
+        tierHint={price.tierHints[0] ?? null}
+        quantity={selection[item.id] ?? 0}
+        fichaHref={fichaBase ? `${fichaBase}/p/${encodeURIComponent(item.id)}` : null}
+        onOpen={openQuick}
+        onQuantity={setQuantity}
+      />
     );
   }
+
+  // Sin fechas la barra igual muestra plata: la suma por día (o por evento) × cantidad con los precios públicos ya cargados.
+  const perDay = (() => {
+    if (!showPrices || range) return null;
+    let sum = 0, priced = 0, events = 0, missing = 0;
+    for (const item of chosen) {
+      const unit = unitFor(item);
+      if (unit > 0) { sum += unit * (selection[item.id] ?? 0); priced += 1; if (item.price?.perEvent) events += 1; } else missing += 1;
+    }
+    if (priced === 0) return null;
+    return { sum, missing, unit: events === priced ? "por evento" : events > 0 ? "por día o evento" : "por día" };
+  })();
 
   return (
     <section id="catalogo" className="cp-section cp-catalog" aria-labelledby="catalogo-titulo">
@@ -527,9 +515,9 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
         <aside className="cp-bar" aria-label="Tu pedido">
           <span className="cp-bar-badge" aria-hidden="true">{count}</span>
           <p className="cp-bar-text">
-            <strong>{count} {count === 1 ? "equipo" : "equipos"}</strong>
+            <strong>{count} {count === 1 ? "equipo" : "equipos"}{perDay ? ` · ${money(perDay.sum)} ${perDay.unit}${perDay.missing > 0 ? " + a cotizar" : ""}` : ""}</strong>
             {showPrices ? (
-              <span>{view && view.total !== null && range ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : range ? "Subtotal a cotizar" : "Elegí fechas para estimar"}</span>
+              <span>{!range ? "Elegí fechas para el total" : view && view.total !== null ? `Total estimado ${money(view.total)}` : subtotal !== null ? `Subtotal estimado ${money(subtotal)}` : "Subtotal a cotizar"}</span>
             ) : null}
           </p>
           <button type="button" className="cp-btn cp-btn--primary" onClick={() => { setDone(null); setOpen(true); }}>
@@ -539,6 +527,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       ) : null}
 
       {contactOpen ? (
+        <ThemePortal>
         <ContactPanel
           slug={slug}
           storeName={storeName ?? organizationName}
@@ -552,9 +541,28 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
             setVisitorToken(token);
           }}
         />
+        </ThemePortal>
+      ) : null}
+
+      {quickItem ? (
+        <ThemePortal>
+          <QuickView
+            item={quickItem}
+            items={items}
+            showPrices={showPrices}
+            priceOf={priceOf}
+            productApi={preorderPath.replace(/\/preorder$/, "/product/")}
+            fichaHref={fichaBase ? `${fichaBase}/p/${encodeURIComponent(quickItem.id)}` : null}
+            inCart={selection[quickItem.id] ?? 0}
+            onAdd={addFromQuick}
+            onNavigate={navigateQuick}
+            onClose={closeQuick}
+          />
+        </ThemePortal>
       ) : null}
 
       {open ? (
+        <ThemePortal>
         <PreorderDialog
           preorderPath={preorderPath}
           organizationName={organizationName}
@@ -576,6 +584,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           onClose={() => setOpen(false)}
           onFinish={() => { setOpen(false); setDone(null); }}
         />
+        </ThemePortal>
       ) : null}
     </section>
   );
@@ -904,26 +913,7 @@ function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { slug: st
   const [result, setResult] = useState<{ url: string; share: { whatsapp: string | null; mailto: string | null } } | null>(null);
   const [copied, setCopied] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
-  const first = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    first.current?.focus();
-    const previous = document.activeElement as HTMLElement | null;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      if (event.key === "Tab" && panel.current) {
-        const nodes = [...panel.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input:not([tabindex='-1'])")];
-        if (nodes.length === 0) return;
-        const firstNode = nodes[0];
-        const lastNode = nodes[nodes.length - 1];
-        if (event.shiftKey && document.activeElement === firstNode) { event.preventDefault(); lastNode.focus(); }
-        else if (!event.shiftKey && document.activeElement === lastNode) { event.preventDefault(); firstNode.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useModalBehavior(panel, onClose);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -962,38 +952,52 @@ function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { slug: st
   }
 
   return (
-    <div className="cp-overlay cp-overlay--side" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cp-side" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel}>
+    <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="cp-drawer cp-drawer--narrow" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel} tabIndex={-1}>
         {result ? (
-          <div className="cp-done" data-testid="visitor-cart-done">
-            <h2 id="contacto-carrito" className="cp-h2">Guardamos tu carrito</h2>
-            <p>Con este enlace lo retomás desde cualquier dispositivo durante 30 días. Guardalo: no lo volvemos a mostrar.</p>
-            <p><a className="cp-link cp-wrap" href={result.url}>{result.url}</a></p>
-            <div className="cp-row">
-              <button type="button" className="cp-btn" onClick={() => void copy()}>{copied ? "Enlace copiado" : "Copiar enlace"}</button>
-              {result.share.whatsapp ? <a className="cp-btn" href={result.share.whatsapp} target="_blank" rel="noopener noreferrer">Enviármelo por WhatsApp</a> : null}
-              {result.share.mailto ? <a className="cp-btn" href={result.share.mailto}>Enviármelo por correo</a> : null}
+          <>
+            <header className="cp-drawer-head">
+              <h2 id="contacto-carrito" className="cp-h2">Guardamos tu carrito</h2>
+              <button type="button" className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar"><XIcon name="close" size={20} /></button>
+            </header>
+            <div className="cp-drawer-body cp-done" data-testid="visitor-cart-done">
+              <p>Con este enlace lo retomás desde cualquier dispositivo durante 30 días. Guardalo: no lo volvemos a mostrar.</p>
+              <p><a className="cp-link cp-wrap" href={result.url}>{result.url}</a></p>
+              <div className="cp-row">
+                <button type="button" className="cp-btn" onClick={() => void copy()}>{copied ? "Enlace copiado" : "Copiar enlace"}</button>
+                {result.share.whatsapp ? <a className="cp-btn" href={result.share.whatsapp} target="_blank" rel="noopener noreferrer">Enviármelo por WhatsApp</a> : null}
+                {result.share.mailto ? <a className="cp-btn" href={result.share.mailto}>Enviármelo por correo</a> : null}
+              </div>
+              <p className="cp-legal">Estos botones abren tu propia app de mensajes: nosotros no enviamos nada por vos.</p>
+              {error ? <p className="cp-error" role="alert">{error}</p> : null}
             </div>
-            <p className="cp-hint">Estos botones abren tu propia app de mensajes: nosotros no enviamos nada por vos.</p>
-            {error ? <p className="cp-error" role="alert">{error}</p> : null}
-            <button type="button" className="cp-btn cp-btn--primary" onClick={onClose}>Seguir eligiendo</button>
-          </div>
+            <footer className="cp-drawer-foot">
+              <button type="button" className="cp-btn cp-btn--primary cp-btn--block" onClick={onClose}>Seguir eligiendo</button>
+            </footer>
+          </>
         ) : (
-          <form onSubmit={submit}>
-            <h2 id="contacto-carrito" className="cp-h2">¿Guardamos tu carrito?</h2>
-            <p className="cp-hint">Dejanos tu nombre y tu WhatsApp o tu correo (con uno alcanza) y retomá este carrito desde otro dispositivo con un enlace. Sin cuenta ni contraseña.</p>
-            <div className="cp-fields">
-              <TextField label="Nombre y apellido" required value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
-              <PhoneField label="WhatsApp" value={phone} onChange={setPhone} />
-              <EmailField label="Correo" value={email} onChange={setEmail} hint="Con el WhatsApp o el correo alcanza." />
+          <form onSubmit={submit} className="cp-drawer-form">
+            <header className="cp-drawer-head">
+              <h2 id="contacto-carrito" className="cp-h2">¿Guardamos tu carrito?</h2>
+              <button type="button" className="cp-btn cp-btn--icon" onClick={onClose} aria-label="Cerrar sin guardar"><XIcon name="close" size={20} /></button>
+            </header>
+            <div className="cp-drawer-body">
+              <p className="cp-drawer-lead">Dejanos tu nombre y un WhatsApp o un correo, y retomá este carrito desde otro dispositivo con un enlace. Sin cuenta ni contraseña.</p>
+              <div className="cp-fields cp-form-stack">
+                <TextField label="Nombre y apellido" required size="full" value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
+                <PhoneField label="WhatsApp" size="full" value={phone} onChange={setPhone} />
+                <EmailField label="Correo" size="full" value={email} onChange={setEmail} hint="Con el WhatsApp o el correo alcanza." />
+              </div>
+              <input className="cp-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
+              {error ? <p className="cp-error" role="alert">{error}</p> : null}
             </div>
-            <input className="cp-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
-            <p className="cp-hint">Usamos tus datos solo para guardar tu carrito. Para enviar el pedido igual te los pedimos.</p>
-            {error ? <p className="cp-error" role="alert">{error}</p> : null}
-            <div className="cp-row">
-              <button type="submit" className="cp-btn cp-btn--primary" disabled={busy}>{busy ? "Guardando…" : "Guardar mi carrito"}</button>
-              <button type="button" className="cp-btn" onClick={onClose}>Seguir sin datos</button>
-            </div>
+            <footer className="cp-drawer-foot">
+              <p className="cp-legal">Usamos tus datos solo para guardar tu carrito. Para enviar el pedido igual te los pedimos.</p>
+              <div className="cp-stack-actions">
+                <button type="submit" className="cp-btn cp-btn--primary" disabled={busy}>{busy ? "Guardando…" : "Guardar mi carrito"}</button>
+                <button type="button" className="cp-btn cp-btn--ghost" onClick={onClose}>Seguir sin datos</button>
+              </div>
+            </footer>
           </form>
         )}
       </div>

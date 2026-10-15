@@ -14,6 +14,8 @@ export type ProductDetail = {
   includes: Array<{ name: string; quantity: number; sku: string | null; imageUrl: string | null }>;
   /** «Te puede interesar»: combos que contienen este producto + de la misma categoría (4 a 8 si hay). */
   related: PublicCatalogItem[];
+  /** «Opciones similares» de la vista rápida: solo combos que lo contienen y productos de su misma categoría (hasta 8). */
+  similar: PublicCatalogItem[];
 };
 
 export const RELATED_MIN = 4;
@@ -32,6 +34,16 @@ export function pickRelated(item: Pick<PublicCatalogItem, "id" | "category">, al
   return picked;
 }
 
+/** Opciones similares: primero los combos que lo contienen y después la misma categoría; nunca el resto del catálogo. */
+export function pickSimilar(item: Pick<PublicCatalogItem, "id" | "category">, all: readonly PublicCatalogItem[], containingIds: ReadonlySet<string>): PublicCatalogItem[] {
+  const others = all.filter((entry) => entry.id !== item.id);
+  const picked = [
+    ...others.filter((entry) => containingIds.has(entry.id)),
+    ...others.filter((entry) => !containingIds.has(entry.id) && entry.category === item.category),
+  ];
+  return picked.slice(0, RELATED_MAX);
+}
+
 export async function loadProductDetail(context: PublicCatalogContext, code: string): Promise<ProductDetail | null> {
   const wanted = code.trim();
   if (!wanted || wanted.length > 80) return null;
@@ -47,9 +59,11 @@ export async function loadProductDetail(context: PublicCatalogContext, code: str
     }),
     db.inventoryComponent.findMany({ where: { organizationId, componentId: item.id }, select: { parentId: true } }),
   ]);
+  const containingIds = new Set(containing.map((row) => row.parentId));
   return {
     item,
     includes: parts.map((part) => ({ name: part.component.name, quantity: part.quantity, sku: part.component.sku, imageUrl: inventoryImageUrl(part.component) })),
-    related: pickRelated(item, all, new Set(containing.map((row) => row.parentId))),
+    related: pickRelated(item, all, containingIds),
+    similar: pickSimilar(item, all, containingIds),
   };
 }

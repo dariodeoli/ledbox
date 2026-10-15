@@ -10,8 +10,8 @@ import { storefrontTheme, type StorefrontTheme } from "./storefront-theme";
 export const EDITORIAL_BG = "#f4efe8";
 /** Superficie de las tarjetas: un crema más claro, casi blanco, para que la foto «respire». */
 export const EDITORIAL_SURFACE = "#fbf8f3";
-/** Verde oliva oscuro por defecto (contraste ≥ 4,5:1 contra el crema y contra el blanco). */
-export const EDITORIAL_BRAND = "#5a5d33";
+/** Verde oliva (más verde que gris, para que el botón principal no parezca apagado) por defecto (contraste ≥ 4,5:1 contra el crema y contra el blanco). */
+export const EDITORIAL_BRAND = "#556b2f";
 
 /** Tema de la tienda para la plantilla editorial: marca de la empresa o, si no hay, el oliva. */
 export function editorialTheme(theme: StorefrontTheme): StorefrontTheme {
