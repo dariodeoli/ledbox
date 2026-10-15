@@ -27,15 +27,38 @@ const FIELDS = [
   { key: "alias", label: "Alias", max: 60 },
 ] as const;
 
-type PaymentDetails = { bank: string | null; holder: string | null; ruc: string | null; account: string | null; alias: string | null };
+/** Tipo de cuenta y moneda: listas cerradas (se guardan junto a lo demás en el mismo JSON). */
+const ACCOUNT_TYPES = ["CORRIENTE", "AHORRO"] as const;
+const CURRENCIES = ["PYG", "USD", "BRL", "EUR"] as const;
+const ENUM_FIELDS = [
+  { key: "accountType", label: "Tipo de cuenta", options: ACCOUNT_TYPES as readonly string[] },
+  { key: "currency", label: "Moneda", options: CURRENCIES as readonly string[] },
+] as const;
+const AUDIT_KEYS = [...FIELDS.map((field) => field.key), ...ENUM_FIELDS.map((field) => field.key)];
+
+type PaymentDetails = {
+  bank: string | null;
+  holder: string | null;
+  ruc: string | null;
+  account: string | null;
+  alias: string | null;
+  /** CORRIENTE (cuenta corriente) o AHORRO (caja de ahorro). */
+  accountType: string | null;
+  /** PYG, USD, BRL o EUR. */
+  currency: string | null;
+};
 
 function parseDetails(value: unknown): PaymentDetails {
   const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  const details = { bank: null, holder: null, ruc: null, account: null, alias: null } as PaymentDetails;
+  const details = { bank: null, holder: null, ruc: null, account: null, alias: null, accountType: null, currency: null } as PaymentDetails;
   for (const field of FIELDS) {
     const raw = record[field.key];
     const text = typeof raw === "string" ? raw.trim() : "";
     details[field.key] = text ? text.slice(0, field.max) : null;
+  }
+  for (const field of ENUM_FIELDS) {
+    const raw = typeof record[field.key] === "string" ? (record[field.key] as string).trim().toUpperCase() : "";
+    details[field.key] = field.options.includes(raw) ? raw : null;
   }
   return details;
 }
@@ -75,6 +98,14 @@ export async function POST(request: Request) {
     }
   }
 
+  for (const field of ENUM_FIELDS) {
+    const raw = record[field.key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    if (typeof raw !== "string" || !field.options.includes(raw.trim().toUpperCase())) {
+      return jsonError(`${field.label}: elegí ${field.options.join(", ")}.`, 400);
+    }
+  }
+
   const before = parseDetails(
     (await db.organization.findUnique({ where: { id: organizationId }, select: { paymentDetails: true } }))?.paymentDetails,
   );
@@ -82,7 +113,7 @@ export async function POST(request: Request) {
   const changes = auditChanges(
     { ...before },
     { ...after },
-    FIELDS.map((field) => field.key),
+    AUDIT_KEYS,
   );
   if (!changes) return Response.json({ paymentDetails: before, unchanged: true });
 

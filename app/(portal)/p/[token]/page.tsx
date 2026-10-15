@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { loadPublicBudget } from "@/lib/server/budget-portal";
+import { PortalBrandScope, PortalCompanyInfo } from "../../_components/PortalCompany";
 import { PortalBudgetView } from "../../_components/PortalBudgetView";
 import { PortalDemoBanner, PortalHeadFacts, PortalHeadTitle, PortalTimeline } from "../../_components/PortalBudgetStatic";
 
@@ -38,6 +39,7 @@ export default async function PortalBudgetPage({
   if (!budget) notFound();
   const demo = budget.demo || search.demo === "1";
   return (
+    <PortalBrandScope company={budget.company}>
     <PortalBudgetView
       budget={budget}
       token={token}
@@ -47,5 +49,7 @@ export default async function PortalBudgetPage({
       headFacts={<PortalHeadFacts budget={budget} />}
       timeline={budget.timeline.length > 0 ? <PortalTimeline entries={budget.timeline} /> : null}
     />
+    <PortalCompanyInfo company={budget.company} />
+    </PortalBrandScope>
   );
 }

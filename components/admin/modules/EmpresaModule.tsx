@@ -12,6 +12,7 @@ import { AdminOrgLogo } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
 import { TextField } from "../AdminFields";
 import { AdminButton, AdminConfirmDialog, AdminDataState, AdminImageUpload, AdminNote, AdminPanel } from "../AdminUI";
+import { EmpresaPerfil } from "./EmpresaPerfil";
 
 /**
  * Empresa (issue #22): OWNER/ADMIN editan el **nombre** de la empresa —el que
@@ -171,7 +172,7 @@ export function EmpresaModule() {
 
         <AdminPanel title="Datos de pago" icon="bank" meta="Se cargan en Presupuestos">
           <p className="admin-field-hint">
-            Banco, titular, cuenta y alias son de la empresa y los usa todo el panel (hojas imprimibles y portal del
+            Banco, titular, cuenta, tipo de cuenta, moneda y alias son de la empresa y los usa todo el panel (hojas imprimibles y portal del
             cliente). El formulario vive en Presupuestos → «Datos de pago de la empresa»: acá no hay una copia, solo el
             acceso.
           </p>
@@ -221,6 +222,7 @@ export function EmpresaModule() {
           </div>
         </AdminPanel>
       </AdminDataState>
+      <EmpresaPerfil />
       {logoToRemove ? (
         <AdminConfirmDialog
           title={`Quitar el ${logoVariantLabel(logoToRemove).toLowerCase()}`}

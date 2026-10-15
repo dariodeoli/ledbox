@@ -10,7 +10,7 @@ import { isEventBilled, quoteProductPrice } from "./quote-sharing";
  * `QuoteRequest.status` (texto validado acá, no un enum de base).
  */
 
-export const QUOTE_REQUEST_STATUSES = ["NEW", "REVIEWING", "QUOTED", "CONVERTED", "DECLINED", "EXPIRED"] as const;
+export const QUOTE_REQUEST_STATUSES = ["NEW", "REVIEWING", "QUOTED", "PROPOSED", "APPROVED", "CONVERTED", "DECLINED", "EXPIRED"] as const;
 export type QuoteRequestStatus = (typeof QUOTE_REQUEST_STATUSES)[number];
 
 export function isQuoteRequestStatus(value: unknown): value is QuoteRequestStatus {
@@ -18,13 +18,40 @@ export function isQuoteRequestStatus(value: unknown): value is QuoteRequestStatu
 }
 
 /** Estados desde los que un pedido todavía se puede convertir en presupuesto. */
-export const CONVERTIBLE_STATUSES: readonly QuoteRequestStatus[] = ["NEW", "REVIEWING", "QUOTED"];
+export const CONVERTIBLE_STATUSES: readonly QuoteRequestStatus[] = ["NEW", "REVIEWING", "QUOTED", "APPROVED"];
+
+/**
+ * Estados de un pedido que la empresa todavía puede responder (rechazar o modificar):
+ * incluye la propuesta enviada y la aprobada por el cliente. Un pedido convertido,
+ * declinado o vencido ya no se responde.
+ */
+export const RESPONDABLE_STATUSES: readonly QuoteRequestStatus[] = ["NEW", "REVIEWING", "QUOTED", "PROPOSED", "APPROVED"];
+
+/** Estados que el equipo puede poner a mano (PROPOSED y APPROVED los pone el flujo de la propuesta). */
+export const MANUAL_STATUSES: readonly QuoteRequestStatus[] = ["NEW", "REVIEWING", "QUOTED", "DECLINED", "EXPIRED"];
+
+/** Qué hizo la empresa con una línea del pedido al modificarlo. */
+export const QUOTE_ITEM_STATES = ["KEEP", "CHANGED", "REMOVED", "UNAVAILABLE", "SUBSTITUTED"] as const;
+export type QuoteItemState = (typeof QUOTE_ITEM_STATES)[number];
+export const QUOTE_ITEM_STATE_LABEL: Record<QuoteItemState, string> = {
+  KEEP: "Sin cambios",
+  CHANGED: "Cantidad ajustada",
+  REMOVED: "Quitado",
+  UNAVAILABLE: "Ya no está disponible",
+  SUBSTITUTED: "Reemplazado",
+};
+export const isQuoteItemState = (value: unknown): value is QuoteItemState =>
+  typeof value === "string" && (QUOTE_ITEM_STATES as readonly string[]).includes(value);
+/** ¿La línea sigue en el pedido? (quitada o no disponible no entran al presupuesto). */
+export const quoteItemActive = (state: string | null | undefined): boolean => state !== "REMOVED" && state !== "UNAVAILABLE";
 
 /** Etiqueta para el equipo (panel de Leads). */
 export const QUOTE_REQUEST_STATUS_LABEL: Record<QuoteRequestStatus, string> = {
   NEW: "Nuevo",
   REVIEWING: "En revisión",
   QUOTED: "Cotizado",
+  PROPOSED: "Propuesta enviada",
+  APPROVED: "Propuesta aprobada",
   CONVERTED: "Convertido en presupuesto",
   DECLINED: "Declinado",
   EXPIRED: "Vencido",
@@ -35,6 +62,8 @@ export const QUOTE_REQUEST_PUBLIC_COPY: Record<QuoteRequestStatus, { label: stri
   NEW: { label: "Recibido", detail: "Recibimos tu pedido. Todavía no es una reserva confirmada." },
   REVIEWING: { label: "En revisión", detail: "Estamos revisando tu pedido y la disponibilidad. Todavía no es una reserva confirmada." },
   QUOTED: { label: "Cotización enviada", detail: "Te enviamos una cotización. Todavía no es una reserva confirmada." },
+  PROPOSED: { label: "Propuesta para revisar", detail: "La empresa te propone una versión ajustada de tu pedido. Revisala y aprobala o rechazala. Todavía no es una reserva confirmada." },
+  APPROVED: { label: "Propuesta aprobada", detail: "Aprobaste la propuesta. La empresa la confirma y arma tu presupuesto. Todavía no es una reserva confirmada." },
   CONVERTED: { label: "Presupuesto en preparación", detail: "Armamos un presupuesto a partir de tu pedido. La reserva se confirma cuando lo aprobás." },
   DECLINED: { label: "No pudimos atenderlo", detail: "No pudimos atender este pedido. Escribinos y buscamos una alternativa." },
   EXPIRED: { label: "Vencido", detail: "Este pedido venció sin respuesta. Escribinos para retomarlo." },

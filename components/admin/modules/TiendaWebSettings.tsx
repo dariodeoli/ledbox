@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { publicConfig } from "@/lib/public-config";
 import type { AdminRentalSettings as RentalSettingsView } from "@/lib/admin-types";
-import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, normalizeHex, parseStorefrontAccent } from "@/lib/storefront-theme";
+import type { CatalogAccessMode } from "@/lib/catalog-access-mode";
+import Link from "next/link";
 import { useAdminSession } from "../AdminShell";
 import { EmailField, PhoneField, SwitchField, TextField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
+import { CatalogAccessModeField, CatalogAccessRequests } from "./CatalogAccessPanel";
 
 /**
  * Ajustes → Tienda web: la tienda pública de la empresa (`/tienda/<slug>`). Encendido,
@@ -20,7 +22,7 @@ type Form = {
   publicCatalogEnabled: boolean;
   publicShowPrices: boolean;
   storefrontTagline: string;
-  storefrontAccent: string;
+  catalogAccessMode: CatalogAccessMode;
   whatsappPhone: string;
   storefrontEmail: string;
 };
@@ -30,7 +32,7 @@ function toForm(settings: RentalSettingsView): Form {
     publicCatalogEnabled: settings.publicCatalogEnabled,
     publicShowPrices: settings.publicShowPrices,
     storefrontTagline: settings.storefrontTagline ?? "",
-    storefrontAccent: settings.storefrontAccent ?? "",
+    catalogAccessMode: settings.catalogAccessMode ?? "OPEN",
     whatsappPhone: settings.whatsappPhone ?? "",
     storefrontEmail: settings.storefrontEmail ?? "",
   };
@@ -54,9 +56,6 @@ export function TiendaWebSettings() {
   }, [initial]);
 
   const dirty = Boolean(form && initial && JSON.stringify(form) !== JSON.stringify(initial));
-  const accentCheck = form ? parseStorefrontAccent(form.storefrontAccent) : null;
-  const accentHex = form ? normalizeHex(form.storefrontAccent) : null;
-  const accentRatio = accentHex ? contrastRatio(accentHex, STORE_SURFACE_LIGHT) : null;
 
   async function send(body: Record<string, unknown>, done: string) {
     setError("");
@@ -79,7 +78,7 @@ export function TiendaWebSettings() {
     if (form.publicCatalogEnabled !== initial.publicCatalogEnabled) body.publicCatalogEnabled = form.publicCatalogEnabled;
     if (form.publicShowPrices !== initial.publicShowPrices) body.publicShowPrices = form.publicShowPrices;
     if (form.storefrontTagline !== initial.storefrontTagline) body.storefrontTagline = form.storefrontTagline || null;
-    if (form.storefrontAccent !== initial.storefrontAccent) body.storefrontAccent = form.storefrontAccent || null;
+    if (form.catalogAccessMode !== initial.catalogAccessMode) body.catalogAccessMode = form.catalogAccessMode;
     if (form.whatsappPhone !== initial.whatsappPhone) body.whatsappPhone = form.whatsappPhone || null;
     if (form.storefrontEmail !== initial.storefrontEmail) body.storefrontEmail = form.storefrontEmail || null;
     await send(body, "Guardamos los ajustes de la tienda web.");
@@ -163,21 +162,6 @@ export function TiendaWebSettings() {
                   disabled={demo || busy}
                   wide
                 />
-                <TextField
-                  label="Color de marca"
-                  value={form.storefrontAccent}
-                  onChange={(value) => setForm({ ...form, storefrontAccent: value })}
-                  maxLength={7}
-                  placeholder="#0b5cd5"
-                  autoCapitalize="none"
-                  error={accentCheck && !accentCheck.ok ? accentCheck.error : null}
-                  hint={
-                    accentHex && accentRatio !== null && accentCheck?.ok
-                      ? `Contraste con el blanco ${accentRatio.toFixed(1).replace(".", ",")}:1 (mínimo ${String(STORE_MIN_CONTRAST).replace(".", ",")}:1). En modo oscuro se aclara solo.`
-                      : "Hexadecimal, por ejemplo #0b5cd5. Vacío, la tienda usa un tema neutro."
-                  }
-                  disabled={demo || busy}
-                />
                 <PhoneField
                   label="WhatsApp de la empresa"
                   value={form.whatsappPhone}
@@ -193,12 +177,19 @@ export function TiendaWebSettings() {
                   disabled={demo || busy}
                 />
               </div>
-              {accentHex && accentCheck?.ok ? (
-                <p className="admin-field-hint" data-testid="accent-preview">
-                  <span className="admin-store-swatch" style={{ background: accentHex }} aria-hidden="true" /> Así se verá el color de marca en botones y títulos.
-                </p>
-              ) : null}
+              <p className="admin-field-hint">
+                El color de marca, la plantilla, la tipografía y la portada están en <Link href="/ajustes/apariencia">Ajustes → Apariencia</Link>.
+              </p>
             </AdminPanel>
+
+            <AdminPanel title="Acceso al catálogo" icon="lock" meta="Lo elige cada empresa">
+              <div className="admin-settings-grid">
+                <CatalogAccessModeField value={form.catalogAccessMode} onChange={(mode) => setForm({ ...form, catalogAccessMode: mode })} disabled={demo || busy} />
+              </div>
+              {initial && initial.catalogAccessMode !== form.catalogAccessMode ? <p className="admin-field-hint">Guardá los ajustes para que el cambio rija en la tienda.</p> : null}
+            </AdminPanel>
+
+            {initial?.catalogAccessMode === "REQUEST" || form.catalogAccessMode === "REQUEST" ? <CatalogAccessRequests canDecide={!demo} /> : null}
 
             <AdminPanel title="Catálogo mayorista" icon="inventory">
               <p className="admin-field-hint">
@@ -208,7 +199,7 @@ export function TiendaWebSettings() {
             </AdminPanel>
 
             <div className="admin-settings-actions">
-              <AdminButton type="submit" variant="primary" icon="check" busy={busy} disabled={demo || !dirty || Boolean(accentCheck && !accentCheck.ok)}>
+              <AdminButton type="submit" variant="primary" icon="check" busy={busy} disabled={demo || !dirty}>
                 Guardar ajustes
               </AdminButton>
             </div>

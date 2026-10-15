@@ -1,3 +1,13 @@
+import {
+  HANDOVER_KINDS,
+  HANDOVER_LABEL,
+  acceptedPaymentMethods,
+  hoursSummary,
+  locationLine,
+  profileHasData,
+  rangesLabel,
+  type OrgProfile,
+} from "@/lib/org-profile";
 import { publicConfig } from "@/lib/public-config";
 
 /**
@@ -84,6 +94,37 @@ export function PrintSection({ title, children, action }: { title: string; child
       </header>
       {children}
     </section>
+  );
+}
+
+/**
+ * Datos de la empresa en la hoja impresa: contacto, ubicación (con el link de Maps escrito, que
+ * en papel no se toca pero se puede escanear o teclear), horario, entrega/retiro/devolución,
+ * medios de pago aceptados y condiciones comerciales. Solo lo que la empresa cargó.
+ */
+export function PrintCompanyInfo({ profile }: { profile: OrgProfile }) {
+  if (!profileHasData(profile)) return null;
+  const { contact, location } = profile;
+  const place = locationLine(profile);
+  const hours = hoursSummary(profile.hours);
+  const methods = acceptedPaymentMethods(profile);
+  const handover = HANDOVER_KINDS.filter((kind) => profile.handover[kind].length > 0);
+  const phones = [contact.phone, contact.phone2, contact.whatsapp ? `${contact.whatsapp} (WhatsApp)` : null].filter(Boolean).join(" · ");
+  return (
+    <PrintSection title="Datos de la empresa">
+      <div className="lbprint-grid" data-testid="print-company-info">
+        {place ? <PrintField label="Dirección" value={place} wide /> : null}
+        {location.mapsUrl ? <PrintField label="Cómo llegar" value={location.mapsUrl} wide /> : null}
+        {phones ? <PrintField label="Teléfonos" value={phones} /> : null}
+        {contact.email ? <PrintField label="Correo" value={contact.email} /> : null}
+        {contact.website ? <PrintField label="Web" value={contact.website.replace(/^https?:\/\//, "")} /> : null}
+        {contact.instagram ? <PrintField label="Instagram" value={`@${contact.instagram}`} /> : null}
+        {hours.length > 0 ? <PrintField label="Horario de atención" value={hours.map((line) => `${line.days}: ${line.text}`).join(" · ")} wide /> : null}
+        {handover.length > 0 ? <PrintField label="Entrega, retiro y devolución" value={handover.map((kind) => `${HANDOVER_LABEL[kind]}: ${rangesLabel(profile.handover[kind])}`).join(" · ")} wide /> : null}
+        {methods.length > 0 ? <PrintField label="Medios de pago aceptados" value={methods.join(" · ")} wide /> : null}
+        {profile.conditions ? <PrintField label="Condiciones" value={profile.conditions} wide /> : null}
+      </div>
+    </PrintSection>
   );
 }
 

@@ -32,7 +32,7 @@ import { appEmailSender, emailConfigured, missingApiKeyMessage, sendThroughProvi
  */
 
 /** Categorías de correo de la app (el historial y los asuntos se agrupan así). */
-export const MAIL_CATEGORIES = ["reset", "reminder", "budget", "test", "invitation", "alert", "signature"] as const;
+export const MAIL_CATEGORIES = ["reset", "reminder", "budget", "test", "invitation", "alert", "signature", "catalog"] as const;
 export type MailCategory = (typeof MAIL_CATEGORIES)[number];
 
 export type MailActor = {

@@ -1,4 +1,5 @@
 import { sandboxHiddenHere } from "./demo-host";
+import { buildPortalCompany, type PortalCompany } from "@/lib/portal-company";
 import { securityDepositPublic } from "@/lib/budget-security-deposit";
 import { isEventBilledItem, resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
@@ -81,6 +82,10 @@ export type PortalBudgetPaymentDetails = {
   ruc: string | null;
   account: string | null;
   alias: string | null;
+  /** CORRIENTE o AHORRO; `null` si la empresa no lo cargó. */
+  accountType?: "CORRIENTE" | "AHORRO" | null;
+  /** PYG, USD, BRL o EUR; `null` si la empresa no lo cargó. */
+  currency?: string | null;
 };
 
 /**
@@ -216,6 +221,8 @@ export type PortalBudget = {
   paymentPlan: PortalBudgetPaymentPlan;
   /** Received money only; proofs/pending payments are not collections (#143). */
   collectedAmount?: number;
+  /** Perfil y marca de la empresa (contacto, horarios, color, tipografía); aditivo y opcional. */
+  company?: PortalCompany | null;
   /** Solo con el presupuesto aprobado; antes es `null`. */
   paymentDetails: PortalBudgetPaymentDetails | null;
   /**
@@ -350,7 +357,14 @@ type BudgetForPortal = {
   approvalNote: string | null;
   revisionRequestedAt: Date | null;
   revisionNote: string | null;
-  organization: { name: string; slug: string; paymentDetails: unknown };
+  organization: {
+    name: string;
+    slug: string;
+    paymentDetails: unknown;
+    profile?: unknown;
+    appearance?: unknown;
+    rentalSettings?: { storefrontAccent: string | null } | null;
+  };
   client: { name: string; company: string | null; tradeName?: string | null; legalName?: string | null; contactName: string | null; contactRole: string | null; logo?: { updatedAt: Date } | null };
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
@@ -455,6 +469,8 @@ export function parsePaymentDetails(value: unknown): PortalBudgetPaymentDetails 
     ruc: asText(value.ruc, 20),
     account: asText(value.account, 40),
     alias: asText(value.alias, 60),
+    accountType: value.accountType === "CORRIENTE" || value.accountType === "AHORRO" ? value.accountType : null,
+    currency: value.currency === "PYG" || value.currency === "USD" || value.currency === "BRL" || value.currency === "EUR" ? value.currency : null,
   };
   return details.bank || details.holder || details.ruc || details.account || details.alias ? details : null;
 }
@@ -632,6 +648,12 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     // La empresa demo los lleva siempre en `demoPaymentDetails` (issue #52).
+    company: buildPortalCompany({
+      name: budget.organization.name,
+      profile: budget.organization.profile,
+      appearance: budget.organization.appearance,
+      accent: budget.organization.rentalSettings?.storefrontAccent,
+    }),
     paymentDetails: approved ? parsePaymentDetails(budget.organization.paymentDetails) : null,
     demoPaymentDetails: demo ? parsePaymentDetails(budget.organization.paymentDetails) : null,
     expectedPayments,
@@ -672,7 +694,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
 export const portalInclude = {
   attachments: { where: { clientVisible: true, mime: "application/pdf" }, select: { id: true, organizationId: true, name: true, mime: true, size: true, clientVisible: true } },
   referenceLinks: { where: { clientVisible: true }, select: { organizationId: true, label: true, url: true, clientVisible: true } },
-  organization: { select: { name: true, slug: true, paymentDetails: true } },
+  organization: { select: { name: true, slug: true, paymentDetails: true, profile: true, appearance: true, rentalSettings: { select: { storefrontAccent: true } } } },
   client: { include: { logo: { select: { updatedAt: true } } } },
   event: { select: { name: true, location: true, startsAt: true } },
   // La imagen del producto vinculado viaja con el ítem (issue #107): solo la

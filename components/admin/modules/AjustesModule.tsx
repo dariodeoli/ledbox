@@ -6,6 +6,7 @@ import { AdminNote } from "../AdminUI";
 import { SANDBOX_UNAVAILABLE } from "@/lib/mail-preview";
 import { AjustesTabs, type AdminAjustesSection } from "./AjustesTabs";
 import { AlquileresSettings } from "./AlquileresSettings";
+import { AparienciaSettings } from "./AparienciaSettings";
 import { CorreoModule } from "./CorreoModule";
 import { EliminadosModule } from "./EliminadosModule";
 import { EmpresaModule } from "./EmpresaModule";
@@ -36,6 +37,7 @@ export function AjustesModule({ section }: { section: AdminAjustesSection }) {
       <AjustesTabs active={section} />
 
       {section === "empresa" && canManage ? <EmpresaModule /> : null}
+      {section === "apariencia" && canManage ? <AparienciaSettings /> : null}
       {section === "correo" && canManage ? <CorreoModule /> : null}
       {section === "alquileres" && canManage ? <AlquileresSettings /> : null}
       {section === "tienda" && canManage ? (

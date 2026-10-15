@@ -1,8 +1,8 @@
-import type { CSSProperties } from "react";
 import { PREORDER_RESPONSE_HOURS, preorderWhatsappUrl } from "@/lib/catalog-public";
-import { storefrontThemeVars } from "@/lib/storefront-theme";
 import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-public";
 import { CatalogBrowser } from "./CatalogBrowser";
+import { CompanyInfo } from "./CompanyInfo";
+import { StoreChrome } from "./StoreChrome";
 
 /**
  * Tienda web de una empresa (portada + catálogo). Componente de servidor: arma la
@@ -22,6 +22,8 @@ type Props = {
   basePath: string;
   preorderPath: string;
   wholesale?: { clientName: string } | null;
+  /** Acceso aprobado de cliente final (`/acceso/<token>`): saludo con su nombre. */
+  member?: { clientName: string } | null;
 };
 
 const DEFAULT_TAGLINE = "Alquiler de equipos para tu evento. Elegí lo que necesitás y te respondemos con una cotización.";
@@ -55,15 +57,14 @@ const STEPS = [
   { title: "Te respondemos con la cotización", text: `En hasta ${PREORDER_RESPONSE_HOURS} horas hábiles. Recién ahí se confirma la reserva: el pedido solo no la asegura.` },
 ] as const;
 
-export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null }: Props) {
-  const style = storefrontThemeVars(store.theme) as CSSProperties;
+export function StoreFront({ store, items, showPrices, demo, range, initialCategory, basePath, preorderPath, wholesale = null, member = null }: Props) {
   const whatsapp = preorderWhatsappUrl(store.whatsappPhone, `Hola ${store.name}! Quiero consultar por ${wholesale ? "el catálogo mayorista" : "su catálogo de alquiler"}.`);
   const featured = featuredCategories(items);
-  const hasContact = Boolean(whatsapp || store.email);
+  const hasContact = Boolean(whatsapp || store.email || store.profile);
   const hasLogo = store.logos.light || store.logos.dark;
 
   return (
-    <div className="cp-theme" style={style}>
+    <StoreChrome theme={store.theme} appearance={store.appearance}>
       <header className="cp-nav">
         <div className="cp-nav-inner">
           <a className={hasLogo ? "cp-brand cp-brand--logo" : "cp-brand"} href={basePath} aria-label={`Inicio de ${store.name}`}>
@@ -79,11 +80,18 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
       </header>
 
       <main className="cp-main">
+        {store.covers.desktop || store.covers.mobile ? (
+          <picture className="cp-cover" data-testid="store-cover">
+            {store.covers.mobile ? <source media="(max-width: 640px)" srcSet={store.covers.mobile} /> : null}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={store.covers.desktop ?? store.covers.mobile ?? ""} alt={`Portada de ${store.name}`} />
+          </picture>
+        ) : null}
         <section className="cp-hero" aria-labelledby="titulo">
           <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Tienda de alquiler"}</p>
           <h1 id="titulo" className="cp-h1">{store.name}</h1>
           <p className="cp-tagline">
-            {wholesale ? `Hola ${wholesale.clientName}. Este es tu catálogo con precios mayoristas.` : store.tagline || DEFAULT_TAGLINE}
+            {wholesale ? `Hola ${wholesale.clientName}. Este es tu catálogo con precios mayoristas.` : member ? `Hola ${member.clientName}. Elegí lo que necesitás y te respondemos con una cotización.` : store.tagline || DEFAULT_TAGLINE}
           </p>
           {demo ? <p className="cp-note" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
           <div className="cp-row cp-hero-actions">
@@ -151,6 +159,7 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
               {whatsapp ? <a className="cp-btn cp-btn--primary" href={whatsapp} target="_blank" rel="noopener noreferrer">WhatsApp</a> : null}
               {store.email ? <a className="cp-btn" href={`mailto:${store.email}`}>{store.email}</a> : null}
             </div>
+            {store.profile ? <CompanyInfo profile={store.profile} /> : null}
           </section>
         ) : null}
       </main>
@@ -158,7 +167,7 @@ export function StoreFront({ store, items, showPrices, demo, range, initialCateg
       <footer className="cp-foot">
         <p>{store.name} · Los precios son de referencia en guaraníes y se confirman en la cotización. Un pedido no es una reserva hasta que la confirmamos.</p>
       </footer>
-    </div>
+    </StoreChrome>
   );
 }
 

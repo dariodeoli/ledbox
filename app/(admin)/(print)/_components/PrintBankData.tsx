@@ -2,6 +2,7 @@
 
 import type { AdminPaymentDetails } from "@/lib/admin-types";
 import { bankMark } from "@/lib/bank-mark";
+import { accountCurrencyLabel, accountTypeLabel } from "@/lib/org-profile";
 
 /**
  * Datos bancarios de la hoja impresa (issue #14): marca del banco (asset del
@@ -28,6 +29,8 @@ export function PrintBankData({ details }: { details: AdminPaymentDetails }) {
         {details.holder ? <span className="lbprint-bank-line">Titular: {details.holder}</span> : null}
         {details.ruc ? <span className="lbprint-bank-line">RUC: {details.ruc}</span> : null}
         {details.account ? <span className="lbprint-bank-line">Cuenta: {details.account}</span> : null}
+        {accountTypeLabel(details.accountType) ? <span className="lbprint-bank-line">Tipo de cuenta: {accountTypeLabel(details.accountType)}</span> : null}
+        {accountCurrencyLabel(details.currency) ? <span className="lbprint-bank-line">Moneda: {accountCurrencyLabel(details.currency)}</span> : null}
         {details.alias ? <span className="lbprint-bank-line">Alias: {details.alias}</span> : null}
       </div>
     </div>

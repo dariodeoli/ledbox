@@ -19,7 +19,8 @@ import {
 } from "@/lib/admin-format";
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
 import { canWriteBudgets, canWriteClients, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
-import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, quoteRequestStatusLabel } from "@/lib/catalog-public";
+import { CONVERTIBLE_STATUSES, QUOTE_ITEM_STATE_LABEL, RESPONDABLE_STATUSES, isQuoteItemState, isQuoteRequestStatus, quoteItemActive, quoteRequestStatusLabel } from "@/lib/catalog-public";
+import type { AdminLeadQuote } from "@/lib/admin-types";
 import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
@@ -47,6 +48,7 @@ import {
 } from "../AdminUI";
 import { CheckboxField, SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { LeadQuickDialog } from "./LeadQuickForm";
+import { ModifyQuoteDialog, RejectQuoteDialog } from "./QuoteResponseDialogs";
 import { AdminIcon } from "../AdminIcons";
 import { leadArchiveBlockedReason } from "@/lib/trash-shared";
 import { adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
@@ -105,6 +107,8 @@ const QUOTE_TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "danger"
   NEW: "accent",
   REVIEWING: "info",
   QUOTED: "warn",
+  PROPOSED: "warn",
+  APPROVED: "ok",
   CONVERTED: "ok",
   DECLINED: "danger",
   EXPIRED: "neutral",
@@ -137,6 +141,9 @@ export function LeadsModule() {
   /** Pedido del catálogo que se está convirtiendo o al que se le retiene stock. */
   const [quoteBusy, setQuoteBusy] = useState("");
   const [holdOnConvert, setHoldOnConvert] = useState(false);
+  /** Pedido que se está rechazando con motivo o modificando (diálogos propios). */
+  const [rejecting, setRejecting] = useState<AdminLeadQuote | null>(null);
+  const [modifying, setModifying] = useState<AdminLeadQuote | null>(null);
   const [detailError, setDetailError] = useState("");
   const [notice, setNotice] = useState("");
   const [boardError, setBoardError] = useState("");
@@ -751,20 +758,34 @@ export function LeadsModule() {
                             <Link href="/presupuestos" title="Abrir Presupuestos">Presupuesto {budgetReference(quote.budget.id)}</Link> creado desde este pedido.
                           </p>
                         ) : null}
+                        {quote.status === "DECLINED" ? (
+                          <p data-testid="quote-decline-reason">
+                            <strong>{quote.declinedBy === "CLIENT" ? "El cliente rechazó la propuesta" : "Motivo del rechazo"}:</strong> {quote.declineReason ?? "sin motivo informado"}
+                          </p>
+                        ) : null}
+                        {quote.status === "PROPOSED" ? (
+                          <p className="admin-muted" data-testid="quote-proposed">Le enviaste una propuesta{quote.proposedAt ? ` el ${formatDateTime(quote.proposedAt)}` : ""}. Esperando que el cliente la apruebe desde su seguimiento.</p>
+                        ) : null}
+                        {quote.status === "APPROVED" ? (
+                          <p className="admin-muted" data-testid="quote-approved">El cliente aprobó tu propuesta{quote.proposalApprovedAt ? ` el ${formatDateTime(quote.proposalApprovedAt)}` : ""}. Aceptala para armar el presupuesto y retener el stock.</p>
+                        ) : null}
+                        {writable && !quote.budget && isQuoteRequestStatus(quote.status) && RESPONDABLE_STATUSES.includes(quote.status) ? (
+                          <div className="admin-detail-actions">
+                            <AdminButton type="button" icon="edit" disabled={Boolean(quoteBusy)} onClick={() => setModifying(quote)}>Modificar pedido</AdminButton>
+                            <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => setRejecting(quote)}>Rechazar con motivo</AdminButton>
+                            {quote.status === "NEW" ? (
+                              <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => void setQuoteStatus(quote.id, "REVIEWING")}>Marcar en revisión</AdminButton>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {budgetWritable && !quote.budget && isQuoteRequestStatus(quote.status) && CONVERTIBLE_STATUSES.includes(quote.status) ? (
                           <div className="admin-detail-actions">
                             {holdWritable ? (
                               <CheckboxField checked={holdOnConvert} onChange={setHoldOnConvert} text="Retener el stock mientras se cotiza (según la vigencia de Ajustes > Alquileres)" />
                             ) : null}
                             <AdminButton type="button" variant="primary" icon="budgets" busy={quoteBusy === quote.id} disabled={Boolean(quoteBusy)} onClick={() => void convertQuote(quote.id)}>
-                              Convertir en presupuesto
+                              Aceptar y convertir en presupuesto
                             </AdminButton>
-                            {writable && quote.status === "NEW" ? (
-                              <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => void setQuoteStatus(quote.id, "REVIEWING")}>Marcar en revisión</AdminButton>
-                            ) : null}
-                            {writable && quote.status !== "DECLINED" ? (
-                              <AdminButton type="button" disabled={Boolean(quoteBusy)} onClick={() => void setQuoteStatus(quote.id, "DECLINED")}>Declinar</AdminButton>
-                            ) : null}
                           </div>
                         ) : null}
                         {quote.budget && holdWritable ? (
@@ -795,7 +816,10 @@ export function LeadsModule() {
                           return (
                             <AdminRow key={item.id}>
                               <AdminCell title={`${item.productName} · ${item.productSlug}`}>
-                                <strong>{item.productName}</strong>
+                                {quoteItemActive(item.state) ? <strong>{item.productName}</strong> : <s>{item.originalName ?? item.productName}</s>}
+                                {item.state && item.state !== "KEEP" && isQuoteItemState(item.state) ? (
+                                  <span className="admin-cell-sub"> · {QUOTE_ITEM_STATE_LABEL[item.state]}{item.state === "SUBSTITUTED" && item.originalName ? ` (en lugar de ${item.originalName})` : ""}</span>
+                                ) : null}
                               </AdminCell>
                               <AdminCell end title={`${formatNumber(item.quantity)} unidades`}>
                                 {formatNumber(item.quantity)}
@@ -930,6 +954,29 @@ export function LeadsModule() {
             </AdminDialogSection>
           </form>
         </AdminDialog>
+      ) : null}
+
+      {rejecting ? (
+        <RejectQuoteDialog
+          quote={rejecting}
+          onClose={() => setRejecting(null)}
+          onDone={(message) => {
+            setRejecting(null);
+            setNotice(message);
+            leads.reload();
+          }}
+        />
+      ) : null}
+      {modifying ? (
+        <ModifyQuoteDialog
+          quote={modifying}
+          onClose={() => setModifying(null)}
+          onDone={(message) => {
+            setModifying(null);
+            setNotice(message);
+            leads.reload();
+          }}
+        />
       ) : null}
     </div>
   );

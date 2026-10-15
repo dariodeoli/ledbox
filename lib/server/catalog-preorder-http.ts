@@ -24,6 +24,10 @@ export async function handlePreorder(
 
   const context = await options.resolve();
   if (!context) return jsonError("Catálogo no encontrado.", 404);
+  // Tienda «Con solicitud» o «Privada»: sin el link personal no se pide (la UI tampoco lo ofrece).
+  if (!context.access && context.settings.catalogAccessMode !== "OPEN") {
+    return jsonError("Esta tienda requiere un link de acceso: pedile acceso a la empresa.", 403);
+  }
 
   // Demo de solo lectura: se valida igual, pero no se guarda nada y se dice claro.
   if (context.demo) {
