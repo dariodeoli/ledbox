@@ -22,8 +22,8 @@ export const DEPOSIT_MODE_LABEL: Record<DepositMode, string> = {
 export const DEPOSIT_PURPOSES = ["RESERVE", "DAMAGES"] as const;
 export type DepositPurpose = (typeof DEPOSIT_PURPOSES)[number];
 export const DEPOSIT_PURPOSE_LABEL: Record<DepositPurpose, string> = {
-  RESERVE: "Reserva (asegura la fecha y se descuenta del saldo)",
-  DAMAGES: "Daños (se devuelve si no hay cargos)",
+  RESERVE: "Reserva",
+  DAMAGES: "Daños",
 };
 
 export const DEPOSIT_CALCS = ["FIXED", "PERCENT", "PER_PRODUCT"] as const;

@@ -162,7 +162,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
       <AdminPanel title="Garantía" icon="wallet" meta="Se puede cambiar en cada presupuesto">
         <div className="admin-settings-grid">
           <SelectField label="¿Usás garantía?" value={form.mode} onChange={(value) => patch({ mode: value as DepositMode })} options={MODE_OPTIONS} disabled={disabled} hint="Opcional: se elige en cada presupuesto. Siempre: se propone sola al crearlo." />
-          <SelectField label="¿Para qué es?" value={form.purpose} onChange={(value) => patch({ purpose: value as DepositPurpose })} options={PURPOSE_OPTIONS} disabled={disabled || form.mode === "NONE"} hint="No se suma al total del presupuesto." />
+          <SelectField label="¿Para qué es?" value={form.purpose} onChange={(value) => patch({ purpose: value as DepositPurpose })} options={PURPOSE_OPTIONS} disabled={disabled || form.mode === "NONE"} hint="Reserva: asegura la fecha y se descuenta del saldo. Daños: se devuelve si no hay cargos. No se suma al total." />
           <SelectField label="¿Cómo se calcula?" value={form.calc} onChange={(value) => patch({ calc: value as DepositCalc })} options={CALC_OPTIONS} disabled={disabled || form.mode === "NONE"} />
           {form.calc === "FIXED" ? <MoneyField label="Monto fijo" value={form.fixed} onChange={(value) => patch({ fixed: value })} limit={BUDGET_INT_MAX} disabled={disabled || form.mode === "NONE"} hint="Vacío = sin monto por defecto." /> : null}
           {form.calc === "PERCENT" ? <NumberField label="% del pedido" value={form.percent} onChange={(value) => patch({ percent: value })} maxLength={3} disabled={disabled || form.mode === "NONE"} hint="De 1 a 100 sobre el total del presupuesto." /> : null}
