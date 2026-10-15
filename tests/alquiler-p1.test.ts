@@ -81,7 +81,10 @@ test("P1-1: la migración es aditiva, idempotente y con default DAILY; el presup
   assert.match(budgets, /links\.perEvent\.has\(inventoryId\) \? 1 : days/);
   // La tienda y la conversión usan el «se cobra» del producto, no un DAILY fijo.
   assert.doesNotMatch(repoFile("lib/server/catalog-public.ts"), /billingUnit: "DAILY" as const/);
-  assert.match(repoFile("lib/server/catalog-convert.ts"), /billedDays\(linked\?\.billingUnit, periodDays\)/);
+  // La regla vive en `catalogLineAmounts` (line-pricing) y la usan la conversión y la propuesta de la empresa.
+  assert.match(repoFile("lib/server/line-pricing.ts"), /billedDays\(linked\?\.billingUnit, periodDays\)/);
+  assert.match(repoFile("lib/server/catalog-convert.ts"), /catalogLineAmounts\(linked,/);
+  assert.match(repoFile("lib/server/quote-request-response.ts"), /catalogLineAmounts\(/);
   assert.match(repoFile("components/catalog-public/CatalogBrowser.tsx"), /por evento/);
 });
 
