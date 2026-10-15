@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { budgetPlanLedgerError, hasDynamicBudgetPlan, resolveBudgetPaymentPlan } from "../budget-payment-plan";
 import { QuoteComparisonError } from "./quote-comparison";
 import { syncBudgetExpectedPayments } from "./expected-payments";
+import { rentalBalancePaymentFilter } from "../payment-origin";
 
 /** Called inside the same quote-row lock as every commercial edit. */
 export async function recalculateBudgetPaymentPlan(tx: Prisma.TransactionClient, budgetId: string) {
@@ -24,7 +25,7 @@ export async function assertBudgetPlanLedger(tx: Prisma.TransactionClient, budge
   const existing = await tx.expectedPayment.findMany({ where: { budgetId } });
   const error = budgetPlanLedgerError(desired, existing);
   if (error) throw new QuoteComparisonError(409, error);
-  const collected = await tx.clientPayment.aggregate({ where: { budgetId, status: "RECEIVED" }, _sum: { amount: true } });
+  const collected = await tx.clientPayment.aggregate({ where: { budgetId, status: "RECEIVED", ...rentalBalancePaymentFilter }, _sum: { amount: true } });
   if ((collected._sum.amount ?? 0) > total) throw new QuoteComparisonError(409, "El total no puede quedar por debajo del dinero ya cobrado. Usá el ciclo de revisión.");
 }
 

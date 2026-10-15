@@ -175,6 +175,7 @@ model Organization {
   inventoryComponents InventoryComponent[]
   inventoryPriceTiers InventoryPriceTier[]
   deliveryZones     DeliveryZone[]
+  rentalCharges     RentalCharge[]
   rentalSettings    OrganizationRentalSettings?
   promoters         Promoter[]
   auditLogs         AuditLog[]
@@ -961,6 +962,11 @@ model Budget {
   securityDepositStatus   String?
   /// Monto retenido (KEPT_PARTIAL / KEPT); el resto se devuelve al cliente.
   securityDepositRetained Int?
+  /// Para qué es la garantía: RESERVE (asegura la fecha, se descuenta del saldo) o DAMAGES (se devuelve sin cargos). NULL = DAMAGES.
+  securityDepositPurpose  String?
+  /// Liquidación de la devolución: NULL = sin liquidar; con fecha, ya corrió (idempotencia).
+  rentalSettledAt         DateTime?
+  rentalSettlement        Json?
   // Portal del cliente (issue #12): token público del presupuesto y evidencia
   // de la aprobación digital o manual. El token es la única credencial del
   // link y se puede regenerar o revocar desde el panel.
@@ -999,6 +1005,8 @@ model Budget {
   invoices             Invoice[]
   /// Solicitudes de firma del cliente (issue #79) sobre este presupuesto.
   signatureRequests    SignatureRequest[]
+  /// Cargos de la devolución (alquileres P1-4): recargo, roturas, faltantes, lavado y personalizados.
+  rentalCharges        RentalCharge[]
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
@@ -1109,6 +1117,13 @@ model ClientPayment {
    * Cuenta de tesorería donde entra el cobro (issue #27).
    */
   treasuryAccountId String?
+  /**
+   * Origen del cobro cuando NO es un pago común del presupuesto (alquileres P1-4):
+   * `deposit_retained` (garantía de daños retenida: ingreso por cargos) y `rental_extra`
+   * (cobro de un cargo extra de la liquidación) entran a tesorería pero NO bajan el saldo
+   * del alquiler. `deposit_reserve` (garantía de reserva) sí es parte del pago. `null` = común.
+   */
+  origin            String?
   organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   budget            Budget?              @relation(fields: [budgetId], references: [id], onDelete: SetNull)
@@ -1439,6 +1454,7 @@ enum ExpectedPaymentConcept {
   advance
   installment
   balance
+  extra
 }
 
 /**
@@ -2106,6 +2122,28 @@ model OrganizationRentalSettings {
   depositPercent       Int?
   /// Depósito de garantía por defecto (PYG) de los presupuestos nuevos; NULL = sin garantía.
   securityDepositDefault Int?
+  /// Política de garantía: NONE (no se usa), OPTIONAL (se elige en cada presupuesto) o ALWAYS (se propone siempre).
+  securityDepositMode    String       @default("NONE")
+  /// Para qué es: RESERVE (asegura la fecha y se descuenta del saldo) o DAMAGES (se devuelve si no hay cargos).
+  securityDepositPurpose String       @default("DAMAGES")
+  /// Cómo se calcula: FIXED (`securityDepositDefault`), PERCENT (% del pedido) o PER_PRODUCT (reglas por producto o categoría).
+  securityDepositCalc    String       @default("FIXED")
+  securityDepositPercent Int?
+  /// Reglas por pieza: [{ inventoryId?, categoryId?, amount }]; el producto gana a la categoría.
+  securityDepositRules   Json?
+  /// Recargo por demora: PERCENT del alquiler o FIXED en guaraníes, por DAY u HOUR, con tolerancia en minutos.
+  lateFeeKind            String       @default("PERCENT")
+  lateFeeUnit            String       @default("DAY")
+  lateFeeValue           Int          @default(10)
+  lateGraceMinutes       Int          @default(120)
+  /// Rotura o faltante: % del costo de reposición del producto.
+  damageChargePercent    Int          @default(100)
+  /// Cargos personalizados: [{ id, name, amount, unit: PIECE|EVENT, categoryId? }].
+  customCharges          Json?
+  /// Política de cancelación: [{ minDaysBefore, retainPercent }]; NULL = la de fábrica.
+  cancellationPolicy     Json?
+  /// Condiciones del alquiler (portal e impreso).
+  rentalTerms            String?
   holdTtlMinutes       Int          @default(2880)
   deliveryBufferMin    Int          @default(0)
   returnBufferMin      Int          @default(0)
@@ -2752,4 +2790,54 @@ model DeliveryZone {
 
   @@unique([organizationId, name])
   @@index([organizationId, archivedAt])
+}
+
+enum RentalChargeKind {
+  LATE
+  DAMAGE
+  MISSING
+  CLEANING
+  STAIN
+  CUSTOM
+  OTHER
+}
+
+enum RentalChargeStatus {
+  PROPOSED
+  APPLIED
+  WAIVED
+}
+
+/// Cargo al cliente por la devolución (alquileres P1-4). Nace PROPOSED al devolver; el equipo
+/// de finanzas lo aplica o lo condona (con motivo) y «Liquidar» lo cierra contra la garantía.
+/// Nunca toca `Budget.total`. `dedupeKey` hace idempotente la propuesta (`late:<asignación>`,
+/// `incident:<id>:<kind>`, `custom:<uuid>`).
+model RentalCharge {
+  id             String             @id
+  organizationId String
+  budgetId       String
+  eventId        String?
+  assignmentId   String?
+  incidentId     String?
+  inventoryId    String?
+  kind           RentalChargeKind
+  status         RentalChargeStatus @default(PROPOSED)
+  label          String
+  quantity       Int                @default(1)
+  unitAmount     Int
+  amount         Int
+  dedupeKey      String
+  /// Motivo de la condonación (obligatorio al condonar).
+  reason         String?
+  note           String?
+  decidedAt      DateTime?
+  decidedByName  String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  budget         Budget             @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, dedupeKey])
+  @@index([organizationId, budgetId])
+  @@index([organizationId, eventId])
 }

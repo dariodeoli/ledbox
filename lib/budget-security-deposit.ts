@@ -76,16 +76,18 @@ export function securityDepositTransition(current: SecurityDepositState, to: unk
 }
 
 /** Lo que el cliente ve de su garantía (sin notas ni costos internos). */
-export type SecurityDepositPublic = { amount: number; status: SecurityDepositStatus; statusLabel: string; retained: number; returned: number } | null;
+export type SecurityDepositPublic = { amount: number; status: SecurityDepositStatus; statusLabel: string; retained: number; returned: number; purpose: "RESERVE" | "DAMAGES" } | null;
 
-export function securityDepositPublic(row: { securityDeposit: number | null; securityDepositStatus: string | null; securityDepositRetained: number | null }): SecurityDepositPublic {
+export function securityDepositPublic(row: { securityDeposit: number | null; securityDepositStatus: string | null; securityDepositRetained: number | null; securityDepositPurpose?: string | null }): SecurityDepositPublic {
   if (!securityDepositAmountValid(row.securityDeposit) || !isSecurityDepositStatus(row.securityDepositStatus)) return null;
   const retained = row.securityDepositStatus === "KEPT" ? row.securityDeposit : row.securityDepositStatus === "KEPT_PARTIAL" ? row.securityDepositRetained ?? 0 : 0;
   const closed = row.securityDepositStatus === "RETURNED" || row.securityDepositStatus === "KEPT" || row.securityDepositStatus === "KEPT_PARTIAL";
   return {
     amount: row.securityDeposit,
     status: row.securityDepositStatus,
-    statusLabel: SECURITY_DEPOSIT_LABEL[row.securityDepositStatus],
+    purpose: row.securityDepositPurpose === "RESERVE" ? "RESERVE" : "DAMAGES",
+    // Una garantía de reserva recibida ya se descontó del saldo: no está «en custodia».
+    statusLabel: row.securityDepositPurpose === "RESERVE" && row.securityDepositStatus === "HELD" ? "Recibida · descontada del saldo" : SECURITY_DEPOSIT_LABEL[row.securityDepositStatus],
     retained,
     returned: closed ? row.securityDeposit - retained : 0,
   };

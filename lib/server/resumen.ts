@@ -2,6 +2,7 @@ import type { AdminNavCounts, AdminResumen, AdminResumenWeekEvent } from "@/lib/
 import { db } from "./db";
 import { clientLabel, DAY_MS, dayKeyOf, dayStart, placeLabel, shiftDayKey } from "./notifications";
 import { live } from "@/lib/server/trash-filter";
+import { rentalBalancePaymentFilter } from "@/lib/payment-origin";
 
 /**
  * Datos del Resumen y del menú que no salen de los listados. Todo es `count` o
@@ -112,6 +113,8 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
         SELECT "budgetId", SUM("amount") AS "paid"
         FROM "ClientPayment"
         WHERE "organizationId" = ${organizationId} AND "status" = 'RECEIVED' AND "budgetId" IS NOT NULL
+          -- La garantía retenida y los cobros de cargos extra son ingresos por cargos: no bajan el saldo del alquiler.
+          AND COALESCE("origin", '') NOT IN ('deposit_retained', 'rental_extra')
         GROUP BY "budgetId"
       ) p ON p."budgetId" = b."id"
       WHERE b."organizationId" = ${organizationId} AND b."status" = 'APPROVED'
@@ -158,7 +161,7 @@ export async function getResumen(organizationId: string, now = new Date()): Prom
         tasks: { select: { completedAt: true } },
         budgets: {
           where: { ...live, status: "APPROVED", advanceAmount: { gt: 0 } },
-          select: { advanceAmount: true, payments: { where: { status: "RECEIVED" }, select: { amount: true } } },
+          select: { advanceAmount: true, payments: { where: { status: "RECEIVED", ...rentalBalancePaymentFilter }, select: { amount: true } } },
         },
       },
     }),

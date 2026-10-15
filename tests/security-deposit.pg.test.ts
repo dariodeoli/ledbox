@@ -118,7 +118,7 @@ test("depósito de garantía en PostgreSQL", { skip: !process.env.TEST_DATABASE_
       await transitionBudgetSecurityDeposit(a.context, a.budget.id, { to: "KEPT_PARTIAL", retainedAmount: 500_000, reason: "NOTA-INTERNA-SECRETA" });
       const row = await db.budget.findUniqueOrThrow({ where: { id: a.budget.id }, include: portalInclude });
       const view = portalBudgetView(row as never);
-      assert.deepEqual(view.securityDeposit, { amount: 2_000_000, status: "KEPT_PARTIAL", statusLabel: "Retenida parcialmente", retained: 500_000, returned: 1_500_000 });
+      assert.deepEqual(view.securityDeposit, { amount: 2_000_000, status: "KEPT_PARTIAL", statusLabel: "Retenida parcialmente", retained: 500_000, returned: 1_500_000, purpose: "DAMAGES" });
       assert.equal(view.total, 1_000_001);
       const json = JSON.stringify(view);
       assert.doesNotMatch(json, /NOTA-INTERNA-SECRETA|777777|123456|materialCost|costEstimate/);

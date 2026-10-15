@@ -1,5 +1,6 @@
 import { CommercialStatus } from "@prisma/client";
 import { db } from "@/lib/server/db";
+import { rentalBalancePaymentFilter } from "@/lib/payment-origin";
 import type { EventBudgetSummary } from "@/lib/event-readiness";
 
 /**
@@ -48,7 +49,7 @@ export async function loadEventReadiness(organizationId: string, eventIds: reado
   const sums = budgetIds.length
     ? await db.clientPayment.groupBy({
         by: ["budgetId"],
-        where: { organizationId, budgetId: { in: budgetIds }, status: "RECEIVED" },
+        where: { organizationId, budgetId: { in: budgetIds }, status: "RECEIVED", ...rentalBalancePaymentFilter },
         _sum: { amount: true },
       })
     : [];

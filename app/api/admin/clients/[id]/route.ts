@@ -1,5 +1,6 @@
 import { isOverdue } from "@/lib/admin-format";
 import { db } from "@/lib/server/db";
+import { countsTowardBudgetBalance } from "@/lib/payment-origin";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
@@ -89,6 +90,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         invoiceIssuedAt: true,
         dueAt: true,
         chequeDate: true,
+        origin: true,
         createdAt: true,
         budget: { select: { id: true, title: true } },
       },
@@ -110,7 +112,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   for (const payment of payments) {
     if (!payment.budgetId) continue;
     const current = byBudget.get(payment.budgetId) ?? { collected: 0, overdue: 0 };
-    if (payment.status === "RECEIVED") current.collected += payment.amount;
+    if (payment.status === "RECEIVED" && countsTowardBudgetBalance(payment)) current.collected += payment.amount;
     if (payment.status === "PENDING" && isOverdue(payment.dueAt)) current.overdue += payment.amount;
     byBudget.set(payment.budgetId, current);
   }

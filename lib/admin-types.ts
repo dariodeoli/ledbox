@@ -4,6 +4,7 @@
  */
 
 import { isOverdue, type AdminTone } from "./admin-format";
+import { countsTowardBudgetBalance } from "./payment-origin";
 import type { StatementDirectionValue, StatementRowStatusValue } from "./bank-statement";
 
 export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
@@ -390,6 +391,8 @@ export type AdminPayment = {
   /** Fecha del cheque cuando el método es cheque. */
   chequeDate: string | null;
   createdAt: string;
+  /** Origen cuando no es un pago común del presupuesto (ver `lib/payment-origin.ts`). */
+  origin?: string | null;
 };
 
 /** Solo un cobro `RECEIVED` cuenta como plata cobrada (nada de contar pendientes). */
@@ -397,8 +400,16 @@ export function isCollectedPayment(payment: Pick<AdminPayment, "status">): boole
   return payment.status === "RECEIVED";
 }
 
-/** Monto realmente cobrado de una lista de cobros. */
-export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
+/**
+ * Monto cobrado QUE BAJA EL SALDO del presupuesto: no cuenta la garantía de daños retenida ni los
+ * cobros de cargos extra (son ingresos por cargos encima del total, ver `lib/payment-origin.ts`).
+ */
+export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status" | "origin">>): number {
+  return payments.reduce((sum, payment) => (isCollectedPayment(payment) && countsTowardBudgetBalance(payment) ? sum + payment.amount : sum), 0);
+}
+
+/** Todo lo efectivamente recibido (ingreso de la empresa), incluida la garantía retenida y los cargos. */
+export function receivedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
   return payments.reduce((sum, payment) => (isCollectedPayment(payment) ? sum + payment.amount : sum), 0);
 }
 
@@ -453,6 +464,8 @@ export type AdminBudgetRow = {
   /** PENDING, HELD, RETURNED, KEPT_PARTIAL o KEPT. */
   securityDepositStatus?: string | null;
   securityDepositRetained?: number | null;
+  /** RESERVE (se descuenta del saldo) o DAMAGES (se devuelve sin cargos); null = daños. */
+  securityDepositPurpose?: string | null;
   /** Devolución de equipos del evento vinculado: sin daños, con incidentes o pendiente. */
   equipmentReturn?: "clean" | "incidents" | "pending" | null;
   createdAt: string;
@@ -2662,6 +2675,25 @@ export type AdminRentalSettings = {
   depositPercent: number | null;
   /** Depósito de garantía por defecto (PYG) de los presupuestos nuevos; `null` = sin garantía. */
   securityDepositDefault: number | null;
+  /** Política de garantía (alquileres P1-2): no se usa, opcional por presupuesto o siempre. */
+  securityDepositMode: "NONE" | "OPTIONAL" | "ALWAYS";
+  /** Para qué es: reserva (se descuenta del saldo) o daños (se devuelve si no hay cargos). */
+  securityDepositPurpose: "RESERVE" | "DAMAGES";
+  /** Cómo se calcula: monto fijo, % del pedido o reglas por producto o categoría. */
+  securityDepositCalc: "FIXED" | "PERCENT" | "PER_PRODUCT";
+  securityDepositPercent: number | null;
+  securityDepositRules: Array<{ inventoryId?: string | null; categoryId?: string | null; amount: number }>;
+  /** Recargo por demora: % del alquiler o monto fijo, por día u hora, con tolerancia en minutos. */
+  lateFeeKind: "PERCENT" | "FIXED";
+  lateFeeUnit: "DAY" | "HOUR";
+  lateFeeValue: number;
+  lateGraceMinutes: number;
+  /** Rotura o faltante: % del costo de reposición. */
+  damageChargePercent: number;
+  customCharges: Array<{ id: string; name: string; amount: number; unit: "PIECE" | "EVENT"; categoryId: string | null }>;
+  /** Política de cancelación vigente (la de fábrica si la empresa no cargó una). */
+  cancellationPolicy: Array<{ minDaysBefore: number; retainPercent: number }>;
+  rentalTerms: string | null;
   holdTtlMinutes: number;
   deliveryBufferMin: number;
   returnBufferMin: number;
@@ -2688,6 +2720,10 @@ export type AdminApiResponse = {
   /** Zonas de flete (`GET /api/admin/delivery-zones`). */
   zones?: import("./delivery-zones").DeliveryZoneView[];
   settings?: AdminRentalSettings;
+  /** Liquidación de la devolución de un alquiler (`GET /api/admin/budgets/settlement`). */
+  settlement?: unknown;
+  /** Retención de la seña propuesta si se cancelara hoy (`?cancellation=1`); nunca reembolsa solo. */
+  cancellation?: unknown;
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];
   /** Calendario: el tope de movimientos de inventario recortó el rango. */
@@ -2710,7 +2746,7 @@ export type AdminApiResponse = {
   budgets?: AdminBudgetRow[];
   budgetRequests?: AdminBudgetRequestRow[];
   /** Valores por defecto de la empresa para presupuestos nuevos (seña y garantía). */
-  rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null };
+  rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null; securityDepositMode?: "NONE" | "OPTIONAL" | "ALWAYS"; securityDepositCalc?: "FIXED" | "PERCENT" | "PER_PRODUCT"; securityDepositPercent?: number | null };
   proofs?: AdminBudgetPaymentProofRow[];
   clientPayments?: AdminPaymentRow[];
   /** Recordatorio recién enviado/registrado (respuesta de `/api/admin/reminders`). */

@@ -122,6 +122,48 @@ con el reemplazo; la sustitución en un evento ya reservado (`substituteComboCom
 paquete re-precificado. Un combo de categorías mixtas («Evento completo»: tótem + piso + impresión + sillas) se arma
 en Inventario → Combos con su precio de paquete.
 
+### P1-2 y P1-4 implementados: ajustes de alquiler, cargos y liquidación
+Decisión del dueño (manda sobre el texto de arriba): **todo configurable por empresa, con valores por defecto y
+editable en cada caso**. Reglas puras en `lib/rental-charges.ts`; datos y liquidación en `lib/server/rental-settlement.ts`.
+
+**Ajustes → Alquileres** (`OrganizationRentalSettings`, migración `202610250001`): garantía (`securityDepositMode`
+NONE|OPTIONAL|ALWAYS, `securityDepositPurpose` RESERVE|DAMAGES, `securityDepositCalc` FIXED|PERCENT|PER_PRODUCT con
+`securityDepositDefault` como monto fijo, `securityDepositPercent` y `securityDepositRules` por producto o categoría; el
+producto gana a la categoría); recargo por demora (`lateFeeKind` PERCENT|FIXED, `lateFeeUnit` DAY|HOUR, `lateFeeValue`,
+`lateGraceMinutes`; default 10 % por día, 2 h de tolerancia); `damageChargePercent` (default 100 % de `replacementCost`);
+`customCharges` (lista `{id, name, amount, unit PIECE|EVENT, categoryId?}`; reemplaza a `cleaningFeePerUnit` y
+`stainFeeDefault` del texto original); `cancellationPolicy` (`[{minDaysBefore, retainPercent}]`, defaults de §5) y
+`rentalTerms` (portal e impreso). Cada bloque muestra el monto en vivo («2 días tarde = 120.000»). Las empresas que ya
+tenían garantía por defecto pasan a `ALWAYS`. La garantía del presupuesto se puede cambiar (monto y propósito:
+`Budget.securityDepositPurpose`; NULL = daños, como antes) y «Calcular según Ajustes» la recalcula.
+
+**Garantía de reserva**: al marcarla recibida entra como cobro confirmado «Garantía de reserva» (cobro + movimiento de
+tesorería) y el saldo baja; no se devuelve ni se retiene a mano. **Garantía de daños**: queda en custodia hasta liquidar.
+
+**Cargos** (`RentalCharge`, `dedupeKey` único por presupuesto): `returnAssignment` propone (PROPOSED) dentro de su
+transacción la rotura/faltante (cantidad × % del costo de reposición), y la demora (% del alquiler de las piezas tarde,
+o monto fijo una vez por evento). Quien tiene `budgets.write` (OWNER, ADMIN, FINANCE) los aplica, edita, condona (motivo
+obligatorio) o reabre, y agrega los de la lista de la empresa (se ofrecen según la categoría de lo devuelto). OPERATIONS
+solo dispara la propuesta al devolver: no ve montos de la liquidación ni decide.
+
+**Liquidar** (`POST /api/admin/budgets/settlement`, `action: "settle"`): una transacción con `FOR UPDATE` del presupuesto,
+idempotente (`rentalSettledAt`). Exige todo devuelto, sin cargos PROPOSED y garantía recibida. Garantía de daños:
+retiene `min(cargos, garantía)` (cobro «Garantía retenida» + movimiento IN), devuelve el resto (RETURNED, KEPT_PARTIAL o
+KEPT) y lo que excede queda como `ExpectedPayment` `extra` (slot `extra:settlement`, que el sincronizado del plan no
+cancela). Garantía de reserva o sin garantía: todos los cargos van como `extra`. Nunca toca `Budget.total`. El cliente ve
+cargos decididos, liquidación, condiciones y política de cancelación en el portal; el impreso del presupuesto trae las
+condiciones, la política y los cargos.
+
+**Coherencia del saldo** (`ClientPayment.origin`, migración `202610260001`, regla en `lib/payment-origin.ts`): la
+garantía de daños retenida (`deposit_retained`) y el cobro de un cargo extra (`rental_extra`) entran a tesorería e
+ingresos pero NO bajan el saldo ni el «por cobrar» del presupuesto (resumen, panel, ficha del cliente, portal, impreso,
+aviso de saldo y plan). La garantía de reserva (`deposit_reserve`) sí es parte del pago: al recibirla se imputa al plan
+(seña, cuotas, saldo) como un cobro más y baja el saldo esperado; sin plan queda como cobro libre. Por eso la garantía de reserva cuenta como seña para la retención por cancelación; la retenida y los cargos no.
+
+**Cancelación**: `GET /api/admin/budgets/settlement?budgetId=…&cancellation=1` y el diálogo de la garantía muestran la
+retención PROPUESTA de lo cobrado según la política; no reembolsa ni mueve plata. **Pendiente**: colchón por categoría
+(`RentalCategoryBuffer`, P1-2 QA 3), que toca el motor de disponibilidad (`resolveRentalBuffers` y sus 6 llamadores).
+
 ### P3
 Precios de temporada, flete por km, comisión del planner, ranking de roturas, aviso automático de devolución vencida.
 

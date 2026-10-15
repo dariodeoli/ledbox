@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import type { AdminRentalSettings as RentalSettingsView } from "@/lib/admin-types";
 import { useAdminSession } from "../AdminShell";
-import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
-import { MoneyField, NumberField } from "../AdminFields";
+import { NumberField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { DeliveryZonesPanel } from "./DeliveryZonesPanel";
+import { RentalPolicyPanels } from "./RentalPolicyPanels";
 
 /**
- * Alquileres (fase 2b): seña, vigencia de la retención y tiempos de preparación.
+ * Alquileres (fase 2b): seña, vigencia de la retención y tiempos de preparación; debajo, garantía, recargo,
+ * roturas, cargos personalizados, cancelación y condiciones (`RentalPolicyPanels`).
  * El catálogo público, los precios y el WhatsApp viven ahora en Ajustes → Tienda web. Los tiempos se cargan en horas y se
  * guardan en minutos; solo se envía lo que la persona cambió, así un valor en
  * minutos no enteros no se pisa. OWNER/ADMIN: el API revalida el rol.
@@ -18,7 +19,6 @@ import { DeliveryZonesPanel } from "./DeliveryZonesPanel";
 
 type Form = {
   depositPercent: string;
-  securityDepositDefault: string;
   holdHours: string;
   prepHours: string;
   transportHours: string;
@@ -32,7 +32,6 @@ const hours = (minutes: number) => String(Math.ceil(minutes / 60));
 function toForm(settings: RentalSettingsView): Form {
   return {
     depositPercent: settings.depositPercent === null ? "" : String(settings.depositPercent),
-    securityDepositDefault: settings.securityDepositDefault === null ? "" : String(settings.securityDepositDefault),
     holdHours: hours(settings.holdTtlMinutes),
     prepHours: hours(settings.prepBufferMin),
     transportHours: hours(settings.transportBufferMin),
@@ -72,7 +71,6 @@ export function AlquileresSettings() {
     setNotice("");
     const body: Record<string, unknown> = {};
     if (form.depositPercent !== initial.depositPercent) body.depositPercent = form.depositPercent === "" ? null : Number(form.depositPercent);
-    if (form.securityDepositDefault !== initial.securityDepositDefault) body.securityDepositDefault = form.securityDepositDefault === "" ? null : Number(form.securityDepositDefault);
     if (form.holdHours !== initial.holdHours) body.holdTtlMinutes = Number(form.holdHours) * 60;
     for (const field of HOUR_FIELDS) {
       if (form[field.key] !== initial[field.key]) body[field.api] = Number(form[field.key] || "0") * 60;
@@ -103,14 +101,6 @@ export function AlquileresSettings() {
                   onChange={(value) => setForm({ ...form, depositPercent: value })}
                   maxLength={3}
                   hint="De 0 a 100. Vacío = la empresa no tiene una política de seña."
-                  disabled={demo || busy}
-                />
-                <MoneyField
-                  label="Depósito de garantía por defecto"
-                  value={form.securityDepositDefault}
-                  onChange={(value) => setForm({ ...form, securityDepositDefault: value })}
-                  limit={BUDGET_INT_MAX}
-                  hint="Monto que se propone en cada alquiler nuevo. No se suma al total ni cuenta como cobro. Vacío = sin garantía."
                   disabled={demo || busy}
                 />
                 <NumberField
@@ -152,6 +142,7 @@ export function AlquileresSettings() {
           </form>
         ) : null}
       </AdminDataState>
+      {resource.data ? <RentalPolicyPanels settings={resource.data} onSaved={resource.reload} readOnly={demo} /> : null}
       <DeliveryZonesPanel />
     </div>
   );

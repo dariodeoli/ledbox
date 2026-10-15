@@ -74,8 +74,8 @@ test("transiciones inválidas de la garantía", () => {
 test("la vista del cliente de la garantía no lleva nada interno", () => {
   assert.equal(securityDepositPublic({ securityDeposit: null, securityDepositStatus: null, securityDepositRetained: null }), null);
   const view = securityDepositPublic({ securityDeposit: 2_000_000, securityDepositStatus: "KEPT_PARTIAL", securityDepositRetained: 300_000 });
-  assert.deepEqual(view, { amount: 2_000_000, status: "KEPT_PARTIAL", statusLabel: "Retenida parcialmente", retained: 300_000, returned: 1_700_000 });
-  assert.deepEqual(Object.keys(view!).sort(), ["amount", "retained", "returned", "status", "statusLabel"]);
+  assert.deepEqual(view, { amount: 2_000_000, status: "KEPT_PARTIAL", statusLabel: "Retenida parcialmente", retained: 300_000, returned: 1_700_000, purpose: "DAMAGES" });
+  assert.deepEqual(Object.keys(view!).sort(), ["amount", "purpose", "retained", "returned", "status", "statusLabel"]);
   assert.equal(securityDepositPublic({ securityDeposit: 500, securityDepositStatus: "HELD", securityDepositRetained: null })!.returned, 0);
 });
 

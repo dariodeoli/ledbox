@@ -6,6 +6,7 @@ import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
 import { randomBytes } from "node:crypto";
 import { db } from "./db";
+import { countsTowardBudgetBalance } from "@/lib/payment-origin";
 import { BUDGET_CODE_ALPHABET, formatBudgetCode, normalizeBudgetCode } from "@/lib/public-config";
 import { inventoryImageValid } from "@/lib/field-rules";
 import { budgetReference } from "@/lib/admin-format";
@@ -218,6 +219,8 @@ export type PortalBudget = {
   warranty: string | null;
   /** Depósito de garantía (aparte del total, no es un cobro); `null` si el presupuesto no lo tiene. */
   securityDeposit?: import("../budget-security-deposit").SecurityDepositPublic;
+  /** Alquiler: cargos de la devolución, liquidación, condiciones y política de cancelación (si corresponde). */
+  rental?: import("./rental-settlement").PortalRental | null;
   notes: string | null;
   /**
    * Cliente, solo lo que la vista pública muestra. `contactName`/`contactRole`
@@ -359,6 +362,7 @@ type BudgetForPortal = {
   securityDeposit?: number | null;
   securityDepositStatus?: string | null;
   securityDepositRetained?: number | null;
+  securityDepositPurpose?: string | null;
   notes: string | null;
   createdAt: Date;
   /** Primera vista del portal (issue #33); `null` si el cliente nunca abrió el link. */
@@ -381,7 +385,7 @@ type BudgetForPortal = {
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; pricingSnapshot?: unknown; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
-  payments: Array<{ id: string; amount: number; status?: string }>;
+  payments: Array<{ id: string; amount: number; status?: string; origin?: string | null }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
   expectedPayments: Array<{
     id: string;
@@ -641,7 +645,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     deliveryAt: iso(budget.deliveryAt),
     ivaType: budget.ivaType,
     warranty: budget.warranty,
-    securityDeposit: securityDepositPublic({ securityDeposit: budget.securityDeposit ?? null, securityDepositStatus: budget.securityDepositStatus ?? null, securityDepositRetained: budget.securityDepositRetained ?? null }),
+    securityDeposit: securityDepositPublic({ securityDeposit: budget.securityDeposit ?? null, securityDepositStatus: budget.securityDepositStatus ?? null, securityDepositRetained: budget.securityDepositRetained ?? null, securityDepositPurpose: budget.securityDepositPurpose ?? null }),
     notes: budget.notes,
     client: { name: budget.client.name, company: budget.client.company, tradeName: budget.client.tradeName ?? null, legalName: budget.client.legalName ?? null, contactName: budget.client.contactName, contactRole: budget.client.contactRole, logoUrl: budget.client.logo && budget.publicToken ? `/api/portal/budget/${encodeURIComponent(budget.publicToken)}/client-logo?v=${encodeURIComponent(budget.client.logo.updatedAt.toISOString())}` : null },
     event: budget.event
@@ -669,7 +673,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     discount: budget.discount,
     total: budget.total,
     paymentPlan: paymentPlanOf(budget),
-    collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED").reduce((sum, payment) => sum + payment.amount, 0),
+    collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED" && countsTowardBudgetBalance(payment)).reduce((sum, payment) => sum + payment.amount, 0),
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     // La empresa demo los lleva siempre en `demoPaymentDetails` (issue #52).
@@ -726,7 +730,7 @@ export const portalInclude = {
   // URL, nunca costos ni stock del inventario.
   items: { orderBy: { name: "asc" }, include: { inventory: { select: { imageUrl: true, organizationId: true, id: true, imageMime: true, billingUnit: true } } } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
-  payments: { select: { id: true, amount: true, status: true } },
+  payments: { select: { id: true, amount: true, status: true, origin: true } },
   // Pagos esperados (issue #28): estado real de cada concepto y cuenta destino.
   // No viaja el motivo interno de cancelación ni la observación técnica: solo lo
   // que el cliente necesita para transferir y seguir su pago.
@@ -807,6 +811,8 @@ export async function loadPublicBudget(
   if (options.sealView && !demo) await sealPortalView(budget.id);
   const timeline = await buildBudgetTimeline(budget.organizationId, budget.id, { audience: "client" });
   const view = portalBudgetView(budget, timeline ?? []);
+  // Import diferido: el armado de correos reutiliza este módulo sin necesitar el motor de alquileres.
+  view.rental = await (await import("./rental-settlement")).loadPortalRental(budget.organizationId, budget.id);
   view.items = view.items.map((item) => {
     const source = budget.items.find((row) => row.id === item.id)?.inventory;
     if (!source || source.organizationId !== budget.organizationId) return { ...item, imageUrl: null };

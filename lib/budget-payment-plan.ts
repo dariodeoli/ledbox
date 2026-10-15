@@ -124,7 +124,10 @@ export function budgetPlanLedgerError(desired: ReadonlyArray<{ slot: string; amo
   const bySlot = new Map(desired.map((row) => [row.slot, row.amount]));
   for (const row of existing) {
     if (row.status === "CANCELLED") continue;
-    if (row.slot.startsWith("split:")) continue;
+    // Solo las filas del plan (advance, balance, installment...) se comparan. Las partes `split:` y
+    // todo concepto que no es del plan (`extra:` cargos de la liquidación, etc.) quedan afuera:
+    // el plan no los genera ni los cancela, así que no pueden bloquearlo.
+    if (row.slot.startsWith("split:") || row.slot.startsWith("extra:")) continue;
     const protectedRow = ["CONFIRMED", "PARTIAL", "PROOF"].includes(row.status) || (row.paidAmount ?? 0) > 0 || Boolean(row.proofId) || Boolean(row.paymentId) || Boolean(row.label?.includes(" · parte "));
     const baseLabel = row.label?.split(" · parte ")[0];
     const splitAmount = row.label?.includes(" · parte ") ? existing.filter((part) => part.status !== "CANCELLED" && part.slot.startsWith("split:") && part.label?.split(" · parte ")[0] === baseLabel).reduce((sum, part) => sum + part.amount, 0) : 0;

@@ -66,7 +66,7 @@ export async function GET(request: Request) {
         }),
         db.clientPayment.findMany({
           where: { organizationId, clientId: { in: clientIds } },
-          select: { clientId: true, amount: true, status: true, dueAt: true, createdAt: true },
+          select: { clientId: true, amount: true, status: true, origin: true, dueAt: true, createdAt: true },
         }),
         db.event.findMany({
           where: { organizationId, clientId: { in: clientIds } },
