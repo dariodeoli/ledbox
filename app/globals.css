@@ -5391,3 +5391,6 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .portal-table--items .portal-item-action { width: 44px; height: 44px; }
   .portal-table--items:has(.portal-item-action-cell) { --budget-client-cols: minmax(0, 1fr) minmax(90px, .34fr) minmax(90px, .34fr) 44px; }
 }
+/* Barra móvil: el acceso no ocupa el ancho reservado al monto pendiente. */
+.portal-mobile-sticky .portal-mobile-sticky-action { flex: 0 0 auto; width: auto; min-width: 9rem; }
+.portal-mobile-sticky .portal-mobile-sticky-total { flex: 1 1 0; min-width: 0; }
