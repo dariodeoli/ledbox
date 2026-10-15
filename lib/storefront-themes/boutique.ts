@@ -4,10 +4,10 @@ import type { ThemeDef } from "./types";
 /** Tema «Boutique»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const BOUTIQUE_THEME: ThemeDef = {
   id: "boutique",
-  rubro: "Eventos y decoración",
+  rubro: "Bodas",
   label: "Boutique",
   description: "Crema, serif elegante, verde oliva y dorado. Radios suaves. Como una revista de decoración.",
-  forWho: "Para eventos, vajilla y decoración",
+  forWho: "Para bodas, vajilla y decoración",
   scheme: "light",
   colors: {
     bg: "#F6F2EA", surface: "#FFFFFF", photo: "#FFFFFF", sand: "#EDE6D8", text: "#22241E", muted: "#5F5E54", border: "#DCD3C2", borderSoft: "#E6DECF",
@@ -21,7 +21,7 @@ export const BOUTIQUE_THEME: ThemeDef = {
   shadow: { card: "0 1px 0 rgba(34, 36, 30, 0.04)", float: "0 20px 50px rgba(0, 0, 0, 0.18)" },
   space: { sectionD: "112px", sectionM: "64px", gutterD: "32px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "68px", heroM: "44px", h2D: "48px", h2M: "34px", nameD: "26px", nameM: "22px", titleD: "56px", titleM: "38px", price: "18px", priceLg: "32px", display: "500" },
   layout: { category: "overlay", grid: "airy", hero: "photo", button: "pill", photoFit: "contain" },
   swatch: ["#F6F2EA", "#FFFFFF", "#4B5637"],

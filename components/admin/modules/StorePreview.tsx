@@ -2,7 +2,6 @@
 
 import "../../../app/tienda.css";
 import { appearanceView, type Appearance } from "@/lib/appearance";
-import { THEMES } from "@/lib/storefront-templates";
 import { categoryDatum, formatGs, priceUnitLabel } from "@/lib/storefront-ui";
 import { ProductPlaceholder, XIcon } from "../../catalog-public/StoreIcons";
 import { StoreChrome } from "../../catalog-public/StoreChrome";
@@ -19,6 +18,8 @@ export function StorePreview({
   brandColor,
   name,
   coverSrc,
+  coverDesktop,
+  coverMobile,
   tagline,
   size = "full",
 }: {
@@ -26,16 +27,19 @@ export function StorePreview({
   appearance: Appearance;
   brandColor: string | null;
   name: string;
-  coverSrc: string | null;
+  /** Portada única (miniaturas). La vista completa pasa las dos y elige según el dispositivo. */
+  coverSrc?: string | null;
+  coverDesktop?: string | null;
+  coverMobile?: string | null;
   tagline?: string | null;
   size?: "full" | "thumb";
 }) {
   const view = appearanceView(appearance, brandColor);
-  const layout = THEMES[appearance.template].layout;
   const shownName = name || "Tu empresa";
-  const photoHero = layout.hero === "photo" && Boolean(coverSrc);
-  const showPrices = appearance.priceMode !== "quote";
   const mobile = frame === "mobile" || size === "thumb";
+  const cover = coverSrc !== undefined ? coverSrc : mobile ? (coverMobile ?? coverDesktop ?? null) : (coverDesktop ?? coverMobile ?? null);
+  const photoHero = Boolean(cover);
+  const showPrices = appearance.priceMode !== "quote";
   const unitText = priceUnitLabel(appearance.priceMode, "PER_DAY", null);
   const examples = [
     { name: "Producto de ejemplo", price: 250000, capacity: "8 personas" },
@@ -56,11 +60,11 @@ export function StorePreview({
         </div>
       </div>
       <div className="cp-page">
-        <section className="cp-hero" data-cover={coverSrc ? "yes" : "no"}>
-          {coverSrc ? (
+        <section className="cp-hero" data-cover={cover ? "yes" : "no"}>
+          {cover ? (
             <div className="cp-hero-media">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverSrc} alt="" />
+              <img src={cover} alt="" />
             </div>
           ) : null}
           <div className="cp-hero-inner">

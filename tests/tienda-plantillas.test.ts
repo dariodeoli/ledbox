@@ -43,7 +43,7 @@ const SPEC_TOKENS = [
 // ── Registro ─────────────────────────────────────────────────────────────────
 
 test("registro: las 4 plantillas del dueño más las 6 premium, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
-  assert.deepEqual([...STORE_THEMES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa"]);
+  assert.deepEqual([...STORE_THEMES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa", "escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
   assert.deepEqual([...TEMPLATES], [...STORE_THEMES]);
   assert.equal(new Set(THEME_REGISTRY.map((theme) => theme.id)).size, THEME_REGISTRY.length, "ids únicos");
   for (const theme of THEME_REGISTRY) {
@@ -62,7 +62,7 @@ test("registro: las 4 plantillas del dueño más las 6 premium, cada una con id,
 });
 
 test("registro: sumar una plantilla no toca componentes (los archivos de tema son solo datos)", () => {
-  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(lienzo|boutique|noir|studio|jardin|marmol|terracota|nordico|gala|brisa)\.ts$/.test(name))) {
+  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(lienzo|boutique|noir|studio|jardin|marmol|terracota|nordico|gala|escenario|corporativo|fiesta|gourmet|kids|industrial|brisa)\.ts$/.test(name))) {
     const source = read(`lib/storefront-themes/${file}`);
     assert.ok(!/\bimport\b[^;]*react/i.test(source), `${file}: sin React`);
     assert.ok(!/function\s/.test(source), `${file}: solo un objeto de tokens`);
@@ -285,4 +285,46 @@ test("premium: Jardín, Mármol, Terracota, Nórdico, Gala y Brisa traen rubro, 
   assert.equal(THEMES.gala.layout.category, "overlay", "Gala lleva overlay en categorías");
   assert.ok(contrastRatio(THEMES.gala.colors.onPrimary, THEMES.gala.colors.primary) >= 4.5, "dorado con contraste AA");
   assert.ok(contrastRatio(THEMES.gala.colors.accentText, THEMES.gala.colors.bg) >= 4.5, "dorado como texto con contraste AA");
+});
+
+// ── Versión 2.1.129 ──────────────────────────────────────────────────────────
+
+test("ninguna plantilla tiene un primario gris, y un color de marca gris no pisa al del tema", () => {
+  assert.equal(THEME_REGISTRY.length, 16);
+  for (const theme of THEME_REGISTRY) {
+    const [r, g, b] = hexToRgb(theme.colors.primary);
+    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24, `${theme.id}: el primario no es gris`);
+    for (const grey of ["#1f2328", "#555555", "#808080", "#ffffff", "#000000", "#3a3d40"]) {
+      const result = themePrimary(theme.id as keyof typeof THEMES, grey);
+      assert.equal(result.fromBrand, false, `${theme.id}: ${grey} es gris y no debe ser el primario`);
+      assert.equal(result.primary, theme.colors.primary);
+    }
+  }
+});
+
+test("rubros: cubren decoración, eventos, corporativo, tecnología, catering, bodas, infantil, mobiliario y exteriores; las nuevas no son de decoración", () => {
+  const rubros = themesByRubro().map((group) => group.rubro);
+  for (const needle of ["Decoración", "Eventos y fiestas", "Corporativo", "Tecnología", "Catering", "Bodas", "Infantil", "Mobiliario", "Exteriores"]) {
+    assert.ok(rubros.some((rubro) => rubro.includes(needle)), `falta el rubro ${needle}`);
+  }
+  for (const id of ["escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"] as const) {
+    assert.notEqual(THEMES[id].rubro, "Decoración", id);
+  }
+  assert.equal(THEMES.escenario.scheme, "dark");
+  assert.equal(THEMES.industrial.scheme, "dark");
+  assert.ok(THEMES.kids.radius.lg >= THEMES.boutique.radius.lg || parseInt(THEMES.kids.radius.lg) >= 32, "Kids con radios grandes");
+});
+
+test("fotos de categoría cuadradas y sin recorte en todas las plantillas", () => {
+  for (const theme of THEME_REGISTRY) assert.equal(theme.imageRatio.category, "1 / 1", theme.id);
+  const cat = css.split("\n").filter((line) => /\.cp-catcard-media img|\.cp-catcard-media \{/.test(line)).join("\n");
+  assert.ok(/object-fit: contain/.test(cat) && !/object-fit: cover/.test(cat), "la imagen de categoría es contain en todas las variantes");
+  assert.ok(/\.cp-catcard-media \{[^}]*background: var\(--color-surface\)/.test(css), "sobre --color-surface");
+});
+
+test("portada: escritorio ≥768 px y celular en móvil, con la otra como respaldo", () => {
+  const front = read("components/catalog-public/StoreFront.tsx");
+  assert.ok(/media="\(min-width: 768px\)"/.test(front));
+  assert.ok(/covers\.mobile \?\? store\.covers\.desktop/.test(front));
+  assert.ok(/--hero-ratio: 16 \/ 5/.test(css) && /--hero-ratio: 4 \/ 5/.test(css));
 });

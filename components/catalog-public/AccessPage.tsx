@@ -17,9 +17,9 @@ export function AccessPage({ store, demo, endpoint }: { store: PublicStorefront;
       <main className="cp-container cp-main-pad cp-narrow">
         {store.covers.desktop || store.covers.mobile ? (
           <picture className="cp-cover" data-testid="store-cover">
-            {store.covers.mobile ? <source media="(max-width: 640px)" srcSet={store.covers.mobile} /> : null}
+            {store.covers.desktop ? <source media="(min-width: 768px)" srcSet={store.covers.desktop} /> : null}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={store.covers.desktop ?? store.covers.mobile ?? ""} alt={`Portada de ${store.name}`} />
+            <img src={store.covers.mobile ?? store.covers.desktop ?? ""} alt={`Portada de ${store.name}`} />
           </picture>
         ) : null}
         <header className="cp-header">

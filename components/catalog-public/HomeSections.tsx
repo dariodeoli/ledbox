@@ -88,10 +88,11 @@ export function CollectionsSection({ collections, items, base }: { collections: 
       <ul className="cp-colgrid">
         {collections.map((collection) => {
           // Sin foto de ambientación se usa la del primer producto que tenga: nunca una imagen inventada.
-          const cover = collection.imageUrl ?? collection.itemIds.map((id) => byId.get(id)?.imageUrl).find(Boolean) ?? null;
+          const productPhoto = collection.imageUrl ? null : collection.itemIds.map((id) => byId.get(id)?.imageUrl).find(Boolean) ?? null;
+          const cover = collection.imageUrl ?? productPhoto;
           return (
             <li key={collection.id}>
-              <a className="cp-colcard" href={`${base}/c/${encodeURIComponent(collection.slug)}`} data-testid="collection-card">
+              <a className="cp-colcard" href={`${base}/c/${encodeURIComponent(collection.slug)}`} data-testid="collection-card" data-media={productPhoto ? "product" : "photo"}>
                 <span className="cp-colcard-media">
                   {cover ? (
                     // eslint-disable-next-line @next/next/no-img-element

@@ -80,10 +80,17 @@ function hoverOf(hex: string, scheme: "light" | "dark", on: string): string {
  * Color primario efectivo: el de la empresa si da contraste AA contra el fondo y la superficie del tema (y el texto del
  * botón sobre él también); si no, el primario propio del tema. Nunca un botón ilegible.
  */
+/** Un gris (sin tono) nunca es un color primario: el botón principal tiene que verse de color. Mismo criterio que el test del registro. */
+export const MIN_PRIMARY_CHROMA = 24;
+export function isGreyish(hex: string): boolean {
+  const [r, g, b] = hexToRgb(hex);
+  return Math.max(r, g, b) - Math.min(r, g, b) < MIN_PRIMARY_CHROMA;
+}
+
 export function themePrimary(id: StoreThemeId, brand: string | null | undefined): { primary: string; primary700: string; onPrimary: string; fromBrand: boolean } {
   const t = THEMES[id];
   const hex = normalizeHex(brand ?? null);
-  if (hex) {
+  if (hex && !isGreyish(hex)) {
     const surfacesOk = [t.colors.bg, t.colors.surface].every((surface) => contrastRatio(hex, surface) >= STORE_MIN_CONTRAST);
     const on = readableOn(hex);
     if (surfacesOk && contrastRatio(on, hex) >= STORE_MIN_CONTRAST) {

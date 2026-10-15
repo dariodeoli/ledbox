@@ -4,7 +4,7 @@ import type { ThemeDef } from "./types";
 /** Tema «Brisa»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const BRISA_THEME: ThemeDef = {
   id: "brisa",
-  rubro: "Playa y náutica",
+  rubro: "Eventos y fiestas",
   label: "Brisa",
   description: "Azul profundo y arena, luminosa y moderna. Aire de playa y de puerto.",
   forWho: "Para eventos de playa y náutica",
@@ -21,7 +21,7 @@ export const BRISA_THEME: ThemeDef = {
   shadow: { card: "0 1px 2px rgba(10, 37, 64, 0.08)", float: "0 20px 50px rgba(10, 37, 64, 0.2)" },
   space: { sectionD: "96px", sectionM: "56px", gutterD: "32px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "64px", heroM: "40px", h2D: "40px", h2M: "28px", nameD: "24px", nameM: "20px", titleD: "48px", titleM: "32px", price: "20px", priceLg: "32px", display: "600" },
   layout: { category: "overlay", grid: "airy", hero: "photo", button: "pill", photoFit: "contain" },
   swatch: ["#FBF7EF", "#FFFFFF", "#0B3C6E"],

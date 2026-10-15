@@ -4,7 +4,7 @@ import type { ThemeDef } from "./types";
 /** Tema «Terracota»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const TERRACOTA_THEME: ThemeDef = {
   id: "terracota",
-  rubro: "Vajilla rústica y catering",
+  rubro: "Catering y gastronomía",
   label: "Terracota",
   description: "Tierra, arcilla y crema: cálida y mediterránea, con serif y sans humanista.",
   forWho: "Para vajilla rústica y catering",
@@ -21,7 +21,7 @@ export const TERRACOTA_THEME: ThemeDef = {
   shadow: { card: "0 1px 2px rgba(58, 36, 24, 0.08)", float: "0 20px 50px rgba(58, 36, 24, 0.2)" },
   space: { sectionD: "96px", sectionM: "60px", gutterD: "32px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "64px", heroM: "40px", h2D: "40px", h2M: "28px", nameD: "24px", nameM: "20px", titleD: "48px", titleM: "32px", price: "18px", priceLg: "32px", display: "500" },
   layout: { category: "card", grid: "airy", hero: "photo", button: "pill", photoFit: "contain" },
   swatch: ["#FAF3E8", "#FFFDF8", "#A64B2A"],

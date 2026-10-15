@@ -4,10 +4,10 @@ import type { ThemeDef } from "./types";
 /** Tema «Lienzo»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const LIENZO_THEME: ThemeDef = {
   id: "lienzo",
-  rubro: "Versátil",
+  rubro: "Decoración",
   label: "Lienzo",
   description: "Blanco cálido, letra geométrica, mucho aire, bordes finos y sin sombras. Fotos sobre fondo neutro.",
-  forWho: "Para casi cualquier rubro",
+  forWho: "Para decoración y ambientación de cualquier estilo",
   scheme: "light",
   colors: {
     bg: "#FAF8F4", surface: "#FFFFFF", photo: "#FFFFFF", sand: "#F1EDE5", text: "#1D1C1A", muted: "#5B5851", border: "#E3DED4", borderSoft: "#ECE8DF",
@@ -21,7 +21,7 @@ export const LIENZO_THEME: ThemeDef = {
   shadow: { card: "none", float: "0 12px 32px rgba(29, 28, 26, 0.12)" },
   space: { sectionD: "96px", sectionM: "56px", gutterD: "32px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "56px", heroM: "36px", h2D: "32px", h2M: "24px", nameD: "20px", nameM: "16px", titleD: "48px", titleM: "32px", price: "20px", priceLg: "32px", display: "500" },
   layout: { category: "card", grid: "airy", hero: "band", button: "soft", photoFit: "contain" },
   swatch: ["#FAF8F4", "#FFFFFF", "#26355D"],

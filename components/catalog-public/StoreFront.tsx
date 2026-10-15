@@ -80,7 +80,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
   const shownIds = new Set<HomeSectionId>(order);
   const nav = storeNavLinks("", { contact: hasContact && shownIds.has("contacto"), howItWorks: shownIds.has("como-funciona"), categories: featured.length > 1 ? featured.slice(0, 3).map((entry) => ({ name: entry.category, href: categoryHref(entry.category) })) : [] });
   const hasCover = Boolean(store.covers.desktop || store.covers.mobile);
-  const photoHero = layout.hero === "photo" && hasCover;
+  const photoHero = hasCover;
   const title = store.tagline || DEFAULT_TITLE;
   const sub = wholesale ? `Hola ${wholesale.clientName}. Este es tu catálogo con precios mayoristas.` : member ? `Hola ${member.clientName}. ${DEFAULT_SUB}` : DEFAULT_SUB;
 
@@ -90,9 +90,10 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
         <section className="cp-hero" aria-labelledby="titulo" data-cover={hasCover ? "yes" : "no"} data-testid="store-hero">
           {hasCover ? (
             <picture className="cp-hero-media" data-testid="store-cover">
-              {store.covers.mobile ? <source media="(max-width: 640px)" srcSet={store.covers.mobile} /> : null}
+              {/* Escritorio (≥ 768 px): la de 1920×600. Celular: la de 1080×1350. Si falta una, la otra (centrada, sin deformar). */}
+              {store.covers.desktop ? <source media="(min-width: 768px)" srcSet={store.covers.desktop} /> : null}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={store.covers.desktop ?? store.covers.mobile ?? ""} alt={`Portada de ${store.name}`} />
+              <img src={store.covers.mobile ?? store.covers.desktop ?? ""} alt={`Portada de ${store.name}`} fetchPriority="high" />
             </picture>
           ) : null}
           <div className="cp-hero-inner">

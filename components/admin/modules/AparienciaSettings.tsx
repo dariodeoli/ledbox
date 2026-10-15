@@ -220,7 +220,6 @@ export function AparienciaSettings() {
 
   const savedUrl = (kind: CoverKind) => (initial?.covers[kind] ? `/api/admin/organization/appearance/covers/${kind}?v=${encodeURIComponent(initial.covers[kind]!)}` : null);
   const coverSrc = (kind: CoverKind) => (covers[kind].remove ? null : covers[kind].previewUrl ?? savedUrl(kind));
-  const previewCover = coverSrc(frame) ?? (coverSrc(frame === "desktop" ? "mobile" : "desktop"));
   const storeUrl = organization?.slug ? `/tienda/${organization.slug}` : null;
 
   return (
@@ -383,7 +382,7 @@ export function AparienciaSettings() {
                     onChange={(value) => setFrame(value as "desktop" | "mobile")}
                     options={[{ value: "desktop", label: "Escritorio" }, { value: "mobile", label: "Celular" }]}
                   />
-                  <StorePreview frame={frame} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverSrc={previewCover} tagline={tagline.trim() || null} />
+                  <StorePreview frame={frame} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
                   {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si no tiene portada de {frame === "desktop" ? "escritorio" : "celular"}, usa la otra.</p> : null}
                 </div>
               </AdminPanel>

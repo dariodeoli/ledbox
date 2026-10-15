@@ -30,18 +30,9 @@ export const TEMPLATES = STORE_THEMES;
 export type TemplateId = StoreThemeId;
 export const DEFAULT_TEMPLATE: TemplateId = DEFAULT_STORE_THEME;
 
-export const TEMPLATE_META: Record<TemplateId, { label: string; description: string; forWho: string }> = {
-  lienzo: { label: THEMES.lienzo.label, description: THEMES.lienzo.description, forWho: THEMES.lienzo.forWho },
-  boutique: { label: THEMES.boutique.label, description: THEMES.boutique.description, forWho: THEMES.boutique.forWho },
-  noir: { label: THEMES.noir.label, description: THEMES.noir.description, forWho: THEMES.noir.forWho },
-  studio: { label: THEMES.studio.label, description: THEMES.studio.description, forWho: THEMES.studio.forWho },
-  jardin: { label: THEMES.jardin.label, description: THEMES.jardin.description, forWho: THEMES.jardin.forWho },
-  marmol: { label: THEMES.marmol.label, description: THEMES.marmol.description, forWho: THEMES.marmol.forWho },
-  terracota: { label: THEMES.terracota.label, description: THEMES.terracota.description, forWho: THEMES.terracota.forWho },
-  nordico: { label: THEMES.nordico.label, description: THEMES.nordico.description, forWho: THEMES.nordico.forWho },
-  gala: { label: THEMES.gala.label, description: THEMES.gala.description, forWho: THEMES.gala.forWho },
-  brisa: { label: THEMES.brisa.label, description: THEMES.brisa.description, forWho: THEMES.brisa.forWho },
-};
+export const TEMPLATE_META = Object.fromEntries(
+  STORE_THEMES.map((id) => [id, { label: THEMES[id].label, description: THEMES[id].description, forWho: THEMES[id].forWho }]),
+) as Record<TemplateId, { label: string; description: string; forWho: string }>;
 
 export function isTemplateId(value: unknown): value is TemplateId {
   return isStoreTheme(value);
@@ -108,7 +99,7 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const next: Appearance = { ...current, announcement: { ...current.announcement }, home: current.home };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista: Lienzo, Boutique, Noir o Studio." };
+    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista de Ajustes → Apariencia." };
     next.template = input.template;
   }
   if (input.font !== undefined) {

@@ -4,7 +4,7 @@ import type { ThemeDef } from "./types";
 /** Tema «Noir»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const NOIR_THEME: ThemeDef = {
   id: "noir",
-  rubro: "Tecnología y sonido",
+  rubro: "Tecnología, LED y sonido",
   label: "Noir",
   description: "Casi negro, texto blanco, un solo acento cian y fotos con brillo.",
   forWho: "Para tecnología, LED y electrónica",
@@ -21,7 +21,7 @@ export const NOIR_THEME: ThemeDef = {
   shadow: { card: "0 0 0 1px rgba(255, 255, 255, 0.04)", float: "0 24px 60px rgba(0, 0, 0, 0.6)" },
   space: { sectionD: "96px", sectionM: "56px", gutterD: "32px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "64px", heroM: "40px", h2D: "32px", h2M: "24px", nameD: "20px", nameM: "16px", titleD: "48px", titleM: "32px", price: "20px", priceLg: "32px", display: "600" },
   layout: { category: "overlay", grid: "airy", hero: "photo", button: "soft", photoFit: "contain" },
   swatch: ["#0A0B0D", "#131519", "#22D3EE"],

@@ -4,7 +4,7 @@ import type { ThemeDef } from "./types";
 /** Tema «Mármol»: solo tokens y variantes de layout. Registrado en `index.ts`. */
 export const MARMOL_THEME: ThemeDef = {
   id: "marmol",
-  rubro: "Lujo y decoración premium",
+  rubro: "Decoración",
   label: "Mármol",
   description: "Blanco y gris piedra con mucho aire, bordes finos y una serif didona. Sobrio y de lujo.",
   forWho: "Para lujo y decoración premium",
@@ -21,7 +21,7 @@ export const MARMOL_THEME: ThemeDef = {
   shadow: { card: "0 0 0 rgba(0, 0, 0, 0)", float: "0 20px 50px rgba(28, 28, 26, 0.14)" },
   space: { sectionD: "128px", sectionM: "72px", gutterD: "40px", gutterM: "16px" },
   container: "1280px",
-  imageRatio: { card: "1 / 1", category: "4 / 3", hero: "21 / 9" },
+  imageRatio: { card: "1 / 1", category: "1 / 1", hero: "21 / 9" },
   size: { heroD: "64px", heroM: "40px", h2D: "40px", h2M: "28px", nameD: "24px", nameM: "20px", titleD: "48px", titleM: "32px", price: "18px", priceLg: "32px", display: "400" },
   layout: { category: "card", grid: "airy", hero: "band", button: "soft", photoFit: "contain" },
   swatch: ["#FAFAF8", "#FFFFFF", "#1F3A5F"],
