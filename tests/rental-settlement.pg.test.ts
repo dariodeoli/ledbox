@@ -218,6 +218,24 @@ test("cargos y liquidación de la devolución en PostgreSQL", { skip: !process.e
     assert.equal((await db.budget.findUniqueOrThrow({ where: { id: s.budget.id } })).total, 600_000);
   });
 
+  await t.test("solo extra por cobrar: liquida sin cuenta de tesorería y deja expectedAccountId en null", async () => {
+    const s = await seed({ deposit: null });
+    await s.giveBack({ damaged: 12 });
+    for (const charge of await charges(s.budget.id)) await settlement.decideRentalCharge(s.context, s.budget.id, charge.id, { action: "apply" });
+    await db.treasuryAccount.deleteMany({ where: { organizationId: s.org } });
+    const result = await settlement.settleBudgetRental(s.context, s.budget.id);
+    assert.deepEqual([result.retained, result.extra], [0, 180_000]);
+    const extra = await db.expectedPayment.findFirstOrThrow({ where: { budgetId: s.budget.id, concept: "extra" } });
+    assert.equal(extra.expectedAccountId, null);
+    assert.equal(extra.amount, 180_000);
+    assert.equal((await payments(s.budget.id)).length, 0);
+    // Con retención sí hace falta una cuenta: sin ella la liquidación se rechaza entera y no escribe.
+    const withDeposit = await settledFlow(100_000, 12);
+    await db.treasuryAccount.deleteMany({ where: { organizationId: withDeposit.org } });
+    await assert.rejects(settlement.settleBudgetRental(withDeposit.context, withDeposit.budget.id), (e: unknown) => e instanceof settlement.RentalSettlementError && e.status === 400);
+    assert.equal((await db.budget.findUniqueOrThrow({ where: { id: withDeposit.budget.id } })).rentalSettledAt, null);
+  });
+
   await t.test("liquidar dos veces y en paralelo no duplica nada", async () => {
     const s = await settledFlow(100_000, 12);
     const runs = await Promise.all([1, 2, 3, 4].map(() => settlement.settleBudgetRental(s.context, s.budget.id)));

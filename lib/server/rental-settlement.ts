@@ -590,7 +590,9 @@ export async function settleBudgetRental(context: AuditContext, budgetId: string
         paymentId = income.paymentId;
       }
       if (result.extra > 0) {
-        const account = await accountFor(tx, context.organizationId, options.accountId);
+        // Solo hay extra por cobrar (sin retención): no se exige una cuenta de tesorería. La cuenta
+        // se resuelve cuando se cobra; acá solo se la fija si se eligió una o ya hubo un ingreso.
+        const account = options.accountId || result.retained > 0 ? await accountFor(tx, context.organizationId, options.accountId) : null;
         const expected = await tx.expectedPayment.create({
           data: {
             id: randomUUID(),
@@ -601,7 +603,7 @@ export async function settleBudgetRental(context: AuditContext, budgetId: string
             label: "Cargos de la devolución",
             amount: result.extra,
             status: "AWAITING",
-            expectedAccountId: account.id,
+            expectedAccountId: account?.id ?? null,
           },
           select: { id: true },
         });
