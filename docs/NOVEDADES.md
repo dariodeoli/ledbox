@@ -673,3 +673,16 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tarjetas sin huecos: precio y acción visibles, también en juegos con ahorro. Cuando falta precio se indica «Consultar precio y disponibilidad» y se puede agregar para cotizar.
 - Campos minimalistas con línea inferior en tienda y portal del cliente, con controles compactos y foco visible.
 - La portada se muestra limpia, separada del título, los botones y las fechas; se conserva una imagen para computadora y otra para celular.
+
+
+## v2.1.131 — 2026-10-15
+
+- La demo suma mobiliario, vajilla, catering, sonido y exteriores: nuevos productos, combos, familias y colores, clientes, presupuestos y eventos. Incluye reservas, equipos entregados, mantenimiento, daños, devoluciones, señas y saldos con sus movimientos de tesorería. Las demos nuevas reciben estos ejemplos; las abiertas conservan tus cambios hasta reiniciarlas.
+- Ajustes y Mi perfil aprovechan mejor el espacio: navegación compacta, paneles en columnas en computadora, campos con línea inferior y portadas separadas para computadora y celular.
+- Clientes, leads y selectores de presupuestos y eventos buscan en todos los registros de la empresa. Las respuestas anteriores de una búsqueda ya no reemplazan los resultados nuevos. El alta de cliente muestra primero lo esencial y deja los datos adicionales plegados.
+- Aprobar desde el tablero o desde el botón aplica las mismas verificaciones y genera el mismo evento y plan de pagos. Los cambios simultáneos no pueden deshacer una aprobación ni aceptar una verificación de stock anterior a una edición de productos o fechas.
+- Los retiros y altas simultáneos de unidades mantienen la cantidad correcta. La edición masiva protege las categorías de las variantes y deja de mostrar controles de precios que no tenían efecto.
+- Los cobros parciales y sus reintentos no se duplican; dividir un saldo conserva la deuda y el origen de los cargos extra. Cobrar desde un presupuesto abre sus pagos, incluidos futuros o sin fecha. La seña porcentual se reconoce en la preparación del evento.
+- Los gastos simultáneos conservan los cambios de cada operación. Los cobros comprueban que cliente y presupuesto coincidan y guardan la cuenta efectiva del movimiento.
+- Se protegen los nombres de eventos aceptados, los vínculos de inventario de presupuestos aprobados o firmados y la identidad de usuarios compartidos entre empresas. Los recursos del portal dejan de estar disponibles cuando el cliente o presupuesto están eliminados.
+- Se ajustan filtros de fechas y navegación de fichas para pantallas pequeñas.
