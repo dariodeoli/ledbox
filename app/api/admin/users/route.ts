@@ -66,7 +66,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("users.manage");
+  const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await requireAdminContext("users.manage");
+  const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, user: actor, role: actorRole } = auth.context;
   const body = await readJson(request) as Record<string, unknown>;

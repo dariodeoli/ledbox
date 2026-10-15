@@ -1,4 +1,5 @@
 import { publicConfig } from "@/lib/public-config";
+import { waMeLink } from "@/lib/whatsapp-link";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import { MAIL_PALETTES, MAIL_THEME_CSS } from "./theme";
 
@@ -142,7 +143,7 @@ function footerHtml(input: { organization?: string | null; reason?: string | nul
   const organization = (input.organization ?? "").trim() || "LedBox";
   const reason = (input.reason ?? "").trim();
   const site = escapeHtml(publicConfig.siteUrl);
-  const whatsapp = `https://wa.me/${escapeHtml(publicConfig.whatsappNumber)}`;
+  const whatsapp = escapeHtml(waMeLink(publicConfig.whatsappNumber) ?? "");
   return (
     `<tr><td class="lb-footer lb-pad" style="padding:20px 28px 24px;border-top:1px solid ${BRAND.line};background:${BRAND.cardMuted};border-radius:0 0 14px 14px;">` +
     `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:13px;font-weight:800;">${escapeHtml(organization)}</p>` +
@@ -244,7 +245,7 @@ export function renderMailText(input: MailContent): string {
   lines.push((input.organization ?? "").trim() || "LedBox");
   lines.push("EventOS · Gestión operativa para eventos");
   if (input.reason?.trim()) lines.push(`Recibiste este correo porque ${input.reason.trim()}.`);
-  lines.push(`${publicConfig.siteUrl} · WhatsApp https://wa.me/${publicConfig.whatsappNumber} · Asunción, Paraguay`);
+  lines.push(`${publicConfig.siteUrl} · WhatsApp ${waMeLink(publicConfig.whatsappNumber) ?? ""} · Asunción, Paraguay`);
   return lines.join("\n");
 }
 

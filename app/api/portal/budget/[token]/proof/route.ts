@@ -1,6 +1,7 @@
 import { quotePortalAvailable } from "@/lib/quote-sharing";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
+import { cuotaArchivosOk, SANDBOX_QUOTA_MESSAGE } from "@/lib/server/demo-sandbox";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalProofUpload, PORTAL_MAX_NAME } from "@/lib/server/budget-portal";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
@@ -112,6 +113,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (!mime) {
     return jsonError("El archivo no es un JPG, PNG, WebP o PDF real. Revisá que no esté renombrado.", 400);
   }
+  if (!(await cuotaArchivosOk(budget.organizationId, data.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
 
   // Un solo cobro pendiente: el comprobante también se cuelga de él para que
   // Finanzas cobre ese pago (y no cree uno nuevo) al confirmar el esperado.

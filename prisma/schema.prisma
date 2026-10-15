@@ -178,9 +178,18 @@ model Organization {
   purchaseInvoices  PurchaseInvoice[]
   fiscalPeriods     FiscalPeriod[]
   invoiceSequence   InvoiceSequence?
+  /// Demo (docs/DEMO-INTERACTIVA.md): `isDemo` marca la vitrina (slug `demo`, solo lectura) y las
+  /// sandboxes por visitante (`demoParentId` = vitrina; escriben, pero con las salidas cortadas).
+  isDemo            Boolean                  @default(false)
+  demoParentId      String?
+  demoExpiresAt     DateTime?
+  demoLastSeenAt    DateTime?
+  /// false mientras la sandbox se está sembrando (paso 2 del alta).
+  demoReady         Boolean                  @default(true)
 
   @@index([active, createdAt])
   @@index([planId])
+  @@index([isDemo, demoExpiresAt])
 }
 
 model AppUser {
@@ -259,6 +268,10 @@ model AdminUser {
   /// Vuelve a null cuando cambia el correo de la cuenta.
   emailVerifiedAt     DateTime?
   activityDays        AdminActivityDay[]
+  /// Visitante de una sandbox de la demo: empresa a la que pertenece (se purga con ella).
+  demoOrganizationId  String?
+
+  @@index([demoOrganizationId])
 }
 
 /// Actividad diaria por usuario (hora de Paraguay): un renglón por (usuario, día) y
@@ -571,6 +584,10 @@ model DemoSession {
   lastSeenAt  DateTime @default(now())
   durationSec Int      @default(0)
   modules     String[] @default([])
+  sandboxOrgId    String?
+  actions         Int      @default(0)
+  actionsByEntity Json?
+  resets          Int      @default(0)
 
   @@index([startedAt])
   @@index([visitorHash, startedAt])
@@ -2166,6 +2183,8 @@ enum MailStatus {
   sending
   sent
   failed
+  /// No se intentó: salida simulada de la demo («Demo: simulado»).
+  skipped
 }
 
 /**

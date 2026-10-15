@@ -60,7 +60,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("profile.write");
+  const auth = await requireAdminContext("profile.write", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { user: actor } = auth.context;
 
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await requireAdminContext("profile.write");
+  const auth = await requireAdminContext("profile.write", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { user: actor } = auth.context;
 
@@ -137,7 +137,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireAdminContext("profile.write");
+  const auth = await requireAdminContext("profile.write", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { user: actor } = auth.context;
 

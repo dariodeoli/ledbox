@@ -89,3 +89,9 @@ test("platform-routes: los dos exportar existen y llaman a requirePlatformAdmin(
     assert.match(source, /csvResponse\(/);
   }
 });
+
+test("sin-demo filtra por isDemo (vitrina y sandboxes), no solo por el slug", () => {
+  const source = readFileSync(join(root, "lib", "platform", "sin-demo.ts"), "utf8");
+  assert.match(source, /"isDemo" = true/, "orgDemo/orgReal usan isDemo");
+  assert.match(source, /o\."isDemo" = false/, "usuarioReal exige una empresa con isDemo = false");
+});
