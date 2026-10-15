@@ -40,11 +40,15 @@ export const HOME_PHOTO_WIDTH = 1200;
 
 export type HomeEditorial = { eyebrow: string; title: string; text: string; cta: string };
 export type HomeInspiration = { title: string; captions: string[] };
-export type HomeConfig = { order: HomeSectionId[]; hidden: HomeSectionId[]; editorial: HomeEditorial; inspiration: HomeInspiration };
+export const CATEGORY_LAYOUTS = ["cards", "accordion"] as const;
+export type CategoryLayout = (typeof CATEGORY_LAYOUTS)[number];
+export const isCategoryLayout = (value: unknown): value is CategoryLayout => typeof value === "string" && (CATEGORY_LAYOUTS as readonly string[]).includes(value);
+export type HomeConfig = { order: HomeSectionId[]; hidden: HomeSectionId[]; categoryLayout: CategoryLayout; editorial: HomeEditorial; inspiration: HomeInspiration };
 
 export const DEFAULT_HOME: HomeConfig = {
   order: [...DEFAULT_HOME_ORDER],
   hidden: [],
+  categoryLayout: "cards",
   editorial: { eyebrow: "", title: "", text: "", cta: "" },
   inspiration: { title: "", captions: ["", "", ""] },
 };
@@ -69,8 +73,13 @@ const clean = (value: unknown, max: number): string | null => {
 
 /** Valida lo que manda el panel; lo ausente mantiene `current`. */
 export function parseHome(body: unknown, current: HomeConfig = DEFAULT_HOME): { ok: true; home: HomeConfig } | { ok: false; error: string } {
-  const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-  const next: HomeConfig = { order: [...current.order], hidden: [...current.hidden], editorial: { ...current.editorial }, inspiration: { title: current.inspiration.title, captions: [...current.inspiration.captions] } };
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Los módulos de la tienda deben ser un objeto válido." };
+  const input = body as Record<string, unknown>;
+  const next: HomeConfig = { order: [...current.order], hidden: [...current.hidden], categoryLayout: current.categoryLayout ?? "cards", editorial: { ...current.editorial }, inspiration: { title: current.inspiration.title, captions: [...current.inspiration.captions] } };
+  if (input.categoryLayout !== undefined) {
+    if (!isCategoryLayout(input.categoryLayout)) return { ok: false, error: "Elegí Tarjetas o Desplegables para las categorías." };
+    next.categoryLayout = input.categoryLayout;
+  }
   if (input.order !== undefined) {
     if (!Array.isArray(input.order) || input.order.some((id) => !isHomeSection(id))) return { ok: false, error: "El orden de las secciones del inicio no es válido." };
     next.order = normalizeOrder(input.order);
@@ -119,8 +128,14 @@ export function readHome(stored: unknown): HomeConfig {
   const record = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
   const parsed = parseHome(record);
   if (parsed.ok) return parsed.home;
-  const partial: HomeConfig = { order: normalizeOrder(record.order), hidden: [], editorial: { ...DEFAULT_HOME.editorial }, inspiration: { title: "", captions: ["", "", ""] } };
+  let partial: HomeConfig = { order: normalizeOrder(record.order), hidden: [], categoryLayout: "cards", editorial: { ...DEFAULT_HOME.editorial }, inspiration: { title: "", captions: ["", "", ""] } };
   if (Array.isArray(record.hidden)) partial.hidden = [...new Set(record.hidden.filter(isHomeSection))].filter((id) => !HOME_LOCKED.includes(id));
+  // Una opción vieja o rota no borra otros módulos válidos de la empresa.
+  for (const key of ["categoryLayout", "editorial", "inspiration"] as const) {
+    if (record[key] === undefined) continue;
+    const field = parseHome({ [key]: record[key] }, partial);
+    if (field.ok) partial = field.home;
+  }
   return partial;
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HOME_LIMITS, HOME_LOCKED, HOME_PHOTO_LABEL, HOME_SECTION_LABEL, INSPIRATION_SLOTS, moveSection, moveSectionTo, type HomeConfig, type HomePhotoSlot, type HomeSectionId } from "@/lib/store-home";
-import { FileField, SwitchField, TextAreaField, TextField } from "../AdminFields";
+import { FileField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { AdminButton, AdminPanel } from "../AdminUI";
 
 /**
@@ -65,8 +65,11 @@ export function HomeLayoutPanels({ home, onHome, photos, onPhotos, versions, dis
   const toggle = (id: HomeSectionId, visible: boolean) => onHome({ ...home, hidden: visible ? home.hidden.filter((other) => other !== id) : [...home.hidden, id] });
   return (
     <>
-      <AdminPanel title="Inicio de la tienda" icon="panel-left" meta="Orden y secciones visibles">
-        <p className="admin-field-hint">Elegí en qué orden salen las secciones del inicio y cuáles se muestran. Arrastralas o usá «Subir» y «Bajar». Una sección sin contenido (por ejemplo, Destacados sin productos marcados) no se dibuja sola.</p>
+      <AdminPanel title="Módulos de la tienda" icon="panel-left" meta="Diseño, orden y visibilidad del inicio">
+        <p className="admin-field-hint">La plantilla define el estilo. Estos módulos definen cómo se recorre tu tienda: podés poner Categorías primero, mover cada sección con «Subir» y «Bajar» u ocultarla. El catálogo siempre queda disponible. Una sección sin contenido no aparece.</p>
+        <SelectField label="Diseño de categorías" value={home.categoryLayout} options={[{ value: "cards", label: "Tarjetas" }, { value: "accordion", label: "Desplegables" }]}
+          onChange={(value) => onHome({ ...home, categoryLayout: value === "accordion" ? "accordion" : "cards" })} disabled={disabled}
+          hint="Tarjetas abre la página de cada categoría. Desplegables permite ver sus productos dentro del inicio. Independiente de la plantilla." />
         <ol className="admin-order" aria-label="Secciones del inicio, en orden" data-testid="home-order">
           {home.order.map((id, index) => (
             <li
@@ -76,7 +79,7 @@ export function HomeLayoutPanels({ home, onHome, photos, onPhotos, versions, dis
               draggable={!disabled}
               onDragStart={(event) => { if (disabled) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDrag(id); }}
               onDragOver={(event) => { if (drag) event.preventDefault(); }}
-              onDrop={(event) => { event.preventDefault(); if (drag) onHome({ ...home, order: moveSectionTo(home.order, drag, id) }); setDrag(null); }}
+              onDrop={(event) => { event.preventDefault(); if (!disabled && drag) onHome({ ...home, order: moveSectionTo(home.order, drag, id) }); setDrag(null); }}
               onDragEnd={() => setDrag(null)}
             >
               <div className="admin-order-row">
@@ -84,6 +87,7 @@ export function HomeLayoutPanels({ home, onHome, photos, onPhotos, versions, dis
                 <strong className="admin-order-name">{HOME_SECTION_LABEL[id]}</strong>
                 {hidden.has(id) ? <span className="admin-cell-sub">Oculta</span> : null}
                 <span className="admin-order-actions">
+                  <AdminButton type="button" aria-label={`Poner primero ${HOME_SECTION_LABEL[id]}`} disabled={disabled || index === 0} onClick={() => onHome({ ...home, order: moveSectionTo(home.order, id, home.order[0]) })}>Poner primero</AdminButton>
                   <AdminButton type="button" aria-label={`Subir la sección ${HOME_SECTION_LABEL[id]}`} disabled={disabled || index === 0} onClick={() => onHome({ ...home, order: moveSection(home.order, id, -1) })}>↑ Subir</AdminButton>
                   <AdminButton type="button" aria-label={`Bajar la sección ${HOME_SECTION_LABEL[id]}`} disabled={disabled || index === home.order.length - 1} onClick={() => onHome({ ...home, order: moveSection(home.order, id, 1) })}>↓ Bajar</AdminButton>
                   {HOME_LOCKED.includes(id) ? (
