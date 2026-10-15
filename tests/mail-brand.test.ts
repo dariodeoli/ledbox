@@ -51,9 +51,9 @@ test("correo de empresa: marca EventOS + logo y nombre de la empresa, contacto e
   const html = renderMail({ ...content, brand: vajilla });
   assert.match(html, /<img[^>]*src="[^"]*\/assets\/eventos-mark\.png"[^>]*alt="EventOS"/, "isotipo de EventOS en el encabezado");
   assert.match(html, /<img[^>]*src="https:\/\/eventos\.example\.test\/api\/mail\/logo\/la-vajilla\/light"[^>]*alt="La Vajilla"/, "logo de la empresa con alt");
-  assert.match(html, /width="114" height="38"/, "el logo reserva su proporción (Outlook)");
+  assert.match(html, /width="90" height="30"/, "el logo reserva su proporción (Outlook)");
   const header = html.slice(html.indexOf('class="lb-header'), html.indexOf('class="lb-content'));
-  assert.ok(header.indexOf("eventos-mark.png") < header.indexOf("/logo/la-vajilla"), "EventOS primero y la empresa al lado");
+  assert.ok(header.indexOf("/logo/la-vajilla") < header.indexOf("eventos-mark.png"), "logo y nombre de la empresa a la izquierda, isotipo EventOS a la derecha");
   assert.ok(header.includes(">La Vajilla<"), "nombre de la empresa en el encabezado");
   const footer = html.slice(html.indexOf('class="lb-footer'));
   assert.ok(footer.includes('href="tel:+595215550'.slice(0, 18)), "teléfono");
@@ -76,17 +76,20 @@ test("el color de marca va solo en el botón y los acentos, con texto legible; s
   assert.equal(button[1], "#0b5cd5");
   assert.equal(button[2], readableOn("#0b5cd5"));
   assert.ok(contrastRatio(button[1], button[2]) >= 4.5, "contraste AA del botón");
-  assert.ok(html.includes("border-bottom:4px solid #0b5cd5"), "filete del encabezado con el color de la empresa");
+  assert.equal(html.split("#0b5cd5").length - 1, 4, "el color de la empresa solo está en el botón (HTML y VML de Outlook)");
+  assert.ok(!/border-bottom:4px|linear-gradient/.test(html), "sin bandas ni degradés");
+  const dull = renderMail({ ...content, brand: { ...vajilla, color: "#ffe066" } });
+  assert.match(dull, /<a class="lb-btn"[^>]*background:#111111;color:#ffffff/, "color sin contraste: botón negro");
   assert.ok(html.includes("Si el botón no abre, copiá este enlace"), "link alternativo en texto");
   const neutral = renderMail({ ...content, brand: { ...vajilla, color: null } });
   assert.ok(!neutral.includes("#0b5cd5"));
-  assert.match(neutral, /<a class="lb-btn"[^>]*background:#08b7cf/, "acento de EventOS");
+  assert.match(neutral, /<a class="lb-btn"[^>]*background:#111111;color:#ffffff/, "sin color de marca: negro con texto blanco");
 });
 
 test("sin logo solo sale el nombre; sin contacto cargado no se inventa ninguno", () => {
   const html = renderMail({ ...content, brand: { name: "Eventos Sur" } });
   assert.ok(!html.includes("/logo/"), "sin logo no hay imagen de empresa");
-  assert.match(html, /font:800 20px[^>]*>Eventos Sur</, "nombre en tipografía fuerte");
+  assert.match(html, /font:600 16px[^>]*>Eventos Sur</, "nombre en semibold");
   const footer = html.slice(html.indexOf('class="lb-footer'));
   assert.ok(!/tel:|wa\.me|instagram|mailto:|maps/i.test(footer), "sin datos, sin enlaces de contacto");
   assert.ok(!visible(footer).includes("Asunción"), "la dirección de la plataforma no se le presta a la empresa");
@@ -94,9 +97,8 @@ test("sin logo solo sale el nombre; sin contacto cargado no se inventa ninguno",
 
 test("correo de plataforma sale como EventOS; LedBox como empresa conserva su propio nombre", () => {
   const platform = renderMail({ ...content, organization: null, brand: PLATFORM_BRAND });
-  assert.ok(visible(platform).includes("EVENTOS") && !/ledbox/i.test(visible(platform)));
-  assert.ok(!platform.includes("lb-header-rule"), "sin divisor ni empresa");
-  const asCompany = renderMail({ ...content, organization: "LedBox", brand: { name: "LedBox", logoUrl: "https://eventos.example.test/api/mail/logo/ledbox/light" } });
+  assert.ok(visible(platform).includes("EventOS") && !/ledbox/i.test(visible(platform)));
+    const asCompany = renderMail({ ...content, organization: "LedBox", brand: { name: "LedBox", logoUrl: "https://eventos.example.test/api/mail/logo/ledbox/light" } });
   assert.ok(visible(asCompany).includes("LedBox"), "LedBox como empresa dice su nombre");
   assert.ok(asCompany.includes('alt="LedBox"'));
   assert.ok(renderMailText({ ...content, organization: null }).startsWith("EventOS"), "sin empresa ni marca: EventOS");

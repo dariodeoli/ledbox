@@ -1,5 +1,5 @@
 import { publicConfig } from "@/lib/public-config";
-import { normalizeHex, readableOn } from "@/lib/storefront-theme";
+import { contrastRatio, normalizeHex, readableOn } from "@/lib/storefront-theme";
 import { instagramHref, instagramLabel } from "@/lib/admin-format";
 import { waMeLink } from "@/lib/whatsapp-link";
 import { APP_VERSION_LABEL } from "@/lib/version";
@@ -101,6 +101,7 @@ export type MailBrand = {
 export const PLATFORM_BRAND: MailBrand = { platform: true, name: "EventOS" };
 
 const BRAND = MAIL_PALETTES.light;
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 function escapeHtml(value: string): string {
   return value
@@ -123,73 +124,71 @@ export function mailLogoUrl(): string {
   return `${publicConfig.siteUrl}/assets/eventos-mark.png`;
 }
 
-function rowsHtml(rows: MailRow[], accent: string): string {
+const LINK_STYLE = `color:${BRAND.ink};text-decoration:underline;text-decoration-color:${BRAND.lineStrong};text-underline-offset:2px;`;
+
+function link(href: string, label: string): string {
+  return `<a class="lb-link" href="${escapeHtml(href)}" style="${LINK_STYLE}">${escapeHtml(label)}</a>`;
+}
+
+function rowsHtml(rows: MailRow[]): string {
   if (rows.length === 0) return "";
   const cells = rows
-    .map((row) => {
+    .map((row, index) => {
       const value = escapeHtml(row.value);
-      const content = row.href
-        ? `<a class="lb-link" href="${escapeHtml(row.href)}" style="color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;">${value}</a>`
-        : value;
-      const weight = row.strong ? "700" : "600";
+      const content = row.href ? link(row.href, row.value) : value;
+      const border = index === rows.length - 1 ? "" : `border-bottom:1px solid ${BRAND.line};`;
       return (
         `<tr>` +
-        `<td class="lb-muted lb-row-label" style="width:38%;padding:11px 14px 11px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.muted};font-size:13px;line-height:1.45;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(row.label)}</td>` +
-        `<td class="lb-ink lb-row-value" align="right" style="padding:11px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.ink};font-size:13px;font-weight:${weight};line-height:1.45;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;">${content}</td>` +
+        `<td class="lb-muted lb-row-label" style="width:38%;padding:12px 16px 12px 0;${border}color:${BRAND.muted};font-size:14px;line-height:1.5;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(row.label)}</td>` +
+        `<td class="lb-ink lb-row-value" align="right" style="padding:12px 0;${border}color:${BRAND.ink};font-size:14px;font-weight:${row.strong ? "700" : "500"};line-height:1.5;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;">${content}</td>` +
         `</tr>`
       );
     })
     .join("");
   return (
-    `<table class="lb-summary" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${BRAND.cardMuted};border:1px solid ${BRAND.line};border-left:4px solid ${accent};border-radius:12px;">` +
-    `<tr><td class="lb-ink" colspan="2" style="padding:14px 16px 2px;color:${BRAND.ink};font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;">Resumen</td></tr>` +
-    `<tr><td colspan="2" style="padding:0 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;border-collapse:collapse;">${cells}</table></td></tr>` +
+    `<table class="lb-summary" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background:${BRAND.card};border-top:1px solid ${BRAND.line};border-bottom:1px solid ${BRAND.line};">` +
+    `<tr><td colspan="2" style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;border-collapse:collapse;"><tr><td style="height:4px;line-height:4px;font-size:1px;" height="4"></td></tr></table></td></tr>` +
+    `<tr><td colspan="2" style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;border-collapse:collapse;">${cells}</table></td></tr>` +
     `</table>`
   );
 }
 
-function ctaHtml(cta: MailCta, brandColor?: string | null): string {
+/** Color del botón: el de marca si da contraste AA con su texto y con blanco; si no, negro. */
+function buttonColor(color: string | null): string | null {
+  return color && contrastRatio(color, "#ffffff") >= 4.5 ? color : null;
+}
+
+function ctaHtml(cta: MailCta, brandColor: string | null): string {
   const url = escapeHtml(cta.url);
   const label = escapeHtml(cta.label);
-  // Con marca de la empresa el botón usa su color y un texto legible sobre él; esas clases no
-  // entran en las reglas del modo oscuro (el botón conserva su par fondo/texto en cualquier cliente).
-  const bg = brandColor ?? BRAND.accent;
-  const ink = brandColor ? readableOn(brandColor) : BRAND.accentInk;
+  // Con color de marca el botón lo usa; esas clases no entran en las reglas del modo oscuro (el
+  // botón conserva su par fondo/texto en cualquier cliente). Sin marca: negro con texto blanco.
+  const bg = brandColor ?? BRAND.button;
+  const ink = brandColor ? readableOn(brandColor) : BRAND.buttonInk;
   const surface = brandColor ? "lb-cta-brand" : "lb-cta-surface";
   const button = brandColor ? "lb-btn-brand" : "lb-btn";
   return (
-    `<table class="lb-cta-table" role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width:100%;margin:22px 0 0;">` +
-    `<tr><td class="${surface}" align="left" bgcolor="${bg}" style="border-radius:7px;">` +
-    `<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="15%" fillcolor="${bg}" strokecolor="${bg}"><w:anchorlock/><v:textbox inset="8px,8px,8px,8px" style="mso-fit-shape-to-text:true;"><center style="color:${ink};font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;word-wrap:break-word;">${label}</center></v:textbox></v:roundrect><![endif]-->` +
-    `<!--[if !mso]><!--><a class="${button}" href="${url}" style="display:inline-block;box-sizing:border-box;max-width:100%;min-height:44px;padding:14px 22px;border-radius:7px;background:${bg};color:${ink};font:700 14px Arial,Helvetica,sans-serif;line-height:1.4;text-decoration:none;letter-spacing:.01em;overflow-wrap:anywhere;word-break:break-word;">${label}</a><!--<![endif]-->` +
+    `<table class="lb-cta-table" role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width:100%;margin:28px 0 0;">` +
+    `<tr><td class="${surface}" align="left" bgcolor="${bg}" style="border-radius:8px;">` +
+    `<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="17%" fillcolor="${bg}" strokecolor="${bg}"><w:anchorlock/><v:textbox inset="8px,8px,8px,8px" style="mso-fit-shape-to-text:true;"><center style="color:${ink};font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;word-wrap:break-word;">${label}</center></v:textbox></v:roundrect><![endif]-->` +
+    `<!--[if !mso]><!--><a class="${button}" href="${url}" style="display:inline-block;box-sizing:border-box;max-width:100%;min-height:44px;padding:13px 24px;border-radius:8px;background:${bg};color:${ink};font:600 14px ${FONT};line-height:1.4;text-decoration:none;overflow-wrap:anywhere;word-break:break-word;">${label}</a><!--<![endif]-->` +
     `</td></tr></table>` +
-    `<p class="lb-soft" style="margin:10px 0 0;color:${BRAND.mutedSoft};font-size:12px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word;">Si el botón no abre, copiá este enlace:<br><a class="lb-link" href="${url}" style="color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;">${url}</a></p>` +
-    (cta.note ? `<p class="lb-muted" style="margin:7px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.5;">${escapeHtml(cta.note)}</p>` : "")
+    `<p class="lb-soft" style="margin:14px 0 0;color:${BRAND.mutedSoft};font-size:12px;line-height:1.6;overflow-wrap:anywhere;word-break:break-word;">Si el botón no abre, copiá este enlace:<br>${link(cta.url, cta.url)}</p>` +
+    (cta.note ? `<p class="lb-muted" style="margin:8px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;">${escapeHtml(cta.note)}</p>` : "")
   );
 }
 
-function noteHtml(note: string | string[] | null | undefined, accent: string): string {
-  const body = paragraphs(note, `margin:0 0 5px;color:${BRAND.muted};font-size:12.5px;line-height:1.55;`, "lb-muted");
+function noteHtml(note: string | string[] | null | undefined): string {
+  const body = paragraphs(note, `margin:0 0 6px;color:${BRAND.muted};font-size:13px;line-height:1.6;`, "lb-muted");
   if (!body) return "";
-  return `<div class="lb-note" style="margin:18px 0 0;padding:12px 14px;border-left:3px solid ${accent};background:${BRAND.accentSoft};border-radius:0 8px 8px 0;">${body}</div>`;
+  return `<div class="lb-note" style="margin:28px 0 0;padding:14px 16px;border:1px solid ${BRAND.line};background:${BRAND.cardMuted};border-radius:8px;">${body}</div>`;
 }
 
+/** Estado: texto en mayúsculas con borde fino, siempre neutro (el color es solo del botón). */
 function statusHtml(status: MailStatus | null | undefined): string {
   if (!status?.label.trim()) return "";
-  const tone = status.tone ?? "accent";
-  const colors = {
-    accent: { background: BRAND.accentSoft, color: BRAND.accentInk },
-    success: { background: BRAND.successSoft, color: BRAND.success },
-    warning: { background: BRAND.warningSoft, color: BRAND.warning },
-    neutral: { background: BRAND.cardMuted, color: BRAND.muted },
-  }[tone];
-  return `<span class="lb-status-${tone}" style="display:inline-block;padding:6px 9px;border-radius:999px;background:${colors.background};color:${colors.color};font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(status.label.trim())}</span>`;
-}
-
-const LINK_STYLE = `color:${BRAND.accentInk};text-decoration:underline;text-underline-offset:2px;`;
-
-function link(href: string, label: string): string {
-  return `<a class="lb-link" href="${escapeHtml(href)}" style="${LINK_STYLE}">${escapeHtml(label)}</a>`;
+  const tone = status.tone ?? "neutral";
+  return `<span class="lb-status-${tone}" style="display:inline-block;padding:4px 10px;border:1px solid ${BRAND.line};border-radius:999px;background:${BRAND.card};color:${BRAND.muted};font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(status.label.trim())}</span>`;
 }
 
 type ContactItem = { label: string; href: string | null };
@@ -221,73 +220,80 @@ function identityOf(input: MailContent): Identity {
   return { platform, name: platform ? "EventOS" : name, brand };
 }
 
+const FOOT_LINK = `color:${BRAND.muted};text-decoration:underline;text-decoration-color:${BRAND.lineStrong};text-underline-offset:2px;`;
+const footLink = (href: string, label: string) => `<a class="lb-link lb-foot-link" href="${escapeHtml(href)}" style="${FOOT_LINK}">${escapeHtml(label)}</a>`;
+
 function footerHtml(identity: Identity, reason: string | null | undefined): string {
   const note = (reason ?? "").trim();
-  const row = (content: string, extra = "") => `<p class="lb-muted" style="margin:6px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;${extra}">${content}</p>`;
+  const row = (content: string) => `<p class="lb-muted" style="margin:4px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;">${content}</p>`;
   let company = "";
   if (identity.platform) {
-    const site = publicConfig.siteUrl;
     const wa = waMeLink(publicConfig.whatsappNumber);
     company =
-      `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:13px;font-weight:800;">EventOS</p>` +
-      row("Gestión operativa para eventos") +
-      row([link(site, "Sitio web"), wa ? link(wa, "Contactar por WhatsApp") : "", "Asunción, Paraguay"].filter(Boolean).join(" · "));
+      `<p class="lb-muted" style="margin:0;color:${BRAND.muted};font-size:12px;font-weight:600;line-height:1.6;">EventOS · Gestión operativa para eventos</p>` +
+      row([footLink(publicConfig.siteUrl, "Sitio web"), wa ? footLink(wa, "WhatsApp") : "", "Asunción, Paraguay"].filter(Boolean).join(" · "));
   } else {
     const { channels, address } = contactItems(identity.brand?.contact);
-    company = `<p class="lb-ink" style="margin:0;color:${BRAND.ink};font-size:14px;font-weight:800;">${escapeHtml(identity.name)}</p>`;
-    if (channels.length > 0) company += row(channels.map((item) => (item.href ? link(item.href, item.label) : escapeHtml(item.label))).join(" · "));
-    if (address) company += row(address.href ? link(address.href, address.label) : escapeHtml(address.label));
+    company = `<p class="lb-muted" style="margin:0;color:${BRAND.muted};font-size:12px;font-weight:600;line-height:1.6;">${escapeHtml(identity.name)}</p>`;
+    if (channels.length > 0) company += row(channels.map((item) => (item.href ? footLink(item.href, item.label) : escapeHtml(item.label))).join(" · "));
+    if (address) company += row(address.href ? footLink(address.href, address.label) : escapeHtml(address.label));
   }
   return (
-    `<tr><td class="lb-footer lb-pad" style="padding:22px 28px 24px;border-top:1px solid ${BRAND.line};background:${BRAND.cardMuted};border-radius:0 0 14px 14px;">` +
+    `<tr><td class="lb-footer lb-pad" style="padding:0 40px 32px;background:${BRAND.card};border-radius:0 0 12px 12px;">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid ${BRAND.line};height:20px;line-height:20px;font-size:1px;" height="20"></td></tr></table>` +
     company +
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0;border-top:1px solid ${BRAND.line};"><tr>` +
-    `<td width="26" style="padding:12px 8px 0 0;vertical-align:middle;"><img src="${escapeHtml(mailLogoUrl())}" width="18" height="18" alt="EventOS" style="display:block;width:18px;height:18px;border-radius:4px;"></td>` +
-    `<td class="lb-muted" style="padding:12px 0 0;color:${BRAND.muted};font-size:11.5px;line-height:1.5;vertical-align:middle;">Enviado con <strong>EventOS</strong> · ${escapeHtml(APP_VERSION_LABEL)}</td>` +
-    `</tr></table>` +
-    (note ? `<p class="lb-soft" style="margin:10px 0 0;color:${BRAND.mutedSoft};font-size:11.5px;line-height:1.55;">Recibiste este correo porque ${escapeHtml(note)}.</p>` : "") +
+    `<p class="lb-muted" style="margin:12px 0 0;color:${BRAND.muted};font-size:12px;line-height:1.6;">Enviado con <strong>EventOS</strong> · ${escapeHtml(APP_VERSION_LABEL)}</p>` +
+    (note ? `<p class="lb-soft" style="margin:6px 0 0;color:${BRAND.mutedSoft};font-size:12px;line-height:1.6;">Recibiste este correo porque ${escapeHtml(note)}.</p>` : "") +
     `</td></tr>`
   );
 }
 
-/** Marca EventOS + (si es de una empresa) divisor, logo y nombre de la empresa. */
-function headerBrandHtml(identity: Identity): string {
-  const mark = `<td style="padding:0 12px 0 0;"><img src="${escapeHtml(mailLogoUrl())}" width="38" height="38" alt="EventOS" style="display:block;width:38px;height:38px;border-radius:9px;background:${BRAND.card};"></td>`;
-  if (identity.platform) {
-    return mark + `<td class="lb-header-ink" style="font:800 17px Arial,Helvetica,sans-serif;letter-spacing:2px;color:${BRAND.headerInk};">EVENTOS</td>`;
-  }
-  const divider = `<td class="lb-header-rule" width="1" bgcolor="${BRAND.headerMuted}" style="width:1px;padding:0;background:${BRAND.headerMuted};font-size:1px;line-height:1px;"></td><td width="12" style="width:12px;font-size:1px;line-height:1px;"></td>`;
-  const name = escapeHtml(identity.name);
+/** Encabezado mínimo: logo y nombre de la empresa a la izquierda, isotipo EventOS chico y gris a la derecha. */
+function headerHtml(identity: Identity): string {
+  const mark = (size: number) => `<img src="${escapeHtml(mailLogoUrl())}" width="${size}" height="${size}" alt="EventOS" style="display:block;width:${size}px;height:${size}px;border-radius:6px;opacity:.5;">`;
   const brand = identity.brand;
-  const logo = brand?.logoUrl?.trim();
-  if (logo) {
-    const height = 38;
-    const ratio = brand?.logoWidth && brand?.logoHeight ? brand.logoWidth / brand.logoHeight : null;
-    const width = ratio ? Math.max(24, Math.min(160, Math.round(height * ratio))) : null;
-    const size = width ? `width="${width}" height="${height}"` : `height="${height}"`;
-    const plate = brand?.logoOnPlate ? `background:${BRAND.card};padding:5px;border-radius:8px;` : "";
-    return (
-      mark + divider +
-      `<td style="padding:0 11px 0 0;"><img src="${escapeHtml(logo)}" ${size} alt="${name}" style="display:block;height:${height}px;max-width:160px;${width ? `width:${width}px;` : "width:auto;"}${plate}box-sizing:content-box;"></td>` +
-      `<td class="lb-header-ink" style="font:700 16px Arial,Helvetica,sans-serif;color:${BRAND.headerInk};">${name}</td>`
-    );
+  let left: string;
+  let right = `<td align="right" style="vertical-align:middle;">${mark(22)}</td>`;
+  if (identity.platform) {
+    left = `<td style="padding:0 10px 0 0;vertical-align:middle;">${mark(28)}</td><td class="lb-header-ink" style="vertical-align:middle;font:600 16px ${FONT};color:${BRAND.headerInk};">EventOS</td>`;
+    right = "";
+  } else {
+    const name = escapeHtml(identity.name);
+    const logo = brand?.logoUrl?.trim();
+    const nameCell = `<td class="lb-header-ink" style="vertical-align:middle;font:600 16px ${FONT};color:${BRAND.headerInk};">${name}</td>`;
+    if (logo) {
+      const height = 30;
+      const ratio = brand?.logoWidth && brand?.logoHeight ? brand.logoWidth / brand.logoHeight : null;
+      const width = ratio ? Math.max(20, Math.min(140, Math.round(height * ratio))) : null;
+      const size = width ? `width="${width}" height="${height}"` : `height="${height}"`;
+      // Variante clara (pensada para fondo oscuro) sobre una chapa negra; la oscura va directo sobre el blanco.
+      const plate = brand?.logoOnPlate ? `background:${BRAND.button};padding:4px 6px;border-radius:6px;` : "";
+      left =
+        `<td style="padding:0 10px 0 0;vertical-align:middle;"><img src="${escapeHtml(logo)}" ${size} alt="${name}" style="display:block;height:${height}px;max-width:140px;${width ? `width:${width}px;` : "width:auto;"}${plate}box-sizing:content-box;"></td>` +
+        nameCell;
+    } else {
+      left = nameCell;
+    }
   }
-  return mark + divider + `<td class="lb-header-ink" style="font:800 20px Arial,Helvetica,sans-serif;letter-spacing:-.01em;color:${BRAND.headerInk};">${name}</td>`;
+  return (
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+    `<td align="left" style="vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>${left}</tr></table></td>` +
+    right +
+    `</tr></table>`
+  );
 }
 
 /** Render the complete HTML email. */
 export function renderMail(input: MailContent): string {
   const identity = identityOf(input);
   const title = escapeHtml(input.title);
-  const eyebrowText = (input.eyebrow ?? (identity.platform ? "EventOS" : "")).trim();
+  const eyebrowText = (input.eyebrow ?? "").trim();
   const preheader = escapeHtml((input.preheader ?? input.title ?? "").trim());
-  const intro = paragraphs(input.intro, `margin:0 0 14px;color:${BRAND.ink};font-size:15px;line-height:1.7;`, "lb-ink");
-  const brandColor = identity.platform ? null : normalizeHex(identity.brand?.color ?? null);
-  const accent = brandColor ?? BRAND.accent;
-  const eyebrowInk = brandColor ?? BRAND.accentInk;
-  const rows = rowsHtml(input.rows ?? [], accent);
+  const intro = paragraphs(input.intro, `margin:0 0 14px;color:${BRAND.body};font-size:15px;line-height:1.6;`, "lb-body");
+  const brandColor = identity.platform ? null : buttonColor(normalizeHex(identity.brand?.color ?? null));
+  const rows = rowsHtml(input.rows ?? []);
   const cta = input.cta ? ctaHtml(input.cta, brandColor) : "";
-  const note = noteHtml(input.note, accent);
+  const note = noteHtml(input.note);
   const status = statusHtml(input.status);
 
   return (
@@ -308,28 +314,26 @@ export function renderMail(input: MailContent): string {
     `@media (max-width:480px){` +
     `.lb-wrap{padding:12px 8px !important;}` +
     `.lb-card{width:100% !important;border-radius:12px !important;}` +
-    `.lb-pad{padding-left:18px !important;padding-right:18px !important;}` +
-    `.lb-header-pad{padding:19px 18px !important;}` +
-    `.lb-title{font-size:22px !important;}` +
+    `.lb-pad{padding-left:22px !important;padding-right:22px !important;}` +
+    `.lb-header-pad{padding:20px 22px !important;}` +
+    `.lb-title{font-size:20px !important;}` +
     `.lb-btn,.lb-btn-brand{display:block !important;text-align:center !important;padding:15px 18px !important;}` +
     `.lb-cta-table{width:100% !important;table-layout:fixed !important;}` +
     `}` +
     `</style>` +
     `</head>` +
-    `<body class="lb-canvas" style="margin:0;padding:0;background:${BRAND.canvas};color:${BRAND.ink};font-family:Arial,Helvetica,sans-serif;">` +
+    `<body class="lb-canvas" style="margin:0;padding:0;background:${BRAND.canvas};color:${BRAND.ink};font-family:${FONT};">` +
     `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:${BRAND.canvas};font-size:1px;line-height:1px;">${preheader}</div>` +
     `<table class="lb-canvas" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.canvas};">` +
-    `<tr><td align="center" class="lb-wrap" style="padding:28px 12px 34px;">` +
-    `<table role="presentation" class="lb-card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;table-layout:fixed;background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:14px;">` +
-    `<tr><td class="lb-header lb-header-pad" style="padding:22px 28px;background:${BRAND.graphite};border-bottom:4px solid ${accent};border-radius:13px 13px 0 0;">` +
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    headerBrandHtml(identity) +
-    `</tr></table>` +
+    `<tr><td align="center" class="lb-wrap" style="padding:32px 12px 40px;">` +
+    `<table role="presentation" class="lb-card" width="580" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:580px;table-layout:fixed;background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:12px;">` +
+    `<tr><td class="lb-header lb-header-pad" style="padding:24px 40px 22px;background:${BRAND.card};border-bottom:1px solid ${BRAND.line};border-radius:12px 12px 0 0;">` +
+    headerHtml(identity) +
     `</td></tr>` +
-    `<tr><td class="lb-content lb-pad" style="padding:32px 28px 30px;background:${BRAND.card};color:${BRAND.ink};">` +
-    (eyebrowText ? `<p class="lb-eyebrow" style="margin:0 0 14px;color:${eyebrowInk};font-size:11px;font-weight:800;letter-spacing:.14em;line-height:1.3;text-transform:uppercase;">${escapeHtml(eyebrowText)}</p>` : "") +
+    `<tr><td class="lb-content lb-pad" style="padding:36px 40px 36px;background:${BRAND.card};color:${BRAND.ink};">` +
+    (eyebrowText ? `<p class="lb-muted" style="margin:0 0 12px;color:${BRAND.muted};font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1.3;text-transform:uppercase;">${escapeHtml(eyebrowText)}</p>` : "") +
     (status ? `<p style="margin:0 0 14px;">${status}</p>` : "") +
-    `<h1 class="lb-title lb-ink" style="margin:0 0 16px;color:${BRAND.ink};font:700 26px Arial,Helvetica,sans-serif;line-height:1.2;letter-spacing:-.015em;">${title}</h1>` +
+    `<h1 class="lb-title lb-ink" style="margin:0 0 16px;color:${BRAND.ink};font:600 22px ${FONT};line-height:1.3;letter-spacing:-.01em;">${title}</h1>` +
     intro +
     (rows ? `<div style="margin:24px 0 0;">${rows}</div>` : "") +
     cta +

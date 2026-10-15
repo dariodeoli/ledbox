@@ -66,7 +66,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
       assert.equal(identity.replyTo, "hola@lavajilla.example");
       assert.equal(identity.brand.name, "La Vajilla");
       assert.equal(identity.brand.color, "#0b5cd5");
-      assert.equal(identity.brand.logoOnPlate, false);
+      assert.equal(identity.brand.logoOnPlate, true, "solo hay la variante clara: va sobre chapa negra");
       assert.ok(identity.brand.logoUrl?.endsWith(`/api/mail/logo/${org.slug}/light`), "logo por la ruta de correos aunque la tienda esté apagada");
       assert.equal(identity.brand.contact?.address, "Av. España 1234, Villa Morra, Asunción");
       assert.equal(identity.brand.contact?.mapsUrl, "https://maps.app.goo.gl/lavajilla");
@@ -94,7 +94,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
 
       const withLogo = await seed({ name: "Solo Oscuro", logo: "dark" });
       const dark = await mailIdentityFor(withLogo.id);
-      assert.equal(dark.brand.logoOnPlate, true, "solo hay la variante para fondo claro: va sobre chapa");
+      assert.equal(dark.brand.logoOnPlate, false, "la variante para fondo claro va directa sobre el blanco");
       const ok = await mailLogo(new Request("http://x"), params({ orgSlug: withLogo.slug, variant: "dark" }));
       assert.equal(ok.status, 200);
       assert.equal(ok.headers.get("content-type"), "image/png");

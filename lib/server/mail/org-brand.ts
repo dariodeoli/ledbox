@@ -49,17 +49,16 @@ export async function mailIdentityFor(
     if (!organization) return platformMailIdentity();
     const color = adjustBrandColor(settings?.storefrontAccent ?? null);
     const brandColor = color.ok && color.result ? color.result.color : null;
-    // El encabezado del correo es oscuro: va la variante clara (`light`, para fondos oscuros);
-    // si solo existe la otra, se apoya sobre una chapa blanca.
-    const light = logos.find((logo) => logo.variant === "light");
-    const logo = light ?? logos.find((item) => item.variant === "dark") ?? null;
+    // El encabezado del correo es blanco: va la variante para fondo claro (`dark`); si solo existe
+    // la otra, se apoya sobre una chapa negra.
+    const logo = logos.find((item) => item.variant === "dark") ?? logos.find((item) => item.variant === "light") ?? null;
     const profile = readOrgProfile(organization.profile);
     const contactEmail = normalizeEmail(profile.contact.email ?? settings?.storefrontEmail ?? "");
     const brand: MailBrand = {
       name: organization.name,
       color: brandColor,
       logoUrl: logo ? mailOrgLogoUrl(organization.slug, logo.variant) : null,
-      logoOnPlate: Boolean(logo && !light),
+      logoOnPlate: Boolean(logo && logo.variant === "light"),
       logoWidth: logo?.width ?? null,
       logoHeight: logo?.height ?? null,
       contact: {
