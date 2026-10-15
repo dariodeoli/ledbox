@@ -1,3 +1,4 @@
+import { sandboxHiddenHere } from "../demo-host";
 import { ensureEventForApprovedBudget } from "../budget-event";
 import { reserveBudgetInventory } from "../inventory-availability";
 import { syncBudgetExpectedPayments } from "../expected-payments";
@@ -353,7 +354,10 @@ async function loadDocumentRow(client: Pick<Prisma.TransactionClient, "signature
   return version === 1 ? row : client.signatureRequest.findUnique({ where, include: snapshotRequestInclude });
 }
 async function loadRow(code: string): Promise<SignatureRequestRow | null> {
-  return loadDocumentRow(db, { publicCode: code });
+  const row = await loadDocumentRow(db, { publicCode: code });
+  // Una sandbox de la demo solo se ve en el host demo (docs/DEMO-INTERACTIVA.md §3).
+  if (row && (await sandboxHiddenHere(row.organizationId))) return null;
+  return row;
 }
 
 /**
@@ -934,7 +938,8 @@ export async function verifySignatureOtp(input: { code: string; evidence: Signat
 export async function loadSignatureImage(code: string | null | undefined): Promise<string | null> {
   const normalized = normalizeSignatureCode(code);
   if (!normalized) return null;
-  const request = await db.signatureRequest.findUnique({ where: { publicCode: normalized }, select: { id: true } });
+  const request = await db.signatureRequest.findUnique({ where: { publicCode: normalized }, select: { id: true, organizationId: true } });
+  if (request && (await sandboxHiddenHere(request.organizationId))) return null;
   if (!request) return null;
   const evidence = await db.signatureEvidence.findFirst({
     where: { requestId: request.id, type: "SIGNATURE", status: "COMPLETED" },

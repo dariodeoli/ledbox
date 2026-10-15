@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/server/db";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { publicConfig } from "@/lib/public-config";
+import { trustedIp } from "@/lib/server/trusted-ip";
 import {
   MAX_BODY_BYTES,
   countryFromHeaders,
@@ -55,15 +56,8 @@ export function metricsSecret(): string | null {
   return process.env.NODE_ENV === "production" ? null : "ledbox-web-metrics-dev-secret";
 }
 
-/**
- * IP para el hash: la que agrega el proxy de confianza (Traefik/Coolify), que es el ÚLTIMO valor de
- * `X-Forwarded-For`; el primero lo escribe el cliente y se puede falsear para rotar el hash. Si no hay
- * XFF, `X-Real-IP`. Sin ninguno, «unknown».
- */
-export function trustedIp(request: Request): string {
-  const forwarded = (request.headers.get("x-forwarded-for") || "").split(",").map((v) => v.trim()).filter(Boolean);
-  return forwarded.at(-1) || request.headers.get("x-real-ip")?.trim() || "unknown";
-}
+/** IP para el hash: ver `lib/server/trusted-ip.ts` (`TRUSTED_PROXY_HOPS`). */
+export { trustedIp };
 
 export function metricsHosts(): Map<string, HostKind> {
   return hostKindMap(
@@ -257,6 +251,39 @@ export function scheduleDemoStart(request: Request, deps: { schedule?: Schedule;
     return true;
   } catch (error) {
     console.warn("[web-metrics] demo_start ignorado", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+/** Une la `DemoSession` más reciente del visitante con su sandbox (y cuenta el reinicio). Nunca lanza hacia afuera. */
+export async function linkDemoSandbox(input: { visitorHash: string; sandboxOrgId: string; reset: boolean }): Promise<void> {
+  await db.$executeRaw(Prisma.sql`
+    UPDATE "DemoSession" SET "sandboxOrgId" = ${input.sandboxOrgId}, "resets" = "resets" + ${input.reset ? 1 : 0}::int
+    WHERE "id" = (SELECT "id" FROM "DemoSession" WHERE "visitorHash" = ${input.visitorHash} ORDER BY "startedAt" DESC LIMIT 1)`);
+}
+
+/**
+ * Sandbox de la demo (docs/DEMO-INTERACTIVA.md §1): registra el arranque (si no es un reinicio) y deja la
+ * sandbox ligada a la `DemoSession` para anotar sus acciones al purgarla. Ignora bots y DNT.
+ */
+export function scheduleDemoSandboxLink(
+  request: Request,
+  input: { sandboxOrgId: string; reset: boolean },
+  deps: { schedule?: Schedule; now?: Date } = {},
+): boolean {
+  try {
+    const ua = request.headers.get("user-agent") || "";
+    if (isBotUa(ua) || request.headers.get("dnt") === "1") return false;
+    const now = deps.now ?? new Date();
+    const hash = visitorOf(request, now);
+    if (!hash) return false;
+    (deps.schedule ?? scheduleSafely)(async () => {
+      if (!input.reset) await recordDemoStart({ visitorHash: hash, now });
+      await linkDemoSandbox({ visitorHash: hash, sandboxOrgId: input.sandboxOrgId, reset: input.reset });
+    });
+    return true;
+  } catch (error) {
+    console.warn("[web-metrics] vínculo de la demo ignorado", error instanceof Error ? error.message : error);
     return false;
   }
 }

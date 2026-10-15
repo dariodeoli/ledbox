@@ -1,3 +1,5 @@
+import { waMeLink } from "@/lib/whatsapp-link";
+
 const DEFAULT_SITE_URL = "https://ledbox.online";
 const DEFAULT_ADMIN_URL = "https://app.ledbox.online";
 const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
@@ -62,7 +64,7 @@ export const publicConfig = {
 } as const;
 
 export function whatsappUrl(message: string): string {
-  return `https://wa.me/${publicConfig.whatsappNumber}?text=${encodeURIComponent(message)}`;
+  return waMeLink(publicConfig.whatsappNumber, { text: message }) ?? "";
 }
 
 /**

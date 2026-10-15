@@ -6,6 +6,7 @@
  */
 
 import { diasHasta, formatGs } from "owncoding-ui/utils";
+import { waMeLink } from "@/lib/whatsapp-link";
 
 import { DEFAULT_PHONE_COUNTRY, normalizePhone, parsePhone, phoneValid } from "./field-rules";
 
@@ -843,13 +844,23 @@ export function initials(name: string | null | undefined): string {
   return (first + second).toUpperCase();
 }
 
+let whatsappSandbox = false;
+
+/**
+ * El shell avisa si la sesión es una sandbox de la demo: a partir de ahí `whatsappHref` devuelve `null`
+ * en todas las pantallas y estas muestran «Así se vería el mensaje». Solo en el navegador (en el servidor
+ * sería un estado compartido entre pedidos).
+ */
+export function setWhatsappSandbox(sandbox: boolean): void {
+  if (typeof window !== "undefined") whatsappSandbox = sandbox;
+}
+
 /** Link de mensajería con el teléfono normalizado sin signos (números locales asumen Paraguay). */
-export function whatsappHref(phone: string | null | undefined, message?: string | null): string | null {
+export function whatsappHref(phone: string | null | undefined, message?: string | null, options: { sandbox?: boolean } = {}): string | null {
   const digits = String(phone || "").replace(/\D/g, "");
   if (digits.length < 8) return null;
   const international = digits.startsWith("595") ? digits : digits.startsWith("0") ? `595${digits.slice(1)}` : `595${digits}`;
-  const text = String(message ?? "").trim();
-  return text ? `https://wa.me/${international}?text=${encodeURIComponent(text)}` : `https://wa.me/${international}`;
+  return waMeLink(international, { text: message, sandbox: options.sandbox ?? whatsappSandbox });
 }
 
 // ── Datos de contacto del cliente (issue #36) ───────────────────────────────

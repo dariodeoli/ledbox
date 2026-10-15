@@ -67,7 +67,9 @@ async function resolveStore(slug: string): Promise<Omit<PublicCatalogContext, "p
   const normalized = slug.trim().toLowerCase();
   if (!normalized || normalized.length > 80) return null;
   const organization = await db.organization.findFirst({
-    where: { slug: normalized, active: true },
+    // Las sandboxes de la demo (`isDemo` con `demoParentId`) no tienen tienda pública por slug:
+    // la vitrina (`demo`) sí, de solo lectura (docs/DEMO-INTERACTIVA.md §4).
+    where: { slug: normalized, active: true, NOT: { isDemo: true, demoParentId: { not: null } } },
     select: { id: true, name: true, slug: true },
   });
   if (!organization) return null;

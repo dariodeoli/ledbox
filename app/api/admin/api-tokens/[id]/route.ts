@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * idempotente; queda auditado con el actor que lo pidió. Solo OWNER.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdminContext("api-keys.manage");
+  const auth = await requireAdminContext("api-keys.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const { id } = await params;

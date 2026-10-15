@@ -12,6 +12,7 @@ import {
 } from "@/lib/plan-rules";
 import type { AdminContext } from "./tenancy";
 import { db } from "./db";
+import { isSandboxOrg } from "./demo-sandbox";
 import { expireDueInvitations } from "./invitations";
 import { dayKeyOf, dayStart } from "./notifications";
 
@@ -157,6 +158,8 @@ export async function planLimitViolation(
   /** Cliente de la transacción en curso: el conteo se hace dentro de ella (chequeo repetido tras el lock). */
   client: Pick<Prisma.TransactionClient, "event" | "adminMembership" | "teamInvitation"> = db,
 ): Promise<PlanLimitViolation | null> {
+  // La sandbox de la demo no tiene topes de plan (docs/DEMO-INTERACTIVA.md §3).
+  if (await isSandboxOrg(context.organizationId)) return null;
   const plan = await resolveOrganizationPlan(context.organizationId, context.organization.planId ?? null);
   if (!plan) return null;
 

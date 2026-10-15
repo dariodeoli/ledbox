@@ -1,3 +1,4 @@
+import { sandboxHiddenHere } from "./demo-host";
 import { securityDepositPublic } from "@/lib/budget-security-deposit";
 import { resolveQuoteSelection, type SelectedQuoteItem } from "@/lib/quote-selection";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
@@ -749,6 +750,8 @@ export async function loadPublicBudget(
   if (!code) return null;
   const budget = await db.budget.findUnique({ where: { publicToken: code }, include: portalInclude });
   if (!budget) return null;
+  // Una sandbox de la demo solo se ve en el host demo (docs/DEMO-INTERACTIVA.md §3).
+  if (await sandboxHiddenHere(budget.organizationId)) return null;
   // Papelera: el portal de un cliente eliminado no existe (404), aunque el presupuesto siga vivo.
   if (budget.client.deletedAt) return null;
   if (!quotePortalAvailable(budget)) return null;

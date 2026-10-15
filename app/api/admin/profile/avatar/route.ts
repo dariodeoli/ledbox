@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { recordAudit } from "@/lib/server/audit";
 import { parseImageUpload } from "@/lib/server/branding";
 import { db } from "@/lib/server/db";
+import { cuotaArchivosOk, SANDBOX_QUOTA_MESSAGE } from "@/lib/server/demo-sandbox";
 import { jsonError, readJson } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
   const parsed = parseImageUpload(await readJson(request));
   if (!parsed.ok) return jsonError(parsed.error, 400);
   const { bytes, mime, width, height } = parsed.image;
+  if (!(await cuotaArchivosOk(auth.context.organizationId, bytes.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
 
   const avatar = await db.adminUserAvatar.upsert({
     where: { userId: id },

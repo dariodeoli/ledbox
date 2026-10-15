@@ -1,3 +1,4 @@
+import { salidaPermitida, SANDBOX_DENIED_MESSAGE } from "@/lib/server/demo-sandbox";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
 import { recordAudit } from "@/lib/server/audit";
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
 
   const limited = await rateLimit(`ia-carga:${auth.context.organizationId}`, IA_RATE_LIMIT);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
+
+  // Salida hacia un proveedor externo con la clave del servidor: una sandbox de la demo no la usa
+  // (docs/DEMO-INTERACTIVA.md §3).
+  const salida = await salidaPermitida({ organizationId: auth.context.organizationId, canal: "ia" });
+  if ("simulado" in salida) return jsonError(SANDBOX_DENIED_MESSAGE, 403, "demo_ia");
 
   const config = iaConfig();
   if (!config) {

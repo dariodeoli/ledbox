@@ -5,6 +5,8 @@ const ALLOWED_ADMIN_EMAILS = new Set([
 
 export const authConfig = {
   sessionCookieName: "ledbox_session",
+  /** Cookie de la demo interactiva: solo del host demo (docs/DEMO-INTERACTIVA.md §2). */
+  demoCookieName: "ledbox_demo",
   sessionDurationMs: 1000 * 60 * 60 * 24 * 7,
   passwordResetDurationMs: 1000 * 60 * 30,
   resetSender: "LedBox <ledbox@weem.com.py>",

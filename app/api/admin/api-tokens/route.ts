@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("api-keys.manage");
+  const auth = await requireAdminContext("api-keys.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
 
   const body = (await readJson(request)) as Record<string, unknown>;

@@ -1,6 +1,8 @@
+import { sandboxHiddenHere } from "@/lib/server/demo-host";
 import { quotePortalAvailable } from "@/lib/quote-sharing";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
+import { cuotaArchivosOk, SANDBOX_QUOTA_MESSAGE } from "@/lib/server/demo-sandbox";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalProofUpload, PORTAL_MAX_NAME } from "@/lib/server/budget-portal";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
@@ -62,6 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       })
     : null;
   if (!budget || !quotePortalAvailable(budget)) return jsonError("No encontramos ese presupuesto.", 404);
+  if (await sandboxHiddenHere(budget.organizationId)) return jsonError("No encontramos ese presupuesto.", 404);
   // Issue #52: la empresa demo no escribe; el portal simula el comprobante en el navegador.
   if (await isDemoOrganizationId(budget.organizationId)) return jsonError("Modo demo: solo lectura", 403);
 
@@ -112,6 +115,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (!mime) {
     return jsonError("El archivo no es un JPG, PNG, WebP o PDF real. Revisá que no esté renombrado.", 400);
   }
+  if (!(await cuotaArchivosOk(budget.organizationId, data.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
 
   // Un solo cobro pendiente: el comprobante también se cuelga de él para que
   // Finanzas cobre ese pago (y no cree uno nuevo) al confirmar el esperado.

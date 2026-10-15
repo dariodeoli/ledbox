@@ -29,6 +29,7 @@ import {
   paymentReminderMessage,
   statusTone,
   whatsappHref,
+  setWhatsappSandbox,
 } from "@/lib/admin-format";
 import { publicConfig } from "@/lib/public-config";
 import { ADMIN_NAV_GROUP_KEY, ADMIN_ROOT_ID, readStoredPinDigits, storePinDigits } from "@/lib/admin-theme";
@@ -77,6 +78,8 @@ export type AdminSessionState = {
   organizations: AdminOrganization[];
   /** Sesión de la demo pública (issue #14): el shell muestra el aviso de solo lectura. */
   demo: boolean;
+  /** Sandbox por visitante de la demo: escribe, pero nada sale hacia afuera (sin links de WhatsApp). */
+  sandbox?: boolean;
   /** Panel bloqueado por PIN (issue #21): se dibuja la pantalla de bloqueo y nada del panel detrás. */
   locked: boolean;
   /** Motivo del bloqueo vigente (para el texto de la pantalla). */
@@ -186,6 +189,7 @@ function pickSessionData(raw: unknown): {
   organization: AdminOrganization | null;
   organizations: AdminOrganization[];
   demo: boolean;
+  sandbox: boolean;
   locked: boolean;
   lockReason: "inactivity" | "manual";
   lock: AdminSessionLock | null;
@@ -207,6 +211,7 @@ function pickSessionData(raw: unknown): {
     organization,
     organizations,
     demo,
+    sandbox: outer.sandbox === true || inner.sandbox === true,
     locked: outer.locked === true || inner.locked === true,
     lockReason,
     lock: asLockInfo(inner.lock) ?? asLockInfo(outer.lock),
@@ -218,14 +223,16 @@ function pickSessionData(raw: unknown): {
  * parser que la respuesta del API, así los dos caminos no divergen.
  */
 function sessionDataFromPayload(payload: AdminSessionPayload): AdminSessionData {
-  const { user, organization, organizations, demo, locked, lockReason, lock } = pickSessionData(payload);
+  const { user, organization, organizations, demo, sandbox, locked, lockReason, lock } = pickSessionData(payload);
   const role = user ? asAdminRole(user.role) : null;
+  setWhatsappSandbox(sandbox);
   return {
     user: user ? { ...user, role: role ?? user.role } : null,
     role,
     organization,
     organizations,
     demo,
+    sandbox,
     locked,
     lockReason,
     lock,
@@ -361,13 +368,14 @@ export function AdminShell({
       setSession((current) => ({ ...current, loading: false, error: result.error }));
       return;
     }
-    const { user, organization, organizations, demo, locked, lockReason, lock } = pickSessionData(result.data);
+    const { user, organization, organizations, demo, sandbox, locked, lockReason, lock } = pickSessionData(result.data);
+    setWhatsappSandbox(sandbox);
     if (!user) {
       setSession((current) => ({ ...current, loading: false, error: "No pudimos cargar tu sesión." }));
       return;
     }
     const role = asAdminRole(user.role);
-    setSession({ user: { ...user, role }, role, organization, organizations, demo, locked, lockReason, lock, loading: false, error: "" });
+    setSession({ user: { ...user, role }, role, organization, organizations, demo, sandbox, locked, lockReason, lock, loading: false, error: "" });
   }, []);
 
   useEffect(() => {

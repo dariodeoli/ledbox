@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { MailStatus } from "@prisma/client";
 import { normalizeEmail } from "@/lib/field-rules";
 import { db } from "../db";
+import { salidaPermitida } from "../demo-sandbox";
 import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
 
 /**
@@ -77,6 +78,7 @@ async function writeMailLog(data: {
   entityId: string | null;
   actor: MailActor | null;
   sentAt: Date;
+  error?: string | null;
 }): Promise<boolean> {
   try {
     await db.mailLog.create({
@@ -85,6 +87,7 @@ async function writeMailLog(data: {
         organizationId: data.organizationId,
         category: data.category,
         status: data.status,
+        error: data.error ?? null,
         to: data.to,
         subject: data.subject,
         entity: data.entity,
@@ -117,12 +120,42 @@ async function updateMailLog(id: string, data: { status: MailStatus; error: stri
 export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   const to = normalizeEmail(input.to);
   if (!to) return { status: "skipped", error: "Sin destinatario." };
-  if (!emailConfigured()) return { status: "skipped", error: missingApiKeyMessage() };
 
   const now = input.now ?? new Date();
-  const logId = randomUUID();
   const actor = input.actor ?? null;
   const organizationId = input.organizationId?.trim() || null;
+
+  // Demo (docs/DEMO-INTERACTIVA.md §3): en una sandbox, o hacia un destino `*.demo`, no sale nada.
+  // Se registra «Demo: simulado» y no se toca el proveedor (ni siquiera sin clave configurada).
+  // Falla cerrado: si no se puede saber si la empresa es una sandbox, no se envía nada.
+  let salida: Awaited<ReturnType<typeof salidaPermitida>>;
+  try {
+    salida = await salidaPermitida({ organizationId, canal: "mail", destino: to });
+  } catch (error) {
+    console.error("mail: no se pudo verificar si la empresa es una sandbox; no se envía", error);
+    return { status: "skipped", error: "No se pudo verificar el destino del correo.", providerId: null, logId: null };
+  }
+  if ("simulado" in salida) {
+    const simulatedId = randomUUID();
+    const registered = await writeMailLog({
+      id: simulatedId,
+      organizationId,
+      category: input.category,
+      status: "skipped",
+      error: salida.motivo,
+      to,
+      subject: input.subject,
+      entity: input.entity ?? null,
+      entityId: input.entityId ?? null,
+      actor,
+      sentAt: now,
+    });
+    return { status: "skipped", error: salida.motivo, providerId: null, logId: registered ? simulatedId : null };
+  }
+
+  if (!emailConfigured()) return { status: "skipped", error: missingApiKeyMessage() };
+
+  const logId = randomUUID();
   const registered = await writeMailLog({
     id: logId,
     organizationId,

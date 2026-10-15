@@ -2,6 +2,7 @@ import { quotePdfValid } from "@/lib/server/pdf-validation";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { cuotaArchivosOk, SANDBOX_QUOTA_MESSAGE } from "@/lib/server/demo-sandbox";
 import { jsonError } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import {
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
 
   if (mime === "application/pdf" && !await quotePdfValid(data)) return jsonError("El PDF está incompleto o contiene funciones activas no permitidas.", 400);
   if (form.get("clientVisible") === "true" && mime !== "application/pdf") return jsonError("Solo los PDF se pueden publicar para el cliente.", 400);
+  if (!(await cuotaArchivosOk(organizationId, data.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
 
   const requestedName = typeof form.get("name") === "string" ? String(form.get("name")).trim() : "";
   const name = (requestedName || file.name || "adjunto").slice(0, BUDGET_ATTACHMENT_MAX_NAME);

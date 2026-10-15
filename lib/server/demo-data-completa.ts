@@ -51,6 +51,8 @@ export type DemoCompletionInput = {
   cancelled: DemoEventRef;
   /** Nombre de la persona de contacto de un cliente (los presupuestos nuevos lo usan al aprobar). */
   contactNameOf: (clientId: string) => string;
+  /** Sandbox: token público al azar por sandbox (la vitrina usa el literal). */
+  tk?: (literal: string) => string;
 };
 
 const SALES = { id: "demo_user_valeria", name: "Valeria Ortiz", email: "valeria.ortiz@ledbox.demo" } as const;
@@ -112,6 +114,7 @@ export type DemoCompletion = {
 
 export function buildDemoCompletion(input: DemoCompletionInput): DemoCompletion {
   const { organizationId, base, now, next, inProgress, recentPast, pastFiller, second, cancelled, contactNameOf } = input;
+  const tk = input.tk ?? ((literal: string) => literal);
   const org = { organizationId };
   const archivedBy = { archivedById: SALES.id };
 
@@ -300,7 +303,7 @@ export function buildDemoCompletion(input: DemoCompletionInput): DemoCompletion 
   ];
   // Mayorista con el link revocado (la ficha muestra «Acceso revocado»).
   const catalogTokens: Prisma.CatalogAccessTokenUncheckedCreateInput[] = [
-    { id: "demo_catalog_access_puntocreativo_revocado", ...org, clientId: "demo_client_puntocreativo", tokenHash: sha256Hex("demo-link-mayorista-revocado-puntocreativo"), createdAt: at(base, -60, 10, 0), revokedAt: at(base, -35, 10, 0), lastUsedAt: at(base, -40, 15, 0) },
+    { id: "demo_catalog_access_puntocreativo_revocado", ...org, clientId: "demo_client_puntocreativo", tokenHash: sha256Hex(tk("demo-link-mayorista-revocado-puntocreativo")), createdAt: at(base, -60, 10, 0), revokedAt: at(base, -35, 10, 0), lastUsedAt: at(base, -40, 15, 0) },
   ];
 
   // ── Inventario ─────────────────────────────────────────────────────────────
@@ -432,8 +435,8 @@ export const SIGNATURE_BUDGET_IDS = SIGNATURE_SPECS.map((spec) => spec.budgetId)
 const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /** Código público determinístico del alfabeto sin ambigüedades (`XXXX-XXXX-XXXX-XXXX-XXXX`). */
-function demoSignatureCode(seed: string): string {
-  const digest = sha256Hex(`demo-codigo-firma:${seed}`);
+function demoSignatureCode(seed: string, salt?: string): string {
+  const digest = sha256Hex(salt ? `demo-codigo-firma:${seed}:${salt}` : `demo-codigo-firma:${seed}`);
   let compact = "";
   for (let i = 0; i < 20; i += 1) compact += ALPHABET[parseInt(digest.slice(i * 2, i * 2 + 2), 16) % ALPHABET.length];
   return compact.match(/.{4}/g)!.join("-");
@@ -491,8 +494,13 @@ export function buildDemoSignatures(input: {
   recipientOf: (budgetId: string) => { name: string; email: string };
   /** Snapshot y huella reales del presupuesto ya insertado (mismo cálculo que la creación real). */
   documentOf: (budgetId: string, title: string) => { snapshot: Record<string, unknown>; hash: string };
+  /** Sandbox: reescribe los ids antes de calcular las huellas (la cadena de auditoría las incluye). */
+  mapId?: (value: string) => string;
+  /** Sandbox: sal del código público de firma (al azar por sandbox). */
+  codeSalt?: string;
 }) {
-  const { organizationId, base, now, recipientOf, documentOf } = input;
+  const { organizationId, base, now, recipientOf, documentOf, codeSalt } = input;
+  const mapId = input.mapId ?? ((value: string) => value);
   const signatureRequests: Prisma.SignatureRequestUncheckedCreateInput[] = [];
   const signatureEvents: Prisma.SignatureEventUncheckedCreateInput[] = [];
   const signatureEvidence: Prisma.SignatureEvidenceUncheckedCreateInput[] = [];
@@ -501,7 +509,7 @@ export function buildDemoSignatures(input: {
   const uaHash = sha256Hex("demo-ua:LedBox Demo");
 
   for (const spec of SIGNATURE_SPECS) {
-    const id = `demo_sig_${spec.key}`;
+    const id = mapId(`demo_sig_${spec.key}`);
     const recipient = recipientOf(spec.budgetId);
     const createdAt = at(base, -spec.daysAgo, 10, 0);
     const { snapshot: documentSnapshot, hash: documentHash } = documentOf(spec.budgetId, spec.title);
@@ -518,7 +526,7 @@ export function buildDemoSignatures(input: {
       const occurredAt = pastOf(new Date(Math.max(createdAt.getTime() + step.minutes * 60_000, lastAt.getTime() + 1)), now);
       lastAt = occurredAt;
       stamps.set(step.type, occurredAt);
-      const eventId = `demo_sigev_${spec.key}_${index + 1}`;
+      const eventId = mapId(`demo_sigev_${spec.key}_${index + 1}`);
       const clientActor = step.actor === "CLIENT";
       const adminActor = step.actor === "ADMIN";
       const core = {
@@ -528,7 +536,7 @@ export function buildDemoSignatures(input: {
         status: step.status,
         occurredAt,
         actorType: step.actor,
-        actorId: adminActor ? SALES.id : null,
+        actorId: adminActor ? mapId(SALES.id) : null,
         actorName: adminActor ? SALES.name : clientActor ? recipient.name : null,
         ipHash: clientActor ? ipHash : null,
         userAgentHash: clientActor ? uaHash : null,
@@ -564,19 +572,19 @@ export function buildDemoSignatures(input: {
     const sentAt = stamps.get("EMAIL_SENT") ?? null;
     if (sentAt) {
       // El historial de correo que muestra la columna «Correo» de Firmas.
-      mailLogs.push({ id: `demo_mail_firma_${spec.key}`, organizationId, category: "signature", status: "sent", to: recipient.email, subject: `Firmá el documento «${spec.title}»`, error: null, providerId: `demo-firma-${spec.key}`, entity: "SignatureRequest", entityId: id, actorId: SALES.id, actorName: SALES.name, actorEmail: SALES.email, sentAt, createdAt: sentAt });
+      mailLogs.push({ id: `demo_mail_firma_${spec.key}`, organizationId, category: "signature", status: "sent", to: recipient.email, subject: `Firmá el documento «${spec.title}»`, error: null, providerId: `demo-firma-${spec.key}`, entity: "SignatureRequest", entityId: id, actorId: mapId(SALES.id), actorName: SALES.name, actorEmail: mapId(SALES.email), sentAt, createdAt: sentAt });
     }
     const expired = spec.status === "EXPIRED";
     signatureRequests.push({
       id,
       organizationId,
-      budgetId: spec.budgetId,
+      budgetId: mapId(spec.budgetId),
       attachmentId: null,
-      publicCode: demoSignatureCode(spec.key),
+      publicCode: demoSignatureCode(spec.key, codeSalt),
       title: spec.title,
-      senderId: SALES.id,
+      senderId: mapId(SALES.id),
       senderName: SALES.name,
-      senderEmail: SALES.email,
+      senderEmail: mapId(SALES.email),
       recipientName: recipient.name,
       recipientEmail: recipient.email,
       recipientPhone: null,
