@@ -540,11 +540,12 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
     if (controller.signal.aborted) return;
     setCargandoClientes(false);
     if (!result.ok) return;
-    setOpcionesCliente((previous) => [...previous.filter((option) => [...eventos.map((row) => row.clienteId), ...cobros.map((row) => row.clienteId)].includes(option.value) && !(result.data.clients ?? []).some((client) => client.id === option.value)),
+    setOpcionesCliente((previous) => [
       ...(result.data.clients ?? []).map((cliente) => ({
         value: cliente.id,
         label: cliente.company?.trim() ? `${cliente.name} · ${cliente.company}` : cliente.name,
       })),
+      ...previous.filter((option) => [...eventos.map((row) => row.clienteId), ...cobros.map((row) => row.clienteId)].includes(option.value) && !(result.data.clients ?? []).some((client) => client.id === option.value)),
     ]);
   }
 
