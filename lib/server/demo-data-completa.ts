@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { DAY_MS, dayKeyOf, dayStart } from "./notifications";
 import { computeSignatureEventHash, sha256Hex } from "./signature/hash";
-import { signatureIdentifierFor, signedDocumentHash } from "./signature/document";
+import { signatureIdentifierFor, signedDocumentHash, SNAPSHOT_DOCUMENT_VERSION } from "./signature/document";
 import type { DemoBudgetSeed } from "./demo-data";
 
 /**
@@ -426,6 +426,9 @@ const SIGNATURE_SPECS: readonly SigSpec[] = [
   { key: "mayorista", budgetId: "demo_budget_mayorista", status: "DRAFT", title: "Presupuesto mayorista (borrador de firma)", daysAgo: 0 },
 ];
 
+/** Presupuestos con solicitud de firma: el seed necesita ya insertados para calcular las huellas. */
+export const SIGNATURE_BUDGET_IDS = SIGNATURE_SPECS.map((spec) => spec.budgetId);
+
 const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /** Código público determinístico del alfabeto sin ambigüedades (`XXXX-XXXX-XXXX-XXXX-XXXX`). */
@@ -486,8 +489,10 @@ export function buildDemoSignatures(input: {
   base: Date;
   now: Date;
   recipientOf: (budgetId: string) => { name: string; email: string };
+  /** Snapshot y huella reales del presupuesto ya insertado (mismo cálculo que la creación real). */
+  documentOf: (budgetId: string, title: string) => { snapshot: Record<string, unknown>; hash: string };
 }) {
-  const { organizationId, base, now, recipientOf } = input;
+  const { organizationId, base, now, recipientOf, documentOf } = input;
   const signatureRequests: Prisma.SignatureRequestUncheckedCreateInput[] = [];
   const signatureEvents: Prisma.SignatureEventUncheckedCreateInput[] = [];
   const signatureEvidence: Prisma.SignatureEvidenceUncheckedCreateInput[] = [];
@@ -499,8 +504,12 @@ export function buildDemoSignatures(input: {
     const id = `demo_sig_${spec.key}`;
     const recipient = recipientOf(spec.budgetId);
     const createdAt = at(base, -spec.daysAgo, 10, 0);
-    const documentHash = sha256Hex(`demo-documento:${spec.budgetId}`);
-    const plan = planFor(spec);
+    const { snapshot: documentSnapshot, hash: documentHash } = documentOf(spec.budgetId, spec.title);
+    const plan = planFor(spec).map((step) =>
+      step.type === "REQUEST_CREATED"
+        ? { ...step, metadata: { documento: `Presupuesto «${spec.title}»`, documentoHash: documentHash, commercialHash: documentHash, documentVersion: SNAPSHOT_DOCUMENT_VERSION, documentSnapshot, documentSnapshotHash: documentHash, metodo: "TYPED", destinatario: recipient.name } }
+        : step,
+    );
     let previous: string | null = null;
     let lastAt = createdAt;
     const stamps = new Map<string, Date>();
