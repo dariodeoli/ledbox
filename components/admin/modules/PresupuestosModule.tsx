@@ -1127,7 +1127,7 @@ export function PresupuestosModule() {
     return [
       { label: "Imprimir / PDF", icon: "print", href: `/imprimir/presupuesto/${budget.id}`, external: true },
       ...(writable ? [{ label: "Enviar por correo", icon: "mail" as const, onClick: () => openSend(budget) }] : []),
-      ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "external" as const, onClick: () => openWhatsapp(budget) }] : []),
+      ...(writable && budget.client.phone ? [{ label: "WhatsApp con plantilla", icon: "whatsapp" as const, onClick: () => openWhatsapp(budget) }] : []),
       ...(budget.publicToken || writable ? [
         { label: "Copiar enlace del cliente", icon: "copy" as const, onClick: () => copyClientLink(budget) },
         { label: "Ver como cliente", icon: "eye" as const, onClick: () => viewAsClient(budget) },
