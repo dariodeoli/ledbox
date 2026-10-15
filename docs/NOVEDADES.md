@@ -663,6 +663,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 ## v2.1.130 — 2026-10-15
 
+- Nuevo diseño completo de la tienda: encabezado con identidad de la empresa, inicio ordenado, catálogo de cuatro columnas en computadora y dos en celular, filtros discretos y pie en tres columnas.
+
 - Cada categoría de la tienda tiene su propia página y conserva las fechas elegidas y el pedido al navegar.
 - Pedido visible desde el primer producto, con productos, unidades e importe; confirmación animada al agregar y guardado voluntario sin interrumpir la elección.
 - El popup muestra la ficha pública completa, galería, composición, características y fechas, sin tener que abrir otra página.
