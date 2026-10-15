@@ -637,9 +637,11 @@ function ItemLinksDialog({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const range = eventAvailabilityRange(budget.event);
+  const locked = Boolean(budget.inventoryLinksLocked || budget.approvedAt || budget.status === "APPROVED" || !budgetInPlay(budget));
   const linkedCount = budget.items.filter((item) => links[item.id]).length;
 
   async function save(item: AdminBudgetRow["items"][number], inventory: AdminInventoryLink | null) {
+    if (locked) return;
     setBusyId(item.id);
     setError("");
     setNotice("");
@@ -676,6 +678,7 @@ function ItemLinksDialog({
         </AdminButton>
       }
     >
+      {locked ? <AdminNote>Los vínculos de un presupuesto aprobado, firmado o cerrado se conservan. Para preparar la entrega y asignar equipos, usá <a href="/eventos">Eventos</a>.</AdminNote> : null}
       <p className="admin-dialog-text">
         Solo los ítems vinculados con un artículo del inventario reservan stock cuando el presupuesto se aprueba (portal o
         panel), usando el rango del evento: montaje → desmontaje. Un ítem sin vínculo no reserva nada.
@@ -721,7 +724,7 @@ function ItemLinksDialog({
                     busy={busy}
                     title={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
                     aria-label={link ? `Cambiar el artículo de «${item.name}»` : `Vincular «${item.name}» con el inventario`}
-                    disabled={busy}
+                    disabled={busy || locked}
                     onClick={() => setOpenId(open ? "" : item.id)}
                   >
                     {link ? "Cambiar" : "Vincular"}
@@ -731,13 +734,13 @@ function ItemLinksDialog({
                       icon="close"
                       title={`Quitar el vínculo de «${item.name}»`}
                       aria-label={`Quitar el vínculo de «${item.name}»`}
-                      disabled={busy}
+                      disabled={busy || locked}
                       onClick={() => void save(item, null)}
                     />
                   ) : null}
                 </span>
               </div>
-              {open ? (
+              {open && !locked ? (
                 <InventoryLinkPicker
                   label={`Artículo de inventario para «${item.name}»`}
                   hint={
@@ -747,7 +750,7 @@ function ItemLinksDialog({
                   }
                   range={range}
                   selected={link}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onSelect={(next) => void save(item, next)}
                 />
               ) : null}

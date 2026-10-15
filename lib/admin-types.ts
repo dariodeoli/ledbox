@@ -498,6 +498,8 @@ export type AdminBudgetRow = {
   publicTokenCreatedAt: string | null;
   /** Primera vista del link del portal (issue #33); `null` si nunca lo abrió. */
   viewedAt: string | null;
+  /** Aprobado o con firma aceptada: los vínculos del documento ya no se editan. */
+  inventoryLinksLocked?: boolean;
   approvedAt: string | null;
   approvedByName: string | null;
   approvalMethod: string | null;

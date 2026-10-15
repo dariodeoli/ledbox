@@ -9,6 +9,7 @@ import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { checkStockBeforeApproval, decideStockApproval, releaseOrphanedGateReservation, snapshotEventAssignments, type AssignmentSnapshot } from "@/lib/server/approval-stock";
 
+import { readApprovalVersion, lockApprovalVersion, assertApprovalVersion } from "@/lib/server/approval-version";
 import { CommercialStatus } from "@prisma/client";
 import { budgetStatusLabel } from "@/lib/admin-format";
 import { clientDisplayName } from "@/lib/client-identity";
@@ -62,10 +63,7 @@ async function decideBudget(context: AdminContext, body: Record<string, unknown>
   if (note.length > MAX_NOTE) return jsonError(`La nota no puede superar los ${MAX_NOTE} caracteres.`, 400);
   if (decision === "request_revision" && !note) return jsonError("Indicá qué cambios se piden.", 400);
 
-  const budget = await db.budget.findFirst({
-    where: { id: budgetId, organizationId },
-    select: { id: true, title: true, status: true, approvedAt: true, eventId: true, client: { select: { name: true, company: true, tradeName: true, legalName: true } } },
-  });
+  const budget = await readApprovalVersion(db, organizationId, budgetId);
   if (!budget) return jsonError("Presupuesto no encontrado.", 404);
   if (budget.status === "LOST" || budget.status === "CANCELLED") return jsonError("El presupuesto está cerrado. Reabrilo explícitamente antes de aprobar o pedir cambios.", 409);
   const clientLabel = clientDisplayName(budget.client);
@@ -98,8 +96,10 @@ async function decideBudget(context: AdminContext, body: Record<string, unknown>
     try { applied = await withQuoteApproval(budget.id, organizationId, async (tx) => {
       // El preflight puede esperar por stock: precio, estado y evidencia se validan de nuevo
       // bajo el candado compartido con edición/firma, nunca desde la pestaña anterior.
-      const current = await tx.budget.findFirstOrThrow({ where: { id: budget.id, organizationId } });
+      const current = await readApprovalVersion(tx, organizationId, budget.id);
+      if (!current) throw new QuoteComparisonError(404, "Presupuesto no encontrado.");
       if (current.approvedAt) return { count: 0, from: current.status };
+      assertApprovalVersion(budget, current);
       const priceBlock = await budgetPriceGate(organizationId, budget.id, "aprobar", tx);
       if (priceBlock) throw new QuoteComparisonError(409, priceBlock, "price_missing");
       await tx.budget.update({
@@ -110,6 +110,8 @@ async function decideBudget(context: AdminContext, body: Record<string, unknown>
       // simultáneo no puede generar dos conceptos ni dejar el plan a mitad de camino.
       await syncBudgetExpectedPayments({ tx, organizationId, budgetId: budget.id });
       return { count: 1, from: current.status };
+    }, undefined, {
+      beforeBudgetLock: (tx) => lockApprovalVersion(tx, budget),
     }); } catch (error) {
       await releaseGate();
       throw error;

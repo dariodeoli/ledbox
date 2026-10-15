@@ -97,6 +97,7 @@ export async function GET() {
         event: true,
         lead: { select: { id: true, createdAt: true } },
         items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } },
+        _count: { select: { signatureRequests: { where: { status: { in: ["SIGNED", "VALIDATED"] } } } } },
         expectedPayments: { where: { status: { not: "CANCELLED" } }, orderBy: [{ installmentNumber: "asc" }, { createdAt: "asc" }], select: { status: true, concept: true, label: true, amount: true, paidAmount: true } },
         payments: true,
         // Adjuntos internos (issue #65): metadatos, el binario se sirve aparte
@@ -131,7 +132,8 @@ export async function GET() {
   const returns = await equipmentReturnByEvent(organizationId, [...new Set(budgets.flatMap((budget) => (budget.eventId && budget.securityDeposit ? [budget.eventId] : [])))]);
   return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault, securityDepositMode: rental.securityDepositMode, securityDepositCalc: rental.securityDepositCalc, securityDepositPercent: rental.securityDepositPercent }, budgets: budgets.map((budget) => {
     const { logo, ...client } = budget.client;
-    return { ...budget, equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
+    const { _count, ...row } = budget;
+    return { ...row, inventoryLinksLocked: Boolean(budget.approvedAt || budget.status === "APPROVED" || _count.signatureRequests), equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };
   }), budgetRequests: budgetRequests.map((request) => ({ ...request, budget: { ...request.budget, items: stableOrderBudgetItems(request.budget.items) } })) });
 }
 
@@ -418,48 +420,51 @@ async function patchBudget(request: Request) {
     const itemId = typeof body.itemId === "string" ? body.itemId : "";
     if (!itemId) return jsonError("Falta el ítem.", 400);
     const rawInventoryId = typeof body.inventoryId === "string" ? body.inventoryId.trim() : "";
-    const budget = await db.budget.findFirst({
-      where: { id: budgetId, organizationId },
-      select: {
-        id: true,
-        title: true,
-        client: { select: { name: true, company: true, tradeName: true, legalName: true } },
-        items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
-      },
-    });
-    if (!budget) return jsonError("Presupuesto no encontrado.", 404);
-    const item = budget.items.find((row) => row.id === itemId);
-    if (!item) return jsonError("El ítem no pertenece a este presupuesto.", 404);
-    const inventory = rawInventoryId
-      ? await db.inventoryItem.findFirst({ where: { id: rawInventoryId, organizationId }, select: { id: true, name: true } })
-      : null;
-    if (rawInventoryId && !inventory) return jsonError("El artículo de inventario no existe en esta empresa.", 404);
-    if (item.inventoryId === (inventory?.id ?? null)) {
-      return Response.json({ item: { id: item.id, inventoryId: item.inventoryId }, unchanged: true });
-    }
-    const updated = await db.budgetItem.update({
-      where: { id: item.id },
-      data: { inventoryId: inventory?.id ?? null },
-      select: { id: true, name: true, inventoryId: true, inventory: { select: INVENTORY_LINK_SELECT } },
-    });
-    await recordAudit({
-      context: auth.context,
-      action: "update",
-      entity: "Budget",
-      entityId: budget.id,
-      summary: inventory
-        ? `Vinculó «${item.name}» del presupuesto «${budget.title}» con «${inventory.name}» del inventario`
-        : `Quitó el vínculo con inventario de «${item.name}» del presupuesto «${budget.title}»`,
-      detail: {
-        changes: {
-          inventoryId: {
-            from: item.inventory?.name ?? null,
-            to: inventory?.name ?? null,
+    return withQuoteCommercialEdit(budgetId, organizationId, true, async (tx) => {
+      const budget = await tx.budget.findFirst({
+        where: { id: budgetId, organizationId },
+        select: {
+          id: true,
+          title: true,
+          client: { select: { name: true, company: true, tradeName: true, legalName: true } },
+          items: { select: { id: true, name: true, inventoryId: true, inventory: { select: { name: true } } } },
+        },
+      });
+      if (!budget) return jsonError("Presupuesto no encontrado.", 404);
+      const item = budget.items.find((row) => row.id === itemId);
+      if (!item) return jsonError("El ítem no pertenece a este presupuesto.", 404);
+      const inventory = rawInventoryId
+        ? await tx.inventoryItem.findFirst({ where: { id: rawInventoryId, organizationId }, select: { id: true, name: true } })
+        : null;
+      if (rawInventoryId && !inventory) return jsonError("El artículo de inventario no existe en esta empresa.", 404);
+      if (item.inventoryId === (inventory?.id ?? null)) {
+        return Response.json({ item: { id: item.id, inventoryId: item.inventoryId }, unchanged: true });
+      }
+      const updated = await tx.budgetItem.update({
+        where: { id: item.id },
+        data: { inventoryId: inventory?.id ?? null },
+        select: { id: true, name: true, inventoryId: true, inventory: { select: INVENTORY_LINK_SELECT } },
+      });
+      await tx.budget.update({ where: { id: budget.id }, data: { updatedAt: new Date() } });
+      await recordAudit({
+        context: auth.context,
+        action: "update",
+        entity: "Budget",
+        entityId: budget.id,
+        summary: inventory
+          ? `Vinculó «${item.name}» del presupuesto «${budget.title}» con «${inventory.name}» del inventario`
+          : `Quitó el vínculo con inventario de «${item.name}» del presupuesto «${budget.title}»`,
+        detail: {
+          changes: {
+            inventoryId: {
+              from: item.inventory?.name ?? null,
+              to: inventory?.name ?? null,
+            },
           },
         },
-      },
+      }, tx);
+      return Response.json({ item: updated });
     });
-    return Response.json({ item: updated });
   }
 
   if (body.kind === "security-deposit" || body.kind === "security-deposit-status") {
