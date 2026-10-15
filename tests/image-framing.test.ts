@@ -60,8 +60,9 @@ test("las tres identidades usan el editor compartido y preparar no se dispara al
   const source = read("components/admin/AdminUI.tsx");
   const uploader = source.slice(source.indexOf("export function AdminImageUpload"), source.indexOf("export function AdminIdentityImageEditor"));
   assert.doesNotMatch(uploader, /await prepareIdentityImage\(/, "seleccionar sólo abre editor, sin subir ni comprimir antes");
-  assert.match(uploader, /setEditing\(file\)/);
-  assert.match(uploader, /onApply=\{\(image\) => \{ setEditing\(null\); onPrepared\(image\); \}\}/);
+  assert.match(uploader, /setEditing\(\{ file, epoch \}\)/);
+  assert.match(uploader, /onApply=\{\(image\) => acceptImage\(image, editing\.epoch\)\}/);
+  assert.match(uploader, /if \(!current\(epoch\)\) return;[\s\S]*setEditing\(null\); onPrepared\(image\)/);
   assert.match(source, /prepareIdentityImage\(file, \{ square, maxSide, framing \}\)/);
   assert.match(source, /identityImageSize\(loaded.width, loaded.height, square, maxSide\)/);
   assert.match(source, /context.drawImage\(loaded.image, rect.x, rect.y, rect.width, rect.height\)/);

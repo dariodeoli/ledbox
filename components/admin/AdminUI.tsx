@@ -1986,25 +1986,57 @@ export function AdminImageUpload({
   const message = error || localError;
   const working = Boolean(busy) || preparing;
 
-  const [editing, setEditing] = useState<File | null>(null);
+  const [editing, setEditing] = useState<{ file: File; epoch: number } | null>(null);
+  const lifecycle = useRef({ active: false, epoch: 0, fetching: false });
+  const requestRef = useRef<AbortController | null>(null);
+  const unavailable = useRef(Boolean(disabled || busy));
+  unavailable.current = Boolean(disabled || busy);
+  useEffect(() => {
+    lifecycle.current.active = !unavailable.current;
+    lifecycle.current.epoch += 1;
+    lifecycle.current.fetching = false;
+    setPreparing(false); setEditing(null);
+    return () => {
+      lifecycle.current.active = false; lifecycle.current.epoch += 1; lifecycle.current.fetching = false;
+      requestRef.current?.abort(); requestRef.current = null;
+    };
+  }, [editSrc, disabled, busy]);
+  function current(epoch: number) { return lifecycle.current.active && lifecycle.current.epoch === epoch && !unavailable.current; }
+  function closeEditor() {
+    lifecycle.current.epoch += 1; requestRef.current?.abort(); requestRef.current = null;
+    setEditing(null);
+  }
+  function acceptImage(image: PreparedIdentityImage, epoch: number) {
+    if (!current(epoch)) return;
+    lifecycle.current.epoch += 1;
+    setEditing(null); onPrepared(image);
+  }
   function pick(file: File | null) {
-    if (!file || working || disabled) return;
+    if (!file || working || disabled || !lifecycle.current.active) return;
+    requestRef.current?.abort(); requestRef.current = null;
+    const epoch = ++lifecycle.current.epoch;
     setLocalError("");
-    setEditing(file);
+    setEditing({ file, epoch });
   }
   async function editCurrent() {
-    if (!editSrc || working || disabled) return;
+    if (!editSrc || working || disabled || !lifecycle.current.active || lifecycle.current.fetching) return;
+    const epoch = ++lifecycle.current.epoch;
+    const controller = new AbortController();
+    requestRef.current?.abort(); requestRef.current = controller;
+    lifecycle.current.fetching = true;
     setLocalError(""); setPreparing(true);
     try {
       const source = new URL(editSrc, window.location.href);
       const localData = /^data:image\/(?:jpeg|png|webp);base64,/i.test(editSrc);
       if (!localData && (source.origin !== window.location.origin || !["http:", "https:"].includes(source.protocol))) throw new Error("No se puede editar esta imagen desde una dirección externa. Subí el archivo original.");
-      const response = await fetch(editSrc, { credentials: "same-origin", cache: "no-store" });
+      const response = await fetch(editSrc, { credentials: "same-origin", cache: "no-store", signal: controller.signal });
+      if (!current(epoch) || controller.signal.aborted) return;
       if (!response.ok) throw new Error("No pudimos abrir la imagen actual. Probá de nuevo o subí el original.");
       const blob = await response.blob();
-      setEditing(new File([blob], "imagen-actual", { type: blob.type }));
-    } catch (failure) { setLocalError(failure instanceof Error ? failure.message : "No pudimos abrir la imagen actual."); }
-    finally { setPreparing(false); }
+      if (!current(epoch) || controller.signal.aborted) return;
+      setEditing({ file: new File([blob], "imagen-actual", { type: blob.type }), epoch });
+    } catch (failure) { if (current(epoch) && !controller.signal.aborted) setLocalError(failure instanceof Error ? failure.message : "No pudimos abrir la imagen actual."); }
+    finally { if (current(epoch)) { lifecycle.current.fetching = false; requestRef.current = null; setPreparing(false); } }
   }
 
   return (
@@ -2052,7 +2084,7 @@ export function AdminImageUpload({
           event.target.value = "";
         }}
       />
-      {editing ? <AdminIdentityImageEditor file={editing} mode={mode} onCancel={() => setEditing(null)} onApply={(image) => { setEditing(null); onPrepared(image); }} /> : null}
+      {editing ? <AdminIdentityImageEditor key={editing.epoch} file={editing.file} mode={mode} disabled={Boolean(disabled || busy)} onCancel={closeEditor} onApply={(image) => acceptImage(image, editing.epoch)} /> : null}
       {message ? (
         <span className="admin-field-error" id={errorId} role="alert">
           {message}
@@ -2067,8 +2099,8 @@ export function AdminImageUpload({
 }
 
 /** Encuadre único de avatar y logos: el mismo rectángulo dibuja preview y exportación. */
-export function AdminIdentityImageEditor({ file, mode, onApply, onCancel }: {
-  file: File; mode: "avatar" | "logo"; onApply: (image: PreparedIdentityImage) => void; onCancel: () => void;
+export function AdminIdentityImageEditor({ file, mode, onApply, onCancel, disabled = false }: {
+  file: File; mode: "avatar" | "logo"; disabled?: boolean; onApply: (image: PreparedIdentityImage) => void; onCancel: () => void;
 }) {
   const [loaded, setLoaded] = useState<LoadedImage | null>(null);
   const [framing, setFraming] = useState<ImageFraming>({ ...DEFAULT_IMAGE_FRAMING });
@@ -2080,25 +2112,33 @@ export function AdminIdentityImageEditor({ file, mode, onApply, onCancel }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const helpId = useId();
   const drag = useRef<{ pointerId: number; x: number; y: number; framing: ImageFraming } | null>(null);
+  const lifecycle = useRef({ active: false, epoch: 0, applying: false });
+  const unavailable = useRef(disabled);
+  unavailable.current = disabled;
+  function current(epoch: number) { return lifecycle.current.active && lifecycle.current.epoch === epoch && !unavailable.current; }
+  function cancel() { lifecycle.current.active = false; lifecycle.current.epoch += 1; lifecycle.current.applying = false; onCancel(); }
   const square = mode === "avatar", maxSide = square ? 512 : 1024;
   const size = loaded ? identityImageSize(loaded.width, loaded.height, square, maxSide) : { width: 1, height: 1 };
   useEffect(() => {
-    let active = true;
+    lifecycle.current.active = !disabled;
+    const epoch = ++lifecycle.current.epoch;
+    lifecycle.current.applying = false;
+    setApplying(false); setLoaded(null); setLoading(!disabled); setError("");
     let resource: LoadedImage | null = null;
     const read = async () => {
       try {
         if (!file.size || !detectIdentityImageMime(new Uint8Array(await file.slice(0, 16).arrayBuffer()))) throw new Error("Elegí un JPG, PNG o WebP real. El archivo no puede estar vacío.");
         resource = await loadImageSource(file);
         if (!resource || resource.width < 1 || resource.height < 1) throw new Error("No pudimos leer esta imagen; probá con otro archivo.");
-        if (!active) { resource.release(); resource = null; return; }
+        if (!current(epoch)) { resource.release(); resource = null; return; }
         const frame = initialImageFraming(resource.width, resource.height, square);
         setLoaded(resource); setFraming(frame); setInitial(frame);
-      } catch (failure) { if (active) setError(failure instanceof Error ? failure.message : "No pudimos leer la imagen."); }
-      finally { if (active) setLoading(false); }
+      } catch (failure) { if (current(epoch)) setError(failure instanceof Error ? failure.message : "No pudimos leer la imagen."); }
+      finally { if (current(epoch)) setLoading(false); }
     };
-    void read();
-    return () => { active = false; resource?.release(); resource = null; };
-  }, [file, square]);
+    if (!disabled) void read();
+    return () => { lifecycle.current.active = false; lifecycle.current.epoch += 1; lifecycle.current.applying = false; resource?.release(); resource = null; };
+  }, [file, square, disabled]);
   useEffect(() => {
     if (!loaded || !canvasRef.current) return;
     const context = canvasRef.current.getContext("2d");
@@ -2110,14 +2150,17 @@ export function AdminIdentityImageEditor({ file, mode, onApply, onCancel }: {
   useEffect(() => { setZoomInput(String(Math.round(framing.zoom * 100))); }, [framing.zoom]);
   function update(patch: Partial<ImageFraming>) { setFraming((current) => boundedImageFraming({ ...current, ...patch })); }
   async function apply() {
-    if (!loaded || applying || loading) return;
+    if (!loaded || applying || loading || !lifecycle.current.active || unavailable.current || lifecycle.current.applying) return;
+    const epoch = lifecycle.current.epoch;
+    lifecycle.current.applying = true;
     setApplying(true); setError("");
     try {
       const result = await prepareIdentityImage(file, { square, maxSide, framing });
+      if (!current(epoch)) return;
       if (!result.ok) { setError(result.error); return; }
       onApply(result.image);
-    } catch { setError("No pudimos preparar la imagen. Probá otra vez."); }
-    finally { setApplying(false); }
+    } catch { if (current(epoch)) setError("No pudimos preparar la imagen. Probá otra vez."); }
+    finally { if (current(epoch)) { lifecycle.current.applying = false; setApplying(false); } }
   }
   function move(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!loaded || !drag.current || event.pointerId !== drag.current.pointerId || applying) return;
@@ -2127,8 +2170,8 @@ export function AdminIdentityImageEditor({ file, mode, onApply, onCancel }: {
   }
   return <AdminDialog title={square ? "Encuadrar foto de perfil" : "Encuadrar logo"} size="md" icon="image" error={error}
     description="Arrastrá la imagen o ajustá los controles. Recién se usa cuando pulsás Aplicar."
-    dirty={JSON.stringify(framing) !== JSON.stringify(initial)} onClose={() => { if (!applying) onCancel(); }}
-    footer={({ requestClose }) => <><AdminButton icon="close" onClick={requestClose} disabled={applying}>Cancelar</AdminButton><AdminButton variant="primary" icon="check" onClick={() => void apply()} disabled={!loaded || loading} busy={applying} busyLabel="Preparando…">Aplicar</AdminButton></>}>
+    dirty={!applying && JSON.stringify(framing) !== JSON.stringify(initial)} onClose={cancel}
+    footer={({ requestClose }) => <><AdminButton icon="close" onClick={applying ? cancel : requestClose}>Cancelar</AdminButton><AdminButton variant="primary" icon="check" onClick={() => void apply()} disabled={!loaded || loading} busy={applying} busyLabel="Preparando…">Aplicar</AdminButton></>}>
     {loading ? <AdminLoadingRows rows={2} /> : loaded ? <div className="admin-image-editor">
       <div className="admin-image-editor-stage" data-mode={mode}>
         <canvas ref={canvasRef} width={size.width} height={size.height} tabIndex={0} aria-label="Vista previa del encuadre. Usá las flechas para mover y más o menos para acercar." aria-describedby={helpId}
