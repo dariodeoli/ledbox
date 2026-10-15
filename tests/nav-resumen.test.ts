@@ -26,7 +26,7 @@ const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, im
 const hrefsFor = (role: Parameters<typeof adminNavGroups>[0]) =>
   adminNavGroups(role).flatMap((group) => group.items.map((item) => item.href));
 
-test("menú por rol: todos ven lo mismo salvo Estado, que es de OWNER/ADMIN", () => {
+test("menú por rol: Ajustes está fijo y Estado vive dentro, con permisos propios", () => {
   const common = [
     "/dashboard",
     "/leads",
@@ -42,8 +42,7 @@ test("menú por rol: todos ven lo mismo salvo Estado, que es de OWNER/ADMIN", ()
   ];
   for (const role of ADMIN_ROLES) {
     const hrefs = hrefsFor(role);
-    const withState = role === "OWNER" || role === "ADMIN";
-    assert.deepEqual(hrefs, withState ? [...common, "/estado"] : common, `${role}: menú distinto del esperado`);
+    assert.deepEqual(hrefs, common, `${role}: menú distinto del esperado`);
   }
   // Sin sesión resuelta (rol desconocido) tampoco se ve Estado.
   assert.equal(hrefsFor(null).includes("/estado"), false);

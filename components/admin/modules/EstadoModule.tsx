@@ -3,6 +3,7 @@
 import type { AdminIconName } from "@/lib/admin-types";
 import { AdminTabs } from "../AdminUI";
 import { AuditoriaModule } from "./AuditoriaModule";
+import { AjustesTabs } from "./AjustesTabs";
 import { SistemaModule } from "./SistemaModule";
 
 /**
@@ -21,7 +22,9 @@ const SECTIONS: ReadonlyArray<{ key: AdminEstadoSection; href: string; label: st
 
 export function EstadoModule({ section }: { section: AdminEstadoSection }) {
   return (
-    <>
+    <div className="admin-settings-layout">
+      <AjustesTabs active="estado" />
+      <div className="admin-settings-content">
       <div className="admin-subtabs-bar">
         <AdminTabs
           label="Secciones de Estado"
@@ -36,6 +39,7 @@ export function EstadoModule({ section }: { section: AdminEstadoSection }) {
 
       {section === "sistema" ? <SistemaModule /> : null}
       {section === "auditoria" ? <AuditoriaModule /> : null}
-    </>
+      </div>
+    </div>
   );
 }

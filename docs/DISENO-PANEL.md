@@ -122,7 +122,7 @@ se unifican los componentes, sin cambiar datos ni contratos.
 | **Clientes** (suelto) | Clientes |
 | **Operación** | Inventario · Proveedores · Promotoras |
 | **Plata** | Finanzas · Facturación |
-| **Sistema** | Ajustes · Estado (solo OWNER/ADMIN) |
+| **Sistema** (fijo sobre Empresa) | Ajustes; Estado vive dentro y conserva acceso OWNER/ADMIN |
 
 > **Menú por etapas (13-10-2026).** El orden sigue el recorrido del negocio:
 > entra un lead, se cotiza, se hace el evento; después se cobra. `ADMIN_NAV`
@@ -138,7 +138,7 @@ se unifican los componentes, sin cambiar datos ni contratos.
 > contactar, presupuestos `SENT`/`NEGOTIATING` y eventos de los próximos 7 días.
 > Sin dato o en 0 no se dibuja contador. Se refrescan al navegar y con
 > `requestAdminRefresh()`. Los permisos por rol no cambian: `adminNavGroups(role)`
-> filtra igual que antes (solo Estado es restringido).
+> mantiene las restricciones de cada sección (Estado es OWNER/ADMIN dentro de Ajustes).
 > **Móvil**: la barra inferior es Inicio · Leads · Presupuestos · Eventos · Más
 > (el resto vive en el drawer).
 >
@@ -150,7 +150,8 @@ se unifican los componentes, sin cambiar datos ni contratos.
 Reglas del reordenamiento:
 - Lo que se usa todos los días arriba (Inicio, y Ventas en el orden del flujo).
 - Finanzas y Facturación juntas bajo **Plata** (son el mismo trabajo con dos caras).
-- Sistema agrupa lo que se toca de vez en cuando y lo restringido (OWNER/ADMIN).
+- Ajustes queda fijo encima de Empresa, fuera del scroll de módulos. Estado conserva Sistema/Auditoría dentro de Ajustes.
+- Entrar a Ajustes/Estado compacta el menú de escritorio sin sobrescribir la preferencia manual. Cambiar una pestaña interna respeta la expansión manual; al entrar a un módulo diario se expande. El control queda debajo de la marca en modo compacto. El drawer de celular mantiene su comportamiento.
 - Dentro de cada módulo: primero lo urgente/accionable (avisos, pendientes), después lo
   operativo (listas y tableros), al final lo descriptivo (notas, ayudas, históricos).
 

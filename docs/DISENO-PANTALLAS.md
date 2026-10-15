@@ -163,7 +163,7 @@ desmontajes, cobros y checklist.
 - **Ajustes** (`/ajustes/empresa`, `/ajustes/correo`, `/ajustes/plan`,
   `/ajustes/usuarios`): barra de subtabs arriba, contenido del módulo debajo.
   Empresa, Correo y Usuarios son OWNER/ADMIN; Plan se ve en todos los roles.
-- **Estado** (`/estado/sistema`, `/estado/auditoria`): mismo patrón; las dos
+- **Estado**, dentro de Ajustes (`/estado/sistema`, `/estado/auditoria`): conserva Sistema/Auditoría y la barra compartida de Ajustes; las dos
   secciones son OWNER/ADMIN.
 - El PIN y el auto-bloqueo viven **solo** en Mi perfil; no se repiten acá.
 

@@ -718,3 +718,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Fotos de identidad: editor compartido para perfil y logos de empresa/cliente, con zoom, posición, teclado, arrastre y vista previa antes de aplicar. También permite reabrir la imagen guardada. Las fotos de productos conservan su encuadre completo.
 - Ciudad: empresa, clientes, eventos y revisión de cargas usan el selector compartido del catálogo del sistema. Los valores históricos se conservan cuando se editan otros datos.
 - Auditoría de los pedidos del día registrada en documentación e issues, distinguiendo entregas, trabajo en curso y hallazgos históricos sin reproducir.
+
+## v2.1.135 — 2026-10-15
+
+- Ajustes queda fijo al pie del menú, justo encima de Empresa. Estado se abre desde Ajustes, con Sistema y Auditoría y sus permisos habituales.
+- Entrar a Ajustes compacta el menú de escritorio; se puede expandir manualmente sin que otra pestaña de Ajustes lo vuelva a cerrar. Entrar a Inventario u otro módulo lo abre. El botón de expandir queda debajo de EventOS cuando está compacto. En celular se conserva el menú desplegable habitual.
