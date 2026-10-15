@@ -1,4 +1,5 @@
 import { sandboxHiddenHere } from "@/lib/server/demo-host";
+import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { quotePortalAvailable } from "@/lib/quote-sharing";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -6,7 +7,7 @@ import { db } from "@/lib/server/db";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalBudgetOpen } from "@/lib/server/budget-portal";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
 
@@ -48,51 +49,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (budget.approvedAt) return jsonError("Este presupuesto ya fue aprobado; el equipo de LedBox puede revisarlo.", 409);
   if (!portalBudgetOpen(budget.status)) return jsonError("Este presupuesto ya no está disponible.", 409);
 
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("La solicitud de cambios debe ser un objeto JSON.", 400);
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!note) return jsonError("Contanos qué cambios necesitás.", 400);
   if (note.length > MAX_NOTE) return jsonError(`El comentario no puede superar los ${MAX_NOTE} caracteres.`, 400);
   if (name.length > MAX_NAME) return jsonError(`El nombre no puede superar los ${MAX_NAME} caracteres.`, 400);
 
-  await db.budget.update({
-    where: { id: budget.id },
-    data: {
-      // Un pedido nuevo actualiza el comentario, pero nunca reabre una venta cerrada.
-      status: budget.status === "APPROVED" ? budget.status : "NEGOTIATING",
-      revisionRequestedAt: new Date(),
-      revisionNote: name ? `${note} — ${name}` : note,
-    },
-  });
-
-  // Issue #14: el pedido de cambios también entra a la cola de solicitudes del
-  // panel, así se resuelve con aceptar o rechazar (y el cliente ve la respuesta).
   const actorName = name || budget.client?.company?.trim() || budget.client?.name || "Cliente (portal)";
-  const pending = await db.budgetChangeRequest.findFirst({
-    where: { budgetId: budget.id, kind: "changes", status: "pending" },
-    select: { id: true },
-    orderBy: { createdAt: "desc" },
-  });
-  const requestData = {
-    payload: { comment: note } as Prisma.InputJsonObject,
-    note,
-    requestedByName: actorName,
-    createdAt: new Date(),
-  };
-  if (pending) {
-    await db.budgetChangeRequest.update({ where: { id: pending.id }, data: requestData });
-  } else {
-    await db.budgetChangeRequest.create({
-      data: {
-        id: randomUUID(),
-        organizationId: budget.organizationId,
-        budgetId: budget.id,
-        kind: "changes",
-        status: "pending",
-        ...requestData,
-      },
+  try { await withQuoteCommercialEdit(budget.id, budget.organizationId, true, async (tx) => {
+    const fresh = await tx.budget.findFirst({ where: { id: budget.id, publicToken: code, deletedAt: null, client: { deletedAt: null } } });
+    if (!fresh || !quotePortalAvailable(fresh)) throw new QuoteComparisonError(404, "El enlace ya no está vigente.");
+    await tx.budget.update({
+      where: { id: budget.id },
+      data: { status: "NEGOTIATING", revisionRequestedAt: new Date(), revisionNote: name ? `${note} — ${name}` : note },
     });
-  }
+    // El presupuesto y su solicitud cambian juntos; el candado evita duplicados
+    // y relee aprobación/firma después de esperar una decisión del equipo.
+    const pending = await tx.budgetChangeRequest.findFirst({ where: { budgetId: budget.id, kind: "changes", status: "pending" }, select: { id: true }, orderBy: { createdAt: "desc" } });
+    const requestData = { payload: { comment: note } as Prisma.InputJsonObject, note, requestedByName: actorName, createdAt: new Date() };
+    if (pending) await tx.budgetChangeRequest.update({ where: { id: pending.id }, data: requestData });
+    else await tx.budgetChangeRequest.create({ data: { id: randomUUID(), organizationId: budget.organizationId, budgetId: budget.id, kind: "changes", status: "pending", ...requestData } });
+  }); } catch (error) { if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status); throw error; }
 
   const payload = await loadPublicBudget(code);
   if (!payload) return jsonError("No encontramos ese presupuesto.", 404);

@@ -2007,6 +2007,8 @@ model InventoryUnit {
   /// Código de inventario legible y único por empresa (ej.: KIO-01).
   code           String
   status         InventoryUnitStatus @default(AVAILABLE)
+  /// Ciclo operativo: avanza al restaurar o iniciar incidentes sin ninguno abierto.
+  incidentCycle  Int                 @default(0)
   /// Costo que tuvo la unidad (interno), en guaraníes enteros.
   purchaseCost   Int                 @default(0)
   notes          String?
@@ -2106,6 +2108,8 @@ model InventoryIncident {
   assignmentId   String?
   eventId        String?
   unitId         String?
+  /// Snapshot del ciclo de la unidad; 0 conserva incidentes históricos sin inferir restauraciones.
+  unitCycle      Int                     @default(0)
   /// true = retenido por cantidad (suma a InventoryItem.incidentHold). Solo estos tocan el contador.
   heldByQuantity Boolean                 @default(false)
   kind           InventoryIncidentKind

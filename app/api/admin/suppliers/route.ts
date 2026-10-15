@@ -4,7 +4,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { archivedFieldsForActive } from "@/lib/server/trash-crm";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { FIELD_MESSAGES, emailValid, normalizeEmail, normalizePersonName, personNameValid } from "@/lib/field-rules";
 
@@ -62,7 +62,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await requireAdminContext("suppliers.write");
   if (!auth.ok) return auth.response;
-  const body = await readJson(request) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("Datos del proveedor inválidos.", 400);
 
   // Mensajes es-PY con las reglas del kit (issue #131): mismo texto en el front.
   const name = normalizePersonName(typeof body.name === "string" ? body.name : "");
@@ -103,7 +104,8 @@ export async function PATCH(request: Request) {
   const auth = await requireAdminContext("suppliers.write");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const body = await readJson(request) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("Datos del proveedor inválidos.", 400);
   if (typeof body.id !== "string") return jsonError("Falta el id del proveedor.", 400);
 
   const supplier = await db.supplier.findFirst({ where: { id: body.id, organizationId } });

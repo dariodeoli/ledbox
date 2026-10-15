@@ -1,3 +1,4 @@
+import { EventRescheduleError, guardEventReschedule, lockEventForEdit } from "@/lib/server/event-reschedule";
 import { guardEventNameChange } from "@/lib/server/event-name";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,7 @@ import { closureBlockMessage, eventClosureBlockers } from "@/lib/server/inventor
 import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
-import { assertLive, trashErrorResponse } from "@/lib/server/trash";
+import { trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
@@ -128,10 +129,10 @@ export async function PATCH(request: Request) {
   const auth = await requireAdminContext("events.write");
   if (!auth.ok) return auth.response;
   const body = (await readJson(request)) as Record<string, unknown>;
-  const id = typeof body.id === "string" ? body.id.trim() : "";
-  if (!id) return jsonError("Event id is required.", 400);
   const parsed = parseEventFields(body);
   if (!parsed.ok) return jsonError(parsed.error, 400);
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id) return jsonError("Event id is required.", 400);
   if (!Object.keys(parsed.data).length) return jsonError("Ingresá los cambios del evento.", 400);
 
   const event = await db.event.findFirst({
@@ -142,7 +143,7 @@ export async function PATCH(request: Request) {
   const proposed = { ...event, ...parsed.data };
   const invalidDates = eventDateViolation(proposed);
   if (invalidDates) return jsonError(invalidDates, 400);
-  const changes = auditChanges(event, proposed, EVENT_AUDIT_FIELDS);
+  let changes = auditChanges(event, proposed, EVENT_AUDIT_FIELDS);
   if (!changes) return Response.json({ event, unchanged: true });
 
   // Cerrar el evento exige haber cerrado la operación de inventario: sin equipos
@@ -154,7 +155,7 @@ export async function PATCH(request: Request) {
   const closing = parsed.data.status === "COMPLETED" && event.status !== "COMPLETED";
   const forceClose = body.forceClose === true;
   const forceNote = typeof body.forceCloseNote === "string" ? body.forceCloseNote.trim() : "";
-  if (closing && forceClose && forceNote.length < 5) return jsonError("Para cerrar igual escribí el motivo (mínimo 5 caracteres).", 400);
+  if (parsed.data.status === "COMPLETED" && forceClose && forceNote.length < 5) return jsonError("Para cerrar igual escribí el motivo (mínimo 5 caracteres).", 400);
   if (forceNote.length > 400) return jsonError("El motivo no puede superar 400 caracteres.", 400);
   if (closing && event.status === "CANCELLED") return jsonError("Un evento cancelado no se puede finalizar.", 409);
   let blockedMessage: string | null = null;
@@ -162,13 +163,16 @@ export async function PATCH(request: Request) {
   let updated;
   try {
     updated = await db.$transaction(async (tx) => {
-    // Papelera: un id eliminado entre la lectura y la escritura da 404, no se edita.
-    await assertLive("Event", event.id, auth.context.organizationId, tx);
+    const stockMayChange = ["startsAt", "endsAt", "setupAt", "strikeAt", "status"].some(key => key in parsed.data);
+    const fresh = await lockEventForEdit(tx, auth.context.organizationId, event.id, stockMayChange);
+    const invalidFreshDates = eventDateViolation({ ...fresh, ...parsed.data });
+    if (invalidFreshDates) throw new EventRescheduleError(invalidFreshDates);
+    changes = auditChanges(fresh, { ...fresh, ...parsed.data }, EVENT_AUDIT_FIELDS);
+    if (parsed.data.status === "COMPLETED" && fresh.status === "CANCELLED") throw new EventRescheduleError("Un evento cancelado no se puede finalizar.");
     if (parsed.data.name !== undefined) {
       await guardEventNameChange(tx, auth.context.organizationId, event.id, parsed.data.name, event.name);
     }
-    if (closing) {
-      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} AND "organizationId" = ${auth.context.organizationId} FOR UPDATE`;
+    if (parsed.data.status === "COMPLETED" && fresh.status !== "COMPLETED") {
       const message = closureBlockMessage(await eventClosureBlockers(auth.context.organizationId, event.id, tx));
       if (message && !forceClose) {
         blockedMessage = message;
@@ -177,6 +181,7 @@ export async function PATCH(request: Request) {
       forcedOver = message;
     }
     const row = await tx.event.update({ where: { id: event.id }, data: parsed.data });
+    if (stockMayChange) await guardEventReschedule(tx, auth.context.organizationId, fresh, row);
     // La nota del cierre forzado es su justificación: se audita en la misma transacción.
     if (forcedOver) {
       await recordAudit({
@@ -191,6 +196,7 @@ export async function PATCH(request: Request) {
     return row;
     });
   } catch (error) {
+    if (error instanceof EventRescheduleError) return jsonError(error.message, error.status, "event_reschedule_conflict");
     if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status);
     const response = trashErrorResponse(error);
     if (response) return response;

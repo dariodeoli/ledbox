@@ -7,6 +7,11 @@ export function jsonError(message: string, status = 400, code?: string): Respons
   return Response.json(code ? { error: message, code } : { error: message }, { status });
 }
 
+/** Los cuerpos de los endpoints de formulario deben ser objetos, no listas ni escalares JSON. */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();

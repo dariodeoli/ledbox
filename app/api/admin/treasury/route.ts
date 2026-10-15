@@ -1,3 +1,4 @@
+import { FIELD_LIMITS } from "@/lib/field-rules";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -43,7 +44,7 @@ export const dynamic = "force-dynamic";
  * Una cuenta de otra empresa responde 404.
  */
 
-const MAX_AMOUNT = 99_000_000_000;
+const MAX_AMOUNT = FIELD_LIMITS.amountStorage;
 const MAX_NAME = 120;
 const MAX_BANK = 120;
 /** Número y alias de la cuenta (issue #129): datos para transferir. */
@@ -260,7 +261,7 @@ export async function POST(request: Request) {
         }
         const type: TreasuryAccountTypeValue = isAccountType(body.type) ? body.type : "CASH";
         const openingBalance = body.openingBalance === undefined ? 0 : toInteger(body.openingBalance, 0, MAX_AMOUNT);
-        if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
+        if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 2.147.483.647).", 400);
         const sortOrder = body.sortOrder === undefined ? 0 : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
         if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
         const bank = type === "BANK" ? (optionalText(body.bank, MAX_BANK) ?? null) : null;
@@ -306,7 +307,7 @@ export async function POST(request: Request) {
         const direction = body.direction === "IN" ? "IN" : body.direction === "OUT" ? "OUT" : body.direction === "TRANSFER" ? "TRANSFER" : null;
         if (!direction) return jsonError("Elegí el tipo de movimiento: entrada, salida o transferencia.", 400);
         const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-        if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+        if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 2.147.483.647).", 400);
 
         const account = await requestedAccount(tx, organizationId, body.accountId);
         if (account === undefined) return jsonError("Elegí la cuenta del movimiento.", 400);
@@ -363,6 +364,10 @@ export async function POST(request: Request) {
       // ── Pago o anticipo a un trabajo de proveedor ─────────────────────────────
       const jobId = typeof body.jobId === "string" ? body.jobId : "";
       if (!jobId) return jsonError("Elegí el trabajo del proveedor.", 400);
+      // El saldo y el estado se leen después de serializar pagos y ediciones
+      // del mismo trabajo. Claves distintas son operaciones distintas: la
+      // idempotencia sola no impide gastar dos veces el mismo saldo.
+      await tx.$queryRaw`SELECT id FROM "SupplierJob" WHERE id = ${jobId} AND "organizationId" = ${organizationId} FOR UPDATE`;
       const job = await tx.supplierJob.findFirst({
         where: { id: jobId, organizationId },
         include: { supplier: { select: { id: true, name: true } } },
@@ -375,7 +380,7 @@ export async function POST(request: Request) {
       const balance = Math.max(0, job.total - job.advance);
       if (balance <= 0) return jsonError("El trabajo no tiene saldo pendiente.", 409);
       const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-      if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+      if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 2.147.483.647).", 400);
       if (amount > balance) return jsonError(`El monto no puede superar el saldo pendiente (${balance} Gs.).`, 400);
 
       const requested = await requestedAccount(tx, organizationId, body.accountId);
@@ -484,7 +489,7 @@ export async function PATCH(request: Request) {
     }
     const nextType = isAccountType(body.type) ? body.type : account.type;
     const openingBalance = body.openingBalance === undefined ? account.openingBalance : toInteger(body.openingBalance, 0, MAX_AMOUNT);
-    if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 99.000.000.000).", 400);
+    if (openingBalance === null) return jsonError("El saldo inicial tiene que ser un monto en guaraníes (hasta 2.147.483.647).", 400);
     const sortOrder = body.sortOrder === undefined ? account.sortOrder : toInteger(body.sortOrder, 0, MAX_SORT_ORDER);
     if (sortOrder === null) return jsonError(`El orden tiene que ser un número entre 0 y ${MAX_SORT_ORDER}.`, 400);
     if (body.active !== undefined && typeof body.active !== "boolean") return jsonError("El estado activo tiene que ser verdadero o falso.", 400);

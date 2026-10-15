@@ -7,11 +7,13 @@ import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { deadResponse } from "@/lib/server/trash-ops";
 import { db } from "@/lib/server/db";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { inventoryImageUrl, readInventoryImageUrl } from "@/lib/server/inventory-images";
 import {
   MAX_UNIT_NOTES,
+  InventoryUnitIncidentConflict,
+  assertUnitsAvailableWithoutIncidents,
   createInventoryUnits,
   isUniqueConstraintError,
   nextInventoryUnitCode,
@@ -524,7 +526,8 @@ export async function POST(request: Request) {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("Los datos deben ser un objeto JSON.", 400);
   const kind = typeof body.kind === "string" ? body.kind : "";
 
   if (kind === "item-archive" || kind === "item-restore") {
@@ -592,7 +595,8 @@ export async function POST(request: Request) {
         data = { ...data, ...categoryWriteData(resolved) };
       }
       if (isUnits) {
-        await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryUnitUpdateManyMutationInput });
+        await assertUnitsAvailableWithoutIncidents(tx, organizationId, ids, data.status);
+        await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } as Prisma.InventoryUnitUpdateManyMutationInput });
         if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
       } else {
         await tx.inventoryItem.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryItemUpdateManyMutationInput });
@@ -601,9 +605,11 @@ export async function POST(request: Request) {
       return before;
     }).catch((error: unknown) => {
       if (error instanceof BulkFamilyCategoryConflict) return "family-category" as const;
+      if (error instanceof InventoryUnitIncidentConflict) return "open-incidents" as const;
       throw error;
     });
     if (result === "family-category") return jsonError("La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio.", 409);
+    if (result === "open-incidents") return jsonError(new InventoryUnitIncidentConflict().message, 409);
     if (!result) return jsonError("La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.", 404);
     for (const row of result) {
       const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
@@ -839,12 +845,14 @@ export async function POST(request: Request) {
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
-        const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data });
+        await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
+        const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
         if (data.status !== undefined) await syncInventoryQuantity(tx, existing.inventoryId);
         return updated;
       });
     } catch (error) {
+      if (error instanceof InventoryUnitIncidentConflict) return jsonError(error.message, 409);
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }

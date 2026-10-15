@@ -1,4 +1,5 @@
 import { sandboxHiddenHere } from "@/lib/server/demo-host";
+import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { quotePortalAvailable } from "@/lib/quote-sharing";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
@@ -119,9 +120,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   // Un solo cobro pendiente: el comprobante también se cuelga de él para que
   // Finanzas cobre ese pago (y no cree uno nuevo) al confirmar el esperado.
-  const linkedPaymentId = budget.payments.length === 1 ? budget.payments[0].id : null;
+  let linkedPaymentId: string | null = null;
   const proofId = randomUUID();
-  await db.$transaction(async (tx) => {
+  try { await withQuoteCommercialEdit(budget.id, budget.organizationId, false, async (tx) => {
+    const fresh = await tx.budget.findFirst({ where: { id: budget.id, publicToken: code, deletedAt: null, client: { deletedAt: null } }, include: { payments: { where: { status: "PENDING" }, select: { id: true } }, expectedPayments: { select: { id: true, status: true, amount: true, paidAmount: true } } } });
+    if (!fresh || !quotePortalAvailable(fresh)) throw new QuoteComparisonError(404, "El enlace ya no está vigente.");
+    const freshOpen = fresh.expectedPayments.filter(row => ["AWAITING", "PROOF", "PARTIAL"].includes(row.status));
+    const upload = portalProofUpload({ status: fresh.status, approvedAt: fresh.approvedAt, pendingPayments: fresh.payments.length, expectedPayments: fresh.expectedPayments.length, openExpectedPayments: freshOpen.length });
+    if (!upload.allowed) throw new QuoteComparisonError(409, upload.reason ?? "Este presupuesto no recibe comprobantes.");
+    const freshExpected = expectedPayment ? freshOpen.find(row => row.id === expectedPayment.id) : null;
+    if (expectedPayment && !freshExpected) throw new QuoteComparisonError(409, "Ese pago ya no está pendiente: actualizá la página y elegí de nuevo.");
+    linkedPaymentId = fresh.payments.length === 1 ? fresh.payments[0].id : null;
     await tx.budgetPaymentProof.create({
       data: {
         id: proofId,
@@ -134,9 +143,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         data,
       },
     });
-    if (expectedPayment) {
-      await tx.expectedPayment.update({
-        where: { id: expectedPayment.id },
+    if (freshExpected) {
+      // La confirmación puede haber cobrado mientras se leía la constancia:
+      // el compare-and-set revalida bajo el candado real y no retrocede estados.
+      const claimed = await tx.expectedPayment.updateMany({
+        where: { id: freshExpected.id, budgetId: budget.id, organizationId: budget.organizationId, status: freshExpected.status, paidAmount: freshExpected.paidAmount, amount: freshExpected.amount },
         data: {
           status: "PROOF",
           proofId,
@@ -147,8 +158,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
           reviewedByName: null,
         },
       });
+      if (claimed.count !== 1) throw new QuoteComparisonError(409, "Ese pago cambió mientras subías el comprobante. Actualizá la página y elegí de nuevo.");
     }
-  });
+  }, { budgetLockMode: "no-key-update" }); } catch (error) { if (error instanceof QuoteComparisonError) return jsonError(error.message, error.status); throw error; }
 
   const payload = await loadPublicBudget(code);
   if (!payload) return jsonError("No encontramos ese presupuesto.", 404);

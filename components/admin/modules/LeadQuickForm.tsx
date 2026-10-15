@@ -11,7 +11,7 @@ import { CheckboxField, EmailField, PhoneField, SelectField, TextAreaField, Text
 /**
  * Alta manual de un lead («Nuevo lead», Resumen y Leads): una consulta que llegó
  * por llamada, WhatsApp o referido y no pasó por el formulario del sitio. Pide lo
- * mínimo (nombre, teléfono y correo, que el API revalida) y deja empresa, canal y
+ * mínimo (nombre y teléfono, que el API revalida) y deja correo, empresa, canal y
  * nota como opcionales. Queda en estado «Nuevo» en la empresa activa.
  */
 
@@ -38,7 +38,7 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
   const errors = {
     name: personNameValid(values.name) ? null : FIELD_MESSAGES.name,
     phone: phoneValid(values.phone) ? null : FIELD_MESSAGES.phone,
-    email: emailValid(values.email) ? null : FIELD_MESSAGES.email,
+    email: !values.email.trim() || emailValid(values.email) ? null : FIELD_MESSAGES.email,
     consent: values.consent ? null : "Marcá que el contacto pidió que lo llamemos o le cotizemos.",
   };
 
@@ -120,10 +120,9 @@ export function LeadQuickDialog({ onClose, onCreated }: { onClose: () => void; o
             error={submitted ? errors.phone : null}
           />
           <EmailField
-            label="Correo"
+            label="Correo (opcional)"
             value={values.email}
             onChange={(email) => setValues((current) => ({ ...current, email }))}
-            required
             error={submitted ? errors.email : null}
           />
         </AdminDialogSection>

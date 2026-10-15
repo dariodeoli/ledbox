@@ -77,6 +77,7 @@ import {
   AdminDataState,
   AdminDialog,
   AdminDialogSection,
+  AdminDisclosure,
   AdminEmpty,
   AdminKpi,
   AdminKpis,
@@ -1777,20 +1778,8 @@ export function PresupuestosModule() {
                   ? "No pudimos cargar los clientes."
                   : "No hay clientes cargados."
             }
-            hint={canCreateClient ? "Escribí para buscar; si no está, creálo desde el listado." : undefined}
             onCreate={canCreateClient ? (name) => setNewClientName(name) : undefined}
             createLabel={(query) => (query ? `Crear cliente «${query}»` : "Crear cliente")}
-          />
-          <Combobox
-            label="Evento"
-            hint={canCreateEvent ? "Opcional · se puede crear desde el listado" : "Opcional"}
-            value={form.eventId}
-            onChange={(value) => setForm({ ...form, eventId: value })}
-            options={eventChoices}
-            placeholder="Buscá por nombre o dejalo vacío…"
-            emptyLabel={events.loading ? "Cargando eventos…" : "No hay eventos cargados."}
-            onCreate={canCreateEvent ? (name) => setNewEventName(name) : undefined}
-            createLabel={(query) => (query ? `Crear evento «${query}»` : "Crear evento")}
           />
           <TextField
             label="Título"
@@ -1800,17 +1789,29 @@ export function PresupuestosModule() {
             onChange={(value) => setForm({ ...form, title: value })}
             placeholder="Ej.: Alquiler pantalla LED 6×3"
           />
+          <AdminDisclosure title="Evento y notas" hint={form.eventId ? "Evento vinculado" : "Opcional · el evento se crea al aprobar"} defaultOpen={Boolean(form.eventId)}>
+          <Combobox
+            label="Evento (opcional)"
+            value={form.eventId}
+            onChange={(value) => setForm({ ...form, eventId: value })}
+            options={eventChoices}
+            placeholder="Buscá por nombre o dejalo vacío…"
+            emptyLabel={events.loading ? "Cargando eventos…" : "No hay eventos cargados."}
+            onCreate={canCreateEvent ? (name) => setNewEventName(name) : undefined}
+            createLabel={(query) => (query ? `Crear evento «${query}»` : "Crear evento")}
+          />
           {leadId ? (
             <TextAreaField
               label="Notas del pedido"
-              hint="Vienen del lead y las ve el cliente en el presupuesto; editalas si hace falta."
+              hint="El cliente ve estas notas en el presupuesto."
               wide
-              rows={3}
+              rows={2}
               maxLength={2000}
               value={notes}
               onChange={setNotes}
             />
           ) : null}
+          </AdminDisclosure>
           </div>
           <BudgetItemsEditor items={createItems} onChange={setCreateItems} disabled={busy} range={formRange} />
           <BudgetCreationDeposit state={createDeposit} onChange={setCreateDeposit} defaults={budgetsResource.data?.rentalDefaults ?? { depositPercent: null, securityDepositDefault: null }} subtotal={budgetDraftSubtotal(createItems)} disabled={busy} />

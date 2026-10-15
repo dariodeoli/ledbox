@@ -1,3 +1,4 @@
+import { FIELD_LIMITS } from "@/lib/field-rules";
 import { withDeletedLabel } from "@/lib/deleted-label";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -40,7 +41,7 @@ export const dynamic = "force-dynamic";
  * queda auditado una sola vez por operación y no cruza datos entre empresas.
  */
 
-const MAX_AMOUNT = 99_000_000_000;
+const MAX_AMOUNT = FIELD_LIMITS.amountStorage;
 const MAX_DESCRIPTION = 200;
 const MAX_METHOD = 60;
 const MAX_RECEIPT = 120;
@@ -182,7 +183,7 @@ export async function POST(request: Request) {
     const description = typeof body.description === "string" ? body.description.trim() : "";
     if (description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
     const amount = toInteger(body.amount, 1, MAX_AMOUNT);
-    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 2.147.483.647).", 400);
     if (!isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
     const category = body.category;
 
@@ -294,7 +295,7 @@ export async function PATCH(request: Request) {
         : "";
     if (description !== undefined && description.length < 2) return jsonError("La descripción del gasto es obligatoria.", 400);
     const amount = body.amount === undefined ? expense.amount : toInteger(body.amount, 1, MAX_AMOUNT);
-    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 99.000.000.000).", 400);
+    if (amount === null) return jsonError("El monto tiene que ser un entero en guaraníes (hasta 2.147.483.647).", 400);
     if (body.category !== undefined && !isCategory(body.category)) return jsonError("Elegí la categoría del gasto.", 400);
 
     let accountId = expense.accountId;

@@ -8,7 +8,7 @@ import {
   DEFAULT_HOLD_TTL_MINUTES,
   EVENT_RANGE_SELECT,
   MAINTENANCE_UNITS_SELECT,
-  MAX_AVAILABILITY_ASSIGNMENTS,
+  loadCommittedAssignments,
   assignmentCountsAt,
   availabilityForRange,
   buildAvailability,
@@ -684,16 +684,18 @@ export async function comboCapacitiesForRange(options: {
   const componentIds = [...new Set([...definitions.values()].flatMap((definition) => definition.components.map((component) => component.componentId)))];
   const result = new Map<string, ComboCapacity>();
   if (componentIds.length === 0) return result;
-  const [items, settings, rows] = await Promise.all([
+  const [items, settings] = await Promise.all([
     db.inventoryItem.findMany({ where: { id: { in: componentIds }, organizationId: options.organizationId }, select: COMPONENT_ITEM_SELECT }),
     loadRentalSettings(options.organizationId),
-    db.eventInventory.findMany({
-      where: { inventoryId: { in: componentIds }, ...committedAssignmentWhere(options.organizationId) },
-      orderBy: { startsAt: "asc" },
-      take: MAX_AVAILABILITY_ASSIGNMENTS * 4,
-      include: { event: { select: EVENT_RANGE_SELECT } },
-    }),
   ]);
+  const rows = await loadCommittedAssignments({
+    organizationId: options.organizationId, inventoryIds: componentIds,
+    range: { startsAt: options.startsAt, endsAt: options.endsAt, bufferMinutes: Math.max(0, ...items.map((item) => {
+      const buffers = resolveRentalBuffers(settings, item);
+      return buffers.beforeMin + buffers.afterMin;
+    })) },
+  });
+
   const availableById = new Map<string, number>();
   for (const item of items) {
     const availability = buildAvailability(

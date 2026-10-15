@@ -1,4 +1,5 @@
 "use client";
+import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 
 import { useId, useMemo, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
@@ -59,7 +60,7 @@ export function ComboDialog({
       candidates.map((item) => ({
         value: item.id,
         label: item.name,
-        description: `${item.category} · ${formatNumber(item.availability.availableNow)} libres ahora`,
+        description: `${item.category} · ${inventoryAvailabilityLabel(item.availability.availableNow)} ahora`,
       })),
     [candidates],
   );

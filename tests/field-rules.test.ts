@@ -442,7 +442,7 @@ test("el catálogo del alta usa el Combobox del kit y no un select plano", () =>
 
   const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
   assert.match(module, /<Combobox\s+label="Cliente"/);
-  assert.match(module, /<Combobox\s+label="Evento"/);
+  assert.match(module, /<AdminDisclosure title="Evento y notas"[\s\S]*?<Combobox\s+label="Evento \(opcional\)"/, "el evento sigue siendo un Combobox dentro de los datos opcionales");
   // El alta rápida del diálogo sale de las llamadas `onCreate` del listado.
   assert.match(module, /onCreate=\{canCreateClient/);
   assert.match(module, /onCreate=\{canCreateEvent/);

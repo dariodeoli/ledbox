@@ -12,6 +12,7 @@ import type { AdminContext } from "./tenancy";
 import { QuoteComparisonError, withQuoteCommercialEdit } from "./quote-comparison";
 import { readRentalDays, snapshotsForLines } from "./line-pricing";
 import { recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "./budget-payment-plan";
+import { normalizeBudgetLineBilling } from "./budget-line-billing";
 
 /** Atomic editor: item replacement, commercial fields and dynamic plan under the
  * existing signature/approval lock. A failed plan rolls back the entire edit.
@@ -26,7 +27,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 100) return jsonError("El presupuesto necesita entre 1 y 100 ítems.", 400);
   if (raw.some((row) => !row || typeof row !== "object" || Array.isArray(row) || ["quantity", "days", "unitPrice", "costPrice"].some((field) => row[field] !== undefined && typeof row[field] !== "number"))) return jsonError("Las cantidades y montos deben ser numéricos, no texto ni booleanos.", 400);
   if (!canSetFreeOnPurpose(context.role) && freeOnPurposeChanged(raw, new Map(current.items.map((item) => [item.id, item.freeOnPurpose])))) return jsonError(FREE_ON_PURPOSE_FORBIDDEN, 403);
-  const items = raw.map((r: Record<string, unknown>) => ({
+  let items = raw.map((r: Record<string, unknown>) => ({
     id: typeof r?.id === "string" ? r.id : null,
     name: typeof r?.name === "string" ? r.name.trim() : "",
     quantity: Number(r?.quantity), days: Number(r?.days), unitPrice: Number(r?.unitPrice), costPrice: Number(r?.costPrice ?? 0),
@@ -42,11 +43,9 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   if (new Set(ids).size !== ids.length) return jsonError("No repitas el identificador de un ítem.", 400);
   // Excluded originals cannot disappear through the compact editor.
   if (current.items.some((item) => item.excluded && !ids.includes(item.id))) return jsonError("Conservá las líneas retiradas de la selección del cliente.", 409);
-  const active = items.filter((item) => !item.id || !existing.get(item.id)?.excluded);
   const discount = Number(body.discount ?? current.discount);
   const materialCost = Number(body.materialCost ?? current.materialCost), laborCost = Number(body.laborCost ?? current.laborCost);
-  const costEstimate = active.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
-  if (![discount, materialCost, laborCost, costEstimate].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
+  if (![discount, materialCost, laborCost].every(budgetMoneyValid)) return jsonError("Revisá precio, descuento y costos: deben estar dentro del límite Int.", 400);
   const lineIds = items.map((item) => item.id ?? randomUUID());
   const dates: Record<string, Date | null> = {};
   for (const key of ["validUntil", "deliveryAt"] as const) {
@@ -59,7 +58,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const title = typeof body.title === "string" ? body.title.trim() : current.title;
   if (!title || title.length > 160) return jsonError("Escribí un título de hasta 160 caracteres.", 400);
   const data = {
-    title, materialCost, laborCost, costEstimate, ...dates,
+    title, materialCost, laborCost, ...dates,
     ...(body.ivaType !== undefined ? { ivaType: body.ivaType || null } : {}),
     ...(typeof body.warranty === "string" ? { warranty: body.warranty.trim().slice(0, 400) || null } : {}),
     ...(typeof body.notes === "string" ? { notes: body.notes.trim().slice(0, 2000) || null } : {}),
@@ -67,6 +66,13 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
   const result = await withQuoteCommercialEdit(budgetId, context.organizationId, true, async (tx) => {
     const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budgetId } });
     if (fresh.updatedAt.getTime() !== current.updatedAt.getTime()) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá antes de guardar.");
+    items = await normalizeBudgetLineBilling(tx, context.organizationId, items.map((item, index) => ({
+      ...item,
+      inventoryId: Object.hasOwn(raw[index] as object, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId),
+    })));
+    const normalizedCost = items.filter((item) => !item.id || !existing.get(item.id)?.excluded).reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
+    if (!budgetMoneyValid(normalizedCost)) throw new QuoteComparisonError(400, "El costo agregado de los ítems supera el límite Int.");
+    data.costEstimate = normalizedCost;
     // Live legacy rows persist manual prices and a fixed global discount/advance.
     // Do not invent tariffs, service execution IDs or recognized costs from them.
     // Calculate once after the existing quote/signature lock and revision check.
@@ -92,8 +98,6 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
       else if (typeof body.eventId === "string" && await tx.event.findFirst({ where: { id: body.eventId, organizationId: context.organizationId } })) data.event = { connect: { id: body.eventId } };
       else throw new QuoteComparisonError(400, "El evento no existe en esta empresa.");
     }
-    const inventoryIds = [...new Set(items.flatMap((item) => item.inventoryId ? [item.inventoryId] : []))];
-    if (await tx.inventoryItem.count({ where: { id: { in: inventoryIds }, organizationId: context.organizationId } }) !== inventoryIds.length) throw new QuoteComparisonError(400, "El producto no existe en esta empresa.");
     await tx.budgetItem.deleteMany({ where: { budgetId, id: { notIn: ids } } });
     // Snapshot de precios (escalones y paquete) de las líneas con producto y días del alquiler.
     const snapshots = await snapshotsForLines(context.organizationId, items.map((item, index) => ({

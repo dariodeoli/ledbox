@@ -470,6 +470,10 @@ export function EventosModule() {
   function runNext(item: EventItem) {
     const next = item.readiness.next;
     if (!next || !writable) return;
+    if (next.key === "dates") {
+      openEventEdit(item.event);
+      return;
+    }
     if (next.key === "finalize") {
       void closeEvent(item.event);
       return;
@@ -764,7 +768,7 @@ export function EventosModule() {
           <form id={eventFormId} className="admin-form" onSubmit={(formEvent) => void submitEvent(formEvent)} aria-busy={busy || undefined}>
               {formNotice ? <AdminNote tone="ok">{formNotice}</AdminNote> : null}
               <EventQuickFields key={editingEventId ?? "nuevo"} layout="sections" values={form} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} autoFocus
-                moreOpen={Boolean(editingEventId)}
+                moreOpen={[form.venueContactName, form.venueContactPhone, form.venueContactEmail, form.responsibleName, form.responsiblePhone, form.responsibleEmail, form.modality, form.attendees].some(Boolean)}
                 locationOptions={[...new Set(events.flatMap((event) => event.location ? [event.location] : []))]}>
               <div className="admin-field-action">
                 <Combobox
@@ -772,7 +776,7 @@ export function EventosModule() {
                   required
                   disabled={Boolean(editingEventId)}
                   value={form.clientId}
-                  onChange={(value) => setForm({ ...form, clientId: value })}
+                  onChange={(value) => setForm((current) => ({ ...current, clientId: value }))}
                   options={clientChoices}
             onSearch={clients.onSearch}
                   placeholder="Buscá por nombre o empresa…"
@@ -898,6 +902,7 @@ export function EventosModule() {
           closeError={closeError}
           menuItems={menuItemsFor(ficha, true)}
           onRunNext={runNext}
+          onEditDates={() => openEventEdit(ficha.event)}
           onMovement={(mode, assignment) => {
             setFlash("");
             setMovement({ mode, assignment, eventName: ficha.event.name });

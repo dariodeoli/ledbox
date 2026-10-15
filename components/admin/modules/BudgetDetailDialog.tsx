@@ -25,7 +25,7 @@ import { clientDisplayName } from "@/lib/client-identity";
 import { budgetApprovalState, collectedAmount } from "@/lib/admin-types";
 import type { AdminBudgetRow, AdminTimelineEntry } from "@/lib/admin-types";
 import { lineMissingPrice } from "@/lib/budget-price-gate";
-import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
+import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminNote, AdminTimeline, type AdminMenuItem } from "../AdminUI";
 import { BudgetEventNotice } from "../BudgetEventNotice";
 import { StageTrail } from "../StageTrail";
 import { securityDepositTone } from "./BudgetSecurityDeposit";
@@ -93,15 +93,16 @@ function Section({ title, actions, children }: { title: string; actions?: React.
 }
 
 /** Historial real del presupuesto (misma fuente que la cronología). */
-function BudgetHistory({ budgetId }: { budgetId: string }) {
+function BudgetHistory({ budgetId, revision }: { budgetId: string; revision: string }) {
   const [entries, setEntries] = useState<AdminTimelineEntry[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     setError("");
+    setEntries(null);
     void adminApiGet<{ timeline?: AdminTimelineEntry[] }>(`/api/admin/timeline?budgetId=${encodeURIComponent(budgetId)}`, {
-      fresh: attempt > 0,
+      fresh: true,
       fallbackError: "No pudimos cargar el historial.",
     }).then((result) => {
       if (!active) return;
@@ -115,7 +116,7 @@ function BudgetHistory({ budgetId }: { budgetId: string }) {
     return () => {
       active = false;
     };
-  }, [budgetId, attempt]);
+  }, [budgetId, revision, attempt]);
   return (
     <AdminTimeline
       entries={entries ?? []}
@@ -160,6 +161,13 @@ export function BudgetDetailDialog({
   const deposit = budget.securityDeposit && isSecurityDepositStatus(budget.securityDepositStatus) ? budget : null;
   const internalCost = internalCostOf({ materialCost: budget.materialCost ?? 0, laborCost: budget.laborCost ?? 0, items: budget.items });
   const linked = budget.items.filter((item) => item.inventoryId).length;
+  const portalMenu: AdminMenuItem[] = [
+    { label: "Copiar enlace", icon: "copy", onClick: actions.onCopyLink },
+    { label: "Firma del cliente", icon: "pen", onClick: actions.onSignature },
+  ];
+  if (actions.onProofs && proofCount > 0) portalMenu.push({ label: `Comprobantes (${formatNumber(proofCount)})`, icon: "upload", onClick: actions.onProofs });
+  if (actions.onApprove) portalMenu.push({ label: "Aprobar manualmente", icon: "check", onClick: actions.onApprove });
+  if (actions.onRequestChanges) portalMenu.push({ label: "Pedir cambios", icon: "alert", onClick: actions.onRequestChanges });
   return (
     <AdminDialog
       title={`PRES-${budgetReference(budget.id)} · ${budget.title}`}
@@ -179,6 +187,13 @@ export function BudgetDetailDialog({
     >
       <StageTrail stages={stagesOfBudget(budget)} label={`Etapas de ${budget.title}`} />
       {prompt ? <BudgetEventNotice prompt={prompt} title={budget.title} canAct={canAct} busy={busy} onCreate={actions.onCreateEvent} onConfirm={actions.onConfirmEvent} /> : null}
+
+      {budget.event && !budget.event.startsAt && linked > 0 && (budget.approvedAt || budget.status === "APPROVED") ? (
+        <AdminNote tone="warn">
+          La aprobación está registrada. Falta definir la fecha del evento para reservar los productos.
+          <AdminButtonLink variant="link" href={`/eventos?evento=${encodeURIComponent(budget.event.id)}`}>Completar fechas en el evento</AdminButtonLink>
+        </AdminNote>
+      ) : null}
 
       <div className="admin-bd-grid">
         <Section title="Cliente y evento" actions={actions.onEventName && budget.event ? <AdminButton icon="edit" onClick={actions.onEventName}>Nombre del evento</AdminButton> : undefined}>
@@ -255,12 +270,8 @@ export function BudgetDetailDialog({
           {actions.onSend ? <AdminButton icon="mail" onClick={actions.onSend}>Enviar por correo</AdminButton> : null}
           {actions.onWhatsapp ? <AdminButton icon="external" onClick={actions.onWhatsapp}>WhatsApp</AdminButton> : null}
           <AdminButton icon="globe" onClick={actions.onPortal}>{budget.publicToken ? "Portal y QR" : "Generar link"}</AdminButton>
-          <AdminButton icon="copy" onClick={actions.onCopyLink}>Copiar enlace</AdminButton>
           <AdminButton icon="eye" onClick={actions.onViewClient}>Ver como cliente</AdminButton>
-          <AdminButton icon="pen" onClick={actions.onSignature}>Firma del cliente</AdminButton>
-          {actions.onProofs && proofCount > 0 ? <AdminButton icon="upload" onClick={actions.onProofs}>Comprobantes ({formatNumber(proofCount)})</AdminButton> : null}
-          {actions.onApprove ? <AdminButton icon="check" onClick={actions.onApprove}>Aprobar manualmente</AdminButton> : null}
-          {actions.onRequestChanges ? <AdminButton icon="alert" onClick={actions.onRequestChanges}>Pedir cambios</AdminButton> : null}
+          <AdminActionsMenu label="Más acciones del portal y firma" items={portalMenu} />
         </>
       }>
         <dl className="admin-dialog-facts">
@@ -272,7 +283,7 @@ export function BudgetDetailDialog({
       </Section>
 
       <Section title="Historial">
-        <BudgetHistory budgetId={budget.id} />
+        <BudgetHistory budgetId={budget.id} revision={`${budget.updatedAt ?? ""}:${budget.status}:${budget.approvedAt ?? ""}:${budget.viewedAt ?? ""}:${budget.revisionRequestedAt ?? ""}`} />
       </Section>
     </AdminDialog>
   );

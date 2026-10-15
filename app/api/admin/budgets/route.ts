@@ -24,6 +24,7 @@ import { readRentalDays, snapshotsForLines } from "@/lib/server/line-pricing";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
+import { normalizeBudgetLineBilling } from "@/lib/server/budget-line-billing";
 import {
   budgetCommercialChanges,
   budgetCommercialGuard,
@@ -185,7 +186,7 @@ function parseBudgetItems(rawItems: unknown[], links: InventoryLinks): ParsedBud
       costPrice: Math.max(0, costPrice),
       subtotal: Math.max(0, quantity * billed * unitPrice),
       inventoryId,
-      rentalDays: inventoryId ? readRentalDays(value.rentalDays) : null,
+      rentalDays: readRentalDays(value.rentalDays),
       freeOnPurpose: value.freeOnPurpose === true && unitPrice === 0,
     }];
   });
@@ -653,7 +654,7 @@ async function patchBudgetItems(params: {
   const validInventoryIds = await resolveInventoryLinks(rawItems, organizationId);
   if (!validInventoryIds) return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
   if (!canSetFreeOnPurpose(context.role) && freeOnPurposeChanged(rawItems, new Map(budget.items.map((item) => [item.id, item.freeOnPurpose])))) return jsonError(FREE_ON_PURPOSE_FORBIDDEN, 403);
-  const parsed = parseBudgetItems(rawItems, validInventoryIds);
+  let parsed = parseBudgetItems(rawItems, validInventoryIds);
   if (parsed.length === 0) return jsonError("El presupuesto necesita al menos un ítem con nombre.", 400);
   if (parsed.length !== rawItems.length) return jsonError("Completá todos los ítems con cantidades y montos válidos.", 400);
 
@@ -665,23 +666,26 @@ async function patchBudgetItems(params: {
   }
 
   const excludedIds = new Set(budget.items.filter((item) => item.excluded).map((item) => item.id));
-  for (const item of parsed) if (item.id && excludedIds.has(item.id)) item.subtotal = 0;
-  const subtotal = parsed.reduce((sum, item) => sum + item.subtotal, 0);
-  const discount = Math.min(budget.discount, subtotal);
-  const total = Math.max(0, subtotal - discount);
-  if (!budgetMoneyValid(subtotal)) return jsonError("El subtotal supera el límite Int.", 400);
-  const costEstimate = parsed.reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
-  if (!budgetMoneyValid(costEstimate)) return jsonError("El costo agregado de los ítems supera el límite Int.", 400);
+  let subtotal = 0, discount = 0, total = 0, costEstimate = 0;
   const keepIds = new Set(parsed.flatMap((item) => (item.id ? [item.id] : [])));
   // El vínculo con el inventario se conserva si el payload no lo manda (el
   // diálogo de precios no edita ese vínculo): sin esto, guardar ítems
   // desvinculaba el stock del #18 y la imagen del portal (#107).
   const linksById = new Map(budget.items.map((item) => [item.id, item.inventoryId]));
-  const snapshots = await snapshotsForLines(organizationId, parsed.map((item, index) => ({ key: String(index), inventoryId: item.inventoryId, rentalDays: item.rentalDays })));
-
   await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
     const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { updatedAt: true } });
     if (fresh.updatedAt.getTime() !== budget.updatedAt.getTime()) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá los ítems antes de guardar.");
+    parsed = await normalizeBudgetLineBilling(tx, organizationId, parsed.map((item, index) => ({
+      ...item,
+      inventoryId: Object.hasOwn(rawItems[index] as object, "inventoryId") ? item.inventoryId : item.inventoryId ?? (item.id ? linksById.get(item.id) ?? null : null),
+    })));
+    for (const item of parsed) item.subtotal = item.id && excludedIds.has(item.id) ? 0 : item.quantity * item.days * item.unitPrice;
+    subtotal = parsed.reduce((sum, item) => sum + item.subtotal, 0);
+    discount = Math.min(budget.discount, subtotal);
+    total = subtotal - discount;
+    costEstimate = parsed.filter((item) => !item.id || !excludedIds.has(item.id)).reduce((sum, item) => sum + item.quantity * item.days * item.costPrice, 0);
+    if (!budgetMoneyValid(subtotal) || !budgetMoneyValid(costEstimate)) throw new QuoteComparisonError(400, "El subtotal o costo agregado supera el límite Int.");
+    const snapshots = await snapshotsForLines(organizationId, parsed.map((item, index) => ({ key: String(index), inventoryId: item.inventoryId, rentalDays: item.rentalDays })), tx);
     await tx.budgetItem.deleteMany({ where: { budgetId: budget.id, id: { notIn: [...keepIds] } } });
     for (const item of parsed) {
       const raw = rawItems.find((row) => row && typeof row === "object" && (row as Record<string, unknown>).id === item.id) as Record<string, unknown> | undefined;
@@ -753,6 +757,7 @@ async function patchBudgetCommercial(params: {
     select: {
       id: true,
       title: true,
+      updatedAt: true,
       status: true,
       approvedAt: true,
       subtotal: true,
@@ -866,6 +871,8 @@ async function patchBudgetCommercial(params: {
   }
 
   const updated = await withQuoteCommercialEdit(budget.id, organizationId, touchesBudgetClientFields(body), async (tx) => {
+    const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { updatedAt: true } });
+    if (fresh.updatedAt.getTime() !== budget.updatedAt.getTime()) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá antes de guardar.");
     const updated = await tx.budget.update({
     where: { id: budget.id },
     data,

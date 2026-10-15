@@ -6,6 +6,7 @@ import { requireAdminContext } from "@/lib/server/tenancy";
 import { readJson } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import { leadSchema, validationError } from "@/lib/server/validation";
+import { FIELD_MESSAGES, phoneValid } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,10 @@ export const dynamic = "force-dynamic";
 const MANUAL_SOURCES = ["llamada", "whatsapp", "referido", "evento", "otro"] as const;
 
 const manualLeadSchema = leadSchema.pick({ name: true, phone: true, email: true, company: true, message: true }).extend({
+  phone: leadSchema.shape.phone.refine(phoneValid, FIELD_MESSAGES.phone),
+  // Una consulta por teléfono/WhatsApp no exige inventar un correo. El alta
+  // pública mantiene su contrato; si el equipo carga un correo, se valida igual.
+  email: z.preprocess((value) => typeof value === "string" ? value.trim() : value, leadSchema.shape.email.optional().or(z.literal(""))),
   source: z.enum(MANUAL_SOURCES).default("otro"),
   /** El equipo declara que el contacto pidió que lo llamen o le coticen; sin eso no hay alta. */
   consent: z.literal(true, { message: "Confirmá que el contacto pidió que lo llamemos o le cotizemos." }),
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
       organizationId: auth.context.organizationId,
       name: data.name,
       phone: data.phone,
-      email: data.email.trim().toLowerCase(),
+      email: (data.email ?? "").toLowerCase(),
       company: data.company || undefined,
       message: data.message || undefined,
       source: `manual-${data.source}`,

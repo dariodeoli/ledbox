@@ -24,7 +24,7 @@ export { lockLiveEvent } from "./event-lock";
 
 export const BLOCKED_INVENTORY_STATUSES: readonly InventoryStatus[] = ["MAINTENANCE", "RETIRED"];
 
-/** Máximo de asignaciones que se cargan para calcular disponibilidad. */
+/** Tamaño de página; nunca un límite al stock comprometido que se calcula. */
 export const MAX_AVAILABILITY_ASSIGNMENTS = 500;
 
 /**
@@ -303,23 +303,93 @@ export function committedAssignmentWhere(organizationId: string, now: Date = new
   };
 }
 
+/** Rango amplio para la consulta: el motor aplica después los colchones exactos de cada ítem. */
+export type AssignmentReadRange = { startsAt: Date; endsAt: Date; bufferMinutes?: number };
+
+/**
+ * Prefiltro conservador del mismo rango efectivo de assignmentRange. Incluye
+ * puntas abiertas, devolución tardía y equipo que sigue afuera. El margen suma
+ * preparación + devolución porque se extienden tanto pedido como asignación.
+ */
+export function assignmentRangeWhere(range: AssignmentReadRange): Prisma.EventInventoryWhereInput {
+  // El motor representa puntas abiertas con extremos de Date (±275 mil años).
+  // No se mandan como timestamps SQL: sin prefiltro seguimos leyendo completo.
+  const sqlDate = (date: Date) => Number.isFinite(date.getTime()) && date.getUTCFullYear() >= 1 && date.getUTCFullYear() <= 9999;
+  if (!sqlDate(range.startsAt) || !sqlDate(range.endsAt)) return {};
+  const margin = Math.max(0, range.bufferMinutes ?? 0) * 60_000;
+  const from = new Date(Math.max(-8.64e15, range.startsAt.getTime() - margin));
+  const to = new Date(Math.min(8.64e15, range.endsAt.getTime() + margin));
+  if (!sqlDate(from) || !sqlDate(to)) return {};
+  const start = (comparison: { lte: Date } | { gte: Date }): Prisma.EventInventoryWhereInput[] => [
+    { startsAt: comparison },
+    { startsAt: null, event: { setupAt: comparison } },
+    { startsAt: null, event: { setupAt: null, startsAt: comparison } },
+    { startsAt: null, event: { setupAt: null, startsAt: null } },
+  ];
+  return { AND: [
+    { OR: start({ lte: to }) },
+    { OR: [
+      { endsAt: { gte: from } },
+      { checkedInAt: { gte: from } },
+      { checkedOut: true, checkedIn: false, checkedInAt: null },
+      { endsAt: null, OR: [
+        { event: { strikeAt: { gte: from } } },
+        { event: { strikeAt: null, endsAt: { gte: from } } },
+        { event: { strikeAt: null, endsAt: null }, OR: start({ gte: from }) },
+      ] },
+    ] },
+  ] };
+}
+
+/**
+ * Lectura completa por páginas estables. Un take global descartaba reservas al
+ * crecer la historia de la empresa. Se consulta por rango antes de paginar y se
+ * limita cada viaje a 500 filas, sin convertir una página parcial en stock libre.
+ */
+export async function loadCommittedAssignments(options: {
+  organizationId: string;
+  inventoryIds: readonly string[];
+  excludeId?: string | null;
+  client?: AvailabilityClient;
+  range?: AssignmentReadRange;
+}): Promise<AssignmentRecord[]> {
+  if (!options.inventoryIds.length) return [];
+  const client = options.client ?? db;
+  const rows: AssignmentRecord[] = [];
+  const committed = committedAssignmentWhere(options.organizationId);
+  let after: string | undefined;
+  for (;;) {
+    const page = await client.eventInventory.findMany({
+      where: {
+        inventoryId: { in: [...options.inventoryIds] },
+        ...committed,
+        AND: [
+          ...(options.range ? [assignmentRangeWhere(options.range)] : []),
+          ...(options.excludeId ? [{ id: { not: options.excludeId } }] : []),
+          ...(after ? [{ id: { gt: after } }] : []),
+        ],
+      },
+      orderBy: { id: "asc" },
+      take: MAX_AVAILABILITY_ASSIGNMENTS,
+      include: { event: { select: EVENT_RANGE_SELECT } },
+    });
+    rows.push(...page);
+    if (page.length < MAX_AVAILABILITY_ASSIGNMENTS) {
+      return rows.sort((a, b) => (a.startsAt?.getTime() ?? Infinity) - (b.startsAt?.getTime() ?? Infinity) || a.id.localeCompare(b.id));
+    }
+    after = page[page.length - 1].id;
+  }
+}
+
 /** Asignaciones de un ítem en la empresa (opcionalmente sin una fila puntual). */
 export async function loadAssignments(
   inventoryId: string,
   organizationId: string,
   excludeId?: string | null,
   client: AvailabilityClient = db,
+  range?: AssignmentReadRange,
 ): Promise<AssignmentRecord[]> {
-  return client.eventInventory.findMany({
-    where: {
-      inventoryId,
-      ...committedAssignmentWhere(organizationId),
-      ...(excludeId ? { id: { not: excludeId } } : {}),
-    },
-    orderBy: { startsAt: "asc" },
-    take: MAX_AVAILABILITY_ASSIGNMENTS,
-    include: { event: { select: EVENT_RANGE_SELECT } },
-  });
+  return loadCommittedAssignments({ organizationId, inventoryIds: [inventoryId], excludeId, client, range });
 }
 
 /**
@@ -408,10 +478,11 @@ export async function availabilityForRange(options: {
   excludeId?: string | null;
   client?: AvailabilityClient;
 }): Promise<RangeAvailability> {
-  const rows = await loadAssignments(options.item.id, options.organizationId, options.excludeId, options.client);
-  const item = options.item.buffers
-    ? options.item
-    : { ...options.item, buffers: resolveRentalBuffers(await loadRentalSettings(options.organizationId, options.client), options.item as { bufferBeforeMin?: number | null; bufferAfterMin?: number | null }) };
+  const buffers = options.item.buffers ?? resolveRentalBuffers(await loadRentalSettings(options.organizationId, options.client), options.item as { bufferBeforeMin?: number | null; bufferAfterMin?: number | null });
+  const item = { ...options.item, buffers };
+  const rows = await loadAssignments(item.id, options.organizationId, options.excludeId, options.client, {
+    startsAt: options.startsAt, endsAt: options.endsAt, bufferMinutes: item.buffers.beforeMin + item.buffers.afterMin,
+  });
   return buildAvailability(item, rows, options.startsAt, options.endsAt);
 }
 
@@ -884,14 +955,13 @@ export async function findSubstitutes(options: {
   });
   if (candidates.length === 0) return [];
   const settings = await loadRentalSettings(options.organizationId);
-  const rows = await db.eventInventory.findMany({
-    where: {
-      inventoryId: { in: candidates.map((candidate) => candidate.id) },
-      ...committedAssignmentWhere(options.organizationId),
-    },
-    orderBy: { startsAt: "asc" },
-    take: MAX_AVAILABILITY_ASSIGNMENTS * 4,
-    include: { event: { select: EVENT_RANGE_SELECT } },
+  const rows = await loadCommittedAssignments({
+    organizationId: options.organizationId,
+    inventoryIds: candidates.map((candidate) => candidate.id),
+    range: { startsAt: options.startsAt, endsAt: options.endsAt, bufferMinutes: Math.max(0, ...candidates.map((candidate) => {
+      const buffers = resolveRentalBuffers(settings, candidate);
+      return buffers.beforeMin + buffers.afterMin;
+    })) },
   });
   return candidates
     .flatMap((candidate) => {

@@ -4,7 +4,7 @@ import { parseOrgProfile, readOrgProfile, type OrgProfile } from "@/lib/org-prof
 import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
 import { auditChanges, recordAudit } from "./audit";
 import { db } from "./db";
-import { jsonError } from "./http";
+import { isJsonObject, jsonError } from "./http";
 import { STOREFRONT_TAGLINE_MAX, saveRentalSettings } from "./rental-settings";
 import type { AdminContext } from "./tenancy";
 
@@ -65,7 +65,10 @@ export function coverUrl(slug: string, kind: CoverKind, version: string | null):
 export async function saveOrgProfile(context: AdminContext, body: unknown): Promise<Response> {
   const { organizationId, organization } = context;
   const record = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
-  const parsed = parseOrgProfile(record?.profile ?? record);
+  if (!record) return jsonError("El perfil debe ser un objeto JSON.", 400);
+  const profileBody = "profile" in record ? record.profile : record;
+  if (!isJsonObject(profileBody)) return jsonError("El perfil debe ser un objeto JSON.", 400);
+  const parsed = parseOrgProfile(profileBody);
   if (!parsed.ok) return jsonError(parsed.error, 400);
 
   const row = await db.organization.findUnique({ where: { id: organizationId }, select: { profile: true } });

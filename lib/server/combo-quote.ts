@@ -1,11 +1,9 @@
 import { db } from "./db";
 import {
   BLOCKED_INVENTORY_STATUSES,
-  EVENT_RANGE_SELECT,
   MAINTENANCE_UNITS_SELECT,
-  MAX_AVAILABILITY_ASSIGNMENTS,
+  loadCommittedAssignments,
   buildAvailability,
-  committedAssignmentWhere,
   findSubstitutes,
   loadRentalSettings,
   maintenanceUnits,
@@ -103,16 +101,18 @@ export async function comboQuote(options: {
   const availableById = new Map<string, number>();
   if (options.range) {
     const ids = combo.components.map((part) => part.item.id);
-    const [items, settings, rows] = await Promise.all([
+    const [items, settings] = await Promise.all([
       db.inventoryItem.findMany({ where: { organizationId, id: { in: ids } }, select: COMPONENT_AVAILABILITY_SELECT }),
       loadRentalSettings(organizationId),
-      db.eventInventory.findMany({
-        where: { inventoryId: { in: ids }, ...committedAssignmentWhere(organizationId) },
-        orderBy: { startsAt: "asc" },
-        take: MAX_AVAILABILITY_ASSIGNMENTS * 4,
-        include: { event: { select: EVENT_RANGE_SELECT } },
-      }),
     ]);
+    const rows = await loadCommittedAssignments({
+      organizationId, inventoryIds: ids,
+      range: { startsAt: options.range.startsAt, endsAt: options.range.endsAt, bufferMinutes: Math.max(0, ...items.map((item) => {
+        const buffers = resolveRentalBuffers(settings, item);
+        return buffers.beforeMin + buffers.afterMin;
+      })) },
+    });
+
     for (const item of items) {
       const availability = buildAvailability(
         { ...item, maintenance: maintenanceUnits(item), buffers: resolveRentalBuffers(settings, item) },

@@ -113,7 +113,7 @@ test("registrar cobro: lo más usado primero (cliente, monto, método, cuenta) y
   assert.ok(order.every((index) => index > 0), "faltan campos");
   assert.deepEqual([...order].sort((x, y) => x - y), order, "orden Cliente → Monto → Método → Cuenta");
   assert.ok(order[3] < dialog.indexOf('title="Más opciones"'), "la cuenta va antes de «Más opciones»");
-  assert.match(dialog, /<MoneyField\s+label="Monto"/, "monto con MoneyField");
+  assert.match(dialog, /<MoneyField\b[^>]*\blabel="Monto"/, "monto con MoneyField, aunque tenga un límite explícito antes del label");
   assert.match(dialog, /busyLabel="Guardando…"/);
   // El cálculo y el payload de cobros no se tocan.
   assert.match(fin, /async function submit\(/);
