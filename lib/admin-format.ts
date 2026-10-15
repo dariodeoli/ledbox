@@ -1441,6 +1441,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   Invoice: "Factura",
   PurchaseInvoice: "Compra",
   FiscalPeriod: "Cierre mensual",
+  DeliveryZone: "Zona de flete",
 };
 
 const AUDIT_FIELD: Record<string, string> = {

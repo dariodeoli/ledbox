@@ -1,4 +1,5 @@
 import { todayDayKey } from "./admin-format";
+import { legacyTier, priceLine, tiersForAudience, type AudiencePriceTier, type LinePricing, type TierPricedProduct } from "./price-tiers";
 
 /** References are links only. Never fetch or embed their remote content. */
 export function quoteReferenceUrl(value: unknown): string | null {
@@ -29,21 +30,45 @@ export const readBillingUnit = (value: unknown): "DAILY" | "EVENT" | null => (va
 export const billedDays = (billingUnit: string | null | undefined, days: number): number =>
   isEventBilled(billingUnit) ? 1 : Math.max(1, Math.trunc(days) || 1);
 
-/** An explicit sales tier stays fixed when duration changes. Zero disables a rule. */
-export function quoteProductPrice(product: {
+/** Producto con sus precios de venta; `priceTiers` (si viene) manda sobre los campos viejos «desde X días». */
+export type QuotableProduct = {
   listPrice?: number; listFromDays?: number; listFromPrice?: number;
   wholesalePrice?: number; wholesaleFromDays?: number; wholesaleFromPrice?: number;
   minimumPrice?: number;
-  /** EVENT = precio único por evento: la duración no cambia el precio (días = 1). */
+  /** EVENT = precio único por evento: la duración no cambia el precio (días = 1) y los escalones se ignoran. */
   billingUnit?: string | null;
-}, rentalDays: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): number {
-  const days = isEventBilled(product.billingUnit) ? 1 : rentalDays;
-  const normal = tier === "WHOLESALE" ? product.wholesalePrice : product.listPrice;
-  const threshold = tier === "WHOLESALE" ? product.wholesaleFromDays : product.listFromDays;
-  const fromPrice = tier === "WHOLESALE" ? product.wholesaleFromPrice : product.listFromPrice;
-  const price = threshold && threshold > 0 && days >= threshold && fromPrice && fromPrice > 0 ? fromPrice : normal ?? 0;
-  // A floor does not manufacture an unconfigured sales price or another tier.
-  return price > 0 ? Math.max(price, product.minimumPrice ?? 0) : 0;
+  /** Escalones por días (`InventoryPriceTier`); con ellos los `*FromDays/*FromPrice` ya no se leen. */
+  priceTiers?: ReadonlyArray<AudiencePriceTier>;
+};
+
+/** Datos de precio de un producto para un frente, en la forma de `priceLine`. */
+export function productPricing(product: QuotableProduct, tier: "FINAL" | "WHOLESALE" = "FINAL"): TierPricedProduct {
+  const audience = tier === "WHOLESALE" ? "WHOLESALE" : "RETAIL";
+  const tiers = product.priceTiers
+    ? tiersForAudience(product.priceTiers, audience)
+    : tier === "WHOLESALE"
+      ? legacyTier(product.wholesaleFromDays, product.wholesaleFromPrice)
+      : legacyTier(product.listFromDays, product.listFromPrice);
+  return {
+    basePrice: (tier === "WHOLESALE" ? product.wholesalePrice : product.listPrice) ?? 0,
+    minimumPrice: product.minimumPrice ?? 0,
+    billingUnit: product.billingUnit,
+    tiers,
+  };
+}
+
+/** Línea completa (precio unitario Y días a guardar) para `rentalDays`; la regla única de `lib/price-tiers.ts`. */
+export function quoteProductLine(product: QuotableProduct, rentalDays: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): LinePricing {
+  return priceLine(productPricing(product, tier), rentalDays);
+}
+
+/**
+ * Precio unitario de la línea. Con escalón «por día» (o sin escalón) es por día; con escalón «total»
+ * y en productos por evento es el total del período (usá `quoteProductLine` si necesitás también los días).
+ * Un piso no fabrica un precio no configurado ni otro frente.
+ */
+export function quoteProductPrice(product: QuotableProduct, rentalDays: number, tier: "FINAL" | "WHOLESALE" = "FINAL"): number {
+  return quoteProductLine(product, rentalDays, tier).unitPrice;
 }
 
 /** Same day boundary as the server portal, including after UTC midnight. */

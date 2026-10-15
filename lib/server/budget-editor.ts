@@ -10,6 +10,7 @@ import { db } from "./db";
 import { jsonError } from "./http";
 import type { AdminContext } from "./tenancy";
 import { QuoteComparisonError, withQuoteCommercialEdit } from "./quote-comparison";
+import { readRentalDays, snapshotsForLines } from "./line-pricing";
 import { recalculateBudgetPaymentPlan, validateBudgetPlanAccounts } from "./budget-payment-plan";
 
 /** Atomic editor: item replacement, commercial fields and dynamic plan under the
@@ -30,6 +31,7 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
     quantity: Number(r?.quantity), days: Number(r?.days), unitPrice: Number(r?.unitPrice), costPrice: Number(r?.costPrice ?? 0),
     notes: typeof r?.notes === "string" ? r.notes.trim().slice(0, 400) : null,
     inventoryId: typeof r?.inventoryId === "string" && r.inventoryId ? r.inventoryId : null,
+    rentalDays: readRentalDays(r?.rentalDays),
   }));
   for (const item of items) { const error = budgetItemError(item); if (error) return jsonError(error, 400); }
   const existing = new Map(current.items.map((item) => [item.id, item]));
@@ -91,11 +93,18 @@ export async function saveBudgetEditor(context: AdminContext, budgetId: string, 
     const inventoryIds = [...new Set(items.flatMap((item) => item.inventoryId ? [item.inventoryId] : []))];
     if (await tx.inventoryItem.count({ where: { id: { in: inventoryIds }, organizationId: context.organizationId } }) !== inventoryIds.length) throw new QuoteComparisonError(400, "El producto no existe en esta empresa.");
     await tx.budgetItem.deleteMany({ where: { budgetId, id: { notIn: ids } } });
+    // Snapshot de precios (escalones y paquete) de las líneas con producto y días del alquiler.
+    const snapshots = await snapshotsForLines(context.organizationId, items.map((item, index) => ({
+      key: String(index),
+      inventoryId: Object.hasOwn(raw[index] as object, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId),
+      rentalDays: item.rentalDays,
+    })), tx);
     for (const item of items) {
       const source = raw[items.indexOf(item)] as Record<string, unknown>;
       const inventoryId = Object.hasOwn(source, "inventoryId") ? item.inventoryId : (item.id ? existing.get(item.id)?.inventoryId ?? null : item.inventoryId);
       const calculated = commercial.items[items.indexOf(item)];
-      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: calculated.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: calculated.subtotal };
+      const snapshot = snapshots.get(String(items.indexOf(item)));
+      const itemData = { name: item.name, quantity: item.quantity, days: item.days, unitPrice: calculated.unitPrice, costPrice: item.costPrice, ...(Object.hasOwn(source, "notes") ? { notes: item.notes } : {}), inventoryId, subtotal: calculated.subtotal, ...(snapshot ? { pricingSnapshot: snapshot } : {}) };
       const orderedItemData = { ...itemData, sortOrder: items.indexOf(item) };
       if (item.id) await tx.budgetItem.update({ where: { id: item.id }, data: orderedItemData });
       else await tx.budgetItem.create({ data: { id: calculated.id, budgetId, ...orderedItemData } });

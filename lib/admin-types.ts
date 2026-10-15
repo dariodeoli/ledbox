@@ -364,6 +364,8 @@ export type AdminBudgetItem = {
   /** Vínculo con inventario (issue #18): `null` = el ítem no reserva nada. */
   inventoryId: string | null;
   inventory: AdminInventoryLink | null;
+  /** Precios congelados de la línea (escalones y paquete); ver `readPricingSnapshot` de `lib/price-tiers.ts`. */
+  pricingSnapshot?: unknown;
 };
 
 /** Cuota del plan de pagos (issue #14); `dueAt` es `YYYY-MM-DD`. */
@@ -1239,6 +1241,14 @@ export type AdminReservationOutcome = {
     endsAt: string | null;
   }>;
   substitutes: AdminInventorySubstitute[];
+  /** Solo en combos con faltante: piezas que no alcanzan, con alternativas y diferencia de precio. */
+  comboParts?: Array<{
+    componentId: string;
+    name: string;
+    needed: number;
+    available: number;
+    alternatives: Array<{ id: string; name: string; available: number; enough: boolean; priceDelta: number | null; newPackageTotal: number | null }>;
+  }>;
   reason: string | null;
 };
 
@@ -1677,6 +1687,8 @@ export type AdminInventoryRow = {
   minimumPrice: number;
   /** «Se cobra»: DAILY (por día) o EVENT (una sola vez por evento). */
   billingUnit: string;
+  /** Escalones de precio por días (cliente final y mayorista); las columnas «desde X días» quedaron sin uso. */
+  priceTiers?: import("./price-tiers").AudiencePriceTier[];
   notes: string | null;
   updatedAt: string;
   /** Solo en combos: sin unidades propias, «libres» es lo que se puede armar. */
@@ -1729,6 +1741,10 @@ export type AdminInventoryLink = {
   listPrice?: number;
   listFromDays?: number;
   listFromPrice?: number;
+  /** Escalones por días del frente cliente final (el panel arma la línea con la regla de `lib/price-tiers.ts`). */
+  priceTiers?: import("./price-tiers").AudiencePriceTier[];
+  /** Cantidad de piezas si es un combo (paquete); 0 o ausente = producto suelto. */
+  _count?: { components: number };
   /** DAILY o EVENT: con EVENT el ítem del presupuesto va con días = 1. */
   billingUnit?: string;
   id: string;
@@ -2165,6 +2181,8 @@ export const AUDIT_ENTITIES = [
   "Invoice",
   "PurchaseInvoice",
   "FiscalPeriod",
+  // Zona de flete de la empresa (alquileres P2).
+  "DeliveryZone",
 ] as const;
 
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
@@ -2602,6 +2620,10 @@ export type AdminRentalSettings = {
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
+  /** Cotización de un paquete (`GET /api/admin/inventory/combos?pricing=1`). */
+  quote?: unknown;
+  /** Zonas de flete (`GET /api/admin/delivery-zones`). */
+  zones?: import("./delivery-zones").DeliveryZoneView[];
   settings?: AdminRentalSettings;
   items?: AdminCalendarItem[];
   alerts?: AdminCalendarAlert[];

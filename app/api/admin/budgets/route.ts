@@ -18,6 +18,7 @@ import { db } from "@/lib/server/db";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
+import { readRentalDays, snapshotsForLines } from "@/lib/server/line-pricing";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
 import { syncBudgetExpectedPayments } from "@/lib/server/expected-payments";
@@ -61,7 +62,7 @@ function textField(value: unknown, max: number): string | null {
 }
 
 /** Datos del artículo de inventario que el panel dibuja junto al ítem del presupuesto. */
-const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true, quantity: true, status: true, billingUnit: true, imageUrl: true, imageMime: true, updatedAt: true } as const;
+const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true, quantity: true, status: true, billingUnit: true, imageUrl: true, imageMime: true, updatedAt: true, listPrice: true, priceTiers: { where: { audience: "RETAIL" as const }, select: { audience: true, fromDays: true, mode: true, price: true }, orderBy: { fromDays: "asc" as const } }, _count: { select: { components: true } } } as const;
 
 /**
  * `GET /api/admin/budgets`: presupuestos de la empresa activa. Los escalares
@@ -143,6 +144,8 @@ type ParsedBudgetItem = {
   costPrice: number;
   subtotal: number;
   inventoryId: string | null;
+  /** Días reales del alquiler cuando el panel los manda con un producto (el escalón «total» guarda días = 1). */
+  rentalDays: number | null;
 };
 
 /**
@@ -176,6 +179,7 @@ function parseBudgetItems(rawItems: unknown[], links: InventoryLinks): ParsedBud
       costPrice: Math.max(0, costPrice),
       subtotal: Math.max(0, quantity * billed * unitPrice),
       inventoryId,
+      rentalDays: inventoryId ? readRentalDays(value.rentalDays) : null,
     }];
   });
 }
@@ -238,6 +242,7 @@ export async function POST(request: Request) {
     return jsonError("El artículo de inventario vinculado no existe en esta empresa.", 400);
   }
   const items = parseBudgetItems(rawItems, validInventoryIds).map((item) => ({ ...item, id: randomUUID() }));
+  const snapshots = await snapshotsForLines(organizationId, items.map((item) => ({ key: item.id, inventoryId: item.inventoryId, rentalDays: item.rentalDays })));
   // Sin ítems no hay presupuesto (issue #132): el required del form se puede
   // saltear y el API no puede aceptar un documento vacío.
   if (items.length === 0) {
@@ -303,7 +308,7 @@ export async function POST(request: Request) {
         installmentsJson: installments,
         securityDeposit,
         securityDepositStatus: securityDeposit ? "PENDING" : null,
-        items: { create: items.map((item, sortOrder) => ({ ...item, sortOrder })) },
+        items: { create: items.map(({ rentalDays: _rentalDays, ...item }, sortOrder) => ({ ...item, sortOrder, ...(snapshots.has(item.id) ? { pricingSnapshot: snapshots.get(item.id) } : {}) })) },
       },
       include: { client: { include: { logo: { select: { updatedAt: true } } } }, event: true, items: { include: { inventory: { select: INVENTORY_LINK_SELECT } } } },
     });
@@ -678,6 +683,7 @@ async function patchBudgetItems(params: {
   // diálogo de precios no edita ese vínculo): sin esto, guardar ítems
   // desvinculaba el stock del #18 y la imagen del portal (#107).
   const linksById = new Map(budget.items.map((item) => [item.id, item.inventoryId]));
+  const snapshots = await snapshotsForLines(organizationId, parsed.map((item, index) => ({ key: String(index), inventoryId: item.inventoryId, rentalDays: item.rentalDays })));
 
   await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
     const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { updatedAt: true } });
@@ -696,6 +702,7 @@ async function patchBudgetItems(params: {
         costPrice: item.costPrice,
         subtotal: item.subtotal,
         inventoryId,
+        ...(snapshots.has(String(parsed.indexOf(item))) ? { pricingSnapshot: snapshots.get(String(parsed.indexOf(item))) } : {}),
       };
       if (item.id && existingIds.has(item.id)) {
         await tx.budgetItem.update({ where: { id: item.id }, data });

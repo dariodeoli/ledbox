@@ -1,7 +1,9 @@
 import { budgetMoneyValid } from "./budget-payment-plan";
 import type { AdminInventoryLink } from "./admin-types";
 
-export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean };
+export type BudgetItemDraft = { id: string | null; name: string; quantity: string; days: string; unitPrice: string; costPrice: string; notes: string; inventory: AdminInventoryLink | null; excluded?: boolean;
+  /** Días reales del alquiler cuando el precio sale de un producto: un escalón «total» guarda `days = 1`. */
+  rentalDays?: string };
 export function emptyBudgetItem(): BudgetItemDraft {
   return { id: null, name: "", quantity: "1", days: "1", unitPrice: "", costPrice: "0", notes: "", inventory: null };
 }

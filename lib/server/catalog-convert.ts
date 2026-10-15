@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { defaultDepositPlanRows } from "@/lib/budget-payment-plan";
-import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, listDailyPrice, rentalDaysBetween } from "@/lib/catalog-public";
+import { CONVERTIBLE_STATUSES, isQuoteRequestStatus, rentalDaysBetween } from "@/lib/catalog-public";
+import { deliveryExtraApplies, deliveryFee, deliveryLineName, orderPieces } from "@/lib/delivery-zones";
+import { loadPricedItems, quoteInventoryLine, totalTierNote } from "./line-pricing";
 import { billedDays } from "@/lib/quote-sharing";
 import { db } from "./db";
 import { commitInventoryAssignment, insufficientMessage } from "./inventory-availability";
@@ -78,27 +80,25 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
   const periodDays = quote.startsAt && quote.endsAt ? rentalDaysBetween(dayKeyOf(quote.startsAt), dayKeyOf(quote.endsAt)) : Math.max(1, quote.durationDays ?? 1);
   const inventoryIds = quote.items.flatMap((item) => (item.inventoryId ? [item.inventoryId] : []));
   const inventory = inventoryIds.length
-    ? await db.inventoryItem.findMany({
-        where: { organizationId, id: { in: inventoryIds } },
-        select: {
-          id: true, name: true, dailyCost: true, billingUnit: true,
-          listPrice: true, listFromDays: true, listFromPrice: true,
-          wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
-        },
-      })
+    ? await db.inventoryItem.findMany({ where: { organizationId, id: { in: inventoryIds } }, select: { id: true, dailyCost: true } })
     : [];
-  const inventoryById = new Map(inventory.map((row) => [row.id, row]));
+  const costById = new Map(inventory.map((row) => [row.id, row.dailyCost]));
+  // Mismo cálculo que la tienda: escalones por días y paquetes de `lib/price-tiers.ts`.
+  const priced = await loadPricedItems(organizationId, inventoryIds);
 
   const wholesale = quote.priceList === "WHOLESALE";
   const priceList = wholesale ? "WHOLESALE" : "RETAIL";
   let unpricedLines = 0;
   const lines = quote.items.map((item, sortOrder) => {
-    const linked = item.inventoryId ? inventoryById.get(item.inventoryId) : undefined;
-    const unitPrice = (linked ? listDailyPrice(linked, priceList, periodDays) : 0) || item.unitPrice || 0;
+    const linked = item.inventoryId ? priced.get(item.inventoryId) : undefined;
+    // El piso de venta es interno: la tienda nunca lo muestra, así que la conversión no lo aplica.
+    const quoted = linked ? quoteInventoryLine(linked, periodDays, priceList, { applyMinimum: false }) : null;
+    const fromStore = quoted && quoted.pricing.unitPrice > 0 ? quoted : null;
+    const unitPrice = fromStore?.pricing.unitPrice || item.unitPrice || 0;
     if (unitPrice <= 0) unpricedLines += 1;
-    const costPrice = linked?.dailyCost ?? 0;
-    // «Se cobra por evento»: una sola unidad de tiempo, sin importar los días del período.
-    const days = billedDays(linked?.billingUnit, periodDays);
+    const costPrice = (linked ? costById.get(linked.id) : 0) ?? 0;
+    // «Se cobra por evento» o escalón «total»: una sola unidad de tiempo, sin importar los días del período.
+    const days = fromStore ? fromStore.pricing.days : billedDays(linked?.billingUnit, periodDays);
     return {
       id: randomUUID(),
       sortOrder,
@@ -109,8 +109,30 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
       costPrice,
       subtotal: unitPrice * item.quantity * days,
       inventoryId: linked?.id ?? null,
+      ...(fromStore?.pricing.mode === "TOTAL" ? { notes: totalTierNote(periodDays) } : {}),
+      ...(fromStore ? { pricingSnapshot: fromStore.snapshot as unknown as Prisma.InputJsonValue } : {}),
     };
   });
+  // Flete por zona: línea calculada con la regla de `lib/delivery-zones.ts`, editable a mano en el presupuesto.
+  const zone = quote.deliveryZoneId ? await db.deliveryZone.findFirst({ where: { id: quote.deliveryZoneId, organizationId }, select: { id: true, name: true, basePrice: true, volumeThreshold: true, extraPrice: true } }) : null;
+  const zoneName = zone?.name ?? quote.deliveryZoneName;
+  const pieces = orderPieces(lines);
+  // Si la zona se borró entre el pedido y la conversión no se inventa un monto: queda «a coordinar».
+  if (zone) {
+    const fee = deliveryFee(zone, pieces);
+    lines.push({
+      id: randomUUID(),
+      sortOrder: lines.length,
+      name: deliveryLineName(zone.name),
+      quantity: 1,
+      days: 1,
+      unitPrice: fee,
+      costPrice: 0,
+      subtotal: fee,
+      inventoryId: null,
+      notes: deliveryExtraApplies(zone, pieces) ? `Incluye recargo por volumen (${pieces} piezas)` : `${pieces} ${pieces === 1 ? "pieza" : "piezas"}`,
+    });
+  }
   const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
   const costEstimate = lines.reduce((sum, line) => sum + line.quantity * line.days * line.costPrice, 0);
   const plan = depositPlan(settings.depositPercent, subtotal);
@@ -119,6 +141,7 @@ export async function convertQuoteRequest(context: AdminContext, quoteRequestId:
     quote.location ? `Lugar: ${quote.location}` : null,
     lead.message ? `Notas del cliente: ${lead.message}` : null,
     wholesale ? "Nació de un pedido del catálogo mayorista (precios mayoristas)." : "Nació de un pedido del catálogo público.",
+    zone ? null : quote.deliveryCoordinate ? "Flete: a coordinar con el cliente." : zoneName ? `Flete: la zona «${zoneName}» ya no existe; coordinar y cargar la línea a mano.` : null,
   ].filter(Boolean);
   const title = `${wholesale ? "Pedido mayorista" : "Pedido del catálogo"} · ${(lead.company || lead.name).trim()}`.slice(0, TITLE_MAX);
 

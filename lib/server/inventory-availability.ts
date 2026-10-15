@@ -954,9 +954,46 @@ export type ReservationOutcome = {
   total: number;
   conflicts: AvailabilityConflict[];
   substitutes: InventorySubstitute[];
+  /**
+   * Solo en combos con faltante: cada pieza que no alcanza con sus alternativas (misma categoría,
+   * con stock real) y la diferencia de precio de reemplazarla (`lib/server/combo-quote.ts`).
+   */
+  comboParts?: ComboShortagePart[];
   /** Motivo legible cuando la reserva no quedó completa. */
   reason: string | null;
 };
+
+export type ComboShortagePart = {
+  componentId: string;
+  name: string;
+  needed: number;
+  available: number;
+  alternatives: Array<{ id: string; name: string; available: number; enough: boolean; priceDelta: number | null; newPackageTotal: number | null }>;
+};
+
+/**
+ * Piezas faltantes de un combo con sus alternativas y diferencia de precio. Nunca lanza: si el
+ * detalle no se puede armar, queda logueado y el faltante se informa igual sin alternativas.
+ */
+async function comboShortageParts(organizationId: string, comboId: string, quantity: number, range: { startsAt: Date; endsAt: Date }): Promise<ComboShortagePart[] | undefined> {
+  try {
+    const { comboQuote } = await import("./combo-quote");
+    const { rentalDaysBetween } = await import("../catalog-public");
+    const { dayKeyOf } = await import("./notifications");
+    const quote = await comboQuote({ organizationId, comboId, quantity, days: rentalDaysBetween(dayKeyOf(range.startsAt), dayKeyOf(range.endsAt)), audience: "RETAIL", range });
+    const parts = quote?.components.filter((part) => part.short).map((part) => ({
+      componentId: part.componentId,
+      name: part.name,
+      needed: part.needed,
+      available: part.available ?? 0,
+      alternatives: part.alternatives.map(({ id, name, available, enough, priceDelta, newPackageTotal }) => ({ id, name, available, enough, priceDelta, newPackageTotal })),
+    }));
+    return parts && parts.length ? parts : undefined;
+  } catch (error) {
+    console.error("[reserva] no se pudieron calcular las alternativas del combo", { comboId, error });
+    return undefined;
+  }
+}
 
 export type BudgetReservation = {
   eventId: string | null;
@@ -1359,6 +1396,7 @@ export async function reserveBudgetInventory(options: {
             startsAt: range.startsAt,
             endsAt: range.endsAt,
           }),
+          comboParts: group.inventory._count.components > 0 ? await comboShortageParts(options.organizationId, group.inventory.id, group.quantity, range) : undefined,
           reason: commit
             ? `Se piden ${group.quantity} y ${available > 0 ? `solo hay ${available} libres` : "no hay unidades libres"} en ${rangeLabel(range.startsAt, range.endsAt)}${
                 commit.availability && commit.availability.conflicts.length > 0
@@ -1504,6 +1542,7 @@ export async function reserveBudgetInventory(options: {
         available: availability.available,
         conflicts: availability.conflicts,
         substitutes,
+        comboParts: shortfall > 0 && group.inventory._count.components > 0 ? await comboShortageParts(options.organizationId, group.inventory.id, group.quantity, range) : undefined,
         reason:
           shortfall > 0
             ? `Se reservaron ${reserved} de ${group.quantity}: ${

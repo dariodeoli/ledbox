@@ -29,7 +29,15 @@ export type StockGate =
 
 /** Una línea legible por ítem faltante: «Copa (piden 12, hay 8)». */
 export function shortageLines(reservation: Pick<BudgetReservation, "outcomes">): string[] {
-  return reservation.outcomes.map((outcome) => `${outcome.inventoryName} (piden ${outcome.quantity}, hay ${outcome.available})`);
+  return reservation.outcomes.map((outcome) => {
+    const base = `${outcome.inventoryName} (piden ${outcome.quantity}, hay ${outcome.available})`;
+    // Paquete: qué pieza falta y con qué se puede reemplazar (y a qué diferencia de precio).
+    const parts = (outcome.comboParts ?? []).map((part) => {
+      const options = part.alternatives.slice(0, 3).map((alt) => `${alt.name}${alt.priceDelta === null ? "" : alt.priceDelta === 0 ? " (mismo precio)" : ` (${alt.priceDelta > 0 ? "+" : "−"}Gs. ${Math.abs(alt.priceDelta).toLocaleString("es-PY")})`}`);
+      return `falta «${part.name}»${options.length ? `, reemplazo posible: ${options.join(" o ")}` : ""}`;
+    });
+    return parts.length ? `${base}: ${parts.join("; ")}` : base;
+  });
 }
 
 export async function checkStockBeforeApproval(options: {

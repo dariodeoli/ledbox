@@ -5,6 +5,8 @@ import { auditPick, recordAudit } from "@/lib/server/audit";
 import { readInventoryImageUrl } from "@/lib/server/inventory-images";
 import { comboCapacitiesForRange, loadComboDefinitions, saveCombo, substituteComboComponent } from "@/lib/server/inventory-combos";
 import { parseDate } from "@/lib/server/inventory-availability";
+import { comboQuote } from "@/lib/server/combo-quote";
+import { readAudienceTiers } from "@/lib/price-tiers";
 import { FIELD_MESSAGES, inventorySkuValid, normalizeInventorySku, normalizePersonName, personNameValid, readInventoryPriceValues } from "@/lib/field-rules";
 
 export const runtime = "nodejs";
@@ -27,6 +29,26 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const url = new URL(request.url);
+  // `?pricing=1&id=<combo>`: precio del paquete, suma por unidad, ahorro y, con rango, alternativas por pieza faltante.
+  if (url.searchParams.get("pricing") === "1") {
+    const id = url.searchParams.get("id") ?? "";
+    const days = Number(url.searchParams.get("days") ?? 1);
+    const quantity = Number(url.searchParams.get("quantity") ?? 1);
+    if (!id || !Number.isInteger(days) || days < 1 || days > 365 || !Number.isInteger(quantity) || quantity < 1 || quantity > 9999) return jsonError("Indicá el combo, los días (1 a 365) y la cantidad.", 400);
+    const from = parseDate(url.searchParams.get("startsAt"));
+    const to = parseDate(url.searchParams.get("endsAt"));
+    if ((from && !to) || (!from && to) || (from && to && to.getTime() < from.getTime())) return jsonError("El rango de fechas no es válido.", 400);
+    const quote = await comboQuote({
+      organizationId,
+      comboId: id,
+      quantity,
+      days,
+      audience: url.searchParams.get("audience") === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
+      range: from && to ? { startsAt: from, endsAt: to } : null,
+    });
+    if (!quote) return jsonError("El combo no existe en esta empresa.", 404);
+    return Response.json({ quote });
+  }
   const startsAt = parseDate(url.searchParams.get("startsAt")) ?? new Date();
   const endsAt = parseDate(url.searchParams.get("endsAt")) ?? startsAt;
   if (endsAt.getTime() < startsAt.getTime()) return jsonError("El fin del rango no puede ser anterior al inicio.", 400);
@@ -72,6 +94,8 @@ export async function POST(request: Request) {
     const prices = readInventoryPriceValues(body);
     if (!prices.ok) return jsonError(prices.error, 400);
     const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) : undefined;
+    const tiers = body.priceTiers === undefined ? null : readAudienceTiers(body.priceTiers);
+    if (tiers && !tiers.ok) return jsonError(tiers.error, 400);
     const result = await saveCombo({
       organizationId,
       id,
@@ -81,7 +105,8 @@ export async function POST(request: Request) {
         sku: sku || null,
         ...(notes !== undefined ? { notes: notes || null } : {}),
         ...(imageUrl !== undefined ? { imageUrl } : {}),
-        prices: Object.fromEntries(Object.entries(prices.values).filter(([, value]) => typeof value === "number")),
+        prices: Object.fromEntries((["listPrice", "wholesalePrice", "minimumPrice"] as const).flatMap((key) => (typeof prices.values[key] === "number" ? [[key, prices.values[key]]] : []))),
+        ...(tiers?.ok ? { priceTiers: tiers.tiers } : {}),
       },
       components: body.components,
     });
@@ -121,9 +146,9 @@ export async function POST(request: Request) {
       entity: "EventInventory",
       entityId: assignmentId,
       summary: `Sustituyó «${result.from.name}» por «${result.to.name}» (${result.units} u.) en el combo «${result.combo.name}» de «${result.event.name}»`,
-      detail: { fields: { comboId: result.combo.id, eventId: result.event.id, desde: result.from.id, hacia: result.to.id, unidades: result.units } },
+      detail: { fields: { comboId: result.combo.id, eventId: result.event.id, desde: result.from.id, hacia: result.to.id, unidades: result.units, ...(result.price.known ? { diferenciaPrecio: result.price.delta, paqueteAntes: result.price.packageBefore, paqueteDespues: result.price.packageAfter } : { diferenciaPrecio: "sin precio" }) } },
     });
-    return Response.json({ ok: true, from: result.from, to: result.to, units: result.units });
+    return Response.json({ ok: true, from: result.from, to: result.to, units: result.units, price: result.price });
   }
 
   return jsonError("Operación de combos desconocida.", 400);

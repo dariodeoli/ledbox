@@ -1,6 +1,7 @@
 import { whatsappHref } from "./admin-format";
 import type { PriceList } from "./catalog-audience";
 import { isEventBilled, quoteProductPrice } from "./quote-sharing";
+import { legacyTier, priceLine, tierLabel, tiersForAudience, type AudiencePriceTier, type LinePricing, type PriceTier } from "./price-tiers";
 
 /**
  * Catálogo público por empresa y preórdenes (alquileres fase 3). Reglas puras,
@@ -113,30 +114,71 @@ export type CatalogPriceFields = { listPrice: number; listFromDays: number; list
  * final sale de los campos de lista y en el mayorista de los campos mayoristas, pero
  * el DTO nunca dice de cuál (ni expone el otro).
  */
-export type CatalogPrice = { unit: number; fromDays: number; fromPrice: number; /** «Se cobra por evento»: el precio no se multiplica por los días. */ perEvent?: boolean };
+export type CatalogPrice = {
+  unit: number;
+  fromDays: number;
+  fromPrice: number;
+  /** Escalones por días del frente (solo si el producto los tiene). */
+  tiers?: PriceTier[];
+  /** «Se cobra por evento»: el precio no se multiplica por los días. */
+  perEvent?: boolean;
+};
 
 type TieredFields = {
   billingUnit: string | null;
   listPrice: number; listFromDays: number; listFromPrice: number;
   wholesalePrice: number; wholesaleFromDays: number; wholesaleFromPrice: number;
+  /** Escalones por días (`InventoryPriceTier`); cuando vienen, los `*FromDays/*FromPrice` no se leen. */
+  priceTiers: ReadonlyArray<AudiencePriceTier>;
 };
 
 /** Precio de la lista elegida a partir de una fila de inventario. */
 export function catalogPriceFor(row: Partial<TieredFields>, list: PriceList): CatalogPrice {
-  const base = list === "WHOLESALE"
-    ? { unit: row.wholesalePrice ?? 0, fromDays: row.wholesaleFromDays ?? 0, fromPrice: row.wholesaleFromPrice ?? 0 }
-    : { unit: row.listPrice ?? 0, fromDays: row.listFromDays ?? 0, fromPrice: row.listFromPrice ?? 0 };
+  const wholesale = list === "WHOLESALE";
+  const unit = (wholesale ? row.wholesalePrice : row.listPrice) ?? 0;
+  const base: CatalogPrice = row.priceTiers
+    ? { unit, fromDays: 0, fromPrice: 0 }
+    : wholesale
+      ? { unit, fromDays: row.wholesaleFromDays ?? 0, fromPrice: row.wholesaleFromPrice ?? 0 }
+      : { unit, fromDays: row.listFromDays ?? 0, fromPrice: row.listFromPrice ?? 0 };
+  if (row.priceTiers) {
+    const tiers = tiersForAudience(row.priceTiers, wholesale ? "WHOLESALE" : "RETAIL");
+    if (tiers.length) base.tiers = tiers;
+  }
   return isEventBilled(row.billingUnit) ? { ...base, perEvent: true } : base;
 }
 
-/** Precio por día de un `CatalogPrice` para `days` días; 0 = sin precio cargado («Consultar»). */
-export function catalogDailyPrice(price: CatalogPrice, days: number): number {
-  return quoteProductPrice({ listPrice: price.unit, listFromDays: price.fromDays, listFromPrice: price.fromPrice, billingUnit: price.perEvent ? "EVENT" : null }, Math.max(1, days), "FINAL");
+/** Línea de precio (unitario + días a guardar) de un `CatalogPrice` para `days` días: la regla única de `lib/price-tiers.ts`. */
+export function catalogLine(price: CatalogPrice, days: number): LinePricing {
+  return priceLine(
+    { basePrice: price.unit, billingUnit: price.perEvent ? "EVENT" : null, tiers: price.tiers ?? legacyTier(price.fromDays, price.fromPrice) },
+    Math.max(1, days),
+  );
 }
 
-/** Precio por día de la lista elegida directo desde una fila de inventario. */
+/**
+ * Precio unitario de un `CatalogPrice` para `days` días; 0 = sin precio cargado («Consultar»).
+ * Es por día salvo en un escalón «total» o un producto por evento, donde es el total del período
+ * (`catalogLine(...).days` dice por cuántos días se multiplica).
+ */
+export function catalogDailyPrice(price: CatalogPrice, days: number): number {
+  return catalogLine(price, days).unitPrice;
+}
+
+/** Precio unitario de la lista elegida directo desde una fila de inventario. */
 export function listDailyPrice(row: Partial<TieredFields>, list: PriceList, days: number): number {
   return catalogDailyPrice(catalogPriceFor(row, list), days);
+}
+
+/** Línea de precio de la lista elegida directo desde una fila de inventario. */
+export function listLine(row: Partial<TieredFields>, list: PriceList, days: number): LinePricing {
+  return catalogLine(catalogPriceFor(row, list), days);
+}
+
+/** Texto de la tienda para el escalón más conveniente: «desde 5 días: 300.000 total». */
+export function catalogTierHints(price: CatalogPrice | null): string[] {
+  if (!price || price.perEvent) return [];
+  return (price.tiers ?? legacyTier(price.fromDays, price.fromPrice)).map(tierLabel);
 }
 
 /** Precio por día de referencia para `days` días; 0 = sin precio cargado («Consultar»). */
@@ -177,11 +219,14 @@ export function preorderWhatsappMessage(input: {
   name: string;
   subtotal: number | null;
   trackingUrl?: string | null;
+  /** Texto del flete: «Flete — Asunción (estimado Gs. 150.000)» o «Flete: a coordinar»; vacío si no eligió. */
+  delivery?: string | null;
 }): string {
   const parts = [
     `Hola ${input.organizationName}! Soy ${input.name}. Hice un pedido de alquiler desde su catálogo (todavía sin confirmar).`,
     `Fechas: ${formatDayKey(input.fromKey)} al ${formatDayKey(input.toKey)}`,
     `Lugar: ${input.location}`,
+    input.delivery ?? "",
     ...input.lines.map((line) => `- ${line.quantity} × ${line.name}`),
     input.subtotal !== null ? `Subtotal estimado: Gs. ${gs.format(input.subtotal)}` : "Subtotal: a cotizar",
     input.trackingUrl ? `Seguimiento: ${input.trackingUrl}` : "",

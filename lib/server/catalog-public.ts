@@ -11,7 +11,7 @@ import {
   availabilityHint,
   catalogPriceFor,
   estimatedSubtotal,
-  listDailyPrice,
+  listLine,
   preorderWhatsappMessage,
   preorderWhatsappUrl,
   rentalDaysBetween,
@@ -37,6 +37,10 @@ import type { IdempotentTx } from "./idempotency";
 import { dayKeyOf, dayStart, isValidDayKey, nextDayKey } from "./notifications";
 import { getRentalSettings, type RentalSettingsView } from "./rental-settings";
 import { phoneKey } from "./lead-client";
+import { listPublicDeliveryZones, resolveDeliveryChoice } from "./delivery-zones";
+import { TIER_SELECT } from "./line-pricing";
+import type { AudiencePriceTier } from "@/lib/price-tiers";
+import { deliveryFee } from "@/lib/delivery-zones";
 
 /**
  * Catálogo público por empresa y preórdenes (alquileres fase 3).
@@ -135,6 +139,11 @@ export type PublicCatalogItem = {
   price: CatalogPrice | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
   availability: AvailabilityHint | null;
+  /**
+   * Solo en paquetes (combos): sus piezas con el precio de la lista del catálogo, para mostrar
+   * «suma por unidad» y «ahorro» con la misma regla de días. `null` si no es un combo o no se muestran precios.
+   */
+  package: Array<{ name: string; quantity: number; price: CatalogPrice }> | null;
 };
 
 type CatalogRow = {
@@ -149,12 +158,8 @@ type CatalogRow = {
   quantity: number;
   status: InventoryStatus;
   billingUnit: BillingUnit;
-  listPrice: number;
-  listFromDays: number;
-  listFromPrice: number;
   wholesalePrice: number;
-  wholesaleFromDays: number;
-  wholesaleFromPrice: number;
+  priceTiers: AudiencePriceTier[];
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
   incidentHold: number;
@@ -180,11 +185,8 @@ async function loadVisibleRows(organizationId: string, list: PriceList, ids?: re
       status: true,
       billingUnit: true,
       listPrice: true,
-      listFromDays: true,
-      listFromPrice: true,
       wholesalePrice: true,
-      wholesaleFromDays: true,
-      wholesaleFromPrice: true,
+      priceTiers: TIER_SELECT,
       bufferBeforeMin: true,
       bufferAfterMin: true,
       incidentHold: true,
@@ -239,6 +241,7 @@ async function hintsFor(organizationId: string, rows: readonly CatalogRow[], ran
 export async function loadPublicCatalogItems(context: PublicCatalogContext, range: PublicRange | null): Promise<PublicCatalogItem[]> {
   const rows = await loadVisibleRows(context.organization.id, context.priceList);
   const hints = range ? await hintsFor(context.organization.id, rows, range) : null;
+  const packages = context.settings.publicShowPrices ? await loadPackages(context, rows.map((row) => row.id)) : new Map<string, NonNullable<PublicCatalogItem["package"]>>();
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -248,7 +251,31 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     description: row.publicDescription?.trim() || null,
     price: context.settings.publicShowPrices ? catalogPriceFor(row, context.priceList) : null,
     availability: hints?.get(row.id) ?? null,
+    package: packages.get(row.id) ?? null,
   }));
+}
+
+/** Zonas de flete para la tienda: solo las activas; sin montos si la tienda no muestra precios. */
+export async function loadPublicZones(context: PublicCatalogContext) {
+  const zones = await listPublicDeliveryZones(context.organization.id);
+  return context.settings.publicShowPrices ? zones : zones.map(({ id, name }) => ({ id, name, basePrice: 0, volumeThreshold: null, extraPrice: null }));
+}
+
+/** Piezas de cada combo visible, con el precio de ESTA lista (cliente final o mayorista). */
+async function loadPackages(context: PublicCatalogContext, comboIds: readonly string[]): Promise<Map<string, NonNullable<PublicCatalogItem["package"]>>> {
+  const result = new Map<string, NonNullable<PublicCatalogItem["package"]>>();
+  if (comboIds.length === 0) return result;
+  const rows = await db.inventoryComponent.findMany({
+    where: { organizationId: context.organization.id, parentId: { in: [...comboIds] } },
+    orderBy: [{ parentId: "asc" }, { component: { name: "asc" } }],
+    select: { parentId: true, quantity: true, component: { select: { name: true, billingUnit: true, listPrice: true, wholesalePrice: true, priceTiers: TIER_SELECT } } },
+  });
+  for (const row of rows) {
+    const list = result.get(row.parentId) ?? [];
+    list.push({ name: row.component.name, quantity: row.quantity, price: catalogPriceFor(row.component, context.priceList) });
+    result.set(row.parentId, list);
+  }
+  return result;
 }
 
 // ── Preorden ─────────────────────────────────────────────────────────────────
@@ -268,6 +295,9 @@ export const preorderSchema = z.object({
     .array(z.object({ inventoryId: z.string().trim().min(1).max(64), quantity: z.coerce.number().int().min(1).max(99) }))
     .min(1)
     .max(40),
+  /** Zona de flete elegida (opcional) o «a coordinar»; con zona el pedido lleva el flete estimado. */
+  deliveryZoneId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
+  deliveryCoordinate: z.coerce.boolean().optional(),
   idempotencyKey: z.string().trim().max(200).optional(),
   honeypot,
   website: honeypot,
@@ -311,23 +341,29 @@ export async function createPreorder(
   const ids = [...quantities.keys()];
   const rows = await tx.inventoryItem.findMany({
     where: { organizationId, ...catalogAudienceWhere(context.priceList), archivedAt: null, status: { not: "RETIRED" }, id: { in: ids } },
-    select: {
-      id: true, name: true, sku: true, billingUnit: true,
-      listPrice: true, listFromDays: true, listFromPrice: true,
-      wholesalePrice: true, wholesaleFromDays: true, wholesaleFromPrice: true,
-    },
+    select: { id: true, name: true, sku: true, billingUnit: true, listPrice: true, wholesalePrice: true, priceTiers: TIER_SELECT },
   });
   if (rows.length !== ids.length) return { ok: false, status: 400, error: "Alguno de los artículos ya no está en el catálogo. Actualizá la página y revisá tu selección." };
   if ([...quantities.values()].some((quantity) => quantity > 99)) return { ok: false, status: 400, error: "La cantidad por artículo no puede superar 99." };
 
   const showPrices = context.settings.publicShowPrices;
   const wholesale = context.priceList === "WHOLESALE";
-  const lines = rows.map((row) => ({
-    row,
-    quantity: quantities.get(row.id) ?? 1,
-    unitPrice: showPrices ? listDailyPrice(row, context.priceList, range.days) || null : null,
-  }));
-  const subtotal = showPrices ? estimatedSubtotal(lines.map((line) => ({ name: line.row.name, quantity: line.quantity, unitPrice: line.unitPrice, perEvent: line.row.billingUnit === "EVENT" })), range.days) : null;
+  const lines = rows.map((row) => {
+    const pricing = showPrices ? listLine(row, context.priceList, range.days) : null;
+    return {
+      row,
+      quantity: quantities.get(row.id) ?? 1,
+      unitPrice: pricing && pricing.unitPrice > 0 ? pricing.unitPrice : null,
+      // Evento o escalón «total»: el precio ya es el del período, no se multiplica por los días.
+      fixedPeriod: pricing ? pricing.mode === "TOTAL" || pricing.mode === "EVENT" : row.billingUnit === "EVENT",
+      days: pricing?.days ?? billedDays(row.billingUnit, range.days),
+    };
+  });
+  const itemsSubtotal = showPrices ? estimatedSubtotal(lines.map((line) => ({ name: line.row.name, quantity: line.quantity, unitPrice: line.unitPrice, perEvent: line.fixedPeriod })), range.days) : null;
+  const zone = await resolveDeliveryChoice(tx, organizationId, input);
+  if (!zone.ok) return { ok: false, status: 400, error: zone.error };
+  const quotedFee = showPrices && zone.zone ? deliveryFee(zone.zone, lines.reduce((sum, line) => sum + line.quantity, 0)) : null;
+  const subtotal = itemsSubtotal !== null ? itemsSubtotal + (quotedFee ?? 0) : null;
 
   // Lead de ESTA empresa: se reutiliza el abierto con el mismo correo o teléfono.
   const email = input.email.trim().toLowerCase();
@@ -373,6 +409,9 @@ export async function createPreorder(
       status: "NEW",
       source: "catalogo",
       priceList: context.priceList,
+      deliveryZoneId: zone.zone?.id ?? null,
+      deliveryZoneName: zone.zone?.name ?? null,
+      deliveryCoordinate: zone.coordinate,
       // El pedido mayorista nace vinculado al cliente del link.
       clientId: context.access?.client.id,
       startsAt: range.startsAt,
@@ -393,7 +432,7 @@ export async function createPreorder(
           duration: range.days,
           billingUnit: line.row.billingUnit === "EVENT" ? ("EVENT" as const) : ("DAILY" as const),
           unitPrice: line.unitPrice ?? undefined,
-          subtotal: line.unitPrice ? line.unitPrice * line.quantity * billedDays(line.row.billingUnit, range.days) : undefined,
+          subtotal: line.unitPrice ? line.unitPrice * line.quantity * line.days : undefined,
           notes: undefined,
         })),
       },
@@ -409,6 +448,9 @@ export async function createPreorder(
     location: input.location,
     name: input.name,
     subtotal,
+    delivery: zone.zone
+      ? `Flete — ${zone.zone.name}${quotedFee !== null ? ` (estimado Gs. ${quotedFee.toLocaleString("es-PY")})` : ""}`
+      : zone.coordinate ? "Flete: a coordinar" : null,
     trackingUrl: `${origin}${trackingPath}`,
   });
   return {

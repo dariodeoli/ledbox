@@ -52,6 +52,7 @@ const PRODUCTOS_COLUMNS: ReadonlyArray<ImportColumn> = [
   { key: "tipo", required: false, example: "juego", help: "«unidad» (un producto suelto) o «juego» (un combo armado con otros productos)." },
   { key: "precio", required: false, example: "660000", help: "Precio de alquiler en guaraníes, número entero y sin símbolos. Vacío = sin dato." },
   { key: "cobro", required: false, example: "evento", help: "«dia» (por día de alquiler, valor por defecto) o «evento» (un precio total por evento). Vacío = dia." },
+  { key: "precios_dias", required: false, example: "5:total:300000", help: "Precio especial desde cierta cantidad de días, «desde:modo:precio» separados por punto y coma. Modo «dia» = precio por día; «total» = total del período. Ejemplo: 5:total:300000 (5 días o más por 300.000 en total); 3:dia:90000; 7:total:500000. Vacío = no cambia nada." },
   { key: "cantidad", required: false, example: "", help: "Unidades en stock (entero). En un juego se deja vacío: su capacidad sale de los componentes." },
   { key: "medidas", required: false, example: "1.60x0.75", help: "Medidas tal como figuran en el catálogo." },
   { key: "capacidad", required: false, example: "8 personas", help: "Capacidad, por ejemplo «8 personas»." },
@@ -73,6 +74,7 @@ const PRODUCTOS_JSON_SHAPE = `{
       "tipo": "juego",
       "precio": 660000,
       "cobro": "dia",
+      "precios_dias": [{ "desde_dias": 5, "modo": "total", "precio": 300000 }],
       "cantidad": null,
       "medidas": "1.60x0.75",
       "capacidad": "8 personas",
@@ -98,6 +100,7 @@ Reglas:
 4. "cantidad": entero con el stock si el catálogo lo dice; si no, null. En los juegos va null (la capacidad sale de los componentes).
 5. "precio": guaraníes (PYG) como número entero, sin puntos, sin "Gs" y sin decimales (660000, no "660.000"). Si el catálogo no trae precio, null. Nunca conviertas otras monedas: dejá null y anotalo en "dudas".
 6. "cobro": "dia" (precio por día de alquiler) salvo que el catálogo diga que el precio es total por evento (entonces "evento").
+6b. "precios_dias": solo si el catálogo trae un precio especial por cantidad de días (ej. "5 días por 300.000"): lista de { "desde_dias": 5, "modo": "total", "precio": 300000 }. "modo": "dia" si el precio es por cada día, "total" si es el total del período. Si no hay, [] o null.
 7. Si falta un dato, usá null. NO inventes códigos, precios, medidas, capacidades ni descripciones.
 8. "medidas" y "capacidad": copialas tal como figuran ("1.60x0.75", "8 personas").
 9. "foto": el nombre del archivo de la foto del producto, "<codigo>.jpg" (por ejemplo "527.jpg"). Si no hay foto, null.
@@ -120,6 +123,7 @@ const PRODUCTOS_IA_INSTRUCTIONS = [
   "- `codigo` y `nombre` son obligatorios; sin alguno de los dos, no incluyas el producto.",
   "- `tipo`: \"unidad\" o \"juego\". Un juego lleva `componentes` [{codigo, cantidad}] con códigos que existan como productos en el mismo texto; un juego no contiene juegos.",
   "- `cobro`: \"dia\" salvo que el texto diga que el precio es total por evento (\"evento\").",
+  "- `precios_dias`: [{desde_dias, modo: \"dia\"|\"total\", precio}] solo si el texto trae un precio especial por cantidad de días; si no, [].",
   "- `precio`: guaraníes enteros sin separadores. Si está en otra moneda o es ambiguo, null y explicalo en `dudas`.",
   "- `foto`: \"<codigo>.jpg\" solo si el texto menciona una foto; si no, null.",
   `- Como máximo ${CATALOG_LIMITS.products} productos; no repitas códigos.`,
@@ -138,6 +142,7 @@ export const IMPORT_MODULES: Readonly<Record<ImportModuleId, ImportModule>> = {
       "No cambies los encabezados ni el orden de las columnas.",
       "Mismo código que un producto ya cargado = se actualiza; un código nuevo = se crea.",
       "Los precios van en guaraníes, números enteros, sin símbolos.",
+      "«precios_dias» es opcional: un precio especial desde N días, con la forma desde:modo:precio (5:total:300000 = 5 días o más por 300.000 en total; 3:dia:90000 = desde 3 días, 90.000 por día).",
       "Un juego (combo) se arma con la columna «componentes»: 743x2; 811x1. Esos códigos tienen que existir.",
       "Las fotos van aparte, en fotos.zip, un archivo por producto: <codigo>.jpg, .png o .webp.",
       "Subí la planilla en .xlsx o .csv desde Inventario → Importar. Antes de aplicar vas a ver una vista previa con los problemas.",
