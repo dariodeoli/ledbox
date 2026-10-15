@@ -361,12 +361,13 @@ test("controles compactos: fecha canónica y montos/cantidades en columnas sin p
   assert.match(read("components/catalog-public/CartDrawer.tsx"), /data-testid="cart-count"/);
 });
 
-test("guardar carrito es un popup acotado y espera que se cierre la vista rápida", () => {
+test("guardar carrito es un popup acotado que solo abre por una acción intencional", () => {
   const contact = read("components/catalog-public/ContactPanel.tsx");
   assert.match(contact, /cp-overlay--contact/);
   assert.match(css, /\.cp-contact \{[^}]*height: auto; max-height:/);
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
-  assert.match(browser, /cartScope !== "public" \|\| quickId \|\| open/);
+  assert.ok(!browser.includes("contactAsked"));
+  assert.match(browser, /onSaveCart=\{!saved && cartScope === "public"/);
   assert.match(browser, /!contactOpen && !open && !quickItem && !filtersOpen \? toast : null/);
 });
 

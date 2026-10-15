@@ -4,6 +4,7 @@ import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
 import { CategoryCard } from "./CategoryCard";
 import { EventPicker } from "./EventPicker";
 import { THEMES } from "@/lib/storefront-templates";
+import { storeCategories, storeCategoryHref, withStoreDates } from "@/lib/store-categories";
 import { featuredCategories } from "@/lib/featured-categories";
 import { CompanyInfo } from "./CompanyInfo";
 import { locationLine } from "@/lib/org-profile";
@@ -73,14 +74,18 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
     const unit = item.price?.unit ?? 0;
     if (unit > 0) minByCategory.set(item.category, Math.min(minByCategory.get(item.category) ?? unit, unit));
   }
-  const categoryHref = (name: string) => `${basePath}?categoria=${encodeURIComponent(name)}#catalogo`;
+  const publicCategories = !member && !wholesale && (!cartScope || cartScope === "public") && store.accessMode === "OPEN";
+  const categoryIndex = storeCategories(items);
+  const categoryHref = (name: string) => {
+    const category = categoryIndex.find((entry) => entry.name === name)!;
+    return publicCategories ? storeCategoryHref(basePath, category, range) : withStoreDates(`${basePath}?categoria=${encodeURIComponent(name)}`, range) + "#catalogo";
+  };
   const hasContact = Boolean(whatsapp || store.email || store.profile);
   const home = store.appearance.home;
   const order = visibleSections(home);
   const shownIds = new Set<HomeSectionId>(order);
   const nav = storeNavLinks("", { contact: hasContact && shownIds.has("contacto"), howItWorks: shownIds.has("como-funciona"), categories: featured.length > 1 ? featured.slice(0, 3).map((entry) => ({ name: entry.category, href: categoryHref(entry.category) })) : [] });
   const hasCover = Boolean(store.covers.desktop || store.covers.mobile);
-  const photoHero = hasCover;
   const title = store.tagline || DEFAULT_TITLE;
   const sub = wholesale ? `Hola ${wholesale.clientName}. Este es tu catálogo con precios mayoristas.` : member ? `Hola ${member.clientName}. ${DEFAULT_SUB}` : DEFAULT_SUB;
 
@@ -103,8 +108,8 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
               <p className="cp-hero-sub">{sub}</p>
               {demo ? <p className="cp-note" role="note">Esto es una demo con datos de ejemplo: los pedidos no se guardan.</p> : null}
               <div className="cp-hero-actions">
-                <a className={photoHero ? "cp-btn cp-btn--lg cp-btn--on-image" : "cp-btn cp-btn--lg cp-btn--primary"} href="#catalogo">Ver catálogo</a>
-                {shownIds.has("como-funciona") ? <a className={photoHero ? "cp-btn cp-btn--lg cp-btn--ghost-image" : "cp-btn cp-btn--lg"} href="#como-funciona">Cómo funciona</a> : null}
+                <a className="cp-btn cp-btn--lg cp-btn--primary" href="#catalogo">Ver catálogo</a>
+                {shownIds.has("como-funciona") ? <a className="cp-btn cp-btn--lg" href="#como-funciona">Cómo funciona</a> : null}
               </div>
             </div>
             <EventPicker slug={store.slug} range={range} variant="hero" restore />
@@ -156,6 +161,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             items={items}
             range={range}
             initialCategory={initialCategory}
+            categoryNavigation={publicCategories ? { allHref: `${withStoreDates(basePath, range)}#catalogo`, links: categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name) })) } : undefined}
             zones={zones}
             priceMode={priceMode}
             slug={store.slug}
@@ -230,7 +236,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
 
   return (
     <StoreChrome theme={store.theme} appearance={store.appearance}>
-      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={basePath} nav={nav} cart="button" cartScope={cartScope === "acceso" || cartScope === "mayorista" ? cartScope : "public"} searchHref={`${basePath}#catalogo`} />
+      <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={withStoreDates(basePath, range)} nav={nav} cart="button" cartScope={cartScope === "acceso" || cartScope === "mayorista" ? cartScope : "public"} searchHref={`${withStoreDates(basePath, range)}#catalogo`} />
 
       <main className="cp-page">
         {!shownIds.has("hero") ? <h1 className="cp-sr">{store.name}</h1> : null}
