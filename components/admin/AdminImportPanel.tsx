@@ -26,6 +26,9 @@ type Resultado = {
   fotos: number;
   omitidos: number;
   fallidos: Array<{ codigo: string; mensaje: string }>;
+  /** Módulos con tarjetas propias (eventos): reemplazan a las del catálogo. */
+  tarjetas?: Array<{ etiqueta: string; valor: number }>;
+  avisos?: Array<{ codigo: string; mensaje: string }>;
 };
 type Camino = "planilla" | "chatgpt" | "ia";
 type Progreso = { hecho: number; total: number; fase: string };
@@ -200,13 +203,16 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
       {resultado ? (
         <div className="admin-import">
           <div className="admin-import-cards" role="list">
-            {[
-              ["Creados", resultado.creados.length],
-              ["Actualizados", resultado.actualizados],
-              ["Juegos", resultado.juegos],
-              ["Fotos", resultado.fotos],
-              ["Omitidos", resultado.omitidos],
-            ].map(([etiqueta, valor]) => (
+            {(resultado.tarjetas
+              ? resultado.tarjetas.map((tarjeta): [string, number] => [tarjeta.etiqueta, tarjeta.valor])
+              : [
+                  ["Creados", resultado.creados.length],
+                  ["Actualizados", resultado.actualizados],
+                  ["Juegos", resultado.juegos],
+                  ["Fotos", resultado.fotos],
+                  ["Omitidos", resultado.omitidos],
+                ]
+            ).map(([etiqueta, valor]) => (
               <div key={etiqueta} className="admin-import-card" role="listitem">
                 <strong>{valor}</strong>
                 <span>{etiqueta}</span>
@@ -218,6 +224,15 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               {resultado.fallidos.map((fallo, index) => (
                 <li key={`${fallo.codigo}-${index}`}>
                   <AdminBadge tone="danger">{fallo.codigo}</AdminBadge> {fallo.mensaje}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {resultado.avisos && resultado.avisos.length > 0 ? (
+            <ul className="admin-import-problems" aria-label="Avisos de la importación">
+              {resultado.avisos.map((aviso, index) => (
+                <li key={`${aviso.codigo}-${index}`}>
+                  <AdminBadge tone="warn">{aviso.codigo}</AdminBadge> {aviso.mensaje}
                 </li>
               ))}
             </ul>
@@ -237,7 +252,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
           {preview.estados ? <p className="admin-field-hint">{preview.estados}</p> : null}
           {errores.length > 0 ? (
             <section aria-label="Errores">
-              <h3 className="admin-import-h">Errores ({errores.length}): esos productos no se importan</h3>
+              <h3 className="admin-import-h">Errores ({errores.length}): {modulo.errorNote ?? "esos productos no se importan"}</h3>
               <ul className="admin-import-problems">
                 {errores.map((problema, index) => (
                   <li key={`e${index}`}>
@@ -328,14 +343,14 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
           ) : null}
           {camino === "chatgpt" ? (
             <>
-              <p className="admin-field-hint">Copiá este texto, pegalo en ChatGPT junto con tu catálogo y subí acá el catalogo.json (y el fotos.zip) que te devuelva.</p>
+              <p className="admin-field-hint">{modulo.chatgptHint ?? "Copiá este texto, pegalo en ChatGPT junto con tu catálogo y subí acá el catalogo.json (y el fotos.zip) que te devuelva."}</p>
               <TextAreaField ariaLabel="Texto para ChatGPT" value={modulo.chatgptPrompt} onChange={() => {}} rows={8} autoGrow={false} wide />
               <div className="admin-inv-actions">
                 <AdminButton type="button" icon="copy" onClick={() => void copiar()}>
                   {copiado ? "Copiado" : "Copiar"}
                 </AdminButton>
               </div>
-              <FileField label="catalogo.json" accept=".json,application/json" maxBytes={CATALOG_LIMITS.jsonBytes} file={json} onSelect={setJson} hint="Hasta 2 MB" />
+              <FileField label={modulo.jsonName ?? "catalogo.json"} accept=".json,application/json" maxBytes={CATALOG_LIMITS.jsonBytes} file={json} onSelect={setJson} hint="Hasta 2 MB" />
             </>
           ) : null}
           {camino === "ia" ? (
@@ -345,7 +360,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
                   La IA de LedBox no está disponible en esta empresa (sin configurar o modo demo). Usá la planilla o ChatGPT.
                 </p>
               ) : null}
-              <p className="admin-field-hint">Pegá el texto del catálogo, factura o lista (hasta 25 productos por vez). La IA lee texto: de un PDF o una foto, copiá el texto antes de pegarlo.</p>
+              <p className="admin-field-hint">{modulo.iaHint ?? "Pegá el texto del catálogo, factura o lista (hasta 25 productos por vez). La IA lee texto: de un PDF o una foto, copiá el texto antes de pegarlo."}</p>
               <TextAreaField label="Texto" value={texto} onChange={setTexto} rows={8} maxLength={20_000} counter wide disabled={iaLista !== true} />
               <FileField label="O un archivo de texto" accept=".txt,.csv,.md,.json,text/plain" maxBytes={200 * 1024} file={null} onSelect={(file) => void leerTexto(file)} disabled={iaLista !== true} hint=".txt, .csv, .md o .json, hasta 200 KB" />
             </>

@@ -12,6 +12,7 @@
 
 import type { AdminCapability } from "@/lib/server/permissions";
 import { CATALOG_LIMITS } from "@/lib/import-catalog";
+import { EVENTOS_MODULE } from "@/lib/import-eventos-module";
 
 export type ImportColumn = {
   /** Encabezado exacto de la planilla y clave del JSON. */
@@ -27,7 +28,7 @@ export type ImportColumn = {
   aliases?: ReadonlyArray<string>;
 };
 
-export type ImportModuleId = "productos" | "gastos" | "clientes" | "movimientos-stock";
+export type ImportModuleId = "productos" | "eventos" | "gastos" | "clientes" | "movimientos-stock";
 
 export type ImportModule = {
   id: ImportModuleId;
@@ -47,6 +48,14 @@ export type ImportModule = {
   iaInstructions: string;
   /** Soporta fotos en ZIP. */
   photos: boolean;
+  /** Nombre del archivo JSON que se sube (por defecto «catalogo.json»). */
+  jsonName?: string;
+  /** Texto de ayuda del camino «Con ChatGPT» (por defecto el del catálogo). */
+  chatgptHint?: string;
+  /** Texto de ayuda del camino «IA de LedBox» (por defecto el del catálogo). */
+  iaHint?: string;
+  /** Qué pasa con las filas con error (por defecto «esos productos no se importan»). */
+  errorNote?: string;
 };
 
 const PRODUCTOS_COLUMNS: ReadonlyArray<ImportColumn> = [
@@ -170,6 +179,7 @@ export const IMPORT_MODULES: Readonly<Record<ImportModuleId, ImportModule>> = {
     iaInstructions: PRODUCTOS_IA_INSTRUCTIONS,
     photos: true,
   },
+  eventos: EVENTOS_MODULE,
   // Ganchos declarados, sin implementar: se completan al sumar cada módulo.
   gastos: {
     id: "gastos",
