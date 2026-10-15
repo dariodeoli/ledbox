@@ -1586,9 +1586,39 @@ export function AdminTable({
   );
 }
 
-export function AdminRow({ children, tone }: { children: React.ReactNode; tone?: AdminTone }) {
+/**
+ * Fila de tabla. Con `onActivate` toda la fila es un blanco de clic (cursor y resalte): el clic sobre un
+ * control propio (botón, enlace, casilla, menú) no la activa. El acceso con teclado lo da el control
+ * principal de la fila (por ej. el botón del nombre), no la fila.
+ */
+export function AdminRow({
+  children,
+  tone,
+  onActivate,
+  selected,
+}: {
+  children: React.ReactNode;
+  tone?: AdminTone;
+  onActivate?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  selected?: boolean;
+}) {
   return (
-    <div className="admin-table-row" role="row" data-tone={tone}>
+    <div
+      className="admin-table-row"
+      role="row"
+      data-tone={tone}
+      data-clickable={onActivate ? "true" : undefined}
+      data-selected={selected ? "true" : undefined}
+      aria-selected={selected || undefined}
+      onClick={
+        onActivate
+          ? (event) => {
+              if ((event.target as HTMLElement).closest("button, a, input, select, textarea, label, [role='menu'], [role='menuitem'], [data-oc-control]")) return;
+              onActivate(event);
+            }
+          : undefined
+      }
+    >
       {children}
     </div>
   );

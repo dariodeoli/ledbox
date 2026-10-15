@@ -2149,8 +2149,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: 2.25rem minmax(10rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) minmax(8.5rem, 1.1fr) minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 6.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
+.admin-table--inventario { --inventario-cols: 2.25rem minmax(11rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) 16rem minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 3.25rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
 /* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
+.admin-table--inventario .admin-table-row { min-height: 40px; margin-top: 4px; }
+.admin-table--inventario .admin-inv-chips { flex-wrap: nowrap; }
+.admin-table-row[data-clickable="true"] { cursor: pointer; }
+.admin-table-row[data-selected="true"] { border-color: var(--a-accent); box-shadow: inset 0 0 0 1px var(--a-accent); }
 .admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
@@ -2883,12 +2887,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .admin-inv-actions .admin-btn { min-height: 38px; }
 .admin-inv-actions-end { margin-left: auto; }
-/* Cinco indicadores: etiqueta completa arriba y valor con su nota debajo. */
-.admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); }
-.admin-kpis--inventario .admin-kpi { flex-wrap: wrap; }
+/* Cinco indicadores en UNA fila compacta (escritorio): etiqueta arriba (recorta, el texto completo
+   va en el aria-label), valor con su nota en la misma línea. En celular, dos por fila. */
+.admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.admin-kpis--inventario .admin-kpi { flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-height: 0; padding: 5px 10px 6px; }
 .admin-kpis--inventario .admin-kpi-label { flex-basis: 100%; }
-.admin-kpis--inventario .admin-kpi-note { white-space: normal; }
-.admin-kpis--inventario .admin-kpi-label-text { overflow: visible; white-space: normal; line-height: 1.25; }
+.admin-kpis--inventario .admin-kpi-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.admin-kpis--inventario .admin-kpi-value { font-size: 17px; }
+.admin-kpis--inventario .admin-kpi-note { white-space: nowrap; }
+@media (max-width: 1100px) { .admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr)); } }
 /* Indicador que filtra: un botón con la misma caja que el KPI estático. */
 /* Producto: foto chica + nombre y SKU en dos líneas; todo el bloque abre la ficha. */
 .admin-inv-product { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -2989,23 +2996,31 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-seg > [data-tone="warn"] { background: var(--a-warn); }
 .admin-inv-seg > [data-tone="info"] { background: var(--a-info); }
 .admin-inv-stock { min-width: 4.5rem; }
-.admin-inv-bar .admin-toolbar > .admin-search { flex: 2 1 12rem; min-width: 0; max-width: 20rem; }
-.admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 0; max-width: 12.5rem; }
+.admin-inv-bar .admin-toolbar { gap: 6px; }
+.admin-inv-bar .admin-toolbar > .admin-search { flex: 1.4 1 10rem; min-width: 0; max-width: 15rem; }
+.admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 7rem; max-width: 12rem; }
 .admin-inv-bar .admin-toolbar > .admin-viewswitch { margin-left: auto; }
-.admin-inv-range { display: flex; flex: 0 1 auto; align-items: flex-end; gap: 8px; min-width: 0; }
+/* Pestañas y rango «Disponible desde/hasta» comparten una fila baja, pegada a la barra de búsqueda. */
+.admin-inv-subbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.admin-inv-range { display: flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; margin-left: auto; color: var(--a-muted); font-size: 12px; }
 /* Barra fija de búsqueda y filtros (en celular fluye con la página para no comerse la pantalla). */
-.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 8px 0 4px; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 4px 0; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
 /* Cuadrícula compacta: foto de 64 px, nombre en 2 líneas, código, chip y «libres/total». */
-.admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 132px), 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 11rem), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .admin-inv-tile { position: relative; min-width: 0; border: var(--a-panel-line); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
 .admin-inv-tile[data-selected="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 1px var(--a-accent); }
-.admin-inv-tile-open { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; height: 100%; min-height: 44px; padding: 10px 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: center; cursor: pointer; }
+.admin-inv-tile-open { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; height: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.admin-inv-tile-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.admin-inv-tile-head > :first-child { flex: none; }
+.admin-inv-tile-text { display: grid; align-content: start; gap: 2px; min-width: 0; flex: 1; }
+.admin-inv-tile .admin-inv-chips--compact { justify-content: flex-start; }
+.admin-inv-tile:has(.admin-inv-tile-check) .admin-inv-tile-text { padding-right: 20px; }
 .admin-inv-tile-open:hover { background: var(--a-accent-soft); }
 .admin-inv-tile-open:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
-.admin-inv-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; min-height: 2.5em; overflow: hidden; color: var(--a-text-strong); font-size: 12px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.admin-inv-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; overflow: hidden; color: var(--a-text-strong); font-size: 12px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .admin-inv-tile-code { max-width: 100%; overflow: hidden; color: var(--a-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.admin-inv-tile-check { position: absolute; top: 0; left: 0; z-index: 1; }
-.admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; }
+.admin-inv-tile-check { position: absolute; top: 2px; right: 2px; z-index: 1; }
+.admin-inv-tile-check .admin-rowcheck { width: 32px; height: 32px; }
 .admin-inv-tile .admin-meter { width: 100%; min-width: 0; }
 .admin-inv-tile .admin-meter-figures { font-size: 12px; }
 .admin-inv-tile-unit { margin-left: 2px; }
@@ -3026,6 +3041,17 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-inv-bar .admin-viewswitch-btn { width: 44px; height: 44px; }
   .admin-inv-bar { position: static; padding: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .admin-inv-section-head > button { flex-wrap: wrap; }
+  .admin-inv-grid { --admin-inv-card-min: 9.5rem; gap: 6px; }
+  .admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; top: -6px; right: -6px; }
+  .admin-inv-range { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-left: 0; gap: 4px 8px; }
+  .admin-inv-range > span:first-child { grid-column: 1 / -1; }
+  .admin-inv-range > span:nth-child(3) { display: none; }
+  .admin-inv-range .admin-field--filter { width: 100%; }
+  .admin-inv-actions .admin-inv-scan { order: 9; flex-basis: 100%; }
+  .admin-inv-actions-end { flex: 1 1 calc(50% - 8px); }
+  .admin-inv-actions-end .admin-btn { width: 100%; }
+  .admin-inv-subbar .admin-inv-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; scrollbar-width: thin; }
+  .admin-inv-subbar .admin-inv-tabs > * { flex: none; }
   .admin-inv-section-count { margin-left: 22px; }
 }
 @media (max-width: 720px) {
@@ -3033,8 +3059,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-kpis--inventario .admin-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .admin-inv-actions .admin-btn:first-child { flex: 1 1 100%; }
   .admin-bulkbar { bottom: calc(var(--a-bottomnav, 72px) + 8px); }
-  .admin-inv-actions .admin-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
-  .admin-inv-actions-end { flex: 1 1 100%; margin-left: 0; }
+  .admin-inv-actions .admin-btn { flex: 1 1 calc(50% - 8px); justify-content: center; min-height: 44px; }
+  .admin-inv-actions-end { margin-left: 0; }
   .admin-cards .admin-btn, .admin-cards .admin-iconbtn, .admin-bulkbar .admin-btn { min-height: 44px; }
   .admin-cards .admin-iconbtn { min-width: 44px; }
   .admin-cards .admin-rowcheck { width: 44px; height: 44px; }

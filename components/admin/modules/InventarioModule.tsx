@@ -92,7 +92,7 @@ export function InventarioModule() {
   const [trashTarget, setTrashTarget] = useState<Pick<AdminInventoryRow, "id" | "name"> | null>(null);
   const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS);
+  const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS, "grid");
   /** Ancho compacto (issue #151): las tarjetas de la cuadrícula, siempre. */
   const narrow = useAdminNarrowViewport();
   /** Barra fija de búsqueda y filtros: su alto fija dónde se pegan los encabezados de «Por categoría». */
@@ -323,7 +323,7 @@ export function InventarioModule() {
             Nuevo combo
           </AdminButton>
         ) : null}
-        <AdminButton icon="search" disabled title="Escanear el código de un producto o unidad: próximamente" aria-label="Escanear: próximamente">
+        <AdminButton className="admin-inv-scan" icon="search" disabled title="Escanear el código de un producto o unidad: próximamente" aria-label="Escanear: próximamente">
           Escanear · próximamente
         </AdminButton>
         {canImport ? (
@@ -406,39 +406,33 @@ export function InventarioModule() {
 
       <OverdueReturnsIndicator />
 
-      <AdminTabs
-        filters
-        className="admin-inv-tabs"
-        label="Filtrar el inventario"
-        value={focusLabel ? "__quitar" : focus}
-        onChange={(key) => setFocus(key === "__quitar" ? "all" : (key as typeof focus))}
-        items={[
-          ...INVENTORY_TABS.map((tab) => ({ key: tab.value, label: tab.label, count: counts[tab.value] })),
-          ...(focusLabel ? [{ key: "__quitar", label: focusLabel, count: rows.length, title: "Quitar este filtro" }] : []),
-        ]}
-      />
-
-      <div className="admin-inv-bar" ref={barRef}>
-        <AdminToolbar>
-          <SearchField value={filters.query} onChange={(value) => setFilter("query", value)} label="Buscar inventario" placeholder="Nombre, SKU o código de unidad…" />
-          <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
-          <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
-          <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Filtrar por depósito" options={warehouseChoices} />
-          <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
-          {showCosts ? <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} /> : null}
-          <div className="admin-inv-range">
+      <div className="admin-inv-subbar">
+        <AdminTabs
+          filters
+          className="admin-inv-tabs"
+          label="Filtrar el inventario"
+          value={focusLabel ? "__quitar" : focus}
+          onChange={(key) => setFocus(key === "__quitar" ? "all" : (key as typeof focus))}
+          items={[
+            ...INVENTORY_TABS.map((tab) => ({ key: tab.value, label: tab.label, count: counts[tab.value] })),
+            ...(focusLabel ? [{ key: "__quitar", label: focusLabel, count: rows.length, title: "Quitar este filtro" }] : []),
+          ]}
+        />
+        <div className="admin-inv-range">
+          <span aria-hidden="true">Disponible entre</span>
           <div className="admin-field--filter">
             <DateField
-              label="Disponible desde"
+              ariaLabel="Disponible desde"
               max={to || undefined}
               value={from}
               onChange={setFrom}
               title="Primer día del rango para consultar unidades libres; no crea reservas"
             />
           </div>
+          <span aria-hidden="true">y</span>
           <div className="admin-field--filter">
             <DateField
-              label="Hasta"
+              ariaLabel="Hasta"
               min={from || undefined}
               value={to}
               onChange={setTo}
@@ -459,6 +453,16 @@ export function InventarioModule() {
               Hoy
             </AdminButton>
           ) : null}
+      </div>
+
+      <div className="admin-inv-bar" ref={barRef}>
+        <AdminToolbar>
+          <SearchField value={filters.query} onChange={(value) => setFilter("query", value)} label="Buscar inventario" placeholder="Nombre, SKU o código de unidad…" />
+          <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
+          <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
+          <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Filtrar por depósito" options={warehouseChoices} />
+          <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
+          {showCosts ? <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} /> : null}
           {filtersActive > 0 ? (
             <AdminButton
               icon="close"

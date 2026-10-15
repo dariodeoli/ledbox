@@ -49,10 +49,10 @@ test("la ocupación de la semana es una lectura acotada a la empresa activa y re
   assert.doesNotMatch(route, /request\.url|searchParams/, "no acepta ids de empresa desde afuera");
 });
 
-test("la lista: una acción visible por fila («Ficha») y el resto en «•••»; sin permiso no hay menú", () => {
+test("la lista: toda la fila abre la ficha (en tarjetas, botón «Ficha») y el resto en «•••»; sin permiso no hay menú", () => {
   const list = moduleFile("InventoryList.tsx");
   assert.match(list, /label: "Libres hoy"|"Libres hoy"/);
-  for (const column of ["Producto", "Categoría", "Estado", "Lista", "Mayorista", "Tienda", "Acciones"]) {
+  for (const column of ["Producto", "Categoría", "Estado", "Lista", "Mayorista", "Tienda", "Más"]) {
     assert.ok(list.includes(`{ label: "${column}"`) || list.includes(`label: "${column}"`), `falta la columna «${column}»`);
   }
   assert.match(list, /Abrir la ficha de \$\{item\.name\}/);
