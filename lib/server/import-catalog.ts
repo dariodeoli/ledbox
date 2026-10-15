@@ -14,6 +14,8 @@ import { db, dbWithDeleted } from "@/lib/server/db";
 import { recordAudit, type AuditContext } from "@/lib/server/audit";
 import { createInventoryUnits, isUniqueConstraintError } from "@/lib/server/inventory-units";
 import { saveCombo } from "@/lib/server/inventory-combos";
+import { categoryWriteData, resolveInventoryCategory } from "@/lib/server/inventory-categories";
+import { findWarehouseByCode } from "@/lib/server/inventory-warehouses";
 import { lockInventoryItems } from "@/lib/server/inventory-availability";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
@@ -59,7 +61,9 @@ export type ImportInput = {
 /** Vista previa: no escribe nada. */
 export async function previewCatalog(organizationId: string, input: ImportInput): Promise<CatalogPlan> {
   const existing = await loadExisting(organizationId, codesToLookUp(input.products));
+  const warehouses = await db.warehouse.findMany({ where: { organizationId, archivedAt: null }, select: { code: true } });
   return planCatalog({
+    warehouseCodes: new Set(warehouses.map((warehouse) => warehouse.code)),
     products: input.products,
     parseProblems: input.parseProblems,
     existing,
@@ -96,9 +100,13 @@ function sameBytes(a: Uint8Array | null | undefined, b: Uint8Array): boolean {
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
 async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
   const { product } = planned;
+  // Categoría y subcategoría: se crean o se asocian con el helper único (sin duplicar padre ni hija).
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  if (!category) throw new Error("No se pudo resolver la categoría.");
+  const warehouse = product.deposito ? await findWarehouseByCode(tx, organizationId, product.deposito) : null;
   const baseData = {
     name: product.nombre,
-    category: product.categoria,
+    ...categoryWriteData(category),
     publicDescription: planned.publicDescription,
     billingUnit: billingUnitOf(product.cobro),
     ...(product.precio ? { listPrice: product.precio } : {}),
@@ -119,7 +127,14 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     });
     // Nunca se retiran unidades: solo se completan hasta la cantidad del archivo.
     if (product.cantidad !== null && current.quantity < product.cantidad) {
-      await createInventoryUnits(tx, { organizationId, inventoryId: planned.existingId, name: product.nombre, quantity: product.cantidad - current.quantity });
+      await createInventoryUnits(tx, {
+        organizationId,
+        inventoryId: planned.existingId,
+        name: product.nombre,
+        quantity: product.cantidad - current.quantity,
+        ...(warehouse ? { warehouseId: warehouse.id } : {}),
+        ...(product.ubicacion ? { location: product.ubicacion } : {}),
+      });
     }
     return { id: planned.existingId, created: false, photo: photoChanged };
   }
@@ -137,7 +152,14 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
       ...(photo ? { imageData: photo.data, imageMime: photo.mime } : {}),
     },
   });
-  await createInventoryUnits(tx, { organizationId, inventoryId: id, name: product.nombre, quantity: planned.unidades });
+  await createInventoryUnits(tx, {
+    organizationId,
+    inventoryId: id,
+    name: product.nombre,
+    quantity: planned.unidades,
+    ...(warehouse ? { warehouseId: warehouse.id } : {}),
+    ...(product.ubicacion ? { location: product.ubicacion } : {}),
+  });
   return { id, created: true, photo: Boolean(photo) };
 }
 
@@ -147,11 +169,13 @@ async function writeComboMeta(tx: Tx, organizationId: string, id: string, planne
   const current = await tx.inventoryItem.findFirst({ where: { id, organizationId }, select: { catalogAudience: true, visibleOnWeb: true, imageData: true } });
   if (!current) throw new Error("El juego ya no existe en esta empresa.");
   const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  if (!category) throw new Error("No se pudo resolver la categoría.");
   await tx.inventoryItem.update({
     where: { id },
     data: {
       name: product.nombre,
-      category: product.categoria,
+      ...categoryWriteData(category),
       publicDescription: planned.publicDescription,
       billingUnit: billingUnitOf(product.cobro),
       ...(product.precio ? { listPrice: product.precio } : {}),
@@ -272,7 +296,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
           const saved = await saveCombo({
             organizationId,
             id: item.existingId,
-            data: { name: item.product.nombre, category: item.product.categoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
+            data: { name: item.product.nombre, category: item.product.categoria, subcategory: item.product.subcategoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
             components,
           });
           if (!saved.ok) {
