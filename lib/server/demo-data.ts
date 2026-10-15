@@ -8,6 +8,7 @@ import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
 import { statementRowFingerprint } from "@/lib/bank-statement";
 import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
 import { catalogTokenHash } from "./catalog-access";
+import { buildDemoCompletion, buildDemoSignatures } from "./demo-data-completa";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { DAY_MS, clientLabel, dayKeyOf, dayStart, shiftDayKey } from "./notifications";
@@ -1059,7 +1060,8 @@ const DATASET_MINS = {
   promoterPhotos: PROMOTERS.length,
   events: REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT,
   tasks: (REAL_EVENTS_COUNT + RELATIVE_EVENTS_COUNT) * 4,
-  budgets: 11,
+  budgets: 16,
+  signatures: 8,
   leads: LEADS.length,
   audits: 34,
   treasuryAccounts: TREASURY_ACCOUNTS.length,
@@ -1199,7 +1201,7 @@ export async function ensureDemoData(options?: { reset?: boolean }): Promise<Dem
  */
 async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): Promise<boolean> {
   const now = new Date();
-  const [leads, clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, bankStatements, bankStatementRows, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars, invoices, purchases, fiscalPeriods] = await Promise.all([
+  const [leads, clients, clientLogos, promoterPhotos, events, tasks, budgets, audits, upcoming, treasuryAccounts, treasuryMovements, bankStatements, bankStatementRows, expenses, expectedPayments, invitations, mailLogs, messageTemplates, logos, avatars, invoices, purchases, fiscalPeriods, signatures] = await Promise.all([
     db.lead.count({ where: { organizationId: organization.id } }),
     db.client.count({ where: { organizationId: organization.id } }),
     db.clientLogo.count({ where: { client: { organizationId: organization.id } } }),
@@ -1229,6 +1231,7 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     db.invoice.count({ where: { organizationId: organization.id } }),
     db.purchaseInvoice.count({ where: { organizationId: organization.id } }),
     db.fiscalPeriod.count({ where: { organizationId: organization.id } }),
+    db.signatureRequest.count({ where: { organizationId: organization.id } }),
   ]);
   const complete =
     leads >= DATASET_MINS.leads &&
@@ -1252,6 +1255,7 @@ async function demoDataIsFresh(organization: { id: string; updatedAt: Date }): P
     invoices >= DATASET_MINS.invoices &&
     purchases >= DATASET_MINS.invoicePurchases &&
     fiscalPeriods >= DATASET_MINS.fiscalPeriods &&
+    signatures >= DATASET_MINS.signatures &&
     avatars >= COLLABORATORS.length + 1 &&
     upcoming >= 3;
   if (!complete) return false;
@@ -1294,6 +1298,42 @@ export async function loadDemoPortalBudget(
 }
 
 // ── Dataset ─────────────────────────────────────────────────────────────────
+
+/** Presupuesto de la demo antes de armar sus filas (lo usa también `demo-data-completa.ts`). */
+export type DemoBudgetSeed = {
+  id: string;
+  /** Evento del presupuesto; sin él hace falta `clientId` (aprobado a la espera de crear el evento). */
+  event?: { id: string; clientId: string };
+  clientId?: string;
+  /** Lead del que nació el presupuesto. */
+  leadId?: string;
+  deliveryAt?: Date;
+  title: string;
+  status: "APPROVED" | "SENT" | "NEGOTIATING" | "DRAFT" | "LOST" | "CANCELLED";
+  discount: number;
+  validUntil: Date;
+  notes: string;
+  token?: string;
+  tokenCreatedAt?: Date;
+  approval?: { at: Date; byName: string; method: "digital" | "manual"; ip?: string; userAgent?: string; note: string };
+  revision?: { at: Date; note: string };
+  /**
+   * Plan de pagos (issue #14): anticipo y cuotas. Las cuotas se vencen en días
+   * relativos a HOY (`dueInDays`) o en una fecha absoluta (`dueAt`, para los
+   * presupuestos ya cerrados), así el re-anclaje nunca deja cuotas raras.
+   */
+  plan?: {
+    advance: number;
+    terms: string;
+    installments: Array<{ label: string; amount: number; dueInDays?: number; dueAt?: Date }>;
+  };
+  /** Depósito de garantía (aparte del total): monto, estado y, si se retuvo algo, cuánto. */
+  securityDeposit?: { amount: number; status: "PENDING" | "HELD" | "RETURNED" | "KEPT_PARTIAL" | "KEPT"; retained?: number };
+  /** Archivado o eliminado (papelera): fechas y motivo. */
+  lifecycle?: { archivedAt?: Date; deletedAt?: Date; deleteReason?: string };
+  createdAt: Date;
+  items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number; inventoryId?: string }>;
+};
 
 type BuiltEvent = {
   id: string;
@@ -1593,6 +1633,26 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
   const pastFiller = past.find((event) => event.id !== longestPast.id && event.id !== recentPast.id) ?? longestPast;
   const eventStart = (event: BuiltEvent, days: number, hour: number, minute = 0) => atDay(event.startsAt, days, hour, minute);
 
+  // ── Completación de la demo (estados que faltaban): inventario, presupuestos,
+  // firmas, papelera. Se arma acá y se suma a cada arreglo antes de escribir. ──
+  const completion = buildDemoCompletion({
+    organizationId,
+    base,
+    now,
+    events: new Map(events.map((event) => [event.id, event])),
+    next,
+    inProgress,
+    recentPast,
+    pastFiller,
+    second,
+    cancelled,
+    contactNameOf: (clientId) => clientContact(clientId).name,
+  });
+  eventsData.push(...completion.events);
+  clientsData.push(...completion.clients);
+  promotersData.push(...completion.promoters);
+  suppliersData.push(...completion.suppliers);
+
   // ── Trabajos de proveedor en varios estados ──
   // Para eventos muy próximos, el vencimiento se corre a mañana (nunca queda
   // vencido sin querer); los saldos de ferias pasadas vencen hace pocos días.
@@ -1615,39 +1675,10 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_job_atraso", ...org, supplierId: "demo_supplier_carpinteria", eventId: next.id, category: "CARPENTRY", description: `Escenografía y mobiliario · ${next.name}`, total: 3_100_000, advance: 1_000_000, status: "IN_PRODUCTION", dueAt: at(base, -3, 12), notes: "Atrasado: el taller prometió entregar hace dos días y todavía no avisó." },
   ];
 
+  jobsData.push(...(completion.supplierJobs as Array<Seeded<Prisma.SupplierJobUncheckedCreateInput>>));
+
   // ── Presupuestos por rol (aprobado por portal, pendiente con link+QR, cambios pedidos) ──
-  const budgetSeeds: Array<{
-    id: string;
-    /** Evento del presupuesto; sin él hace falta `clientId` (aprobado a la espera de crear el evento). */
-    event?: BuiltEvent;
-    clientId?: string;
-    /** Lead del que nació el presupuesto. */
-    leadId?: string;
-    deliveryAt?: Date;
-    title: string;
-    status: "APPROVED" | "SENT" | "NEGOTIATING" | "DRAFT" | "LOST";
-    discount: number;
-    validUntil: Date;
-    notes: string;
-    token?: string;
-    tokenCreatedAt?: Date;
-    approval?: { at: Date; byName: string; method: "digital" | "manual"; ip?: string; userAgent?: string; note: string };
-    revision?: { at: Date; note: string };
-    /**
-     * Plan de pagos (issue #14): anticipo y cuotas. Las cuotas se vencen en días
-     * relativos a HOY (`dueInDays`) o en una fecha absoluta (`dueAt`, para los
-     * presupuestos ya cerrados), así el re-anclaje nunca deja cuotas raras.
-     */
-    plan?: {
-      advance: number;
-      terms: string;
-      installments: Array<{ label: string; amount: number; dueInDays?: number; dueAt?: Date }>;
-    };
-    /** Depósito de garantía (aparte del total): monto, estado y, si se retuvo algo, cuánto. */
-    securityDeposit?: { amount: number; status: "PENDING" | "HELD" | "RETURNED" | "KEPT_PARTIAL" | "KEPT"; retained?: number };
-    createdAt: Date;
-    items: Array<{ id: string; name: string; quantity: number; days: number; unitPrice: number; costPrice: number; inventoryId?: string }>;
-  }> = [
+  const budgetSeeds: DemoBudgetSeed[] = [
     {
       id: "demo_budget_aprobado",
       securityDeposit: { amount: 2_000_000, status: "HELD" },
@@ -1938,6 +1969,17 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     },
   ];
 
+  budgetSeeds.push(...completion.budgetSeeds);
+  const budgetClientOf = new Map(budgetSeeds.map((budget) => [budget.id, budget.event?.clientId ?? budget.clientId ?? ""]));
+  const signatures = buildDemoSignatures({
+    organizationId,
+    base,
+    now,
+    recipientOf: (budgetId) => {
+      const client = CLIENT_BY_ID.get(budgetClientOf.get(budgetId) ?? "");
+      return { name: client?.name ?? "Cliente", email: client ? contactEmailOf(client) : "cliente@ledbox.demo" };
+    },
+  });
   const budgetTotals = new Map<string, number>();
   const budgetsData: Prisma.BudgetUncheckedCreateInput[] = [];
   const budgetItemsData: Prisma.BudgetItemUncheckedCreateInput[] = [];
@@ -1992,6 +2034,15 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       revisionRequestedAt: budget.revision?.at ?? null,
       revisionNote: budget.revision?.note ?? null,
       createdAt: budget.createdAt,
+      ...(budget.lifecycle
+        ? {
+            archivedAt: budget.lifecycle.archivedAt ?? null,
+            archivedById: ACTORS.sales.id,
+            deletedAt: budget.lifecycle.deletedAt ?? null,
+            deletedById: budget.lifecycle.deletedAt ? ACTORS.sales.id : null,
+            deleteReason: budget.lifecycle.deleteReason ?? null,
+          }
+        : {}),
     });
     for (const item of budget.items) {
       budgetItemsData.push({
@@ -2216,6 +2267,8 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     },
     received("demo_pay_hist_sep_1", { clientId: "demo_client_vision", budgetId: "demo_budget_hist_sep", amount: 5_700_000, paidAt: at(base, -20, 10, 0), method: "Transferencia", reference: "TRF-87300", notes: "Anticipo de la Feria de la Vivienda." }, "demo_treasury_ueno"),
   ];
+
+  paymentsData.push(...(completion.payments as Array<Seeded<Prisma.ClientPaymentUncheckedCreateInput>>));
 
   // ── Gastos (issue #27): cada uno con su categoría, su cuenta y su egreso.
   // Los dos sin proyecto quedan «A definir» a propósito. ──
@@ -2730,6 +2783,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       createdAt: eventStart(longestPast, -18, 9, 30),
     },
   ];
+  expectedPaymentsData.push(...completion.expectedPayments);
 
   // ── Historial de correos (issue #30): presupuesto enviado, recordatorio,
   // prueba, un fallo con su motivo y la invitación. ──
@@ -2926,6 +2980,10 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     { id: "demo_inc_paneles_1", organizationId, inventoryId: "demo_inv_panels", assignmentId: "demo_asg_feria_paneles", eventId: longestPast.id, unitId: "demo_unit_panels_1", kind: "MISSING", quantity: 1, status: "OPEN", cost: null, notes: "No volvió del predio de la feria; reclamo abierto con el cliente.", openedAt: atDay(longestPast.strikeAt, 0, 10, 35) },
     { id: "demo_inc_paneles_2", organizationId, inventoryId: "demo_inv_panels", assignmentId: "demo_asg_feria_paneles", eventId: longestPast.id, unitId: "demo_unit_panels_2", kind: "MISSING", quantity: 1, status: "OPEN", cost: null, notes: "No volvió del predio de la feria; reclamo abierto con el cliente.", openedAt: atDay(longestPast.strikeAt, 0, 10, 35) },
   ];
+  inventoryData.push(...completion.inventoryItems);
+  inventoryUnitsData.push(...completion.inventoryUnits);
+  assignmentsData.push(...completion.assignments.map((row) => ({ ...row, organizationId })));
+  incidentsData.push(...completion.incidents);
   const inventoryComponentsData: Prisma.InventoryComponentUncheckedCreateInput[] = INVENTORY_COMBOS.map((row) => ({
     id: `demo_combo_${row.parent.replace(/^demo_inv_/, "")}_${row.component.replace(/^demo_inv_/, "")}`,
     organizationId,
@@ -2934,6 +2992,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     quantity: row.quantity,
     createdAt: at(base, -20, 9, 0),
   }));
+  inventoryComponentsData.push(...completion.inventoryComponents);
   // Ajustes de alquiler de la empresa demo: seña 50 %, retención de 48 h y tiempos de ejemplo.
   const rentalSettingsData: Prisma.OrganizationRentalSettingsUncheckedCreateInput = {
     id: "demo_rental_settings",
@@ -2975,6 +3034,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
     eventDate: at(base, lead.eventDateDays, 12, 0),
     internalNotes: lead.internalNotes,
   }));
+  leadsData.push(...completion.leads);
   const quotesData: Prisma.QuoteRequestUncheckedCreateInput[] = [
     // Preorden NUEVA del catálogo público: sin presupuesto y sin stock comprometido.
     {
@@ -3417,6 +3477,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.catalogAccessToken.create({
         data: { id: "demo_catalog_access_pixel", organizationId, clientId: DEMO_WHOLESALE_CLIENT_ID, tokenHash: catalogTokenHash(DEMO_WHOLESALE_TOKEN), createdAt: at(base, -20, 10, 0) },
       });
+      await tx.catalogAccessToken.createMany({ data: completion.catalogTokens });
       await tx.event.createMany({ data: eventsData });
       await tx.promoter.createMany({ data: promotersData });
       await tx.eventTask.createMany({ data: tasksData });
@@ -3428,6 +3489,9 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.quoteRequest.createMany({ data: quotesData });
       await tx.budget.createMany({ data: budgetsData });
       await tx.budgetItem.createMany({ data: budgetItemsData });
+      await tx.signatureRequest.createMany({ data: signatures.signatureRequests });
+      await tx.signatureEvent.createMany({ data: signatures.signatureEvents });
+      await tx.signatureEvidence.createMany({ data: signatures.signatureEvidence });
       // Las cuentas van antes que los cobros y los gastos: todos las referencian.
       await tx.treasuryAccount.createMany({
         data: TREASURY_ACCOUNTS.map((account) => ({ ...account, organizationId, currency: "PYG", active: true, createdAt: at(base, -40, 9, 0) })),
@@ -3450,7 +3514,7 @@ async function seedDemoData(organizationId: string, base: Date): Promise<void> {
       await tx.budgetPaymentProof.createMany({ data: proofsData });
       await tx.expectedPayment.createMany({ data: expectedPaymentsData });
       await tx.teamInvitation.createMany({ data: invitationsData });
-      await tx.mailLog.createMany({ data: mailLogsData });
+      await tx.mailLog.createMany({ data: [...mailLogsData, ...signatures.mailLogs] });
       await tx.messageTemplate.createMany({ data: messageTemplatesData });
       await tx.paymentReminderLog.createMany({ data: reminderLogsData });
       await tx.organizationLogo.createMany({ data: logosData });
@@ -3483,6 +3547,9 @@ async function wipeDemoData(tx: Prisma.TransactionClient, organizationId: string
   await tx.purchaseInvoice.deleteMany({ where: { organizationId } });
   await tx.fiscalPeriod.deleteMany({ where: { organizationId } });
   await tx.invoiceSequence.deleteMany({ where: { organizationId } });
+  await tx.signatureEvidence.deleteMany({ where: { organizationId } });
+  await tx.signatureEvent.deleteMany({ where: { organizationId } });
+  await tx.signatureRequest.deleteMany({ where: { organizationId } });
   await tx.budgetPaymentProof.deleteMany({ where: { organizationId } });
   await tx.expectedPayment.deleteMany({ where: { organizationId } });
   await tx.inventoryIncident.deleteMany({ where: { organizationId } });
