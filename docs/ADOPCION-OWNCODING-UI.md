@@ -292,3 +292,10 @@ reinstaura el token de lectura (fine-grained, solo lectura de
   `lib` y `tests`.
 - Subcamino: `exports["./utils"]` presente en `package.json` desde antes de
   v0.39.0; `dist/utils.js` sin `"use client"`.
+
+### Identidad de clientes y mensajes (2.1.133)
+
+- `ClientIdentityView` y `ClientAvatar` (`components/admin/ClientIdentity.tsx`) son la presentación compartida de clientes: logo/iniciales, nombre comercial, responsable explícito y segmento conocido. `clientPresentation` decide los textos; no se infiere un responsable a partir del nombre histórico. Los PDFs y snapshots aceptados conservan su contrato.
+- `Combobox` admite contenido enriquecido para opciones y selección sin perder el texto de búsqueda ni el nombre accesible. `AdminActionsMenu` admite accesos frecuentes en una fila de iconos.
+- `AdminDialog`, `AdminConfirmDialog` y las superficies de menús/combobox/selector de empresa conservan una base común. Las listas internas no dibujan otra superficie. Los controles nativos de fecha mantienen el selector del navegador.
+- `ClientesTabs` comparte Directorio/Mensajes; `PlantillasModule` reutiliza la API, las variables y el compositor existentes. La vista previa es texto con datos ficticios y guardar una plantilla no envía mensajes.
