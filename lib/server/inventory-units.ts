@@ -21,6 +21,27 @@ import { ensureDefaultWarehouse } from "@/lib/server/inventory-warehouses";
 /** Tope de las notas de una unidad (nota corta de equipo). */
 export const MAX_UNIT_NOTES = 400;
 
+export class InventoryUnitIncidentConflict extends Error {
+  constructor() {
+    super("Hay unidades con incidentes abiertos. Resolvé sus incidentes antes de marcarlas como disponibles. No se aplicó ningún cambio.");
+  }
+}
+
+/** El llamador bloquea los productos primero, igual que el escritor de incidentes. */
+export async function assertUnitsAvailableWithoutIncidents(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  unitIds: readonly string[],
+  status: unknown,
+): Promise<void> {
+  if (status !== "AVAILABLE") return;
+  const open = await tx.inventoryIncident.findFirst({
+    where: { organizationId, unitId: { in: [...unitIds] }, status: { in: ["OPEN", "IN_REPAIR"] } },
+    select: { id: true },
+  });
+  if (open) throw new InventoryUnitIncidentConflict();
+}
+
 /**
  * Cantidad del ítem = unidades activas (issue #112): las retiradas no cuentan y
  * la columna `quantity` se sincroniza para no romper los contratos existentes.

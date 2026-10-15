@@ -12,6 +12,8 @@ import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { inventoryImageUrl, readInventoryImageUrl } from "@/lib/server/inventory-images";
 import {
   MAX_UNIT_NOTES,
+  InventoryUnitIncidentConflict,
+  assertUnitsAvailableWithoutIncidents,
   createInventoryUnits,
   isUniqueConstraintError,
   nextInventoryUnitCode,
@@ -592,6 +594,7 @@ export async function POST(request: Request) {
         data = { ...data, ...categoryWriteData(resolved) };
       }
       if (isUnits) {
+        await assertUnitsAvailableWithoutIncidents(tx, organizationId, ids, data.status);
         await tx.inventoryUnit.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryUnitUpdateManyMutationInput });
         if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
       } else {
@@ -601,9 +604,11 @@ export async function POST(request: Request) {
       return before;
     }).catch((error: unknown) => {
       if (error instanceof BulkFamilyCategoryConflict) return "family-category" as const;
+      if (error instanceof InventoryUnitIncidentConflict) return "open-incidents" as const;
       throw error;
     });
     if (result === "family-category") return jsonError("La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio.", 409);
+    if (result === "open-incidents") return jsonError(new InventoryUnitIncidentConflict().message, 409);
     if (!result) return jsonError("La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.", 404);
     for (const row of result) {
       const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
@@ -839,12 +844,14 @@ export async function POST(request: Request) {
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
+        await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
         const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
         if (data.status !== undefined) await syncInventoryQuantity(tx, existing.inventoryId);
         return updated;
       });
     } catch (error) {
+      if (error instanceof InventoryUnitIncidentConflict) return jsonError(error.message, 409);
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }

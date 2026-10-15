@@ -471,7 +471,15 @@ export async function transitionIncident(options: {
           const others = await tx.inventoryIncident.count({
             where: { unitId: incident.unitId, id: { not: incident.id }, status: { in: [...OPEN_STATUSES] } },
           });
-          if (others === 0) await tx.inventoryUnit.update({ where: { id: incident.unitId }, data: { status: "AVAILABLE" } });
+          // Resolver limpieza/reparación no revierte una baja de otro incidente ni un retiro manual.
+          // La restauración explícita de unidades sigue siendo una operación del inventario.
+          const unit = await tx.inventoryUnit.findFirst({ where: { id: incident.unitId, organizationId: options.organizationId }, select: { status: true } });
+          const writtenOff = unit?.status === "LOST" ? await tx.inventoryIncident.count({
+            where: { organizationId: options.organizationId, unitId: incident.unitId, status: "WRITTEN_OFF" },
+          }) : 0;
+          if (others === 0 && unit && unit.status !== "RETIRED" && writtenOff === 0) {
+            await tx.inventoryUnit.update({ where: { id: incident.unitId }, data: { status: "AVAILABLE" } });
+          }
         } else if (options.to === "WRITTEN_OFF") {
           await tx.inventoryUnit.update({ where: { id: incident.unitId }, data: { status: incident.kind === "MISSING" ? "LOST" : "RETIRED" } });
         }
