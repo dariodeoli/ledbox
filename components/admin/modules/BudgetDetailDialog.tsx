@@ -25,7 +25,7 @@ import { clientDisplayName } from "@/lib/client-identity";
 import { budgetApprovalState, collectedAmount } from "@/lib/admin-types";
 import type { AdminBudgetRow, AdminTimelineEntry } from "@/lib/admin-types";
 import { lineMissingPrice } from "@/lib/budget-price-gate";
-import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminTimeline, type AdminMenuItem } from "../AdminUI";
+import { AdminButtonLink, AdminActionsMenu, AdminBadge, AdminButton, AdminCountdown, AdminDialog, AdminNote, AdminTimeline, type AdminMenuItem } from "../AdminUI";
 import { BudgetEventNotice } from "../BudgetEventNotice";
 import { StageTrail } from "../StageTrail";
 import { securityDepositTone } from "./BudgetSecurityDeposit";
@@ -93,15 +93,16 @@ function Section({ title, actions, children }: { title: string; actions?: React.
 }
 
 /** Historial real del presupuesto (misma fuente que la cronología). */
-function BudgetHistory({ budgetId }: { budgetId: string }) {
+function BudgetHistory({ budgetId, revision }: { budgetId: string; revision: string }) {
   const [entries, setEntries] = useState<AdminTimelineEntry[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     setError("");
+    setEntries(null);
     void adminApiGet<{ timeline?: AdminTimelineEntry[] }>(`/api/admin/timeline?budgetId=${encodeURIComponent(budgetId)}`, {
-      fresh: attempt > 0,
+      fresh: true,
       fallbackError: "No pudimos cargar el historial.",
     }).then((result) => {
       if (!active) return;
@@ -115,7 +116,7 @@ function BudgetHistory({ budgetId }: { budgetId: string }) {
     return () => {
       active = false;
     };
-  }, [budgetId, attempt]);
+  }, [budgetId, revision, attempt]);
   return (
     <AdminTimeline
       entries={entries ?? []}
@@ -179,6 +180,13 @@ export function BudgetDetailDialog({
     >
       <StageTrail stages={stagesOfBudget(budget)} label={`Etapas de ${budget.title}`} />
       {prompt ? <BudgetEventNotice prompt={prompt} title={budget.title} canAct={canAct} busy={busy} onCreate={actions.onCreateEvent} onConfirm={actions.onConfirmEvent} /> : null}
+
+      {budget.event && !budget.event.startsAt && linked > 0 && (budget.approvedAt || budget.status === "APPROVED") ? (
+        <AdminNote tone="warn">
+          La aprobación está registrada. Falta definir la fecha del evento para reservar los productos.
+          <AdminButtonLink variant="link" href={`/eventos?evento=${encodeURIComponent(budget.event.id)}`}>Completar fechas en el evento</AdminButtonLink>
+        </AdminNote>
+      ) : null}
 
       <div className="admin-bd-grid">
         <Section title="Cliente y evento" actions={actions.onEventName && budget.event ? <AdminButton icon="edit" onClick={actions.onEventName}>Nombre del evento</AdminButton> : undefined}>
@@ -272,7 +280,7 @@ export function BudgetDetailDialog({
       </Section>
 
       <Section title="Historial">
-        <BudgetHistory budgetId={budget.id} />
+        <BudgetHistory budgetId={budget.id} revision={`${budget.updatedAt ?? ""}:${budget.status}:${budget.approvedAt ?? ""}:${budget.viewedAt ?? ""}:${budget.revisionRequestedAt ?? ""}`} />
       </Section>
     </AdminDialog>
   );

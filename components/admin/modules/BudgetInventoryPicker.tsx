@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { formatNumber, inventoryStatusLabel } from "@/lib/admin-format";
+import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
 import type { AdminInventoryItemRow, AdminInventoryLink } from "@/lib/admin-types";
 import { useAdminResource } from "@/lib/admin-api";
@@ -82,7 +83,7 @@ export function InventoryLinkPicker({
               {selectedFree !== null
                 ? selectedRow?.combo
                   ? ` · ${comboCapacityLabel(selectedFree).toLowerCase()} ${range ? "en el rango" : "ahora"}`
-                  : ` · ${formatNumber(selectedFree)} libres ${range ? "en el rango" : "ahora"}`
+                  : ` · ${inventoryAvailabilityLabel(selectedFree)} ${range ? "en el rango" : "ahora"}`
                 : ""}
             </small>
           </span>
@@ -119,7 +120,7 @@ export function InventoryLinkPicker({
                 ? inventoryStatusLabel(item.status)
                 : item.combo
                   ? `${comboCapacityLabel(available)} ${range ? "en el rango" : "ahora"}`
-                  : `${formatNumber(available)} libres ${range ? "en el rango" : "ahora"}`}
+                  : `${inventoryAvailabilityLabel(available)} ${range ? "en el rango" : "ahora"}`}
             </span>
             <AdminButton
               icon="check"

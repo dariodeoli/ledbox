@@ -470,6 +470,10 @@ export function EventosModule() {
   function runNext(item: EventItem) {
     const next = item.readiness.next;
     if (!next || !writable) return;
+    if (next.key === "dates") {
+      openEventEdit(item.event);
+      return;
+    }
     if (next.key === "finalize") {
       void closeEvent(item.event);
       return;
@@ -898,6 +902,7 @@ export function EventosModule() {
           closeError={closeError}
           menuItems={menuItemsFor(ficha, true)}
           onRunNext={runNext}
+          onEditDates={() => openEventEdit(ficha.event)}
           onMovement={(mode, assignment) => {
             setFlash("");
             setMovement({ mode, assignment, eventName: ficha.event.name });

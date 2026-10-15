@@ -144,6 +144,7 @@ export type EventoFichaProps = {
   closeError: string;
   menuItems: AdminMenuItem[];
   onRunNext: (item: EventItem) => void;
+  onEditDates: () => void;
   onMovement: (mode: "checkout" | "checkin", assignment: AdminEventAssignment) => void;
   onReload: () => void;
   onReloadInventory: () => void;
@@ -211,7 +212,7 @@ export function EventoFicha(props: EventoFichaProps) {
           <ul className="admin-evento-gaps-list">
             {readiness.gaps.map((gap) => (
               <li key={gap.key}>
-                <button type="button" className="admin-evento-gap" data-tone={gap.tone} onClick={() => onTab(gap.tab)} aria-label={`${gap.label}. Ir a ${TABS.find((entry) => entry.key === gap.tab)?.label ?? gap.tab}`}>
+                <button type="button" className="admin-evento-gap" data-tone={gap.tone} onClick={() => gap.key === "dates" && writable ? props.onEditDates() : onTab(gap.tab)} aria-label={gap.key === "dates" && writable ? "Completar fechas del evento" : `${gap.label}. Ir a ${TABS.find((entry) => entry.key === gap.tab)?.label ?? gap.tab}`}>
                   <AdminIcon name="alert" size={13} />
                   <span>{gap.label}</span>
                 </button>

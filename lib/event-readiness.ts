@@ -29,11 +29,11 @@ export type EventDetailTab = "resumen" | "checklist" | "equipos" | "personal" | 
 
 export type EventPhase = "upcoming" | "live" | "ended" | "closed";
 
-export type EventNextKey = "checklist" | "dispatch" | "return" | "finalize";
+export type EventNextKey = "dates" | "checklist" | "dispatch" | "return" | "finalize";
 
 export type EventNext = { key: EventNextKey; label: string; tab: EventDetailTab };
 
-export type EventGapKey = "checklist" | "dispatch" | "return" | "promoter" | "deposit";
+export type EventGapKey = "dates" | "checklist" | "dispatch" | "return" | "promoter" | "deposit";
 
 export type EventGap = { key: EventGapKey; label: string; tab: EventDetailTab; tone: "warn" | "danger" };
 
@@ -179,6 +179,7 @@ export function eventReadiness(
   let next: EventNext | null = null;
   if (phase !== "closed") {
     const imminent = phase !== "upcoming" || startsWithinDays(event, 7);
+    if (!event.startsAt) gaps.push({ key: "dates", tab: "resumen", tone: "warn", label: "Falta la fecha del evento" });
     if (tasks.pending > 0) {
       gaps.push({
         key: "checklist",
@@ -199,7 +200,9 @@ export function eventReadiness(
     if (deposit === "pending") gaps.push({ key: "deposit", tab: "resumen", tone: "warn", label: "Seña pendiente de cobro" });
 
     // La siguiente acción lógica, una sola.
-    if (phase === "ended") {
+    if (!event.startsAt && phase === "upcoming") {
+      next = { key: "dates", label: "Completar fechas", tab: "resumen" };
+    } else if (phase === "ended") {
       next = equipment.pendingReturn > 0
         ? { key: "return", label: "Registrar devolución", tab: "equipos" }
         : { key: "finalize", label: "Finalizar", tab: "resumen" };

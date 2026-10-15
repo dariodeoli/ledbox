@@ -303,3 +303,19 @@ test("«Con pendientes · 14 días» cuenta el evento a 13 días y no el de 15; 
   assert.equal(hits(withGap({ status: "IN_PROGRESS", startsAt: iso(-2 * HOUR), endsAt: iso(5 * HOUR) })), true, "en curso cuenta");
   assert.equal(hits(withGap({ status: "COMPLETED", startsAt: iso(-30 * HOUR), endsAt: iso(-6 * HOUR) })), false, "cerrado no");
 });
+
+
+test("evento sin fecha: completar fechas tiene prioridad sobre checklist y no altera eventos cerrados", () => {
+  const undated = event({ startsAt: null, endsAt: null, tasks: [task("pending", false)], assignments: [assignment()] });
+  const readiness = eventReadiness(undated);
+  assert.equal(readiness.gaps[0]?.key, "dates");
+  assert.equal(readiness.next?.key, "dates");
+  assert.equal(readiness.next?.label, "Completar fechas");
+  assert.ok(readiness.gaps.some((gap) => gap.key === "checklist"));
+  assert.equal(readiness.equipment.units, 4, "el aviso no cambia stock ni asignaciones");
+  for (const status of ["COMPLETED", "CANCELLED"]) {
+    const closed = eventReadiness({ ...undated, status });
+    assert.equal(closed.next, null);
+    assert.deepEqual(closed.gaps, []);
+  }
+});
