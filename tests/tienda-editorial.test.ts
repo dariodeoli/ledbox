@@ -148,20 +148,22 @@ test("plantilla: tipografías de lista cerrada (serif de Boutique y de títulos)
   assert.equal(readAppearance({ template: "elegante", font: "inter" }).template, "boutique");
 });
 
-test("plantilla: Boutique usa serif en títulos, la manuscrita decorativa y fondo crema", () => {
+test("plantilla: Boutique minimalista usa blanco y negro, letra del sistema y pie claro", () => {
   const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "boutique" });
   assert.equal(view.attrs["data-store-theme"], "boutique");
-  assert.match(view.vars["--font-display"], /Cormorant/);
-  assert.ok(view.fontHref.includes("Cormorant") && view.fontHref.includes("Pinyon"));
-  assert.equal(view.vars["--color-bg"], "#F6F2EA");
+  assert.match(view.vars["--font-display"], /system-ui/);
+  assert.equal(view.fontHref, null);
+  assert.equal(view.vars["--color-primary"], "#111111");
+  assert.equal(view.vars["--color-ink"], "#F5F5F7");
+  assert.equal(view.vars["--color-bg"], "#FFFFFF");
   const otros = appearanceView({ ...DEFAULT_APPEARANCE, template: "escenario" });
-  assert.ok(!otros.fontHref.includes("Pinyon"));
+  assert.ok(!otros.fontHref?.includes("Pinyon"));
 });
 
-test("plantilla: verde oliva por defecto con contraste AA sobre crema y blanco; la marca de la empresa manda", () => {
+test("plantilla: negro por defecto con contraste AA y marca personalizada conservada", () => {
   const { colors } = THEMES.boutique;
-  assert.ok(contrastRatio(colors.primary, colors.bg) >= 4.5, "oliva sobre crema");
-  assert.ok(contrastRatio(colors.primary, "#ffffff") >= 4.5, "oliva sobre blanco");
+  assert.ok(contrastRatio(colors.primary, colors.bg) >= 4.5, "negro sobre blanco");
+  assert.ok(contrastRatio(colors.primary, "#ffffff") >= 4.5, "negro sobre superficie");
   const sinMarca = themePrimary("boutique", null);
   assert.equal(sinMarca.primary, colors.primary);
   assert.ok(contrastRatio(sinMarca.onPrimary, sinMarca.primary) >= 4.5, "texto del botón");

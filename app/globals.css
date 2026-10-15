@@ -3493,12 +3493,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-code { display: grid; gap: 10px; margin-top: 4px; padding: 16px; border: 1px solid var(--border); border-radius: var(--p-radius-lg); background: var(--surface); box-shadow: var(--p-shadow-card); }
 .portal-code-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal-field { display: grid; gap: 6px; }
-.portal-field-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.portal-field-label { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: normal; }
 .portal-field input, .portal-field textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
 .portal-field select { width: 100%; padding: 11px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
 .portal-field input:focus, .portal-field textarea:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
 .portal-field select:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
 .portal-field input[aria-invalid="true"] { border-color: var(--p-danger); }
+.portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), .portal-field textarea, .portal-field select { min-height: 44px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-control); border-radius: 0; background: transparent; }
+.portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):focus, .portal-field textarea:focus, .portal-field select:focus { border-bottom-color: var(--p-action); box-shadow: 0 1px 0 var(--p-action); }
+.portal-field input[aria-invalid="true"], .portal-field textarea[aria-invalid="true"], .portal-field select[aria-invalid="true"] { border-bottom-color: var(--p-danger); }
 .portal-help { color: var(--muted-2); font-size: 12px; line-height: 1.5; }
 .portal-error { color: var(--p-danger); font-size: 12.5px; line-height: 1.5; }
 .portal-btn { justify-self: start; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--line-control); border-radius: 999px; background: transparent; color: var(--text); font: 700 11px var(--font-body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s, filter .15s; }

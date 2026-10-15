@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import { storeCategories, storeCategoryHref } from "@/lib/store-categories";
 import { AccessPage } from "@/components/catalog-public/AccessPage";
 import { StoreFront } from "@/components/catalog-public/StoreFront";
 import { loadCategoryImages, loadPublicCollections, loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
@@ -46,6 +47,11 @@ export default async function StorePage({ params, searchParams }: PageProps) {
   }
   const range = parsePublicRange(first(query.desde), first(query.hasta));
   const [store, items, zones, categoryImages] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context), loadCategoryImages(context.organization.id)]);
+  if (query.categoria !== undefined) {
+    const category = storeCategories(items).find((entry) => entry.name === first(query.categoria));
+    if (!category) notFound();
+    permanentRedirect(storeCategoryHref(`/tienda/${encodeURIComponent(context.organization.slug)}`, category, range));
+  }
   const collections = await loadPublicCollections(context.organization.id, new Set(items.map((item) => item.id)));
   const slug = encodeURIComponent(context.organization.slug);
   return (

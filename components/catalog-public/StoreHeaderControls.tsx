@@ -59,7 +59,7 @@ export function StoreHeaderControls({ nav, cart, slug, cartScope, searchHref }: 
     return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
   }, [menu]);
 
-  const label = count > 0 ? `Ver tu pedido: ${count} ${count === 1 ? "producto" : "productos"}` : "Tu pedido: todavía no elegiste productos";
+  const label = count > 0 ? `Ver tu pedido: ${count} ${count === 1 ? "unidad" : "unidades"}` : "Tu pedido: todavía no elegiste productos";
   const bag = (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <path d="M6 8h12l1 12H5zM9 8V6a3 3 0 0 1 6 0v2" />

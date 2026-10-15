@@ -224,7 +224,8 @@ test("apariencia: solo tokens CSS (variables y data-*) y fuentes de Google desde
   assert.equal(view.attrs["data-store-theme"], "boutique");
   assert.ok(Object.keys(view.vars).every((key) => key.startsWith("--")), "solo variables CSS");
   assert.ok(!Object.keys(view.vars).some((key) => key.startsWith("--cp-")), "sin el sistema viejo --cp-*");
-  assert.match(view.fontHref, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Cormorant\+Garamond/);
+  assert.equal(view.fontHref, null, "Boutique usa la tipografía del sistema sin una hoja externa");
+  assert.match(appearanceView({ ...DEFAULT_APPEARANCE, displayFont: "playfair" }).fontHref!, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Playfair/);
   assert.equal(googleFontHref("sistema"), null);
   assert.equal(googleFontHref("no-existe"), null);
   for (const font of FONTS) if (font.google) assert.match(googleFontHref(font.id)!, /^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;@=.]+&display=swap$/);

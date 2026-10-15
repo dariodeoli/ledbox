@@ -13,9 +13,13 @@ export function StoreChrome({ appearance, children }: { theme?: StorefrontTheme;
   const view = appearance ?? appearanceView(DEFAULT_APPEARANCE);
   return (
     <div className="cp-theme" style={view.vars as CSSProperties} {...view.attrs}>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link rel="stylesheet" href={view.fontHref} />
+      {view.fontHref ? (
+        <>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={view.fontHref} />
+        </>
+      ) : null}
       {view.announcement ? (
         <div className="cp-announce" role="note" data-testid="store-announcement">
           <p>{view.announcement}</p>

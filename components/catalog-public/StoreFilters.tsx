@@ -40,7 +40,7 @@ function Chips<T extends string>({ label, options, isOn, toggle }: { label: stri
 export function FiltersPanel({ filters, onChange, capacities, tags, collections, showPrices, hasRange }: Props) {
   const set = (patch: Partial<StoreFilters>) => onChange({ ...filters, ...patch });
   return (
-    <div className="cp-filters-body" data-testid="store-filters">
+    <div className="cp-filters-body cp-fields" data-testid="store-filters">
       {collections.length > 0 ? (
         <Chips label="Colección" options={collections.map((entry) => ({ key: entry.slug, label: entry.name }))} isOn={(key) => filters.collection === key} toggle={(key) => set({ collection: filters.collection === key ? null : key })} />
       ) : null}

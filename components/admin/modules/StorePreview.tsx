@@ -43,7 +43,6 @@ export function StorePreview({
   const shownName = name || "Tu empresa";
   const mobile = frame === "mobile";
   const cover = mobile ? (coverMobile ?? coverDesktop ?? null) : (coverDesktop ?? coverMobile ?? null);
-  const photoHero = Boolean(cover);
   const showPrices = appearance.priceMode !== "quote";
   const unitText = priceUnitLabel(appearance.priceMode, "PER_DAY", null);
   // Solo ejemplos rotulados del selector: elegir plantilla nunca modifica el catálogo real de la empresa.
@@ -77,8 +76,8 @@ export function StorePreview({
               <h2 className="cp-h1">{tagline || "Alquiler para tu próximo evento"}</h2>
               <p className="cp-hero-sub">Elegí lo que necesitás y te respondemos con una cotización.</p>
               <div className="cp-hero-actions">
-                <span className={photoHero ? "cp-btn cp-btn--lg cp-btn--on-image" : "cp-btn cp-btn--lg cp-btn--primary"}>Ver catálogo</span>
-                <span className={photoHero ? "cp-btn cp-btn--lg cp-btn--ghost-image" : "cp-btn cp-btn--lg"}>Cómo funciona</span>
+                <span className="cp-btn cp-btn--lg cp-btn--primary">Ver catálogo</span>
+                <span className="cp-btn cp-btn--lg">Cómo funciona</span>
               </div>
             </div>
           </div>

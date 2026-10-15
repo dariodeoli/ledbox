@@ -660,3 +660,16 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tienda con colecciones, galería de producto, etiquetas y filtros, destacados y orden de las secciones del inicio.
 - Importación de eventos con reservas: vista previa y aplicación desde JSON, planilla o IA. Reimportar no duplica; no se cambia la fecha de un evento reservado sin reprogramarlo antes desde Eventos.
 - Seguridad: protección de altas y agrupaciones simultáneas, aislamiento entre empresas y actualización de la lectura de archivos ZIP importados.
+
+## v2.1.130 — 2026-10-15
+
+- Boutique adopta el estilo minimalista elegido: blanco y negro, tipografía moderna y pie claro. Fecha, días e invitados usan campos cortos (160/100/80 px en computadora), sin estirarse por toda la pantalla.
+
+- Nuevo diseño completo de la tienda: encabezado con identidad de la empresa, inicio ordenado, catálogo de cuatro columnas en computadora y dos en celular, filtros discretos y pie en tres columnas.
+
+- Cada categoría de la tienda tiene su propia página y conserva las fechas elegidas y el pedido al navegar.
+- Pedido visible desde el primer producto, con productos, unidades e importe; confirmación animada al agregar y guardado voluntario sin interrumpir la elección.
+- El popup muestra la ficha pública completa, galería, composición, características y fechas, sin tener que abrir otra página.
+- Tarjetas sin huecos: precio y acción visibles, también en juegos con ahorro. Cuando falta precio se indica «Consultar precio y disponibilidad» y se puede agregar para cotizar.
+- Campos minimalistas con línea inferior en tienda y portal del cliente, con controles compactos y foco visible.
+- La portada se muestra limpia, separada del título, los botones y las fechas; se conserva una imagen para computadora y otra para celular.

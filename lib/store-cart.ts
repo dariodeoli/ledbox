@@ -103,3 +103,10 @@ export function writeLocalStoreCart(key: string, state: StoreCartState, store: S
     return false;
   }
 }
+
+
+/** Contexto del total observado: cambiar líneas, cantidades, fechas o flete no es una variación de precios. */
+export function storeCartContext(state: Pick<StoreCartState, "items" | "from" | "to" | "zone">): string {
+  const lines = state.items.map((line) => [line.id, line.quantity] as const).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  return JSON.stringify([lines, state.from, state.to, state.zone]);
+}

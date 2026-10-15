@@ -9,6 +9,7 @@ import { MiniAdd } from "./MiniAdd";
 import { ProductGallery } from "./ProductGallery";
 import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
 import { StoreHeader, storeNavLinks } from "./StoreHeader";
+import { withStoreDates } from "@/lib/store-categories";
 import { StoreChrome } from "./StoreChrome";
 import { ProductPlaceholder, XIcon } from "./StoreIcons";
 
@@ -95,7 +96,7 @@ export function ProductPage({ store, detail, showPrices: showPricesProp, basePat
             <div className="cp-panel">
               <nav className="cp-crumbs" aria-label="Ruta">
                 <a href={basePath}>Inicio</a><span aria-hidden="true">/</span>
-                <a href={`${basePath}?categoria=${encodeURIComponent(item.category)}#catalogo`}>{sector}</a><span aria-hidden="true">/</span>
+                <a href={`${withStoreDates(`${basePath}?categoria=${encodeURIComponent(item.category)}`, range)}#catalogo`}>{sector}</a><span aria-hidden="true">/</span>
                 <span aria-current="page">{item.name}</span>
               </nav>
               <p className="cp-panel-meta">{sector}{item.sku ? ` · ${codeOf(item.sku)}` : ""}{wholesale ? " · Mayorista" : ""}</p>

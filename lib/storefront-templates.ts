@@ -39,7 +39,7 @@ export function resolveStoredTheme(value: unknown): StoreThemeId | null {
 }
 
 /** Tipografías de títulos que la empresa puede elegir (lista curada). `null` = la del tema. */
-export const DISPLAY_FONTS: readonly ThemeFont[] = [F.cormorant, F.playfair, F.fraunces, F.outfit, F.sora, F.archivo];
+export const DISPLAY_FONTS: readonly ThemeFont[] = [F.system, F.cormorant, F.playfair, F.fraunces, F.outfit, F.sora, F.archivo];
 export type DisplayFontId = (typeof DISPLAY_FONTS)[number]["id"];
 
 export function isDisplayFont(value: unknown): value is DisplayFontId {
@@ -67,11 +67,17 @@ function hoverOf(hex: string, scheme: "light" | "dark", on: string): string {
   return hex;
 }
 
+/** Negro y casi negro son una acción intencional del diseño minimalista; un gris medio sigue rechazado. */
+export function isNearBlack(value: string): boolean {
+  const hex = normalizeHex(value);
+  return Boolean(hex && Math.max(...hexToRgb(hex)) <= 24);
+}
+
 /**
  * Color primario efectivo: el de la empresa si da contraste AA contra el fondo y la superficie del tema (y el texto del
  * botón sobre él también); si no, el primario propio del tema. Nunca un botón ilegible.
  */
-/** Un gris (sin tono) nunca es un color primario: el botón principal tiene que verse de color. Mismo criterio que el test del registro. */
+/** Detecta un tono neutro; el negro intencional se admite aparte y el gris medio se rechaza. */
 export const MIN_PRIMARY_CHROMA = 24;
 export function isGreyish(hex: string): boolean {
   const [r, g, b] = hexToRgb(hex);
@@ -81,7 +87,7 @@ export function isGreyish(hex: string): boolean {
 export function themePrimary(id: StoreThemeId, brand: string | null | undefined): { primary: string; primary700: string; onPrimary: string; fromBrand: boolean } {
   const t = THEMES[id];
   const hex = normalizeHex(brand ?? null);
-  if (hex && !isGreyish(hex)) {
+  if (hex && (!isGreyish(hex) || isNearBlack(hex))) {
     const surfacesOk = [t.colors.bg, t.colors.surface].every((surface) => contrastRatio(hex, surface) >= STORE_MIN_CONTRAST);
     const on = readableOn(hex);
     if (surfacesOk && contrastRatio(on, hex) >= STORE_MIN_CONTRAST) {
@@ -181,9 +187,10 @@ export function themeAttrs(id: StoreThemeId): Record<string, string> {
 }
 
 /** Hoja de Google Fonts del tema (títulos + cuerpo, y la manuscrita si el tema la usa), con `display=swap`. */
-export function themeFontHref(id: StoreThemeId, displayFont?: string | null): string {
+export function themeFontHref(id: StoreThemeId, displayFont?: string | null): string | null {
   const fonts = themeFonts(id, displayFont);
-  const families = [...new Set([fonts.display.google, fonts.body.google, ...(fonts.script ? [fonts.script.google] : [])])];
+  const families = [...new Set([fonts.display.google, fonts.body.google, ...(fonts.script ? [fonts.script.google] : [])].filter(Boolean))];
+  if (families.length === 0) return null;
   return `https://fonts.googleapis.com/css2?${families.map((family) => `family=${family}`).join("&")}&display=swap`;
 }
 

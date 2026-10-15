@@ -213,7 +213,7 @@ export function adjustBrandColor(value: unknown): { ok: true; result: BrandColor
 export type AppearanceView = {
   template: TemplateId;
   /** Hoja de Google Fonts a enlazar. */
-  fontHref: string;
+  fontHref: string | null;
   /** Variables CSS inline del contenedor (todas con los nombres de la especificación: `--color-*`, `--font-*`…). */
   vars: Record<string, string>;
   /** Atributos `data-*` del contenedor: tema, esquema y variantes de layout. */
