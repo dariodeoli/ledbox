@@ -1,5 +1,5 @@
-/** Familias de Google Fonts de una lista cerrada. Un tema nuevo reutiliza estas o suma la suya acá. */
-/** Familia de Google Fonts (parámetro `family` de la API css2). */
+/** Tipografía del sistema y familias de Google Fonts de una lista cerrada. */
+/** `google` es el parámetro family de css2; vacío cuando la fuente ya vive en el sistema. */
 export type ThemeFont = { id: string; label: string; css: string; google: string };
 
 export const font = (id: string, label: string, css: string, google: string): ThemeFont => ({ id, label, css, google });
@@ -7,6 +7,7 @@ const SERIF_FALLBACK = 'Georgia, "Times New Roman", serif';
 const SANS_FALLBACK = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
 export const F = {
+  system: font("system", "Sistema (moderna)", '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif', ""),
   outfit: font("outfit", "Outfit", `"Outfit", ${SANS_FALLBACK}`, "Outfit:wght@400;500;600"),
   inter: font("inter", "Inter", `"Inter", ${SANS_FALLBACK}`, "Inter:wght@400;500;600;700"),
   cormorant: font("cormorant", "Cormorant Garamond", `"Cormorant Garamond", ${SERIF_FALLBACK}`, "Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500"),

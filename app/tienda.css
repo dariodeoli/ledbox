@@ -243,13 +243,13 @@
 
 /* ── Selector de evento: fecha + días + invitados (opcional, no filtra) ── */
 .cp-event { background: transparent; border: 0; border-top: 1px solid var(--color-border-soft); border-radius: 0; box-shadow: none; padding: var(--sp-4) 0 0; display: grid; gap: var(--sp-2); color: var(--color-text); min-width: 0; }
-.cp-event-fields { display: grid; gap: var(--sp-3); grid-template-columns: minmax(0, 1fr); align-items: end; }
-@media (min-width: 768px) { .cp-event-fields { grid-template-columns: minmax(160px, 220px) minmax(120px, 160px) minmax(140px, 180px) auto; justify-content: start; } }
+.cp-event-fields { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: end; }
+
 .cp-event .cp-fields, .cp-event.cp-fields { --a-field-bg: var(--color-bg); }
-.cp-event-note { font-size: var(--fs-14); color: var(--color-muted); }
+.cp-event-note { font-size: var(--fs-12); color: var(--color-muted); }
 .cp-event[data-variant="panel"], .cp-event[data-variant="drawer"] { box-shadow: none; padding: var(--sp-4); border-radius: var(--radius-md); }
-.cp-event[data-variant="panel"] .cp-event-fields, .cp-event[data-variant="drawer"] .cp-event-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.cp-event[data-variant="drawer"] .cp-event-fields > :last-child, .cp-event[data-variant="panel"] .cp-event-fields > :last-child { grid-column: 1 / -1; }
+
+
 .cp-event[data-variant="bar"] { box-shadow: none; border-radius: var(--radius-md); }
 
 /* ── Sección de categorías: grilla de 2 (móvil) a 3 o 4 (escritorio), todas de la misma altura ── */
@@ -279,7 +279,7 @@
 .cp-cat[aria-pressed="true"] { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
 .cp-theme[data-grid="dense"] .cp-cat { font-weight: 700; border-radius: var(--radius-sm); }
 .cp-filter-tools { display: grid; gap: var(--sp-2); grid-template-columns: minmax(0, 1fr) minmax(130px, 40%); align-items: end; }
-@media (min-width: 768px) { .cp-filter-tools { grid-template-columns: minmax(0, 1fr) 260px; gap: var(--sp-3); } }
+@media (min-width: 768px) { .cp-filter-tools { grid-template-columns: minmax(0, 320px) 160px; justify-content: start; gap: var(--sp-3); } }
 .cp-filter-tools .admin-field { width: 100%; max-width: none; }
 .cp-results { font-size: var(--fs-14); color: var(--color-muted); }
 
@@ -731,13 +731,10 @@
 .cp-drawer.cp-contact::before { display: none; }
 @media (min-width: 1024px) {
   .cp-filter { grid-template-columns: minmax(0, 1fr); align-items: end; }
-  .cp-filter-tools { grid-template-columns: minmax(0, 1fr) 190px; }
+  .cp-filter-tools { grid-template-columns: minmax(0, 320px) 160px; justify-content: start; }
   .cp-filter-open { display: none; }
 }
 @media (max-width: 767px) {
-  .cp-event[data-variant="hero"] .cp-event-fields, .cp-event[data-variant="bar"] .cp-event-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
-  .cp-event[data-variant="hero"] .cp-event-fields > :first-child, .cp-event[data-variant="bar"] .cp-event-fields > :first-child { grid-column: 1 / -1; }
-  .cp-event-go { grid-column: 1 / -1; }
   .cp-overlay--contact { align-items: center; padding: var(--sp-3); }
   .cp-drawer.cp-contact { width: 100%; max-height: 92dvh; border-radius: var(--radius-lg); }
 }
@@ -789,10 +786,13 @@
 .cp-theme .cp-fields [role="option"] { min-height: var(--tap); }
 .cp-theme .cp-fields .admin-field-hint { font-size: var(--fs-12); line-height: 1.5; }
 .cp-theme .cp-event { padding: var(--sp-3) var(--sp-4); border-radius: 0; box-shadow: none; }
-.cp-theme .cp-event-date { position: relative; min-width: 0; }
+.cp-theme .cp-event-date { position: relative; min-width: 0; flex: 0 0 160px; width: 160px; }
+.cp-theme .cp-event-days { flex: 0 0 100px; width: 100px; }
+.cp-theme .cp-event-guests { flex: 0 0 80px; width: 80px; }
+.cp-event > .cp-btn--block { width: auto; justify-self: start; min-height: var(--tap); font-size: var(--fs-14); }
 .cp-theme .cp-event-date > .admin-icon { position: absolute; left: 2px; top: 32px; color: var(--color-muted); pointer-events: none; }
 .cp-theme .cp-fields .cp-event-date .admin-field input[data-oc-control]:not([type="hidden"]):not([type="checkbox"]) { padding-inline-start: 30px; }
-.cp-theme .cp-event-fields { gap: var(--sp-3); align-items: start; }
+.cp-theme .cp-event-fields { gap: var(--sp-3); align-items: end; }
 .cp-theme .cp-event-fields > .cp-btn { align-self: end; }
 .cp-theme .cp-stepper { border: 0; border-bottom: 1px solid var(--color-muted); border-radius: 0; background: transparent; gap: 0; }
 .cp-theme .cp-stepper button { width: var(--tap); height: var(--tap); border-radius: 0; font-size: var(--fs-16); }
@@ -845,7 +845,6 @@
 @media (min-width: 768px) {
   .cp-home-intro { grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-6); }
   .cp-home-intro .cp-hero-actions { justify-content: flex-end; max-width: 360px; }
-  .cp-home-booking .cp-event-fields { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
   .cp-footer-col:first-child { grid-column: auto; }
   .cp-qv-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-6); }
 }
@@ -872,3 +871,15 @@
 .cp-drawer-foot:has(.cp-save-cart) .cp-cart-actions > .cp-btn:not(.cp-btn--primary) { grid-row: 2; grid-column: 2; }
 .cp-drawer-foot:has(.cp-save-cart) :is(.cp-save-cart, .cp-cart-actions > .cp-btn:not(.cp-btn--primary)) { min-height: var(--tap); min-width: 0; padding: var(--sp-1); border-color: transparent; background: transparent; color: var(--color-muted); font-size: var(--fs-12); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 .cp-drawer-foot:has(.cp-save-cart) :is(.cp-save-cart, .cp-cart-actions > .cp-btn:not(.cp-btn--primary)):hover { color: var(--color-primary); }
+
+@media (max-width: 767px) {
+  .cp-theme .cp-event-fields { gap: var(--sp-2); }
+  .cp-theme .cp-event-date { flex-basis: 140px; width: 140px; }
+  .cp-theme .cp-event-days { flex-basis: 80px; width: 80px; }
+  .cp-theme .cp-event-guests { flex-basis: 76px; width: 76px; }
+  .cp-event-fields > .cp-event-go { margin-right: auto; }
+}
+@media (max-width: 380px) {
+  .cp-theme .cp-event-date { flex-basis: 132px; width: 132px; }
+  .cp-theme .cp-event-days, .cp-theme .cp-event-guests { flex-basis: 72px; width: 72px; }
+}

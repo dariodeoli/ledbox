@@ -8,6 +8,7 @@ import {
   STORE_THEMES,
   THEMES,
   isDisplayFont,
+  isNearBlack,
   isStoreTheme,
   resolveStoredTheme,
   themeAttrs,
@@ -112,33 +113,36 @@ test("tokens: cada plantilla define los nombres de la especificación y nada que
     assert.match(attrs["data-category"], /^(card|overlay)$/);
   }
   assert.equal(THEMES.escenario.scheme, "dark");
-  assert.deepEqual([THEMES.boutique.layout.category, THEMES.escenario.layout.category, THEMES.corporativo.layout.category], ["overlay", "overlay", "card"], "overlay en Boutique y Noir");
+  assert.deepEqual([THEMES.boutique.layout.category, THEMES.escenario.layout.category, THEMES.corporativo.layout.category], ["card", "overlay", "card"], "Boutique minimalista y Noir con su variante");
   // Boutique: los valores exactos de la especificación del dueño.
   const boutique = themeVars("boutique");
-  assert.equal(boutique["--color-bg"], "#F6F2EA");
-  assert.equal(boutique["--color-primary"], "#4B5637");
-  assert.equal(boutique["--radius-lg"], "28px");
-  assert.equal(boutique["--space-section-d"], "112px");
-  assert.equal(boutique["--space-section-m"], "64px");
+  assert.equal(boutique["--color-bg"], "#FFFFFF");
+  assert.equal(boutique["--color-primary"], "#111111");
+  assert.equal(boutique["--radius-lg"], "16px");
+  assert.equal(boutique["--space-section-d"], "48px");
+  assert.equal(boutique["--space-section-m"], "32px");
 });
 
-test("tipografía: como máximo 2 familias de texto (+ la manuscrita decorativa de Boutique), lista cerrada y display=swap", () => {
+test("tipografía: sistema sin solicitudes externas o hasta dos familias curadas con display=swap", () => {
   for (const id of STORE_THEMES) {
     const t = THEMES[id];
     const families = new Set([t.fonts.display.id, t.fonts.body.id]);
     assert.ok(families.size <= 2, id);
     const href = themeFontHref(id);
-    assert.match(href, /^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;@=.,&-]+&display=swap$/);
-    assert.ok((href.match(/family=/g) ?? []).length <= (t.fonts.script ? 3 : 2), `${id} más familias de las permitidas`);
+    if (href) assert.match(href, /^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;@=.,&-]+&display=swap$/);
+    assert.ok((href?.match(/family=/g) ?? []).length <= (t.fonts.script ? 3 : 2), `${id} más familias de las permitidas`);
   }
-  assert.ok(THEMES.boutique.fonts.script && !THEMES.escenario.fonts.script);
+  assert.equal(themeFontHref("boutique"), null);
+  assert.equal(THEMES.boutique.fonts.script, null);
+  assert.match(themeVars("boutique")["--font-body"], /system-ui/);
+  assert.ok(themeFontHref("boutique", "playfair")?.includes("Playfair"));
   // Fuente de títulos de la empresa: de una lista curada, reemplaza solo los títulos.
   assert.ok(["cormorant", "playfair", "fraunces"].every((id) => isDisplayFont(id)));
   assert.equal(isDisplayFont("comic-sans"), false);
   const vars = themeVars("corporativo", { displayFont: "playfair" });
   assert.match(vars["--font-display"], /Playfair/);
   assert.equal(vars["--font-body"], THEMES.corporativo.fonts.body.css);
-  assert.ok(themeFontHref("corporativo", "playfair").includes("Playfair"));
+  assert.ok(themeFontHref("corporativo", "playfair")!.includes("Playfair"));
   assert.ok(DISPLAY_FONTS.length >= 3);
   const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "escenario", font: "poppins" });
   assert.equal(view.vars["--font-body"], THEMES.escenario.fonts.body.css, "la tipografía del portal no cambia la tienda");
@@ -268,7 +272,7 @@ test("las seis plantillas por rubro usan tipografías cerradas y botón sólido 
     const t = THEMES[id];
     assert.ok(t.rubro && t.forWho);
     assert.ok(t.fonts.display.google && t.fonts.body.google);
-    assert.ok((themeFontHref(id).match(/family=/g) ?? []).length <= 2);
+    assert.ok((themeFontHref(id)?.match(/family=/g) ?? []).length <= 2);
     const [r, g, b] = hexToRgb(t.colors.primary);
     assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24);
   }
@@ -276,12 +280,15 @@ test("las seis plantillas por rubro usan tipografías cerradas y botón sólido 
 
 // ── Versión 2.1.129 ──────────────────────────────────────────────────────────
 
-test("ninguna plantilla tiene un primario gris, y un color de marca gris no pisa al del tema", () => {
+test("acciones: negro intencional permitido y grises medios rechazados en todas las plantillas", () => {
   assert.equal(THEME_REGISTRY.length, 7);
+  assert.equal(themePrimary("boutique", "#000000").fromBrand, true);
+  assert.equal(themePrimary("corporativo", "#111111").fromBrand, true);
+  assert.equal(themePrimary("escenario", "#111111").fromBrand, false);
   for (const theme of THEME_REGISTRY) {
     const [r, g, b] = hexToRgb(theme.colors.primary);
-    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24, `${theme.id}: el primario no es gris`);
-    for (const grey of ["#1f2328", "#555555", "#808080", "#ffffff", "#000000", "#3a3d40"]) {
+    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24 || isNearBlack(theme.colors.primary), `${theme.id}: el primario es color o negro intencional`);
+    for (const grey of ["#1f2328", "#555555", "#808080", "#ffffff", "#3a3d40"]) {
       const result = themePrimary(theme.id as keyof typeof THEMES, grey);
       assert.equal(result.fromBrand, false, `${theme.id}: ${grey} es gris y no debe ser el primario`);
       assert.equal(result.primary, theme.colors.primary);
