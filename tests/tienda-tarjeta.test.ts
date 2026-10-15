@@ -135,7 +135,7 @@ test("vista rápida y cajones: URL ?p=, atrás cierra, portal por encima del enc
   assert.match(browser, /searchParams\.set\("p", id\)/);
   assert.match(browser, /addEventListener\("popstate"/);
   assert.match(browser, /window\.history\.back\(\)/);
-  assert.equal((browser.match(/<ThemePortal>/g) ?? []).length, 3, "carrito, guardar carrito y vista rápida salen por el portal");
+  assert.equal((browser.match(/<ThemePortal>/g) ?? []).length, 4, "resumen, carrito, guardar carrito y vista rápida salen por el portal");
   assert.match(browser, /Elegí fechas para el total/);
   assert.match(browser, /por día o evento/);
   assert.match(browser, /<OrderBar/, "barra del pedido compacta");
