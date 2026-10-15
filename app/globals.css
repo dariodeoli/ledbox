@@ -1618,6 +1618,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    precio desde esos días; el mínimo va en su fila. */
 .admin-form-group--prices { grid-template-columns: minmax(11rem, 14rem) 6.5rem minmax(11rem, 14rem); }
 .admin-form-group--min { grid-template-columns: minmax(11rem, 14rem); }
+/* Precio por días (alquileres P2): una fila por escalón, «desde N días · por día/total · precio». */
+.admin-form-group--tiers { grid-template-columns: minmax(0, 1fr); }
+.admin-tier-row { display: grid; grid-template-columns: 6.5rem minmax(9rem, 11rem) minmax(11rem, 14rem) auto; gap: 8px; align-items: end; min-width: 0; }
+.budget-package { display: grid; gap: 6px; }
+.budget-package ul { margin: 4px 0 0; padding-left: 18px; }
+@media (max-width: 640px) { .admin-tier-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .admin-tier-row > :nth-child(3) { grid-column: 1 / -1; } }
 @media (max-width: 760px) {
   .admin-form-group--photo,
   .admin-form-group--prices,
@@ -2001,6 +2007,16 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
    pendiente y con qué eventos choca. */
 .admin-table--presupuestos-reserva { --presupuestos-reserva-cols: minmax(9rem, 1.3fr) minmax(9rem, 1.3fr) 5rem 6rem 7.5rem minmax(13rem, 2fr); --admin-cols: var(--presupuestos-reserva-cols); --admin-table-min: 55.5rem; }
+/* Zonas de flete (alquileres P2): tarjetas que se apilan en el celular, sin scroll horizontal. */
+.admin-zone-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-zone { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) auto; gap: 8px 16px; align-items: center; min-width: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel); }
+.admin-zone[data-archived] { opacity: 0.75; }
+.admin-zone-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; overflow-wrap: anywhere; }
+.admin-zone-rates { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 4px 16px; margin: 0; min-width: 0; }
+.admin-zone-rates dt { font-size: 0.75rem; opacity: 0.8; }
+.admin-zone-rates dd { margin: 0; overflow-wrap: anywhere; }
+.admin-zone-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 760px) { .admin-zone { grid-template-columns: minmax(0, 1fr); } .admin-zone-actions { justify-content: flex-start; } }
 .admin-table--proveedores { --proveedores-cols: minmax(7rem, 1.2fr) minmax(6.5rem, 1.1fr) 5.75rem 5.5rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem 10rem; --admin-cols: var(--proveedores-cols); --admin-table-min: 57.5rem; }
 .admin-table--trabajos { --trabajos-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 64rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 10rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 55.5rem; }

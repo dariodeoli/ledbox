@@ -4,12 +4,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AVAILABILITY_HINT_LABEL,
-  catalogDailyPrice,
+  catalogLine,
+  catalogTierHints,
   estimatedSubtotal,
   formatDayKey,
   type AvailabilityHint,
   type CatalogPrice,
 } from "@/lib/catalog-public";
+import { deliveryExtraApplies, deliveryFee, deliveryRateText } from "@/lib/delivery-zones";
+import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tiers";
 
 /**
  * Catálogo de la tienda web de una empresa, carrito y armado de la preorden (sin
@@ -27,7 +30,12 @@ export type CatalogItemView = {
   description?: string | null;
   price: CatalogPrice | null;
   availability: AvailabilityHint | null;
+  /** Paquete (combo): sus piezas con precio, para mostrar la suma por unidad y el ahorro. */
+  package?: Array<{ name: string; quantity: number; price: CatalogPrice }> | null;
 };
+
+/** Zona de flete que ve el público; sin precios si la tienda no muestra precios. */
+export type CatalogZoneView = { id: string; name: string; basePrice: number; volumeThreshold: number | null; extraPrice: number | null };
 
 type Props = {
   organizationName: string;
@@ -41,6 +49,7 @@ type Props = {
   items: CatalogItemView[];
   range: { fromKey: string; toKey: string; days: number } | null;
   initialCategory: string | null;
+  zones?: CatalogZoneView[];
 };
 
 type Done =
@@ -59,6 +68,39 @@ function todayKey(): string {
   return parts;
 }
 
+/** «por día», «por evento» o «total por 5 días» según cómo se cobra esa cantidad de días. */
+function unitLabel(mode: "BASE" | "PER_DAY" | "TOTAL" | "EVENT" | undefined, days: number | null): string {
+  if (mode === "EVENT") return "por evento";
+  if (mode === "TOTAL") return days ? `total por ${days} ${days === 1 ? "día" : "días"}` : "total";
+  return "por día";
+}
+
+/** Suma por unidad de las piezas del paquete y ahorro, con la misma regla de días de cada pieza. */
+function packageOf(item: CatalogItemView, days: number): PackageSummary | null {
+  if (!item.price || !item.package?.length) return null;
+  const product = { basePrice: item.price.unit, billingUnit: item.price.perEvent ? "EVENT" : null, tiers: item.price.tiers ?? legacyTier(item.price.fromDays, item.price.fromPrice) };
+  const components = item.package.map((part) => ({
+    name: part.name,
+    quantity: part.quantity,
+    base: part.price.unit,
+    minimum: 0,
+    billingUnit: part.price.perEvent ? ("EVENT" as const) : ("DAILY" as const),
+    tiers: part.price.tiers ?? legacyTier(part.price.fromDays, part.price.fromPrice),
+  }));
+  return packageSummary(product, components, days);
+}
+
+function PackageNote({ item, days }: { item: CatalogItemView; days: number }) {
+  const summary = packageOf(item, days);
+  if (!summary || summary.incomplete || summary.packageTotal <= 0) return null;
+  return (
+    <p className="cp-hint cp-package" data-testid="catalog-package">
+      Paquete {money(summary.packageTotal)} · piezas por separado {money(summary.unitSum)}
+      {summary.savings > 0 ? <> · <strong>ahorrás {money(summary.savings)}</strong></> : null}
+    </p>
+  );
+}
+
 function Placeholder() {
   return (
     <svg className="cp-ph" viewBox="0 0 64 48" role="img" aria-label="Sin foto" focusable="false">
@@ -68,7 +110,7 @@ function Placeholder() {
   );
 }
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [] }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [query, setQuery] = useState("");
@@ -98,8 +140,13 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
   const days = range?.days ?? 1;
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
-  const unitFor = (item: CatalogItemView) => (item.price ? catalogDailyPrice(item.price, days) : 0);
-  const lines = chosen.map((item) => ({ name: item.name, quantity: selection[item.id], unitPrice: unitFor(item) || null, perEvent: Boolean(item.price?.perEvent) }));
+  // Misma regla de días que el presupuesto (escalones por día o total, evento): `lib/price-tiers.ts`.
+  const pricingFor = (item: CatalogItemView) => (item.price ? catalogLine(item.price, days) : null);
+  const unitFor = (item: CatalogItemView) => pricingFor(item)?.unitPrice ?? 0;
+  const lines = chosen.map((item) => {
+    const pricing = pricingFor(item);
+    return { name: item.name, quantity: selection[item.id], unitPrice: unitFor(item) || null, perEvent: pricing ? pricing.mode === "TOTAL" || pricing.mode === "EVENT" : false };
+  });
   const subtotal = showPrices && range ? estimatedSubtotal(lines, days) : null;
   const count = chosen.reduce((sum, item) => sum + (selection[item.id] ?? 0), 0);
 
@@ -186,8 +233,10 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
                     {item.sku ? <p className="cp-sku">SKU {item.sku}</p> : null}
                     {item.description ? <p className="cp-desc">{item.description}</p> : null}
                     <p className="cp-price">
-                      {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>{item.price?.perEvent ? "por evento" : "por día"}</span></>) : "Consultar"}
+                      {showPrices && unit > 0 ? (<><strong>{money(unit)}</strong> <span>{unitLabel(pricingFor(item)?.mode, range ? days : null)}</span></>) : "Consultar"}
                     </p>
+                    {showPrices && catalogTierHints(item.price).map((hint) => <p key={hint} className="cp-hint cp-tier">{hint}</p>)}
+                    {showPrices && unit > 0 && item.package ? <PackageNote item={item} days={days} /> : null}
                     {item.availability ? (
                       <p><span className={`cp-chip ${AVAILABILITY_TONE[item.availability]}`}>{AVAILABILITY_HINT_LABEL[item.availability]}</span></p>
                     ) : null}
@@ -231,6 +280,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           onQuantity={setQuantity}
           subtotal={subtotal}
           showPrices={showPrices}
+          zones={zones}
           done={done}
           onDone={setDone}
           onClose={() => setOpen(false)}
@@ -251,17 +301,24 @@ function PreorderDialog(props: {
   onQuantity: (id: string, next: number) => void;
   subtotal: number | null;
   showPrices: boolean;
+  zones: CatalogZoneView[];
   done: Done | null;
   onDone: (done: Done) => void;
   onClose: () => void;
   onFinish: () => void;
 }) {
-  const { range, lines, subtotal, showPrices, done } = props;
+  const { range, lines, subtotal, showPrices, done, zones } = props;
+  const zone = zones.find((entry) => entry.id === zoneChoice) ?? null;
+  const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
+  const fee = showPrices && zone ? deliveryFee(zone, pieces) : null;
+  const total = subtotal !== null ? subtotal + (fee ?? 0) : null;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  // Flete: "" = no elegí, COORDINATE = «a coordinar», o el id de una zona.
+  const [zoneChoice, setZoneChoice] = useState("");
   const [trap, setTrap] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -296,6 +353,7 @@ function PreorderDialog(props: {
       name, phone, email, location, notes,
       from: range.fromKey, to: range.toKey,
       items: lines.map((line) => ({ inventoryId: line.id, quantity: line.quantity })),
+      ...(zone ? { deliveryZoneId: zone.id } : zoneChoice === "COORDINATE" ? { deliveryCoordinate: true } : {}),
       website: trap,
     };
     const serialized = JSON.stringify(payload);
@@ -368,7 +426,22 @@ function PreorderDialog(props: {
                 </li>
               ))}
             </ul>
-            {showPrices ? <p><strong>{subtotal !== null ? `Subtotal estimado: ${money(subtotal)}` : "Subtotal: a cotizar"}</strong> <span className="cp-hint">(referencia, no incluye traslado ni instalación)</span></p> : null}
+            {zones.length > 0 ? (
+              <label className="cp-field">
+                <span>Flete (opcional)</span>
+                <select value={zoneChoice} onChange={(e) => setZoneChoice(e.target.value)} aria-describedby="flete-ayuda">
+                  <option value="">Lo defino después</option>
+                  {zones.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{showPrices && entry.basePrice > 0 ? ` · ${money(entry.basePrice)}` : ""}</option>)}
+                  <option value="COORDINATE">A coordinar</option>
+                </select>
+                <small id="flete-ayuda" className="cp-hint">
+                  {zone && showPrices
+                    ? `Flete estimado ${money(fee ?? 0)}${deliveryExtraApplies(zone, pieces) ? ` (incluye recargo por más de ${zone.volumeThreshold} piezas)` : zone.volumeThreshold !== null && zone.extraPrice ? ` (${deliveryRateText(zone).split(" + ")[1]})` : ""}.`
+                    : zoneChoice === "COORDINATE" ? "Coordinamos el flete con vos al responder." : "Si elegís la zona te mostramos el flete estimado."}
+                </small>
+              </label>
+            ) : null}
+            {showPrices ? <p><strong>{total !== null ? `Total estimado: ${money(total)}` : "Subtotal: a cotizar"}</strong> <span className="cp-hint">({fee !== null ? `incluye flete de la zona; ` : ""}referencia, no incluye instalación ni cargos extra)</span></p> : null}
             <label className="cp-field"><span>Nombre y apellido</span><input ref={first} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" /></label>
             <label className="cp-field"><span>WhatsApp</span><input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required minLength={6} maxLength={40} autoComplete="tel" placeholder="+595 981 000 000" /></label>
             <label className="cp-field"><span>Correo</span><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={320} autoComplete="email" /></label>

@@ -1,5 +1,6 @@
 "use client";
 
+import { tierLabel, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { formatDateShort, formatMoney, formatNumber, formatTime } from "@/lib/admin-format";
 import { CATALOG_AUDIENCE_LABEL, effectiveAudience } from "@/lib/catalog-audience";
 import { AUDIENCE_TONE, type StockSummary } from "@/lib/inventory-view";
@@ -62,40 +63,36 @@ export function daysText(days: number): string {
 }
 
 /**
- * Frente de precios (issue #110) en una línea: el normal y, si hay regla, el
- * precio desde X días. Ej.: `Final Gs 750.000 · desde 3 días Gs 500.000`.
+ * Frente de precios en una línea: el normal y, si hay «Precio por días», cada escalón.
+ * Ej.: `Final Gs 100.000 · desde 5 días: 300.000 total`.
  */
-function priceFrontText(label: string, normal: number, fromDays: number, fromPrice: number): string {
-  const parts = [`${label} ${priceText(normal)}`];
-  if (fromPrice > 0 && fromDays > 0) parts.push(`${daysText(fromDays)} ${priceText(fromPrice)}`);
-  return parts.join(" · ");
+function priceFrontText(label: string, normal: number, tiers: ReadonlyArray<PriceTier>): string {
+  return [`${label} ${priceText(normal)}`, ...tiers.map(tierLabel)].join(" · ");
 }
 
-type PriceFields = Pick<
-  AdminInventoryRow,
-  "listPrice" | "listFromDays" | "listFromPrice" | "wholesalePrice" | "wholesaleFromDays" | "wholesaleFromPrice" | "minimumPrice"
->;
+type PriceFields = Pick<AdminInventoryRow, "listPrice" | "wholesalePrice" | "minimumPrice" | "priceTiers">;
 
 /** Detalle completo de los precios para el `title` de una fila o tarjeta. */
 export function pricesTitle(item: PriceFields): string {
   return (
     [
-      priceFrontText("Final", item.listPrice, item.listFromDays, item.listFromPrice),
-      priceFrontText("Mayorista", item.wholesalePrice, item.wholesaleFromDays, item.wholesaleFromPrice),
+      priceFrontText("Final", item.listPrice, tiersForAudience(item.priceTiers, "RETAIL")),
+      priceFrontText("Mayorista", item.wholesalePrice, tiersForAudience(item.priceTiers, "WHOLESALE")),
       `Mínimo ${priceText(item.minimumPrice)}`,
     ].join(" · ") + " (PYG)"
   );
 }
 
-/** Precio de un frente: el normal y, debajo, su regla «desde X días» sin recortes. */
-export function PriceValue({ normal, days, from }: { normal: number; days: number; from: number }) {
-  if (normal <= 0 && from <= 0) return <span className="admin-muted">—</span>;
+/** Precio de un frente: el normal y, debajo, su «Precio por días» (el primer escalón y cuántos más hay). */
+export function PriceValue({ normal, tiers }: { normal: number; tiers: ReadonlyArray<PriceTier> }) {
+  if (normal <= 0 && tiers.length === 0) return <span className="admin-muted">—</span>;
   return (
     <span className="admin-cell-stack">
       <span className="admin-nowrap">{priceText(normal)}</span>
-      {from > 0 && days > 0 ? (
+      {tiers.length > 0 ? (
         <small className="admin-cell-sub admin-nowrap">
-          desde {days} d: {formatNumber(from)}
+          {tierLabel(tiers[0])}
+          {tiers.length > 1 ? ` (+${tiers.length - 1})` : ""}
         </small>
       ) : null}
     </span>

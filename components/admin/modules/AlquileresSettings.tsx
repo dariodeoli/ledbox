@@ -7,6 +7,7 @@ import { useAdminSession } from "../AdminShell";
 import { BUDGET_INT_MAX } from "@/lib/budget-payment-plan";
 import { MoneyField, NumberField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
+import { DeliveryZonesPanel } from "./DeliveryZonesPanel";
 
 /**
  * Alquileres (fase 2b): seña, vigencia de la retención y tiempos de preparación.
@@ -151,6 +152,7 @@ export function AlquileresSettings() {
           </form>
         ) : null}
       </AdminDataState>
+      <DeliveryZonesPanel />
     </div>
   );
 }
