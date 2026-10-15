@@ -837,7 +837,8 @@ export function AdminDisclosure({
  * `autoFocus`), trampa de foco con Tab, cierre con Escape y clic afuera, y el
  * foco vuelve al disparador al cerrar. `wide` para las tablas chicas y `ficha`
  * para la ficha 360 del cliente (issue #34): panel lateral a pantalla completa
- * de alto. En celular las tres son una hoja a pantalla completa.
+ * de alto. En celular los formularios se ajustan a su contenido y la ficha
+ * conserva la hoja completa.
  *
  * - `description`: una línea bajo el título que dice qué pasa al guardar.
  * - `footer`: pie fijo, siempre visible, con la acción principal a la derecha.
@@ -852,9 +853,9 @@ export function AdminDisclosure({
  *   alias de `md` y `lg`. `ficha` es el panel lateral.
  * - `error` / `warning`: franja entre el cuerpo y el pie (siempre visible, no
  *   se pierde al desplazar el formulario).
- * - Celular (0-767 px): hoja de 100dvh con safe-area arriba y abajo; con el
- *   teclado abierto la hoja toma el alto de `visualViewport` y el pie queda
- *   pegado encima del teclado.
+ * - Celular (0-767 px): formularios con altura natural y máximo según
+ *   `visualViewport`; fichas de alto completo. Safe-area arriba y abajo; el
+ *   cuerpo largo se desplaza y el pie queda encima del teclado.
  */
 export function AdminDialog({
   title,

@@ -1956,11 +1956,14 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-col { display: grid; align-content: start; min-width: 0; }
 .admin-col > .admin-field { max-width: none; }
 @media (max-width: 767px) {
-  /* Hoja de pantalla completa: alto visible real (teclado incluido, `--admin-dialog-vh`
-     lo fija visualViewport), safe-area arriba y abajo, pie pegado abajo. */
+  /* Formularios cortos se ajustan al contenido; los largos limitan el cuerpo
+     al viewport visible (incluye teclado) y conservan el pie fuera del scroll.
+     Las fichas mantienen la hoja completa y su navegación de varias secciones. */
   .admin-dialog-overlay, .admin-dialog-overlay--ficha { place-items: stretch; padding: 0; overflow: hidden; align-items: start; }
   .admin-dialog-overlay .admin-dialog { width: 100%; max-height: none; border-width: 0; border-radius: 0; }
   .admin-dialog-overlay .admin-dialog--sheet, .admin-dialog-overlay--ficha .admin-dialog--sheet { height: 100vh; height: 100dvh; height: var(--admin-dialog-vh, 100dvh); max-height: none; border-radius: 0; transform: translateY(var(--admin-dialog-vtop, 0px)); }
+  .admin-dialog-overlay:not(.admin-dialog-overlay--ficha) { padding: 12px; place-items: start center; }
+  .admin-dialog-overlay:not(.admin-dialog-overlay--ficha) .admin-dialog--sheet { height: auto; max-height: calc(var(--admin-dialog-vh, 100dvh) - 24px); border-width: 1px; border-radius: var(--a-radius-lg); }
   .admin-dialog-overlay .admin-dialog:not(.admin-dialog--sheet) { height: 100vh; height: 100dvh; }
   .admin-dialog--sheet .admin-dialog-head { padding-top: max(16px, env(safe-area-inset-top)); }
   .admin-dialog-grid { grid-template-columns: minmax(0, 1fr); }
