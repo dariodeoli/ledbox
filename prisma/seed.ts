@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_MESSAGE_TEMPLATES } from '@/lib/server/message-templates';
+import { categoryWriteData, resolveInventoryCategory } from '@/lib/server/inventory-categories';
 import { LEDBOX_INVENTORY_CATALOG, ledboxInventoryItemId } from '@/lib/server/inventory-catalog';
 import { DEFAULT_PLAN_CODE, PLAN_CATALOG } from '@/lib/plan-rules';
 
@@ -87,6 +88,19 @@ async function main() {
         notes: item.notes,
       })),
       skipDuplicates: true,
+    });
+    // `category` es obligatoria: entra con el texto del catálogo y el helper único la pisa enseguida.
+    // La categoría pasa por el helper único: crea la fila de InventoryCategory y deja `categoryId`
+    // + el texto espejo «Padre › Hija» (nadie escribe `category` a mano).
+    await prisma.$transaction(async (tx) => {
+      for (const category of new Set(LEDBOX_INVENTORY_CATALOG.map((item) => item.category))) {
+        const resolved = await resolveInventoryCategory(tx, organization.id, { category });
+        if (!resolved) throw new Error(`No se pudo resolver la categoría del seed «${category}».`);
+        await tx.inventoryItem.updateMany({
+          where: { organizationId: organization.id, id: { in: LEDBOX_INVENTORY_CATALOG.filter((item) => item.category === category).map((item) => ledboxInventoryItemId(organization.id, item.slug)) } },
+          data: categoryWriteData(resolved),
+        });
+      }
     });
     console.log(`Seeded ${LEDBOX_INVENTORY_CATALOG.length} inventory items for ${organization.slug}.`);
   }
