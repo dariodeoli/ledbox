@@ -1517,9 +1517,9 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 }
 
 /* ── Menús y desplegables: una caja opaca con sombra ── */
-.admin-menu-pop, .admin-combobox-pop, .admin-company-menu, .admin-root [role="listbox"] { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; color: var(--a-text-strong); padding: 4px; }
-.admin-menu-item, .admin-company-menu-item, .admin-combobox-option, .admin-root [role="option"] { min-height: 44px; border-radius: 8px; }
-.admin-menu-item:hover:not(:disabled), .admin-company-menu-item:hover:not(:disabled), .admin-combobox-option:hover, .admin-root [role="option"]:is(:hover, [aria-selected="true"]) { background: var(--a-accent-soft); color: var(--a-accent); }
+.admin-menu-pop, .admin-combobox-pop, .admin-company-menu, .admin-root .admin-field [role="listbox"] { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; color: var(--a-text-strong); padding: 4px; }
+.admin-menu-item, .admin-company-menu-item, .admin-combobox-option, .admin-root .admin-field [role="option"] { min-height: 44px; border-radius: 8px; }
+.admin-menu-item:hover:not(:disabled), .admin-company-menu-item:hover:not(:disabled), .admin-combobox-option:hover, .admin-root .admin-field [role="option"]:is(:hover, [aria-selected="true"]) { background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-company-menu-item:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
 /* Piel única del panel: línea inferior en los campos canónicos. Se conservan
    prefijos, indicadores, validación y halo de foco de cada primitivo. No afecta
