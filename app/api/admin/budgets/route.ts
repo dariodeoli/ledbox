@@ -21,6 +21,7 @@ import { assertLive, trashErrorResponse } from "@/lib/server/trash";
 import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
+import { incompleteGameLines } from "@/lib/server/approval-stock";
 import { readRentalDays, snapshotsForLines } from "@/lib/server/line-pricing";
 import { parseInstallments as readStoredInstallments } from "@/lib/server/budget-portal";
 import { dayKeyOf, isValidDayKey } from "@/lib/server/notifications";
@@ -426,6 +427,11 @@ async function patchBudget(request: Request) {
     if (status === "APPROVED" || status === "SENT") {
       const priceBlock = await budgetPriceGate(organizationId, budget.id, status === "SENT" ? "enviar" : "aprobar");
       if (priceBlock) return jsonError(priceBlock, 409, "price_missing");
+    }
+    // Juego incompleto (sin piezas): tampoco se aprueba a mano.
+    if (status === "APPROVED") {
+      const incomplete = await incompleteGameLines(organizationId, budget.id);
+      if (incomplete.length) return jsonError(`No se puede aprobar: ${incomplete.join(" · ")}.`, 409, "combo_incomplete");
     }
     if (budget.status === "APPROVED" && status !== "APPROVED") return jsonError("El presupuesto ya está aprobado: no se puede reabrir para cambiar sus condiciones.", 409);
     let updated: { id: string; status: CommercialStatus };

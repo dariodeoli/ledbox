@@ -41,7 +41,7 @@ export async function loadProductDetail(context: PublicCatalogContext, code: str
   const organizationId = context.organization.id;
   const [parts, containing] = await Promise.all([
     db.inventoryComponent.findMany({
-      where: { organizationId, parentId: item.id },
+      where: { organizationId, parentId: item.id, component: { archivedAt: null, status: { not: "RETIRED" } } },
       orderBy: { component: { name: "asc" } },
       select: { quantity: true, component: { select: { id: true, name: true, sku: true, imageUrl: true, imageMime: true, updatedAt: true } } },
     }),
