@@ -595,3 +595,9 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 ## v2.1.122 — 2026-10-15
 
 - Cambiar de empresa: quien pertenece a más de una empresa ve, debajo de la empresa activa en el menú lateral, un botón «Cambiar a <empresa>» por cada una. Faltaba el botón (el servidor ya lo permitía).
+
+## v2.1.123 — 2026-10-15
+
+- La caja «Empresa» del menú lateral ahora es un selector: tocás tu empresa y se
+  abre la lista de todas tus empresas para cambiarte. El logo se ve más grande y
+  quitamos el botón «Cambiar a…».

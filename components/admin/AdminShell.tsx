@@ -50,7 +50,7 @@ import {
 import { AdminIcon } from "./AdminIcons";
 import { AdminSandboxStrip } from "./AdminSandboxStrip";
 import { AdminAvatar, AdminOrgLogo } from "./AdminAvatar";
-import { AdminBadge, AdminButton, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
+import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScreen, AdminSimulatedMessageDialog } from "./AdminUI";
 /**
  * Paleta del buscador (issue #67): llega diferida. Su código no entra en el
  * arranque del panel; con el shell ocioso se prefetchea el chunk para que la
@@ -274,6 +274,111 @@ function isDemoEntryPath(): boolean {
  * Grupo abierto del acordeón del nav (issue #50): la elección manual se guarda
  * por usuario y, sin preferencia, manda el grupo de la ruta activa.
  */
+/**
+ * Caja «Empresa» del menú lateral. Con más de una empresa es un botón que abre la lista
+ * para cambiar de empresa (fuera de la demo); con una sola, lleva a Ajustes → Empresa.
+ */
+function AdminCompanySwitcher({
+  session,
+  canEditOrganization,
+  logo,
+  onSwitch,
+}: {
+  session: Pick<AdminSessionState, "organization" | "organizations" | "demo" | "sandbox">;
+  canEditOrganization: boolean;
+  logo: React.ReactNode;
+  onSwitch: (organizationId: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const active = session.organization;
+  const canSwitch = !session.demo && !session.sandbox && session.organizations.length > 1;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (!active) return null;
+  const body = (
+    <>
+      <span className="admin-company-label">Empresa</span>
+      <span className="admin-company-main">
+        {logo}
+        <strong className="admin-company-name">{active.name}</strong>
+        {canSwitch ? <AdminIcon name="chevron-down" size={14} /> : null}
+      </span>
+    </>
+  );
+
+  if (!canSwitch) {
+    return canEditOrganization ? (
+      <Link className="admin-company" href="/ajustes/empresa" title={`Empresa activa: ${active.name} · Editar nombre y logos`}>
+        {body}
+      </Link>
+    ) : (
+      <div className="admin-company" title={`Empresa activa: ${active.name}`}>{body}</div>
+    );
+  }
+
+  return (
+    <div className="admin-company-switcher" ref={rootRef}>
+      <button
+        type="button"
+        className="admin-company"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Empresa activa: ${active.name}. Cambiar de empresa`}
+        data-open={open ? "true" : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {body}
+      </button>
+      {open ? (
+        <div className="admin-company-menu" role="menu" aria-label="Cambiar de empresa">
+          <span className="admin-company-menu-title">Tus empresas</span>
+          {session.organizations.map((org) => {
+            const current = org.id === active.id;
+            return (
+              <button
+                key={org.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={current}
+                className="admin-company-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  if (!current) void onSwitch(org.id);
+                }}
+              >
+                <span className="admin-company-menu-name">{org.name}</span>
+                {current ? <AdminIcon name="check" size={14} /> : null}
+              </button>
+            );
+          })}
+          {canEditOrganization ? (
+            <Link className="admin-company-menu-item admin-company-menu-edit" role="menuitem" href="/ajustes/empresa" onClick={() => setOpen(false)}>
+              <AdminIcon name="settings" size={14} />
+              <span className="admin-company-menu-name">Ajustes de la empresa</span>
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function readStoredNavGroup(): string | null {
   try {
     return window.localStorage.getItem(ADMIN_NAV_GROUP_KEY);
@@ -883,61 +988,19 @@ export function AdminShell({
 
           <div className="admin-sidebar-foot">
             {session.organization ? (
-              canEditOrganization ? (
-                <Link
-                  className="admin-company"
-                  href="/ajustes/empresa"
-                  title={`Empresa activa: ${session.organization.name} · Editar nombre y logos`}
-                >
-                  <span className="admin-company-label">Empresa</span>
-                  <span className="admin-company-main">
-                    <AdminOrgLogo
-                      name={session.organization.name}
-                      lightSrc={
-                        organizationLogos?.light
-                          ? organizationLogoUrl("light", organizationLogos.light)
-                          : null
-                      }
-                      darkSrc={
-                        organizationLogos?.dark ? organizationLogoUrl("dark", organizationLogos.dark) : null
-                      }
-                      size={22}
-                    />
-                    <strong className="admin-company-name">{session.organization.name}</strong>
-                  </span>
-                </Link>
-              ) : (
-                <div className="admin-company" title={`Empresa activa: ${session.organization.name}`}>
-                  <span className="admin-company-label">Empresa</span>
-                  <span className="admin-company-main">
-                    <AdminOrgLogo
-                      name={session.organization.name}
-                      lightSrc={
-                        organizationLogos?.light
-                          ? organizationLogoUrl("light", organizationLogos.light)
-                          : null
-                      }
-                      darkSrc={
-                        organizationLogos?.dark ? organizationLogoUrl("dark", organizationLogos.dark) : null
-                      }
-                      size={22}
-                    />
-                    <strong className="admin-company-name">{session.organization.name}</strong>
-                  </span>
-                </div>
-              )
-            ) : null}
-            {/* Cambiar de empresa: solo quien es miembro de más de una (fuera de la demo). */}
-            {!session.demo && !session.sandbox && session.organization && session.organizations.length > 1 ? (
-              <div className="admin-company-switch" role="group" aria-label="Cambiar de empresa">
-                {session.organizations
-                  .filter((org) => org.id !== session.organization?.id)
-                  .map((org) => (
-                    <AdminButton key={org.id} type="button" icon="building" title={`Pasar a ${org.name}`} onClick={() => void switchOrganization(org.id)}>
-                      {`Cambiar a ${org.name}`}
-                    </AdminButton>
-                  ))}
-              </div>
+              <AdminCompanySwitcher
+                session={session}
+                canEditOrganization={canEditOrganization}
+                logo={
+                  <AdminOrgLogo
+                    name={session.organization.name}
+                    lightSrc={organizationLogos?.light ? organizationLogoUrl("light", organizationLogos.light) : null}
+                    darkSrc={organizationLogos?.dark ? organizationLogoUrl("dark", organizationLogos.dark) : null}
+                    size={32}
+                  />
+                }
+                onSwitch={switchOrganization}
+              />
             ) : null}
               {session.user ? (
                 /* El chip es un enlace directo: la cuenta vive en Mi perfil (issue #117). */

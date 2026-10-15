@@ -1254,13 +1254,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-sidebar-foot { display: grid; gap: 8px; padding: 12px; border-top: 1px solid var(--a-line); }
 .admin-company { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--a-line); border-radius: 8px; background: var(--a-bg-2); color: inherit; text-decoration: none; }
 /* Cambiar de empresa: un botón por cada otra empresa del usuario, bajo la empresa activa. */
-.admin-company-switch { display: grid; gap: 4px; }
-.admin-company-switch .admin-btn { justify-content: flex-start; width: 100%; }
-.admin-root[data-sidebar="collapsed"] .admin-company-switch .admin-btn span:not(.admin-icon) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.admin-company-switcher { position: relative; }
+.admin-company-switcher > .admin-company { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.admin-company-switcher > .admin-company:hover, .admin-company-switcher > .admin-company[data-open] { border-color: var(--a-line-2); background: var(--a-panel-2); }
+.admin-company-switcher > .admin-company .admin-icon:last-child { margin-left: auto; color: var(--a-muted); transition: transform .15s ease; }
+.admin-company-switcher > .admin-company[data-open] .admin-icon:last-child { transform: rotate(180deg); }
+.admin-company-menu { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40; display: grid; gap: 2px; padding: 6px; border: 1px solid var(--a-line); border-radius: 10px; background: var(--a-panel); box-shadow: 0 12px 32px rgba(0, 0, 0, .14); }
+.admin-company-menu-title { padding: 6px 8px 4px; color: var(--a-muted); font-size: 11px; font-weight: 500; }
+.admin-company-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--a-text-strong); font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; }
+.admin-company-menu-item:hover, .admin-company-menu-item:focus-visible { background: var(--a-bg-2); outline: none; }
+.admin-company-menu-item[aria-checked="true"] { font-weight: 600; }
+.admin-company-menu-item .admin-icon { flex: none; color: var(--a-muted); }
+.admin-company-menu-item[aria-checked="true"] .admin-icon { margin-left: auto; color: var(--a-accent); }
+.admin-company-menu-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-company-menu-edit { margin-top: 4px; border-top: 1px solid var(--a-line); border-radius: 0 0 6px 6px; color: var(--a-muted); font-size: 12px; }
+.admin-root[data-sidebar="collapsed"] .admin-company-menu { left: 0; right: auto; width: 220px; }
 a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel-2); }
-.admin-company-label { color: var(--a-muted); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
-.admin-company-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.admin-company-name { color: var(--a-text-strong); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-company-label { color: var(--a-muted); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; text-align: center; }
+.admin-company-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.admin-company-name { color: var(--a-text-strong); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-sidebar-note { color: var(--a-muted); font-size: 11px; }
 /* Cerrar sesión al pie del menú: misma fila que un ítem del nav, sin aspecto de botón. */
 .admin-sidebar-logout { width: 100%; border: 0; background: none; font: inherit; color: var(--a-muted); cursor: pointer; text-align: left; }
