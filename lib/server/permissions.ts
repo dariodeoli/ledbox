@@ -19,6 +19,8 @@ export type AdminCapability =
   | "events.write"
   // Alta y edición de ítems de inventario.
   | "inventory.write"
+  // Costos internos del inventario (reposición, costo diario, compra y garantía): VIEWER no los ve.
+  | "inventory.costs"
   // Alta y edición de promotoras.
   | "promoters.write"
   // Presupuestos e ítems.
@@ -40,6 +42,7 @@ export const ADMIN_CAPABILITIES: readonly AdminCapability[] = [
   "clients.write",
   "events.write",
   "inventory.write",
+  "inventory.costs",
   "promoters.write",
   "budgets.write",
   "finance.write",
@@ -59,11 +62,13 @@ const OPERATIONS_CAPABILITIES: readonly AdminCapability[] = [
   "clients.write",
   "events.write",
   "inventory.write",
+  "inventory.costs",
   "promoters.write",
 ];
 
 const FINANCE_CAPABILITIES: readonly AdminCapability[] = [
   "profile.write",
+  "inventory.costs",
   "budgets.write",
   "finance.write",
   "suppliers.write",

@@ -109,26 +109,43 @@ Acción principal: **Emitir factura** (desde presupuesto o manual).
 ## Inventario (`/inventario`)
 
 Responde: *¿qué tengo, cuánto queda libre hoy y qué necesita atención?* (rediseño
-del 13-10-2026; la disponibilidad la sigue calculando el API, la pantalla solo la muestra)
+E2 del 15-10-2026; la disponibilidad la sigue calculando el API, la pantalla solo la muestra)
 
 1. Encabezado con las acciones: **Nuevo producto** (principal), **Nuevo combo**,
+   **Escanear** (deshabilitado, «próximamente» hasta E3), **Importar**,
    **Incidentes (n abiertos)** y Exportar CSV. Las altas solo con permiso de escritura.
 2. Cinco indicadores que **filtran al tocarlos**: Productos activos · Unidades
    disponibles hoy · En reparación / dañadas / perdidas · Ocupación de esta semana
-   (`GET /api/admin/inventory/occupancy`, mismo cálculo que el Resumen) · Publicados
-   en la tienda.
+   (`GET /api/admin/inventory/occupancy`) · Publicados en la tienda.
 3. Pestañas con conteo: Todos · Combos · Con incidentes · Publicados en tienda · Ocultos.
-4. Filtros: búsqueda, tipo, estado y rango «Disponible desde / Hasta».
-5. Lista con una plantilla de columnas (`--inventario-cols`): selección, producto
-   (foto chica y SKU), categoría, libres hoy sobre el total con barra mini, estado,
-   lista, mayorista, tienda (chip de alcance) y **una** acción visible («Ficha»);
-   el resto va en «•••». Tarjetas con foto en celular (siempre) y como opción en
-   escritorio. Al seleccionar filas aparece la barra de lote (ventana «Edición en lote»).
-6. **Ficha** como panel lateral (`AdminDialog size="ficha"`, `?producto=<id>` la abre
-   por link): Resumen · Disponibilidad (línea de tiempo de 4 semanas con reservas
-   y retenciones, rango y sustitutos) · Unidades · Precios · Tienda web · Combos donde
-   se usa / Componentes · Incidentes · Historial (asignaciones y, para OWNER/ADMIN,
-   cambios registrados).
+4. **Barra fija** (pegada bajo el topbar; en celular fluye con la página): búsqueda
+   (nombre, SKU y código de unidad), Tipo, Categoría (árbol con subcategorías),
+   Depósito, Estado (los del mapa), Proveedor, «Disponible desde / Hasta», «Limpiar
+   filtros» y el conmutador **Lista · Cuadrícula · Por categoría** (recordado por usuario).
+   Los filtros se combinan con «Y».
+5. **Estado visual** (`lib/inventory-visual-state.ts`, mapa único, ícono + texto):
+   Disponible (verde) · Alquilado (rojo, camión) · **Vencida** (rojo, alerta, negrita,
+   gana sobre «alquilado») · Dañado (naranja) · Mantenimiento / Fuera de servicio
+   (info) · Reservado desde dd/mm (acento) · Archivado (neutro). Los parciales llevan
+   el chip principal, la barra segmentada y «12/40».
+6. **Lista** con una plantilla de columnas (`--inventario-cols`): selección, producto
+   (foto chica y SKU), categoría, **ubicación** (`D1-E3-B2`, «3 depósitos» o «—»),
+   libres sobre el total con la barra segmentada, **chip de estado**, lista, mayorista,
+   tienda y **una** acción visible («Ficha»); el resto en «•••». Tarjetas en celular.
+7. **Cuadrícula compacta** `.admin-inv-grid`: foto de 64 px, nombre en 2 líneas, código,
+   chip y «libres/total». 8 por fila a 1440 px y 2 a 390 px, sin scroll horizontal
+   (`--admin-inv-card-min`, 132 px: el ancho útil a 1440 es ~1164 px, con 148 caen 7).
+8. **Por categoría**: secciones por `sortOrder` con encabezado pegajoso (nombre, conteo
+   y libres), plegables; lo no ligado queda en «Sin categoría».
+9. **Datos**: la pantalla usa `GET /api/admin/inventory?fields=grid` (liviano, paginado
+   por cursor, sin unidades ni asignaciones; agregados por `groupBy`) y carga todas las
+   páginas. La ficha pide su detalle con `?itemId=<id>&vivas=1`.
+10. **Ficha** (`AdminDialog size="ficha"`, `?producto=<id>`): resumen siempre visible y
+    pestañas Datos · Disponibilidad · Stock por depósito · Unidades · Precios · Tienda web
+    · Combos · Proveedor y garantía · Verificación · Cronología. Tienda web y Combos solo
+    aparecen si aplican; la garantía que vence en menos de 30 días se resalta. Verificación
+    y la cronología unificada son «próximamente (E4)» (la cronología reúne hoy incidentes e
+    historial; no se inventan datos).
 
 Un VIEWER ve la misma pantalla sin controles que mutan (el servidor además responde 403).
 

@@ -63,6 +63,15 @@ se unifican los componentes, sin cambiar datos ni contratos.
   **naranja** pendiente / en curso · **rojo** esperando aprobación / vencido /
   rechazado. El texto del estado no cambia: el color acompaña. `accent`, `info`
   y `neutral` quedan para lo que no es estado (roles, tipos, categorías, IVA).
+  **Excepción de Inventario (E2, 15-10-2026)**: el estado visual del inventario
+  usa seis tonos del mismo mapa (`lib/inventory-visual-state.ts`): verde
+  disponible, **rojo** alquilado y devolución vencida (la vencida con ícono de
+  alerta y etiqueta en negrita), naranja dañado, **info** (azul/violeta del tema)
+  mantenimiento y fuera de servicio, **acento** reservado a futuro y neutro
+  archivado. Por eso `info` y `accent` tienen también `--a-info-surface/-text` y
+  `--a-accent-surface/-text`. Siempre ícono + texto. AA medido en claro y oscuro
+  por `tests/inventory-visual-tokens.test.ts` (texto sobre superficie ≥ 7.9 / 6.4
+  acento, 8.2 / 5.8 info, ≥ 5.0 los otros; color base sobre el panel ≥ 3).
 - **Bordes**: `--a-line` para separadores internos, `--a-line-2` para el borde
   de los objetos; en modo claro marcan el objeto (calibrados el 22-09-2026).
 - **Estados**: hover (acento suave), activo/seleccionado (acento), foco visible

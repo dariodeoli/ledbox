@@ -986,6 +986,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-ok-text: #7df0b8;
   --a-warn-text: #ffd489;
   --a-danger-text: #ffa4b3;
+  /* Estados de inventario (E2): azul/violeta (info) y acento como estado. AA medido en
+     tests/inventory-visual-tokens.test.ts; excepción anotada en DISENO-PANEL.md §3. */
+  --a-info-surface: rgba(167, 139, 250, .18);
+  --a-info-text: #d4c8ff;
+  --a-accent-surface: rgba(90, 217, 255, .14);
+  --a-accent-text: #a5eaff;
   --a-radius: 14px;
   --a-radius-lg: 20px;
   /* Campos y ventanas (rediseño 13-10-2026): fondo un tono más oscuro que el
@@ -1065,6 +1071,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --a-ok-text: #0b6b43;
   --a-warn-text: #7a5005;
   --a-danger-text: #a82640;
+  --a-info-surface: #e8e7fc;
+  --a-info-text: #3730a3;
+  --a-accent-surface: #dff1f7;
+  --a-accent-text: #084e66;
   --a-radius: 18px;
   --a-radius-lg: 26px;
   --a-field-bg: #ffffff;
@@ -2021,7 +2031,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
    scroll horizontal en desktop y en mobile la tabla se desplaza sola. */
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
-.admin-table--inventario { --inventario-cols: 2.25rem minmax(10.5rem, 3fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) 7rem minmax(6rem, .8fr) minmax(6rem, .8fr) 6.25rem 6.75rem; --admin-cols: var(--inventario-cols); --admin-table-min: 57rem; }
+.admin-table--inventario { --inventario-cols: 2.25rem minmax(10rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) minmax(8.5rem, 1.1fr) minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 6.5rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
 /* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
 .admin-table--inventario > .admin-table-head { border-inline: 1px solid transparent; }
 .admin-table--inventario-asignaciones { --inventario-asignaciones-cols: minmax(8.5rem, 1.4fr) 11.5rem 4.5rem 7.5rem 7.5rem 10.5rem minmax(6.5rem, 1fr); --admin-cols: var(--inventario-asignaciones-cols); --admin-table-min: 57rem; }
@@ -2802,6 +2812,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-ficha-nav { position: sticky; top: -16px; z-index: 2; display: flex; gap: 6px; margin: -16px -16px 0; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--a-line); background: var(--a-dialog-bg); scrollbar-width: none; }
 .admin-ficha-nav::-webkit-scrollbar { display: none; }
 .admin-ficha-nav .admin-subtab { flex: 0 0 auto; min-height: 34px; cursor: pointer; }
+/* Pestañas de la ficha (E2): van debajo del resumen y quedan pegadas arriba al desplazarse. */
+.admin-ficha-nav.admin-ficha-tabs { margin: 0 -16px; }
+.admin-ficha-panel { display: grid; gap: 12px; min-width: 0; }
+.admin-ficha-panel:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+.admin-ficha-units-own { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-ficha-units-own li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 10px; border: 1px solid var(--a-line); border-radius: 8px; font-size: 12px; }
 .admin-ficha-hero { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
 .admin-ficha-hero-main { display: grid; flex: 1 1 18rem; gap: 12px; min-width: 0; }
 .admin-ficha-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
@@ -2836,6 +2852,71 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-cards .admin-cards-field { flex-direction: column; align-items: flex-start; gap: 2px; }
 .admin-inv-cards .admin-cards-field dd { width: 100%; max-width: 100%; text-align: left; }
 .admin-inv-cards .admin-meter { min-width: 0; width: 100%; }
+
+/* ── Inventario E2: estado visual, cuadrícula compacta y «Por categoría» ──
+   El chip dice el estado con ícono + texto; el color sale del mapa único
+   (lib/inventory-visual-state.ts) y usa los tokens -surface/-text (AA medido en
+   tests/inventory-visual-tokens.test.ts). */
+.admin-inv-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.admin-inv-chip { --chip-base: var(--a-line-2); --chip-surface: var(--a-panel-2); --chip-text: var(--a-muted-2); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px 2px 6px; border: 1px solid color-mix(in srgb, var(--chip-base) 45%, transparent); border-radius: 999px; background: var(--chip-surface); color: var(--chip-text); font-size: 11px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.admin-inv-chip .admin-icon { flex: 0 0 auto; }
+.admin-inv-chip-text { overflow: hidden; text-overflow: ellipsis; }
+.admin-inv-chip[data-tone="ok"] { --chip-base: var(--a-ok); --chip-surface: var(--a-ok-surface); --chip-text: var(--a-ok-text); }
+.admin-inv-chip[data-tone="warn"] { --chip-base: var(--a-warn); --chip-surface: var(--a-warn-surface); --chip-text: var(--a-warn-text); }
+.admin-inv-chip[data-tone="danger"] { --chip-base: var(--a-danger); --chip-surface: var(--a-danger-surface); --chip-text: var(--a-danger-text); }
+.admin-inv-chip[data-tone="info"] { --chip-base: var(--a-info); --chip-surface: var(--a-info-surface); --chip-text: var(--a-info-text); }
+.admin-inv-chip[data-tone="accent"] { --chip-base: var(--a-accent); --chip-surface: var(--a-accent-surface); --chip-text: var(--a-accent-text); }
+/* Devolución vencida: la misma familia roja, pero con etiqueta en negrita y borde pleno para que destaque. */
+.admin-inv-chip[data-emphasis="true"] { border-color: var(--chip-base); box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-base) 55%, transparent); font-weight: 800; }
+.admin-inv-chips--compact { justify-content: center; }
+.admin-inv-chips--compact .admin-inv-chip { padding: 1px 6px 1px 5px; border-radius: 10px; font-size: 10.5px; white-space: normal; text-align: left; }
+/* Barra segmentada: verde libres · rojo comprometidas o vencidas · naranja dañadas · azul mantenimiento. */
+.admin-inv-seg { display: flex; gap: 1px; height: 6px; min-width: 3rem; overflow: hidden; border-radius: 999px; background: var(--a-line); }
+.admin-inv-seg > span { display: block; flex: none; min-width: 2px; height: 100%; }
+.admin-inv-seg > [data-tone="ok"] { background: var(--a-ok); }
+.admin-inv-seg > [data-tone="danger"] { background: var(--a-danger); }
+.admin-inv-seg > [data-tone="warn"] { background: var(--a-warn); }
+.admin-inv-seg > [data-tone="info"] { background: var(--a-info); }
+.admin-inv-stock { min-width: 4.5rem; }
+.admin-inv-bar .admin-toolbar > .admin-search { flex: 2 1 12rem; min-width: 0; max-width: 20rem; }
+.admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 0; max-width: 12.5rem; }
+.admin-inv-bar .admin-toolbar > .admin-viewswitch { margin-left: auto; }
+.admin-inv-range { display: flex; flex: 0 1 auto; align-items: flex-end; gap: 8px; min-width: 0; }
+/* Barra fija de búsqueda y filtros (en celular fluye con la página para no comerse la pantalla). */
+.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 8px 0 4px; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+/* Cuadrícula compacta: foto de 64 px, nombre en 2 líneas, código, chip y «libres/total». */
+.admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 132px), 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-inv-tile { position: relative; min-width: 0; border: var(--a-panel-line); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
+.admin-inv-tile[data-selected="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 1px var(--a-accent); }
+.admin-inv-tile-open { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; height: 100%; min-height: 44px; padding: 10px 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: center; cursor: pointer; }
+.admin-inv-tile-open:hover { background: var(--a-accent-soft); }
+.admin-inv-tile-open:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-inv-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; min-height: 2.5em; overflow: hidden; color: var(--a-text-strong); font-size: 12px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.admin-inv-tile-code { max-width: 100%; overflow: hidden; color: var(--a-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-inv-tile-check { position: absolute; top: 0; left: 0; z-index: 1; }
+.admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; }
+.admin-inv-tile .admin-meter { width: 100%; min-width: 0; }
+.admin-inv-tile .admin-meter-figures { font-size: 12px; }
+.admin-inv-tile-unit { margin-left: 2px; }
+/* Por categoría: encabezado pegajoso debajo de la barra fija, plegable. */
+.admin-inv-sections { display: grid; gap: 14px; min-width: 0; }
+.admin-inv-section-head { position: sticky; top: calc(var(--a-topbar) + var(--admin-inv-bar-h, 0px)); z-index: 6; margin: 0 0 6px; font: inherit; background: color-mix(in srgb, var(--a-bg) 94%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+.admin-inv-section-head > button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-bottom: 1px solid var(--a-line-2); background: transparent; color: var(--a-text-strong); font: inherit; text-align: left; cursor: pointer; }
+.admin-inv-section-head > button:hover .admin-inv-section-name { color: var(--a-accent); }
+.admin-inv-section-head > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.admin-inv-section-chevron { display: inline-grid; place-items: center; transition: transform .15s ease; }
+.admin-inv-section[data-open="false"] .admin-inv-section-chevron { transform: rotate(-90deg); }
+.admin-inv-section-name { font-family: var(--font-display); font-size: 14px; font-weight: 700; }
+.admin-inv-section-count { margin-left: auto; color: var(--a-muted-2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  /* Celular: controles de 44 px de alto. */
+  .admin-inv-bar .admin-toolbar > select.admin-filter, .admin-inv-bar .admin-toolbar > .admin-search input { min-height: 44px; }
+  .admin-inv-bar .admin-toolbar > .admin-viewswitch { height: auto; }
+  .admin-inv-bar .admin-viewswitch-btn { width: 44px; height: 44px; }
+  .admin-inv-bar { position: static; padding: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .admin-inv-section-head > button { flex-wrap: wrap; }
+  .admin-inv-section-count { margin-left: 22px; }
+}
 @media (max-width: 720px) {
   .admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-kpis--inventario .admin-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }

@@ -67,8 +67,10 @@ test("leads: tarjetas con pestañas y sin Kanban cortado en ancho compacto", () 
 test("inventario: las tarjetas de la cuadrícula entran también en ancho compacto", () => {
   const module = inventoryModuleSource();
   assert.match(module, /const narrow = useAdminNarrowViewport\(\);/);
-  assert.match(module, /narrow \? null : <AdminViewSwitch view=\{view\}/);
-  assert.match(module, /cards=\{view === "grid" \|\| narrow\}/);
+  // E2: el conmutador (Lista · Cuadrícula · Por categoría) se ve también en celular; la lista pasa a tarjetas.
+  assert.match(module, /<AdminViewSwitch view=\{view\}/);
+  assert.match(module, /cards=\{narrow\}/);
+  assert.match(module, /<InventoryCompactGrid/);
   assert.match(module, /<AdminCardGrid\s+label="Inventario"/);
   assert.match(module, /<AdminActionsMenu label=\{`Más acciones de \$\{item\.name\}`\} items=\{items\} \/>/);
 });

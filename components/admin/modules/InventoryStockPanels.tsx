@@ -48,7 +48,6 @@ export function stockByWarehouse(units: readonly AdminInventoryUnitRow[], wareho
 export function ProductDataSection({ item, taxonomy }: { item: AdminInventoryItemRow; taxonomy: InventoryTaxonomy }) {
   const path = categoryFormFromText(item.category);
   const defaultWarehouse = taxonomy.warehouses.find((warehouse) => warehouse.id === item.defaultWarehouseId);
-  const supplier = taxonomy.suppliers.find((entry) => entry.id === item.supplierId);
   const condition = conditionSummary(item.units);
   const place = defaultWarehouse ? formatInventoryLocation(defaultWarehouse.code, item.defaultLocation) : null;
   return (
@@ -80,21 +79,54 @@ export function ProductDataSection({ item, taxonomy }: { item: AdminInventoryIte
           </div>
         </>
       )}
-      <div>
-        <dt>Proveedor</dt>
-        <dd title={supplier?.name ?? "Sin proveedor"}>{supplier?.name ?? "—"}</dd>
-      </div>
-      <div>
-        <dt>Compra</dt>
-        <dd>{item.purchasedAt ? formatDateShort(item.purchasedAt) : "—"}</dd>
-      </div>
-      <div>
-        <dt>Garantía</dt>
-        <dd>
-          <WarrantyBadge until={item.warrantyUntil} />
-        </dd>
-      </div>
     </dl>
+  );
+}
+
+/**
+ * Pestaña «Proveedor y garantía» de la ficha: el lote principal del producto y, aparte, las
+ * unidades que traen su proveedor, compra o garantía propios (vence en menos de 30 días resalta).
+ */
+export function SupplierWarrantySection({ item, taxonomy, now = new Date() }: { item: AdminInventoryItemRow; taxonomy: InventoryTaxonomy; now?: Date }) {
+  const supplierName = (id: string | null | undefined) => taxonomy.suppliers.find((entry) => entry.id === id)?.name;
+  const own = item.units
+    .filter((unit) => unit.supplierId || unit.purchasedAt || unit.warrantyUntil)
+    .sort((a, b) => (a.warrantyUntil ?? "9999").localeCompare(b.warrantyUntil ?? "9999") || a.code.localeCompare(b.code));
+  const supplier = supplierName(item.supplierId);
+  return (
+    <>
+      <dl className="admin-item-prices admin-item-data">
+        <div>
+          <dt>Proveedor</dt>
+          <dd title={supplier ?? "Sin proveedor"}>{supplier ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Compra</dt>
+          <dd>{item.purchasedAt ? formatDateShort(item.purchasedAt) : "—"}</dd>
+        </div>
+        <div>
+          <dt>Garantía</dt>
+          <dd>
+            <WarrantyBadge until={item.warrantyUntil} now={now} />
+          </dd>
+        </div>
+      </dl>
+      {own.length > 0 ? (
+        <>
+          <p className="admin-cell-sub">Unidades con proveedor, compra o garantía propios ({formatNumber(own.length)}). El resto hereda el lote principal.</p>
+          <ul className="admin-ficha-units-own" aria-label={`Unidades con garantía o proveedor propios de ${item.name}`}>
+            {own.map((unit) => (
+              <li key={unit.id}>
+                <strong className="admin-code">{unit.code}</strong>
+                <span>{supplierName(unit.supplierId) ?? "Proveedor del lote"}</span>
+                <span>{unit.purchasedAt ? `Compra ${formatDateShort(unit.purchasedAt)}` : "Compra del lote"}</span>
+                <WarrantyBadge until={unit.warrantyUntil} now={now} />
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </>
   );
 }
 

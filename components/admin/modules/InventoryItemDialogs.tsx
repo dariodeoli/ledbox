@@ -14,7 +14,10 @@ import {
   readInventoryPriceValues,
   type InventoryPriceValues,
 } from "@/lib/field-rules";
-import type { AdminApiResponse, AdminInventoryItemRow } from "@/lib/admin-types";
+import type { AdminApiResponse, AdminInventoryRow } from "@/lib/admin-types";
+
+/** Producto de la lista (liviano, con `stock`) o de la ficha (completo, con `units`). */
+export type InventoryEditable = AdminInventoryRow & { units?: ReadonlyArray<unknown>; stock?: { unitCount: number } };
 import type { PreparedInventoryPhoto } from "@/lib/inventory-image";
 import { adminApiUpload, adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS, effectiveAudience, type CatalogAudience } from "@/lib/catalog-audience";
@@ -105,7 +108,7 @@ const bufferHoursText = (minutes: number | null | undefined) =>
 type InventoryEditForm = typeof EMPTY_EDIT;
 
 /** El formulario de edición con los valores actuales del ítem. */
-function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
+function editFormFromItem(item: InventoryEditable): InventoryEditForm {
   return {
     name: item.name,
     // El espejo de texto trae «Categoría › Subcategoría»: se parte para los dos campos.
@@ -117,8 +120,8 @@ function editFormFromItem(item: AdminInventoryItemRow): InventoryEditForm {
     warrantyUntil: dayKeyOf(item.warrantyUntil),
     inventoryKind: item.kind,
     status: item.status,
-    replacementCost: item.replacementCost > 0 ? String(item.replacementCost) : "",
-    dailyCost: item.dailyCost > 0 ? String(item.dailyCost) : "",
+    replacementCost: (item.replacementCost ?? 0) > 0 ? String(item.replacementCost) : "",
+    dailyCost: (item.dailyCost ?? 0) > 0 ? String(item.dailyCost) : "",
     notes: item.notes ?? "",
     publicDescription: item.publicDescription ?? "",
     catalogAudience: effectiveAudience(item),
@@ -547,13 +550,14 @@ export function InventoryEditDialog({
   onSaved,
   onOpenUnits,
 }: {
-  item: AdminInventoryItemRow;
+  item: InventoryEditable;
   taxonomy: InventoryTaxonomy;
   onClose: () => void;
   onSaved: (notice: InventoryNotice) => void;
   /** Abre la ficha del producto, donde se gestionan las unidades. */
   onOpenUnits: (itemId: string) => void;
 }) {
+  const unitCount = item.units?.length ?? item.stock?.unitCount ?? 0;
   const [editForm, setEditForm] = useState<InventoryEditForm>(() => editFormFromItem(item));
   // Línea base congelada al abrir: una recarga del padre no cambia el diff de los buffers.
   const [baseForm] = useState<InventoryEditForm>(() => editFormFromItem(item));
@@ -820,7 +824,7 @@ export function InventoryEditDialog({
         <AdminDialogSection title="Stock y tiempos">
           <p className="admin-note admin-field--wide">
             <span>
-              {formatNumber(item.units.length)} unidad{item.units.length === 1 ? "" : "es"} · código, estado y costo se
+              {formatNumber(unitCount)} unidad{unitCount === 1 ? "" : "es"} · código, estado y costo se
               gestionan en la ficha del producto.
             </span>
             <AdminButton

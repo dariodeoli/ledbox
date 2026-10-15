@@ -28,6 +28,7 @@ import type {
   AdminAuditRow,
   AdminInventoryAvailability,
   AdminInventoryItemRow,
+  AdminInventoryListed,
   AdminInventorySubstitute,
   AdminInventoryUnitRow,
 } from "@/lib/admin-types";
@@ -43,6 +44,7 @@ import {
   type TimelineBar,
 } from "@/lib/inventory-view";
 import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { inventoryVisualState } from "@/lib/inventory-visual-state";
 import {
   AdminBadge,
   AdminActionsMenu,
@@ -61,7 +63,7 @@ import {
 import { trashMenuItems } from "../TrashDialogs";
 import { DateField, DayField, MoneyField, NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
-import { ProductDataSection, WarehouseStockSection } from "./InventoryStockPanels";
+import { ProductDataSection, SupplierWarrantySection, WarehouseStockSection } from "./InventoryStockPanels";
 import { ConditionBadge, dayKeyOf, supplierOptions, unitLocationLabel, warehouseOptions, type InventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryIncidentsPanel } from "./InventoryIncidents";
 import {
@@ -69,6 +71,8 @@ import {
   InventoryThumb,
   RowCheck,
   STATUS_PICK_OPTIONS,
+  SegmentedMeter,
+  StateChips,
   StockMeter,
   UNIT_STATUS_PICK_OPTIONS,
   dayRangeLabel,
@@ -78,8 +82,8 @@ import {
   stamp,
 } from "./InventoryParts";
 
-const SECTION_LABELS = {
-  resumen: "Resumen",
+/** Pestañas de la ficha (rediseño E2, §5.8). «Tienda web» y «Combos» solo aparecen si aplican. */
+const TAB_LABELS = {
   datos: "Datos",
   disponibilidad: "Disponibilidad",
   depositos: "Stock por depósito",
@@ -87,11 +91,22 @@ const SECTION_LABELS = {
   precios: "Precios",
   tienda: "Tienda web",
   combos: "Combos",
-  incidentes: "Incidentes",
-  historial: "Historial",
+  proveedor: "Proveedor y garantía",
+  verificacion: "Verificación",
+  cronologia: "Cronología",
 } as const;
 
-type SectionKey = keyof typeof SECTION_LABELS;
+type TabKey = keyof typeof TAB_LABELS;
+
+/** Contenido de una pestaña: solo se dibuja la activa (el resto no se monta). */
+function TabPanel({ active, id, tab, children }: { active: boolean; id: string; tab: string; children: React.ReactNode }) {
+  if (!active) return null;
+  return (
+    <div role="tabpanel" id={id} aria-labelledby={tab} className="admin-ficha-panel" tabIndex={-1}>
+      {children}
+    </div>
+  );
+}
 
 export type InventoryRangeControls = {
   from: string;
@@ -210,7 +225,7 @@ export function InventoryFicha({
   banner,
 }: {
   item: AdminInventoryItemRow;
-  inventory: AdminInventoryItemRow[];
+  inventory: AdminInventoryListed[];
   writable: boolean;
   /** OWNER y ADMIN leen la auditoría; el resto ve solo las asignaciones. */
   canReadAudit: boolean;
@@ -293,10 +308,12 @@ export function InventoryFicha({
   }, [item.id, rangeActive, from, to]);
 
   const summary = stockSummary(item, rangeActive);
+  const visual = inventoryVisualState(item, { combo: isCombo });
   const problems = unitProblemCounts([item]);
   const priceWarning = inventoryPriceWarning({ ...item, listFromPrice: 0, wholesaleFromPrice: 0 });
   const usedIn = useMemo(() => (isCombo ? [] : combosUsing(inventory, item.id)), [inventory, isCombo, item.id]);
   const audience = effectiveAudience(item);
+  const [requestedTab, setRequestedTab] = useState<TabKey>("datos");
   const toggleUnit = (id: string) =>
     setBulkUnitIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : current.length < 100 ? [...current, id] : current));
 
@@ -332,7 +349,7 @@ export function InventoryFicha({
     setUnitForm({
       code: unit.code,
       status: unit.status,
-      purchaseCost: unit.purchaseCost > 0 ? String(unit.purchaseCost) : "",
+      purchaseCost: (unit.purchaseCost ?? 0) > 0 ? String(unit.purchaseCost) : "",
       notes: unit.notes ?? "",
       warehouseId: unit.warehouseId ?? "",
       location: unit.location ?? "",
@@ -385,11 +402,35 @@ export function InventoryFicha({
     onChanged();
   }
 
-  const sections: SectionKey[] = isCombo
-    ? ["resumen", "datos", "disponibilidad", "precios", "tienda", "combos", "historial"]
-    : ["resumen", "datos", "disponibilidad", "depositos", "unidades", "precios", "tienda", "combos", "incidentes", "historial"];
-  const anchor = (key: SectionKey) => `${uid}-${key}`;
-  const jump = (key: SectionKey) => document.getElementById(anchor(key))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Tienda web y Combos solo si aplican: publicado en la tienda / es combo o está dentro de uno.
+  // Costos internos: el API los omite para VIEWER; sin ellos no hay columna, campos ni pestaña de compra.
+  const showCosts = item.dailyCost !== undefined;
+  const tabs: TabKey[] = isCombo
+    ? ["datos", "disponibilidad", "precios", ...(audience !== "HIDDEN" ? (["tienda"] as const) : []), "combos", "cronologia"]
+    : [
+        "datos",
+        "disponibilidad",
+        "depositos",
+        "unidades",
+        "precios",
+        ...(audience !== "HIDDEN" ? (["tienda"] as const) : []),
+        ...(usedIn.length > 0 ? (["combos"] as const) : []),
+        ...(showCosts ? (["proveedor"] as const) : []),
+        "verificacion",
+        "cronologia",
+      ];
+  const tab: TabKey = tabs.includes(requestedTab) ? requestedTab : tabs[0];
+  const tabId = (key: TabKey) => `${uid}-tab-${key}`;
+  const panelId = (key: TabKey) => `${uid}-panel-${key}`;
+  const onTabKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const index = tabs.indexOf(tab);
+    const next = event.key === "ArrowRight" ? index + 1 : event.key === "ArrowLeft" ? index - 1 : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
+    if (next === null) return;
+    event.preventDefault();
+    const target = tabs[(next + tabs.length) % tabs.length];
+    setRequestedTab(target);
+    document.getElementById(tabId(target))?.focus();
+  };
   const editLabel = isCombo ? "Editar combo" : "Editar producto";
 
   return (
@@ -450,19 +491,12 @@ export function InventoryFicha({
       )}
     >
       {banner ? <AdminNote tone={banner.tone}>{banner.text}</AdminNote> : null}
-      <nav className="admin-ficha-nav" aria-label={`Secciones de ${item.name}`}>
-        {sections.map((key) => (
-          <button key={key} type="button" className="admin-subtab" onClick={() => jump(key)}>
-            {key === "combos" ? (isCombo ? "Componentes" : "Combos") : SECTION_LABELS[key]}
-          </button>
-        ))}
-      </nav>
-
-      <AdminDialogSection title="Resumen" id={anchor("resumen")} stack>
+      <AdminDialogSection title="Resumen" stack>
         <div className="admin-ficha-hero">
           <InventoryThumb item={item} size={96} />
           <div className="admin-ficha-hero-main">
             <div className="admin-ficha-badges">
+              <StateChips visual={visual} />
               {archived ? <AdminBadge tone="neutral" title={`Archivado el ${formatDateShort(item.archivedAt)}`}>Archivado</AdminBadge> : null}
               {isCombo ? (
                 <AdminBadge tone="accent" title="Sin unidades propias: se arma con sus componentes.">Combo</AdminBadge>
@@ -493,6 +527,7 @@ export function InventoryFicha({
                 <dt>{rangeActive ? "Libres en el rango" : "Libres hoy"}</dt>
                 <dd>
                   <StockMeter summary={summary} combo={isCombo} large />
+                  {!rangeActive && !isCombo ? <SegmentedMeter visual={visual} /> : null}
                 </dd>
               </div>
               {isCombo ? (
@@ -525,11 +560,33 @@ export function InventoryFicha({
         {item.notes ? <p className="admin-note" title="Notas internas: no se publican.">{item.notes}</p> : null}
       </AdminDialogSection>
 
-      <AdminDialogSection title="Datos" id={anchor("datos")} stack>
+      <div className="admin-ficha-tabs admin-ficha-nav" role="tablist" aria-label={`Secciones de ${item.name}`} onKeyDown={onTabKey}>
+        {tabs.map((key) => (
+          <button
+            key={key}
+            id={tabId(key)}
+            type="button"
+            role="tab"
+            className="admin-subtab"
+            data-active={tab === key ? "true" : undefined}
+            aria-selected={tab === key}
+            aria-controls={panelId(key)}
+            tabIndex={tab === key ? 0 : -1}
+            onClick={() => setRequestedTab(key)}
+          >
+            {key === "combos" && isCombo ? "Componentes" : TAB_LABELS[key]}
+          </button>
+        ))}
+      </div>
+
+      <TabPanel active={tab === "datos"} id={panelId("datos")} tab={tabId("datos")}>
+<AdminDialogSection title="Datos" stack>
         <ProductDataSection item={item} taxonomy={taxonomy} />
       </AdminDialogSection>
+</TabPanel>
 
-      <AdminDialogSection title="Disponibilidad · próximas 4 semanas" id={anchor("disponibilidad")} stack>
+      <TabPanel active={tab === "disponibilidad"} id={panelId("disponibilidad")} tab={tabId("disponibilidad")}>
+<AdminDialogSection title="Disponibilidad · próximas 4 semanas" stack>
         <AvailabilityTimeline item={item} />
         <div className="admin-ficha-range">
           <DateField
@@ -644,15 +701,19 @@ export function InventoryFicha({
           <AdminNote>Elegí un rango (desde y hasta) para ver los rangos comprometidos y los sustitutos sugeridos.</AdminNote>
         )}
       </AdminDialogSection>
+</TabPanel>
 
       {isCombo ? null : (
-        <AdminDialogSection id={anchor("depositos")} stack title="Stock por depósito">
+        <TabPanel active={tab === "depositos"} id={panelId("depositos")} tab={tabId("depositos")}>
+<AdminDialogSection stack title="Stock por depósito">
           <WarehouseStockSection item={item} taxonomy={taxonomy} writable={writable} onChanged={onChanged} />
         </AdminDialogSection>
+</TabPanel>
       )}
 
       {isCombo ? null : (
-        <AdminDialogSection id={anchor("unidades")} stack title={`Unidades · ${formatNumber(item.units.length)}${item.availability.maintenanceNow > 0 ? ` · ${formatNumber(item.availability.maintenanceNow)} fuera de circulación` : ""}`}>
+        <TabPanel active={tab === "unidades"} id={panelId("unidades")} tab={tabId("unidades")}>
+<AdminDialogSection stack title={`Unidades · ${formatNumber(item.units.length)}${item.availability.maintenanceNow > 0 ? ` · ${formatNumber(item.availability.maintenanceNow)} fuera de circulación` : ""}`}>
           {/* Unidades físicas (issue #112): código, estado y costo por unidad. */}
           <div className="admin-unit-head" aria-label={`Unidades de ${item.name}`}>
             <span className="admin-unit-summary">
@@ -795,7 +856,7 @@ export function InventoryFicha({
             <AdminTable
               view="inventario-unidades"
               label={`Unidades de ${item.name}`}
-              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Ubicación" }, { label: "Condición" }, { label: "Costo", end: true }, { label: "Acciones", end: true }]}
+              columns={[{ label: "Código" }, { label: "Estado" }, { label: "Ubicación" }, { label: "Condición" }, ...(showCosts ? [{ label: "Costo", end: true }] : []), { label: "Acciones", end: true }]}
             >
               {item.units.map((unit) => (
                 <AdminRow key={unit.id}>
@@ -832,9 +893,11 @@ export function InventoryFicha({
                   <AdminCell title={`Condición de ${unit.code}`}>
                     <ConditionBadge score={unit.conditionScore} />
                   </AdminCell>
-                  <AdminCell end title={unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "Sin costo cargado"}>
-                    {unit.purchaseCost > 0 ? formatMoney(unit.purchaseCost) : "—"}
-                  </AdminCell>
+                  {showCosts ? (
+                    <AdminCell end title={(unit.purchaseCost ?? 0) > 0 ? formatMoney(unit.purchaseCost ?? 0) : "Sin costo cargado"}>
+                      {(unit.purchaseCost ?? 0) > 0 ? formatMoney(unit.purchaseCost ?? 0) : "—"}
+                    </AdminCell>
+                  ) : null}
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       {writable ? (
@@ -854,9 +917,11 @@ export function InventoryFicha({
             </AdminDisclosure>
           )}
         </AdminDialogSection>
+</TabPanel>
       )}
 
-      <AdminDialogSection title="Precios" id={anchor("precios")} stack>
+      <TabPanel active={tab === "precios"} id={panelId("precios")} tab={tabId("precios")}>
+<AdminDialogSection title="Precios" stack>
         <dl className="admin-item-prices">
           <div>
             <dt>Se cobra</dt>
@@ -879,16 +944,20 @@ export function InventoryFicha({
           </div>
         </dl>
         <dl className="admin-item-prices">
-          <div>
-            <dt>Costo diario</dt>
-            <dd>{priceText(item.dailyCost)}</dd>
-            <small>Interno, no es un precio de venta.</small>
-          </div>
-          <div>
-            <dt>Reposición</dt>
-            <dd>{priceText(item.replacementCost)}</dd>
-            <small>Interno, por unidad.</small>
-          </div>
+          {showCosts ? (
+            <>
+              <div>
+                <dt>Costo diario</dt>
+                <dd>{priceText(item.dailyCost ?? 0)}</dd>
+                <small>Interno, no es un precio de venta.</small>
+              </div>
+              <div>
+                <dt>Reposición</dt>
+                <dd>{priceText(item.replacementCost ?? 0)}</dd>
+                <small>Interno, por unidad.</small>
+              </div>
+            </>
+          ) : null}
           <div>
             <dt>Tiempo antes</dt>
             <dd>{bufferText(item.bufferBeforeMin)}</dd>
@@ -901,8 +970,10 @@ export function InventoryFicha({
           </div>
         </dl>
       </AdminDialogSection>
+</TabPanel>
 
-      <AdminDialogSection title="Tienda web" id={anchor("tienda")} stack>
+      <TabPanel active={tab === "tienda"} id={panelId("tienda")} tab={tabId("tienda")}>
+<AdminDialogSection title="Tienda web" stack>
         <p className="admin-note">
           <AudienceChip item={item} />
           <span>
@@ -917,8 +988,10 @@ export function InventoryFicha({
           <AdminNote>Sin descripción pública cargada{writable ? ": se completa en «Editar»." : "."}</AdminNote>
         )}
       </AdminDialogSection>
+</TabPanel>
 
-      <AdminDialogSection title={isCombo ? "Componentes" : "Combos donde se usa"} id={anchor("combos")} stack>
+      <TabPanel active={tab === "combos"} id={panelId("combos")} tab={tabId("combos")}>
+<AdminDialogSection title={isCombo ? "Componentes" : "Combos donde se usa"} stack>
         {item.combo ? (
           <>
             <AdminNote tone={item.combo.capacity === 0 ? "warn" : "ok"}>
@@ -968,14 +1041,40 @@ export function InventoryFicha({
           </ul>
         )}
       </AdminDialogSection>
+</TabPanel>
 
+      {/* Proveedor y garantía: del lote principal y de las unidades con garantía propia. */}
+      {isCombo || !showCosts ? null : (
+        <TabPanel active={tab === "proveedor"} id={panelId("proveedor")} tab={tabId("proveedor")}>
+          <AdminDialogSection title="Proveedor y garantía" stack>
+            <SupplierWarrantySection item={item} taxonomy={taxonomy} />
+          </AdminDialogSection>
+        </TabPanel>
+      )}
+
+      {/* Verificación (E4): sin conteos todavía; no se muestra ninguna fecha inventada. */}
       {isCombo ? null : (
-        <AdminDialogSection title="Incidentes" id={anchor("incidentes")} stack>
+        <TabPanel active={tab === "verificacion"} id={panelId("verificacion")} tab={tabId("verificacion")}>
+          <AdminDialogSection title="Verificación" stack>
+            <AdminEmpty
+              icon="check"
+              title="Verificación: próximamente (E4)"
+              hint="Acá va a figurar cuándo se contó este producto por última vez y quién lo hizo. Todavía no hay conteos registrados."
+            />
+          </AdminDialogSection>
+        </TabPanel>
+      )}
+
+      {/* Cronología: hasta E4 reúne lo que ya existe (incidentes y asignaciones/cambios). */}
+      <TabPanel active={tab === "cronologia"} id={panelId("cronologia")} tab={tabId("cronologia")}>
+        <AdminNote>La cronología unificada de este producto (alquileres, devoluciones y conteos) llega en E4: próximamente. Mientras tanto, acá están los incidentes y el historial que ya se registran.</AdminNote>
+      {isCombo ? null : (
+        <AdminDialogSection title="Incidentes" stack>
           <InventoryIncidentsPanel inventoryId={item.id} writable={writable} onChanged={onChanged} />
         </AdminDialogSection>
       )}
 
-      <AdminDialogSection title="Historial" id={anchor("historial")} stack>
+      <AdminDialogSection title="Historial" stack>
         {item.assignments.length === 0 ? (
           <AdminEmpty
             icon="inventory"
@@ -1046,6 +1145,7 @@ export function InventoryFicha({
           )
         ) : null}
       </AdminDialogSection>
+      </TabPanel>
     </AdminDialog>
   );
 }

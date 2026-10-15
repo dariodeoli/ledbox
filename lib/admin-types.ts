@@ -52,6 +52,10 @@ export type AdminIconName =
   | "upload"
   | "trash"
   | "globe"
+  /** Estados de inventario (E2): alquilado, mantenimiento y archivado. */
+  | "truck"
+  | "wrench"
+  | "archive"
   /** Menú de acciones de fila/tarjeta (issue #143): el botón «⋯». */
   | "dots"
   | "database"
@@ -1704,8 +1708,9 @@ export type AdminInventoryRow = {
   /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
   publicDescription?: string | null;
   quantity: number;
-  replacementCost: number;
-  dailyCost: number;
+  /** Costos internos: el API los omite si el rol no tiene `inventory.costs` (VIEWER). */
+  replacementCost?: number;
+  dailyCost?: number;
   /** Tiempo antes/después del evento en minutos; `null` hereda el de la empresa. */
   bufferBeforeMin?: number | null;
   bufferAfterMin?: number | null;
@@ -1840,8 +1845,8 @@ export type AdminInventoryUnitRow = {
   /** Código de inventario único por empresa (`KIO-01`), editable. */
   code: string;
   status: string;
-  /** Costo que tuvo la unidad (interno), en Gs. */
-  purchaseCost: number;
+  /** Costo que tuvo la unidad (interno), en Gs; ausente sin `inventory.costs`. */
+  purchaseCost?: number;
   notes: string | null;
   updatedAt: string;
   /** Depósito y ubicación dentro de él («E3-B2»). */
@@ -1880,19 +1885,61 @@ export type AdminWarehouseRow = {
   unitCount: number;
 };
 
+/** Disponibilidad de hoy de un producto, con los agregados del estado visual (rediseño E2). */
+export type AdminInventoryAvailabilityNow = {
+  committedNow: number;
+  availableNow: number;
+  overcommittedNow: boolean;
+  /** Unidades en mantenimiento (issue #112): no cuentan como libres. */
+  maintenanceNow: number;
+  /** Disponibilidad del rango pedido; `null` cuando la lista va sin rango. */
+  range?: AdminInventoryRangeAvailability | null;
+  /** Unidades por estado (`groupBy`): AVAILABLE, MAINTENANCE, DAMAGED, LOST, RETIRED. */
+  unitsByStatus?: Record<string, number>;
+  /** Cantidad retenida por incidentes abiertos sin unidad con código, por tipo. */
+  holdByKind?: Record<string, number>;
+  /** Inicio de la próxima reserva a futuro (ISO) o `null`. */
+  nextCommittedAt?: string | null;
+  /** Unidades que salieron y no volvieron con el fin ya pasado (P1-3). */
+  overduePending?: number;
+  /** Los atrasos se calcularon con un tope de lectura: pueden estar incompletos. */
+  overdueTruncated?: boolean;
+};
+
+/** Dónde están las unidades (`groupBy` de depósito y ubicación) y quién las proveyó. */
+export type AdminInventoryGridStock = {
+  unitCount: number;
+  locations: Array<{ warehouseId: string | null; location: string | null; units: number }>;
+  supplierIds: string[];
+};
+
 /** Ítem de `/api/admin/inventory`: incluye asignaciones, unidades y disponibilidad de hoy. */
 export type AdminInventoryItemRow = AdminInventoryRow & {
   assignments: AdminInventoryAssignmentRow[];
   units: AdminInventoryUnitRow[];
-  availability: {
-    committedNow: number;
-    availableNow: number;
-    overcommittedNow: boolean;
-    /** Unidades en mantenimiento (issue #112): no cuentan como libres. */
-    maintenanceNow: number;
-    /** Disponibilidad del rango pedido; `null` cuando la lista va sin rango. */
-    range?: AdminInventoryRangeAvailability | null;
-  };
+  availability: AdminInventoryAvailabilityNow;
+};
+
+/** Producto con su disponibilidad de hoy: lo común a la fila liviana y a la completa. */
+export type AdminInventoryListed = AdminInventoryRow & { availability: AdminInventoryAvailabilityNow };
+
+/**
+ * Fila liviana de `/api/admin/inventory?fields=grid` (rediseño E2): sin unidades ni asignaciones,
+ * con los agregados por `groupBy`. La ficha trae el detalle (`AdminInventoryItemRow`).
+ */
+export type AdminInventoryGridRow = AdminInventoryRow & {
+  availability: AdminInventoryAvailabilityNow;
+  stock: AdminInventoryGridStock;
+};
+
+/** Página de la grilla: `nextCursor` es `null` en la última. */
+export type AdminInventoryGridPage = {
+  inventory: AdminInventoryGridRow[];
+  nextCursor: string | null;
+  /** `true` si los atrasos de la página llegaron al tope de lectura y pueden estar incompletos. */
+  truncated?: boolean;
+  /** Productos de la empresa (se informa en la primera página). */
+  total?: number;
 };
 
 /**
@@ -2757,7 +2804,12 @@ export type AdminApiResponse = {
   supplierJobs?: AdminSupplierJobRow[];
   jobs?: AdminSupplierJobRow[];
   suppliers?: AdminSupplierRow[];
-  inventory?: Array<AdminInventoryRow | AdminInventoryItemRow>;
+  inventory?: Array<AdminInventoryRow | AdminInventoryItemRow | AdminInventoryGridRow>;
+  /** Cursor de la página siguiente de `?fields=grid` (rediseño E2). */
+  nextCursor?: string | null;
+  total?: number;
+  /** `?fields=grid&unitMatch=`: productos con una unidad cuyo código coincide. */
+  matchedIds?: string[];
   availability?: AdminInventoryAvailability;
   occupancy?: AdminInventoryOccupancy;
   substitutes?: AdminInventorySubstitute[];

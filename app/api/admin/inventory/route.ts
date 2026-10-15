@@ -58,6 +58,8 @@ import { replacePriceTiers } from "@/lib/server/price-tier-store";
 import { readAudienceTiers, tierWarnings, tiersForAudience } from "@/lib/price-tiers";
 import { categoryWriteData, resolveInventoryCategory, type ResolveCategoryInput } from "@/lib/server/inventory-categories";
 import { readInventoryTrace } from "@/lib/server/inventory-details";
+import { stripInventoryCosts } from "@/lib/server/inventory-costs";
+import { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } from "@/lib/server/inventory-grid";
 import { resolveUnitPlacement } from "@/lib/server/inventory-units";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
@@ -358,10 +360,34 @@ export async function GET(request: Request) {
     return Response.json({ inventory: withComboAvailability(inventory, definitions) });
   }
 
+  if (url.searchParams.get("fields") === "grid") {
+    // Payload liviano de la pantalla (rediseño E2): sin unidades ni asignaciones, paginado por cursor.
+    const unitMatch = url.searchParams.get("unitMatch");
+    try {
+      if (unitMatch !== null) return Response.json({ matchedIds: await matchInventoryByUnitCode(organizationId, unitMatch) });
+      const gridStart = parseDate(url.searchParams.get("startsAt"));
+      const gridEnd = parseDate(url.searchParams.get("endsAt"));
+      const page = await listInventoryGrid({
+        organizationId,
+        cursor: url.searchParams.get("cursor"),
+        limit: readGridLimit(url.searchParams.get("limit")),
+        range: gridStart && gridEnd && gridEnd.getTime() >= gridStart.getTime() ? { start: gridStart, end: gridEnd } : null,
+      });
+      return Response.json({ ...page, inventory: page.inventory.map((row) => stripInventoryCosts(row, auth.context)) });
+    } catch (error) {
+      if (error instanceof GridCursorError) return jsonError(error.message, 400);
+      console.error("[inventory/grid] no se pudo leer", error);
+      return jsonError("No pudimos leer el inventario.", 500);
+    }
+  }
+
+  // Detalle de un producto para la ficha (rediseño E2): mismo payload completo, un solo ítem.
+  const detailId = url.searchParams.get("itemId");
+
   // Sin el binario de la foto (issue #109): la lista solo necesita la URL
   // efectiva. Con las unidades (issue #112) y el conteo de mantenimiento.
   const items = await db.inventoryItem.findMany({
-    where: { organizationId },
+    where: { organizationId, ...(detailId ? { id: detailId } : {}) },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { name: "asc" }],
     take: 300,
     omit: { imageData: true },
@@ -371,6 +397,7 @@ export async function GET(request: Request) {
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
   });
+  if (detailId && items.length === 0) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
   // `?vivas=1` (ficha y línea de tiempo): solo reservas sin liberar cuyo fin no
   // pasó, de la más próxima a la más lejana, para que el tope de 1000 no deje
   // afuera las próximas. Sin el parámetro el comportamiento no cambia.
@@ -411,6 +438,8 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const rentalSettings = range ? await loadRentalSettings(organizationId) : null;
+  // La ficha pide el estado visual con los mismos agregados que la pantalla.
+  const extras = detailId ? await loadGridExtras({ organizationId, itemIds: items.map((item) => item.id), assignments, now }) : null;
   const inventory = items.map((item) => {
     // La URL efectiva (issue #109): la manual manda; si no, la foto subida.
     const { imageMime: _imageMime, _count, ...row } = item;
@@ -433,6 +462,15 @@ export async function GET(request: Request) {
         availableNow: blocked ? 0 : Math.max(0, usable - committedNow),
         overcommittedNow: committedNow > usable,
         maintenanceNow,
+        ...(extras
+          ? {
+              unitsByStatus: extras.get(item.id)?.unitsByStatus,
+              holdByKind: extras.get(item.id)?.holdByKind,
+              nextCommittedAt: extras.get(item.id)?.nextCommittedAt,
+              overduePending: extras.get(item.id)?.overduePending,
+              overdueTruncated: extras.get(item.id)?.overdueTruncated,
+            }
+          : {}),
         range: rangeAvailability
           ? {
               startsAt: rangeAvailability.startsAt,
@@ -454,7 +492,7 @@ export async function GET(request: Request) {
     range && definitions.size > 0
       ? await comboCapacitiesForRange({ organizationId, comboIds: [...definitions.keys()], startsAt: range.start, endsAt: range.end })
       : null;
-  return Response.json({ inventory: withComboAvailability(inventory, definitions, rangeCapacities) });
+  return Response.json({ inventory: withComboAvailability(inventory, definitions, rangeCapacities).map((row) => stripInventoryCosts(row, auth.context)) });
 }
 
 export async function POST(request: Request) {

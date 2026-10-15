@@ -8,7 +8,7 @@ import { FIELD_LIMITS, FIELD_MESSAGES, inventorySkuError, normalizeInventorySku,
 import { packageSummary, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { formatMoney } from "@/lib/admin-format";
 import { PriceTiersEditor, readTierRows, tierRowsFrom, type TierRow } from "./PriceTiersEditor";
-import type { AdminInventoryItemRow } from "@/lib/admin-types";
+import type { AdminInventoryListed, AdminInventoryRow } from "@/lib/admin-types";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
 import { Combobox, MoneyField, NumberField, TextField } from "../AdminFields";
 
@@ -26,8 +26,8 @@ export function ComboDialog({
   onClose,
   onSaved,
 }: {
-  combo: AdminInventoryItemRow | null;
-  inventory: AdminInventoryItemRow[];
+  combo: AdminInventoryRow | null;
+  inventory: AdminInventoryListed[];
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
