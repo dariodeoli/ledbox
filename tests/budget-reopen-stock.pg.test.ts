@@ -14,7 +14,11 @@ test("reabrir presupuesto vuelve a comprometer stock sin sobreventa", { skip: !p
   const id = randomUUID();
   const organization = await db.organization.create({ data: { id, name: "QA reapertura 132", slug: `reopen132-${id}` } });
   const client = await db.client.create({ data: { id: randomUUID(), organizationId: id, name: "Cliente ficticio" } });
-  const context = { ...portalAuditContext(id, "QA local"), organization, role: "FINANCE", demo: false, sandbox: false } as AdminContext;
+  const context: AdminContext = {
+    ...portalAuditContext(id, "QA local"), organization, role: "FINANCE", demo: false, sandbox: false,
+    user: { ...portalAuditContext(id, "QA local").user, role: "FINANCE" },
+    session: { id: "local-qa132", userId: "portal", activeOrganizationId: id, expiresAt: new Date("2036-01-01"), revokedAt: null, lockedAt: null, lockAttempts: 0, lockReason: null, createdAt: new Date() },
+  };
   const start = new Date("2035-02-01T10:00:00Z"), end = new Date("2035-02-02T10:00:00Z");
   async function fixture(status: "LOST" | "CANCELLED", stock = 1) {
     const inventory = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: id, name: "Proyector único", category: "QA", quantity: stock } });
