@@ -728,6 +728,12 @@ export function PortalBudgetView({
             <dd>{howToPay}</dd>
           </div>
         ) : null}
+        {budget.paymentPlan.terms ? (
+          <div>
+            <dt>Condiciones de pago</dt>
+            <dd className="portal-summary-terms">{budget.paymentPlan.terms}</dd>
+          </div>
+        ) : null}
         {budget.event?.startsAt ? (
           <div>
             <dt>Fecha del evento</dt>
@@ -1617,11 +1623,6 @@ export function PortalBudgetView({
                                 {current.excluded ? <small className="portal-item-note">Retirado / no incluido</small> : null}
                                 {item.notes ? <details><summary>Detalles</summary><p className="portal-item-note">{item.notes}</p></details> : null}
                                 {shown.package && !current.excluded ? <PortalPackageNote summary={shown.package} quantity={current.quantity} /> : null}
-                                <div className="budget-client-quantity">
-                                  <span>Cantidad</span>
-                                  {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
-                                  {item.usesDays || item.days > 1 ? <><span>Días</span>{canEdit && !current.excluded ? <Stepper value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onType={(text) => setDraftField(item.id, "days", text)} /> : <span>{formatNumber(item.days)}</span>}</> : null}
-                                </div>
                                 {changed ? (
                                   <small className="portal-item-note">
                                     Antes: {formatNumber(item.quantity)} × {formatNumber(item.days)} d · subtotal{" "}
@@ -1630,6 +1631,12 @@ export function PortalBudgetView({
                                 ) : null}
                               </span>
                             </span>
+                          <div className="budget-client-quantity">
+                            <span className="portal-quantity-group"><span className="portal-quantity-label">Cantidad</span>
+                            {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
+                            </span>
+                            {item.usesDays || item.days > 1 ? <span className="portal-quantity-group"><span className="portal-quantity-label">Días</span>{canEdit && !current.excluded ? <Stepper value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onType={(text) => setDraftField(item.id, "days", text)} /> : <span>{formatNumber(item.days)}</span>}</span> : null}
+                          </div>
                           </td>
                           <td className="portal-num" data-label="Precio unitario">{formatMoney(shown.unitPrice)}{shown.periodTotal ? <small className="portal-item-note">total por {formatNumber(current.days)} {current.days === 1 ? "día" : "días"}</small> : null}</td>
                           <td className={`portal-num${canEdit ? " portal-item-subtotal" : ""}`} data-label="Total">{formatMoney(shown.total)}</td>

@@ -148,12 +148,12 @@ export function portalTransferDestination(details: PortalBudgetPaymentDetails | 
 export function portalHowToPay(plan: Pick<PortalBudgetPaymentPlan, "advanceAmount" | "installments">, total: number): string | null {
   if (!(total > 0)) return null;
   const advance = Math.max(0, Math.round(plan.advanceAmount || 0));
-  if (advance > 0 && advance >= total) return `Pago total de ${formatMoney(total)} para reservar`;
+  if (advance > 0 && advance >= total) return `Pago total de ${formatMoney(total)} con la aprobación`;
   if (advance > 0) {
     const exact = (advance * 100) / total;
     const whole = Math.round(exact);
     const head = Math.abs(exact - whole) < 0.05 ? `Seña ${whole} %: ${formatMoney(advance)}` : `Seña de ${formatMoney(advance)}`;
-    return `${head} para reservar · saldo antes de la entrega`;
+    return `${head} con la aprobación · saldo según el plan de pagos`;
   }
   if (plan.installments.length > 1) return `${plan.installments.length} pagos acordados · el primero de ${formatMoney(plan.installments[0].amount)}`;
   if (plan.installments.length === 1) return `${plan.installments[0].label}: ${formatMoney(plan.installments[0].amount)}`;
