@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { lockInventoryItems } from "@/lib/server/inventory-availability";
 import { INVENTORY_TAXONOMY_NAME_MAX, FIELD_MESSAGES, normalizeWarehouseCode, warehouseCodeValid } from "@/lib/field-rules";
 
 /**
@@ -164,6 +165,8 @@ export async function moveUnitsBetweenWarehouses(
     findUsableWarehouse(tx, organizationId, toWarehouseId),
   ]);
   if (!from || !to) return fail(404, "El depósito no existe en esta empresa.");
+  // Mismo lock que las confirmaciones de reserva: el movimiento no se cruza con una asignación en curso.
+  await lockInventoryItems(tx, organizationId, [inventoryId]);
   const units = await tx.inventoryUnit.findMany({
     where: { organizationId, inventoryId, warehouseId: fromWarehouseId, status: "AVAILABLE" },
     orderBy: { code: "asc" },
@@ -171,9 +174,18 @@ export async function moveUnitsBetweenWarehouses(
     select: { id: true },
   });
   if (units.length < options.quantity) return fail(409, `Solo hay ${units.length} unidad${units.length === 1 ? "" : "es"} disponible${units.length === 1 ? "" : "s"} en ese depósito.`);
-  await tx.inventoryUnit.updateMany({
-    where: { organizationId, id: { in: units.map((unit) => unit.id) } },
+  // El `where` repite estado y depósito de origen: si una unidad cambió entre la lectura y la escritura no se mueve.
+  const result = await tx.inventoryUnit.updateMany({
+    where: { organizationId, inventoryId, id: { in: units.map((unit) => unit.id) }, status: "AVAILABLE", warehouseId: fromWarehouseId },
     data: { warehouseId: to.id, ...(options.location !== undefined ? { location: options.location } : {}) },
   });
-  return { ok: true, moved: units.length };
+  if (result.count < options.quantity) throw new WarehouseMoveConflict(result.count);
+  return { ok: true, moved: result.count };
+}
+
+/** Se movieron menos unidades que las pedidas: la transacción entera se revierte. */
+export class WarehouseMoveConflict extends Error {
+  constructor(readonly moved: number) {
+    super(`Solo se pudieron mover ${moved} unidad${moved === 1 ? "" : "es"}: cambiaron mientras se movían.`);
+  }
 }

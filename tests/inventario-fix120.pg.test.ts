@@ -61,6 +61,25 @@ test("Inventario E1 (notas de QA 2.1.120) en PostgreSQL", { skip: !process.env.T
       void d1;
     });
 
+    await t.test("2) mover devuelve las unidades realmente movidas y dos movimientos a la vez no se pisan", async () => {
+      const org = await newOrg();
+      const d1 = await addWarehouse(org, "D1", true);
+      const d2 = await addWarehouse(org, "D2");
+      const d3 = await addWarehouse(org, "D3");
+      const item = await addItem(org, "Silla", "Sillas");
+      await addUnit(org, item.id, "S-1", d1.id);
+      await addUnit(org, item.id, "S-2", d1.id, "MAINTENANCE");
+      const attempt = (to: string) =>
+        db.$transaction((tx) => warehouses.moveUnitsBetweenWarehouses(tx, { organizationId: org, inventoryId: item.id, fromWarehouseId: d1.id, toWarehouseId: to, quantity: 1 }));
+      const results = await Promise.all([attempt(d2.id), attempt(d3.id)]);
+      const wins = results.filter((r) => r.ok);
+      assert.equal(wins.length, 1, "hay una sola unidad disponible: gana un solo movimiento");
+      assert.equal(wins[0]?.ok && wins[0].moved, 1);
+      assert.equal(results.find((r) => !r.ok)?.ok, false);
+      // La unidad en mantenimiento no se movió.
+      assert.equal((await db.inventoryUnit.findFirstOrThrow({ where: { organizationId: org, code: "S-2" } })).warehouseId, d1.id);
+      assert.equal(await db.inventoryUnit.count({ where: { organizationId: org, warehouseId: { in: [d2.id, d3.id] } } }), 1);
+    });
   } finally {
     await db.organization.deleteMany({ where: { id: { in: orgs } } });
     await db.$disconnect();

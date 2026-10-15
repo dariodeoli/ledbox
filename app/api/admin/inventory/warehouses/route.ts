@@ -8,6 +8,7 @@ import {
   deleteWarehouse,
   listWarehouses,
   moveUnitsBetweenWarehouses,
+  WarehouseMoveConflict,
   setDefaultWarehouse,
   updateWarehouse,
 } from "@/lib/server/inventory-warehouses";
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
       // Mover no cambia cuántas unidades hay; se sincroniza igual como red de seguridad.
       if (moved.ok) await syncInventoryQuantity(tx, item.id);
       return moved;
+    }).catch((error: unknown) => {
+      if (error instanceof WarehouseMoveConflict) return { ok: false as const, status: 409 as const, error: error.message };
+      throw error;
     });
     if (!result.ok) return jsonError(result.error, result.status);
     await recordAudit({ context: auth.context, action: "update", entity: "InventoryItem", entityId: item.id, summary: `Movió ${result.moved} unidad${result.moved === 1 ? "" : "es"} de «${item.name}» entre depósitos`, detail: { fields: { unidades: result.moved, desde: body.fromWarehouseId as string, hasta: body.toWarehouseId as string } } });
