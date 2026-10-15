@@ -1,5 +1,4 @@
 import { FIELD_LIMITS } from "@/lib/field-rules";
-import { withDeletedLabel } from "@/lib/deleted-label";
 import { budgetPriceGate } from "@/lib/server/budget-price-gate";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -21,6 +20,7 @@ import {
   movementSourceSnapshot,
 } from "@/lib/server/finance-snapshots";
 import { clientLabel, dayKeyOf, dayStart, isValidDayKey, shiftDayKey } from "@/lib/server/notifications";
+import { readFinanceListing } from "@/lib/server/finance-listing";
 import { runDailyPaymentReminders } from "@/lib/server/reminders";
 import { runDailySignatureReminders } from "@/lib/server/signature/reminders";
 
@@ -110,7 +110,7 @@ function readPayment(tx: Prisma.TransactionClient, id: string) {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
@@ -132,39 +132,7 @@ export async function GET() {
       }
     });
   }
-  const [clientPayments, supplierJobs] = await Promise.all([
-    db.clientPayment.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-      // Recorte por referencia (issue #63): el cobro embebe solo lo que la lista
-      // y el detalle dibujan (`AdminPaymentRow`): nada de la ficha del cliente
-      // —notas, RUC, dirección— ni de la evidencia interna del presupuesto
-      // (`approvalIp`, `approvalUserAgent`), que no tienen por qué viajar.
-      include: {
-        client: { select: { id: true, name: true, company: true, type: true, email: true, phone: true, deletedAt: true } },
-        budget: { select: { id: true, title: true, publicToken: true } },
-        // Historial de recordatorios del cobro (issue #19) para el "enviado hoy"
-        // de la fila y el detalle del cobro.
-        reminders: { orderBy: { sentAt: "desc" }, take: 20 },
-        // Cuenta de tesorería del cobro (issue #27).
-        treasuryAccount: { select: treasuryAccountSelect },
-      },
-    }),
-    db.supplierJob.findMany({
-      where: { organizationId },
-      orderBy: { dueAt: "asc" },
-      take: 200,
-      include: {
-        supplier: { select: { id: true, name: true, phone: true, category: true, deletedAt: true } },
-        event: { select: { id: true, name: true, startsAt: true, status: true } },
-      },
-    }),
-  ]);
-  return Response.json({
-    clientPayments: clientPayments.map((payment) => ({ ...payment, client: withDeletedLabel(payment.client) })),
-    supplierJobs: supplierJobs.map((job) => ({ ...job, supplier: withDeletedLabel(job.supplier) })),
-  });
+  return Response.json(await readFinanceListing(organizationId, new URL(request.url).searchParams));
 }
 
 export async function POST(request: Request) {

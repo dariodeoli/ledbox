@@ -3,7 +3,7 @@
 import { FIELD_LIMITS } from "@/lib/field-rules";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   countdownTone,
@@ -41,16 +41,14 @@ import { csvDay, csvFilename, csvStamp, downloadCsv, type CsvBlock } from "@/lib
 import { bankMark, bankSuggestions } from "@/lib/bank-mark";
 import { BankLogo } from "../BankLogo";
 import { canWriteFinance, matchesQuery } from "@/lib/admin-policy";
-import { AGING_LABELS, agingKeyOf, lateDaysOf, parseAgingParam } from "@/lib/resumen-board";
+import { AGING_LABELS, parseAgingParam } from "@/lib/resumen-board";
 import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
 import {
   accountsForPaymentMethod,
   COLLECTED_PAYMENT_METHODS,
-  receivedAmount,
   EXPENSE_CATEGORIES,
   expectedPaymentNeedsAction,
   groupProofsByBudget,
-  isCollectedPayment,
   PAYMENT_METHODS,
   PENDING_PAYMENT_METHOD,
   supplierJobBalance,
@@ -60,6 +58,7 @@ import {
   type AdminExpectedPaymentRow,
   type AdminExpectedPaymentSummary,
   type AdminExpenseRow,
+  type AdminFinancePaymentPage,
   type AdminIconName,
   type AdminPaymentReminder,
   type AdminPaymentRow,
@@ -1185,34 +1184,47 @@ function ExpectedTimelineDialog({ row, onClose }: { row: AdminExpectedPaymentRow
   );
 }
 
+function FinancePaymentPagination({ page, visible, busy, received = false, onChange }: { page?: AdminFinancePaymentPage; visible: number; busy: boolean; received?: boolean; onChange: (page: number) => void }) {
+  if (!page) return null;
+  return <AdminToolbar>
+    <span className="admin-muted" role="status">{formatNumber(visible)} de {formatNumber(page.total)} · {received ? "cobrado" : "por cobrar"} de todos los resultados: {formatMoney(page.amount)} · página {page.page} de {page.pages}</span>
+    <AdminButton disabled={busy || page.page <= 1} onClick={() => onChange(page.page - 1)} aria-label={`Página anterior de ${received ? "historial" : "pendientes"}`}>Anterior</AdminButton>
+    <AdminButton disabled={busy || page.page >= page.pages} onClick={() => onChange(page.page + 1)} aria-label={`Página siguiente de ${received ? "historial" : "pendientes"}`}>Siguiente</AdminButton>
+  </AdminToolbar>;
+}
+
 export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanzasSection } = {}) {
   const { role } = useAdminSession();
-  const finance = useAdminResource("/api/admin/finance", (payload) => ({
-    payments: payload.clientPayments ?? [],
-    jobs: payload.supplierJobs ?? [],
-  }));
-
   const [query, setQuery] = useState("");
-  // Enlaces del Resumen: `?vence=al-dia|1-30|31-60|60-mas` filtra «Por cobrar» por antigüedad.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [paymentPages, setPaymentPages] = useState({ filter: "", pending: 1, settled: 1 });
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const venceFilter = parseAgingParam(searchParams.get("vence"));
-  // `?cliente=<id>` (ficha del cliente → Cobrar): se valida contra los cobros cargados de la empresa activa.
   const clienteParam = searchParams.get("cliente");
   const presupuestoParam = searchParams.get("presupuesto");
-  const clienteFilter = useMemo(
-    () => (clienteParam ? finance.data?.payments.find((payment) => payment.client.id === clienteParam)?.client ?? null : null),
-    [finance.data, clienteParam],
-  );
-  // Un id que no aparece en los datos de la empresa activa se ignora y se limpia de la URL.
   useEffect(() => {
-    if (!clienteParam || finance.loading || finance.error || clienteFilter) return;
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("cliente");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }, [clienteParam, clienteFilter, finance.loading, finance.error, searchParams, router, pathname]);
+    const timer = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const paymentFilter = JSON.stringify([debouncedQuery, clienteParam, searchParams.get("vence")]);
+  useEffect(() => { setPaymentPages({ filter: paymentFilter, pending: 1, settled: 1 }); }, [paymentFilter]);
+  // Reiniciar ambas páginas en el mismo render en que cambia el filtro.
+  const pendingPage = paymentPages.filter === paymentFilter ? paymentPages.pending : 1;
+  const settledPage = paymentPages.filter === paymentFilter ? paymentPages.settled : 1;
+  const collectionParams = new URLSearchParams({ view: "collections", q: debouncedQuery, pendingPage: String(pendingPage), settledPage: String(settledPage) });
+  if (clienteParam) collectionParams.set("clientId", clienteParam);
+  if (venceFilter) collectionParams.set("vence", searchParams.get("vence")!);
+  const finance = useAdminResource(section === "por-cobrar" ? `/api/admin/finance?${collectionParams}` : "/api/admin/finance", (payload) => ({
+    payments: payload.clientPayments ?? [],
+    jobs: payload.supplierJobs ?? [],
+    summary: payload.financeSummary,
+    pagination: payload.paymentsPagination,
+    filterClient: payload.filterClient ?? null,
+  }));
+  const clienteFilter = finance.data?.filterClient ?? null;
+  const changePaymentPage = (kind: "pending" | "settled", page: number) => setPaymentPages({
+    filter: paymentFilter, pending: pendingPage, settled: settledPage, [kind]: page,
+  });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PaymentForm>(EMPTY_PAYMENT_FORM);
   const [busy, setBusy] = useState(false);
@@ -1432,46 +1444,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     [budgets.data, form.clientId],
   );
 
-  const pendingPayments = useMemo(
-    () =>
-      payments
-        .filter((payment) => payment.status === "PENDING")
-        .filter((payment) => !venceFilter || agingKeyOf(lateDaysOf(payment.dueAt, new Date())) === venceFilter)
-        .filter((payment) => !clienteFilter || payment.client.id === clienteFilter.id)
-        .filter((payment) =>
-          matchesQuery(query, [
-            payment.client.company,
-            payment.client.name,
-            payment.budget?.title,
-            payment.method,
-            payment.invoiceNumber,
-            payment.reference,
-          ]),
-        )
-        .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999")),
-    [payments, query, venceFilter, clienteFilter],
-  );
-
-  const settledPayments = useMemo(
-    () =>
-      payments
-        .filter((payment) => payment.status !== "PENDING")
-        .filter((payment) =>
-          matchesQuery(query, [
-            payment.client.company,
-            payment.client.name,
-            payment.budget?.title,
-            payment.method,
-            payment.reference,
-            payment.invoiceNumber,
-            paymentStatusLabel(payment.status),
-          ]),
-        )
-        .sort((a, b) =>
-          (b.collectedAt ?? b.paidAt ?? "").localeCompare(a.collectedAt ?? a.paidAt ?? ""),
-        ),
-    [payments, query],
-  );
+  // El API filtra y ordena antes de paginar; aquí sólo se separan las dos listas.
+  const pendingPayments = useMemo(() => payments.filter(payment => payment.status === "PENDING"), [payments]);
+  const settledPayments = useMemo(() => payments.filter(payment => payment.status !== "PENDING"), [payments]);
 
   const filteredJobs = useMemo(
     () => jobs.filter((job) => matchesQuery(query, [job.supplier.name, job.event?.name, job.description, job.status])),
@@ -1501,16 +1476,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     [expectedRows, query, presupuestoParam],
   );
 
-  const totals = useMemo(() => {
-    const collected = receivedAmount(payments);
-    const collectedCount = payments.filter(isCollectedPayment).length;
-    const pending = payments.filter((payment) => payment.status === "PENDING");
-    const pendingTotal = pending.reduce((sum, payment) => sum + payment.amount, 0);
-    const overdue = pending.filter((payment) => countdownTone(payment.dueAt) === "danger").length;
-    const advances = jobs.reduce((sum, job) => sum + job.advance, 0);
-    const payable = jobs.reduce((sum, job) => sum + supplierJobBalance(job), 0);
-    return { collected, collectedCount, pendingTotal, pendingCount: pending.length, overdue, advances, payable };
-  }, [payments, jobs]);
+  const totals = finance.data?.summary ?? { collected: 0, collectedCount: 0, pendingTotal: 0, pendingCount: 0, overdue: 0, advances: 0, payable: 0, jobsCount: 0 };
 
   /**
    * Resumen (auditoría UX, issue #140): una tarjeta por sección con el dato que
@@ -1567,8 +1533,8 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         title: "Proveedores",
         subtitle: "Cuentas por pagar: saldo, anticipos y pagos desde tesorería.",
         badges:
-          jobs.length > 0
-            ? [{ label: `${formatNumber(jobs.length)} trabajos`, tone: totals.payable > 0 ? "warn" : "ok" }]
+          totals.jobsCount > 0
+            ? [{ label: `${formatNumber(totals.jobsCount)} trabajos`, tone: totals.payable > 0 ? "warn" : "ok" }]
             : [{ label: "Sin trabajos", tone: "ok" }],
         fields: [
           { label: "Saldo por pagar", value: formatMoney(totals.payable) },
@@ -1658,7 +1624,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     const total = settledPayments.reduce((sum, payment) => sum + payment.amount, 0);
     const blocks: CsvBlock[] = [
       {
-        title: "Cobros de clientes",
+        title: "Cobros de clientes · página visible",
         header: ["Fecha", "Cliente", "Presupuesto", "Factura", "Método", "Referencia", "Estado", "Monto (PYG)"],
         rows: [
           ...settledPayments.map((payment) => [
@@ -1683,7 +1649,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
     const total = pendingPayments.reduce((sum, payment) => sum + payment.amount, 0);
     const blocks: CsvBlock[] = [
       {
-        title: "Cobros a plazo por cobrar",
+        title: "Cobros a plazo por cobrar · página visible",
         header: ["Vence", "Cliente", "Presupuesto", "Factura", "Emisión", "Método", "Cheque", "Cuándo", "Monto (PYG)"],
         rows: [
           ...pendingPayments.map((payment) => [
@@ -2410,7 +2376,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               state={kpiState(finance)}
               label="Saldo por pagar" icon="suppliers"
               value={formatMoney(totals.payable)}
-              note={`${formatNumber(jobs.length)} trabajos de proveedor`}
+              note={`${formatNumber(totals.jobsCount)} trabajos de proveedor`}
               tone="warn"
             />
           </AdminKpis>
@@ -2997,15 +2963,15 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
         <>
         <AdminPanel
           title="Por cobrar" icon="finance"
-          meta={pendingPayments.length > 0 ? `${formatNumber(pendingPayments.length)} cobros a plazo` : undefined}
+          meta={`${formatNumber(finance.data?.pagination?.pending.total ?? 0)} cobros a plazo · todos los resultados`}
           action={
             <AdminButton
               icon="download"
               onClick={exportPendingCollections}
-              title="Exportar los cobros a plazo filtrados a CSV"
-              aria-label="Exportar los cobros a plazo filtrados a CSV"
+              title="Exportar la página visible de cobros a plazo a CSV"
+              aria-label="Exportar la página visible de cobros a plazo a CSV"
             >
-              Exportar CSV
+              Exportar página CSV
             </AdminButton>
           }
         >
@@ -3017,6 +2983,9 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               </Link>
             </AdminNote>
           ) : null}
+          {clienteParam && !clienteFilter && !finance.loading ? <AdminNote>
+            No se encontró ese cliente en esta empresa. <Link className="admin-panel-link" href="/finanzas/por-cobrar">Quitar filtro</Link>
+          </AdminNote> : null}
           {venceFilter ? (
             <AdminNote>
               Filtrado por antigüedad: {AGING_LABELS[venceFilter].toLowerCase()}.{" "}
@@ -3348,19 +3317,20 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro a plazo coincide con la búsqueda." />
             ) : null}
           </AdminDataState>
+          <FinancePaymentPagination page={finance.data?.pagination?.pending} visible={pendingPayments.length} busy={finance.loading} onChange={page => changePaymentPage("pending", page)} />
         </AdminPanel>
 
         <AdminPanel
           title="Cobros de clientes" icon="finance"
-          meta={`${formatNumber(settledPayments.length)} movimientos`}
+          meta={`${formatNumber(finance.data?.pagination?.settled.total ?? 0)} movimientos · todos los resultados`}
           action={
             <AdminButton
               icon="download"
               onClick={exportCollections}
-              title="Exportar los cobros filtrados a CSV"
-              aria-label="Exportar los cobros filtrados a CSV"
+              title="Exportar la página visible de cobros a CSV"
+              aria-label="Exportar la página visible de cobros a CSV"
             >
-              Exportar CSV
+              Exportar página CSV
             </AdminButton>
           }
         >
@@ -3477,6 +3447,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
               <AdminEmpty icon="search" title="Sin resultados" hint="Ningún cobro coincide con la búsqueda." />
             ) : null}
           </AdminDataState>
+          <FinancePaymentPagination received page={finance.data?.pagination?.settled} visible={settledPayments.length} busy={finance.loading} onChange={page => changePaymentPage("settled", page)} />
         </AdminPanel>
         </>
       ) : null}

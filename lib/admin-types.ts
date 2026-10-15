@@ -696,6 +696,12 @@ export type AdminPaymentRow = AdminPayment & {
   treasuryAccount?: AdminTreasuryAccountRef | null;
 };
 
+export type AdminFinanceSummary = {
+  collected: number; collectedCount: number; pendingTotal: number; pendingCount: number;
+  overdue: number; advances: number; payable: number; jobsCount: number;
+};
+export type AdminFinancePaymentPage = { page: number; pageSize: number; total: number; amount: number; pages: number };
+
 // ── Ficha 360 del cliente (issue #34) ───────────────────────────────────────
 // Las métricas se derivan de los datos reales del cliente en la empresa activa
 // (presupuestos, cobros y eventos); ninguna se guarda en un campo nuevo.
@@ -2846,6 +2852,9 @@ export type AdminApiResponse = {
   rentalDefaults?: { depositPercent: number | null; securityDepositDefault: number | null; securityDepositMode?: "NONE" | "OPTIONAL" | "ALWAYS"; securityDepositCalc?: "FIXED" | "PERCENT" | "PER_PRODUCT"; securityDepositPercent?: number | null };
   proofs?: AdminBudgetPaymentProofRow[];
   clientPayments?: AdminPaymentRow[];
+  financeSummary?: AdminFinanceSummary;
+  paymentsPagination?: { pending: AdminFinancePaymentPage; settled: AdminFinancePaymentPage };
+  filterClient?: Pick<AdminClientRef, "id" | "name" | "company"> | null;
   /** Recordatorio recién enviado/registrado (respuesta de `/api/admin/reminders`). */
   reminder?: AdminPaymentReminder | null;
   alreadySentToday?: boolean;

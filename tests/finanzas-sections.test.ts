@@ -79,10 +79,13 @@ test("pantalla chica: las listas de Finanzas pasan a tarjetas", () => {
   assert.ok(grids >= tables, `tablas sin tarjetas: ${tables} tablas, ${grids} grillas`);
 });
 
-test("Por cobrar acepta ?cliente=<id>, lo valida contra los cobros cargados y la ficha lo envía", () => {
+test("Por cobrar acepta ?cliente=<id>, lo valida en servidor aunque quede fuera de la página y la ficha lo envía", () => {
   assert.match(moduleSource, /searchParams\.get\("cliente"\)/);
-  assert.match(moduleSource, /payments\.find\(\(payment\) => payment\.client\.id === clienteParam\)/, "valida contra los datos de la empresa activa");
-  assert.match(moduleSource, /next\.delete\("cliente"\)/, "un id desconocido se limpia de la URL");
+  assert.match(moduleSource, /collectionParams\.set\("clientId", clienteParam\)/, "el filtro llega al servidor antes de paginar");
+  assert.match(moduleSource, /filterClient: payload\.filterClient/, "la identidad validada viene del servidor");
+  assert.doesNotMatch(moduleSource, /payments\.find\(\(payment\) => payment\.client\.id === clienteParam\)/, "no descarta clientes fuera de la página visible");
+  const listing = readFileSync(join(root, "lib/server/finance-listing.ts"), "utf8");
+  assert.match(listing, /FROM "Client" WHERE id = \$\{clientId\} AND "organizationId" = \$\{organizationId\}/, "la identidad del filtro se valida contra su empresa");
   assert.match(moduleSource, /Filtrado por \{clienteFilter\.company \|\| clienteFilter\.name\} ·/);
   assert.match(moduleSource, /Quitar filtro/);
   const ficha = readFileSync(join(root, "components/admin/modules/ClienteFichaModule.tsx"), "utf8");
