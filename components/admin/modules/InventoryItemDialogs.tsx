@@ -92,6 +92,8 @@ const EMPTY_EDIT = {
   dailyCost: "",
   notes: "",
   publicDescription: "",
+  capacity: "",
+  dimensions: "",
   catalogAudience: "HIDDEN" as CatalogAudience,
   imageUrl: "",
   /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
@@ -124,6 +126,8 @@ function editFormFromItem(item: InventoryEditable): InventoryEditForm {
     dailyCost: (item.dailyCost ?? 0) > 0 ? String(item.dailyCost) : "",
     notes: item.notes ?? "",
     publicDescription: item.publicDescription ?? "",
+    capacity: item.capacity ? String(item.capacity) : "",
+    dimensions: item.dimensions ?? "",
     catalogAudience: effectiveAudience(item),
     bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
     bufferAfterHours: bufferHoursText(item.bufferAfterMin),
@@ -665,6 +669,8 @@ export function InventoryEditDialog({
       dailyCost: dailyCost ?? 0,
       notes: editForm.notes,
       publicDescription: editForm.publicDescription,
+      capacity: editForm.capacity.trim() ? Number(editForm.capacity) : null,
+      dimensions: editForm.dimensions,
       catalogAudience: editForm.catalogAudience,
       imageUrl: image,
       billingUnit: editForm.billingUnit,
@@ -874,6 +880,23 @@ export function InventoryEditDialog({
             onSelectFile={(file) => void selectEditPhoto(file)}
             onClearPhoto={clearEditPhoto}
             error={editPhotoError}
+            disabled={editBusy}
+          />
+          <NumberField
+            label="Capacidad (personas)"
+            value={editForm.capacity}
+            onChange={(value) => setEditForm({ ...editForm, capacity: value.replace(/\D/g, "").slice(0, 4) })}
+            maxLength={4}
+            hint="Ej.: 8. La tienda la destaca para distinguir juegos parecidos."
+            disabled={editBusy}
+          />
+          <TextField
+            label="Medidas"
+            optional
+            value={editForm.dimensions}
+            onChange={(value) => setEditForm({ ...editForm, dimensions: value })}
+            maxLength={60}
+            hint="Ej.: Ø 1,40 m o 1,60 × 0,75 m."
             disabled={editBusy}
           />
           <TextAreaField

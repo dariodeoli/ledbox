@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { adminApiGet, adminSend } from "@/lib/admin-api";
-import { formatNumber } from "@/lib/admin-format";
-import type { AdminLeadItem, AdminLeadQuote } from "@/lib/admin-types";
+import { formatMoney, formatNumber } from "@/lib/admin-format";
+import type { AdminLeadItem, AdminLeadQuote, AdminPriceRequest } from "@/lib/admin-types";
 import { QUOTE_ITEM_STATE_LABEL, isQuoteItemState, quoteItemActive } from "@/lib/catalog-public";
-import { NumberField, SelectField, TextAreaField } from "../AdminFields";
+import { MoneyField, NumberField, SelectField, TextAreaField } from "../AdminFields";
 import { AdminButton, AdminDialog, AdminNote } from "../AdminUI";
 
 /**
@@ -247,5 +247,99 @@ function ModifyLine({
         ) : null}
       </div>
     </div>
+  );
+}
+
+// ── Pedido de mejor precio ───────────────────────────────────────────────────
+
+type PriceAction = "accept" | "counter" | "reject";
+
+/**
+ * Responder al pedido de mejor precio del cliente: aceptar el monto que pidió, contraofertar con un
+ * monto propio o rechazar con motivo. Aceptar o contraofertar envía la propuesta (el cliente aprueba
+ * la versión final desde su seguimiento); el monto pedido nunca se aplica solo. El servidor valida
+ * todo y scopea a la empresa: un pedido ajeno responde 404.
+ */
+export function PriceRequestDialog({ quote, request, onClose, onDone }: { quote: AdminLeadQuote; request: AdminPriceRequest; onClose: () => void; onDone: (message: string) => void }) {
+  const canAccept = Boolean(request.desiredAmount);
+  const [action, setAction] = useState<PriceAction>(canAccept ? "accept" : "counter");
+  const [offered, setOffered] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const total = quote.referenceTotal;
+  const offeredNumber = Number(offered);
+  const valid =
+    action === "reject" ? note.trim().length >= 3 : action === "accept" ? canAccept : Number.isInteger(offeredNumber) && offeredNumber > 0 && (!total || offeredNumber <= total);
+
+  async function submit() {
+    if (!valid || busy) return;
+    setBusy(true);
+    setError("");
+    const body = { action, ...(action === "counter" ? { offeredAmount: offeredNumber } : {}), note: note.trim() || undefined };
+    const result = await adminSend<{ mail?: MailResult }>(`/api/admin/quote-requests/${encodeURIComponent(quote.id)}/price-request/${encodeURIComponent(request.id)}`, body, "POST");
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    onDone(
+      action === "reject"
+        ? "Rechazamos el pedido de precio. El cliente ve tu motivo en su seguimiento; avisale por WhatsApp si querés."
+        : `Enviamos la propuesta con el precio al cliente. Queda en «Propuesta enviada» hasta que apruebe la versión final. No le mandamos correo: compartile el link de su pedido.`,
+    );
+  }
+
+  return (
+    <AdminDialog
+      title="Pedido de mejor precio"
+      icon="edit"
+      size="md"
+      description="El monto que pide el cliente no se aplica solo: vos decidís."
+      error={error}
+      dirty={(note.trim().length > 0 || offered.length > 0) && !busy}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      footer={({ requestClose }) => (
+        <>
+          <AdminButton icon="close" type="button" onClick={requestClose} disabled={busy}>Cancelar</AdminButton>
+          <AdminButton type="button" variant="primary" icon="check" busy={busy} busyLabel="Enviando…" disabled={!valid} onClick={() => void submit()}>
+            {action === "reject" ? "Rechazar el pedido de precio" : action === "accept" ? "Aceptar y enviar propuesta" : "Enviar contraoferta"}
+          </AdminButton>
+        </>
+      )}
+    >
+      <div className="admin-quote-modify" data-testid="price-request-dialog">
+        <p><strong>Comentario del cliente:</strong> {request.comment}</p>
+        <p className="admin-muted">
+          Total actual del pedido: {total ? formatMoney(total) : "sin total"} · Monto que pidió: {request.desiredAmount ? formatMoney(request.desiredAmount) : "no indicó"}
+        </p>
+        <SelectField
+          label="Qué hacer"
+          value={action}
+          onChange={(value) => setAction(value as PriceAction)}
+          options={[
+            ...(canAccept ? [{ value: "accept", label: `Aceptar el monto que pidió (${formatMoney(request.desiredAmount ?? 0)})` }] : []),
+            { value: "counter", label: "Contraofertar con otro monto" },
+            { value: "reject", label: "Rechazar, con un motivo" },
+          ]}
+        />
+        {action === "counter" ? (
+          <MoneyField label="Tu oferta para el total del pedido" required value={offered} onChange={setOffered} hint={total ? `Hasta ${formatMoney(total)} (el total actual).` : undefined} error={total && offeredNumber > total ? "La oferta no puede superar el total actual del pedido." : null} />
+        ) : null}
+        <TextAreaField
+          label={action === "reject" ? "Motivo para el cliente" : "Mensaje para el cliente"}
+          required={action === "reject"}
+          optional={action !== "reject"}
+          value={note}
+          onChange={setNote}
+          maxLength={500}
+          rows={3}
+          counter
+          hint="Lo ve en su seguimiento. Sin datos internos."
+        />
+      </div>
+    </AdminDialog>
   );
 }

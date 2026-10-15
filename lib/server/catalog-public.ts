@@ -20,9 +20,11 @@ import {
 } from "@/lib/catalog-public";
 import { catalogAudienceWhere, type PriceList } from "@/lib/catalog-audience";
 import { appearanceView, type AppearanceView } from "@/lib/appearance";
+import { PRICE_REQUESTS_PER_ORDER, PRICE_REQUEST_ORDER_STATUSES, parsePriceRequest } from "@/lib/price-request";
+import { sortStorefrontItems } from "@/lib/storefront-order";
 import { profileHasData, type OrgProfile } from "@/lib/org-profile";
 import { storefrontTheme, type StorefrontTheme } from "@/lib/storefront-theme";
-import { resolveCatalogAccess, type ResolvedCatalogAccess } from "./catalog-access";
+import { catalogTokenHash, isCatalogTokenShape, resolveCatalogAccess, type ResolvedCatalogAccess } from "./catalog-access";
 import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { inventoryImageUrl } from "./inventory-images";
@@ -44,6 +46,7 @@ import { TIER_SELECT } from "./line-pricing";
 import type { AudiencePriceTier } from "@/lib/price-tiers";
 import { deliveryFee } from "@/lib/delivery-zones";
 import { coverUrl, loadOrgPresentation } from "./org-presentation";
+import { createPriceRequestInTx, loadPriceRequests, type PriceRequestView } from "./quote-price-request";
 
 /**
  * Catálogo público por empresa y preórdenes (alquileres fase 3).
@@ -68,6 +71,8 @@ export type PublicCatalogContext = {
   priceList: PriceList;
   /** Solo en el catálogo mayorista: el link y el cliente al que pertenece. */
   access: ResolvedCatalogAccess | null;
+  /** Solo en el enlace mágico del carrito de un visitante (`/tienda/<slug>/carrito/<token>`): su carrito guardado. */
+  visitorCartId?: string | null;
 };
 
 /** Empresa con tienda encendida; `null` si no existe, está inactiva o la apagó. */
@@ -117,6 +122,22 @@ export async function resolveAccessCatalog(slug: string, token: string): Promise
   return { ...store, priceList: "RETAIL", access };
 }
 
+/**
+ * Enlace mágico del carrito de un visitante (`/tienda/<slug>/carrito/<token>`): abre la tienda pública
+ * (cliente final) con su carrito guardado. Solo con la tienda abierta; token inexistente, vencido o de
+ * otra empresa: `null` (404).
+ */
+export async function resolveVisitorCartCatalog(slug: string, token: string): Promise<PublicCatalogContext | null> {
+  if (!isCatalogTokenShape(token)) return null;
+  const store = await resolveStore(slug);
+  if (!store || store.settings.catalogAccessMode !== "OPEN") return null;
+  const cart = await db.storeCart.findFirst({
+    where: { visitorTokenHash: catalogTokenHash(token), organizationId: store.organization.id, expiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+  return cart ? { ...store, priceList: "RETAIL", access: null, visitorCartId: cart.id } : null;
+}
+
 export type PublicStorefront = {
   name: string;
   slug: string;
@@ -164,6 +185,9 @@ export type PublicCatalogItem = {
   imageUrl: string | null;
   /** Descripción pública del ítem; `null` si no la cargaron. Nunca son las notas internas. */
   description: string | null;
+  /** Capacidad en personas y medidas que cargó la empresa; `null` si no los cargó. */
+  capacity: number | null;
+  dimensions: string | null;
   /** Precio por día de la lista del catálogo; `null` si la empresa no muestra precios. */
   price: CatalogPrice | null;
   /** Pista de disponibilidad para las fechas elegidas; `null` si no hay fechas. */
@@ -181,6 +205,8 @@ type CatalogRow = {
   category: string;
   sku: string | null;
   publicDescription: string | null;
+  capacity: number | null;
+  dimensions: string | null;
   imageUrl: string | null;
   imageMime: string | null;
   updatedAt: Date;
@@ -192,12 +218,14 @@ type CatalogRow = {
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
   incidentHold: number;
+  webSortOrder: number;
+  categoryRef: { sortOrder: number } | null;
   _count: { units: number };
 };
 
 /** Lectura mínima (sin `imageData` ni ningún costo): solo lo que el DTO necesita. */
-async function loadVisibleRows(organizationId: string, list: PriceList, ids?: readonly string[]): Promise<CatalogRow[]> {
-  return db.inventoryItem.findMany({
+export async function loadVisibleRows(organizationId: string, list: PriceList, ids?: readonly string[]): Promise<CatalogRow[]> {
+  const rows = await db.inventoryItem.findMany({
     where: { organizationId, ...catalogAudienceWhere(list), archivedAt: null, status: { not: "RETIRED" }, ...(ids ? { id: { in: [...ids] } } : {}) },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 500,
@@ -207,6 +235,8 @@ async function loadVisibleRows(organizationId: string, list: PriceList, ids?: re
       category: true,
       sku: true,
       publicDescription: true,
+      capacity: true,
+      dimensions: true,
       imageUrl: true,
       imageMime: true,
       updatedAt: true,
@@ -219,9 +249,14 @@ async function loadVisibleRows(organizationId: string, list: PriceList, ids?: re
       bufferBeforeMin: true,
       bufferAfterMin: true,
       incidentHold: true,
+      webSortOrder: true,
+      categoryRef: { select: { sortOrder: true } },
       _count: { select: MAINTENANCE_UNITS_SELECT },
     },
   });
+  // Orden que decide la empresa (Ajustes → Tienda): secciones por `InventoryCategory.sortOrder`,
+  // productos por `webSortOrder`; sin orden cargado, alfabético (`lib/storefront-order.ts`).
+  return sortStorefrontItems(rows.map((row) => ({ ...row, categorySort: row.categoryRef?.sortOrder ?? null }))).map(({ categorySort: _categorySort, ...row }) => row);
 }
 
 export type PublicRange = { fromKey: string; toKey: string; startsAt: Date; endsAt: Date; days: number };
@@ -237,7 +272,7 @@ export function parsePublicRange(fromKey: unknown, toKey: unknown, today: string
 }
 
 /** Pista de disponibilidad por artículo con el motor real (tiempos y retenciones incluidos). */
-async function hintsFor(organizationId: string, rows: readonly CatalogRow[], range: PublicRange): Promise<Map<string, AvailabilityHint>> {
+export async function hintsFor(organizationId: string, rows: readonly CatalogRow[], range: PublicRange): Promise<Map<string, AvailabilityHint>> {
   const settings = await db.organizationRentalSettings.findUnique({ where: { organizationId } });
   const assignments = rows.length
     ? await db.eventInventory.findMany({
@@ -278,6 +313,8 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     sku: row.sku,
     imageUrl: inventoryImageUrl(row),
     description: row.publicDescription?.trim() || null,
+    capacity: row.capacity,
+    dimensions: row.dimensions?.trim() || null,
     price: context.settings.publicShowPrices ? catalogPriceFor(row, context.priceList) : null,
     availability: hints?.get(row.id) ?? null,
     package: packages.get(row.id) ?? null,
@@ -328,6 +365,8 @@ export const preorderSchema = z.object({
   deliveryZoneId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
   // Estricto: `z.coerce.boolean()` convertía el texto "false" en true. Solo booleano o "true"/"false" explícitos.
   deliveryCoordinate: z.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")]).optional(),
+  /** «Pedir un mejor precio» al enviar el pedido: comentario y monto deseado opcional (nunca se aplica solo). */
+  priceRequest: z.object({ comment: z.string().max(1200), desiredAmount: z.union([z.number(), z.string().max(20)]).nullable().optional() }).optional(),
   idempotencyKey: z.string().trim().max(200).optional(),
   honeypot,
   website: honeypot,
@@ -429,11 +468,15 @@ export async function createPreorder(
     leadId = lead.id;
   }
 
+  const priceRequest = input.priceRequest ? parsePriceRequest(input.priceRequest, { total: subtotal }) : null;
+  if (priceRequest && !priceRequest.ok) return { ok: false, status: 400, error: priceRequest.error };
+
   const token = trackingToken();
   const respondBy = addBusinessHours(now, PREORDER_RESPONSE_HOURS);
+  const quoteRequestId = randomUUID();
   await tx.quoteRequest.create({
     data: {
-      id: randomUUID(),
+      id: quoteRequestId,
       organizationId,
       leadId,
       status: "NEW",
@@ -468,6 +511,8 @@ export async function createPreorder(
       },
     },
   });
+
+  if (priceRequest?.ok) await createPriceRequestInTx(tx, { organizationId, quoteRequestId, originalTotal: subtotal }, priceRequest.value);
 
   const trackingPath = `/pedido/${token}`;
   const message = preorderWhatsappMessage({
@@ -516,6 +561,10 @@ export type PublicOrderView = {
   decline: { reason: string | null; by: "COMPANY" | "CLIENT" | null } | null;
   /** Propuesta de la empresa: su nota y si el cliente ya la aprobó. */
   proposal: { note: string | null; sentAt: string | null; approvedAt: string | null } | null;
+  /** Pedidos de mejor precio del cliente y lo que respondió la empresa (más nuevo primero). */
+  priceRequests: PriceRequestView[];
+  /** ¿Todavía puede pedir un mejor precio? (pedido abierto, sin otro pedido de precio esperando y bajo el tope). */
+  canRequestPrice: boolean;
   items: Array<{
     name: string;
     quantity: number;
@@ -533,6 +582,8 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
   const quote = await db.quoteRequest.findUnique({
     where: { publicToken: token },
     select: {
+      id: true,
+      budget: { select: { id: true } },
       status: true,
       createdAt: true,
       respondBy: true,
@@ -557,6 +608,7 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     loadOrgPresentation(quote.organizationId),
   ]);
   if (!organization) return null;
+  const priceRequests = await loadPriceRequests(quote.id, quote.organizationId);
   return {
     status: quote.status,
     createdAt: quote.createdAt.toISOString(),
@@ -576,6 +628,12 @@ export async function loadPublicOrder(token: string): Promise<PublicOrderView | 
     },
     decline: quote.status === "DECLINED" ? { reason: quote.declineReason, by: quote.declinedBy === "CLIENT" ? "CLIENT" : quote.declinedBy === "COMPANY" ? "COMPANY" : null } : null,
     proposal: quote.proposedAt ? { note: quote.proposalNote, sentAt: quote.proposedAt.toISOString(), approvedAt: quote.proposalApprovedAt?.toISOString() ?? null } : null,
+    priceRequests,
+    canRequestPrice:
+      (PRICE_REQUEST_ORDER_STATUSES as readonly string[]).includes(quote.status) &&
+      !quote.budget &&
+      !priceRequests.some((entry) => entry.status === "OPEN") &&
+      priceRequests.length < PRICE_REQUESTS_PER_ORDER,
     items: quote.items.map((item) => ({
       name: item.productName,
       quantity: item.quantity,

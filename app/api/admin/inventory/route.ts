@@ -104,6 +104,8 @@ const INVENTORY_ITEM_FIELDS = [
   "replacementCost",
   "dailyCost",
   "notes",
+  "capacity",
+  "dimensions",
   "publicDescription",
   "visibleOnWeb",
   "catalogAudience",
@@ -127,6 +129,8 @@ type InventoryItemUpdate = Partial<{
   dailyCost: number;
   notes: string | null;
   publicDescription: string | null;
+  capacity: number | null;
+  dimensions: string | null;
   visibleOnWeb: boolean;
   catalogAudience: CatalogAudience;
   imageUrl: string | null;
@@ -193,6 +197,18 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
       return { ok: false, error: `La descripción para el catálogo no puede superar los ${FIELD_LIMITS.publicDescription} caracteres.` };
     }
     data.publicDescription = description || null;
+  }
+  // Capacidad (personas) y medidas: los datos que distinguen a dos productos parecidos en la tienda.
+  if (body.capacity !== undefined) {
+    const capacity = body.capacity === null || body.capacity === "" ? null : Number(body.capacity);
+    if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 9999)) return { ok: false, error: "La capacidad tiene que ser un entero de 1 a 9999 personas." };
+    data.capacity = capacity;
+  }
+  if (body.dimensions !== undefined) {
+    if (body.dimensions !== null && typeof body.dimensions !== "string") return { ok: false, error: "Las medidas no son válidas." };
+    const dimensions = (body.dimensions ?? "").trim().replace(/\s+/g, " ");
+    if (dimensions.length > 60) return { ok: false, error: "Las medidas no pueden superar los 60 caracteres." };
+    data.dimensions = dimensions || null;
   }
   // Alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos); `visibleOnWeb` queda sincronizado.
   const audience = readAudienceInput(body);
@@ -623,6 +639,8 @@ export async function POST(request: Request) {
         dailyCost: true,
         notes: true,
         publicDescription: true,
+        capacity: true,
+        dimensions: true,
         visibleOnWeb: true,
         catalogAudience: true,
         imageUrl: true,

@@ -20,7 +20,8 @@ import {
 import type { AdminLeadItem, AdminLeadRow } from "@/lib/admin-types";
 import { canWriteBudgets, canWriteClients, canWriteOperations, matchesQuery } from "@/lib/admin-policy";
 import { CONVERTIBLE_STATUSES, QUOTE_ITEM_STATE_LABEL, RESPONDABLE_STATUSES, isQuoteItemState, isQuoteRequestStatus, quoteItemActive, quoteRequestStatusLabel } from "@/lib/catalog-public";
-import type { AdminLeadQuote } from "@/lib/admin-types";
+import type { AdminLeadQuote, AdminPriceRequest } from "@/lib/admin-types";
+import { PRICE_REQUEST_LABEL, isPriceRequestStatus } from "@/lib/price-request";
 import { useTrashFlow } from "../TrashDialogs";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
@@ -49,7 +50,7 @@ import {
 } from "../AdminUI";
 import { CheckboxField, SearchField, SelectField, TextAreaField } from "../AdminFields";
 import { LeadQuickDialog } from "./LeadQuickForm";
-import { ModifyQuoteDialog, RejectQuoteDialog } from "./QuoteResponseDialogs";
+import { ModifyQuoteDialog, PriceRequestDialog, RejectQuoteDialog } from "./QuoteResponseDialogs";
 import { AdminIcon } from "../AdminIcons";
 import { leadArchiveBlockedReason } from "@/lib/trash-shared";
 import { adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
@@ -145,6 +146,7 @@ export function LeadsModule() {
   /** Pedido que se está rechazando con motivo o modificando (diálogos propios). */
   const [rejecting, setRejecting] = useState<AdminLeadQuote | null>(null);
   const [modifying, setModifying] = useState<AdminLeadQuote | null>(null);
+  const [pricing, setPricing] = useState<{ quote: AdminLeadQuote; request: AdminPriceRequest } | null>(null);
   const [detailError, setDetailError] = useState("");
   const [notice, setNotice] = useState("");
   const [boardError, setBoardError] = useState("");
@@ -746,6 +748,22 @@ export function LeadsModule() {
                         {quote.status === "APPROVED" ? (
                           <p className="admin-muted" data-testid="quote-approved">El cliente aprobó tu propuesta{quote.proposalApprovedAt ? ` el ${formatDateTime(quote.proposalApprovedAt)}` : ""}. Aceptala para armar el presupuesto y retener el stock.</p>
                         ) : null}
+                        {(quote.priceRequests ?? []).length > 0 ? (
+                          <div className="admin-detail-price" data-testid="quote-price-requests">
+                            {(quote.priceRequests ?? []).map((request) => (
+                              <p key={request.id}>
+                                <AdminBadge tone={request.status === "OPEN" ? "warn" : request.status === "REJECTED" ? "neutral" : "ok"}>{PRICE_REQUEST_LABEL[isPriceRequestStatus(request.status) ? request.status : "OPEN"]}</AdminBadge>{" "}
+                                <strong>Pide un mejor precio</strong>
+                                {request.desiredAmount ? ` (quiere pagar ${formatMoney(request.desiredAmount)}${request.originalTotal ? ` en vez de ${formatMoney(request.originalTotal)}` : ""})` : ""}: {request.comment}
+                                {request.offeredAmount ? <> · Ofreciste <strong>{formatMoney(request.offeredAmount)}</strong>{request.clientApprovedAt ? `; el cliente lo aprobó el ${formatDateTime(request.clientApprovedAt)}. Aplicá ese precio al armar el presupuesto.` : "; esperando que el cliente apruebe la versión final."}</> : null}
+                                {request.status === "REJECTED" && request.responseNote ? ` · Tu motivo: ${request.responseNote}` : ""}
+                                {request.status === "OPEN" && writable && !quote.budget && isQuoteRequestStatus(quote.status) && RESPONDABLE_STATUSES.includes(quote.status) ? (
+                                  <> <AdminButton type="button" icon="edit" disabled={Boolean(quoteBusy)} onClick={() => setPricing({ quote, request })}>Responder</AdminButton></>
+                                ) : null}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
                         {writable && !quote.budget && isQuoteRequestStatus(quote.status) && RESPONDABLE_STATUSES.includes(quote.status) ? (
                           <div className="admin-detail-actions">
                             <AdminButton type="button" icon="edit" disabled={Boolean(quoteBusy)} onClick={() => setModifying(quote)}>Modificar pedido</AdminButton>
@@ -939,6 +957,18 @@ export function LeadsModule() {
           onClose={() => setRejecting(null)}
           onDone={(message) => {
             setRejecting(null);
+            setNotice(message);
+            leads.reload();
+          }}
+        />
+      ) : null}
+      {pricing ? (
+        <PriceRequestDialog
+          quote={pricing.quote}
+          request={pricing.request}
+          onClose={() => setPricing(null)}
+          onDone={(message) => {
+            setPricing(null);
             setNotice(message);
             leads.reload();
           }}

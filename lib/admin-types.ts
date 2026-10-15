@@ -1480,6 +1480,20 @@ export type AdminLeadItem = {
   originalQuantity?: number | null;
 };
 
+/** Pedido de mejor precio del cliente dentro de un pedido del catálogo (OPEN, ACCEPTED, COUNTERED o REJECTED). */
+export type AdminPriceRequest = {
+  id: string;
+  status: string;
+  comment: string;
+  desiredAmount: number | null;
+  originalTotal: number | null;
+  offeredAmount: number | null;
+  responseNote: string | null;
+  createdAt: string;
+  respondedAt: string | null;
+  clientApprovedAt: string | null;
+};
+
 export type AdminLeadQuote = {
   id: string;
   referenceTotal: number | null;
@@ -1507,6 +1521,8 @@ export type AdminLeadQuote = {
   proposedAt?: string | null;
   proposalNote?: string | null;
   proposalApprovedAt?: string | null;
+  /** Pedidos de mejor precio del cliente (más nuevo primero). */
+  priceRequests?: AdminPriceRequest[];
 };
 
 export type AdminLeadRow = {
@@ -1709,6 +1725,9 @@ export type AdminInventoryRow = {
   catalogAudience: "HIDDEN" | "RETAIL" | "WHOLESALE" | "BOTH";
   /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
   publicDescription?: string | null;
+  /** Capacidad en personas y medidas (tienda web). */
+  capacity?: number | null;
+  dimensions?: string | null;
   quantity: number;
   /** Costos internos: el API los omite si el rol no tiene `inventory.costs` (VIEWER). */
   replacementCost?: number;

@@ -23,6 +23,7 @@ import {
   type InventorySubstitute,
 } from "./inventory-availability";
 import { catalogLineAmounts, loadPricedItems } from "./line-pricing";
+import { markPriceOfferApproved } from "./quote-price-request";
 import { sendMail, type MailActor } from "./mail";
 import { buildOrderProposalMail, buildOrderRejectedMail } from "./mail/catalog";
 import { mailBrandFor } from "./mail/org-brand";
@@ -499,6 +500,8 @@ export async function respondToProposal(token: string, action: "approve" | "decl
   }
   const moved = await db.quoteRequest.updateMany({ where: { id: quote.id, status: "PROPOSED" }, data: { status: "APPROVED", proposalApprovedAt: new Date() } });
   if (moved.count === 0) return { ok: false, status: 409, error: "Este pedido ya cambió de estado: recargá la página." };
+  // Si la propuesta traía un precio acordado (aceptado o contraofertado), el cliente acaba de aprobarlo.
+  await markPriceOfferApproved(quote.id, organizationId);
   await recordAudit({ context: actor, action: "status", entity: "Lead", entityId: quote.leadId ?? quote.id, summary: "El cliente aprobó la propuesta del pedido", detail: { changes: { quoteRequestStatus: { from: "PROPOSED", to: "APPROVED" } } } });
   return { ok: true, status: "APPROVED" };
 }

@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { AppearanceView } from "@/lib/appearance";
+import { editorialTheme } from "@/lib/storefront-editorial";
 import { storefrontThemeVars, type StorefrontTheme } from "@/lib/storefront-theme";
 
 /**
@@ -8,7 +9,9 @@ import { storefrontThemeVars, type StorefrontTheme } from "@/lib/storefront-them
  * elegida (hoja de Google Fonts de una lista cerrada). Componente de servidor.
  */
 export function StoreChrome({ theme, appearance, children }: { theme: StorefrontTheme; appearance: AppearanceView | null; children: ReactNode }) {
-  const style = { ...storefrontThemeVars(theme), ...(appearance?.vars ?? {}) } as CSSProperties;
+  // Plantilla editorial: sin color de marca rige el verde oliva; con color, manda el de la empresa.
+  const effective = appearance?.template === "editorial" ? editorialTheme(theme) : theme;
+  const style = { ...storefrontThemeVars(effective), ...(appearance?.vars ?? {}) } as CSSProperties;
   return (
     <div className="cp-theme" style={style} {...(appearance?.attrs ?? {})}>
       {appearance?.fontHref ? (

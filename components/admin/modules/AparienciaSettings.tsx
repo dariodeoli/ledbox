@@ -29,7 +29,7 @@ import { StorePreview } from "./StorePreview";
  * seguimiento del pedido, portal, presupuesto impreso y correos; en los correos solo el color y el
  * logo). Todo sale de listas cerradas y tokens CSS, nunca CSS libre:
  *
- * - **Plantilla**: Clásica, Minimalista, Elegante u Oscura.
+ * - **Plantilla**: Clásica, Minimalista, Elegante, Oscura o Catálogo editorial (crema, serif, oliva).
  * - **Color de marca** con control automático de contraste AA (≥ 4,5:1): si no alcanza se ajusta y se avisa.
  * - **Tipografía** de una lista cerrada de Google Fonts.
  * - **Portada**: dos archivos separados (escritorio 1920×600 y celular 1080×1350), JPG/PNG/WebP de
@@ -66,6 +66,7 @@ export function AparienciaSettings() {
   const initial = resource.data;
   const [template, setTemplate] = useState<TemplateId>(DEFAULT_APPEARANCE.template);
   const [font, setFont] = useState<FontId>(DEFAULT_APPEARANCE.font);
+  const [script, setScript] = useState(DEFAULT_APPEARANCE.script);
   const [bgOn, setBgOn] = useState(false);
   const [background, setBackground] = useState("");
   const [color, setColor] = useState("");
@@ -81,6 +82,7 @@ export function AparienciaSettings() {
     if (!initial) return;
     setTemplate(initial.appearance.template);
     setFont(initial.appearance.font);
+    setScript(initial.appearance.script);
     setBgOn(Boolean(initial.appearance.background));
     setBackground(initial.appearance.background ?? "");
     setColor(initial.brandColor ?? "");
@@ -95,7 +97,7 @@ export function AparienciaSettings() {
   );
 
   const backgroundCheck = bgOn ? parseBackground(background) : ({ ok: true, background: null } as const);
-  const effective: Appearance = { template, font, background: backgroundCheck.ok ? backgroundCheck.background : null };
+  const effective: Appearance = { template, font, background: backgroundCheck.ok ? backgroundCheck.background : null, script };
   const brand = useMemo(() => adjustBrandColor(color, { background: effective.background }), [color, effective.background]);
   const brandHex = brand.ok ? brand.result?.color ?? null : null;
   const colorFieldError = !brand.ok ? brand.error : null;
@@ -103,6 +105,7 @@ export function AparienciaSettings() {
   const dirty = Boolean(initial) && (
     template !== initial!.appearance.template ||
     font !== initial!.appearance.font ||
+    script !== initial!.appearance.script ||
     (effective.background ?? null) !== (initial!.appearance.background ?? null) ||
     (normalizeHex(color) ?? null) !== (initial!.brandColor ?? null) ||
     COVER_KINDS.some((kind) => covers[kind].file || covers[kind].remove)
@@ -161,7 +164,7 @@ export function AparienciaSettings() {
     // 2) Plantilla, tipografía, fondo y color (el servidor vuelve a validar el contraste).
     const result = await adminSend<{ appearance: Appearance; brandColor: string | null; brandNotice: string | null }>(
       "/api/admin/organization/appearance",
-      { template, font, background: effective.background, brandColor: color.trim() ? color : null },
+      { template, font, script, background: effective.background, brandColor: color.trim() ? color : null },
       "PATCH",
     );
     setBusy(false);
@@ -215,7 +218,7 @@ export function AparienciaSettings() {
                       placeholder="#0b5cd5"
                       autoCapitalize="none"
                       error={colorFieldError}
-                      hint="Hexadecimal. Vacío, la tienda usa un tema neutro."
+                      hint={template === "editorial" ? "Hexadecimal. Vacío, la plantilla editorial usa un verde oliva oscuro." : "Hexadecimal. Vacío, la tienda usa un tema neutro."}
                       disabled={demo}
                     />
                     <div className="admin-field">
@@ -239,6 +242,9 @@ export function AparienciaSettings() {
                 <AdminPanel title="Tipografía y fondo" icon="edit">
                   <div className="admin-settings-grid">
                     <SelectField label="Tipografía" value={font} onChange={(value) => { setFont(value as FontId); setNotice(""); }} options={FONTS.map((entry) => ({ value: entry.id, label: entry.label }))} hint="Fuentes de Google Fonts de una lista cerrada." disabled={demo} />
+                    {template === "editorial" ? (
+                      <SwitchField label="Acento manuscrito" checked={script} onChange={(checked) => { setScript(checked); setNotice(""); }} hint="Los títulos de sección llevan una línea manuscrita (Allura), como en un catálogo impreso." disabled={demo} />
+                    ) : null}
                     <SwitchField label="Fondo propio" checked={bgOn} onChange={(checked) => { setBgOn(checked); setNotice(""); }} hint="Un color claro de fondo. Para fondo oscuro usá la plantilla Oscura." disabled={demo} />
                     {bgOn ? (
                       <TextField label="Color de fondo" value={background} onChange={(value) => { setBackground(value); setNotice(""); }} maxLength={7} placeholder="#f6f1e8" autoCapitalize="none" error={!backgroundCheck.ok ? backgroundCheck.error : null} disabled={demo} />

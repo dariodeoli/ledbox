@@ -10,94 +10,124 @@ import {
 } from "@/lib/org-profile";
 
 /**
- * Perfil de la empresa para el público: contacto, ubicación con «Cómo llegar», horario de
- * atención, horarios de entrega/retiro/devolución, medios de pago aceptados y condiciones.
- * Solo dibuja lo que la empresa cargó: nada se inventa. Componente de servidor.
+ * Perfil de la empresa para el público, en tarjetas con icono: ubicación con «Cómo llegar», teléfonos uno por línea con
+ * botón para llamar, WhatsApp destacado con el color de marca, correo, web e Instagram, horarios en tabla, entrega/retiro,
+ * medios de pago como chips y condiciones en un bloque plegable. Solo dibuja lo que la empresa cargó: nada se inventa.
+ * Todo con tokens de la plantilla (`--cp-*`). Componente de servidor.
  */
-export function CompanyInfo({ profile, headingId = "empresa-info" }: { profile: OrgProfile; headingId?: string }) {
+
+type IconName = "pin" | "phone" | "clock" | "truck" | "card" | "doc" | "mail" | "chat" | "globe" | "instagram";
+const ICONS: Record<IconName, string> = {
+  pin: "M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
+  truck: "M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
+  card: "M3 6h18v12H3zM3 10h18M7 15h3",
+  doc: "M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5",
+  mail: "M3 6h18v12H3zM3 7l9 7 9-7",
+  chat: "M4 5h16v11H9l-5 4zM8 9h8M8 12h5",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9S14.5 18.4 12 21c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z",
+  instagram: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17.2 6.8h.01",
+};
+
+function Icon({ name }: { name: IconName }) {
+  return (
+    <svg className="cp-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d={ICONS[name]} />
+    </svg>
+  );
+}
+
+function InfoCard({ icon, title, children, wide }: { icon: IconName; title: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <section className={wide ? "cp-icard cp-icard--wide" : "cp-icard"} aria-label={title}>
+      <h4 className="cp-icard-title"><span className="cp-icard-ico"><Icon name={icon} /></span>{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+export function CompanyInfo({ profile, headingId = "empresa-info", whatsapp: whatsappUrl = null, email = null }: { profile: OrgProfile; headingId?: string; whatsapp?: string | null; email?: string | null }) {
   const place = locationLine(profile);
   const hours = hoursSummary(profile.hours);
   const handover = HANDOVER_KINDS.filter((kind) => profile.handover[kind].length > 0);
   const methods = acceptedPaymentMethods(profile);
   const { contact, location } = profile;
-  const wa = contact.whatsapp ? whatsappHref(contact.whatsapp, "Hola! Quiero consultar por un alquiler.") : null;
+  const wa = whatsappUrl ?? (contact.whatsapp ? whatsappHref(contact.whatsapp, "Hola! Quiero consultar por un alquiler.") : null);
+  const phones = [contact.phone, contact.phone2].filter((phone): phone is string => Boolean(phone));
+  const mail = email ?? contact.email;
+  const online = Boolean(mail || contact.website || contact.instagram);
   return (
     <div className="cp-info" role="group" aria-labelledby={headingId}>
       <h3 id={headingId} className="cp-h3 cp-h3--plain">Sobre la empresa</h3>
-      <dl className="cp-dl cp-info-grid">
+      <div className="cp-icards">
+        {wa || phones.length > 0 || online ? (
+          <InfoCard icon="chat" title="Escribinos o llamanos">
+            {wa ? <a className="cp-btn cp-btn--primary cp-btn--block" href={wa} target="_blank" rel="noopener noreferrer">Escribir por WhatsApp</a> : null}
+            {phones.length > 0 ? (
+              <ul className="cp-plain cp-lines">
+                {phones.map((phone) => (
+                  <li key={phone}>
+                    <span className="cp-line-text cp-nowrap">{phone}</span>
+                    <a className="cp-btn cp-btn--small" href={`tel:${phone.replace(/[^+\d]/g, "")}`} aria-label={`Llamar al ${phone}`}>Llamar</a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {online ? (
+              <ul className="cp-plain cp-lines">
+                {mail ? <li><Icon name="mail" /><a className="cp-link cp-wrap" href={`mailto:${mail}`}>{mail}</a></li> : null}
+                {contact.website ? <li><Icon name="globe" /><a className="cp-link cp-wrap" href={contact.website} target="_blank" rel="noopener noreferrer">{contact.website.replace(/^https?:\/\//, "")}</a></li> : null}
+                {contact.instagram ? <li><Icon name="instagram" /><a className="cp-link cp-wrap" href={`https://instagram.com/${contact.instagram}`} target="_blank" rel="noopener noreferrer">@{contact.instagram}</a></li> : null}
+              </ul>
+            ) : null}
+          </InfoCard>
+        ) : null}
         {place || location.mapsUrl ? (
-          <div>
-            <dt>Dónde estamos</dt>
-            <dd>
-              {place ?? "Ubicación en el mapa"}
-              {location.mapsUrl ? (
-                <>
-                  {" "}
-                  <a className="cp-btn cp-btn--small" href={location.mapsUrl} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
-                </>
-              ) : null}
-            </dd>
-          </div>
-        ) : null}
-        {contact.phone || contact.phone2 || wa ? (
-          <div>
-            <dt>Teléfonos</dt>
-            <dd>
-              {[contact.phone, contact.phone2].filter(Boolean).map((phone) => (
-                <span key={phone} className="cp-nowrap"><a className="cp-link" href={`tel:${phone!.replace(/[^+\d]/g, "")}`}>{phone}</a>{" "}</span>
-              ))}
-              {wa ? <a className="cp-link" href={wa} target="_blank" rel="noopener noreferrer">WhatsApp {contact.whatsapp}</a> : null}
-            </dd>
-          </div>
-        ) : null}
-        {contact.email || contact.website || contact.instagram ? (
-          <div>
-            <dt>En línea</dt>
-            <dd>
-              {contact.email ? <><a className="cp-link" href={`mailto:${contact.email}`}>{contact.email}</a>{" "}</> : null}
-              {contact.website ? <><a className="cp-link" href={contact.website} target="_blank" rel="noopener noreferrer">{contact.website.replace(/^https?:\/\//, "")}</a>{" "}</> : null}
-              {contact.instagram ? <a className="cp-link" href={`https://instagram.com/${contact.instagram}`} target="_blank" rel="noopener noreferrer">@{contact.instagram}</a> : null}
-            </dd>
-          </div>
+          <InfoCard icon="pin" title="Dónde estamos">
+            <p className="cp-icard-text">{place ?? "Ubicación en el mapa"}</p>
+            {location.mapsUrl ? <a className="cp-btn" href={location.mapsUrl} target="_blank" rel="noopener noreferrer">Cómo llegar</a> : null}
+          </InfoCard>
         ) : null}
         {hours.length > 0 ? (
-          <div>
-            <dt>Horario de atención</dt>
-            <dd>
-              <ul className="cp-plain">
+          <InfoCard icon="clock" title="Horario de atención">
+            <table className="cp-hours">
+              <tbody>
                 {hours.map((line) => (
-                  <li key={line.days}><span>{line.days}:</span> <span className="cp-nowrap">{line.text}</span></li>
+                  <tr key={line.days}><th scope="row">{line.days}</th><td className="cp-nowrap">{line.text}</td></tr>
                 ))}
-              </ul>
-            </dd>
-          </div>
+              </tbody>
+            </table>
+          </InfoCard>
         ) : null}
         {handover.length > 0 ? (
-          <div>
-            <dt>Entrega, retiro y devolución</dt>
-            <dd>
-              <ul className="cp-plain">
+          <InfoCard icon="truck" title="Entrega, retiro y devolución">
+            <table className="cp-hours">
+              <tbody>
                 {handover.map((kind) => (
-                  <li key={kind}><span>{HANDOVER_LABEL[kind]}:</span> <span className="cp-nowrap">{rangesLabel(profile.handover[kind])}</span></li>
+                  <tr key={kind}><th scope="row">{HANDOVER_LABEL[kind]}</th><td className="cp-nowrap">{rangesLabel(profile.handover[kind])}</td></tr>
                 ))}
-              </ul>
-              <span className="cp-hint">Horarios habituales; se coordinan al confirmar el pedido.</span>
-            </dd>
-          </div>
+              </tbody>
+            </table>
+            <p className="cp-hint">Horarios habituales; se coordinan al confirmar el pedido.</p>
+          </InfoCard>
         ) : null}
         {methods.length > 0 ? (
-          <div>
-            <dt>Medios de pago</dt>
-            <dd>{methods.join(" · ")}</dd>
-          </div>
+          <InfoCard icon="card" title="Medios de pago">
+            <ul className="cp-plain cp-chips">
+              {methods.map((method) => <li key={method} className="cp-x-chip">{method}</li>)}
+            </ul>
+          </InfoCard>
         ) : null}
         {profile.conditions ? (
-          <div>
-            <dt>Condiciones</dt>
-            <dd className="cp-pre">{profile.conditions}</dd>
-          </div>
+          <InfoCard icon="doc" title="Condiciones" wide>
+            <details className="cp-fold">
+              <summary>Ver las condiciones</summary>
+              <p className="cp-pre">{profile.conditions}</p>
+            </details>
+          </InfoCard>
         ) : null}
-      </dl>
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { catalogDailyPrice, catalogPriceFor, listDailyPrice } from "../lib/catal
 import { parseRentalSettingsPatch } from "../lib/server/rental-settings";
 import { catalogTokenHash, catalogTokenValue, isCatalogTokenShape } from "../lib/server/catalog-access";
 import { contrastRatio, normalizeHex, parseStorefrontAccent, storefrontTheme, STORE_MIN_CONTRAST, STORE_SURFACE_DARK } from "../lib/storefront-theme";
-import { featuredCategories } from "../components/catalog-public/StoreFront";
+import { featuredCategories } from "../lib/featured-categories";
 import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const read = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
