@@ -201,6 +201,7 @@ model Organization {
   /// false mientras la sandbox se está sembrando (paso 2 del alta).
   demoReady         Boolean                  @default(true)
   inventoryCategories InventoryCategory[]
+  inventoryFamilies InventoryFamily[]
   warehouses          Warehouse[]
 
   @@index([active, createdAt])
@@ -1963,8 +1964,19 @@ model InventoryItem {
   supplier           Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchasedAt        DateTime?
   warrantyUntil      DateTime?
+  /// Familia de variantes (docs/VARIANTES.md): cada variante es un producto completo (código, unidades,
+  /// foto, precio); la familia solo las agrupa. `variantOptions` = `{"color":"Verde"}`, `variantKey` la
+  /// combinación normalizada (`color=verde|talle=35`, única por familia mientras la variante esté viva).
+  familyId           String?
+  family             InventoryFamily? @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  variantOptions     Json?
+  variantKey         String?
+  /// `true` = el precio de esta variante lo cargó la persona: «mismo precio para todas» no lo pisa.
+  variantOwnPrice    Boolean          @default(false)
+  variantSortOrder   Int              @default(0)
 
   @@unique([organizationId, sku])
+  @@index([organizationId, familyId])
   @@index([status, category])
   @@index([organizationId, name])
   @@index([organizationId, categoryId])
@@ -2036,6 +2048,7 @@ model InventoryCategory {
   parent         InventoryCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children       InventoryCategory[] @relation("CategoryTree")
   items          InventoryItem[]
+  families       InventoryFamily[]
 
   @@unique([organizationId, key])
   @@index([organizationId, parentId])
@@ -2118,6 +2131,9 @@ model InventoryComponent {
   parentId       String
   componentId    String
   quantity       Int
+  /// «Cualquier variante» (etapa D de docs/VARIANTES.md): `componentId` es la variante de referencia.
+  /// Se crea apagada; ningún flujo la prende todavía.
+  anyVariant     Boolean       @default(false)
   createdAt      DateTime      @default(now())
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent         InventoryItem @relation("ComboParent", fields: [parentId], references: [id], onDelete: Cascade)
@@ -2983,4 +2999,33 @@ model DeliveryNotePhoto {
 model DeliveryNoteCounter {
   organizationId String @id
   last           Int    @default(0)
+}
+
+/// Familia de variantes de producto (docs/VARIANTES.md): el «padre» que agrupa productos que solo
+/// difieren en color, talle, etc. No es un `InventoryItem`: nunca entra en disponibilidad, presupuestos
+/// ni conteos. `axes` = `[{ key, label, values: [{ value, swatch? }] }]` (≤ 2 ejes). Un único escritor
+/// (`lib/server/inventory-families.ts`) reescribe nombre y categoría de las variantes.
+model InventoryFamily {
+  id                String             @id
+  organizationId    String
+  name              String
+  code              String
+  categoryId        String?
+  category          InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  publicDescription String?
+  /// Variante cuya foto es la portada (sin duplicar binarios); se valida contra la empresa.
+  coverItemId       String?
+  axes              Json
+  webSortOrder      Int                @default(0)
+  archivedAt        DateTime?
+  deletedAt         DateTime?
+  deletedById       String?
+  deleteReason      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items             InventoryItem[]
+
+  @@index([organizationId, code])
+  @@index([organizationId, deletedAt])
 }

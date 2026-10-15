@@ -7,7 +7,7 @@ import { canImportCatalog, canSeeInventoryCosts, canWriteOperations } from "@/li
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryGridRow, AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy, AdminInventoryRow } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
-import { EMPTY_GRID_FILTERS, activeFilterCount, applyInventoryFilters, categoryFilterOptions, type InventoryGridFilters } from "@/lib/inventory-grid-view";
+import { EMPTY_GRID_FILTERS, activeFilterCount, applyInventoryFilters, categoryFilterOptions, familyFilterOptions, type InventoryGridFilters } from "@/lib/inventory-grid-view";
 import { INVENTORY_STATE_FILTER_OPTIONS } from "@/lib/inventory-visual-state";
 import { useAdminSession } from "../AdminShell";
 import {
@@ -36,6 +36,7 @@ import dynamic from "next/dynamic";
 import { ComboDialog } from "./ComboDialog";
 import { InventoryBulkEditor } from "./InventoryBulkEditor";
 import { InventoryFicha } from "./InventoryFicha";
+import { GroupFamilyDialog, type GroupableItem } from "./InventoryFamilies";
 import { useInventoryTaxonomy } from "./InventoryTaxonomy";
 import { InventoryCreateDialog, InventoryEditDialog, type InventoryEditable, type InventoryNotice } from "./InventoryItemDialogs";
 import { OverdueReturnsIndicator } from "./OverdueReturns";
@@ -92,6 +93,8 @@ export function InventarioModule() {
   const [trashTarget, setTrashTarget] = useState<Pick<AdminInventoryRow, "id" | "name"> | null>(null);
   const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
+  /** Productos que se están por agrupar en una familia (acción masiva o desde la pestaña «Variantes»). */
+  const [groupItems, setGroupItems] = useState<GroupableItem[] | null>(null);
   const [view, setView] = useAdminModuleView("inventario", INVENTARIO_VIEWS, "grid");
   /** Ancho compacto (issue #151): las tarjetas de la cuadrícula, siempre. */
   const narrow = useAdminNarrowViewport();
@@ -189,6 +192,7 @@ export function InventarioModule() {
   const filtersActive = activeFilterCount(filters, rangeActive);
   const categoryOptions = useMemo(() => categoryFilterOptions(taxonomy.tree), [taxonomy.tree]);
   const stateOptions = useMemo(() => [{ value: "ALL", label: "Todos los estados" }, ...INVENTORY_STATE_FILTER_OPTIONS], []);
+  const familyChoices = useMemo(() => familyFilterOptions(inventory), [inventory]);
   const warehouseChoices = useMemo(() => warehouseOptions(taxonomy.warehouses, { includeEmpty: "Todos los depósitos" }), [taxonomy.warehouses]);
   const supplierChoices = useMemo(() => supplierOptions(taxonomy.suppliers, "Todos los proveedores"), [taxonomy.suppliers]);
 
@@ -460,6 +464,7 @@ export function InventarioModule() {
           <SearchField value={filters.query} onChange={(value) => setFilter("query", value)} label="Buscar inventario" placeholder="Nombre, SKU o código de unidad…" />
           <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
           <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
+          {familyChoices.length > 1 ? <AdminSelect value={filters.familyId} onChange={(value) => setFilter("familyId", value)} label="Filtrar por familia" options={familyChoices} /> : null}
           <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Filtrar por depósito" options={warehouseChoices} />
           <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
           {showCosts ? <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} /> : null}
@@ -494,6 +499,21 @@ export function InventarioModule() {
           <span className="admin-bulkbar-actions">
             <AdminButton variant="primary" icon="edit" onClick={() => setBulkOpen(true)} title="Editar en lote los productos seleccionados">
               Editar en lote
+            </AdminButton>
+            <AdminButton
+              icon="inventory"
+              onClick={() =>
+                setGroupItems(
+                  bulkItemIds.flatMap((id) => {
+                    const row = inventory.find((item) => item.id === id);
+                    return row ? [{ id: row.id, name: row.name, sku: row.sku, familyId: row.familyId, isCombo: Boolean(row.combo) }] : [];
+                  }),
+                )
+              }
+              title="Agrupar los productos seleccionados en una familia de variantes (color, talle…)"
+              aria-haspopup="dialog"
+            >
+              Agrupar en familia
             </AdminButton>
             <AdminButton
               icon="check"
@@ -630,6 +650,7 @@ export function InventarioModule() {
           onChanged={reloadAll}
           taxonomy={taxonomy}
           onOpenProduct={openFicha}
+          onGroupFamily={(target) => setGroupItems([{ ...target, familyId: null }])}
         />
       ) : selectedId ? (
         <AdminDialog
@@ -708,6 +729,19 @@ export function InventarioModule() {
           onClose={() => setComboDialog(null)}
           onSaved={(message) => {
             setComboDialog(null);
+            setNotice({ tone: "ok", message });
+            reloadAll();
+          }}
+        />
+      ) : null}
+
+      {writable && groupItems ? (
+        <GroupFamilyDialog
+          items={groupItems}
+          onClose={() => setGroupItems(null)}
+          onDone={(message) => {
+            setGroupItems(null);
+            setBulkItemIds([]);
             setNotice({ tone: "ok", message });
             reloadAll();
           }}

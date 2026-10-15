@@ -859,6 +859,8 @@ export type InventorySubstitute = {
   available: number;
   /** Cuántas asignaciones comprometidas se solapan en el rango. */
   conflicts: number;
+  /** Hermana de la misma familia de variantes («Blanco · 35» para «Negro · 35»): va primero como reemplazo posible. */
+  sibling: boolean;
 };
 
 /**
@@ -875,11 +877,13 @@ export async function findSubstitutes(options: {
   limit?: number;
 }): Promise<InventorySubstitute[]> {
   const limit = options.limit ?? 8;
+  // Las hermanas de la misma familia (variantes de color, talle…) son el primer reemplazo posible.
+  const familyId = (await db.inventoryItem.findFirst({ where: { id: options.item.id, organizationId: options.organizationId }, select: { familyId: true } }))?.familyId ?? null;
   const candidates = await db.inventoryItem.findMany({
     // Misma categoría = mismo `categoryId`; los productos viejos sin id comparan el texto.
     where: {
       organizationId: options.organizationId,
-      ...(options.item.categoryId ? { categoryId: options.item.categoryId } : { category: options.item.category }),
+      OR: [options.item.categoryId ? { categoryId: options.item.categoryId } : { category: options.item.category }, ...(familyId ? [{ familyId }] : [])],
       id: { not: options.item.id },
     },
     orderBy: { name: "asc" },
@@ -918,10 +922,11 @@ export async function findSubstitutes(options: {
           committed: availability.committed,
           available: availability.available,
           conflicts: availability.conflicts.length,
+          sibling: Boolean(familyId) && candidate.familyId === familyId,
         },
       ];
     })
-    .sort((a, b) => b.available - a.available || a.name.localeCompare(b.name))
+    .sort((a, b) => Number(b.sibling) - Number(a.sibling) || b.available - a.available || a.name.localeCompare(b.name))
     .slice(0, limit);
 }
 

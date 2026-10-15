@@ -61,6 +61,7 @@ import { readInventoryTrace } from "@/lib/server/inventory-details";
 import { stripInventoryCosts } from "@/lib/server/inventory-costs";
 import { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } from "@/lib/server/inventory-grid";
 import { resolveUnitPlacement } from "@/lib/server/inventory-units";
+import { markOwnPrice } from "@/lib/server/inventory-families";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
 export const runtime = "nodejs";
@@ -260,6 +261,9 @@ function liveAssignmentWhere(startOfToday: Date): Prisma.EventInventoryWhereInpu
     ],
   };
 }
+
+/** Campos de precio de la edición en lote: si cambian en una variante, su precio pasa a ser propio. */
+const PRICE_KEYS = ["listPrice", "wholesalePrice", "minimumPrice", "listFromDays", "listFromPrice", "wholesaleFromDays", "wholesaleFromPrice"];
 
 export async function GET(request: Request) {
   const auth = await requireAdminContext();
@@ -581,6 +585,7 @@ export async function POST(request: Request) {
         if (data.status !== undefined) for (const id of new Set(before.map(row => (row as { inventoryId: string }).inventoryId))) await syncInventoryQuantity(tx, id);
       } else {
         await tx.inventoryItem.updateMany({ where: { id: { in: ids }, organizationId }, data: data as Prisma.InventoryItemUpdateManyMutationInput });
+        if (PRICE_KEYS.some((key) => key in data)) await markOwnPrice(tx, organizationId, ids);
       }
       return before;
     });
@@ -653,11 +658,16 @@ export async function POST(request: Request) {
         purchasedAt: true,
         warrantyUntil: true,
         defaultWarehouse: { select: { code: true } },
+        familyId: true,
       },
     });
     if (!existing) return jsonError("El ítem de inventario no existe en esta empresa.", 404);
     const dead = await deadResponse("InventoryItem", existing.id, organizationId);
     if (dead) return dead;
+    // Una variante se llama «Familia · Opción» y hereda la categoría de su familia: solo el escritor de familias las cambia.
+    if (existing.familyId && update.data.name !== undefined && update.data.name !== existing.name) {
+      return jsonError("El nombre de una variante lo define su familia: cambialo desde la pestaña «Variantes».", 409);
+    }
     const trace = await readInventoryTrace(body, { organizationId, currentWarehouseCode: existing.defaultWarehouse?.code, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
     if (!trace.ok) return jsonError(trace.error, trace.status);
     const { location: defaultLocation, ...traceRest } = trace.values;
@@ -665,6 +675,7 @@ export async function POST(request: Request) {
       // Categoría + espejo de texto: solo el helper único las escribe.
       const resolved = update.taxonomy ? await resolveInventoryCategory(tx, organizationId, update.taxonomy) : undefined;
       if (resolved === null) return null;
+      if (existing.familyId && resolved && resolved.categoryId !== existing.categoryId) return "family-category" as const;
       return tx.inventoryItem.update({
         where: { id: existing.id },
         data: { ...update.data, ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
@@ -672,6 +683,7 @@ export async function POST(request: Request) {
       });
     });
     if (!inventory) return jsonError("La categoría no existe en esta empresa.", 404);
+    if (inventory === "family-category") return jsonError("La categoría de una variante la define su familia: cambiala desde la pestaña «Variantes».", 409);
     const changes = auditChanges(existing, inventory, INVENTORY_ITEM_FIELDS);
     if (changes) {
       await recordAudit({
@@ -917,6 +929,8 @@ export async function POST(request: Request) {
           minimumPrice: prices.values.minimumPrice ?? undefined,
         },
       });
+      // Si es una variante, el precio pasa a ser propio: «mismo precio para todas» no lo pisa.
+      await markOwnPrice(tx, organizationId, [existing.id]);
       const tierChange = tiers?.ok ? await replacePriceTiers(tx, organizationId, existing.id, tiers.tiers) : null;
       const priceTiers = await tx.inventoryPriceTier.findMany({ where: { organizationId, inventoryId: existing.id }, orderBy: [{ audience: "asc" }, { fromDays: "asc" }], select: { audience: true, fromDays: true, mode: true, price: true } });
       return { inventory, tierChange, priceTiers };

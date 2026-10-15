@@ -1423,6 +1423,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   EventInventory: "Asignación de equipo",
   InventoryIncident: "Incidente de inventario",
   InventoryCategory: "Categoría de inventario",
+  InventoryFamily: "Familia de productos",
   Warehouse: "Depósito",
   EventTask: "Tarea",
   Promoter: "Promotora",

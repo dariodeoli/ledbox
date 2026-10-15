@@ -2160,6 +2160,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Disponibilidad por rango y sustitutos (issue #18): los rangos comprometidos
    del ítem y las alternativas de la misma categoría con stock libre. */
 .admin-table--inventario-rangos { --inventario-rangos-cols: minmax(9rem, 1.5fr) 12.5rem 5rem; --admin-cols: var(--inventario-rangos-cols); --admin-table-min: 27.5rem; }
+.admin-table--inventario-variantes { --inventario-variantes-cols: minmax(10rem, 2fr) minmax(6rem, 1fr) 5.5rem minmax(7.5rem, 1fr) 5.5rem; --admin-cols: var(--inventario-variantes-cols); --admin-table-min: 38rem; }
 .admin-table--inventario-sustitutos { --inventario-sustitutos-cols: minmax(10rem, 1.5fr) minmax(7rem, 1fr) 7rem 5rem 7rem; --admin-cols: var(--inventario-sustitutos-cols); --admin-table-min: 38rem; }
 /* Reserva automática del presupuesto (issue #18): qué se reservó, qué quedó
    pendiente y con qué eventos choca. */
@@ -5283,3 +5284,17 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Logo de una sola variante pensado para fondo claro: chapa clara donde el fondo es oscuro. */
 /* Chips de la tarjeta: el texto largo baja de línea en vez de cortarse («PANTALLAS Y TÓTEM…»). */
 /* Tecnológica: la etiqueta «ALQUILER» queda sobre la foto, nunca encima del texto de ahorro, que vive en el pie de la tarjeta. */
+
+/* Familias de variantes (docs/VARIANTES.md): muestra de color siempre junto al texto, filas de «Agrupar en familia». */
+.admin-fam-swatch { display: inline-block; flex: none; width: 12px; height: 12px; margin-right: 6px; border: 1px solid var(--a-line-strong, var(--a-muted)); border-radius: 50%; vertical-align: -1px; }
+.admin-fam-options { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.admin-fam-option { display: inline-flex; align-items: center; }
+.admin-fam-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.admin-fam-rows { display: grid; gap: 10px; }
+.admin-fam-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: 8px; }
+.admin-fam-row-title { margin: 0; overflow-wrap: anywhere; }
+.admin-fam-row-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 10px; }
+.admin-fam-row-pair { display: grid; gap: 8px; align-content: start; }
+.admin-fam-preview { margin: 0; color: var(--a-muted); font-size: 12px; overflow-wrap: anywhere; }
+.admin-fam-preview strong { color: var(--a-text-strong); }
+.admin-fam-legend { margin: 4px 0 0; color: var(--a-muted); font-size: 12px; }

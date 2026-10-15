@@ -3,6 +3,7 @@ import { deflateSync } from "node:zlib";
 import { Prisma } from "@prisma/client";
 import { formatDate, formatMoney, formatNumber } from "@/lib/admin-format";
 import { seedDemoInventoryTaxonomy } from "@/lib/server/demo-inventory-taxonomy";
+import { buildDemoFamilies } from "@/lib/server/demo-families";
 import { inventoryUnitPrefix } from "@/lib/field-rules";
 import { fiscalSummaryOf, grossToNet, shiftMonthKey, taxTotalsOf, type InvoiceTaxTypeValue } from "@/lib/fiscal";
 import type { MessageTemplateCategoryValue } from "@/lib/admin-types";
@@ -2996,6 +2997,10 @@ async function seedDemoData(organizationId: string, base: Date, ns?: string): Pr
   ];
   inventoryData.push(...completion.inventoryItems);
   inventoryUnitsData.push(...completion.inventoryUnits);
+  // Familias de variantes (docs/VARIANTES.md): Plato Arabesco verde/lila y Zapato Ola negro/blanco 35/36.
+  const demoFamilies = buildDemoFamilies(organizationId, at(base, -90, 9, 0));
+  inventoryData.push(...demoFamilies.items);
+  inventoryUnitsData.push(...demoFamilies.units);
   assignmentsData.push(...completion.assignments.map((row) => ({ ...row, organizationId })));
   incidentsData.push(...completion.incidents);
   const inventoryComponentsData: Prisma.InventoryComponentUncheckedCreateInput[] = INVENTORY_COMBOS.map((row) => ({
@@ -3555,10 +3560,18 @@ async function seedDemoData(organizationId: string, base: Date, ns?: string): Pr
       await tx.messageTemplate.createMany({ data: messageTemplatesData });
       await tx.paymentReminderLog.createMany({ data: reminderLogsData });
       await tx.organizationLogo.createMany({ data: logosData });
+      // Las familias van antes que sus variantes (FK de `InventoryItem.familyId`).
+      await tx.inventoryFamily.createMany({ data: demoFamilies.families });
       await tx.inventoryItem.createMany({ data: inventoryData });
       await tx.inventoryUnit.createMany({ data: inventoryUnitsData });
       // Categorías (con subcategorías), depósitos, ubicación, condición y compras del inventario (rediseño E1).
       await seedDemoInventoryTaxonomy(tx, { organizationId, base, items: inventoryData, units: inventoryUnitsData });
+      // La categoría de cada familia es la de sus productos (ya resuelta por el helper único).
+      for (const { familyId, category } of demoFamilies.familyCategories) {
+        const sample = await tx.inventoryItem.findFirst({ where: { organizationId, familyId, category: { not: "" } }, select: { categoryId: true } });
+        if (sample?.categoryId) await tx.inventoryFamily.update({ where: { id: familyId }, data: { categoryId: sample.categoryId } });
+        else console.warn(`[demo] la familia ${familyId} quedó sin categoría (${category})`);
+      }
       await tx.inventoryComponent.createMany({ data: inventoryComponentsData });
       for (const link of budgetItemLinks) await tx.budgetItem.update({ where: { id: link.id }, data: { inventoryId: link.inventoryId } });
       await tx.organizationRentalSettings.create({ data: rentalSettingsData });
@@ -3615,6 +3628,7 @@ export async function wipeDemoData(tx: Prisma.TransactionClient, organizationId:
   // Los componentes de combos restringen el borrado del ítem: primero se sueltan.
   await tx.inventoryComponent.deleteMany({ where: { organizationId } });
   await tx.inventoryItem.deleteMany({ where: { organizationId } });
+  await tx.inventoryFamily.deleteMany({ where: { organizationId } });
   // Subcategorías antes que sus categorías (la FK al padre restringe el borrado) y luego los depósitos.
   await tx.inventoryCategory.deleteMany({ where: { organizationId, parentId: { not: null } } });
   await tx.inventoryCategory.deleteMany({ where: { organizationId } });

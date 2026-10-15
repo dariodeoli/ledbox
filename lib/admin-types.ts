@@ -1756,6 +1756,16 @@ export type AdminInventoryRow = {
   updatedAt: string;
   /** Solo en combos: sin unidades propias, «libres» es lo que se puede armar. */
   combo?: AdminInventoryCombo;
+  /** Familia de variantes (docs/VARIANTES.md): `null`/ausente = producto suelto. */
+  familyId?: string | null;
+  familyName?: string | null;
+  familyCode?: string | null;
+  /** Opciones de la variante por eje (`{ color: "Verde" }`). */
+  variantOptions?: Record<string, string> | null;
+  variantKey?: string | null;
+  /** `true` = su precio es propio: «mismo precio para todas» no lo pisa. */
+  variantOwnPrice?: boolean;
+  variantSortOrder?: number;
 };
 
 /** Composición y capacidad de un combo (alquileres fase 2c): lo que arma `/api/admin/inventory`. */
@@ -1844,6 +1854,8 @@ export type AdminInventorySubstitute = {
   committed: number;
   available: number;
   conflicts: number;
+  /** Hermana de la misma familia de variantes: el primer reemplazo posible. */
+  sibling?: boolean;
 };
 
 /** Ocupación del inventario alquilable en la semana (`GET /api/admin/inventory/occupancy`). */
@@ -2300,6 +2312,8 @@ export const AUDIT_ENTITIES = [
   "InventoryIncident",
   // Categorías y depósitos de inventario (rediseño E1).
   "InventoryCategory",
+  // Familia de variantes de producto (docs/VARIANTES.md).
+  "InventoryFamily",
   "Warehouse",
   "EventInventory",
   "EventTask",

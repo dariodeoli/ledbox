@@ -1,4 +1,5 @@
 import { readBillingUnit } from "@/lib/quote-sharing";
+import { skuClashesWithFamilyCode } from "@/lib/server/inventory-families";
 import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { skuConflictMessage } from "@/lib/server/trash-ops";
@@ -207,6 +208,8 @@ export async function POST(request: Request) {
     // SKU opcional (issue #131): vacío no es error, inválido sí.
     const skuRaw = typeof body.sku === "string" ? normalizeInventorySku(body.sku) : "";
     if (skuRaw && !inventorySkuValid(skuRaw)) return jsonError(FIELD_MESSAGES.sku, 400);
+    // El código de una familia de variantes no puede coincidir con un SKU de la misma empresa (en las dos direcciones).
+    if (skuRaw && (await skuClashesWithFamilyCode(db, auth.context.organizationId, skuRaw))) return jsonError(`El SKU «${skuRaw}» ya es el código de una familia de variantes: probá con otro.`, 409);
     const imageUrl = readInventoryImageUrl(body.imageUrl);
     if (imageUrl === false) return jsonError(FIELD_MESSAGES.image, 400);
     const prices = readInventoryPriceValues(body);

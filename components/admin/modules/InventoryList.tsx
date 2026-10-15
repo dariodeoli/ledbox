@@ -138,6 +138,12 @@ export function InventoryList(props: InventoryListProps) {
         <span className="admin-inv-product-text">
           <strong>{item.name}</strong>
           <small className="admin-code">
+            {item.familyId ? (
+              <AdminBadge size="sm" tone="info" title={item.familyName ? `Variante de la familia ${item.familyName}` : "Variante de una familia"}>
+                Familia
+              </AdminBadge>
+            ) : null}
+            {item.familyId ? " " : ""}
             {item.sku ? `SKU ${item.sku}` : item.combo ? `Combo · ${formatNumber(item.combo.components.length)} componentes` : inventoryKindLabel(item.kind)}
           </small>
         </span>
