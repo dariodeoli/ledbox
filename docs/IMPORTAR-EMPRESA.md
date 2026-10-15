@@ -247,3 +247,41 @@ Sin cambios: `cantidad: null` sigue creando 1 unidad por defecto (decisión del 
 - La tienda pública lee `imageUrl` de cada categoría (`loadPublicCategories`); sin foto propia usa la del primer producto.
 
 No probado en vivo: la vista de la tienda con estas fotos y los textos «Consultar» en producción (la tienda estaba apagada).
+
+## Eventos y reservas
+
+Carga de **eventos con sus productos** para que las reservas queden cargadas. Va en Eventos → Importar (planilla .xlsx/.csv, «Con ChatGPT» con `eventos.json` o «IA de LedBox»), con el mismo patrón que el catálogo: vista previa → aplicar. Solo OWNER y ADMIN. Se importa **después** del catálogo: los productos se resuelven por el SKU de la empresa activa.
+
+### Formato JSON (`eventos.json`)
+
+```json
+{"eventos":[{"codigo":"EV-2026-001","nombre":"Boda Pérez","cliente":{"nombre":"Ana Pérez","telefono":"+595981000111","correo":"ana@ejemplo.com"},"desde":"2026-11-14","hasta":"2026-11-15","lugar":"Salón X","estado":"confirmado","productos":[{"codigo":"527","cantidad":1},{"codigo":"1482","cantidad":10}],"notas":null}]}
+```
+
+Planilla: una fila por evento, columnas `codigo, nombre, cliente, telefono, correo, desde, hasta, lugar, estado, productos, notas`; `productos` va como «527x1; 1482x10». Límites: 500 eventos por archivo y 200 líneas por evento; JSON hasta 2 MB, planilla hasta 5 MB.
+
+### Reglas
+
+- **Clave:** `codigo` del evento. Reimportar el mismo código **actualiza** (nombre, lugar, fechas, estado, notas, cliente y líneas); nunca duplica. Un código repetido dentro del archivo se omite (error). El vínculo código → evento se guarda en `IdempotencyKey` (scope `import:evento`, por empresa), así que **no hay migración**; un evento enviado a la papelera deja de estar vinculado y el mismo código crea uno nuevo.
+- **Cliente:** se busca por teléfono o correo normalizados (`field-rules`; «0981 123 456» equivale a «+595 981 123 456»); sin ninguno de los dos, por nombre exacto. Si no existe se crea (una sola vez aunque aparezca en varios eventos). Un teléfono o correo inválido se descarta con aviso, nunca se inventa.
+- **Fechas:** `AAAA-MM-DD` o `dd/mm/aaaa` (también el número de serie de una celda de fecha de Excel). `desde` es obligatoria y `hasta` también (si dura un día, la misma). Se interpretan en la zona horaria de la empresa (America/Asuncion): el evento empieza a las 00:00 de `desde` y termina a las 23:59 de `hasta`. Una fecha ambigua o inválida es error de esa fila; nunca se adivina.
+- **Productos:** por SKU de la empresa activa. Un código inexistente o un juego incompleto (`comboIncomplete`) es **error de ese evento**: el evento entero se omite y no se escribe nada (se evita un evento a medias por un error de tipeo). Los demás eventos del archivo siguen.
+- **Estados:**
+  - `confirmado`: evento CONFIRMADO; reserva en firme con el motor existente (`commitInventoryAssignment`: lock del ítem + disponibilidad por período con colchones de preparación, transporte y limpieza, dentro de la transacción; es la misma función de la asignación manual).
+  - `tentativo`: evento BORRADOR con **retención** (bloqueo tentativo con el vencimiento de retención de la empresa); se confirma después desde el evento.
+  - `borrador` (o sin estado): evento BORRADOR **sin reservar**; los productos pedidos quedan anotados en las notas del evento.
+  - `cancelado`: evento CANCELADO; libera las reservas (las que ya salieron del depósito siguen contando hasta su devolución, con aviso).
+- **Juegos (combos):** reservan sus componentes, como hoy. Una línea suelta del mismo producto se suma a lo que aporta el juego.
+- **Sin stock:** nunca se sobrevende. Es un **aviso por línea** («Lounge Oslo: piden 2, hay 1 libre en esas fechas»): esa línea **no se reserva** (todo o nada por línea, como la asignación manual; no se reserva "lo que entra"), el evento se crea o actualiza igual con las líneas que sí entran, y la línea faltante queda en las notas del evento («Sin stock al importar: …») y en el resultado. Se eligió esto y no bloquear la fila porque el evento existe en la realidad aunque falte stock; lo seguro es no reservar de más y dejar la falta a la vista para resolverla (comprar, tercerizar, cambiar fechas) y reimportar o asignar a mano. Un producto en mantenimiento o retirado se trata igual.
+- **Reimportar** solo agrega o actualiza líneas: **no quita** productos que el archivo ya no trae (pueden haberse cargado a mano); la vista previa avisa cuáles quedan sin tocar. Un evento que ya está **en curso o finalizado** en LedBox no se modifica (error de esa fila). Un evento cancelado se reactiva si el archivo lo trae con otro estado.
+- Rate limit, lote idempotente (mismo lote no se aplica dos veces), cuota y bloqueo de la demo como en las otras importaciones; todo acotado a la empresa activa (un código de producto o cliente de otra empresa no existe para esta).
+
+### Vista previa
+
+Tarjetas: eventos a crear, eventos a actualizar, clientes nuevos, líneas reservadas, líneas sin stock y errores; más las filas (acción, fechas, estado, cliente, líneas) y los avisos por línea. **La disponibilidad de la vista previa es una estimación**: descuenta lo que ya está comprometido y lo que el propio archivo reserva antes (los eventos compiten en el orden del archivo), pero al aplicar cada línea se vuelve a comprobar bajo lock y es la que manda. Los componentes compartidos entre un juego y una unidad suelta de otro evento del mismo archivo pueden hacer que la estimación difiera apenas.
+
+### Resumen para IAs (eventos)
+
+Preparé `eventos.json` con `{"eventos":[…]}`. Por evento: `codigo` único y estable (clave; reimportar lo actualiza), `nombre`, `cliente {nombre, telefono, correo}` (los datos de contacto evitan clientes duplicados; no los inventes), `desde` y `hasta` en AAAA-MM-DD (misma fecha si dura un día), `lugar`, `estado` (`confirmado` reserva, `tentativo` retiene, `borrador` no reserva, `cancelado` libera; sin dato, `borrador`), `productos` `[{codigo, cantidad}]` con el **SKU del inventario** (no el nombre) y cantidades enteras, y `notas`. Los productos tienen que estar importados antes; un SKU que no existe bloquea ese evento. Si falta stock el evento se carga igual y la línea queda avisada: nunca se sobrevende. No inventes fechas, códigos ni clientes; lo dudoso va fuera del archivo y se anota aparte.
+
+No probado en vivo: la importación de eventos contra datos reales de una empresa y el diálogo en el navegador (probada con Postgres descartable: reservas, reimportación, sin stock, cancelado, concurrencia y aislamiento entre empresas).
