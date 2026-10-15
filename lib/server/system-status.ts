@@ -9,7 +9,7 @@ import { APP_VERSION_LABEL } from "@/lib/version";
 import { recordAudit } from "./audit";
 import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
-import { renderMail, renderMailText, sendMail } from "./mail";
+import { PLATFORM_BRAND, renderMail, renderMailText, sendMail } from "./mail";
 import { dayKeyOf, dayStart } from "./notifications";
 import type { AdminContext } from "./tenancy";
 
@@ -414,6 +414,7 @@ function buildBackupAlertMail(input: {
     ],
     preheader: `${ISSUE_TITLE[issue]} · ${issueDetail(status, issue)}`,
     organization: null,
+    brand: PLATFORM_BRAND,
     reason: "estás en la lista de propietarios y administradores del panel",
   };
   return { subject: `EventOS · ${ISSUE_TITLE[issue]}`, html: renderMail(content), text: renderMailText(content) };
@@ -480,6 +481,7 @@ async function alertBackupIssue(context: AdminContext, now: Date): Promise<Backu
       html: content.html,
       text: content.text,
       organizationId: null,
+      platform: true,
       entity: "System",
       entityId,
       actor: { id: context.user.id, name: context.user.name, email: context.user.email },

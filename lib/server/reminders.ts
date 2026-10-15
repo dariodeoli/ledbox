@@ -9,7 +9,7 @@ import { parsePaymentDetails, type PortalBudgetPaymentDetails } from "./budget-p
 import { db } from "./db";
 import { isDemoOrganizationSlug } from "./demo-data";
 import { dayKeyOf, dayStart, shiftDayKey } from "./notifications";
-import { renderMail, renderMailText, type MailRow } from "./mail";
+import { mailBrandFor, renderMail, renderMailText, type MailBrand, type MailRow } from "./mail";
 import { emailConfigured, sendReminderEmail } from "./resend";
 
 /**
@@ -204,6 +204,8 @@ export type PaymentReminderEmail = {
 
 export type PaymentReminderEmailInput = {
   organizationName: string;
+  /** Marca de la empresa (`mailIdentityFor`); sin ella, solo el nombre. */
+  brand?: MailBrand | null;
   client: { name: string; company: string | null };
   amount: number;
   dueAt: Date;
@@ -251,6 +253,7 @@ export function buildPaymentReminderEmail(input: PaymentReminderEmailInput): Pay
     note: "Si ya abonaste este pago, ignorá este mensaje.",
     preheader: `${formatMoney(input.amount)} · ${dueText || `vence el ${due}`}`,
     organization: input.organizationName,
+    brand: input.brand ?? null,
     reason: `el equipo de ${input.organizationName} te recuerda un pago pendiente`,
   };
 
@@ -341,6 +344,7 @@ export async function sendReminderEmailForTarget(input: {
   const sandbox = await isSandboxOrg(organization.id);
   const content = buildPaymentReminderEmail({
     organizationName: organization.name,
+    brand: await mailBrandFor(organization.id),
     client: fields.client,
     amount: fields.amount,
     dueAt: fields.dueAt,

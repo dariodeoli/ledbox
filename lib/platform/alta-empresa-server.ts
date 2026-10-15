@@ -5,7 +5,7 @@ import { validateAltaInput, type AltaEmpresaErrors, type AltaEmpresaInput, type 
 import { recordAudit, type AuditContext } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { upsertInvitation } from "@/lib/server/invitations";
-import { buildInvitationMail, sendMail } from "@/lib/server/mail";
+import { PLATFORM_BRAND, buildInvitationMail, sendMail } from "@/lib/server/mail";
 import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/server/message-templates";
 
 /**
@@ -43,6 +43,7 @@ async function sendPlatformInvitation(input: {
 }): Promise<MailOutcome> {
   const content = buildInvitationMail({
     organizationName: input.organization.name,
+    brand: PLATFORM_BRAND,
     email: input.invitation.email,
     role: input.invitation.role,
     invitedByName: PLATFORM_ACTOR,
@@ -57,6 +58,7 @@ async function sendPlatformInvitation(input: {
     html: content.html,
     text: content.text,
     organizationId: input.organization.id,
+    platform: true,
     entity: "TeamInvitation",
     entityId: input.invitation.id,
     actor: { id: input.actor.userId, name: PLATFORM_ACTOR, email: input.actor.email },

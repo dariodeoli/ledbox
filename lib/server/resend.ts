@@ -2,7 +2,7 @@ import { db } from "./db";
 import { publicConfig } from "@/lib/public-config";
 import type { SimulatedMail } from "@/lib/mail-preview";
 import { normalizeEmail } from "@/lib/field-rules";
-import { appEmailSender, emailConfigured, renderMail, renderMailText, sendMail } from "./mail";
+import { PLATFORM_BRAND, appEmailSender, emailConfigured, renderMail, renderMailText, sendMail } from "./mail";
 
 /**
  * Correos de la app: fachada sobre `lib/server/mail/**` (plantilla única +
@@ -35,20 +35,22 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   const organization = await resetOwnerOrganization(to);
   const content = {
     title: "Restablecé tu contraseña",
-    intro: "Solicitaste restablecer tu contraseña de LedBox.",
+    intro: "Solicitaste restablecer tu contraseña de EventOS.",
     cta: { label: "Restablecer contraseña", url },
     note: "El enlace vence en 30 minutos. Si no fuiste vos, ignorá este mensaje.",
     preheader: "El enlace vence en 30 minutos.",
-    organization: organization?.name ?? null,
-    reason: "solicitaste restablecer tu contraseña de LedBox",
+    brand: PLATFORM_BRAND,
+    reason: "solicitaste restablecer tu contraseña de EventOS",
   };
   const result = await sendMail({
     to,
-    subject: "Restablecé tu contraseña de LedBox",
+    subject: "Restablecé tu contraseña de EventOS",
     category: "reset",
     html: renderMail(content),
     text: renderMailText(content),
     organizationId: organization?.id ?? null,
+    // El reset es de la cuenta, no de una empresa: sale como EventOS (el historial sí lo guarda con la empresa).
+    platform: true,
   });
   if (result.status === "failed") throw new Error(result.error ?? "Password reset email could not be sent");
 }

@@ -3,7 +3,7 @@ import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { recordAudit } from "@/lib/server/audit";
 import { db } from "@/lib/server/db";
 import { jsonError, readJson } from "@/lib/server/http";
-import { appEmailSender, buildBudgetMail, sendMail } from "@/lib/server/mail";
+import { buildBudgetMail, mailIdentityFor, sendMail } from "@/lib/server/mail";
 import { createMailPreview, verifyMailPreviewConfirmation, MailPreviewUnavailableError } from "@/lib/server/mail/preview";
 import { requireAdminContext } from "@/lib/server/tenancy";
 
@@ -69,8 +69,10 @@ export async function POST(request: Request) {
     return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
   }
 
+  const identity = await mailIdentityFor(organizationId);
   const content = buildBudgetMail({
     organizationName: budget.organization.name,
+    brand: identity.brand,
     paymentDetails: budget.organization.paymentDetails,
     budget: { ...budget, items: stableOrderBudgetItems(budget.items) },
     message,
@@ -78,7 +80,7 @@ export async function POST(request: Request) {
   });
   if (!content) return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
 
-  const sendable = { from: appEmailSender(), to, subject: content.subject, html: content.html, text: content.text };
+  const sendable = { from: identity.from, to, subject: content.subject, html: content.html, text: content.text };
   const scope = { organizationId, actorId: auth.context.user.id, entity: "Budget", entityId: budget.id };
   try {
     if (preview) {
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
     html: content.html,
     text: content.text,
     organizationId,
+    identity,
     entity: "Budget",
     entityId: budget.id,
     actor: auth.context.user,
