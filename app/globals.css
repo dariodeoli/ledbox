@@ -5285,3 +5285,31 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-cover-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .admin-cover-frame[data-kind="mobile"] { max-width: 220px; }
 @media (max-width: 640px) { .admin-attachment .admin-btn { min-height: 44px; } }
+
+/* Remitos de salida y devolución (P1-5): lista en tarjetas, usable desde 360 px. */
+.admin-remito-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.admin-remito { display: grid; gap: 8px; min-width: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-remito-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.admin-remito-head strong { flex: 1 1 12rem; min-width: 0; color: var(--a-text-strong); overflow-wrap: anywhere; }
+.admin-remito-lines { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-remito-lines li { display: grid; gap: 1px; min-width: 0; }
+.admin-remito-name { font-weight: 600; overflow-wrap: anywhere; }
+.admin-remito-qty, .admin-remito-meta { margin: 0; color: var(--a-muted); font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.admin-remito .admin-actions a.admin-btn { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+.admin-remito-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-remito-photos li { position: relative; }
+.admin-remito-photos img { display: block; width: 88px; height: 88px; object-fit: cover; border-radius: 8px; border: 1px solid var(--a-line); }
+.admin-remito-photos .admin-btn { position: absolute; top: 2px; right: 2px; min-width: 44px; min-height: 44px; }
+
+/* Hoja del remito (P1-5): tabla fija para que entre a 360 px y firma/fotos acotadas. */
+.lbprint-remito-table { table-layout: fixed; }
+.lbprint-remito-table th:first-child { width: 28%; }
+.lbprint-remito-table th, .lbprint-remito-table td { overflow-wrap: anywhere; }
+.lbprint-remito-table th { letter-spacing: 0; text-transform: none; font-size: 9px; padding: 4px 3px; }
+.lbprint-remito-table td { padding-left: 3px; padding-right: 3px; }
+.lbprint-sku { color: #5d6f78; }
+.lbprint-remito-terms { margin: 0; white-space: pre-wrap; font-size: 11px; overflow-wrap: anywhere; }
+.lbprint-remito-signature { display: block; width: min(100%, 260px); height: auto; border-bottom: 1px solid #10161a; margin-bottom: 8px; background: #fff; }
+.lbprint-remito-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.lbprint-remito-photos img { display: block; width: 100%; height: 110px; object-fit: cover; border: 1px solid #e6ecef; }
+@media print { .lbprint-remito-photos { break-inside: avoid; } }

@@ -47,6 +47,7 @@ import {
 } from "../AdminUI";
 import { AdminIcon } from "../AdminIcons";
 import { DateField, DateTimeField, NumberField, TextField } from "../AdminFields";
+import { RemitosPanel } from "./RemitosPanel";
 import { StageTrail } from "../StageTrail";
 import { stagesOfBudget } from "./BudgetDetailDialog";
 import { ChecklistTable, type ChecklistEntry } from "./Checklist";
@@ -837,6 +838,9 @@ function EquiposTab(props: EventoFichaProps) {
           })}
         </ul>
       </AdminDataState>
+
+      <h3 className="admin-subtitle">Remitos</h3>
+      <RemitosPanel eventId={event.id} writable={writable} reloadKey={incidentsKey} />
 
       <h3 className="admin-subtitle">Incidentes de inventario</h3>
       <InventoryIncidentsPanel eventId={event.id} writable={writable} reloadKey={incidentsKey} onChanged={onIncidentsChanged} />

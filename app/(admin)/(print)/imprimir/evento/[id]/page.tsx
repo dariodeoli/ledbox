@@ -15,6 +15,7 @@ import { loadOrganizationLogos } from "@/lib/server/branding";
 import { organizationLogoUrl } from "@/lib/admin-types";
 import { PrintEmpty, PrintField, PrintFooter, PrintHeader, PrintSection } from "../../../_components/PrintParts";
 import { PrintToolbar } from "../../../_components/PrintToolbar";
+import { RemitoSheet } from "./RemitoSheet";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,10 +41,18 @@ function stamp(value: Date | null): string {
  * Orden de trabajo imprimible del evento (PDF vía `window.print()`):
  * datos del evento y del cliente, equipos asignados y checklist operativo.
  */
-export default async function EventoImprimiblePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EventoImprimiblePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ remito?: string }> }) {
   const auth = await requireAdminContext();
   if (!auth.ok) redirect("/login");
   const { id } = await params;
+  const { remito } = await searchParams;
+
+  // `?remito=<id>`: la hoja es el remito de salida o devolución, armado desde su snapshot.
+  if (typeof remito === "string" && remito) {
+    const sheet = await RemitoSheet({ organizationId: auth.context.organizationId, organizationName: auth.context.organization.name, eventId: id, noteId: remito });
+    if (!sheet) notFound();
+    return sheet;
+  }
 
   const event = await db.event.findFirst({
     where: { id, organizationId: auth.context.organizationId },
