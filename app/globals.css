@@ -1387,6 +1387,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Menú de acciones de fila/tarjeta (issue #143): el panel se ancla con
    coordenadas del botón y `position: fixed`, así no lo recorta el scroll
    horizontal de la tabla ni de las columnas del tablero. */
+/* z-index 70 a propósito (no 55): el menú «Más acciones» se abre por portal en <body> también desde dentro de diálogos
+   (p. ej. BudgetDetailDialog), cuyo overlay está en 60; con 55 quedaría tapado por el propio diálogo. */
 .admin-menu-pop { position: fixed; z-index: 70; display: grid; gap: 2px; min-width: 12rem; max-height: min(70vh, 24rem); overflow-y: auto; padding: 4px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius); background: linear-gradient(var(--a-panel), var(--a-panel)), var(--a-bg); box-shadow: var(--a-shadow); backdrop-filter: var(--a-blur); }
 .admin-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--a-muted-2); font: 600 12.5px var(--font-body); text-align: left; text-decoration: none; cursor: pointer; }
 .admin-menu-item:hover:not(:disabled) { background: var(--a-accent-soft); color: var(--a-accent); }
@@ -4322,7 +4324,7 @@ select[data-tone="danger"] { border-color: color-mix(in srgb, var(--a-danger) 36
 .admin-quote-product-row > .admin-btn { grid-area: action; }
 .admin-quote-resource, .portal-quote-resource { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; overflow-wrap: anywhere; }
 .admin-quote-create-item { grid-column: 1 / -1; display: grid; gap: 12px; padding-block: 12px; border-top: 1px solid var(--a-line); }
-.admin-menu-pop { max-width: min(18rem, calc(100vw - 16px)); max-height: min(70vh, calc(100dvh - 16px)); z-index: 80; }
+.admin-menu-pop { max-width: min(18rem, calc(100vw - 16px)); max-height: min(70vh, calc(100dvh - 16px)); }
 .admin-menu-item { min-height: 44px; }
 @media (max-width: 600px) { .admin-quote-product-row { grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "photo name action" ". free free"; } }
 

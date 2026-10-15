@@ -135,3 +135,11 @@ test("la lista de búsqueda abierta es opaca y queda por encima de «Más opcion
   assert.match(css, /\.admin-combobox-pop \{ position: absolute; z-index: 60;[^}]*background: linear-gradient\(var\(--a-panel\), var\(--a-panel\)\), var\(--a-bg\);/);
   assert.match(css, /\.admin-dialog-section:has\(\.admin-combobox-pop\) \{ position: relative; z-index: 60; \}/);
 });
+
+test("el menú «Más acciones» (portal en body) queda por encima del overlay de los diálogos (60) con un único z-index", () => {
+  const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+  const overlay = Number(css.match(/\.admin-dialog-overlay \{[^}]*z-index: (\d+)/)?.[1]);
+  const layers = [...css.matchAll(/\.admin-menu-pop \{([^}]*)\}/g)].flatMap((match) => [...match[1].matchAll(/z-index:\s*(\d+)/g)].map((z) => Number(z[1])));
+  assert.equal(overlay, 60);
+  assert.deepEqual(layers, [70], "una sola capa, sobre el overlay del diálogo");
+});
