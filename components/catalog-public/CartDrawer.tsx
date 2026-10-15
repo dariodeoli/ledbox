@@ -253,7 +253,7 @@ export function CartDrawer(props: {
                         </>
                       ) : null}
                       {range ? (
-                        <div><dt>Subtotal de productos</dt><dd>{subtotal !== null ? formatGs(subtotal) : "—"}</dd></div>
+                        <div><dt>Subtotal de productos</dt><dd>{subtotal !== null ? formatGs(subtotal) : "A cotizar"}</dd></div>
                       ) : perDayText ? (
                         <div><dt>Suma por día</dt><dd>{perDayText}</dd></div>
                       ) : null}
@@ -265,7 +265,7 @@ export function CartDrawer(props: {
                   ) : null}
                   {showPrices ? (
                     <p className="cp-hint">
-                      {range && total !== null ? "Confirmamos el monto final en la cotización." : "El total aparece cuando elegís las fechas."}
+                      {!range ? "El total aparece cuando elegís las fechas." : total !== null ? "Confirmamos el monto final en la cotización." : "El total se confirma en la cotización."}
                       {unpriced && view ? " Los productos sin precio cargado también se confirman en la cotización." : ""}
                     </p>
                   ) : <p className="cp-hint">Te enviamos la cotización con los montos. Confirmamos el monto final al responder.</p>}
