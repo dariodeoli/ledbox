@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { StoreFront } from "@/components/catalog-public/StoreFront";
-import { loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolveWholesaleCatalog } from "@/lib/server/catalog-public";
+import { loadCategoryImages, loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolveWholesaleCatalog } from "@/lib/server/catalog-public";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +33,14 @@ export default async function WholesaleStorePage({ params, searchParams }: PageP
   const context = await resolveWholesaleCatalog(orgSlug, token);
   if (!context || !context.access) notFound();
   const range = parsePublicRange(first(query.desde), first(query.hasta));
-  const [store, items, zones] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context)]);
+  const [store, items, zones, categoryImages] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context), loadCategoryImages(context.organization.id)]);
   const slug = encodeURIComponent(context.organization.slug);
   const base = `/tienda/${slug}/mayorista/${encodeURIComponent(token)}`;
   return (
     <StoreFront
       store={store}
       items={items}
+      categoryImages={categoryImages}
       zones={zones}
       showPrices={context.settings.publicShowPrices}
       demo={context.demo}

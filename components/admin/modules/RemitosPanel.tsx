@@ -15,7 +15,7 @@ import {
   type AdminDeliveryNote,
 } from "@/lib/delivery-note";
 import { FileField, TextField } from "../AdminFields";
-import { AdminBadge, AdminButton, AdminDataState, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
+import { AdminBadge, AdminButton, AdminButtonLink, AdminDataState, AdminDialog, AdminDialogSection, AdminNote } from "../AdminUI";
 
 /**
  * Remitos de salida y de devolución de un evento (P1-5). Nacen solos al despachar o devolver, con lo
@@ -77,9 +77,9 @@ export function RemitosPanel({ eventId, writable, reloadKey }: { eventId: string
                       Firmar remito
                     </AdminButton>
                   ) : null}
-                  <a className="admin-btn admin-btn--ghost" href={`/imprimir/evento/${encodeURIComponent(eventId)}?remito=${encodeURIComponent(note.id)}`} target="_blank" rel="noreferrer">
+                  <AdminButtonLink href={`/imprimir/evento/${encodeURIComponent(eventId)}?remito=${encodeURIComponent(note.id)}`} target="_blank">
                     Imprimir
-                  </a>
+                  </AdminButtonLink>
                 </div>
               </li>
             );

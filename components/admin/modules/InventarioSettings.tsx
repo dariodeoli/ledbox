@@ -408,7 +408,7 @@ function CategoryPhoto({ node, disabled, onChanged, onError }: { node: CategoryN
       <div>
         <strong>Foto de la categoría</strong>
         <p className="admin-muted">JPG, PNG o WebP cuadrada, hasta 1 MB. La tienda la muestra en la categoría; sin foto usa la de su primer producto.</p>
-        {node.imageUrl ? <img src={node.imageUrl} alt={`Foto de ${node.name}`} width={96} height={96} style={{ objectFit: "cover", borderRadius: 8 }} /> : <span className="admin-muted">Sin foto propia.</span>}
+        {node.imageUrl ? <img src={node.imageUrl} alt={`Foto de ${node.name}`} width={96} height={96} className="admin-cat-photo" /> : <span className="admin-muted">Sin foto propia.</span>}
       </div>
       <FileField label={node.imageUrl ? "Cambiar foto" : "Subir foto"} accept="image/jpeg,image/png,image/webp" maxBytes={1024 * 1024} disabled={disabled || busy} file={null} onSelect={(file) => void upload(file)} />
       {node.imageUrl ? <div className="admin-form-actions"><AdminButton type="button" icon="trash" disabled={disabled || busy} onClick={() => void clear()}>Quitar foto</AdminButton></div> : null}

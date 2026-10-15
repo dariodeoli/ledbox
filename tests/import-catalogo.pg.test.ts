@@ -72,7 +72,9 @@ test("importar catálogo en PostgreSQL: idempotente, juegos con el motor real, f
       assert.equal(juego.quantity, 0, "el juego no tiene unidades propias");
       assert.equal(await db.inventoryUnit.count({ where: { inventoryId: juego.id } }), 0);
       assert.equal(silla.listPrice, 15000);
-      assert.equal(mesa.publicDescription, "Medidas: 1.50 m. Capacidad: 10 personas.");
+      assert.equal(mesa.dimensions, "1.50 m");
+      assert.equal(mesa.capacity, 10);
+      assert.equal(mesa.publicDescription, null);
       assert.ok(items.every((i) => i.visibleOnWeb && i.catalogAudience === "RETAIL"));
       assert.equal(silla.imageMime, "image/webp");
       assert.ok(silla.imageData && silla.imageData.byteLength > 0 && silla.imageData.byteLength <= 2 * 1024 * 1024);

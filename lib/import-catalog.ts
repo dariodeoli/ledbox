@@ -483,12 +483,34 @@ export function resolvePhoto(product: Pick<CatalogProduct, "codigo" | "foto">, p
 
 // ── Descripción pública ─────────────────────────────────────────────────────
 
-/** Arma la descripción pública con medidas, capacidad y descripción (≤ 600). */
+/** Capacidad en personas del archivo («10 personas», «8»): entero 1..9999, o `null` si no es un número claro. */
+export function parseCapacity(capacidad: string | null | undefined): number | null {
+  const match = /^\D*(\d{1,4})\D*$/.exec((capacidad ?? "").trim());
+  const n = match ? Number(match[1]) : 0;
+  return n >= 1 ? n : null;
+}
+
+/** Medidas del archivo en el campo corto del inventario (≤ 60), o `null` si no entran (van a la descripción). */
+export function parseDimensions(medidas: string | null | undefined): string | null {
+  const value = (medidas ?? "").trim().replace(/\s+/g, " ");
+  return value && value.length <= 60 ? value : null;
+}
+
+/** Campos propios de la ficha (`capacity`, `dimensions`) que salen de `capacidad` y `medidas`. */
+export function catalogSpecs(product: Pick<CatalogProduct, "medidas" | "capacidad">): { capacity: number | null; dimensions: string | null } {
+  return { capacity: parseCapacity(product.capacidad), dimensions: parseDimensions(product.medidas) };
+}
+
+/**
+ * Arma la descripción pública (≤ 600). Las medidas y la capacidad que entran en los campos propios
+ * (`dimensions`, `capacity`) NO se repiten acá; solo van si no se pudieron mapear.
+ */
 export function buildPublicDescription(product: Pick<CatalogProduct, "medidas" | "capacidad" | "descripcion">): { text: string | null; truncated: boolean } {
   const ensureDot = (value: string) => (/[.!?…]$/.test(value) ? value : `${value}.`);
+  const specs = catalogSpecs(product);
   const parts = [
-    product.medidas ? `Medidas: ${product.medidas}` : null,
-    product.capacidad ? `Capacidad: ${product.capacidad}` : null,
+    product.medidas && !specs.dimensions ? `Medidas: ${product.medidas}` : null,
+    product.capacidad && specs.capacity === null ? `Capacidad: ${product.capacidad}` : null,
     product.descripcion,
   ].filter((part): part is string => Boolean(part));
   if (parts.length === 0) return { text: null, truncated: false };

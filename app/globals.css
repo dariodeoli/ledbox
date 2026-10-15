@@ -5670,3 +5670,6 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 .cp-unit-sm { display: none; font-variant-numeric: tabular-nums; }
 @media (max-width: 480px) { .cp-unit-sm { display: block; } .cp-drawer-foot .cp-btn { padding-inline: 12px; } .cp-drawer-foot .cp-btn--primary { flex: 1 1 0; min-width: 0; } }
+
+/* Foto de la categoría en Ajustes → Inventario. */
+.admin-cat-photo { object-fit: cover; border-radius: 8px; }

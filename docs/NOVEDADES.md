@@ -598,6 +598,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 ## v2.1.123 — 2026-10-15
 
-- La caja «Empresa» del menú lateral ahora es un selector: tocás tu empresa y se
-  abre la lista de todas tus empresas para cambiarte. El logo se ve más grande y
-  quitamos el botón «Cambiar a…».
+- Empresas: la caja «Empresa» del menú lateral ahora es un selector. Tocás tu empresa y se abre la lista de todas las tuyas para cambiarte; el logo se ve más grande.
+- Usuarios: el rol Propietario solo lo puede dar otro Propietario, con confirmación y registro de quién lo hizo.
+- Remitos: al entregar y al recibir de vuelta un alquiler se genera un remito de salida y uno de devolución, con numeración sin saltos, firma del cliente en el celular, fotos del estado y versión para imprimir. Se ven en Equipos.
+- Correos: todos los mails salen con una misma plantilla sobria, con el logo, el nombre y el contacto de tu empresa. El remitente figura como «Tu empresa vía EventOS» y las respuestas de los clientes te llegan a vos.
+- Panel: botones, etiquetas, pestañas y cuadros de diálogo ahora son iguales en todas las pantallas, y hay un control automático para que no se vuelvan a mezclar estilos.
+- Importar catálogo: los juegos sin piezas entran como «juego incompleto» (no se pueden alquilar hasta completarlos y no aparecen en la tienda); una unidad que pasa a ser juego se convierte sola si no tiene reservas; el precio vacío o 0 queda «a consultar» y el presupuesto avisa «falta precio» hasta cargarlo; cada categoría puede traer su foto. Las medidas y la capacidad del archivo ahora van a sus campos propios de la ficha del producto.
+- Tienda web: nueva plantilla «Catálogo editorial» con las fotos de cada categoría, orden de la tienda a tu gusto (arrastrar o Subir / Bajar), carrito que se conserva, ficha de cada producto con medidas y capacidad, y pedido de mejor precio.

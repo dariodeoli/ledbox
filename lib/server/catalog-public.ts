@@ -226,7 +226,7 @@ type CatalogRow = {
 /** Lectura mínima (sin `imageData` ni ningún costo): solo lo que el DTO necesita. */
 export async function loadVisibleRows(organizationId: string, list: PriceList, ids?: readonly string[]): Promise<CatalogRow[]> {
   const rows = await db.inventoryItem.findMany({
-    where: { organizationId, ...catalogAudienceWhere(list), archivedAt: null, status: { not: "RETIRED" }, ...(ids ? { id: { in: [...ids] } } : {}) },
+    where: { organizationId, ...catalogAudienceWhere(list), archivedAt: null, status: { not: "RETIRED" }, comboIncomplete: false, ...(ids ? { id: { in: [...ids] } } : {}) },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     take: 500,
     select: {
@@ -688,4 +688,11 @@ export async function loadPublicCategories(organizationId: string): Promise<Publ
     imageUrl: row.imageUrl,
     sortOrder: row.sortOrder,
   }));
+}
+
+/** Fotos de categoría por nombre público, listas para `StoreFront.categoryImages` (solo las que tienen foto). */
+export async function loadCategoryImages(organizationId: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const category of await loadPublicCategories(organizationId)) if (category.imageUrl) out[category.name] = category.imageUrl;
+  return out;
 }

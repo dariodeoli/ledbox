@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AccessPage } from "@/components/catalog-public/AccessPage";
 import { StoreFront } from "@/components/catalog-public/StoreFront";
-import { loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
+import { loadCategoryImages, loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
 
 export const dynamic = "force-dynamic";
 
@@ -45,12 +45,13 @@ export default async function StorePage({ params, searchParams }: PageProps) {
     return <AccessPage store={store} demo={context.demo} endpoint={`/api/catalog/${encodeURIComponent(context.organization.slug)}/access-request`} />;
   }
   const range = parsePublicRange(first(query.desde), first(query.hasta));
-  const [store, items, zones] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context)]);
+  const [store, items, zones, categoryImages] = await Promise.all([loadStorefront(context), loadPublicCatalogItems(context, range), loadPublicZones(context), loadCategoryImages(context.organization.id)]);
   const slug = encodeURIComponent(context.organization.slug);
   return (
     <StoreFront
       store={store}
       items={items}
+      categoryImages={categoryImages}
       zones={zones}
       showPrices={context.settings.publicShowPrices}
       demo={context.demo}

@@ -29,6 +29,7 @@ import {
   type ExistingItem,
   type ImportProblem,
   type PlannedProduct,
+  catalogSpecs,
 } from "@/lib/import-catalog";
 
 const BLOCK_SIZE = 25;
@@ -128,6 +129,12 @@ function sameBytes(a: Uint8Array | null | undefined, b: Uint8Array): boolean {
   return Boolean(a) && a!.byteLength === b.byteLength && Buffer.compare(Buffer.from(a!), Buffer.from(b)) === 0;
 }
 
+/** Capacidad y medidas del archivo en los campos de la ficha; lo que el archivo no trae no se pisa. */
+const specData = (product: Parameters<typeof catalogSpecs>[0]) => {
+  const { capacity, dimensions } = catalogSpecs(product);
+  return { ...(capacity !== null ? { capacity } : {}), ...(dimensions ? { dimensions } : {}) };
+};
+
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
 async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
   const { product } = planned;
@@ -139,6 +146,7 @@ async function writeUnitItem(tx: Tx, organizationId: string, planned: PlannedPro
     name: product.nombre,
     ...categoryWriteData(category),
     publicDescription: planned.publicDescription,
+    ...specData(product),
     billingUnit: billingUnitOf(product.cobro),
     ...(product.precio ? { listPrice: product.precio } : {}),
   };
@@ -222,6 +230,7 @@ async function writeComboMeta(tx: Tx, organizationId: string, id: string, planne
       name: product.nombre,
       ...categoryWriteData(category),
       publicDescription: planned.publicDescription,
+      ...specData(product),
       billingUnit: billingUnitOf(product.cobro),
       ...(product.precio ? { listPrice: product.precio } : {}),
       ...visibilityData(current),

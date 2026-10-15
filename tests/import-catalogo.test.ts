@@ -7,6 +7,7 @@ import {
   DUDA_MOTIVO_LABEL,
   dudaMotivo,
   buildPublicDescription,
+  catalogSpecs,
   normalizeCatalog,
   parseCatalogJson,
   planCatalog,
@@ -134,7 +135,11 @@ test("fotos: faltante, sobrante y sin ZIP", () => {
 });
 
 test("descripción pública: medidas, capacidad y descripción, con tope de 600", () => {
-  assert.equal(buildPublicDescription({ medidas: "1.60x0.75", capacidad: "8 personas", descripcion: "Sofá con mesa." }).text, "Medidas: 1.60x0.75. Capacidad: 8 personas. Sofá con mesa.");
+  assert.equal(buildPublicDescription({ medidas: "1.60x0.75", capacidad: "8 personas", descripcion: "Sofá con mesa." }).text, "Sofá con mesa.");
+  // Lo que no entra en los campos propios (no es un número / es muy largo) se conserva en la descripción.
+  assert.equal(buildPublicDescription({ medidas: "x".repeat(70), capacidad: "para muchos", descripcion: null }).text, `Medidas: ${"x".repeat(70)}. Capacidad: para muchos.`);
+  assert.deepEqual(catalogSpecs({ medidas: " Ø 1,40  m ", capacidad: "10 personas" }), { capacity: 10, dimensions: "Ø 1,40 m" });
+  assert.deepEqual(catalogSpecs({ medidas: null, capacidad: "varias" }), { capacity: null, dimensions: null });
   assert.equal(buildPublicDescription({ medidas: null, capacidad: null, descripcion: null }).text, null);
   const long = buildPublicDescription({ medidas: null, capacidad: null, descripcion: "x".repeat(900) });
   assert.equal(long.text!.length, 600);

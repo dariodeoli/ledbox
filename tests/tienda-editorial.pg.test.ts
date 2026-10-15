@@ -18,7 +18,7 @@ test("tienda editorial: orden de secciones, carrito guardado y pedido de mejor p
   const { GET: visitorCartGet, PUT: visitorCartPut, POST: visitorCartPrice } = await import("../app/api/catalog/[orgSlug]/carrito/[token]/cart/route");
   const { loadProductDetail } = await import("../lib/server/catalog-product");
   const { issueCatalogAccess } = await import("../lib/server/catalog-access");
-  const { loadPublicCatalogItems, loadPublicOrder, resolvePublicCatalog, resolveAccessCatalog } = await import("../lib/server/catalog-public");
+  const { loadCategoryImages, loadPublicCatalogItems, loadPublicOrder, resolvePublicCatalog, resolveAccessCatalog } = await import("../lib/server/catalog-public");
   const { loadStorefrontOrder, saveStorefrontOrder } = await import("../lib/server/storefront-order");
   const { respondToPriceRequest } = await import("../lib/server/quote-price-request");
   const { convertQuoteRequest } = await import("../lib/server/catalog-convert");
@@ -351,6 +351,17 @@ test("tienda editorial: orden de secciones, carrito guardado y pedido de mejor p
       // Un producto solo mayorista no sale en la ficha pública.
       await db.inventoryItem.update({ where: { id: a.mesa.id }, data: { catalogAudience: "WHOLESALE" } });
       assert.equal(await loadProductDetail(ctx, a.mesa.id), null);
+    });
+
+    await t.test("juegos incompletos fuera de la tienda y foto de categoría para StoreFront", async () => {
+      const a = await seed();
+      await db.inventoryItem.update({ where: { id: a.puff.id }, data: { comboIncomplete: true } });
+      await db.inventoryCategory.update({ where: { id: a.living.id }, data: { imageUrl: "/api/foto-categoria-prueba" } });
+      const context = await resolvePublicCatalog(a.slug);
+      const items = await loadPublicCatalogItems(context!, null);
+      assert.ok(!items.some((item) => item.id === a.puff.id), "un juego incompleto no se puede pedir");
+      assert.ok(items.some((item) => item.id === a.sofa.id));
+      assert.deepEqual(await loadCategoryImages(a.org), { "Sector Living": "/api/foto-categoria-prueba" });
     });
   } finally {
     await db.organization.deleteMany({ where: { slug: { startsWith: "te-" } } });
