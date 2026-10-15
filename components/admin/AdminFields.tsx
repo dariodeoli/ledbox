@@ -17,6 +17,7 @@ import {
   Tooltip as SharedTooltip,
 } from "owncoding-ui";
 import {
+  CITY_OPTIONS,
   amountExceeds,
   amountInput,
   DEFAULT_PHONE_COUNTRY,
@@ -647,9 +648,10 @@ export function PhoneField({
   );
 }
 
-/** Ciudad libre; cada cambio limpia/resuelve el departamento dependiente. */
-export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name }: {
+/** Ciudad con sugerencias; `catalogOnly` exige selección del catálogo y conserva valores históricos. */
+export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name, catalogOnly = false }: {
   label?: string; help?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
+  catalogOnly?: boolean;
   onSelect: (city: string, department: string) => void;
   hint?: string; error?: string | null; wide?: boolean;
   /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
@@ -658,6 +660,10 @@ export function CityField({ label, help, ariaLabel, value, onChange, onSelect, h
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
+  if (catalogOnly) return <Combobox label={label} help={help} ariaLabel={ariaLabel} value={value}
+    onChange={(city) => { const option = CITY_OPTIONS.find((entry) => entry.ciudad === city); if (option) onSelect(option.ciudad, option.departamento); else onChange(city === value ? city : ""); }}
+    options={CITY_OPTIONS.map((entry) => ({ value: entry.ciudad, label: entry.ciudad, description: entry.departamento })).concat(value && !CITY_OPTIONS.some((entry) => entry.ciudad === value) ? [{ value, label: value, description: "Valor guardado anteriormente" }] : [])}
+    hint={hint} error={error} wide={wide} size={size ?? "md"} required={required} disabled={disabled} placeholder={placeholder} id={fieldId} name={name} />;
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">
@@ -1152,7 +1158,13 @@ export function Combobox({
   onCreate,
   createLabel,
   onSearch,
+  allowCustomValue = false,
+  onSelectOption,
 }: {
+  /** Texto libre persistido al escribir; sólo para catálogos que lo permiten. */
+  allowCustomValue?: boolean;
+  /** Selección explícita; nunca se dispara al escribir texto libre. */
+  onSelectOption?: (value: string) => void;
   /** Búsqueda remota opcional; conserva el contrato de selección por ID. */
   onSearch?: (query: string) => void;
   label?: string;
@@ -1231,7 +1243,7 @@ export function Combobox({
   }, [open]);
 
   function openList() {
-    setText(selected?.label ?? "");
+    setText(selected?.label ?? (allowCustomValue ? value : ""));
     setQuery("");
     onSearch?.("");
     const index = selected ? options.findIndex((option) => option.value === selected.value) : -1;
@@ -1249,6 +1261,7 @@ export function Combobox({
 
   function choose(option: ComboboxOption) {
     onChange(option.value);
+    onSelectOption?.(option.value);
     closeList();
     inputRef.current?.focus();
   }
@@ -1279,7 +1292,7 @@ export function Combobox({
           id={fieldId}
           name={name}
           type="text"
-          value={open ? text : selected?.label ?? ""}
+          value={open ? text : selected?.label ?? (allowCustomValue ? value : "")}
           role="combobox"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
@@ -1313,8 +1326,9 @@ export function Combobox({
             onSearch?.(next);
             setActive(next.trim() ? 0 : -1);
             setOpen(true);
+            if (allowCustomValue) onChange(next);
             // Borrar todo el texto quita la selección (el evento es opcional).
-            if (!next.trim() && value) onChange("");
+            else if (!next.trim() && value) onChange("");
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {

@@ -1,3 +1,4 @@
+import { rememberedVenues } from "@/lib/event-venues";
 import { EventRescheduleError, guardEventReschedule, lockEventForEdit } from "@/lib/server/event-reschedule";
 import { guardEventNameChange } from "@/lib/server/event-name";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
@@ -7,7 +8,7 @@ import { eventStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { trashErrorResponse } from "@/lib/server/trash";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, auditPick, recordAudit } from "@/lib/server/audit";
 import { planLimitViolation } from "@/lib/server/plan-limits";
 import { dayStart, isValidDayKey, nextDayKey } from "@/lib/server/notifications";
@@ -49,6 +50,15 @@ export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const url = new URL(request.url);
+  if (url.searchParams.get("fields") === "venues") {
+    // Proyección propia: no depende del tope del listado ni expone clientes/responsables.
+    const rows = await db.event.findMany({
+      where: { organizationId: auth.context.organizationId, location: { not: null } },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: { location: true, city: true, department: true, address: true, addressReference: true, locationUrl: true, venueContactName: true, venueContactPhone: true, venueContactEmail: true },
+    });
+    return Response.json({ venues: rememberedVenues(rows) });
+  }
   if (url.searchParams.get("fields") === "selector") {
     const events = await db.event.findMany({
       where: { organizationId: auth.context.organizationId, startsAt: selectorStartsAt(url) },
@@ -128,17 +138,15 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const auth = await requireAdminContext("events.write");
   if (!auth.ok) return auth.response;
-  const body = (await readJson(request)) as Record<string, unknown>;
-  const parsed = parseEventFields(body);
-  if (!parsed.ok) return jsonError(parsed.error, 400);
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("Datos del evento inválidos.", 400);
   const id = typeof body.id === "string" ? body.id.trim() : "";
   if (!id) return jsonError("Event id is required.", 400);
-  if (!Object.keys(parsed.data).length) return jsonError("Ingresá los cambios del evento.", 400);
-
-  const event = await db.event.findFirst({
-    where: { id, organizationId: auth.context.organizationId },
-  });
+  const event = await db.event.findFirst({ where: { id, organizationId: auth.context.organizationId } });
   if (!event) return jsonError("Event not found.", 404);
+  const parsed = parseEventFields(body, event.city);
+  if (!parsed.ok) return jsonError(parsed.error, 400);
+  if (!Object.keys(parsed.data).length) return jsonError("Ingresá los cambios del evento.", 400);
   if (parsed.data.city !== undefined && parsed.data.city !== event.city && parsed.data.department === undefined) parsed.data.department = null;
   const proposed = { ...event, ...parsed.data };
   const invalidDates = eventDateViolation(proposed);

@@ -78,9 +78,10 @@ test("Client/Event servidor: migración conserva historia, scope, permisos y sna
     assert.equal((await call("/api/admin/events", "PATCH", { id: foreignEvent.id, department: "Filtración" })).status, 404);
     assert.equal((await call("/api/admin/events", "PATCH", { id: event.id, endsAt: "2029-01-01T12:00:00Z" })).status, 400);
     assert.equal((await call("/api/admin/events", "PATCH", { id: event.id, attendees: -1 })).status, 400);
-    assert.equal((await call("/api/admin/events", "PATCH", { id: event.id, city: "Ciudad manual", name: "Evento editado" })).status, 200);
+    assert.equal((await call("/api/admin/events", "PATCH", { id: event.id, city: "Asunciónx" })).status, 400);
+    assert.equal((await call("/api/admin/events", "PATCH", { id: event.id, city: "Luque", name: "Evento editado" })).status, 200);
     const changed = await db.event.findUniqueOrThrow({ where: { id: event.id } });
-    assert.equal(changed.location, "Recinto QA"); assert.equal(changed.department, null); assert.equal(changed.city, "Ciudad manual");
+    assert.equal(changed.location, "Recinto QA"); assert.equal(changed.department, "Central"); assert.equal(changed.city, "Luque");
     const unchanged = await call("/api/admin/events", "PATCH", { id: event.id, name: changed.name });
     assert.equal((await unchanged.json()).unchanged, true);
     const events = (await (await call("/api/admin/events?fields=selector")).json()).events;

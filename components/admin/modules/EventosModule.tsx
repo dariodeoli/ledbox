@@ -409,7 +409,7 @@ export function EventosModule() {
       setFormError("Elegí el cliente del evento.");
       return;
     }
-    const invalid = eventQuickError(form);
+    const invalid = eventQuickError(form, editingEvent?.city);
     if (invalid) { setFormError(invalid); return; }
     const fields: Partial<ReturnType<typeof eventQuickPayload>> = eventQuickPayload(form);
     const original = editingEventId ? events.find((event) => event.id === editingEventId) : null;

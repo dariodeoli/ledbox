@@ -751,3 +751,10 @@ export function parseTimeRanges(value: unknown, max = 4): { ok: true; ranges: Ti
   }
   return { ok: true, ranges: ranges.map(({ from, to }) => ({ from, to })) };
 }
+
+/** Opción exacta del catálogo (ignora acentos, mayúsculas y espacios externos). */
+export function catalogCity(value: string): { ciudad: string; departamento: string } | null {
+  const key = (text: string) => text.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+  const normalized = key(value);
+  return CITY_OPTIONS.find((entry) => key(entry.ciudad) === normalized) ?? null;
+}

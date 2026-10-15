@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminResource } from "@/lib/admin-api";
+import { VENUE_FIELDS, type EventVenue } from "@/lib/event-venues";
 import { AdminDialogSection, AdminDisclosure } from "../AdminUI";
 import { CityField, Combobox, DateTimeField, EmailField, NumberField, PhoneField, TextField } from "../AdminFields";
 import { contactPhoneValid } from "@/lib/admin-format";
@@ -18,16 +20,27 @@ export function EventQuickFields({ values, onChange, autoFocus, moreOpen = false
   layout?: "quick" | "sections";
   children?: React.ReactNode;
 }) {
+  const venueResource = useAdminResource<EventVenue[]>("/api/admin/events?fields=venues", (payload) => payload.venues ?? []);
+  const remembered = venueResource.data ?? [];
+  const venueNames = [...new Set([...remembered.flatMap((row) => row.location ? [row.location] : []), ...locationOptions])];
+  const chooseVenue = (location: string) => {
+    const saved = remembered.find((row) => row.location === location);
+    onChange(saved ? Object.fromEntries(VENUE_FIELDS.map((key) => [key, saved[key] ?? ""])) : { location });
+  };
   const name = <TextField label="Nombre del evento" required autoFocus={autoFocus} maxLength={200}
       value={values.name} onChange={(name) => onChange({ name })} placeholder="Ej.: Lanzamiento Samsung" />;
   const starts = <DateTimeField label="Inicio" hint="Opcional · fecha y hora del evento" value={values.startsAt} onChange={(startsAt) => onChange({ startsAt })} />;
   const ends = <DateTimeField label="Fin" value={values.endsAt} onChange={(endsAt) => onChange({ endsAt })} />;
-  const venue = <Combobox label="Lugar / recinto" value={values.location} onChange={(location) => onChange({ location })}
-        options={locationOptions.map((location) => ({ value: location, label: location }))}
+  const venue = <Combobox label="Lugar / recinto" value={values.location} allowCustomValue onChange={(location) => {
+          // El texto nuevo se guarda de inmediato; seleccionar una sugerencia aplica su ficha.
+          onChange({ location });
+        }}
+        options={venueNames.map((location) => ({ value: location, label: location }))}
+        onSelectOption={chooseVenue}
         onCreate={(location) => onChange({ location })} createLabel={(query) => `Usar lugar «${query}»`}
-        placeholder="Buscá un recinto o escribí uno…" hint="Recintos de tus eventos; una ciudad no reemplaza el lugar." />;
+        placeholder="Buscá un recinto o escribí uno…" hint="Se guarda con el evento. Elegí un recinto guardado para completar dirección y contacto." />;
   const place = <>
-      <CityField label="Ciudad" value={values.city} onChange={(city) => onChange({ city, department: "" })}
+      <CityField catalogOnly label="Ciudad" value={values.city} onChange={(city) => onChange({ city, department: "" })}
         onSelect={(city, department) => onChange({ city, department })} placeholder="Ej.: Asunción" />
       <TextField label="Departamento" maxLength={120} value={values.department} onChange={(department) => onChange({ department })} hint="Opcional · también podés completarlo a mano." />
       <TextField label="Dirección del evento" maxLength={300} value={values.address} onChange={(address) => onChange({ address })} />

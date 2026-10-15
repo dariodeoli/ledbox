@@ -1,6 +1,6 @@
 import type { EventStatus } from "@prisma/client";
 import { normalizeContactPhone, normalizeWebsite, websiteValid } from "@/lib/admin-format";
-import { emailValid, normalizeEmail } from "@/lib/field-rules";
+import { catalogCity, emailValid, normalizeEmail } from "@/lib/field-rules";
 
 export type EventFieldPatch = {
   name?: string;
@@ -27,7 +27,7 @@ export type EventFieldPatch = {
 };
 
 /** Alta y edición parcial: ausente conserva, null/vacío limpia opcionales. */
-export function parseEventFields(body: unknown): { ok: true; data: EventFieldPatch } | { ok: false; error: string } {
+export function parseEventFields(body: unknown, existingCity?: string | null): { ok: true; data: EventFieldPatch } | { ok: false; error: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Datos del evento inválidos." };
   const record = body as Record<string, unknown>;
   const data: EventFieldPatch = {};
@@ -41,6 +41,11 @@ export function parseEventFields(body: unknown): { ok: true; data: EventFieldPat
     if (value === undefined) continue;
     if (value !== null && (typeof value !== "string" || value.trim().length > texts[field])) return { ok: false, error: `El campo ${field} debe ser texto de hasta ${texts[field]} caracteres.` };
     data[field] = typeof value === "string" ? value.trim() || null : null;
+  }
+  if (data.city) {
+    const option = catalogCity(data.city);
+    if (!option && data.city !== existingCity) return { ok: false, error: "Elegí una ciudad de la lista." };
+    if (option) { data.city = option.ciudad; if (data.department === undefined) data.department = option.departamento; }
   }
   for (const field of ["venueContactEmail", "responsibleEmail"] as const) {
     const value = record[field];
