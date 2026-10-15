@@ -150,3 +150,6 @@ La publicación133 **falló**, no está servida: #243. El código134 está en la
 - #222: herramientas/dependencias sigue abierto.
 
 Engram local: proyecto `ledbox`, observación76 registra continuidad, fuentes y fallo133. La revisión de este informe no modificó datos comerciales ni certificó entrega de correos.
+
+- #253: completar identidad compartida de clientes en consumidores secundarios (calendario, facturación y comparadores), conservando snapshots.
+- #252: índice principal de continuidad y prioridades. Los defectos de portal y ciclo asíncrono de fotos encontrados durante134 ya se corrigieron y recibieron revisión independiente; falta la acreditación final de publicación.
