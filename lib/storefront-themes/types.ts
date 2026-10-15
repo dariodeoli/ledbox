@@ -34,9 +34,9 @@ export type ThemeColors = {
   announceText: string;
 };
 
-/** Variantes de layout: las lee el CSS por `data-*`; el marcado de los componentes es el mismo en los cuatro temas. */
+/** Variantes de layout: las lee el CSS por `data-*`; el marcado de los componentes es el mismo en todos los temas. */
 export type ThemeLayout = {
-  /** Tarjeta de categoría: caja con imagen arriba, o imagen a sangre con el texto encima. */
+  /** Tarjeta de categoría: caja con imagen arriba, o foto entera con una banda de texto debajo. */
   category: "card" | "overlay";
   /** Densidad de la grilla del catálogo en escritorio. */
   grid: "airy" | "dense";
@@ -44,7 +44,7 @@ export type ThemeLayout = {
   hero: "photo" | "band";
   /** Botones: píldora o esquina suave. */
   button: "pill" | "soft";
-  /** Foto de la tarjeta de producto sobre superficie blanca (`contain`) o a sangre (`cover`). */
+  /** Foto de la tarjeta de producto sobre superficie blanca (`contain`); los productos siempre se muestran enteros. */
   photoFit: "contain" | "cover";
 };
 

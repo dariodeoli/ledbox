@@ -8,61 +8,46 @@ import { StoreChrome } from "../../catalog-public/StoreChrome";
 
 /** Datos ficticios de cada rubro, únicamente para distinguir las plantillas en Apariencia. */
 const PREVIEW_EXAMPLES: Record<string, { categories: string[]; products: string[] }> = {
-  lienzo: { categories: ["Decoración", "Complementos"], products: ["Florero de ejemplo", "Lámpara de ejemplo"] },
-  marmol: { categories: ["Decoración", "Centros de mesa"], products: ["Centro de mesa de ejemplo", "Candelabro de ejemplo"] },
   boutique: { categories: ["Ceremonia", "Recepción"], products: ["Arco de boda de ejemplo", "Mesa de novios de ejemplo"] },
-  gala: { categories: ["Ceremonia", "Banquete"], products: ["Silla de ceremonia de ejemplo", "Copa de ejemplo"] },
-  noir: { categories: ["Pantallas LED", "Sonido"], products: ["Pantalla LED de ejemplo", "Parlante de ejemplo"] },
   escenario: { categories: ["Sonido", "Iluminación"], products: ["Sistema de sonido de ejemplo", "Cabezal móvil de ejemplo"] },
-  studio: { categories: ["Conferencias", "Exposiciones"], products: ["Atril de ejemplo", "Proyector de ejemplo"] },
   corporativo: { categories: ["Conferencias", "Stands"], products: ["Atril de ejemplo", "Stand modular de ejemplo"] },
-  jardin: { categories: ["Jardín", "Exteriores"], products: ["Gazebo de ejemplo", "Guirnalda de ejemplo"] },
   industrial: { categories: ["Estructuras", "Generadores"], products: ["Carpa de ejemplo", "Generador de ejemplo"] },
-  terracota: { categories: ["Vajilla", "Servicio"], products: ["Plato de ejemplo", "Bandeja de ejemplo"] },
   gourmet: { categories: ["Vajilla", "Catering"], products: ["Juego de platos de ejemplo", "Chafing de ejemplo"] },
   kids: { categories: ["Juegos", "Mobiliario infantil"], products: ["Inflable de ejemplo", "Mesa infantil de ejemplo"] },
-  nordico: { categories: ["Mesas", "Sillas"], products: ["Mesa de ejemplo", "Silla de ejemplo"] },
   fiesta: { categories: ["Fiestas", "Pista y barras"], products: ["Barra de ejemplo", "Pista de baile de ejemplo"] },
-  brisa: { categories: ["Sociales", "Celebraciones"], products: ["Living de ejemplo", "Barra de ejemplo"] },
 };
 
 /**
  * Vista previa en vivo de la tienda con la apariencia que se está editando (antes de guardar). Usa **las mismas clases y
  * tokens CSS** que la tienda real (`.cp-*`, `--color-*`…): plantilla, color primario, tipografía de títulos, barra de anuncio,
- * frase y modo de precio. El contenido es de ejemplo y está rotulado. Con `size="thumb"` es la miniatura de la tarjeta de
- * plantilla (la misma página, reducida): se ve exactamente lo que el cliente va a ver.
+ * frase y modo de precio. El contenido es de ejemplo y está rotulado; el ancho se adapta al panel sin recortar sus precios ni controles.
  */
 export function StorePreview({
   frame,
   appearance,
   brandColor,
   name,
-  coverSrc,
   coverDesktop,
   coverMobile,
   tagline,
-  size = "full",
 }: {
   frame: "desktop" | "mobile";
   appearance: Appearance;
   brandColor: string | null;
   name: string;
-  /** Portada única (miniaturas). La vista completa pasa las dos y elige según el dispositivo. */
-  coverSrc?: string | null;
   coverDesktop?: string | null;
   coverMobile?: string | null;
   tagline?: string | null;
-  size?: "full" | "thumb";
 }) {
   const view = appearanceView(appearance, brandColor);
   const shownName = name || "Tu empresa";
-  const mobile = frame === "mobile" || size === "thumb";
-  const cover = coverSrc !== undefined ? coverSrc : mobile ? (coverMobile ?? coverDesktop ?? null) : (coverDesktop ?? coverMobile ?? null);
+  const mobile = frame === "mobile";
+  const cover = mobile ? (coverMobile ?? coverDesktop ?? null) : (coverDesktop ?? coverMobile ?? null);
   const photoHero = Boolean(cover);
   const showPrices = appearance.priceMode !== "quote";
   const unitText = priceUnitLabel(appearance.priceMode, "PER_DAY", null);
   // Solo ejemplos rotulados del selector: elegir plantilla nunca modifica el catálogo real de la empresa.
-  const niche = PREVIEW_EXAMPLES[appearance.template] ?? PREVIEW_EXAMPLES.lienzo;
+  const niche = PREVIEW_EXAMPLES[appearance.template] ?? PREVIEW_EXAMPLES.boutique;
   const examples = niche.products.map((name, index) => ({ name, price: index === 0 ? 250000 : 120000 }));
   const body = (
     <StoreChrome appearance={view}>
@@ -133,13 +118,6 @@ export function StorePreview({
       </div>
     </StoreChrome>
   );
-  if (size === "thumb") {
-    return (
-      <div className="cp-root cp-thumb" data-testid={`store-thumb-${appearance.template}`} aria-hidden="true" inert>
-        <div className="cp-thumb-scale">{body}</div>
-      </div>
-    );
-  }
   return (
     <div className="cp-root cp-preview" data-frame={mobile ? "mobile" : "desktop"} data-testid={`store-preview-${frame}`} role="img" aria-label={`Vista previa de la tienda en ${frame === "desktop" ? "escritorio" : "celular"}, con datos de ejemplo`}>
       {body}

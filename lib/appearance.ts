@@ -17,7 +17,7 @@ import { STORE_MIN_CONTRAST, STORE_SURFACE_LIGHT, contrastRatio, hexToRgb, norma
 /**
  * Apariencia de las superficies del cliente (tienda y catálogo, mayorista, seguimiento del
  * pedido, portal, presupuesto impreso y correos). Todo es una **lista cerrada** o un valor
- * validado: plantilla (Lienzo, Boutique, Noir o Studio: solo tokens CSS, sin CSS libre), tipografía
+ * validado: plantilla (Boutique y seis rubros especializados: solo tokens CSS, sin CSS libre), tipografía
  * de títulos de una lista curada, color de marca con contraste AA, barra de anuncio y modo de precio.
  * Reglas puras: las usan el API, las páginas públicas, el panel (vista previa en vivo) y los tests.
  *
@@ -99,8 +99,9 @@ export function parseAppearance(body: unknown, current: Appearance = DEFAULT_APP
   const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const next: Appearance = { ...current, announcement: { ...current.announcement }, home: current.home };
   if (input.template !== undefined) {
-    if (!isTemplateId(input.template)) return { ok: false, error: "Elegí una plantilla de la lista de Ajustes → Apariencia." };
-    next.template = input.template;
+    const template = resolveStoredTheme(input.template);
+    if (!template) return { ok: false, error: "Elegí una plantilla de la lista de Ajustes → Apariencia." };
+    next.template = template;
   }
   if (input.font !== undefined) {
     if (!isFontId(input.font)) return { ok: false, error: "Elegí una tipografía de la lista." };

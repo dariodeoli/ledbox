@@ -4,8 +4,7 @@ import type { ThemeDef } from "./storefront-themes/types";
 import { STORE_MIN_CONTRAST, contrastRatio, hexToRgb, normalizeHex, readableOn, rgbToHex, type Rgb } from "./storefront-theme";
 
 /**
- * Sistema de temas de la tienda (docs/TIENDA-PLANTILLAS.md y docs/TIENDA-BOUTIQUE.md): Lienzo, Boutique, Noir y
- * Studio. Un tema = **un objeto de tokens** (colores, tipografías, radios, sombras, espacios, proporciones de imagen)
+ * Sistema de temas de la tienda (docs/TIENDA-PLANTILLAS.md y docs/TIENDA-BOUTIQUE.md): Boutique y seis rubros especializados. Un tema = **un objeto de tokens** (colores, tipografías, radios, sombras, espacios, proporciones de imagen)
  * más **variantes de layout** (atributos `data-*` que el CSS de `app/tienda.css` lee). Es la ÚNICA fuente de verdad:
  * los componentes y el CSS de la tienda no llevan colores ni tamaños propios, solo `var(--…)`.
  *
@@ -16,28 +15,20 @@ import { STORE_MIN_CONTRAST, contrastRatio, hexToRgb, normalizeHex, readableOn, 
  * Puro y testeable: el test mide el contraste AA de todos los pares de texto/fondo y de los botones de cada tema.
  */
 
-export const DEFAULT_STORE_THEME: StoreThemeId = "lienzo";
+export const DEFAULT_STORE_THEME: StoreThemeId = "boutique";
 
 export function isStoreTheme(value: unknown): value is StoreThemeId {
   return typeof value === "string" && (STORE_THEMES as readonly string[]).includes(value);
 }
 
-/**
- * Las plantillas de versiones anteriores pasan a las 4 nuevas (decisión del dueño, 2026-10-15). Las cinco de
- * v2.1.126 y las cinco clásicas anteriores a ellas. Es la tabla que usa el alias de lectura y la migración de datos
- * `202610300001_tienda_temas`: si cambia una, cambia la otra (lo verifica un test).
- */
+/** Compatibilidad de lectura y escritura: las plantillas retiradas se resuelven a una de las siete vigentes.
+ * El SQL histórico no se reescribe: sus resultados intermedios también están en este mapa. */
 export const LEGACY_TEMPLATE_MAP: Readonly<Record<string, StoreThemeId>> = {
-  minimal: "lienzo",
-  boutique: "boutique",
-  noche: "noir",
-  tecnologica: "noir",
-  fresca: "studio",
-  editorial: "boutique",
-  clasica: "lienzo",
-  minimalista: "lienzo",
-  elegante: "boutique",
-  oscura: "noir",
+  minimal: "corporativo", boutique: "boutique", noche: "escenario", tecnologica: "escenario",
+  fresca: "corporativo", editorial: "boutique", clasica: "corporativo", minimalista: "corporativo",
+  elegante: "boutique", oscura: "escenario",
+  lienzo: "corporativo", studio: "corporativo", marmol: "corporativo", nordico: "corporativo",
+  noir: "escenario", gala: "escenario", jardin: "boutique", terracota: "boutique", brisa: "boutique",
 };
 
 /** Plantilla vigente para un valor guardado (nuevo o viejo); `null` si no es de ninguna lista. */

@@ -1,19 +1,10 @@
 import { BOUTIQUE_THEME } from "./boutique";
-import { BRISA_THEME } from "./brisa";
 import { CORPORATIVO_THEME } from "./corporativo";
 import { ESCENARIO_THEME } from "./escenario";
 import { FIESTA_THEME } from "./fiesta";
 import { GOURMET_THEME } from "./gourmet";
 import { INDUSTRIAL_THEME } from "./industrial";
 import { KIDS_THEME } from "./kids";
-import { GALA_THEME } from "./gala";
-import { JARDIN_THEME } from "./jardin";
-import { LIENZO_THEME } from "./lienzo";
-import { MARMOL_THEME } from "./marmol";
-import { NORDICO_THEME } from "./nordico";
-import { NOIR_THEME } from "./noir";
-import { STUDIO_THEME } from "./studio";
-import { TERRACOTA_THEME } from "./terracota";
 import type { ThemeDef } from "./types";
 
 /**
@@ -22,7 +13,7 @@ import type { ThemeDef } from "./types";
  * El orden de este arreglo es el orden dentro de cada rubro en el selector de Apariencia. Los tests de contraste y de
  * ausencia de hardcodes recorren TODO el registro.
  */
-export const THEME_REGISTRY = [LIENZO_THEME, BOUTIQUE_THEME, NOIR_THEME, STUDIO_THEME, JARDIN_THEME, MARMOL_THEME, TERRACOTA_THEME, NORDICO_THEME, GALA_THEME, BRISA_THEME, ESCENARIO_THEME, CORPORATIVO_THEME, FIESTA_THEME, GOURMET_THEME, KIDS_THEME, INDUSTRIAL_THEME] as const;
+export const THEME_REGISTRY = [BOUTIQUE_THEME, ESCENARIO_THEME, CORPORATIVO_THEME, FIESTA_THEME, GOURMET_THEME, KIDS_THEME, INDUSTRIAL_THEME] as const;
 
 export type StoreThemeId = (typeof THEME_REGISTRY)[number]["id"];
 export const STORE_THEMES = THEME_REGISTRY.map((theme) => theme.id) as readonly StoreThemeId[];

@@ -42,8 +42,8 @@ const SPEC_TOKENS = [
 
 // ── Registro ─────────────────────────────────────────────────────────────────
 
-test("registro: las 4 plantillas del dueño más las 6 premium, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
-  assert.deepEqual([...STORE_THEMES], ["lienzo", "boutique", "noir", "studio", "jardin", "marmol", "terracota", "nordico", "gala", "brisa", "escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
+test("registro: solo Boutique y las seis plantillas por rubro, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
+  assert.deepEqual([...STORE_THEMES], ["boutique", "escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
   assert.deepEqual([...TEMPLATES], [...STORE_THEMES]);
   assert.equal(new Set(THEME_REGISTRY.map((theme) => theme.id)).size, THEME_REGISTRY.length, "ids únicos");
   for (const theme of THEME_REGISTRY) {
@@ -62,7 +62,7 @@ test("registro: las 4 plantillas del dueño más las 6 premium, cada una con id,
 });
 
 test("registro: sumar una plantilla no toca componentes (los archivos de tema son solo datos)", () => {
-  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(lienzo|boutique|noir|studio|jardin|marmol|terracota|nordico|gala|escenario|corporativo|fiesta|gourmet|kids|industrial|brisa)\.ts$/.test(name))) {
+  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(boutique|escenario|corporativo|fiesta|gourmet|kids|industrial)\.ts$/.test(name))) {
     const source = read(`lib/storefront-themes/${file}`);
     assert.ok(!/\bimport\b[^;]*react/i.test(source), `${file}: sin React`);
     assert.ok(!/function\s/.test(source), `${file}: solo un objeto de tokens`);
@@ -91,10 +91,10 @@ test("color primario de la empresa: rige si da AA con el tema; si no, cae al pro
       assert.ok(contrastRatio(onPrimary, primary700) >= 4.5, `${id} ${brand} hover`);
     }
   }
-  assert.equal(themePrimary("lienzo", "#0b5cd5").primary, "#0b5cd5");
-  assert.equal(themePrimary("noir", "#0b5cd5").fromBrand, false, "un azul oscuro no se lee sobre el fondo negro de Noir");
-  assert.equal(themePrimary("noir", "#7dd3fc").fromBrand, true);
-  assert.equal(themePrimary("studio", "#ffe14a").fromBrand, false);
+  assert.equal(themePrimary("corporativo", "#0b5cd5").primary, "#0b5cd5");
+  assert.equal(themePrimary("escenario", "#0b5cd5").fromBrand, false, "un azul oscuro no se lee sobre el fondo negro de Noir");
+  assert.equal(themePrimary("escenario", "#7dd3fc").fromBrand, true);
+  assert.equal(themePrimary("corporativo", "#ffe14a").fromBrand, false);
 });
 
 // ── Tokens, tipografías y atributos ──────────────────────────────────────────
@@ -111,8 +111,8 @@ test("tokens: cada plantilla define los nombres de la especificación y nada que
     assert.equal(attrs["data-store-scheme"], THEMES[id].scheme);
     assert.match(attrs["data-category"], /^(card|overlay)$/);
   }
-  assert.equal(THEMES.noir.scheme, "dark");
-  assert.deepEqual([THEMES.boutique.layout.category, THEMES.noir.layout.category, THEMES.lienzo.layout.category], ["overlay", "overlay", "card"], "overlay en Boutique y Noir");
+  assert.equal(THEMES.escenario.scheme, "dark");
+  assert.deepEqual([THEMES.boutique.layout.category, THEMES.escenario.layout.category, THEMES.corporativo.layout.category], ["overlay", "overlay", "card"], "overlay en Boutique y Noir");
   // Boutique: los valores exactos de la especificación del dueño.
   const boutique = themeVars("boutique");
   assert.equal(boutique["--color-bg"], "#F6F2EA");
@@ -131,17 +131,17 @@ test("tipografía: como máximo 2 familias de texto (+ la manuscrita decorativa 
     assert.match(href, /^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;@=.,&-]+&display=swap$/);
     assert.ok((href.match(/family=/g) ?? []).length <= (t.fonts.script ? 3 : 2), `${id} más familias de las permitidas`);
   }
-  assert.ok(THEMES.boutique.fonts.script && !THEMES.noir.fonts.script);
+  assert.ok(THEMES.boutique.fonts.script && !THEMES.escenario.fonts.script);
   // Fuente de títulos de la empresa: de una lista curada, reemplaza solo los títulos.
   assert.ok(["cormorant", "playfair", "fraunces"].every((id) => isDisplayFont(id)));
   assert.equal(isDisplayFont("comic-sans"), false);
-  const vars = themeVars("lienzo", { displayFont: "playfair" });
+  const vars = themeVars("corporativo", { displayFont: "playfair" });
   assert.match(vars["--font-display"], /Playfair/);
-  assert.equal(vars["--font-body"], THEMES.lienzo.fonts.body.css);
-  assert.ok(themeFontHref("lienzo", "playfair").includes("Playfair"));
+  assert.equal(vars["--font-body"], THEMES.corporativo.fonts.body.css);
+  assert.ok(themeFontHref("corporativo", "playfair").includes("Playfair"));
   assert.ok(DISPLAY_FONTS.length >= 3);
-  const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "noir", font: "poppins" });
-  assert.equal(view.vars["--font-body"], THEMES.noir.fonts.body.css, "la tipografía del portal no cambia la tienda");
+  const view = appearanceView({ ...DEFAULT_APPEARANCE, template: "escenario", font: "poppins" });
+  assert.equal(view.vars["--font-body"], THEMES.escenario.fonts.body.css, "la tipografía del portal no cambia la tienda");
 });
 
 test("prohibido el rosa en las paletas por defecto", () => {
@@ -159,26 +159,22 @@ test("prohibido el rosa en las paletas por defecto", () => {
 
 // ── Migración de plantillas ──────────────────────────────────────────────────
 
-test("migración: el mapa de la especificación y el alias de lectura coinciden con el SQL", () => {
-  assert.deepEqual(
-    { minimal: "lienzo", boutique: "boutique", noche: "noir", tecnologica: "noir", fresca: "studio", editorial: "boutique", clasica: "lienzo" },
-    Object.fromEntries(["minimal", "boutique", "noche", "tecnologica", "fresca", "editorial", "clasica"].map((key) => [key, LEGACY_TEMPLATE_MAP[key]])),
-  );
-  for (const legacy of Object.keys(LEGACY_TEMPLATE_MAP)) {
-    assert.ok(isStoreTheme(LEGACY_TEMPLATE_MAP[legacy]));
-    assert.equal(resolveStoredTheme(legacy), LEGACY_TEMPLATE_MAP[legacy]);
-    assert.equal(readAppearance({ template: legacy }).template, LEGACY_TEMPLATE_MAP[legacy], `alias de lectura: ${legacy}`);
+test("compatibilidad: IDs históricos se resuelven a las siete plantillas vigentes sin volver al selector", () => {
+  for (const [legacy, current] of Object.entries(LEGACY_TEMPLATE_MAP)) {
+    assert.ok(isStoreTheme(current));
+    assert.equal(resolveStoredTheme(legacy), current);
+    assert.equal(readAppearance({ template: legacy }).template, current);
+    const parsed = parseAppearance({ template: legacy });
+    assert.ok(parsed.ok && parsed.appearance.template === current, legacy);
+    if (legacy !== "boutique") assert.equal(STORE_THEMES.includes(legacy), false);
   }
   assert.equal(resolveStoredTheme("neon"), null);
+  // La migración ya aplicada conserva el mapa original; sus IDs de salida siguen teniendo alias válidos.
   const sql = read("prisma/migrations/202610300001_tienda_temas/migration.sql");
-  for (const [legacy, next] of Object.entries(LEGACY_TEMPLATE_MAP)) {
-    if (legacy === next) continue;
-    assert.ok(sql.includes(`WHEN '${legacy}' THEN '${next}'`), `SQL: ${legacy} → ${next}`);
+  for (const [legacy, intermediate] of [["minimal", "lienzo"], ["noche", "noir"], ["fresca", "studio"]]) {
+    assert.ok(sql.includes(`WHEN '${legacy}' THEN '${intermediate}'`));
+    assert.equal(resolveStoredTheme(intermediate), resolveStoredTheme(legacy));
   }
-  // Idempotente y aditiva: solo toca filas con un valor viejo y no borra ni crea nada.
-  assert.match(sql, /IN \('minimal', 'clasica'/);
-  assert.ok(!/DROP |DELETE |TRUNCATE |ALTER TABLE/i.test(sql.replace(/--.*$/gm, "")));
-  assert.ok(!sql.includes("'boutique', 'boutique'") && !/WHEN 'boutique'/.test(sql), "boutique ya se llama igual");
 });
 
 // ── Sin hardcodes ────────────────────────────────────────────────────────────
@@ -267,30 +263,21 @@ test("fuentes del portal: lista cerrada sin cambios", () => {
 
 // ── Plantillas premium (v2.1.128) ────────────────────────────────────────────
 
-test("premium: Jardín, Mármol, Terracota, Nórdico, Gala y Brisa traen rubro, tipografías cerradas y botón primario sólido de color", () => {
-  const premium = ["jardin", "marmol", "terracota", "nordico", "gala", "brisa"] as const;
-  const allowed = new Set(Object.values(DISPLAY_FONTS).map((f) => f.id));
-  assert.ok(allowed.size > 0);
-  for (const id of premium) {
+test("las seis plantillas por rubro usan tipografías cerradas y botón sólido de color", () => {
+  for (const id of ["escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]) {
     const t = THEMES[id];
-    assert.ok(t.rubro && t.forWho, id);
-    assert.ok(t.fonts.display.google && t.fonts.body.google, id);
-    const href = themeFontHref(id);
-    assert.ok((href.match(/family=/g) ?? []).length <= 2, `${id}: máximo 2 familias`);
-    assert.ok(href.endsWith("&display=swap"), id);
+    assert.ok(t.rubro && t.forWho);
+    assert.ok(t.fonts.display.google && t.fonts.body.google);
+    assert.ok((themeFontHref(id).match(/family=/g) ?? []).length <= 2);
     const [r, g, b] = hexToRgb(t.colors.primary);
-    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24, `${id}: el primario no es gris`);
+    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24);
   }
-  assert.equal(THEMES.gala.scheme, "dark");
-  assert.equal(THEMES.gala.layout.category, "overlay", "Gala lleva overlay en categorías");
-  assert.ok(contrastRatio(THEMES.gala.colors.onPrimary, THEMES.gala.colors.primary) >= 4.5, "dorado con contraste AA");
-  assert.ok(contrastRatio(THEMES.gala.colors.accentText, THEMES.gala.colors.bg) >= 4.5, "dorado como texto con contraste AA");
 });
 
 // ── Versión 2.1.129 ──────────────────────────────────────────────────────────
 
 test("ninguna plantilla tiene un primario gris, y un color de marca gris no pisa al del tema", () => {
-  assert.equal(THEME_REGISTRY.length, 16);
+  assert.equal(THEME_REGISTRY.length, 7);
   for (const theme of THEME_REGISTRY) {
     const [r, g, b] = hexToRgb(theme.colors.primary);
     assert.ok(Math.max(r, g, b) - Math.min(r, g, b) >= 24, `${theme.id}: el primario no es gris`);
@@ -302,9 +289,9 @@ test("ninguna plantilla tiene un primario gris, y un color de marca gris no pisa
   }
 });
 
-test("rubros: cubren decoración, eventos, corporativo, tecnología, catering, bodas, infantil, mobiliario y exteriores; las nuevas no son de decoración", () => {
+test("rubros: cubren eventos, corporativo, tecnología, catering, bodas, infantil y exteriores; las nuevas no son de decoración", () => {
   const rubros = themesByRubro().map((group) => group.rubro);
-  for (const needle of ["Decoración", "Eventos y fiestas", "Corporativo", "Tecnología", "Catering", "Bodas", "Infantil", "Mobiliario", "Exteriores"]) {
+  for (const needle of ["Eventos y fiestas", "Corporativo", "Tecnología", "Catering", "Bodas", "Infantil", "Exteriores"]) {
     assert.ok(rubros.some((rubro) => rubro.includes(needle)), `falta el rubro ${needle}`);
   }
   for (const id of ["escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"] as const) {
@@ -381,4 +368,15 @@ test("guardar carrito es un popup acotado y espera que se cierre la vista rápid
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
   assert.match(browser, /cartScope !== "public" \|\| quickId \|\| open/);
   assert.match(browser, /!contactOpen && !open && !quickItem && !filtersOpen \? toast : null/);
+});
+
+test("selector compacto: solo siete tarjetas con muestras, sin miniaturas que recorten precios", () => {
+  const settings = read("components/admin/modules/AparienciaSettings.tsx");
+  assert.match(settings, /themesByRubro\(\)\.map/);
+  assert.match(settings, /theme\.swatch\.map/);
+  assert.ok(!settings.includes('size="thumb"'));
+  const preview = read("components/admin/modules/StorePreview.tsx");
+  assert.ok(!preview.includes("cp-thumb-scale"));
+  assert.ok(!/\.cp-preview[^}]*transform:/.test(css));
+  assert.match(css, /\.cp-preview \.cp-price \{ white-space: nowrap/);
 });

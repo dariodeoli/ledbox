@@ -35,7 +35,7 @@ import { DEFAULT_HOME, HOME_PHOTO_SLOTS, type HomeConfig, type HomePhotoSlot } f
  * portal, presupuesto impreso y correos; en los correos solo el color y el logo). Todo sale de listas cerradas y tokens
  * CSS, nunca CSS libre:
  *
- * - **Plantilla**: Lienzo, Boutique, Noir o Studio, agrupadas por rubro y con una vista previa real de cada una.
+ * - **Plantilla**: Boutique y seis rubros especializados, agrupadas por rubro y con una vista previa real de cada una.
  * - **Color de marca** (primario) con control automático de contraste AA (≥ 4,5:1): si no alcanza se ajusta y se avisa.
  * - **Títulos**: tipografía de una lista curada. **Frase** de la tienda (título del héroe).
  * - **Barra de anuncio**: encendida o apagada, con su texto. **Modo de precio**: por día, por unidad o a cotizar.
@@ -245,7 +245,9 @@ export function AparienciaSettings() {
                         <div className="admin-template-grid">
                           {group.themes.map((theme) => (
                             <button key={theme.id} type="button" className="admin-template-card" aria-pressed={template === theme.id} disabled={demo} onClick={() => { setTemplate(theme.id as TemplateId); setNotice(""); }} data-testid={`template-${theme.id}`}>
-                              <StorePreview frame="mobile" size="thumb" appearance={{ ...effective, template: theme.id as TemplateId }} brandColor={brandHex} name={organization?.name ?? ""} coverSrc={null} tagline={tagline.trim() || null} />
+                              <span className="admin-template-swatches" aria-hidden="true">
+                                {theme.swatch.map((swatch, index) => <i key={index} style={{ background: swatch }} />)}
+                              </span>
                               <strong>{TEMPLATE_META[theme.id as TemplateId].label}</strong>
                               <span>{theme.forWho}</span>
                               <span>{theme.description}</span>

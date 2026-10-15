@@ -118,11 +118,11 @@ test("perfil, apariencia, acceso al catálogo y respuesta al pedido en PostgreSQ
       assert.equal((await saveOrgAppearance(a.ctx, { template: "neon" })).status, 400);
       assert.equal((await saveOrgAppearance(a.ctx, { font: "Comic Sans" })).status, 400);
       // El color sigue vigente cuando solo se cambia la plantilla.
-      const keep = await saveOrgAppearance(a.ctx, { template: "noir" });
+      const keep = await saveOrgAppearance(a.ctx, { template: "escenario" });
       assert.equal(((await keep.json()) as { brandColor: string }).brandColor, body.brandColor);
       // La tienda la lee completa.
       const store = await loadStorefront((await resolvePublicCatalog(a.slug))!);
-      assert.equal(store.appearance.template, "noir");
+      assert.equal(store.appearance.template, "escenario");
       assert.equal(store.appearance.priceMode, "unit");
       assert.equal(store.appearance.announcement, "Entregas en Asunción");
       assert.equal(store.theme.branded, true);
