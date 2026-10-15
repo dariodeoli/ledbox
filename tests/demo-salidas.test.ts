@@ -111,14 +111,17 @@ test("todo fetch( de lib/** y app/** (server actions, rutas, páginas) está en 
 });
 
 test("la «Carga con IA» (proveedor externo) pasa por salidaPermitida antes de llamar al proveedor", () => {
-  const callers = sources("lib", "app").filter((file) => /\biaProviderDeConfig\(/.test(stripped(file)) && rel(file) !== "lib/server/ia-carga.ts").map(rel);
-  assert.deepEqual(callers, ["app/api/admin/ia/carga/route.ts"]);
-  const route = stripped(join(root, "app/api/admin/ia/carga/route.ts"));
-  const post = route.slice(route.indexOf("export async function POST"));
-  const gate = post.indexOf("salidaPermitida(");
-  assert.ok(gate > 0 && gate < post.indexOf("iaProviderDeConfig("), "salidaPermitida( va antes del proveedor");
-  assert.match(post, /canal:\s*"ia"/);
-  assert.match(post, /"simulado" in salida/);
+  const callers = sources("lib", "app").filter((file) => /\biaProviderDeConfig\(/.test(stripped(file)) && rel(file) !== "lib/server/ia-carga.ts").map(rel).sort();
+  // Cada caller nuevo del proveedor de IA tiene que sumarse acá y pasar por la compuerta.
+  assert.deepEqual(callers, ["app/api/admin/ia/carga/route.ts", "app/api/admin/import/[modulo]/route.ts"]);
+  for (const file of callers) {
+    const route = stripped(join(root, file));
+    const gate = route.indexOf("salidaPermitida(");
+    assert.ok(gate > 0 && gate < route.lastIndexOf("iaProviderDeConfig("), `${file}: salidaPermitida( va antes del proveedor`);
+    assert.match(route, /canal:\s*"ia"/, file);
+  }
+  const carga = stripped(join(root, "app/api/admin/ia/carga/route.ts"));
+  assert.match(carga.slice(carga.indexOf("export async function POST")), /"simulado" in salida/);
 });
 
 test("los únicos fetch( permitidos son la consulta de RUC y el token de Google", () => {

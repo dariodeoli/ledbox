@@ -9,7 +9,8 @@ import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
 import { ImportZipError, readPhotoZip } from "@/lib/server/import-photos";
 import { applyCatalog, previewCatalog, type ImportInput } from "@/lib/server/import-catalog";
-import { analizarImportacion, salidaPermitida } from "@/lib/server/import-ia";
+import { analizarImportacion } from "@/lib/server/import-ia";
+import { cuotaArchivosOk, salidaPermitida } from "@/lib/server/demo-sandbox";
 import { IaError, iaConfig, iaProviderDeConfig } from "@/lib/server/ia-carga";
 import { IA_RATE_LIMIT, IA_TEXTO_MAX } from "@/lib/ia-carga";
 
@@ -69,7 +70,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ modu
   }
   return Response.json({
     modulo: module.id,
-    ia: { disponible: Boolean(iaConfig()) && salidaPermitida(context), textoMax: IA_TEXTO_MAX },
+    ia: { disponible: Boolean(iaConfig()) && !context.demo && "ok" in (await salidaPermitida({ organizationId: context.organizationId, canal: "ia" })), textoMax: IA_TEXTO_MAX },
     limites: { json: CATALOG_LIMITS.jsonBytes, zip: CATALOG_LIMITS.zipBytes, planilla: CATALOG_LIMITS.sheetBytes, fotos: CATALOG_LIMITS.zipFiles },
   });
 }
@@ -111,7 +112,8 @@ async function readSource(module: ImportModule, form: FormData, accion: string, 
     if (!sheet.ok) return fail(sheet.error);
     raw = { productos: sheet.rows };
   } else if (fuente === "ia") {
-    if (!salidaPermitida(context)) return fail("La IA no está disponible en la demo.", 403, "ia_bloqueada");
+    // Punto central de salidas (docs/DEMO-INTERACTIVA.md §3): la demo y las sandboxes no mandan nada al proveedor.
+    if (context.demo || !("ok" in (await salidaPermitida({ organizationId: context.organizationId, canal: "ia" })))) return fail("La IA no está disponible en la demo.", 403, "ia_bloqueada");
     const config = iaConfig();
     if (!config) return fail("La IA no está configurada en el servidor: pedile a Owncoding que cargue IA_API_KEY.", 503, "ia_no_configurada");
     const texto = textOf(form, "texto").trim();
@@ -167,6 +169,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       const read = readPhotoZip(new Uint8Array(await zip.arrayBuffer()));
       photos = read.photos;
       photoProblems = read.problems;
+      const bytes = [...read.photos.values()].reduce((sum, data) => sum + data.byteLength, 0);
+      if (!(await cuotaArchivosOk(context.organizationId, bytes))) return jsonError("En la demo las fotos superan el espacio disponible (15 MB).", 413);
     } catch (error) {
       if (error instanceof ImportZipError) return jsonError(error.message, 400);
       throw error;

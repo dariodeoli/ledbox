@@ -15,7 +15,7 @@ import {
 import { IMPORT_MODULES, importHeaders, importModule } from "../lib/import-modules";
 import { buildCsv, buildXlsx, parseCsv, readSheetFile, readXlsx, templateCsv, templateXlsx } from "../lib/server/import-tabular";
 import { ImportZipError, preparePhoto, readPhotoZip } from "../lib/server/import-photos";
-import { analizarImportacion, salidaPermitida } from "../lib/server/import-ia";
+import { analizarImportacion } from "../lib/server/import-ia";
 
 const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, import.meta.url), "utf8");
 const productos = importModule("productos")!;
@@ -251,9 +251,12 @@ test("planilla, JSON de ChatGPT e IA de LedBox producen la misma vista previa", 
   assert.deepEqual(strip(fromIa), strip(fromJson));
 });
 
-test("la IA no manda nada afuera en la demo", () => {
-  assert.equal(salidaPermitida({ demo: true }), false);
-  assert.equal(salidaPermitida({ demo: false }), true);
+test("la IA no manda nada afuera en la demo: la ruta usa el punto central de salidas", async () => {
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync("app/api/admin/import/[modulo]/route.ts", "utf8");
+  assert.match(route, /from "@\/lib\/server\/demo-sandbox"/);
+  assert.match(route, /context\.demo \|\| !\("ok" in \(await salidaPermitida\(\{ organizationId: context\.organizationId, canal: "ia" \}\)\)\)\) return fail\("La IA no está disponible en la demo\."/);
+  assert.match(route, /cuotaArchivosOk\(context\.organizationId, bytes\)/);
 });
 
 // ── Prompt, registro y encabezado ───────────────────────────────────────────

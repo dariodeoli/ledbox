@@ -14,14 +14,6 @@ import { IA_TEXTO_MAX, IA_REGISTROS_MAX, IA_TOKENS_MAX } from "@/lib/ia-carga";
 import { IaError, parsearSalidaIa, type IaProvider } from "@/lib/server/ia-carga";
 import type { ImportModule } from "@/lib/import-modules";
 
-/**
- * ¿Puede esta empresa mandar texto al proveedor de IA? La demo (solo lectura,
- * datos públicos) no manda nada afuera.
- */
-export function salidaPermitida(context: { demo: boolean }): boolean {
-  return !context.demo;
-}
-
 export function mensajesDeImportacion(module: ImportModule, texto: string) {
   return [
     { role: "system" as const, content: module.iaInstructions },
