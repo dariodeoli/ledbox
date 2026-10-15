@@ -1,4 +1,5 @@
 "use client";
+import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
 import { BudgetDetailDialog, type BudgetDetailActions } from "./BudgetDetailDialog";
 import { PIPELINE_STAGE_LABEL, budgetPipelineStage, budgetPrimaryAction, matchesPipelineFilter, type BudgetPipelineFilter, type BudgetPipelineInput, type BudgetPipelineStage, type BudgetPrimaryAction } from "@/lib/budget-pipeline";
@@ -686,7 +687,7 @@ function ItemLinksDialog({
       </p>
       <p className="admin-dialog-text">
         {formatNumber(linkedCount)} de {formatNumber(budget.items.length)} ítems vinculados. Los conflictos de disponibilidad
-        no bloquean la aprobación: quedan auditados y el equipo los ve en los avisos y en Inventario (con sustitutos).
+        bloquean la aprobación: ajustá las cantidades o elegí sustitutos. Solo el propietario puede autorizar una excepción explícita, que queda auditada.
       </p>
 
       <AdminDialogSection title="Ítems del presupuesto" stack>
@@ -795,11 +796,6 @@ export function PresupuestosModule() {
   // se pide completo a propósito: el rango de disponibilidad del issue #18
   // (setupAt/strikeAt/endsAt) todavía no viaja en el selector; si OPS lo agrega,
   // el alta puede recortar la respuesta sin tocar nada más.
-  const clients = useAdminResource(
-    "/api/admin/clients?fields=selector",
-    (payload) => (payload as { clients?: AdminClientOption[] }).clients ?? [],
-    { enabled: showForm },
-  );
   const events = useAdminResource("/api/admin/events", (payload) => payload.events ?? [], { enabled: showForm });
   const [notice, setNotice] = useState("");
   const writableForLead = canWriteFinance(role);
@@ -926,6 +922,7 @@ export function PresupuestosModule() {
   const canCreateClient = canWriteClients(role);
   const canCreateEvent = canWriteOperations(role);
   const canManagePayments = role === "OWNER" || role === "ADMIN";
+  const clients = useClientSelector(form.clientId);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   const eventOptions = useMemo(() => events.data ?? [], [events.data]);
   const portalToken = portalBudget?.publicToken ?? null;
@@ -1768,6 +1765,7 @@ export function PresupuestosModule() {
             value={form.clientId}
             onChange={(value) => setForm({ ...form, clientId: value })}
             options={clientChoices}
+            onSearch={clients.onSearch}
             placeholder="Buscá por nombre o empresa…"
             emptyLabel={
               clients.loading

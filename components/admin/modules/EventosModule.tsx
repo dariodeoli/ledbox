@@ -1,4 +1,5 @@
 "use client";
+import { useClientSelector } from "@/lib/admin-client-selector";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
@@ -145,12 +146,9 @@ export function EventosModule() {
   );
   // Clientes e inventario alimentan solo los selectores del formulario y de la
   // asignación de equipos (issue #62): campos mínimos, sin métricas ni historial.
-  const clients = useAdminResource(
-    "/api/admin/clients?fields=selector",
-    (payload) => (payload as { clients?: AdminClientOption[] }).clients ?? [],
-  );
+  const [inventoryQuery, setInventoryQuery] = useState("");
   const inventoryResource = useAdminResource(
-    "/api/admin/inventory?fields=selector",
+    `/api/admin/inventory?fields=grid&limit=30&q=${encodeURIComponent(inventoryQuery)}`,
     (payload) => (payload as { inventory?: AdminInventoryOption[] }).inventory ?? [],
   );
   // Promotoras con su disponibilidad real: la asignación avisa, no bloquea (issue #24).
@@ -253,6 +251,7 @@ export function EventosModule() {
   const events = useMemo(() => allEvents.filter((event) => !event.archivedAt), [allEvents]);
   const editingEvent = editingEventId ? allEvents.find((event) => event.id === editingEventId) ?? null : null;
   const eventFormDirty = JSON.stringify(form) !== JSON.stringify(editingEvent ? eventFormFrom(editingEvent) : EMPTY_EVENT_FORM);
+  const clients = useClientSelector(form.clientId);
   const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
   /** Opciones del selector de cliente (issue #106): empresa manda, el nombre va de detalle. */
   const clientChoices = useMemo(
@@ -775,6 +774,7 @@ export function EventosModule() {
                   value={form.clientId}
                   onChange={(value) => setForm({ ...form, clientId: value })}
                   options={clientChoices}
+            onSearch={clients.onSearch}
                   placeholder="Buscá por nombre o empresa…"
                   emptyLabel={clients.loading ? "Cargando clientes…" : "No hay clientes cargados."}
                   onCreate={editingEventId ? undefined : (name) => setNewClientName(name)}
@@ -890,6 +890,7 @@ export function EventosModule() {
           budgetState={readinessResource.loading ? "loading" : readinessResource.error ? "error" : "ready"}
           promoters={promoters}
           inventoryItems={inventoryItems}
+          onSearchInventory={setInventoryQuery}
           queuedActions={queuedActions}
           flash={flash}
           incidentsKey={incidentsKey}

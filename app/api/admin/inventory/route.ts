@@ -389,7 +389,10 @@ export async function GET(request: Request) {
       if (unitMatch !== null) return Response.json({ matchedIds: await matchInventoryByUnitCode(organizationId, unitMatch) });
       const gridStart = parseDate(url.searchParams.get("startsAt"));
       const gridEnd = parseDate(url.searchParams.get("endsAt"));
+      const query = (url.searchParams.get("q") ?? "").trim();
+      if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
       const page = await listInventoryGrid({
+        query,
         organizationId,
         cursor: url.searchParams.get("cursor"),
         limit: readGridLimit(url.searchParams.get("limit")),

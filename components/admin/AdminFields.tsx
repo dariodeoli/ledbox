@@ -1151,7 +1151,10 @@ export function Combobox({
   emptyLabel = "Sin coincidencias.",
   onCreate,
   createLabel,
+  onSearch,
 }: {
+  /** Búsqueda remota opcional; conserva el contrato de selección por ID. */
+  onSearch?: (query: string) => void;
   label?: string;
   help?: string;
   ariaLabel?: string;
@@ -1195,8 +1198,8 @@ export function Combobox({
     [options, value],
   );
   const matches = useMemo(
-    () => options.filter((option) => matchesQuery(query, [option.label, option.description, option.keywords])),
-    [options, query],
+    () => onSearch ? options : options.filter((option) => matchesQuery(query, [option.label, option.description, option.keywords])),
+    [options, query, onSearch],
   );
   const visible = matches.slice(0, maxVisible);
   const rowCount = visible.length + (onCreate ? 1 : 0);
@@ -1220,6 +1223,7 @@ export function Combobox({
       setOpen(false);
       setText("");
       setQuery("");
+      onSearch?.("");
       setActive(-1);
     }
     wrapper.addEventListener("keydown", onKeyDown, true);
@@ -1229,6 +1233,7 @@ export function Combobox({
   function openList() {
     setText(selected?.label ?? "");
     setQuery("");
+    onSearch?.("");
     const index = selected ? options.findIndex((option) => option.value === selected.value) : -1;
     setActive(index >= 0 && index < maxVisible ? index : -1);
     setOpen(true);
@@ -1238,6 +1243,7 @@ export function Combobox({
     setOpen(false);
     setText("");
     setQuery("");
+    onSearch?.("");
     setActive(-1);
   }
 
@@ -1261,6 +1267,7 @@ export function Combobox({
     onChange("");
     setText("");
     setQuery("");
+    onSearch?.("");
     setActive(-1);
   }
 
@@ -1303,6 +1310,7 @@ export function Combobox({
             const next = event.target.value;
             setText(next);
             setQuery(next);
+            onSearch?.(next);
             setActive(next.trim() ? 0 : -1);
             setOpen(true);
             // Borrar todo el texto quita la selección (el evento es opcional).

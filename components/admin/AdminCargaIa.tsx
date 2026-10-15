@@ -25,6 +25,7 @@ import {
 import type { AdminRole } from "@/lib/admin-types";
 import type { IaAccionExistente } from "@/lib/ia-carga";
 import {
+  Combobox,
   DateField,
   EmailField,
   MoneyField,
@@ -259,6 +260,7 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
   const [confirmandoAnular, setConfirmandoAnular] = useState<string | null>(null);
   const [opcionesCliente, setOpcionesCliente] = useState<ClienteOpcion[]>([]);
   const [cargandoClientes, setCargandoClientes] = useState(false);
+  const clientSearchRequest = useRef<AbortController | null>(null);
   const [cartera, setCartera] = useState<{ clientes: number; productos: number } | null>(null);
   const [cuentas, setCuentas] = useState<Array<{ id: string; nombre: string; banco: string | null }>>([]);
   const [cargandoCuentas, setCargandoCuentas] = useState(false);
@@ -526,20 +528,24 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
     );
   }
 
-  async function cargarClientes() {
+  async function cargarClientes(query = "") {
+    clientSearchRequest.current?.abort();
+    const controller = new AbortController();
+    clientSearchRequest.current = controller;
     setCargandoClientes(true);
     const result = await adminApiGet<{ clients?: Array<{ id: string; name: string; company: string | null }> }>(
-      "/api/admin/clients?fields=selector",
-      { fresh: true },
+      `/api/admin/clients?fields=selector&q=${encodeURIComponent(query)}`,
+      { fresh: true, signal: controller.signal },
     );
+    if (controller.signal.aborted) return;
     setCargandoClientes(false);
     if (!result.ok) return;
-    setOpcionesCliente(
-      (result.data.clients ?? []).map((cliente) => ({
+    setOpcionesCliente((previous) => [...previous.filter((option) => [...eventos.map((row) => row.clienteId), ...cobros.map((row) => row.clienteId)].includes(option.value) && !(result.data.clients ?? []).some((client) => client.id === option.value)),
+      ...(result.data.clients ?? []).map((cliente) => ({
         value: cliente.id,
         label: cliente.company?.trim() ? `${cliente.name} · ${cliente.company}` : cliente.name,
       })),
-    );
+    ]);
   }
 
   async function analizar() {
@@ -1327,13 +1333,14 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
                       onChange={(nombre) => actualizarEvento(evento.clave, { nombre })}
                       disabled={!evento.incluir}
                     />
-                    <SelectField
+                    <Combobox
+                      onSearch={(query) => void cargarClientes(query)}
                       label="Cliente"
                       hint={evento.clienteNombre ? `En el texto: ${evento.clienteNombre}` : "Sin cliente en el texto"}
                       options={opcionesDeClienteEvento(evento)}
                       value={evento.clienteId}
                       onChange={(clienteId) => actualizarEvento(evento.clave, { clienteId, incluir: Boolean(clienteId) })}
-                      disabled={cargandoClientes}
+                      emptyLabel={cargandoClientes ? "Buscando clientes…" : "Sin coincidencias."}
                       error={!evento.clienteId ? "Elegí el cliente para poder crear el evento." : null}
                     />
                     <DateField
@@ -1595,12 +1602,14 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
                   ) : null}
                   {avisosVigentes(cobro.avisos, cobro.clienteId).length > 0 ? <AdminNote tone="warn">{avisosVigentes(cobro.avisos, cobro.clienteId).join(" ")}</AdminNote> : null}
                   <div className="admin-ia-grid">
-                    <SelectField
+                    <Combobox
+                      onSearch={(query) => void cargarClientes(query)}
                       label="Cliente"
                       options={opcionesDeClienteCobro(cobro)}
                       value={cobro.clienteId}
                       onChange={(clienteId) => actualizarCobro(cobro.clave, { clienteId, incluir: Boolean(clienteId) && !cobro.plazo && aNumero(cobro.monto) > 0 })}
-                      disabled={cargandoClientes || !puedeCobrar}
+                      disabled={!puedeCobrar}
+                      emptyLabel={cargandoClientes ? "Buscando clientes…" : "Sin coincidencias."}
                       error={!cobro.clienteId ? "Elegí el cliente del cobro." : null}
                     />
                     <MoneyField

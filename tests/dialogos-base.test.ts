@@ -85,9 +85,10 @@ test("Productos: alta y edición usan secciones (Datos, Precios, Fotos, Más opc
 });
 
 test("Clientes: el alta y la edición usan secciones y no cambian el payload", () => {
-  for (const title of ["Datos", "Contacto", "Datos fiscales", "Ubicación", "Más opciones"]) {
+  for (const title of ["Datos", "Contacto alternativo", "Datos fiscales", "Ubicación", "Más opciones"]) {
     assert.ok(quick.includes(`<AdminDialogSection title="${title}"`), `falta la sección ${title}`);
   }
+  assert.match(quick, /title="Contacto alternativo" collapsible defaultOpen=\{moreOpen\}/);
   assert.match(clientes, /layout="sections"/);
   assert.match(clientes, /<AdminDialogSection title="Notas y logo"/);
   assert.match(clientes, /error=\{formError\}/);

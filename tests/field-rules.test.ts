@@ -447,7 +447,8 @@ test("el catálogo del alta usa el Combobox del kit y no un select plano", () =>
   assert.match(module, /onCreate=\{canCreateClient/);
   assert.match(module, /onCreate=\{canCreateEvent/);
   // El cliente usa los campos mínimos del selector (issue #62).
-  assert.match(module, /\/api\/admin\/clients\?fields=selector/);
+  assert.match(module, /useClientSelector\(form\.clientId\)/);
+  assert.match(module, /onSearch=\{clients\.onSearch\}/);
   // Cliente y evento ya no se eligen con el select plano.
   assert.doesNotMatch(module, /<SelectField/);
 });

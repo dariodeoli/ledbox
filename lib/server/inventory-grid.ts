@@ -186,6 +186,7 @@ export async function loadGridExtras(options: {
 export type GridPageOptions = {
   organizationId: string;
   cursor?: string | null;
+  query?: string;
   limit?: number;
   /** Rango opcional de «Disponible desde/hasta»: suma la disponibilidad de ese rango. */
   range?: { start: Date; end: Date } | null;
@@ -224,10 +225,13 @@ export async function listInventoryGrid(options: GridPageOptions) {
   // El cursor lleva (nombre, id) del último producto: sigue desde el siguiente aunque ese producto
   // se haya borrado entre dos páginas, y siempre dentro de la empresa pedida.
   const after = options.cursor ? decodeGridCursor(options.cursor) : null;
+  const query = options.query?.trim() ?? "";
+  const search: Prisma.InventoryItemWhereInput = query ? { OR: ["name", "sku", "category"].map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
   const [rows, total] = await Promise.all([
     db.inventoryItem.findMany({
       where: {
         organizationId,
+        AND: [search],
         ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -238,7 +242,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
     }),
-    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId } }),
+    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId, ...search } }),
   ]);
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;

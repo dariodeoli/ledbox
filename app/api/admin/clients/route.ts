@@ -1,3 +1,4 @@
+import { listClientSelector } from "@/lib/server/client-selector";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -35,13 +36,11 @@ export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  if (new URL(request.url).searchParams.get("fields") === "selector") {
-    const clients = await db.client.findMany({
-      where: { organizationId },
-      orderBy: { name: "asc" },
-      take: 300,
-      select: { id: true, name: true, company: true, tradeName: true, legalName: true, type: true, active: true },
-    });
+  const params = new URL(request.url).searchParams;
+  if (params.get("fields") === "selector") {
+    const query = (params.get("q") ?? "").trim();
+    if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
+    const clients = await listClientSelector(organizationId, query, params.get("selectedId"), params.has("q") ? 30 : 300);
     return Response.json({ clients });
   }
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
