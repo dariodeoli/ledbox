@@ -551,3 +551,13 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - En la demo nada sale hacia afuera: los correos y los WhatsApp se simulan y se muestra «así se vería»; el código para firmar aparece en pantalla; las claves de API, invitaciones, cambio de plan y cambio de correo o contraseña están desactivados; mayorista y tienda web dicen «No disponible en la demo».
 - Con más de 150 demos abiertas a la vez, el visitante nuevo ve «La demo está llena, volvé en unos minutos». La demo se abre con «Entrar a la demo» (los robots no gastan copias).
 - Superadmin → Tráfico → Demo: copias creadas por día, activas ahora, reinicios, cuántas hicieron algo y qué tocaron. Las copias nunca cuentan como empresas ni usuarios reales.
+
+## v2.1.117 — 2026-10-15
+
+- Superadmin → Empresas → «Nueva empresa»: alta de un cliente nuevo con su plan y una lista de invitados (dueño o administrador). A cada uno le llega su invitación por correo y entra con su propia contraseña; también se puede reenviar.
+- Empresa predeterminada: quien pertenece a varias empresas elige en Mi perfil con cuál se abre el panel al entrar.
+- Inventario → «Importar»: carga masiva de productos (con juegos y fotos) de tres formas: planilla para descargar y completar, texto listo para pedirle a ChatGPT o la IA de LedBox. Todo termina en una vista previa con los problemas y las dudas antes de aplicar; reimportar actualiza y no duplica. Los productos sin precio quedan «Consultar precio». El botón de IA del encabezado se sacó: la IA vive en «Importar».
+- Cada producto se cobra «por día» o «por evento» (precio total). Un producto por evento cotiza lo mismo aunque el alquiler dure varios días.
+- Un equipo que salió y no volvió a tiempo queda ocupado hasta que vuelve, con la lista «Devoluciones vencidas» y avisos en el resumen.
+- Ya no se puede aprobar sin stock: en el portal el cliente ve «el equipo te contacta» y el presupuesto queda en revisión; en el panel solo dueño o administrador pueden «aprobar igual», y queda registrado. La firma de una alternativa sin stock no se ofrece, y si igual falta algo después de firmar, el equipo recibe una alerta.
+- Las listas de búsqueda y los menús desplegables ya no quedan tapados ni transparentes sobre el resto del formulario.
