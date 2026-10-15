@@ -178,19 +178,19 @@ export function WarehouseStockSection({
         <AdminTable
           view="inventario-depositos"
           label={`Stock de ${item.name} por depósito`}
-          columns={[{ label: "Depósito" }, { label: "Unidades", end: true }, { label: "Libres", end: true }, { label: "Fuera", end: true }, { label: "Ubicaciones" }]}
+          columns={[{ label: "Depósito" }, { label: "Ubicaciones" }, { label: "Uds.", end: true }, { label: "Libres", end: true }, { label: "Fuera", end: true }]}
         >
           {groups.map((group) => {
             const places = [...group.locations].sort();
             return (
               <AdminRow key={group.id}>
                 <AdminCell title={group.label}>{group.label}</AdminCell>
-                <AdminCell end>{formatNumber(group.total)}</AdminCell>
-                <AdminCell end>{formatNumber(group.available)}</AdminCell>
-                <AdminCell end>{formatNumber(group.out)}</AdminCell>
                 <AdminCell title={places.join(" · ") || "Sin ubicación cargada"}>
                   <span className="admin-code">{places.length === 0 ? "—" : places.length > 3 ? `${places.slice(0, 3).join(" · ")} +${places.length - 3}` : places.join(" · ")}</span>
                 </AdminCell>
+                <AdminCell end>{formatNumber(group.total)}</AdminCell>
+                <AdminCell end>{formatNumber(group.available)}</AdminCell>
+                <AdminCell end>{formatNumber(group.out)}</AdminCell>
               </AdminRow>
             );
           })}
@@ -202,7 +202,7 @@ export function WarehouseStockSection({
       {writable ? (
         <>
           <AdminDisclosure title="Mover unidades" hint="de un depósito a otro">
-            <form className="admin-form" onSubmit={(event) => void submitMove(event)} aria-label="Mover unidades entre depósitos">
+            <form className="admin-form admin-form-grid" onSubmit={(event) => void submitMove(event)} aria-label="Mover unidades entre depósitos">
               <SelectField label="Desde" value={move.from} onChange={(value) => setMove({ ...move, from: value })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(taxonomy.warehouses)]} disabled={busy !== ""} />
               <SelectField label="Hacia" value={move.to} onChange={(value) => setMove({ ...move, to: value })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(active)]} disabled={busy !== ""} />
               <NumberField label="Cantidad" value={move.quantity} onChange={(value) => setMove({ ...move, quantity: value })} maxLength={4} hint="Se mueven unidades disponibles, por orden de código." disabled={busy !== ""} />
@@ -215,7 +215,7 @@ export function WarehouseStockSection({
             </form>
           </AdminDisclosure>
           <AdminDisclosure title="Registrar compra" hint="suma unidades nuevas con proveedor y garantía">
-            <form className="admin-form" onSubmit={(event) => void submitPurchase(event)} aria-label="Registrar compra de unidades">
+            <form className="admin-form admin-form-grid" onSubmit={(event) => void submitPurchase(event)} aria-label="Registrar compra de unidades">
               <NumberField label="Cantidad comprada" required value={purchase.quantity} onChange={(value) => setPurchase({ ...purchase, quantity: value })} maxLength={3} hint="Se crean con código automático." disabled={busy !== ""} />
               <MoneyField label="Costo por unidad" help={INVENTORY_FIELD_HELP.purchaseCost} value={purchase.unitCost} onChange={(value) => setPurchase({ ...purchase, unitCost: value })} disabled={busy !== ""} />
               <SelectField label="Proveedor" help={INVENTORY_FIELD_HELP.supplierId} value={purchase.supplierId} onChange={(value) => setPurchase({ ...purchase, supplierId: value })} options={supplierOptions(taxonomy.suppliers, "Sin proveedor")} disabled={busy !== ""} />

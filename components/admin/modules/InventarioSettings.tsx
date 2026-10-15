@@ -54,17 +54,15 @@ export function InventarioSettings() {
             <AdminTable
               view="ajustes-categorias"
               label="Categorías y subcategorías de inventario"
-              columns={[{ label: "Nombre" }, { label: "Productos", end: true }, { label: "Estado" }, { label: "Acciones", end: true }]}
+              columns={[{ label: "Nombre" }, { label: "Productos", end: true }, { label: "Acciones", end: true }]}
             >
               {tree.flatMap((root) => [root, ...root.children]).map((node) => (
                 <AdminRow key={node.id}>
                   <AdminCell title={node.parentId ? `${tree.find((entry) => entry.id === node.parentId)?.name} › ${node.name}` : node.name}>
                     <span className={node.parentId ? "admin-cat-child" : "admin-cat-root"}>{node.parentId ? "↳ " : ""}{node.name}</span>
+                    {node.archivedAt ? <AdminBadge tone="neutral">Archivada</AdminBadge> : node.color && (CATEGORY_TONES as readonly string[]).includes(node.color) ? <AdminBadge tone={node.color as (typeof CATEGORY_TONES)[number]}>{TONE_LABEL[node.color]}</AdminBadge> : null}
                   </AdminCell>
                   <AdminCell end>{formatNumber(node.itemCount)}</AdminCell>
-                  <AdminCell>
-                    {node.archivedAt ? <AdminBadge tone="neutral">Archivada</AdminBadge> : node.color && (CATEGORY_TONES as readonly string[]).includes(node.color) ? <AdminBadge tone={node.color as (typeof CATEGORY_TONES)[number]}>{TONE_LABEL[node.color]}</AdminBadge> : <span className="admin-cell-sub">Activa</span>}
-                  </AdminCell>
                   <AdminCell end className="admin-cell--actions">
                     <span className="admin-actions">
                       <AdminButton icon="edit" title={`Editar ${node.name}`} aria-label={`Editar la categoría ${node.name}`} disabled={demo} onClick={() => setEditCategory(node)} />
@@ -91,16 +89,16 @@ export function InventarioSettings() {
           <AdminTable
             view="ajustes-depositos"
             label="Depósitos de inventario"
-            columns={[{ label: "Código" }, { label: "Nombre" }, { label: "Unidades", end: true }, { label: "Estado" }, { label: "Acciones", end: true }]}
+            columns={[{ label: "Código" }, { label: "Nombre" }, { label: "Uds.", end: true }, { label: "Acciones", end: true }]}
           >
             {(warehouses.data ?? []).map((warehouse) => (
               <AdminRow key={warehouse.id}>
                 <AdminCell><span className="admin-code">{warehouse.code}</span></AdminCell>
-                <AdminCell title={warehouse.address ?? warehouse.name}>{warehouse.name}</AdminCell>
-                <AdminCell end>{formatNumber(warehouse.unitCount)}</AdminCell>
-                <AdminCell>
-                  {warehouse.archivedAt ? <AdminBadge tone="neutral">Archivado</AdminBadge> : warehouse.isDefault ? <AdminBadge tone="accent">Principal</AdminBadge> : <span className="admin-cell-sub">Activo</span>}
+                <AdminCell title={warehouse.address ?? warehouse.name}>
+                  {warehouse.name}
+                  {warehouse.archivedAt ? <AdminBadge tone="neutral">Archivado</AdminBadge> : warehouse.isDefault ? <AdminBadge tone="accent">Principal</AdminBadge> : null}
                 </AdminCell>
+                <AdminCell end>{formatNumber(warehouse.unitCount)}</AdminCell>
                 <AdminCell end className="admin-cell--actions">
                   <span className="admin-actions">
                     <AdminButton icon="edit" title={`Editar ${warehouse.name}`} aria-label={`Editar el depósito ${warehouse.name}`} disabled={demo} onClick={() => setEditWarehouse(warehouse)} />
@@ -158,7 +156,7 @@ function NewCategoryForm({ disabled, onDone, onError }: { disabled: boolean; onD
     onDone(`Categoría «${result.data.category.text}» lista: si ya existía se usó la misma, sin duplicar.`);
   }
   return (
-    <form className="admin-form" onSubmit={(event) => void submit(event)} aria-label="Agregar categoría">
+    <form className="admin-form admin-form-grid" onSubmit={(event) => void submit(event)} aria-label="Agregar categoría">
       <TextField label="Categoría" value={category} onChange={setCategory} maxLength={INVENTORY_TAXONOMY_NAME_MAX} placeholder="Ej.: Vajilla" disabled={disabled || busy} />
       <TextField label="Subcategoría" value={subcategory} onChange={setSubcategory} maxLength={INVENTORY_TAXONOMY_NAME_MAX} placeholder="Ej.: Copas" hint="Opcional." disabled={disabled || busy} />
       <div className="admin-form-actions">
@@ -190,7 +188,7 @@ function NewWarehouseForm({ disabled, onDone, onError }: { disabled: boolean; on
     onDone(`Depósito «${result.data.warehouse.name}» (${result.data.warehouse.code}) creado.`);
   }
   return (
-    <form className="admin-form" onSubmit={(event) => void submit(event)} aria-label="Agregar depósito">
+    <form className="admin-form admin-form-grid" onSubmit={(event) => void submit(event)} aria-label="Agregar depósito">
       <TextField label="Código" value={code} onChange={(value) => setCode(normalizeWarehouseCode(value))} maxLength={6} placeholder="Ej.: D2" hint="Una letra y hasta 5 letras o números." disabled={disabled || busy} />
       <TextField label="Nombre" value={name} onChange={setName} maxLength={INVENTORY_TAXONOMY_NAME_MAX} placeholder="Ej.: Depósito Planta Alta" disabled={disabled || busy} />
       <TextField label="Dirección" value={address} onChange={setAddress} maxLength={400} hint="Opcional." wide disabled={disabled || busy} />
@@ -273,7 +271,7 @@ function CategoryDialog({ node, roots, onClose, onDone }: { node: CategoryNode; 
           </>
         )}
       >
-        <form id={formId} className="admin-form" onSubmit={(event) => void save(event)}>
+        <form id={formId} className="admin-form admin-form-grid" onSubmit={(event) => void save(event)}>
           <TextField label="Nombre" required value={name} onChange={setName} maxLength={INVENTORY_TAXONOMY_NAME_MAX} disabled={busy} hint="Sin «/», «>» ni «›»." />
           <SelectField
             label="Mover a…"
@@ -287,7 +285,7 @@ function CategoryDialog({ node, roots, onClose, onDone }: { node: CategoryNode; 
           <SelectField label="Ícono" value={icon} onChange={setIcon} disabled={busy} options={[{ value: "", label: "Sin ícono" }, ...CATEGORY_ICONS.map((entry) => ({ value: entry, label: ICON_LABEL[entry] ?? entry }))]} />
           <NumberField label="Orden" value={sortOrder} onChange={setSortOrder} maxLength={4} hint="Las más chicas van primero." disabled={busy} />
         </form>
-        <div className="admin-form">
+        <div className="admin-form admin-form-grid">
           <SelectField
             label="Unir con otra categoría"
             value={mergeInto}
@@ -359,7 +357,7 @@ function WarehouseDialog({ warehouse, onClose, onDone }: { warehouse: AdminWareh
         </>
       )}
     >
-      <form id={formId} className="admin-form" onSubmit={save}>
+      <form id={formId} className="admin-form admin-form-grid" onSubmit={save}>
         <TextField label="Código" required value={code} onChange={(value) => setCode(normalizeWarehouseCode(value))} maxLength={6} disabled={busy} hint="Cambiarlo no rompe las ubicaciones: se guardan aparte." />
         <TextField label="Nombre" required value={name} onChange={setName} maxLength={INVENTORY_TAXONOMY_NAME_MAX} disabled={busy} />
         <TextField label="Dirección" value={address} onChange={setAddress} maxLength={400} wide disabled={busy} />

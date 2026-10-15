@@ -148,3 +148,10 @@ una lectura reintentada no cuenta doble (.pg). 3) Un despacho durante el conteo 
 1. El rojo de «alquilado» es el mismo de «vencido» en todo el panel. ¿Lo dejamos así o usamos violeta para alquilado y rojo solo para devolución vencida?
 2. ¿Alcanza con un nivel de subcategoría (Vajilla › Copas) o hacen falta más?
 3. ¿Quién aprueba las diferencias de un conteo: solo dueño y administrador, o también el encargado de depósito?
+
+## 11. E1 implementada (decisiones del dueño y detalles)
+- **Taxonomía de tres niveles**: Tipo (`InventoryKind`: reutilizable, consumible, descartable), Categoría y Subcategoría (un nivel de hija en `InventoryCategory`). `InventoryItem.category` queda como espejo de «Categoría › Subcategoría»; lo escribe solo `resolveInventoryCategory` (`lib/server/inventory-categories.ts`) y un test de fuente lo verifica. La tienda y los sustitutos siguen el nombre/ id (renombrar reescribe el texto en la misma transacción).
+- **Backfill** (migración `202610240001_inventory_taxonomy_warehouses`): una categoría por (empresa, texto); «Vajilla / Copas», «Vajilla > Copas» y «Vajilla › Copas» crean padre e hija; «Vajilla» y «vajilla » comparten clave. Depósito «Depósito principal · D1» solo en empresas con unidades.
+- **Importar productos**: columnas `categoria`, `subcategoria`, `deposito` (código) y `ubicacion`; también «Categoría / Subcategoría» en `categoria`. Un depósito que no existe avisa en la vista previa y las unidades van al principal. Plantilla, prompt de ChatGPT e instrucciones de la IA actualizados.
+- **Ajustes → Inventario** (`/ajustes/inventario`, OWNER y ADMIN): categorías (renombrar, mover, color, ícono, orden, unir, archivar) y depósitos (código, nombre, principal, archivar; con unidades no se borra).
+- **Ficha**: secciones «Datos» y «Stock por depósito» (agrupación de unidades, «Mover unidades» y «Registrar compra»); unidades con depósito-ubicación y condición (`8/10 · 80 %`). La pantalla nueva (estados, cuadrícula, escaneo) queda para E2 y E3.
