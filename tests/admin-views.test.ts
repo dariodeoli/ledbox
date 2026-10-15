@@ -31,8 +31,10 @@ test("los módulos con cuadrícula la ofrecen en el conmutador o en la lista com
       assert.match(ownerSource, /useAdminModuleView\(/, `${owner}: falta la vista recordada que decide ${file}`);
       assert.match(ownerSource, /AdminViewSwitch/, `${owner}: falta el conmutador de vistas`);
       assert.match(ownerSource, /useAdminNarrowViewport/, `${owner}: falta el ancho compacto`);
-      // La vista grid llega a la cuadrícula: el módulo se la pide a la lista y la lista la dibuja.
-      assert.match(ownerSource, /cards=\{view === "grid" \|\| narrow\}/, `${owner}: la vista grid/compacta tiene que activar las tarjetas`);
+      // E2: en ancho compacto la lista se lee como tarjetas; la vista «Cuadrícula» y «Por categoría» dibujan su propia cuadrícula compacta.
+      assert.match(ownerSource, /cards=\{narrow\}/, `${owner}: el ancho compacto tiene que activar las tarjetas de la lista`);
+      assert.match(ownerSource, /view === "grid" \?[\s\S]{0,160}<InventoryCompactGrid/, `${owner}: la vista grid tiene que dibujar la cuadrícula compacta`);
+      assert.match(ownerSource, /view === "category" \?[\s\S]{0,160}<InventoryByCategory/, `${owner}: falta la vista por categoría`);
       assert.match(readFileSync(join(MODULES_DIR, file), "utf8"), /<AdminCardGrid\b/, `${file}: tiene que dibujar AdminCardGrid`);
       continue;
     }

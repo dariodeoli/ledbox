@@ -284,7 +284,7 @@ test("el encabezado ya no tiene el botón de Carga con IA y la pantalla de Inven
   assert.throws(() => repoFile("components/admin/AdminCargaIaButton.tsx"));
   const inventario = repoFile("components/admin/modules/InventarioModule.tsx");
   assert.match(inventario, /canImportCatalog\(role\)/);
-  assert.match(inventario, /Importar catálogo/);
+  assert.match(inventario, /Importar\n\s*<\/AdminButton>/, "el encabezado de Inventario dice «Importar»");
   const route = repoFile("app/api/admin/import/[modulo]/route.ts");
   assert.match(route, /canImportCatalog/);
   assert.match(route, /rateLimit\(/);
