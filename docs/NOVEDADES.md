@@ -646,3 +646,5 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Seis plantillas nuevas para la tienda, listas para elegir en Ajustes → Apariencia: Jardín (verdes y papel, para exteriores y bodas al aire libre), Mármol (blanco y gris piedra, para lujo y decoración premium), Terracota (tierra y crema, para vajilla rústica y catering), Nórdico (madera clara, para mobiliario y oficinas), Gala (negro y dorado, para bodas de gala y eventos nocturnos) y Brisa (azul profundo y arena, para eventos de playa y náutica). Todas cumplen contraste AA y tienen el botón principal de color.
 - Importar catálogo: ahora podés indicar cuántas unidades están en mantenimiento, dañadas o perdidas (columnas «En mantenimiento», «Dañadas» y «Perdidas»). Una planilla anterior sin esas columnas sigue valiendo.
+- La frase de la portada se edita solo en Ajustes → Apariencia (se quitó el campo repetido de Tienda web).
+- Buscador de fechas: el campo «Invitados» queda alineado con los demás.

@@ -7,7 +7,7 @@ import type { AdminRentalSettings as RentalSettingsView } from "@/lib/admin-type
 import type { CatalogAccessMode } from "@/lib/catalog-access-mode";
 import Link from "next/link";
 import { useAdminSession } from "../AdminShell";
-import { EmailField, PhoneField, SwitchField, TextField } from "../AdminFields";
+import { EmailField, PhoneField, SwitchField } from "../AdminFields";
 import { AdminButton, AdminDataState, AdminNote, AdminPanel } from "../AdminUI";
 import { CatalogAccessModeField, CatalogAccessRequests } from "./CatalogAccessPanel";
 import { StoreOrderPanel } from "./StoreOrderPanel";
@@ -78,7 +78,7 @@ export function TiendaWebSettings() {
     const body: Record<string, unknown> = {};
     if (form.publicCatalogEnabled !== initial.publicCatalogEnabled) body.publicCatalogEnabled = form.publicCatalogEnabled;
     if (form.publicShowPrices !== initial.publicShowPrices) body.publicShowPrices = form.publicShowPrices;
-    if (form.storefrontTagline !== initial.storefrontTagline) body.storefrontTagline = form.storefrontTagline || null;
+    // La frase de la portada se edita solo en Ajustes → Apariencia.
     if (form.catalogAccessMode !== initial.catalogAccessMode) body.catalogAccessMode = form.catalogAccessMode;
     if (form.whatsappPhone !== initial.whatsappPhone) body.whatsappPhone = form.whatsappPhone || null;
     if (form.storefrontEmail !== initial.storefrontEmail) body.storefrontEmail = form.storefrontEmail || null;
@@ -154,15 +154,6 @@ export function TiendaWebSettings() {
 
             <AdminPanel title="Portada y contacto" icon="building">
               <div className="admin-settings-grid">
-                <TextField
-                  label="Frase de la portada"
-                  value={form.storefrontTagline}
-                  onChange={(value) => setForm({ ...form, storefrontTagline: value })}
-                  maxLength={140}
-                  hint="Una línea bajo el nombre de la empresa. Vacía, se usa una frase neutra."
-                  disabled={demo || busy}
-                  wide
-                />
                 <PhoneField
                   label="WhatsApp de la empresa"
                   value={form.whatsappPhone}

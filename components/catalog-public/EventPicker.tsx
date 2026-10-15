@@ -87,12 +87,12 @@ export function EventPicker({ slug, range, variant = "hero", restore = false, on
       <div className="cp-event-fields">
         <DayField label="Fecha del evento" value={from} min={today} size="full" required onChange={(value) => { setFrom(value); setMessage(""); }} />
         <SelectField label="Días de alquiler" value={days} size="full" onChange={setDays} options={Array.from({ length: MAX_RENTAL_DAYS }, (_, index) => ({ value: String(index + 1), label: `${index + 1} ${index === 0 ? "día" : "días"}` }))} />
-        <NumberField label="Invitados (opcional)" value={guests} size="full" maxLength={5} placeholder="Ej.: 80" onChange={(value) => setGuests(value.replace(/\D/g, ""))} hint="Solo de referencia: no filtra." />
+        <NumberField label="Invitados (opcional)" value={guests} size="full" maxLength={5} placeholder="Ej.: 80" onChange={(value) => setGuests(value.replace(/\D/g, ""))} />
         {variant !== "drawer" && variant !== "panel" ? <button className="cp-btn cp-btn--primary cp-event-go" type="submit">Ver disponibilidad</button> : null}
       </div>
       {variant === "drawer" || variant === "panel" ? <button className="cp-btn cp-btn--block" type={embedded ? "button" : "submit"} onClick={embedded ? () => apply(from, Number(days), guests) : undefined}>Aplicar fechas</button> : null}
       <p className="cp-event-note" role={message ? "alert" : undefined}>
-        {message || current || (emptyNote ?? "Elegí la fecha para ver la disponibilidad indicativa de cada producto.")}
+        {message || current || (emptyNote ?? "Elegí la fecha para ver la disponibilidad indicativa de cada producto.")} Los invitados son solo de referencia.
       </p>
     </Root>
   );

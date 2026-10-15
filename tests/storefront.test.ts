@@ -185,7 +185,7 @@ test("Ajustes tiene la sección «Tienda web» con Crear tienda, copiar link, fr
   const tabs = read("components/admin/modules/AjustesTabs.tsx");
   assert.match(tabs, /key: "tienda", href: "\/ajustes\/tienda", label: "Tienda web"/);
   const settings = read("components/admin/modules/TiendaWebSettings.tsx");
-  for (const text of ["Crear tienda", "Copiar link", "Frase de la portada", "Acceso al catálogo", "Tienda encendida", "Mostrar precios", "WhatsApp de la empresa"]) assert.ok(settings.includes(text), text);
+  for (const text of ["Crear tienda", "Copiar link", "Acceso al catálogo", "Tienda encendida", "Mostrar precios", "WhatsApp de la empresa"]) assert.ok(settings.includes(text), text);
   assert.equal(settings.includes('label="Color de marca"'), false, "el color de marca no se duplica: vive en Ajustes → Apariencia");
   assert.match(read("components/admin/modules/AparienciaSettings.tsx"), /label="Color de marca \(botones y enlaces\)"/);
   assert.match(read("lib/admin-policy.ts"), /"\/ajustes\/tienda": \["OWNER", "ADMIN"\]/);
