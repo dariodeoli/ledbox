@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * invitación tiene que ser de la empresa activa y quedan auditadas.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireAdminContext("users.manage");
+  const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, organization, user: actor } = auth.context;
   const { id } = await params;

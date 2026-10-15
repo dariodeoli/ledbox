@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { cuotaArchivosOk, SANDBOX_QUOTA_MESSAGE } from "@/lib/server/demo-sandbox";
 import { jsonError } from "@/lib/server/http";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { recordAudit } from "@/lib/server/audit";
@@ -49,6 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mime) {
     return jsonError("El archivo no es un JPG, PNG o WebP real: revisá que no esté renombrado.", 400);
   }
+  if (!(await cuotaArchivosOk(auth.context.organizationId, data.byteLength))) return jsonError(SANDBOX_QUOTA_MESSAGE, 413);
 
   const inventory = await db.inventoryItem.update({
     where: { id: item.id },

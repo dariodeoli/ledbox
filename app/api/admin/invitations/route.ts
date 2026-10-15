@@ -72,7 +72,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("users.manage");
+  const auth = await requireAdminContext("users.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, organization, user: actor } = auth.context;
 

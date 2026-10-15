@@ -22,7 +22,7 @@ const MIN_LENGTH = 8;
 const MAX_LENGTH = 128;
 
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("profile.write");
+  const auth = await requireAdminContext("profile.write", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { user: actor } = auth.context;
 

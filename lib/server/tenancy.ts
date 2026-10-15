@@ -4,6 +4,7 @@ import { parseBearerToken } from "@/lib/api-tokens";
 import { getAuthenticatedAdmin, type AuthenticatedAdmin, type PublicAdminUser } from "./auth";
 import { touchApiToken, verifyApiToken } from "./api-tokens";
 import { isDemoOrganizationSlug } from "./demo-data";
+import { isSandboxOrg, SANDBOX_DENIED_MESSAGE } from "./demo-sandbox";
 import { db } from "./db";
 import { jsonError } from "./http";
 import { ensureOrganizationPlan } from "./plan-limits";
@@ -39,8 +40,20 @@ export type AdminContext = {
   };
   role: AdminRole;
   organizationId: string;
-  /** La empresa activa es la demo pública: el panel va en modo solo lectura. */
+  /** La empresa activa es la vitrina de la demo pública: el panel va en modo solo lectura. */
   demo: boolean;
+  /**
+   * La empresa activa es una sandbox por visitante (docs/DEMO-INTERACTIVA.md): escribe, pero toda
+   * salida hacia afuera queda cortada (`lib/server/demo-sandbox.ts`).
+   */
+  sandbox: boolean;
+};
+
+/** Opciones de `requireAdminContext`. */
+export type RequireAdminOptions = {
+  allowLocked?: boolean;
+  /** `"deny"`: la ruta es 403 «En la demo esto está desactivado» en una sandbox (API keys, usuarios, clave, PIN, plan…). */
+  sandbox?: "deny";
 };
 
 export type AdminContextResult = { ok: true; context: AdminContext } | { ok: false; response: Response };
@@ -76,10 +89,10 @@ async function findMembership(adminUserId: string, organizationId: string | null
  */
 export async function requireAdminContext(
   capability?: AdminCapability,
-  options?: { allowLocked?: boolean },
+  options?: RequireAdminOptions,
 ): Promise<AdminContextResult> {
   const bearer = parseBearerToken((await headers()).get("authorization"));
-  if (bearer) return requireApiTokenContext(bearer, capability);
+  if (bearer) return requireApiTokenContext(bearer, capability, options);
 
   const auth = await getAuthenticatedAdmin();
   if (!auth) return { ok: false, response: jsonError("Unauthorized", 401) };
@@ -103,6 +116,7 @@ export async function requireAdminContext(
 
   const role = membership.role;
   const demo = isDemoOrganizationSlug(membership.organization.slug);
+  const sandbox = !demo && (await isSandboxOrg(membership.organizationId));
   // La empresa sin plan recibe el por defecto una sola vez (issue #42): así los
   // límites se aplican desde el primer request y no queda una empresa sin tope
   // por olvido. Best-effort: `ensureOrganizationPlan` nunca rompe el request.
@@ -115,6 +129,9 @@ export async function requireAdminContext(
   if (capability && demo) {
     return { ok: false, response: jsonError("Modo demo: solo lectura", 403) };
   }
+  if (sandbox && options?.sandbox === "deny") {
+    return { ok: false, response: jsonError(SANDBOX_DENIED_MESSAGE, 403) };
+  }
   if (capability && !roleCan(role, capability)) {
     return { ok: false, response: jsonError("Forbidden", 403) };
   }
@@ -122,7 +139,7 @@ export async function requireAdminContext(
   // Registro de actividad (docs/SUPERADMIN.md §3): solo la rama de cookie, nunca la demo
   // ni la API key; va en `after()` y no puede romper ni demorar la respuesta.
   // Las rutas de PIN (`allowLocked`) con la sesión bloqueada no cuentan como uso del panel.
-  if (!auth.session.lockedAt) trackAdminActivity({ userId: auth.user.id, organizationId: membership.organizationId, lastActiveAt: auth.lastActiveAt, demo });
+  if (!auth.session.lockedAt) trackAdminActivity({ userId: auth.user.id, organizationId: membership.organizationId, lastActiveAt: auth.lastActiveAt, demo: demo || sandbox });
 
   return {
     ok: true,
@@ -133,6 +150,7 @@ export async function requireAdminContext(
       role,
       organizationId: membership.organizationId,
       demo,
+      sandbox,
     },
   };
 }
@@ -145,7 +163,7 @@ export async function requireAdminContext(
  */
 const API_TOKEN_RATE_LIMIT = 300;
 
-async function requireApiTokenContext(token: string, capability?: AdminCapability): Promise<AdminContextResult> {
+async function requireApiTokenContext(token: string, capability?: AdminCapability, options?: RequireAdminOptions): Promise<AdminContextResult> {
   const verified = await verifyApiToken(token);
   if (!verified.ok) return { ok: false, response: jsonError("Unauthorized", 401) };
   const apiToken = verified.token;
@@ -154,8 +172,12 @@ async function requireApiTokenContext(token: string, capability?: AdminCapabilit
   if (!limited.allowed) return { ok: false, response: rateLimitResponse(limited.retryAfter) };
 
   const demo = isDemoOrganizationSlug(apiToken.organization.slug);
+  const sandbox = !demo && (await isSandboxOrg(apiToken.organization.id));
   if (capability && demo) {
     return { ok: false, response: jsonError("Modo demo: solo lectura", 403) };
+  }
+  if (sandbox && options?.sandbox === "deny") {
+    return { ok: false, response: jsonError(SANDBOX_DENIED_MESSAGE, 403) };
   }
   if (capability && !roleCan(apiToken.role, capability)) {
     return { ok: false, response: jsonError("Forbidden", 403) };
@@ -192,6 +214,7 @@ async function requireApiTokenContext(token: string, capability?: AdminCapabilit
       role: apiToken.role,
       organizationId: apiToken.organization.id,
       demo,
+      sandbox,
     },
   };
 }
@@ -243,12 +266,13 @@ export async function resolveActiveOrganizationId(adminUserId: string): Promise<
 /** Organización por defecto para los endpoints públicos (leads y cotizaciones). */
 export async function resolveDefaultOrganizationId(): Promise<string | null> {
   const slug = (process.env.DEFAULT_ORGANIZATION_SLUG || "ledbox").trim();
+  // La vitrina y las sandboxes de la demo (`isDemo`) nunca reciben leads ni cotizaciones públicas.
   const bySlug = slug
-    ? await db.organization.findFirst({ where: { slug, active: true }, select: { id: true } })
+    ? await db.organization.findFirst({ where: { slug, active: true, isDemo: false }, select: { id: true } })
     : null;
   if (bySlug) return bySlug.id;
   const fallback = await db.organization.findFirst({
-    where: { active: true },
+    where: { active: true, isDemo: false },
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });

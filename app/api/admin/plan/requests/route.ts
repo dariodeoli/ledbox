@@ -22,7 +22,7 @@ const NOTE_MAX_LENGTH = 400;
  * de tenancy, sin llegar a escribir.
  */
 export async function POST(request: Request) {
-  const auth = await requireAdminContext("org.manage");
+  const auth = await requireAdminContext("org.manage", { sandbox: "deny" });
   if (!auth.ok) return auth.response;
   const { organizationId, user: actor } = auth.context;
 
