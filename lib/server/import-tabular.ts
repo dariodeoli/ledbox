@@ -228,7 +228,14 @@ export function rowsToObjects(module: ImportModule, matrix: string[][]): { ok: t
   if (matrix.length === 0) return { ok: false, error: "La planilla está vacía." };
   const expected = importHeaders(module);
   const header = matrix[0].map((cell) => cell.trim().toLowerCase());
-  const missing = expected.filter((key) => !header.includes(key));
+  // Encabezados alternativos («En mantenimiento», «Dañadas»): se llevan a la clave de la columna.
+  for (const column of module.columns) {
+    if (header.includes(column.key)) continue;
+    const at = header.findIndex((cell) => column.aliases?.some((alias) => alias === cell || alias.normalize("NFD").replace(/[̀-ͯ]/g, "") === cell.normalize("NFD").replace(/[̀-ͯ]/g, "")));
+    if (at >= 0) header[at] = column.key;
+  }
+  const optional = new Set(module.columns.filter((column) => column.optionalColumn).map((column) => column.key));
+  const missing = expected.filter((key) => !header.includes(key) && !optional.has(key));
   if (missing.length > 0) {
     return { ok: false, error: `Faltan columnas en la planilla: ${missing.join(", ")}. Usá «Descargar plantilla» y no cambies los encabezados.` };
   }

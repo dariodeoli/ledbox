@@ -99,6 +99,22 @@ Sección opcional `categorias` (al mismo nivel que `productos`), para darle foto
 
 Campos adicionales soportados pero no ejercitados en este lote: subcategoria, deposito, ubicacion y precios_dias. No agregarlos por inventar información. precios_dias usa `[{"desde_dias":5,"modo":"total","precio":300000}]`, con modo dia o total, únicamente cuando hay una tarifa documentada. No deducir descuentos.
 
+### Estados de unidades (opcional, solo `tipo: unidad`)
+
+Tres campos enteros ≥ 0 por producto: `en_mantenimiento`, `danadas` y `perdidas` (en la planilla, columnas «En mantenimiento», «Dañadas» y «Perdidas»; una planilla anterior sin esas columnas sigue valiendo). Van a los estados MAINTENANCE, DAMAGED y LOST de la unidad.
+
+```json
+{ "codigo": "S-1", "nombre": "Silla modelo A", "tipo": "unidad", "cantidad": 40, "en_mantenimiento": 2, "danadas": 1, "perdidas": 0 }
+```
+
+- La suma de los tres no puede superar la cantidad (o las unidades totales después de completar): si la supera es un **error bloqueante** de esa fila («suman X y el producto tiene Y»).
+- **Alta:** de las unidades creadas, N quedan en cada estado y el resto AVAILABLE.
+- **Reimportación:** el estado del archivo es el objetivo. Solo se mueven unidades AVAILABLE que no hacen falta para asignaciones vigentes o futuras (la reserva es por cantidad: se descuenta la cantidad comprometida), o unidades en esos estados que vuelven a AVAILABLE si el archivo trae menos. Nunca se tocan las RETIRED. Si no se llega al objetivo, aviso «solo se pudieron ajustar N».
+- **Campo ausente = no tocar** el estado. **Campo en 0 = devolver a disponible** las que estén en ese estado (con las mismas restricciones).
+- Cada cambio deja el mismo rastro que uno manual (auditoría de la unidad y cantidad del producto sincronizada) y además un incidente abierto con la nota «Importación» (mantenimiento = reparación, dañada = daño, perdida = faltante). Al volver a disponible se resuelven los incidentes abiertos de esa unidad.
+- En un juego estos campos se ignoran con un aviso. La vista previa muestra «Estados de unidades: X a mantenimiento, Y dañadas, Z perdidas, W vuelven a disponible».
+- Sin migración: usa el enum `InventoryUnitStatus` actual.
+
 ## 4. Códigos, nombres, categorías y descripciones
 
 - codigo es texto único por empresa. Conservar el original, incluidos ceros iniciales. No usar el nombre como identificador.
@@ -190,7 +206,7 @@ No atribuir una causa a un error solo por su color o mensaje genérico: conserva
 
 ## Orden breve para futuras IAs
 
-Prepará catalogo.json y fotos.zip conforme a esta guía. Conservá códigos únicos y estables, nombres comerciales y datos comprobados. Precios y existencias desconocidos van null, con dudas claras; stock confirmado agotado va 0. Combos solo con componentes completos y unidades reales; composición incompleta va [] y se advierte. Precio de combo es comercial, nunca la suma automática. Fotos cuadradas 1200 × 1200 centradas con margen blanco, código.jpg en la raíz del ZIP. Si querés foto por categoría, agregá la sección opcional `categorias` (`nombre`, `foto`, `orden`) y las fotos `cat-<slug>.jpg` de 1200 × 1200, cuadradas, con una imagen representativa del rubro, centradas y con margen, en el mismo ZIP. Separá logo, portadas y perfil. Entregá resumen de productos, categorías, precios faltantes, cantidades faltantes, combos completos/incompletos y dudas. No inventes datos ni publiques la tienda sin instrucción. Marcá lo no probado como no probado.
+Prepará catalogo.json y fotos.zip conforme a esta guía. Conservá códigos únicos y estables, nombres comerciales y datos comprobados. Precios y existencias desconocidos van null, con dudas claras; stock confirmado agotado va 0. Combos solo con componentes completos y unidades reales; composición incompleta va [] y se advierte. Precio de combo es comercial, nunca la suma automática. Fotos cuadradas 1200 × 1200 centradas con margen blanco, código.jpg en la raíz del ZIP. Si querés foto por categoría, agregá la sección opcional `categorias` (`nombre`, `foto`, `orden`) y las fotos `cat-<slug>.jpg` de 1200 × 1200, cuadradas, con una imagen representativa del rubro, centradas y con margen, en el mismo ZIP. Estados de unidades (solo `tipo: unidad`): `en_mantenimiento`, `danadas` y `perdidas` son opcionales, enteros ≥ 0 y su suma no puede superar `cantidad`; ausente = no tocar, 0 = devolver a disponible, y nunca se mueven unidades asignadas a eventos ni retiradas. No los inventes: solo si el cliente informa piezas en reparación, rotas o perdidas. Separá logo, portadas y perfil. Entregá resumen de productos, categorías, precios faltantes, cantidades faltantes, combos completos/incompletos y dudas. No inventes datos ni publiques la tienda sin instrucción. Marcá lo no probado como no probado.
 
 ## Cambios desde v2.1.121
 

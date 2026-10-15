@@ -71,6 +71,13 @@ export type CatalogProduct = {
    */
   preciosDias?: PriceTier[];
   cantidad: number | null;
+  /**
+   * Estados de unidad deseados (solo productos «unidad»): enteros ≥ 0. `null` = el archivo no trae el
+   * campo (no se toca el estado); `0` = devolver a disponible las que estén en ese estado.
+   */
+  enMantenimiento: number | null;
+  danadas: number | null;
+  perdidas: number | null;
   medidas: string | null;
   capacidad: string | null;
   descripcion: string | null;
@@ -108,6 +115,10 @@ export type ProblemKind =
   | "precio-invalido"
   | "precio-cero"
   | "cantidad-invalida"
+  | "estado-invalido"
+  | "estado-excede"
+  | "estado-incompleto"
+  | "estado-ignorado"
   | "componente-inexistente"
   | "componente-invalido"
   | "juego-anidado"
@@ -201,6 +212,17 @@ function parseWholeNumber(raw: unknown): number | null | false {
   const value = typeof raw === "string" ? (raw.trim().toLowerCase() === "null" ? null : /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN) : raw;
   if (value === null) return null;
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 100_000 ? value : false;
+}
+
+/** Cantidad de unidades en un estado: entero ≥ 0. `null` = campo ausente; `false` = inválido. */
+export function parseStateCount(raw: unknown): number | null | false {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "string") {
+    const clean = raw.trim();
+    if (!clean || clean.toLowerCase() === "null") return null;
+    return /^\d{1,6}$/.test(clean) ? Number(clean) : false;
+  }
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 && raw <= 100_000 ? raw : false;
 }
 
 /**
@@ -367,6 +389,17 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     problems.push(problem("error", "cantidad-invalida", codigo, fila, `Código ${codigo}: la cantidad debe ser un entero de 1 o más (o null).`));
     return null;
   }
+  const estados = {
+    en_mantenimiento: parseStateCount(row.en_mantenimiento),
+    danadas: parseStateCount(row.danadas ?? row["dañadas"]),
+    perdidas: parseStateCount(row.perdidas),
+  };
+  for (const [campo, value] of Object.entries(estados)) {
+    if (value === false) {
+      problems.push(problem("error", "estado-invalido", codigo, fila, `Código ${codigo}: «${campo}» debe ser un entero de 0 o más (o vacío para no tocar el estado).`));
+      return null;
+    }
+  }
   const componentes = parseComponents(row.componentes);
   if (!componentes.ok) {
     problems.push(problem("error", "componente-invalido", codigo, fila, `Código ${codigo}: ${componentes.error}`));
@@ -408,6 +441,9 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     cobro: cobroRaw,
     preciosDias: preciosDias.list,
     cantidad,
+    enMantenimiento: estados.en_mantenimiento as number | null,
+    danadas: estados.danadas as number | null,
+    perdidas: estados.perdidas as number | null,
     medidas: text(row.medidas, 120),
     capacidad: text(row.capacidad, 120),
     descripcion: text(row.descripcion, 2000),
@@ -534,7 +570,69 @@ export type ExistingItem = {
   reservas?: number;
   /** Unidades con historial (fuera de servicio, retiradas o con incidentes). */
   unidadesConHistorial?: number;
+  /** Unidades por estado (las retiradas no cuentan): base para ajustar estados por importación. */
+  estados?: UnitStateCounts;
+  /** Cantidad comprometida por asignaciones vigentes o futuras (sin devolver). */
+  comprometidas?: number;
 };
+
+export type UnitStateCounts = { AVAILABLE: number; MAINTENANCE: number; DAMAGED: number; LOST: number };
+export type AdjustableState = "MAINTENANCE" | "DAMAGED" | "LOST";
+export const ADJUSTABLE_STATES: readonly AdjustableState[] = ["MAINTENANCE", "DAMAGED", "LOST"];
+export type UnitStateTargets = Partial<Record<AdjustableState, number>>;
+
+/** Estados pedidos por el archivo (solo los presentes). */
+export function stateTargetsOf(product: Pick<CatalogProduct, "enMantenimiento" | "danadas" | "perdidas">): UnitStateTargets {
+  const targets: UnitStateTargets = {};
+  if (product.enMantenimiento !== null) targets.MAINTENANCE = product.enMantenimiento;
+  if (product.danadas !== null) targets.DAMAGED = product.danadas;
+  if (product.perdidas !== null) targets.LOST = product.perdidas;
+  return targets;
+}
+
+export type UnitStatePlan = {
+  /** Unidades AVAILABLE que pasan a cada estado. */
+  aEstado: Record<AdjustableState, number>;
+  /** Unidades de cada estado que vuelven a AVAILABLE. */
+  aDisponible: Record<AdjustableState, number>;
+  /** Unidades pedidas de más que no se pudieron mover. */
+  faltan: number;
+  /** Unidades pedidas para pasar a un estado (las que se necesitaban mover). */
+  pedidas: number;
+};
+
+/**
+ * Cálculo puro de cómo llegar a los estados del archivo. Solo se mueven unidades AVAILABLE que no
+ * hacen falta para asignaciones vigentes o futuras (`comprometidas`) y las que están en un estado
+ * pedido vuelven a AVAILABLE si el archivo trae menos. Las retiradas y las asignadas no se tocan.
+ * `nuevas` son las unidades que esta misma importación crea (entran disponibles).
+ */
+export function planUnitStates(options: { counts: UnitStateCounts; nuevas: number; comprometidas: number; targets: UnitStateTargets }): UnitStatePlan {
+  const aEstado = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+  const aDisponible = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+  let available = options.counts.AVAILABLE + options.nuevas;
+  for (const state of ADJUSTABLE_STATES) {
+    const target = options.targets[state];
+    if (target === undefined) continue;
+    const back = Math.max(0, options.counts[state] - target);
+    aDisponible[state] = back;
+    available += back;
+  }
+  let free = Math.max(0, available - options.comprometidas);
+  let faltan = 0;
+  let pedidas = 0;
+  for (const state of ADJUSTABLE_STATES) {
+    const target = options.targets[state];
+    if (target === undefined) continue;
+    const need = Math.max(0, target - options.counts[state]);
+    const give = Math.min(need, free);
+    free -= give;
+    aEstado[state] = give;
+    pedidas += need;
+    faltan += need - give;
+  }
+  return { aEstado, aDisponible, faltan, pedidas };
+}
 
 export type PlannedProduct = {
   product: CatalogProduct;
@@ -551,6 +649,8 @@ export type PlannedProduct = {
   /** Unidades a tener (solo unidades): `cantidad` o 1. */
   unidades: number;
   existingId: string | null;
+  /** Ajuste de estados de unidad (solo unidades con algún campo de estado en el archivo). */
+  estados: UnitStatePlan | null;
 };
 
 export type CatalogSummary = {
@@ -563,6 +663,11 @@ export type CatalogSummary = {
   incompletos: number;
   /** Unidades existentes que se convierten en juego. */
   convertidos: number;
+  /** Unidades que pasan a mantenimiento, dañadas, perdidas, y las que vuelven a disponible. */
+  estadosMantenimiento: number;
+  estadosDanadas: number;
+  estadosPerdidas: number;
+  estadosDisponibles: number;
   fotos: number;
   /** Fotos de categoría encontradas en el ZIP. */
   fotosCategoria: number;
@@ -627,6 +732,7 @@ export function planCatalog(options: {
       publicDescription: null,
       unidades: esCombo ? 0 : product.cantidad ?? 1,
       existingId: existing?.id ?? null,
+      estados: null,
     };
     const errors: ImportProblem[] = [];
 
@@ -685,6 +791,28 @@ export function planCatalog(options: {
       return { ...base, accion: "omitir" };
     }
 
+    const targets = stateTargetsOf(product);
+    if (Object.keys(targets).length > 0) {
+      if (esCombo) {
+        problems.push(problem("aviso", "estado-ignorado", product.codigo, product.fila, `${product.nombre}: es un juego, no tiene unidades propias; se ignoran «en_mantenimiento», «danadas» y «perdidas».`));
+      } else {
+        const counts = existing?.estados ?? { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+        const active = counts.AVAILABLE + counts.MAINTENANCE + counts.DAMAGED + counts.LOST;
+        const total = existing ? Math.max(active, product.cantidad ?? active) : product.cantidad ?? 1;
+        const requested = (targets.MAINTENANCE ?? 0) + (targets.DAMAGED ?? 0) + (targets.LOST ?? 0);
+        if (requested > total) {
+          problems.push(problem("error", "estado-excede", product.codigo, product.fila, `${product.nombre}: en mantenimiento + dañadas + perdidas suman ${requested} y el producto tiene ${total} unidad${total === 1 ? "" : "es"}. La suma no puede superar la cantidad.`));
+          return { ...base, accion: "omitir" };
+        }
+        const nuevas = existing ? Math.max(0, (product.cantidad ?? active) - active) : total;
+        const estados = planUnitStates({ counts, nuevas, comprometidas: existing?.comprometidas ?? 0, targets });
+        base.estados = estados;
+        if (estados.faltan > 0) {
+          const logradas = estados.pedidas - estados.faltan;
+          problems.push(problem("aviso", "estado-incompleto", product.codigo, product.fila, `${product.nombre}: el archivo pide ${estados.pedidas} unidad${estados.pedidas === 1 ? "" : "es"} más en mantenimiento, dañadas o perdidas y solo se pudieron ajustar ${logradas}: el resto está asignado a eventos vigentes o futuros (esas unidades no se tocan).`));
+        }
+      }
+    }
     if (product.deposito && options.warehouseCodes && !options.warehouseCodes.has(product.deposito)) {
       problems.push(problem("aviso", "deposito-inexistente", product.codigo, product.fila, `${product.nombre}: no hay un depósito con el código ${product.deposito}; las unidades nuevas van al depósito principal.`));
     }
@@ -754,6 +882,10 @@ export function planCatalog(options: {
     juegos: live.filter((item) => item.esCombo).length,
     incompletos: live.filter((item) => item.incompleto).length,
     convertidos: live.filter((item) => item.convertir).length,
+    estadosMantenimiento: live.reduce((sum, item) => sum + (item.estados?.aEstado.MAINTENANCE ?? 0), 0),
+    estadosDanadas: live.reduce((sum, item) => sum + (item.estados?.aEstado.DAMAGED ?? 0), 0),
+    estadosPerdidas: live.reduce((sum, item) => sum + (item.estados?.aEstado.LOST ?? 0), 0),
+    estadosDisponibles: live.reduce((sum, item) => sum + ADJUSTABLE_STATES.reduce((acc, state) => acc + (item.estados?.aDisponible[state] ?? 0), 0), 0),
     fotos: live.filter((item) => item.foto).length,
     fotosCategoria: categories.filter((entry) => entry.foto).length,
     errores: problems.filter((entry) => entry.nivel === "error").length,

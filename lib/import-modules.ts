@@ -21,6 +21,10 @@ export type ImportColumn = {
   example: string;
   /** Explicación para la hoja «Instrucciones». */
   help: string;
+  /** La planilla puede no traer la columna (planillas anteriores): se toma como vacía. */
+  optionalColumn?: boolean;
+  /** Otros encabezados aceptados, ya normalizados (minúsculas, sin tildes, guion bajo). */
+  aliases?: ReadonlyArray<string>;
 };
 
 export type ImportModuleId = "productos" | "gastos" | "clientes" | "movimientos-stock";
@@ -55,6 +59,9 @@ const PRODUCTOS_COLUMNS: ReadonlyArray<ImportColumn> = [
   { key: "cobro", required: false, example: "evento", help: "«dia» (por día de alquiler, valor por defecto) o «evento» (un precio total por evento). Vacío = dia." },
   { key: "precios_dias", required: false, example: "5:total:300000", help: "Precio especial desde cierta cantidad de días, «desde:modo:precio» separados por punto y coma. Modo «dia» = precio por día; «total» = total del período. Ejemplo: 5:total:300000 (5 días o más por 300.000 en total); 3:dia:90000; 7:total:500000. Vacío = no cambia nada." },
   { key: "cantidad", required: false, example: "", help: "Unidades en stock (entero). En un juego se deja vacío: su capacidad sale de los componentes." },
+  { key: "en_mantenimiento", required: false, optionalColumn: true, aliases: ["en mantenimiento", "en_mantenimiento"], example: "", help: "Solo unidades: cuántas están en mantenimiento (entero, 0 o más). Vacío = no cambia el estado de las que ya existen; 0 = vuelven a disponible las que estaban en mantenimiento. La suma de mantenimiento, dañadas y perdidas no puede superar la cantidad. Nunca se tocan las unidades asignadas a eventos." },
+  { key: "danadas", required: false, optionalColumn: true, aliases: ["dañadas", "danadas"], example: "", help: "Solo unidades: cuántas están dañadas (entero, 0 o más). Vacío = no cambia; 0 = vuelven a disponible las dañadas." },
+  { key: "perdidas", required: false, optionalColumn: true, aliases: ["perdidas"], example: "", help: "Solo unidades: cuántas están perdidas (entero, 0 o más). Vacío = no cambia; 0 = vuelven a disponible las perdidas." },
   { key: "deposito", required: false, example: "D1", help: "Código del depósito donde se guardan las unidades nuevas (por ejemplo D1). Vacío = el depósito principal. Un código que no existe se ignora con un aviso." },
   { key: "ubicacion", required: false, example: "E3-B2", help: "Ubicación dentro del depósito: estante y nivel, hasta 4 tramos de 1 a 4 letras o números (por ejemplo E3-B2)." },
   { key: "medidas", required: false, example: "1.60x0.75", help: "Medidas tal como figuran en el catálogo." },
