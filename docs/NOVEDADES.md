@@ -686,3 +686,17 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Los gastos simultáneos conservan los cambios de cada operación. Los cobros comprueban que cliente y presupuesto coincidan y guardan la cuenta efectiva del movimiento.
 - Se protegen los nombres de eventos aceptados, los vínculos de inventario de presupuestos aprobados o firmados y la identidad de usuarios compartidos entre empresas. Los recursos del portal dejan de estar disponibles cuando el cliente o presupuesto están eliminados.
 - Se ajustan filtros de fechas y navegación de fichas para pantallas pequeñas.
+
+## v2.1.132 — 2026-10-15
+
+- Los campos del panel usan línea inferior y formularios más compactos. Datos opcionales de presupuestos y eventos quedan plegados; las acciones del portal se agrupan y las fechas pendientes tienen un acceso directo para completarlas.
+- El historial del presupuesto se actualiza después de aprobar o editar, sin tener que cerrar y volver a abrir la ficha.
+- Podés cargar una consulta de WhatsApp sin inventar un correo: el alta manual mantiene teléfono y consentimiento obligatorios. El formulario público conserva sus validaciones.
+- Editar productos que se cobran por evento mantiene un único cargo, aunque el alquiler dure varios días. Una edición simultánea ya no guarda descuentos sobre un subtotal anterior.
+- Los pagos simultáneos a proveedores conservan el anticipo y los movimientos correctos; los reintentos de una misma operación devuelven el resultado original.
+- Reprogramar o reabrir eventos y presupuestos comprueba nuevamente el stock antes de reactivar sus reservas. Si falta disponibilidad, se conserva el estado anterior y se informa el conflicto.
+- La disponibilidad consulta todas las reservas relevantes, aunque haya un historial grande. Tienda, combos y sustitutos comparten la misma lectura completa por rango.
+- Los incidentes distinguen cada ciclo de reparación o faltante: resolver uno no revive una unidad dada de baja ni bloquea una reparación posterior a una restauración explícita.
+- Una solicitud de cambios del portal no puede deshacer una aprobación simultánea. Una constancia tampoco hace retroceder un cobro ya confirmado.
+- Por cobrar incorpora páginas y filtros en servidor; los importes corresponden a todos los resultados, aunque el cobro sea antiguo. El CSV identifica la página exportada y suma solamente lo cobrado.
+- Los formularios inválidos se rechazan antes de modificar el perfil, los datos bancarios, usuarios e inventario. Finanzas, tesorería, trabajos y gastos validan el límite real de cada importe almacenado sin dejar registros parciales.
