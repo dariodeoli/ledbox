@@ -14,7 +14,6 @@ import {
   adminNavLabel,
   asAdminRole,
   canManageOrganization,
-  canWriteCarga,
   canWriteFinance,
   isAdminNavItemActive,
 } from "@/lib/admin-policy";
@@ -56,14 +55,6 @@ import { AdminBadge, AdminEmpty, AdminErrorState, AdminLoadingRows, AdminLockScr
 const AdminCommandPalette = dynamic(() => import("./AdminCommandPalette").then((mod) => mod.AdminCommandPalette), {
   ssr: false,
 });
-/**
- * «Carga con IA» (issue #120): el diálogo llega diferido al abrirlo, igual que
- * la paleta; el botón del topbar es una pieza chica que vive aparte.
- */
-const AdminCargaIaDialog = dynamic(() => import("./AdminCargaIa").then((mod) => mod.AdminCargaIaDialog), {
-  ssr: false,
-});
-import { AdminCargaIaButton } from "./AdminCargaIaButton";
 import { AdminMobileNav } from "./AdminMobileNav";
 import { AdminModuleHelp } from "./AdminModuleHelp";
 import { AdminThemeToggle, AdminSidebarToggle } from "./admin-theme";
@@ -305,7 +296,6 @@ export function AdminShell({
   }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMounted, setPaletteMounted] = useState(false);
-  const [cargaOpen, setCargaOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   // Bloqueo por PIN (issue #21): error/estado de la pantalla y canal entre pestañas.
   const [lockError, setLockError] = useState("");
@@ -386,9 +376,6 @@ export function AdminShell({
     setPaletteOpen(true);
   }, []);
 
-  /** Abre «Carga con IA»: el diálogo diferido se monta al aparecer abierto. */
-  const openCarga = useCallback(() => setCargaOpen(true), []);
-
   // Atajo global del panel (⌘/Ctrl + K): vive acá porque la paleta llega diferida.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -405,7 +392,6 @@ export function AdminShell({
   useEffect(() => {
     const load = () => {
       void import("./AdminCommandPalette");
-      void import("./AdminCargaIa");
     };
     const idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(load, { timeout: 4000 }) : window.setTimeout(load, 2500);
     return () => {
@@ -991,8 +977,6 @@ export function AdminShell({
                 </kbd>
               </button>
               {paletteMounted ? <AdminCommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} /> : null}
-              {!session.demo && canWriteCarga(session.user?.role) ? <AdminCargaIaButton onOpen={openCarga} /> : null}
-              {cargaOpen ? <AdminCargaIaDialog onClose={() => setCargaOpen(false)} rol={session.user?.role ?? null} /> : null}
               {session.demo ? (
                 <Link
                   className="admin-demo-chip"
