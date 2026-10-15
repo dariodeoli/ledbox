@@ -7,7 +7,7 @@ import { db } from "@/lib/server/db";
 import { recordAudit, portalAuditContext } from "@/lib/server/audit";
 import { loadPublicBudget, portalBudgetOpen } from "@/lib/server/budget-portal";
 import { isDemoOrganizationId } from "@/lib/server/demo-data";
-import { jsonError, readJson } from "@/lib/server/http";
+import { isJsonObject, jsonError, readJson } from "@/lib/server/http";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { normalizeBudgetCode } from "@/lib/public-config";
 
@@ -49,7 +49,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (budget.approvedAt) return jsonError("Este presupuesto ya fue aprobado; el equipo de LedBox puede revisarlo.", 409);
   if (!portalBudgetOpen(budget.status)) return jsonError("Este presupuesto ya no está disponible.", 409);
 
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const body = await readJson(request);
+  if (!isJsonObject(body)) return jsonError("La solicitud de cambios debe ser un objeto JSON.", 400);
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (!note) return jsonError("Contanos qué cambios necesitás.", 400);

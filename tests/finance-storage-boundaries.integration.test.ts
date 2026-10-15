@@ -23,8 +23,11 @@ test("Dinero HTTP: límites Int4 coherentes y sin escrituras parciales", { skip:
     const supplier = await db.supplier.create({ data: { id: randomUUID(), organizationId: org, name: "Proveedor QA" } });
     const account = await db.treasuryAccount.create({ data: { id: randomUUID(), organizationId: org, name: "Caja QA" } });
     const job = await db.supplierJob.create({ data: { id: randomUUID(), organizationId: org, supplierId: supplier.id, description: "Trabajo QA", total: max } });
-    const counts = async () => Promise.all([db.clientPayment.count({ where: { organizationId: org } }), db.treasuryMovement.count({ where: { organizationId: org } }), db.supplierJob.count({ where: { organizationId: org } }), db.treasuryAccount.count({ where: { organizationId: org } })]);
+    const expense = await db.expense.create({ data: { id: randomUUID(), organizationId: org, accountId: account.id, description: "Gasto base QA", amount: 1000, category: "OTHER", date: new Date(), createdById: userId, createdByName: owner.name, createdByEmail: owner.email } });
+    const counts = async () => Promise.all([db.clientPayment.count({ where: { organizationId: org } }), db.treasuryMovement.count({ where: { organizationId: org } }), db.supplierJob.count({ where: { organizationId: org } }), db.treasuryAccount.count({ where: { organizationId: org } }), db.expense.count({ where: { organizationId: org } })]);
     const cases: Array<[string, string, Record<string, unknown>]> = [
+      ["expenses", "POST", { description: "Gasto inválido QA", category: "OTHER", accountId: account.id, amount: max + 1, method: "Efectivo" }],
+      ["expenses", "PATCH", { expenseId: expense.id, amount: max + 1 }],
       ["finance", "POST", { kind: "client", clientId: client.id, amount: max + 1, method: "Efectivo" }],
       ["finance", "POST", { kind: "client", clientId: client.id, amount: 1, totalAmount: max + 1, method: "Efectivo" }],
       ["treasury", "POST", { kind: "account", name: "Caja inválida", openingBalance: max + 1 }],
@@ -39,6 +42,7 @@ test("Dinero HTTP: límites Int4 coherentes y sin escrituras parciales", { skip:
       const response = await call(path, method, body);
       assert.equal(response.status, 400, await response.clone().text());
       assert.deepEqual(await counts(), before);
+      assert.equal((await db.expense.findUniqueOrThrow({ where: { id: expense.id } })).amount, 1000);
       assert.equal((await db.supplierJob.findUniqueOrThrow({ where: { id: job.id } })).advance, 0);
       assert.equal((await db.treasuryAccount.findUniqueOrThrow({ where: { id: account.id } })).openingBalance, 0);
     });
@@ -56,6 +60,13 @@ test("Dinero HTTP: límites Int4 coherentes y sin escrituras parciales", { skip:
       assert.equal(read.status, 200);
       const treasury = await read.json();
       assert.equal(treasury.accounts.find((row: { id: string }) => row.id === account.id).balance, 2 * max);
+    });
+    await t.test("borde Int4 exacto se conserva en gasto y egreso", async () => {
+      const response = await call("expenses", "POST", { description: "Gasto máximo QA", category: "OTHER", accountId: account.id, amount: max, method: "Efectivo" });
+      assert.equal(response.status, 201, await response.clone().text());
+      const saved = (await response.json()).expense;
+      assert.equal((await db.expense.findUniqueOrThrow({ where: { id: saved.id } })).amount, max);
+      assert.equal((await db.treasuryMovement.findFirstOrThrow({ where: { organizationId: org, sourceId: saved.id } })).amount, max);
     });
     await t.test("borde Int4 exacto se conserva como total de trabajo y saldo inicial", async () => {
       const work = await call("suppliers/jobs", "POST", { supplierId: supplier.id, description: "Trabajo máximo válido", total: max });
