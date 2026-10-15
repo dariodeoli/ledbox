@@ -87,13 +87,13 @@ export function AlquileresSettings() {
   }
 
   return (
-    <div className="admin-module-page">
+    <div className="admin-module-page admin-rental-settings">
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
       <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} rows={4}>
         {form ? (
-          <form className="admin-settings admin-settings-sections" onSubmit={(event) => void save(event)}>
-            <AdminPanel title="Seña y retenciones" icon="calendar">
+          <form className="admin-settings admin-settings-sections admin-rental-basics" onSubmit={(event) => void save(event)}>
+            <AdminPanel title="Seña, retenciones y tiempos" icon="calendar" meta="Reservas y disponibilidad del equipo">
               <div className="admin-settings-grid">
                 <NumberField
                   label="Seña (%)"
@@ -111,15 +111,6 @@ export function AlquileresSettings() {
                   hint="Una retención sin confirmar deja de reservar stock pasado este tiempo."
                   disabled={demo || busy}
                 />
-              </div>
-            </AdminPanel>
-
-            <AdminPanel title="Tiempos de preparación" icon="calendar" meta="Se suman al rango del evento">
-              <p className="admin-field-hint">
-                El equipo queda ocupado antes (preparación + transporte + entrega) y después (devolución + transporte + limpieza)
-                del evento. Cada producto puede tener sus propios tiempos en su ficha.
-              </p>
-              <div className="admin-settings-grid">
                 {HOUR_FIELDS.map((field) => (
                   <NumberField
                     key={field.key}
@@ -132,6 +123,7 @@ export function AlquileresSettings() {
                   />
                 ))}
               </div>
+              <p className="admin-field-hint">Los tiempos se suman antes y después del evento. Cada producto puede tener sus propios tiempos en su ficha.</p>
             </AdminPanel>
 
             <div className="admin-settings-actions">

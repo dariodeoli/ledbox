@@ -202,7 +202,7 @@ export function EmpresaPerfil() {
         </AdminPanel>
 
         <AdminPanel title="Horario de atención" icon="clock" meta="Por día; con varias franjas o cerrado">
-          <div className="admin-hours" data-testid="horario-atencion">
+          <div className="admin-hours admin-hours--week" data-testid="horario-atencion">
             {WEEK_DAYS.map((day) => (
               <div className="admin-hours-day" key={day}>
                 <div className="admin-hours-head">
@@ -243,7 +243,7 @@ export function EmpresaPerfil() {
         </AdminPanel>
 
         <AdminPanel title="Entrega, retiro y devolución" icon="calendar" meta="Franjas por defecto; se coordinan al confirmar">
-          <div className="admin-hours">
+          <div className="admin-hours admin-hours--handover">
             {HANDOVER_KINDS.map((kind) => (
               <div className="admin-hours-day" key={kind}>
                 <div className="admin-hours-head"><strong>{HANDOVER_LABEL[kind]}</strong></div>
