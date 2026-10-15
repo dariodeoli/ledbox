@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
+import { rentalBalancePaymentFilter } from "@/lib/payment-origin";
 import { alertBackupIssueIfNeeded } from "@/lib/server/system-status";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function GET() {
     // pendiente es parte de lo que queda por cobrar, no plata cobrada.
     db.budget.findMany({
       where: { organizationId, status: { in: ["APPROVED", "SENT", "NEGOTIATING"] } },
-      select: { total: true, payments: { where: { status: "RECEIVED" }, select: { amount: true } } },
+      select: { total: true, payments: { where: { status: "RECEIVED", ...rentalBalancePaymentFilter }, select: { amount: true } } },
     }),
     // Cobros a plazo pendientes sin presupuesto: se suman como por cobrar. Los
     // que sí tienen presupuesto ya viven en el saldo del presupuesto (si se

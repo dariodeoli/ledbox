@@ -154,6 +154,12 @@ cancela). Garantía de reserva o sin garantía: todos los cargos van como `extra
 cargos decididos, liquidación, condiciones y política de cancelación en el portal; el impreso del presupuesto trae las
 condiciones, la política y los cargos.
 
+**Coherencia del saldo** (`ClientPayment.origin`, migración `202610260001`, regla en `lib/payment-origin.ts`): la
+garantía de daños retenida (`deposit_retained`) y el cobro de un cargo extra (`rental_extra`) entran a tesorería e
+ingresos pero NO bajan el saldo ni el «por cobrar» del presupuesto (resumen, panel, ficha del cliente, portal, impreso,
+aviso de saldo y plan). La garantía de reserva (`deposit_reserve`) sí es parte del pago: al recibirla se imputa al plan
+(seña, cuotas, saldo) como un cobro más y baja el saldo esperado; sin plan queda como cobro libre.
+
 **Cancelación**: `GET /api/admin/budgets/settlement?budgetId=…&cancellation=1` y el diálogo de la garantía muestran la
 retención PROPUESTA de lo cobrado según la política; no reembolsa ni mueve plata. **Pendiente**: colchón por categoría
 (`RentalCategoryBuffer`, P1-2 QA 3), que toca el motor de disponibilidad (`resolveRentalBuffers` y sus 6 llamadores).

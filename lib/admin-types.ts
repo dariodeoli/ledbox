@@ -4,6 +4,7 @@
  */
 
 import { isOverdue, type AdminTone } from "./admin-format";
+import { countsTowardBudgetBalance } from "./payment-origin";
 import type { StatementDirectionValue, StatementRowStatusValue } from "./bank-statement";
 
 export type AdminRole = "OWNER" | "ADMIN" | "FINANCE" | "OPERATIONS" | "VIEWER";
@@ -390,6 +391,8 @@ export type AdminPayment = {
   /** Fecha del cheque cuando el método es cheque. */
   chequeDate: string | null;
   createdAt: string;
+  /** Origen cuando no es un pago común del presupuesto (ver `lib/payment-origin.ts`). */
+  origin?: string | null;
 };
 
 /** Solo un cobro `RECEIVED` cuenta como plata cobrada (nada de contar pendientes). */
@@ -397,8 +400,16 @@ export function isCollectedPayment(payment: Pick<AdminPayment, "status">): boole
   return payment.status === "RECEIVED";
 }
 
-/** Monto realmente cobrado de una lista de cobros. */
-export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
+/**
+ * Monto cobrado QUE BAJA EL SALDO del presupuesto: no cuenta la garantía de daños retenida ni los
+ * cobros de cargos extra (son ingresos por cargos encima del total, ver `lib/payment-origin.ts`).
+ */
+export function collectedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status" | "origin">>): number {
+  return payments.reduce((sum, payment) => (isCollectedPayment(payment) && countsTowardBudgetBalance(payment) ? sum + payment.amount : sum), 0);
+}
+
+/** Todo lo efectivamente recibido (ingreso de la empresa), incluida la garantía retenida y los cargos. */
+export function receivedAmount(payments: ReadonlyArray<Pick<AdminPayment, "amount" | "status">>): number {
   return payments.reduce((sum, payment) => (isCollectedPayment(payment) ? sum + payment.amount : sum), 0);
 }
 

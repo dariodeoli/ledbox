@@ -6,6 +6,7 @@ import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { quotePortalAvailable, quoteReferenceUrl } from "@/lib/quote-sharing";
 import { randomBytes } from "node:crypto";
 import { db } from "./db";
+import { countsTowardBudgetBalance } from "@/lib/payment-origin";
 import { BUDGET_CODE_ALPHABET, formatBudgetCode, normalizeBudgetCode } from "@/lib/public-config";
 import { inventoryImageValid } from "@/lib/field-rules";
 import { budgetReference } from "@/lib/admin-format";
@@ -384,7 +385,7 @@ type BudgetForPortal = {
   event: { name: string; location: string | null; startsAt: Date | null } | null;
   items: Array<{ id: string; sortOrder?: number | null; name: string; quantity: number; days: number; unitPrice: number; subtotal: number; excluded?: boolean; notes: string | null; pricingSnapshot?: unknown; inventory: { imageUrl: string | null; organizationId?: string; id?: string; imageMime?: string | null; billingUnit?: string | null } | null }>;
   /** Solo los cobros pendientes: habilitan el comprobante y el aviso al equipo. */
-  payments: Array<{ id: string; amount: number; status?: string }>;
+  payments: Array<{ id: string; amount: number; status?: string; origin?: string | null }>;
   /** Pagos esperados del plan aprobado (issue #28), con su cuenta destino. */
   expectedPayments: Array<{
     id: string;
@@ -672,7 +673,7 @@ export function portalBudgetView(budget: BudgetForPortal, timeline: AdminTimelin
     discount: budget.discount,
     total: budget.total,
     paymentPlan: paymentPlanOf(budget),
-    collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED").reduce((sum, payment) => sum + payment.amount, 0),
+    collectedAmount: budget.payments.filter((payment) => payment.status === "RECEIVED" && countsTowardBudgetBalance(payment)).reduce((sum, payment) => sum + payment.amount, 0),
     // Los datos de pago son de la empresa, no del presupuesto: recién con la
     // aprobación registrada el cliente tiene motivo (y permiso) para verlos.
     // La empresa demo los lleva siempre en `demoPaymentDetails` (issue #52).
@@ -729,7 +730,7 @@ export const portalInclude = {
   // URL, nunca costos ni stock del inventario.
   items: { orderBy: { name: "asc" }, include: { inventory: { select: { imageUrl: true, organizationId: true, id: true, imageMime: true, billingUnit: true } } } },
   changeRequests: { orderBy: { createdAt: "desc" }, take: PORTAL_MAX_REQUESTS },
-  payments: { select: { id: true, amount: true, status: true } },
+  payments: { select: { id: true, amount: true, status: true, origin: true } },
   // Pagos esperados (issue #28): estado real de cada concepto y cuenta destino.
   // No viaja el motivo interno de cancelación ni la observación técnica: solo lo
   // que el cliente necesita para transferir y seguir su pago.

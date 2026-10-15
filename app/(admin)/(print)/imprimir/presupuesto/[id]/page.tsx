@@ -16,6 +16,7 @@ import {
 import { organizationLogoUrl } from "@/lib/admin-types";
 import { portalBudgetUrl, portalOrigin } from "@/lib/public-config";
 import { qrSvg } from "@/lib/qr";
+import { rentalBalancePaymentFilter } from "@/lib/payment-origin";
 import { loadOrganizationLogos } from "@/lib/server/branding";
 import { parsePaymentDetails, paymentPlanOf } from "@/lib/server/budget-portal";
 import { db } from "@/lib/server/db";
@@ -69,7 +70,7 @@ export default async function PresupuestoImprimiblePage({ params }: { params: Pr
       items: { orderBy: { name: "asc" }, include: { inventory: { select: { id: true, imageUrl: true, imageMime: true, updatedAt: true } } } },
       // Solo los cobros cobrados (issue #16): un cobro a plazo pendiente no es
       // plata cobrada y no se imprime como pago del presupuesto.
-      payments: { where: { status: "RECEIVED" }, orderBy: { paidAt: "asc" } },
+      payments: { where: { status: "RECEIVED", ...rentalBalancePaymentFilter }, orderBy: { paidAt: "asc" } },
       organization: { select: { paymentDetails: true, fiscalDetails: true, profile: true, appearance: true } },
     },
   });

@@ -1117,6 +1117,13 @@ model ClientPayment {
    * Cuenta de tesorería donde entra el cobro (issue #27).
    */
   treasuryAccountId String?
+  /**
+   * Origen del cobro cuando NO es un pago común del presupuesto (alquileres P1-4):
+   * `deposit_retained` (garantía de daños retenida: ingreso por cargos) y `rental_extra`
+   * (cobro de un cargo extra de la liquidación) entran a tesorería pero NO bajan el saldo
+   * del alquiler. `deposit_reserve` (garantía de reserva) sí es parte del pago. `null` = común.
+   */
+  origin            String?
   organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   budget            Budget?              @relation(fields: [budgetId], references: [id], onDelete: SetNull)

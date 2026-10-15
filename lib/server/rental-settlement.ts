@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, RentalChargeKind } from "@prisma/client";
 import { budgetMoneyValid } from "../budget-payment-plan";
+import { countsTowardBudgetBalance, DEPOSIT_RESERVE_ORIGIN, DEPOSIT_RETAINED_ORIGIN } from "../payment-origin";
 import { securityDepositAmountValid } from "../budget-security-deposit";
 import {
   cancellationPolicyLines,
@@ -19,6 +20,7 @@ import {
 } from "../rental-charges";
 import { recordAudit, type AuditContext } from "./audit";
 import { db } from "./db";
+import { syncBudgetExpectedPayments } from "./expected-payments";
 import { collectionSnapshotOf } from "./finance-snapshots";
 import { getRentalSettings, toRentalSettingsView } from "./rental-settings";
 
@@ -80,7 +82,18 @@ async function accountFor(tx: Tx, organizationId: string, accountId?: string | n
 async function recordIncome(
   tx: Tx,
   context: AuditContext,
-  input: { budget: { id: string; title: string; total: number; client: { id: string; name: string; company: string | null } }; amount: number; method: string; notes: string; accountId?: string | null; at: Date },
+  input: {
+    budget: { id: string; title: string; total: number; client: { id: string; name: string; company: string | null } };
+    amount: number;
+    method: string;
+    notes: string;
+    /** Ver `lib/payment-origin.ts`: qué clase de cobro es (no baja el saldo, o es la garantía de reserva). */
+    origin: string;
+    /** Concepto del plan que este cobro imputa (solo la garantía de reserva). */
+    expectedPaymentId?: string | null;
+    accountId?: string | null;
+    at: Date;
+  },
 ) {
   const account = await accountFor(tx, context.organizationId, input.accountId);
   const payment = await tx.clientPayment.create({
@@ -96,6 +109,8 @@ async function recordIncome(
       method: input.method,
       notes: input.notes,
       treasuryAccountId: account.id,
+      origin: input.origin,
+      expectedPaymentId: input.expectedPaymentId ?? null,
       collectedSnapshot: collectionSnapshotOf({ at: input.at, amount: input.amount, method: input.method, client: input.budget.client, budget: input.budget, account }) as unknown as Prisma.InputJsonValue,
     },
     select: { id: true },
@@ -119,12 +134,17 @@ async function recordIncome(
   return { paymentId: payment.id, accountName: account.name };
 }
 
-// ── Garantía de reserva: al recibirla se descuenta del saldo ─────────────────
+// ── Garantía de reserva: al recibirla se imputa al plan ──────────────────────
 
 /**
- * Una garantía de RESERVA es parte del pago: al marcarla recibida entra como cobro confirmado
- * («Garantía de reserva») y el saldo baja. La llama `transitionBudgetSecurityDeposit` dentro de
- * su transacción y con el presupuesto ya bloqueado, así que corre una sola vez por garantía.
+ * Una garantía de RESERVA es parte del pago del alquiler: al marcarla recibida entra como cobro
+ * confirmado («Garantía de reserva») y se IMPUTA al plan igual que cualquier cobro (seña primero,
+ * después cuotas y saldo): los pagos esperados bajan su saldo y las dos vistas (total − cobrado y
+ * suma de pendientes del plan) coinciden. Si no hay plan (presupuesto sin aprobar) o sobra plata,
+ * el resto queda como un cobro libre del presupuesto, que igual baja el saldo.
+ *
+ * La llama `transitionBudgetSecurityDeposit` dentro de su transacción y con el presupuesto ya
+ * bloqueado, así que corre una sola vez por garantía. Devuelve el primer cobro creado.
  */
 export async function receiveReserveDeposit(tx: Tx, context: AuditContext, budgetId: string): Promise<{ paymentId: string } | null> {
   const budget = await tx.budget.findFirst({
@@ -132,8 +152,47 @@ export async function receiveReserveDeposit(tx: Tx, context: AuditContext, budge
     select: { id: true, title: true, total: true, securityDeposit: true, securityDepositPurpose: true, client: { select: { id: true, name: true, company: true } } },
   });
   if (!budget || budget.securityDepositPurpose !== "RESERVE" || !securityDepositAmountValid(budget.securityDeposit)) return null;
-  const { paymentId } = await recordIncome(tx, context, { budget, amount: budget.securityDeposit, method: GARANTIA_RESERVA, notes: `Garantía de reserva del presupuesto «${budget.title}»`, at: new Date() });
-  return { paymentId };
+  const now = new Date();
+  const notes = `Garantía de reserva del presupuesto «${budget.title}»`;
+  const account = await accountFor(tx, context.organizationId, null);
+  try {
+    // Asegura que existan la seña y el saldo del plan (idempotente; sin aprobar no crea nada).
+    await syncBudgetExpectedPayments({ tx, organizationId: context.organizationId, budgetId });
+  } catch (error) {
+    console.error("[rental-charges] no se pudo sincronizar el plan antes de imputar la garantía de reserva", error);
+  }
+  const rank = (concept: string) => (concept === "advance" ? 0 : concept === "installment" ? 1 : concept === "balance" ? 2 : 3);
+  const open = (
+    await tx.expectedPayment.findMany({
+      where: { organizationId: context.organizationId, budgetId, concept: { not: "extra" }, status: { in: ["AWAITING", "PARTIAL"] } },
+    })
+  ).sort((a, b) => rank(a.concept) - rank(b.concept) || (a.installmentNumber ?? 0) - (b.installmentNumber ?? 0) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+
+  let left = budget.securityDeposit;
+  let firstPaymentId: string | null = null;
+  for (const row of open) {
+    if (left <= 0) break;
+    const remaining = row.amount - row.paidAmount;
+    if (remaining <= 0) continue;
+    const applied = Math.min(remaining, left);
+    const full = applied === remaining;
+    // Mismo candado que la confirmación de un pago esperado: solo escribe si el saldo no cambió.
+    const claimed = await tx.expectedPayment.updateMany({
+      where: { id: row.id, organizationId: context.organizationId, status: row.status, paidAmount: row.paidAmount, amount: row.amount, proofId: row.proofId, paymentId: row.paymentId },
+      data: full
+        ? { status: "CONFIRMED", paidAmount: row.amount, confirmedAt: now, confirmedById: context.user.id, confirmedByName: context.user.name, confirmedByEmail: context.user.email, expectedAccountId: account.id }
+        : { status: "PARTIAL", paidAmount: row.paidAmount + applied, expectedAccountId: account.id },
+    });
+    if (claimed.count === 0) continue;
+    const income = await recordIncome(tx, context, { budget, amount: applied, method: GARANTIA_RESERVA, notes, origin: DEPOSIT_RESERVE_ORIGIN, expectedPaymentId: row.id, at: now });
+    firstPaymentId ??= income.paymentId;
+    left -= applied;
+  }
+  if (left > 0 || firstPaymentId === null) {
+    const income = await recordIncome(tx, context, { budget, amount: left, method: GARANTIA_RESERVA, notes, origin: DEPOSIT_RESERVE_ORIGIN, at: now });
+    firstPaymentId ??= income.paymentId;
+  }
+  return { paymentId: firstPaymentId };
 }
 
 // ── Propuesta de cargos al devolver ─────────────────────────────────────────
@@ -513,6 +572,7 @@ export async function settleBudgetRental(context: AuditContext, budgetId: string
           budget,
           amount: result.retained,
           method: GARANTIA_RETENIDA,
+          origin: DEPOSIT_RETAINED_ORIGIN,
           notes: `Garantía retenida por cargos de la devolución del presupuesto «${budget.title}»`,
           accountId: options.accountId,
           at: now,
@@ -610,14 +670,14 @@ export async function loadPortalRental(organizationId: string, budgetId: string)
 export async function proposeCancellationRetention(organizationId: string, budgetId: string, now = new Date()) {
   const budget = await db.budget.findFirst({
     where: { id: budgetId, organizationId },
-    select: { id: true, event: { select: { startsAt: true } }, deliveryAt: true, payments: { where: { status: "RECEIVED" }, select: { amount: true, method: true } } },
+    select: { id: true, event: { select: { startsAt: true } }, deliveryAt: true, payments: { where: { status: "RECEIVED" }, select: { amount: true, origin: true } } },
   });
   if (!budget) throw new RentalSettlementError(404, "Presupuesto no encontrado.");
   const settings = await getRentalSettings(organizationId);
   const startsAt = budget.event?.startsAt ?? budget.deliveryAt;
   if (!startsAt) return { daysBefore: null, percent: null, retained: 0, refundable: 0, advancePaid: 0 };
   const daysBefore = Math.floor((startsAt.getTime() - now.getTime()) / 86_400_000);
-  const advancePaid = budget.payments.filter((payment) => payment.method !== GARANTIA_RETENIDA).reduce((sum, payment) => sum + payment.amount, 0);
+  const advancePaid = budget.payments.filter((payment) => countsTowardBudgetBalance(payment)).reduce((sum, payment) => sum + payment.amount, 0);
   const proposal = cancellationRetention(settings.cancellationPolicy, { daysBefore, advancePaid });
   return { daysBefore, advancePaid, ...proposal };
 }

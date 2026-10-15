@@ -27,6 +27,7 @@ type MetricBudget = {
 type MetricPayment = {
   amount: number;
   status: string;
+  origin?: string | null;
   dueAt: MetricDate | null;
   createdAt: MetricDate;
 };

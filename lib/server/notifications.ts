@@ -1,5 +1,6 @@
 import { formatGs } from "owncoding-ui/utils";
 import { db } from "./db";
+import { rentalBalancePaymentFilter } from "../payment-origin";
 import { isSandboxOrg } from "./demo-sandbox";
 import { portalBudgetUrl } from "@/lib/public-config";
 import type {
@@ -311,7 +312,7 @@ async function extraCandidates(organizationId: string, now: Date): Promise<Admin
         client: { select: { name: true, company: true } },
         // Solo lo cobrado de verdad: un cobro a plazo pendiente no es plata cobrada
         // (misma regla que el dashboard, la lista y la hoja impresa).
-        payments: { where: { status: "RECEIVED" }, select: { amount: true } },
+        payments: { where: { status: "RECEIVED", ...rentalBalancePaymentFilter }, select: { amount: true } },
       },
     }),
     db.budgetChangeRequest.findMany({

@@ -7,6 +7,7 @@ import { clientLabel, dayKeyOf, dayStart, isValidDayKey } from "./notifications"
 import { auditChanges, recordAudit, type AuditContext } from "./audit";
 import { collectionSnapshotOf } from "./finance-snapshots";
 import { budgetPlanLedgerError } from "../budget-payment-plan";
+import { RENTAL_EXTRA_ORIGIN } from "../payment-origin";
 import { QuoteComparisonError } from "./quote-comparison";
 
 /**
@@ -490,6 +491,8 @@ export async function confirmExpectedPayment(input: {
           treasuryAccountId: account.id,
           expectedPaymentId: expected.id,
           method,
+          // Un cargo extra de la liquidación es ingreso por cargos: no baja el saldo del alquiler.
+          ...(expected.concept === "extra" ? { origin: RENTAL_EXTRA_ORIGIN } : {}),
           collectedSnapshot: snapshot as unknown as Prisma.InputJsonValue,
           ...(reference ? { reference } : {}),
         },
@@ -532,6 +535,7 @@ export async function confirmExpectedPayment(input: {
           clientId: client.id,
           budgetId: expected.budgetId,
           expectedPaymentId: expected.id,
+          origin: expected.concept === "extra" ? RENTAL_EXTRA_ORIGIN : null,
           amount: appliedAmount,
           status: "RECEIVED",
           paidAt: collectedAt,

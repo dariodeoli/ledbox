@@ -44,7 +44,7 @@ import { validateFinanceSplitAmounts } from "@/lib/finance-split-validation";
 import {
   accountsForPaymentMethod,
   COLLECTED_PAYMENT_METHODS,
-  collectedAmount,
+  receivedAmount,
   EXPENSE_CATEGORIES,
   expectedPaymentNeedsAction,
   groupProofsByBudget,
@@ -1495,7 +1495,7 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
   );
 
   const totals = useMemo(() => {
-    const collected = collectedAmount(payments);
+    const collected = receivedAmount(payments);
     const collectedCount = payments.filter(isCollectedPayment).length;
     const pending = payments.filter((payment) => payment.status === "PENDING");
     const pendingTotal = pending.reduce((sum, payment) => sum + payment.amount, 0);
