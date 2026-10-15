@@ -619,3 +619,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Ficha del producto: la barra de pestañas ya no queda tapada en Unidades y Cronología (vale para todas las ventanas con pestañas).
 - «Editar producto» rediseñado: foto, nombre y código arriba; secciones Identidad · Precio y cobro · Medidas y capacidad · Stock y depósito · Tienda web · Proveedor y costos · Notas; dos columnas en computadora y una en celular, con Guardar siempre visible.
 - Sin permiso de costos, guardar un producto ya no pisa los costos con 0.
+
+## v2.1.126 — 2026-10-15
+
+- Tienda: tarjeta de producto más compacta (foto, código, nombre, medidas, precio y botones «Agregar» y «Ver más»), sin huecos ni textos cortados.
+- Tienda: «Ver más» abre una vista rápida con el producto, lo que incluye y opciones similares, sin salir del catálogo.
+- Tienda: el carrito y el panel de datos del pedido se arreglaron: ya no quedan tapados por el menú, los campos ocupan todo el ancho y el botón principal tiene el color de tu empresa.
+- Tienda: la barra del pedido muestra el monto. Sin fechas dice cuánto es por día y «Elegí fechas para el total»; con fechas, el total.
+- Tienda: cinco plantillas nuevas para elegir en Apariencia: Tecnológica, Boutique, Noche, Fresca y Minimal. Las tarjetas, la vista rápida y el carrito siguen el estilo de cada una.
+- Tienda: la sección de contacto ya no se ve partida en dos columnas.

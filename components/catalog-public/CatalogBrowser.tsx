@@ -572,6 +572,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
           lines={chosen.map((item) => ({ id: item.id, name: item.name, sku: item.sku, quantity: selection[item.id], imageUrl: item.imageUrl, pieces: item.package?.length ? piecesText(item.package) : null }))}
           onQuantity={setQuantity}
           localSubtotal={localSubtotal}
+          perDay={perDay}
           view={view}
           showPrices={showPrices}
           zones={zones}
@@ -613,6 +614,8 @@ function PreorderDialog(props: {
   lines: Array<{ id: string; name: string; sku: string | null; quantity: number; imageUrl: string | null; pieces: string | null }>;
   onQuantity: (id: string, next: number) => void;
   localSubtotal: number | null;
+  /** Sin fechas: suma por día (o por evento) con los precios públicos; con fechas es null. */
+  perDay: { sum: number; missing: number; unit: string } | null;
   view: CartView | null;
   showPrices: boolean;
   zones: CatalogZoneView[];
@@ -624,7 +627,7 @@ function PreorderDialog(props: {
   onClose: () => void;
   onFinish: () => void;
 }) {
-  const { range, lines, localSubtotal, view, showPrices, done, zones, zoneChoice } = props;
+  const { range, lines, localSubtotal, perDay, view, showPrices, done, zones, zoneChoice } = props;
   const zone = zones.find((entry) => entry.id === zoneChoice) ?? null;
   const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
   // Flete y total: los del servidor (revalidados); sin red, el cálculo local con la misma regla.
@@ -716,6 +719,8 @@ function PreorderDialog(props: {
   const stepOneReady = Boolean(range) && lines.length > 0;
   const priceOk = !askPrice || priceComment.trim().length >= 3;
   const totalLabel = showPrices ? (total !== null ? money(total) : "A cotizar") : null;
+  // Sin fechas no hay total: se muestra lo que cuesta por día y se pide elegir fechas (antes decía «A cotizar» con un total en el pie).
+  const perDayText = !range && perDay ? `${money(perDay.sum)} ${perDay.unit}${perDay.missing > 0 ? " + a cotizar" : ""}` : null;
 
   return (
     <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
@@ -834,11 +839,11 @@ function PreorderDialog(props: {
                           <div><dt>Descuento por escalón de días</dt><dd className="cp-num cp-num--ok">− {money(view.tierSavings)}</dd></div>
                         </>
                       ) : null}
-                      <div><dt>Subtotal de equipos</dt><dd className="cp-num">{subtotal !== null && range ? money(subtotal) : "A cotizar"}</dd></div>
+                      <div><dt>Subtotal de equipos</dt><dd className="cp-num">{subtotal !== null && range ? money(subtotal) : perDayText ?? (range ? "A cotizar" : "—")}</dd></div>
                       {zoneChoice ? (
                         <div><dt>Flete{zone ? ` · ${zone.name}` : ""}</dt><dd className="cp-num">{zoneChoice === "COORDINATE" ? "A coordinar" : fee !== null ? money(fee) : "—"}</dd></div>
                       ) : null}
-                      <div className="cp-summary-total"><dt>Total estimado</dt><dd className="cp-num">{total !== null && range ? money(total) : "A cotizar"}</dd></div>
+                      <div className="cp-summary-total"><dt>Total estimado</dt><dd className="cp-num">{total !== null && range ? money(total) : range ? "A cotizar" : "Elegí fechas para el total"}</dd></div>
                     </dl>
                   ) : null}
                   {showPrices ? <p className="cp-hint">Los precios no incluyen instalación ni cargos extra; la cotización los confirma. Los montos son los de hoy, calculados por el servidor.</p> : null}
@@ -878,7 +883,14 @@ function PreorderDialog(props: {
             <footer className="cp-drawer-foot">
               {showPrices ? (
                 <p className="cp-drawer-total" data-testid="cart-total">
-                  <strong>{total !== null ? `Total estimado: ${totalLabel}` : "Subtotal: a cotizar"}</strong>
+                  {!range ? (
+                    <>
+                      <strong>{perDayText ?? "Total a cotizar"}</strong>
+                      <small className="cp-hint"> Elegí fechas para el total</small>
+                    </>
+                  ) : (
+                    <strong>{total !== null ? `Total estimado: ${totalLabel}` : "Subtotal: a cotizar"}</strong>
+                  )}
                 </p>
               ) : null}
               <div className="cp-row">

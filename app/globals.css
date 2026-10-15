@@ -6037,3 +6037,35 @@ a.cp-footer-text { width: fit-content; display: inline-flex; align-items: center
 /* Categoría sin foto: degradé suave del acento y un icono de línea (caja) centrado. */
 .cp-feat-photo--empty { background: linear-gradient(145deg, color-mix(in srgb, var(--cp-accent) 16%, var(--cp-surface)), color-mix(in srgb, var(--cp-accent) 5%, var(--cp-surface))); color: var(--cp-accent); }
 .cp-feat-ico { display: block; opacity: 0.85; }
+
+/* ── Coherencia: tarjeta compacta, vista rápida y cajones heredan los tokens de cada plantilla de diseño ──
+   Va DESPUÉS de los dos bloques anteriores (compacta y plantillas) para que el orden de cascada no dependa de la especificidad.
+   Acento (`--cp-primary` = acento de la plantilla o de la marca), radios, sombra y tipografías son los `--cp-*` de la plantilla. */
+.cp-theme[data-store-scheme] { --cp-primary: var(--cp-accent); --cp-primary-text: var(--cp-accent-text); }
+.cp-theme[data-store-scheme] .cp-tile-spec, .cp-theme[data-store-scheme] .cp-tile-status, .cp-theme[data-store-scheme] .cp-qv-kicker { border-radius: var(--cp-r-chip); }
+.cp-theme[data-store-scheme] .cp-tile-ph, .cp-theme[data-store-scheme] .cp-qv-head, .cp-theme[data-store-scheme] .cp-qv-name, .cp-theme[data-store-scheme] .cp-qv-h { font-family: var(--cp-font-head); }
+.cp-theme[data-store-scheme] .cp-qv-h { font-family: var(--cp-font-body); }
+.cp-theme[data-store-scheme] .cp-qv { border-radius: var(--cp-r-card); box-shadow: var(--cp-shadow), 0 30px 70px -30px rgba(0, 0, 0, 0.55); }
+.cp-theme[data-store-scheme] .cp-qv-photo, .cp-theme[data-store-scheme] .cp-qv-side { border-radius: var(--cp-r-card); }
+.cp-theme[data-store-scheme] .cp-qv-mini { border-radius: var(--cp-r-btn); }
+.cp-theme[data-store-scheme] .cp-qv-mini-photo { border-radius: calc(var(--cp-r-btn) * 0.6); }
+.cp-theme[data-store-scheme] .cp-qv-mini-name { font-family: var(--cp-font-head); }
+.cp-theme[data-store-scheme] .cp-qv-includes .cp-include { border-radius: var(--cp-r-btn); }
+.cp-theme[data-store-scheme] .cp-cart-thumb { border-radius: calc(var(--cp-r-btn) * 0.6); }
+.cp-theme[data-store-scheme] .cp-cart-thumb:empty { background: var(--cp-tint); }
+.cp-theme[data-store-scheme] .cp-drawer { box-shadow: -18px 0 50px -22px rgba(0, 0, 0, 0.6); }
+.cp-theme[data-store-scheme] .cp-drawer :is(input, select, textarea), .cp-theme[data-store-scheme] .cp-drawer .admin-shared-phone, .cp-theme[data-store-scheme] .cp-drawer .admin-shared-phone > * { border-radius: var(--cp-r-btn); }
+.cp-theme[data-store-scheme] .cp-drawer .admin-shared-phone > :first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cp-theme[data-store-scheme] .cp-drawer .admin-shared-phone > :last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.cp-theme[data-store-scheme] .cp-bar { box-shadow: var(--cp-shadow), 0 10px 30px -14px rgba(0, 0, 0, 0.45); }
+.cp-theme[data-store-scheme] .cp-bar-badge, .cp-theme[data-store-scheme] .cp-hd-badge { background: var(--cp-primary); color: var(--cp-primary-text); }
+/* Chips de la tarjeta: el texto largo baja de línea en vez de cortarse («PANTALLAS Y TÓTEM…»). */
+.cp-tile .cp-x-chips { overflow: visible; }
+.cp-tile .cp-x-chip { max-width: 100%; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.3; }
+.cp-theme[data-store-template="boutique"] .cp-tile .cp-x-chips { column-gap: 14px; }
+.cp-theme[data-store-template="boutique"] .cp-tile .cp-x-chip:not(.cp-x-chip--cod)::before { content: none; }
+/* Tecnológica: la etiqueta «ALQUILER» queda sobre la foto, nunca encima del texto de ahorro, que vive en el pie de la tarjeta. */
+.cp-theme[data-store-template="tecnologica"] .cp-tile .cp-photo::after { z-index: 1; }
+.cp-theme[data-store-template="tecnologica"] .cp-tile .cp-photo img { bottom: 32px; height: calc(100% - 40px); }
+/* El `#contacto` de la landing (dos columnas y línea inferior) se filtraba a la sección de contacto de la tienda. */
+#contacto.cp-section.cp-contact { grid-template-columns: minmax(0, 1fr); border-bottom: 0; }
