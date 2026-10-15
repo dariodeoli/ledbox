@@ -488,6 +488,7 @@ export function InventarioModule() {
 
       {notice && !selectedId ? <AdminNote tone={notice.tone}>{notice.message}</AdminNote> : null}
       {statusError && !selectedId ? <AdminNote tone="error">{statusError}</AdminNote> : null}
+      {resources.truncated ? <AdminNote tone="warn">Hay muchas reservas sin devolver y el conteo de atrasos puede estar incompleto. Revisá las devoluciones en Eventos.</AdminNote> : null}
       {rangeActive ? <AdminNote>Disponibilidad entre {dayRangeLabel(from, to)}; «Unidades disponibles hoy» sigue siendo la de hoy.</AdminNote> : null}
       {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}

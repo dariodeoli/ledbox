@@ -123,6 +123,34 @@ test("Inventario E2 en PostgreSQL: payload liviano, agregados por groupBy, pagin
       await assert.rejects(listInventoryGrid({ organizationId: org, cursor: "no-es-un-cursor", now }), GridCursorError);
     });
 
+    await t.test("3c) atrasos: orden determinista y aviso `truncated` al llegar al tope", async () => {
+      const { OVERDUE_ROWS_CAP } = await import("../lib/server/inventory-grid");
+      const org = await newOrg("atrasos");
+      const cl = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "Cliente" } });
+      const item = await addItem(org, "Cable");
+      // Un evento por reserva (único por evento y producto).
+      const addOverdue = async (count: number) => {
+        const events = Array.from({ length: count }, (_, index) => ({ id: randomUUID(), organizationId: org, clientId: cl.id, name: `Atraso ${index}`, startsAt: hours(now, -100), endsAt: hours(now, -90) }));
+        await db.event.createMany({ data: events });
+        await db.eventInventory.createMany({
+          data: events.map((event, index) => ({ id: randomUUID(), eventId: event.id, inventoryId: item.id, quantity: 1, startsAt: hours(now, -100 + (index % 5)), endsAt: hours(now, -90), checkedOut: true, checkoutQuantity: 1, returnedQuantity: 0 })),
+        });
+      };
+      await addOverdue(OVERDUE_ROWS_CAP);
+      const exact = (await loadGridExtras({ organizationId: org, itemIds: [item.id], assignments: [], now })).get(item.id)!;
+      assert.equal(exact.overdueTruncated, false, "justo en el tope no es truncado");
+      assert.equal(exact.overduePending, OVERDUE_ROWS_CAP);
+      await addOverdue(5);
+      const capped = (await loadGridExtras({ organizationId: org, itemIds: [item.id], assignments: [], now })).get(item.id)!;
+      assert.equal(capped.overdueTruncated, true, "pasado el tope avisa");
+      assert.equal(capped.overduePending, OVERDUE_ROWS_CAP, "cuenta solo las filas leídas");
+      const again = (await loadGridExtras({ organizationId: org, itemIds: [item.id], assignments: [], now })).get(item.id)!;
+      assert.equal(again.overduePending, capped.overduePending, "dos lecturas dan lo mismo (orden determinista)");
+      const page = await listInventoryGrid({ organizationId: org, now });
+      assert.equal(page.truncated, true);
+      assert.equal((await listInventoryGrid({ organizationId: a, now })).truncated, false);
+    });
+
     await t.test("4) más de 300 productos: sin tope, páginas de 300 como máximo", async () => {
       const big = await newOrg("grande");
       await db.inventoryItem.createMany({

@@ -28,6 +28,8 @@ export const GRID_DEFAULT_LIMIT = 150;
 export const GRID_MAX_LIMIT = 300;
 /** Tope de asignaciones vivas que se leen por página (una página trae a lo sumo `GRID_MAX_LIMIT` productos). */
 const LIVE_ASSIGNMENTS_CAP = 5000;
+/** Tope de reservas sin devolver que se leen para calcular los atrasos. */
+export const OVERDUE_ROWS_CAP = 2000;
 /** Tope de coincidencias de «código de unidad». */
 export const UNIT_MATCH_CAP = 200;
 
@@ -54,6 +56,8 @@ export type GridExtras = {
   holdByKind: Record<string, number>;
   nextCommittedAt: string | null;
   overduePending: number;
+  /** `true` si se llegó al tope de `OVERDUE_ROWS_CAP` y los atrasos pueden estar incompletos. */
+  overdueTruncated: boolean;
   stock: { unitCount: number; locations: Array<{ warehouseId: string | null; location: string | null; units: number }>; supplierIds: string[] };
 };
 
@@ -83,7 +87,7 @@ export async function loadGridExtras(options: {
   const { organizationId, itemIds, assignments, now } = options;
   const out = new Map<string, GridExtras>();
   for (const id of itemIds) {
-    out.set(id, { unitsByStatus: {}, holdByKind: {}, nextCommittedAt: null, overduePending: 0, stock: { unitCount: 0, locations: [], supplierIds: [] } });
+    out.set(id, { unitsByStatus: {}, holdByKind: {}, nextCommittedAt: null, overduePending: 0, overdueTruncated: false, stock: { unitCount: 0, locations: [], supplierIds: [] } });
   }
   if (itemIds.length === 0) return out;
   const ids = [...itemIds];
@@ -107,7 +111,9 @@ export async function loadGridExtras(options: {
         checkedIn: false,
         checkedInAt: null,
       },
-      take: 2000,
+      // Orden determinista (las más viejas primero) y una fila de más para saber si se llegó al tope.
+      orderBy: [{ startsAt: { sort: "asc", nulls: "last" } }, { id: "asc" }],
+      take: OVERDUE_ROWS_CAP + 1,
       select: {
         id: true,
         inventoryId: true,
@@ -164,7 +170,12 @@ export async function loadGridExtras(options: {
     if (!extra.nextCommittedAt || start.toISOString() < extra.nextCommittedAt) extra.nextCommittedAt = start.toISOString();
   }
 
-  for (const row of overdueRows) {
+  const overdueTruncated = overdueRows.length > OVERDUE_ROWS_CAP;
+  if (overdueTruncated) {
+    console.warn(`[inventory/grid] atrasos truncados: más de ${OVERDUE_ROWS_CAP} reservas sin devolver en esta página`);
+    for (const extra of out.values()) extra.overdueTruncated = true;
+  }
+  for (const row of overdueTruncated ? overdueRows.slice(0, OVERDUE_ROWS_CAP) : overdueRows) {
     const overdue = overdueReturnOf(row, now);
     const extra = overdue ? out.get(overdue.inventoryId) : null;
     if (overdue && extra) extra.overduePending += overdue.pending;
@@ -285,6 +296,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
         holdByKind: extra.holdByKind,
         nextCommittedAt: extra.nextCommittedAt,
         overduePending: extra.overduePending,
+        overdueTruncated: extra.overdueTruncated,
         range: rangeAvailability
           ? {
               startsAt: rangeAvailability.startsAt,
@@ -305,6 +317,8 @@ export async function listInventoryGrid(options: GridPageOptions) {
   const rangeCapacities = range && definitions.size > 0 ? await comboCapacitiesForRange({ organizationId, comboIds: [...definitions.keys()], startsAt: range.start, endsAt: range.end }) : null;
   return {
     inventory: withComboAvailability(inventory, definitions, rangeCapacities),
+    // Los atrasos se calcularon con un tope: la pantalla avisa que pueden faltar.
+    truncated: [...extras.values()].some((extra) => extra.overdueTruncated),
     nextCursor: hasMore ? encodeGridCursor(items[items.length - 1]) : null,
     ...(total === undefined ? {} : { total }),
   };

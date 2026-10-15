@@ -468,6 +468,7 @@ export async function GET(request: Request) {
               holdByKind: extras.get(item.id)?.holdByKind,
               nextCommittedAt: extras.get(item.id)?.nextCommittedAt,
               overduePending: extras.get(item.id)?.overduePending,
+              overdueTruncated: extras.get(item.id)?.overdueTruncated,
             }
           : {}),
         range: rangeAvailability

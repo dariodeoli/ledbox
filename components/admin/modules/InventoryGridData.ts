@@ -19,6 +19,7 @@ export function useInventoryGrid(range: { from: string; to: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [total, setTotal] = useState<number | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const runId = useRef(0);
 
   const rangeKey = `${range.from}|${range.to}`;
@@ -29,6 +30,7 @@ export function useInventoryGrid(range: { from: string; to: string }) {
       setLoading(true);
       setError("");
       const collected: AdminInventoryGridRow[] = [];
+      setTruncated(false);
       let cursor: string | null = null;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const params = new URLSearchParams({ fields: "grid", limit: String(PAGE_SIZE) });
@@ -50,6 +52,9 @@ export function useInventoryGrid(range: { from: string; to: string }) {
         }
         collected.push(...((result.data.inventory ?? []) as AdminInventoryGridRow[]));
         if (typeof result.data.total === "number") setTotal(result.data.total);
+        if (result.data.truncated) {
+          setTruncated(true);
+        }
         setRows([...collected]);
         cursor = result.data.nextCursor ?? null;
         if (!cursor) break;
@@ -70,7 +75,7 @@ export function useInventoryGrid(range: { from: string; to: string }) {
   }, [load]);
 
   const reload = useCallback(() => void load(true), [load]);
-  return { data: rows, loading, error, total, reload };
+  return { data: rows, loading, error, total, truncated, reload };
 }
 
 /** Productos con una unidad cuyo código coincide con la búsqueda (con espera para no pedir por cada tecla). */

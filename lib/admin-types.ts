@@ -1889,6 +1889,8 @@ export type AdminInventoryAvailabilityNow = {
   nextCommittedAt?: string | null;
   /** Unidades que salieron y no volvieron con el fin ya pasado (P1-3). */
   overduePending?: number;
+  /** Los atrasos se calcularon con un tope de lectura: pueden estar incompletos. */
+  overdueTruncated?: boolean;
 };
 
 /** Dónde están las unidades (`groupBy` de depósito y ubicación) y quién las proveyó. */
@@ -1921,6 +1923,8 @@ export type AdminInventoryGridRow = AdminInventoryRow & {
 export type AdminInventoryGridPage = {
   inventory: AdminInventoryGridRow[];
   nextCursor: string | null;
+  /** `true` si los atrasos de la página llegaron al tope de lectura y pueden estar incompletos. */
+  truncated?: boolean;
   /** Productos de la empresa (se informa en la primera página). */
   total?: number;
 };
