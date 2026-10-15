@@ -179,6 +179,9 @@ async function prepareMembers(
     if (ids.includes(id)) return fail(400, "Un producto no puede estar dos veces en la misma familia.");
     ids.push(id);
   }
+  // Dos familias distintas también pueden intentar incorporar el mismo producto.
+  // Bloquear antes de leer familyId evita que la segunda robe la variante a la primera.
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "InventoryItem" WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join([...ids].sort())}) ORDER BY "id" FOR UPDATE`);
   const items = await tx.inventoryItem.findMany({
     where: { organizationId, id: { in: ids } },
     select: { ...VARIANT_SELECT, familyId: true, comboIncomplete: true, _count: { select: { components: true } } },

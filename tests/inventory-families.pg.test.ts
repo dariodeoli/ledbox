@@ -98,6 +98,38 @@ test("Familias de variantes en PostgreSQL: migración, agrupar, concurrencia, ai
       assert.deepEqual(dup.map((r: { ok: boolean; status?: number }) => (r.ok ? 201 : r.status)).sort(), [201, 409]);
     });
 
+    await t.test("un producto no puede agruparse simultáneamente en dos familias distintas", async () => {
+      const org = await newOrg("producto-dos-familias");
+      const item = await addItem(org, "Silla suelta", 1, { sku: "SUELTA" });
+      const results = await Promise.all(["FA", "FB"].map((code) => run((tx) => families.createFamily(tx, org, {
+        name: `Familia ${code}`, code, axes: [{ label: "Color", values: ["Rojo"] }], members: [{ itemId: item.id, options: { color: "Rojo" } }],
+      }))));
+      assert.deepEqual(results.map((r) => r.ok ? 201 : r.status).sort(), [201, 409]);
+      const winner = results.find((r) => r.ok)!;
+      assert.ok(winner.ok);
+      assert.equal(await db.inventoryFamily.count({ where: { organizationId: org } }), 1, "el perdedor no deja una familia vacía");
+      assert.equal((await db.inventoryItem.findFirstOrThrow({ where: { id: item.id } })).familyId, winner.familyId);
+    });
+
+    await t.test("agregar el mismo producto suelto a dos familias simultáneamente conserva un solo dueño", async () => {
+      const org = await newOrg("agregar-dos-familias");
+      const familyIds: string[] = [];
+      for (const code of ["FA", "FB"]) {
+        const seed = await addItem(org, `Silla base ${code}`, 1, { sku: `BASE-${code}` });
+        const family = await run((tx) => families.createFamily(tx, org, { name: `Familia ${code}`, code, axes: [{ label: "Color", values: ["Rojo", "Azul"] }], members: [{ itemId: seed.id, options: { color: "Rojo" } }] }));
+        assert.ok(family.ok);
+        familyIds.push(family.familyId);
+      }
+      const item = await addItem(org, "Silla azul suelta", 1, { sku: "AZUL" });
+      const results = await Promise.all(familyIds.map((familyId) => run((tx) => families.addExistingVariants(tx, org, familyId, [{ itemId: item.id, options: { color: "Azul" } }]))));
+      assert.deepEqual(results.map((r) => r.ok ? 200 : r.status).sort(), [200, 409]);
+      const winner = results.find((r) => r.ok)!;
+      assert.ok(winner.ok);
+      assert.equal((await db.inventoryItem.findFirstOrThrow({ where: { id: item.id } })).familyId, winner.familyId);
+      const counts = await db.inventoryFamily.findMany({ where: { organizationId: org }, select: { _count: { select: { items: true } } } });
+      assert.deepEqual(counts.map((r) => r._count.items).sort(), [1, 2]);
+    });
+
     await t.test("4) aislamiento: familia o ítem de la empresa B usados desde A responden 404 (y nunca se ven)", async () => {
       const a = await newOrg("aislamiento-a");
       const b = await newOrg("aislamiento-b");

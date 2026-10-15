@@ -289,6 +289,39 @@ test("importación de eventos: reservas, reimportación, sin stock, cancelado y 
       // Los clientes de A siguen siendo de A.
       assert.equal(await db.client.count({ where: { organizationId: B.id } }), 1);
     });
+    await t.test("mismo código nuevo en dos lotes simultáneos crea un único evento y un único cliente", async () => {
+      const org = await newOrg("mismo-codigo-concurrente");
+      const input = [ev("EV-SAME", { desde: "2033-01-01", hasta: "2033-01-01" })];
+      const results = await Promise.all([apply(org, input), apply(org, input)]);
+      assert.deepEqual(results.flatMap((r) => r.fallidos), [], "el segundo lote actualiza el evento creado por el primero");
+      assert.equal(results.reduce((sum, r) => sum + r.creados.length, 0), 1);
+      assert.equal(results.reduce((sum, r) => sum + r.actualizados, 0), 1);
+      assert.equal(await db.event.count({ where: { organizationId: org.id } }), 1);
+      assert.equal(await db.client.count({ where: { organizationId: org.id } }), 1);
+      assert.equal(await db.idempotencyKey.count({ where: { organizationId: org.id, scope: "import:evento", key: "ev-same" } }), 1);
+    });
+
+    await t.test("cambiar fechas con reservas heredadas rechaza el evento sin desplazar stock ni guardar cambios parciales", async () => {
+      const org = await newOrg("fechas-heredadas");
+      await catalog(org, [{ codigo: "UNICO", nombre: "Silla única", categoria: "Sillas", tipo: "unidad", precio: 1000, cantidad: 1 }]);
+      await apply(org, [ev("EV-ENERO", { desde: "2033-01-01", hasta: "2033-01-01" }), ev("EV-FEBRERO", { desde: "2033-02-01", hasta: "2033-02-01" })]);
+      const january = (await eventByCode(org.id, "EV-ENERO"))!;
+      const february = (await eventByCode(org.id, "EV-FEBRERO"))!;
+      const item = await db.inventoryItem.findFirstOrThrow({ where: { organizationId: org.id, sku: "UNICO" } });
+      const { commitInventoryAssignment } = await import("../lib/server/inventory-availability");
+      for (const event of [january, february]) {
+        const result = await commitInventoryAssignment({ organizationId: org.id, eventId: event.id, inventoryId: item.id, quantity: 1 });
+        assert.ok(result.ok, "cada evento puede reservar el único producto en su fecha original");
+      }
+      const assignmentsBefore = await db.eventInventory.findMany({ where: { inventoryId: item.id }, orderBy: { eventId: "asc" } });
+      assert.ok(assignmentsBefore.every((row) => row.startsAt === null && row.endsAt === null), "fechas heredadas del evento");
+      const changed = await apply(org, [ev("EV-ENERO", { nombre: "No debe guardarse", cliente: { nombre: "Cliente nuevo", correo: "nuevo@ejemplo.com" }, desde: "2033-02-01", hasta: "2033-02-01", productos: [] })]);
+      assert.equal(changed.actualizados, 0);
+      assert.equal(changed.fallidos.length, 1, "la reprogramación requiere el flujo que valida todas las reservas");
+      assert.deepEqual(await eventByCode(org.id, "EV-ENERO"), january, "fecha, cliente y demás datos originales intactos");
+      assert.deepEqual(await db.eventInventory.findMany({ where: { inventoryId: item.id }, orderBy: { eventId: "asc" } }), assignmentsBefore);
+      assert.equal(await db.client.count({ where: { organizationId: org.id } }), 1, "no crea cliente al rechazar el evento");
+    });
   } finally {
     for (const id of orgs) await db.organization.delete({ where: { id } }).catch(() => undefined);
     await db.$disconnect();

@@ -339,6 +339,7 @@ export type EventosResult = {
 };
 
 class PlanLimitError extends Error {}
+class EventImportConflict extends Error {}
 
 const isUnique = (error: unknown) => error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 
@@ -358,9 +359,6 @@ export async function applyEventos(
   let sinStock = 0;
   let liberadas = 0;
 
-  // Clientes creados durante esta aplicación (un cliente nuevo que aparece en varios eventos se crea una sola vez).
-  const known: ClientRow[] = await db.client.findMany({ where: { organizationId }, select: { id: true, name: true, company: true, email: true, phone: true }, take: 50_000 });
-
   let done = 0;
   for (const item of plan.items) {
     input.onProgress?.({ hecho: done, total: plan.items.length, fase: "Cargando eventos" });
@@ -376,9 +374,41 @@ export async function applyEventos(
 
       const written = await db.$transaction(
         async (tx) => {
+          // El código todavía puede no tener fila: el lock lógico cubre también el alta.
+          await tx.$queryRaw(Prisma.sql`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`${organizationId}:${IMPORT_EVENTO_SCOPE}:${key}`}, 0))`);
+          const mapping = await tx.idempotencyKey.findUnique({ where: { organizationId_scope_key: { organizationId, scope: IMPORT_EVENTO_SCOPE, key } }, select: { response: true } });
+          const mappedId = (mapping?.response as { eventId?: unknown } | null)?.eventId;
+
+          let eventId = typeof mappedId === "string" ? mappedId : null;
+          let existingNotes: string | null = null;
+          if (eventId) {
+            // Candado del evento: dos importaciones del mismo código se serializan.
+            const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${eventId} AND "organizationId" = ${organizationId} AND "deletedAt" IS NULL FOR UPDATE`);
+            if (locked.length === 0) eventId = null;
+          }
+          let created = false;
+          if (eventId) {
+            const current = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { notes: true, status: true, startsAt: true, endsAt: true } });
+            if (!current || current.status === "IN_PROGRESS" || current.status === "COMPLETED") throw new Error("El evento cambió mientras se importaba: volvé a generar la vista previa.");
+            // Las reservas heredadas usan las fechas/estado del evento: cambiarlos primero
+            // desplazaría stock sin pasar por disponibilidad. La reprogramación se hace en Eventos.
+            const rangeChanged = current.startsAt?.getTime() !== item.startsAt.getTime() || current.endsAt?.getTime() !== item.endsAt.getTime();
+            const reactivating = current.status === "CANCELLED" && status !== "CANCELLED";
+            if (status !== "CANCELLED" && (rangeChanged || reactivating)) {
+              const active = await tx.eventInventory.count({ where: { eventId, releasedAt: null, event: { organizationId } } });
+              if (active > 0) throw new EventImportConflict("Este evento tiene reservas: reprogramalo o liberá sus reservas desde Eventos antes de cambiar sus fechas o reactivarlo por importación.");
+            }
+            existingNotes = current.notes;
+          } else {
+            const limit = await lockedEventLimitViolation(tx, context);
+            if (limit) throw new PlanLimitError(limit.error);
+            eventId = randomUUID();
+            created = true;
+          }
           // Cliente: el de la vista previa o, si ya apareció en este lote, el creado hace un instante.
-          const matched = matchClient(known, doc.cliente);
-          let clientId = matched?.id ?? item.cliente.id;
+          const currentClients: ClientRow[] = await tx.client.findMany({ where: { organizationId }, select: { id: true, name: true, company: true, email: true, phone: true }, take: 50_000 });
+          const matched = matchClient(currentClients, doc.cliente);
+          let clientId = matched?.id ?? null;
           let clientCreated = false;
           if (!clientId) {
             clientId = randomUUID();
@@ -389,24 +419,6 @@ export async function applyEventos(
             clientCreated = true;
           }
 
-          let eventId = item.existingId;
-          let existingNotes: string | null = null;
-          if (eventId) {
-            // Candado del evento: dos importaciones del mismo código se serializan.
-            const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${eventId} AND "organizationId" = ${organizationId} AND "deletedAt" IS NULL FOR UPDATE`);
-            if (locked.length === 0) eventId = null;
-          }
-          let created = false;
-          if (eventId) {
-            const current = await tx.event.findFirst({ where: { id: eventId, organizationId }, select: { notes: true, status: true } });
-            if (!current || current.status === "IN_PROGRESS" || current.status === "COMPLETED") throw new Error("El evento cambió mientras se importaba: volvé a generar la vista previa.");
-            existingNotes = current.notes;
-          } else {
-            const limit = await lockedEventLimitViolation(tx, context);
-            if (limit) throw new PlanLimitError(limit.error);
-            eventId = randomUUID();
-            created = true;
-          }
           const notes = composeNotes(doc.notas ?? stripBlock(existingNotes), modo === "sin-reserva" && productNames.length ? [`Productos pedidos (sin reservar): ${productNames.join(", ")}`] : []);
           const data = { clientId, name: doc.nombre, location: doc.lugar, startsAt: item.startsAt, endsAt: item.endsAt, status, notes };
           if (created) {
@@ -444,7 +456,6 @@ export async function applyEventos(
       );
       if (written.clientCreated) {
         clientesCreados.push({ id: written.clientId, etiqueta: doc.cliente.nombre });
-        known.push({ id: written.clientId, name: doc.cliente.nombre, company: null, email: doc.cliente.correo, phone: doc.cliente.telefono });
       }
       if (written.created) creados.push({ id: written.eventId, etiqueta: `${doc.codigo} · ${doc.nombre}` });
       else actualizados += 1;
@@ -509,7 +520,7 @@ export async function applyEventos(
       aplicadosFallidos += 1;
       fallidos.push({
         codigo: doc.codigo,
-        mensaje: error instanceof PlanLimitError ? error.message : isUnique(error) ? "Otra importación creó este evento al mismo tiempo: volvé a intentar." : error instanceof Error && /cambió mientras|No se pudo reservar/.test(error.message) ? error.message : "No pudimos guardar este evento. Reintentá: reimportar no duplica.",
+        mensaje: (error instanceof PlanLimitError || error instanceof EventImportConflict) ? error.message : isUnique(error) ? "Otra importación creó este evento al mismo tiempo: volvé a intentar." : error instanceof Error && /cambió mientras|No se pudo reservar/.test(error.message) ? error.message : "No pudimos guardar este evento. Reintentá: reimportar no duplica.",
       });
     }
   }

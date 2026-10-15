@@ -724,8 +724,9 @@ export function PortalBudgetView({
       <dl className="portal-summary-facts">
         {howToPay ? (
           <div>
-            <dt>Cómo se paga</dt>
+            <dt>{itemsChanged ? "Plan del presupuesto original" : "Cómo se paga"}</dt>
             <dd>{howToPay}</dd>
+            {itemsChanged ? <dd>El equipo revisará el plan de pagos junto con tus cambios.</dd> : null}
           </div>
         ) : null}
         {budget.paymentPlan.terms ? (
