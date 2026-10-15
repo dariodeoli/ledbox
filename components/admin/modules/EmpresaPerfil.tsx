@@ -159,7 +159,7 @@ export function EmpresaPerfil() {
   return (
     <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} rows={4}>
       <form
-        className="admin-settings"
+        className="admin-settings admin-settings-sections"
         onSubmit={(event) => {
           event.preventDefault();
           void save();

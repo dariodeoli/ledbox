@@ -155,7 +155,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
   }
 
   return (
-    <form className="admin-settings" onSubmit={(event) => void save(event)}>
+    <form className="admin-settings admin-settings-sections" onSubmit={(event) => void save(event)}>
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
 

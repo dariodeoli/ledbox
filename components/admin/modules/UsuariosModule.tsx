@@ -122,7 +122,7 @@ export function UsuariosModule() {
 
   /** Un ADMIN no edita a un OWNER; nadie se edita el rol (issue #22). */
   function canEditUser(user: AdminUserRow): boolean {
-    if (!writable) return false;
+    if (!writable || (user.sharedAccount && user.id !== sessionUser?.id)) return false;
     return user.role !== "OWNER" || role === "OWNER";
   }
 
@@ -307,6 +307,9 @@ export function UsuariosModule() {
         <AdminKpi label="Administradores" icon="users" value={formatNumber(totals.admins)} note="propietarios y admins" tone="accent" />
         <AdminKpi label="Consulta" icon="eye" value={formatNumber(totals.viewers)} note="solo lectura" />
       </AdminKpis>
+      {list.some((user) => user.sharedAccount && user.id !== sessionUser?.id) ? (
+        <AdminNote>Solo el titular puede editar el nombre y correo de una cuenta compartida con otras empresas. Acá podés administrar su rol y acceso a esta empresa.</AdminNote>
+      ) : null}
 
       <AdminToolbar>
         <SearchField value={query} onChange={setQuery} label="Buscar usuarios" placeholder="Buscar por nombre, correo o rol…" />

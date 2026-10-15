@@ -1518,6 +1518,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 
 /* ── Menús y desplegables: una caja opaca con sombra ── */
 .admin-menu-pop, .admin-combobox-pop { border: 0; background: var(--a-pop-bg); box-shadow: var(--a-pop-shadow); backdrop-filter: none; border-radius: 12px; }
+/* Ajustes usa las mismas piezas con una línea inferior, sin cambiar su teclado,
+   validación ni área táctil. La piel vive junto al campo canónico. */
+.admin-settings-content .admin-field :is([data-oc-control], input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-radius: 0; border-width: 0 0 1px; background-color: transparent;
+}
+.admin-settings-content .admin-field :is([data-oc-control], input, select, textarea):focus-visible {
+  outline: 2px solid var(--a-accent); outline-offset: 2px;
+}
+
 /* ═══ FIN BIBLIOTECA ═══ */
 
 /* Barras de filtros/búsqueda y formularios en línea: todos los controles
@@ -5397,3 +5406,59 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 /* Barra móvil: el acceso no ocupa el ancho reservado al monto pendiente. */
 .portal-mobile-sticky .portal-mobile-sticky-action { flex: 0 0 auto; width: auto; min-width: 9rem; }
 .portal-mobile-sticky .portal-mobile-sticky-total { flex: 1 1 0; min-width: 0; }
+
+/* Ajustes: navegación y contenido densos. Todo queda acotado a esta área. */
+.admin-settings-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
+.admin-settings-content, .admin-settings-content > *, .admin-settings-sections > * { min-width: 0; }
+.admin-settings-layout .admin-settings-nav { position: sticky; top: 12px; padding: 0; }
+.admin-settings-layout .admin-settings-nav .admin-subtabs { display: grid; gap: 3px; }
+.admin-settings-layout .admin-settings-nav .admin-subtab { justify-content: flex-start; width: 100%; padding: 8px 10px; text-align: left; }
+.admin-settings-content .admin-panel-head { flex-wrap: wrap; gap: 5px 8px; padding: 10px 12px; }
+.admin-settings-content .admin-panel-title { margin: 0; font-size: 13px; letter-spacing: 0; text-transform: none; }
+.admin-settings-content .admin-panel-meta { flex-basis: 100%; padding-left: 28px; line-height: 1.4; }
+.admin-settings-content .admin-panel-action { margin-left: auto; }
+.admin-settings-content .admin-panel-head:has(.admin-panel-action) .admin-panel-meta { flex-basis: auto; padding-left: 0; }
+.admin-settings-content .admin-settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); align-items: start; gap: 10px 14px; }
+.admin-settings-sections { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-sections > :is(.admin-settings-actions, .admin-note, .admin-data-state) { grid-column: 1 / -1; }
+.admin-settings-content .admin-settings-actions { gap: 8px; }
+.admin-settings-content .admin-hours { gap: 2px; }
+.admin-settings-content .admin-hours-day { gap: 4px; padding: 6px 0; }
+.admin-settings-content .admin-hours-head { gap: 6px; }
+.admin-settings-content .admin-hours-head strong { font-size: 12px; }
+.admin-settings-content .admin-ranges-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 6px; width: 100%; }
+.admin-settings-content .admin-ranges-row .admin-field { min-width: 0; }
+.admin-settings-content .admin-ranges { width: 100%; }
+.admin-settings-content .admin-ranges > .admin-btn { justify-self: start; }
+.admin-settings-content .admin-appearance-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.admin-settings-content .admin-template-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+.admin-settings-covers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.admin-settings-covers > * { min-width: 0; }
+.admin-settings-previews { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-previews h3 { margin: 0; font-size: 12px; }
+.admin-settings-wide { grid-column: 1 / -1; }
+@media (min-width: 1180px) {
+  .admin-settings-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-settings-content--empresa .admin-settings-sections:first-child > .admin-panel:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 1600px) {
+  .admin-settings-content .admin-appearance-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .admin-settings-previews { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 980px) {
+  .admin-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .admin-settings-layout .admin-settings-nav { position: static; min-width: 0; }
+  .admin-settings-layout .admin-settings-nav .admin-subtabs { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 2px 2px 6px; }
+  .admin-settings-layout .admin-settings-nav .admin-subtab { flex: 0 0 auto; width: auto; min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .admin-settings-content .admin-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-settings-covers, .admin-settings-previews { grid-template-columns: minmax(0, 1fr); }
+  .admin-settings-content .admin-panel-meta { padding-left: 0; }
+}
+
+.admin-settings-profile { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.admin-settings-profile > :is(.admin-account-head, .admin-note) { grid-column: 1 / -1; }
+@media (min-width: 1180px) {
+  .admin-settings-profile { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

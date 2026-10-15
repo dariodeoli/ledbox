@@ -335,7 +335,7 @@ export function AparienciaSettings() {
                 <HomeLayoutPanels home={home} onHome={(next) => { setHome(next); setNotice(""); }} photos={homePhotos} onPhotos={(next) => { setHomePhotos(next); setNotice(""); }} versions={initial.homePhotos} disabled={demo} />
 
                 <AdminPanel title="Portada" icon="image" meta="Dos archivos separados · JPG, PNG o WebP · máximo 2 MB cada uno">
-                  <div className="admin-settings">
+                  <div className="admin-settings-covers">
                     {COVER_KINDS.map((kind) => {
                       const spec = COVER_SPEC[kind];
                       const state = covers[kind];
@@ -376,14 +376,14 @@ export function AparienciaSettings() {
               </div>
 
               <AdminPanel title="Vista previa en vivo" icon="eye" meta="Con datos de ejemplo; todavía no está publicada">
-                <div className="admin-settings">
+                <div className="admin-settings-previews">
                   {(["desktop", "mobile"] as const).map((device) => (
                     <section key={device} className="admin-settings" aria-label={`Vista previa en ${device === "desktop" ? "computadora" : "celular"}`}>
                       <h3>{device === "desktop" ? "Computadora · 1920 × 600" : "Celular · 1080 × 1350"}</h3>
                       <StorePreview frame={device} appearance={effective} brandColor={brandHex} name={organization?.name ?? ""} coverDesktop={coverSrc("desktop")} coverMobile={coverSrc("mobile")} tagline={tagline.trim() || null} />
                     </section>
                   ))}
-                  {storeUrl ? <p className="admin-field-hint">La tienda real está en {storeUrl}. Si falta una portada, usa la otra centrada.</p> : null}
+                  {storeUrl ? <p className="admin-field-hint admin-settings-wide">La tienda real está en {storeUrl}. Si falta una portada, usa la otra centrada.</p> : null}
                 </div>
               </AdminPanel>
             </div>

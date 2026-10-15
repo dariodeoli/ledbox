@@ -2040,6 +2040,8 @@ export type PromoterAvailabilityValue = (typeof PROMOTER_AVAILABILITIES)[number]
 
 export type AdminUserRow = {
   id: string;
+  /** Identidad global compartida: solo su titular edita nombre/correo. */
+  sharedAccount?: boolean;
   name: string;
   email: string;
   role: AdminRole;

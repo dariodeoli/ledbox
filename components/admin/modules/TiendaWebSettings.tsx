@@ -112,7 +112,7 @@ export function TiendaWebSettings() {
             </AdminButton>
           </AdminPanel>
         ) : form ? (
-          <form className="admin-settings" onSubmit={(event) => void save(event)}>
+          <form className="admin-settings admin-settings-sections" onSubmit={(event) => void save(event)}>
             <AdminPanel title="Tu tienda web" icon="globe">
               {storeUrl ? (
                 <div data-testid="store-link">
