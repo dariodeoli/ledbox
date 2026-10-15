@@ -124,7 +124,7 @@ test("aprobar crea el evento solo, después de la aprobación, en todos los cami
     assert.match(source, underCount, `${file}: solo si la aprobación se aplicó`);
     assert.match(source, afterTx, `${file}: después de la transacción de aprobación`);
     assert.equal((source.match(/ensureEventForApprovedBudget\(/g) ?? []).length, 1, `${file}: una sola llamada`);
-    assert.match(source, /la reserva quedó pendiente/, `${file}: la reserva de respaldo no tira 500`);
+    assert.match(source, /la reserva (de la alternativa firmada )?quedó pendiente/, `${file}: la reserva de respaldo no tira 500`);
   }
   const shared = repoFile("lib/server/budget-event.ts");
   assert.match(shared, /catch \(error\)[\s\S]*No se creó el evento automáticamente/, "si falla, se audita el motivo y no se lanza");
