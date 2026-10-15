@@ -102,17 +102,19 @@ test("tarjeta: no reserva espacio para lo que no existe", async () => {
   assert.ok(!/cp-tile-avail|cp-tile-flag/.test(html), "sin estado no hay línea de disponibilidad");
   assert.ok(!/cp-tile-sub/.test(html), "sin ahorro ni escalón no hay renglón extra");
   const sinPrecio = await tile({ item: bare, specs: cardSpecs(bare), showPrices: false, unit: 0 });
-  assert.match(sinPrecio, /A cotizar/);
+  assert.match(sinPrecio, /Consultar precio y disponibilidad/);
+  assert.match(sinPrecio, /Agregar<\/button>/);
   const sinMonto = await tile({ item: bare, specs: cardSpecs(bare), unit: 0 });
-  assert.match(sinMonto, /Consultar precio/);
+  assert.match(sinMonto, /Consultar precio y disponibilidad/);
+  assert.match(sinMonto, /Agregar<\/button>/);
 });
 
 test("tarjeta: «c/u» con selector de a 10; combo con ahorro muestra «Ahorrás» y «Por separado»; con pedido, la cantidad", async () => {
   const porUnidad = await tile({ perUnit: true, step: 10, unit: 2500, unitText: "c/u" });
   assert.match(porUnidad, /Gs\. 2\.500/);
   assert.match(porUnidad, /c\/u/);
-  assert.match(porUnidad, /Agregar 10 unidades/);
-  assert.ok(!/cp-tile-add"/.test(porUnidad), "en «c/u» hay selector, no «+ Agregar»");
+  assert.match(porUnidad, /Agregar 10<\/button>/);
+  assert.match(porUnidad, /cp-tile-add/, "el producto sin cantidad siempre ofrece Agregar");
   const html = await tile({ saving: { savings: 50000, unitSum: 200000 }, quantity: 3 });
   assert.match(html, /Ahorrás Gs\. 50\.000/);
   assert.match(html, /Por separado <s>Gs\. 200\.000<\/s>/);
@@ -138,7 +140,8 @@ test("vista rápida y cajones: URL ?p=, atrás cierra, portal por encima del enc
   assert.match(browser, /por día o evento/);
   assert.match(browser, /<OrderBar/, "barra del pedido compacta");
   const quick = read("components/catalog-public/QuickView.tsx");
-  for (const text of ["Opciones similares", "Ver la ficha completa", "Incluye", 'aria-modal="true"', "Agregar al pedido"]) assert.ok(quick.includes(text), text);
+  for (const text of ["Opciones similares", "Incluye", 'aria-modal="true"', "Agregar al pedido"]) assert.ok(quick.includes(text), text);
+  assert.ok(!quick.includes("Ver la ficha completa"), "todos los detalles se consultan dentro de la vista rápida");
   const css = read("app/tienda.css");
   assert.match(css, /\.cp-overlay \{ position: fixed; inset: 0; z-index: var\(--z-overlay\);/);
   assert.match(css, /\.cp-btn--primary\[disabled\]/);

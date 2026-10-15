@@ -50,7 +50,7 @@ export function ProductTile({ item, specs, isPackage, showPrices, perUnit, step,
   const datum = pieces ?? specs.dimensions;
   const priced = showPrices && unit > 0;
   const low = item.availability === "LOW";
-  const showStepper = (perUnit && !isPackage) || quantity > 0;
+  const showStepper = quantity > 0;
   return (
     <li className="cp-tile" data-testid="catalog-item">
       {fichaHref ? (
@@ -86,7 +86,7 @@ export function ProductTile({ item, specs, isPackage, showPrices, perUnit, step,
                 <span className="cp-price-unit">{unitText}</span>
               </>
             ) : (
-              <span className="cp-price-unit">{showPrices ? "Consultar precio" : "A cotizar"}</span>
+              <span className="cp-price-unit">Consultar precio y disponibilidad</span>
             )}
           </div>
           <div className="cp-tile-actions">
@@ -94,7 +94,7 @@ export function ProductTile({ item, specs, isPackage, showPrices, perUnit, step,
               <Stepper label={item.name} value={quantity} step={step} max={MAX_QUANTITY} onChange={(next) => onQuantity(item.id, next)} />
             ) : (
               <button type="button" className="cp-btn cp-tile-add" onClick={() => onAdd(item.id, step)} aria-label={`Agregar ${item.name} al pedido`}>
-                <XIcon name="plus" size={16} />Agregar
+                <XIcon name="plus" size={16} />{perUnit && !isPackage && step > 1 ? `Agregar ${step}` : "Agregar"}
               </button>
             )}
           </div>
