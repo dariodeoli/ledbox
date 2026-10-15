@@ -161,7 +161,7 @@ export function CollectionsSettings({ readOnly }: { readOnly: boolean }) {
                     file={draft.photo}
                     onSelect={(file) => setDraft({ ...draft, photo: file, removePhoto: false })}
                   />
-                  <div className="admin-cover-frame" style={{ aspectRatio: "4 / 3" }}>
+                  <div className="admin-cover-frame" data-ratio="4-3">
                     {photoSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={photoSrc} alt="Vista previa de la foto de ambientación" />

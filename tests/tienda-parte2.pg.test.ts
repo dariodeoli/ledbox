@@ -28,7 +28,7 @@ test("tienda parte 2: fotos por producto, colecciones y orden del inicio, aislad
   const jpg = async (color: string) => new Uint8Array(await sharp({ create: { width: 900, height: 1100, channels: 3, background: color } }).jpeg().toBuffer());
   const upload = (bytes: Uint8Array, name = "foto.png") => {
     const form = new FormData();
-    form.append("file", new File([bytes], name, { type: "image/png" }));
+    form.append("file", new File([bytes as BlobPart], name, { type: "image/png" }));
     return new Request("http://x/upload", { method: "POST", body: form });
   };
   const params = <T extends object>(value: T) => ({ params: Promise.resolve(value) });

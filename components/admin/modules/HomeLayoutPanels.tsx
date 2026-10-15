@@ -38,7 +38,7 @@ function PhotoBox({ slot, state, version, disabled, onChange }: { slot: HomePhot
         disabled={disabled}
         onSelect={(file) => onChange({ file, remove: false })}
       />
-      <div className="admin-cover-frame" style={{ aspectRatio: "4 / 5", maxWidth: 220 }}>
+      <div className="admin-cover-frame" data-ratio="4-5">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={`Vista previa: ${HOME_PHOTO_LABEL[slot].toLowerCase()}`} />
