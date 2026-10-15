@@ -640,3 +640,4 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Tienda: el pedido se abre como cajón (hoja inferior en el celular) con las fechas adentro, arriba; si faltan, un aviso neutro, no rojo. Muestra «Total estimado» y «Confirmamos el monto final en la cotización». En el celular hay una barra compacta; el botón de WhatsApp no la pisa.
 - Tienda: pie completo (contacto, horarios, zonas de entrega, medios de pago) con «Desarrollado por OwnCoding · EventOS v…». Pantallas de carga, de «sin resultados» y de error.
 - Apariencia: color de marca, frase de la tienda, tipografía de los títulos (lista curada), barra de anuncio con texto, modo de precio (por día, por unidad «c/u» con cantidades de a 10, o a cotizar) y portada. El fondo propio y el acento manuscrito se retiraron: cada plantilla trae su fondo.
+- Panel: el botón «Ver mi tienda» abre la tienda de la empresa activa (antes llevaba a la página de LedBox).
