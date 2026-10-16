@@ -1,8 +1,10 @@
 "use client";
+import { MoneyInput, Textarea as SharedTextarea } from "owncoding-ui";
+
 
 import { PREORDER_COPY } from "@/lib/storefront-ui";
 import { useState, type FormEvent } from "react";
-import { PRICE_COMMENT_MAX, parsePriceRequest } from "@/lib/price-request";
+import { PRICE_AMOUNT_MAX, PRICE_COMMENT_MAX, parsePriceRequest } from "@/lib/price-request";
 
 /**
  * «Pedir un mejor precio» desde el seguimiento del pedido. Comentario obligatorio y monto deseado
@@ -58,11 +60,11 @@ export function PriceRequestForm({ token, total }: { token: string; total: numbe
       <p className="cp-hint">{PREORDER_COPY.notice} {PREORDER_COPY.logistics}</p>
       <label className="cp-field">
         <span>¿Por qué lo pedís?</span>
-        <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={PRICE_COMMENT_MAX} rows={3} required placeholder="Ej.: somos clientes frecuentes, es para un evento grande." />
+        <SharedTextarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={PRICE_COMMENT_MAX} rows={3} required placeholder="Ej.: somos clientes frecuentes, es para un evento grande." />
       </label>
       <label className="cp-field">
         <span>Monto que proponés, en Gs. (opcional)</span>
-        <input inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.\s]/g, "").slice(0, 16))} placeholder="Ej.: 1.200.000" />
+        <MoneyInput currency="PYG" integerOnly max={PRICE_AMOUNT_MAX} value={amount} onValueChange={(value) => setAmount(String(value))} placeholder="Ej.: 1.200.000" />
       </label>
       <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
       {error ? <p className="cp-error" role="alert">{error}</p> : null}

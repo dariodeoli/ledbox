@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput } from "owncoding-ui";
+
 import { useState } from "react";
 import type { PublicQuoteComparison } from "@/lib/server/quote-comparison-view";
 import { formatMoney, formatDate } from "@/lib/admin-format";
@@ -51,7 +53,7 @@ export function PortalComparisonView({ initial, token }: { initial: PublicQuoteC
       </fieldset>
       {!group.selectedBudgetId ? <section className="portal-card">
         <h2>Confirmar una alternativa</h2>
-        <label className="portal-field">Nombre y apellido<input value={name} onChange={(e) => setName(e.target.value)} minLength={3} maxLength={120} required disabled={busy} autoComplete="name" /></label>
+        <label className="portal-field">Nombre y apellido<SharedInput value={name} onChange={(e) => setName(e.target.value)} minLength={3} maxLength={120} required disabled={busy} autoComplete="name" /></label>
         <label className="portal-comparison-select"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required disabled={busy} /> Confirmo que apruebo únicamente la alternativa elegida y sus condiciones.</label>
         <button className="portal-btn" disabled={busy || !choice || !consent}>{busy ? "Registrando…" : "Aprobar alternativa elegida"}</button>
       </section> : null}

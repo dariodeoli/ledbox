@@ -1,7 +1,10 @@
 "use client";
+import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
+
 import Link from "next/link";
+import { PhonePartsField } from "@/components/fields/PhonePartsField";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { CODIGOS_PAIS, EmailField as LibEmailField, RucField as LibRucField, soloDigitos } from "owncoding-ui";
+import { EmailField as LibEmailField, RucField as LibRucField, soloDigitos } from "owncoding-ui";
 import type { CartItem } from "@/components/cart/CartDrawer";
 import { whatsappUrl } from "@/lib/public-config";
 
@@ -14,8 +17,7 @@ import { whatsappUrl } from "@/lib/public-config";
  * Ojo con el teléfono: el `PhoneField` de la librería valida solo-móvil para
  * Paraguay y marcaría como inválidos los fijos que LedBox sí acepta
  * (`owncoding-ui#4`, ya documentado en `lib/field-rules.ts`), así que acá se usa
- * el catálogo `CODIGOS_PAIS` + `soloDigitos` de la librería con el marcado del
- * sitio. Los componentes de la librería se renderizan solo en el navegador: el
+ * el adaptador común `PhonePartsField`, con catálogo y helpers de la librería. Los componentes de la librería se renderizan solo en el navegador: el
  * diálogo nace cerrado (`open=false`), así que el prerender del sitio no los
  * toca (ver la nota del bloqueo en `docs` del issue #101).
  *
@@ -78,25 +80,20 @@ export function LeadCaptureDialog({ open, items, onClose }: { open: boolean; ite
       <button ref={closeRef} className="dialog-close" type="button" aria-label="Cerrar formulario" onClick={onClose}>×</button>
       {!sent ? <><div className="sec-kicker">Antes de cotizar</div><h2 id="lead-title">Contanos de tu evento<span className="led">.</span></h2><p>Con estos datos te respondemos más rápido. Son pocos campos y no te comprometen a contratar.</p>
         <form onSubmit={submit} aria-busy={submitting}><div className="f-row">
-          <label className="f-field"><span>Nombre <em aria-hidden="true">*</em></span><input name="name" type="text" required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label className="f-field"><span>Nombre <em aria-hidden="true">*</em></span><SharedInput name="name" type="text" required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /></label>
           <div className="f-field lead-phone">
             <span>Teléfono <em aria-hidden="true">*</em></span>
-            <span className="lead-phone-row">
-              <select className="lead-phone-code" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} aria-label="Código de país">
-                {CODIGOS_PAIS.map((code) => <option key={code} value={code}>{code}</option>)}
-              </select>
-              <input name="phone" type="tel" inputMode="tel" required autoComplete="tel" value={phone} onChange={(event) => setPhone(soloDigitos(event.target.value))} placeholder="981 123 456" aria-label="Teléfono" />
-            </span>
+            <PhonePartsField countryCode={countryCode} phone={phone} onCountryCodeChange={setCountryCode} onChange={setPhone} name="phone" required />
           </div>
           <div className="f-field lead-email"><span>Email <em aria-hidden="true">*</em></span><LibEmailField value={email} onChange={setEmail} placeholder="tu@email.com" aria-label="Email" inputMode="email" /></div>
-          <label className="f-field"><span>Empresa</span><input name="company" type="text" autoComplete="organization" value={company} onChange={(event) => setCompany(event.target.value)} placeholder="Eventos del Sur S.A." /></label>
+          <label className="f-field"><span>Empresa</span><SharedInput name="company" type="text" autoComplete="organization" value={company} onChange={(event) => setCompany(event.target.value)} placeholder="Eventos del Sur S.A." /></label>
           <div className="f-field lead-ruc">
             <span>RUC</span>
             <LibRucField value={ruc} onChange={setRuc} consultar={consultarRuc} onAplicar={(datos) => setCompany(datos.name)} maxLength={40} ariaLabel="RUC" textoAyuda="Aplicá la razón social con un clic." />
           </div>
         </div>
-        <label className="f-field f-full"><span>Motivo</span><select name="reason" value={reason} onChange={(event) => setReason(event.target.value)}><option>Alquiler de equipos</option><option>Stand o activación</option><option>Cobertura digital</option><option>Otro</option></select></label>
-        <label className="f-field f-full"><span>Detalle breve (opcional)</span><textarea name="message" rows={2} maxLength={500} placeholder="Fecha, ciudad o cantidad de equipos" value={message} onChange={(event) => setMessage(event.target.value)} /></label>
+        <label className="f-field f-full"><span>Motivo</span><SharedSelect name="reason" value={reason} onChange={(event) => setReason(event.target.value)}><option>Alquiler de equipos</option><option>Stand o activación</option><option>Cobertura digital</option><option>Otro</option></SharedSelect></label>
+        <label className="f-field f-full"><span>Detalle breve (opcional)</span><SharedTextarea name="message" rows={2} maxLength={500} placeholder="Fecha, ciudad o cantidad de equipos" value={message} onChange={(event) => setMessage(event.target.value)} /></label>
         <input className="honeypot" name="website" tabIndex={-1} autoComplete="off" />{error && <p className="form-error" role="alert">{error}</p>}{/* Aviso de finalidad (issue #92): texto claro antes del botón, sin casilla premarcada ni dark patterns. */}<p className="lead-consent">Usamos tus datos solo para responder esta consulta y preparar el presupuesto; no los compartimos para publicidad. <Link href="/privacidad" target="_blank" rel="noopener">Política de privacidad</Link>.</p><button className="btn-led" type="submit" disabled={submitting}>{submitting ? "Registrando consulta…" : "Continuar por WhatsApp →"}</button></form></> : <><div className="lead-success" aria-live="polite"><span aria-hidden="true">✓</span><h2>Consulta lista<span className="led">.</span></h2><p>Se abrió WhatsApp con tus datos. El equipo de LedBox te responde a la brevedad.</p><button className="btn-line" type="button" onClick={onClose}>Volver al catálogo</button></div></>}
     </section>
   </div>;

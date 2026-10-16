@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput, Textarea as SharedTextarea } from "owncoding-ui";
+
 
 import { useState } from "react";
 import { AdminIcon } from "@/components/admin/AdminIcons";
@@ -330,7 +332,7 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
                   <div className="portal-signature-otp">
                     <label className="portal-field">
                       <span className="portal-field-label">Código de verificación</span>
-                      <input
+                      <SharedInput
                         value={otp}
                         onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
                         inputMode="numeric"
@@ -384,7 +386,7 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
                 ) : (
                   <label className="portal-field">
                     <span className="portal-field-label">Firma tipográfica</span>
-                    <input
+                    <SharedInput
                       value={typedName}
                       onChange={(event) => setTypedName(event.target.value)}
                       placeholder="Escribí tu nombre y apellido"
@@ -531,7 +533,7 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
               <form className="portal-form" onSubmit={(event) => void submitReject(event)}>
                 <label className="portal-field">
                   <span className="portal-field-label">¿Qué no podés firmar y por qué?</span>
-                  <textarea
+                  <SharedTextarea
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
                     rows={3}

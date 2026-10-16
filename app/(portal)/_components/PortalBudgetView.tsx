@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
+
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "@/components/admin/AdminAvatar";
@@ -319,7 +321,7 @@ function Stepper({
       >
         −
       </button>
-      <input
+      <SharedInput
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
@@ -1366,7 +1368,7 @@ export function PortalBudgetView({
           {openExpected.length > 0 ? (
             <label className="portal-field" htmlFor="portal-proof-concept">
               <span className="portal-field-label">¿Qué pago estás comprobando?</span>
-              <select
+              <SharedSelect
                 id="portal-proof-concept"
                 name="proof-concept"
                 value={proofExpectedId}
@@ -1383,13 +1385,13 @@ export function PortalBudgetView({
                     {expected.status === "PROOF" ? " (en revisión)" : ""}
                   </option>
                 ))}
-              </select>
+              </SharedSelect>
             </label>
           ) : null}
           <div className="portal-form-row">
             <label className="portal-field" htmlFor="portal-proof-name">
               <span className="portal-field-label">Nombre y apellido</span>
-              <input
+              <SharedInput
                 id="portal-proof-name"
                 name="proof-name"
                 value={proofName}
@@ -1893,7 +1895,7 @@ export function PortalBudgetView({
 
                 <label className="portal-field" htmlFor="portal-name">
                   <span className="portal-field-label">Nombre y apellido de quien autoriza o pide</span>
-                  <input
+                  <SharedInput
                     id="portal-name"
                     name="name"
                     value={name}
@@ -1912,7 +1914,7 @@ export function PortalBudgetView({
                   <div className="portal-form-row portal-form-row--discount">
                     <label className="portal-field" htmlFor="portal-discount-value">
                       <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
-                      <input
+                      <SharedInput
                         ref={discountInputRef}
                         id="portal-discount-value"
                         name="discount-value"
@@ -1970,7 +1972,7 @@ export function PortalBudgetView({
                   <span className="portal-field-label">
                     {actionMode === "authorize" ? "Comentario (opcional)" : actionMode === "discount" ? "Motivo de la rebaja" : "¿Qué cambios necesitás?"}
                   </span>
-                  <textarea
+                  <SharedTextarea
                     id="portal-note"
                     name="note"
                     value={note}

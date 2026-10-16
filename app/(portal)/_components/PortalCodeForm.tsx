@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput } from "owncoding-ui";
+
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -62,7 +64,7 @@ export function PortalCodeForm({ demoUnavailable = false }: { demoUnavailable?: 
     <form className="portal-code" onSubmit={submit} noValidate>
       <label className="portal-field" htmlFor="portal-code">
         <span className="portal-field-label">Código del presupuesto</span>
-        <input
+        <SharedInput
           id="portal-code"
           name="code"
           value={value}
