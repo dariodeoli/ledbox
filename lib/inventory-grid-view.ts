@@ -15,7 +15,10 @@ export type InventoryGridFilters = {
   kind: string;
   /** Id de categoría; si es una categoría padre incluye sus subcategorías. */
   categoryId: string;
+  /** Depósito físico de unidades existentes. */
   warehouseId: string;
+  /** Depósito previsto del catálogo; incluye fichas sin unidades. */
+  defaultWarehouseId: string;
   /** Clave del mapa de estados (`rented`, `overdue`…), `reserved` o `ALL`. */
   state: string;
   supplierId: string;
@@ -24,7 +27,7 @@ export type InventoryGridFilters = {
   focus: InventoryFocus;
 };
 
-export const EMPTY_GRID_FILTERS: InventoryGridFilters = { query: "", kind: "ALL", categoryId: "", warehouseId: "", state: "ALL", supplierId: "", familyId: "", focus: "all" };
+export const EMPTY_GRID_FILTERS: InventoryGridFilters = { query: "", kind: "ALL", categoryId: "", warehouseId: "", defaultWarehouseId: "", state: "ALL", supplierId: "", familyId: "", focus: "all" };
 
 export type InventoryFilterContext = InventoryFocusContext & {
   /** Productos con una unidad cuyo código coincide con la búsqueda (viene del API). */
@@ -54,6 +57,7 @@ export function activeFilterCount(filters: InventoryGridFilters, rangeActive: bo
     filters.kind !== "ALL",
     filters.categoryId !== "",
     filters.warehouseId !== "",
+    filters.defaultWarehouseId !== "",
     filters.state !== "ALL",
     filters.supplierId !== "",
     filters.familyId !== "",
@@ -79,6 +83,7 @@ export function applyInventoryFilters(
     if (filters.kind !== "ALL" && row.kind !== filters.kind) return false;
     if (filters.categoryId && !(row.categoryId && scope.has(row.categoryId))) return false;
     if (filters.familyId && row.familyId !== filters.familyId) return false;
+    if (filters.defaultWarehouseId && row.defaultWarehouseId !== filters.defaultWarehouseId) return false;
     if (filters.warehouseId && !row.stock.locations.some((place) => place.warehouseId === filters.warehouseId)) return false;
     if (filters.supplierId && row.supplierId !== filters.supplierId && !row.stock.supplierIds.includes(filters.supplierId)) return false;
     if (!wantArchived && !inventoryStateMatches(row, filters.state)) return false;

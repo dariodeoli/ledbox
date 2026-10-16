@@ -12,7 +12,7 @@ type Draft = { mode: string; value: string };
 
 export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onClear, onClose }: {
   target: "items" | "units";
-  /** Depósitos y proveedores para los campos de unidades. */
+  /** Catálogos comunes de depósitos y proveedores para defaults y unidades. */
   taxonomy?: InventoryTaxonomy;
   selection: { id: string; label: string }[];
   onSaved: () => void;
@@ -68,6 +68,7 @@ export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onCl
   >
     <p className="admin-note">Selección explícita ({selection.length}): {selection.map(row => row.label).join(" · ")}</p>
     <AdminNote>No cambiar conserva cada valor. Vaciar borra textos opcionales o deja un importe/umbral en 0. El lote se guarda completo: ante un error no se aplica ningún cambio. Los códigos, nombres y cantidades derivadas se editan individualmente. Los precios por duración se cargan en «Precio por días» del producto.</AdminNote>
+    {target === "items" ? <AdminNote>Depósito y ubicación por defecto sólo cambian la ficha y lo propuesto para altas futuras. No crean ni trasladan unidades, ni cambian reservas, propietarios o precios.</AdminNote> : null}
     <form id={formId} className="admin-form" onSubmit={event => void submit(event)}>
       <AdminDialogSection title="Campos a cambiar" stack>
       {fields.map(field => {
