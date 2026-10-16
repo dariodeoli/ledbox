@@ -156,8 +156,13 @@ async function resolveRequest(request: Request) {
     const nextStatus = changesOffer && budget.status !== "APPROVED" ? "NEGOTIATING" : budget.status;
 
     await withQuoteCommercialEdit(budget.id, organizationId, true, async (tx) => {
-      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { subtotal: true, discount: true, items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true } } } });
-      const stable = (rows: typeof fresh.items) => JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id)));
+      const fresh = await tx.budget.findUniqueOrThrow({ where: { id: budget.id }, select: { subtotal: true, discount: true, items: { select: { id: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, subtotal: true, pricingSnapshot: true } } } });
+      // Comparar el mismo contrato de revisión, incluido el precio congelado.
+      // Un include/select diferente no puede aparentar una edición concurrente.
+      const stable = (rows: typeof fresh.items) => JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id)).map(item => ({
+        id: item.id, name: item.name, quantity: item.quantity, days: item.days,
+        unitPrice: item.unitPrice, excluded: item.excluded, subtotal: item.subtotal, pricingSnapshot: item.pricingSnapshot,
+      })));
       if (fresh.subtotal !== budget.subtotal || fresh.discount !== budget.discount || stable(fresh.items) !== stable(budget.items)) throw new QuoteComparisonError(409, "El presupuesto cambió. Actualizá la solicitud antes de resolverla.");
       const freshRequest = await tx.budgetChangeRequest.findUniqueOrThrow({ where: { id: changeRequest.id }, select: { status: true, payload: true } });
       if (freshRequest.status !== "pending" || JSON.stringify(freshRequest.payload) !== JSON.stringify(changeRequest.payload)) throw new QuoteComparisonError(409, "La selección cambió. Actualizá la solicitud antes de resolverla.");
