@@ -1,3 +1,4 @@
+import { applySelectedPrices, previewSelectedPrices, selectedPriceReport } from "@/lib/server/import-selected-prices";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
@@ -52,6 +53,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ modu
   if (!checked.ok) return checked.response;
   const { module, context } = checked;
   const formato = new URL(request.url).searchParams.get("formato");
+  if (module.id === "productos" && formato === "reporte-precios") return selectedPriceReport(context.organizationId, new URL(request.url).searchParams.get("lote") ?? "");
   if (formato === "xlsx") {
     return new Response(Buffer.from(templateXlsx(module)), {
       headers: {
@@ -160,10 +162,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   const limited = await rateLimit(accion === "apply" ? `import-aplicar:${organizationId}` : `import-vista:${organizationId}`, accion === "apply" ? CATALOG_LIMITS.applyRate : CATALOG_LIMITS.previewRate);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
 
+  if (textOf(form, "modo") === "UPDATE_SELECTED" && module.id !== "productos") return jsonError("La actualización selectiva de precios pertenece al inventario.", 400);
+
   // Eventos con productos: validación y aplicación propias (lib/server/import-eventos*.ts).
   if (module.id === "eventos") return importarEventos(module, context, form, accion);
 
   const modeRaw = textOf(form, "modo");
+  if (modeRaw === "UPDATE_SELECTED") {
+    if (form.get("zip")) return jsonError("La actualización selectiva disponible sólo modifica precios. No adjuntes ZIP.", 400);
+    let raw: unknown;
+    try {
+      if (accion === "apply") raw = JSON.parse(textOf(form, "catalogo"));
+      else {
+        if (textOf(form, "fuente") !== "json") return jsonError("Para precios selectivos usá el JSON de instrucciones; planilla e IA conservan su modo anterior.", 400);
+        const file = fileOf(form, "json");
+        if (!file || file.size > CATALOG_LIMITS.jsonBytes) return jsonError("Elegí el JSON selectivo de hasta 2 MB.", 400);
+        raw = JSON.parse(await file.text());
+      }
+    } catch { return jsonError("El JSON selectivo no es válido.", 400); }
+    try {
+      return accion === "preview" ? await previewSelectedPrices(context, raw) : await applySelectedPrices(context, raw, textOf(form, "confirmationToken"), textOf(form, "lote"), request);
+    } catch (error) {
+      console.error("[import-selected-prices]", error instanceof Error ? error.message : error);
+      return jsonError("No se completó el lote de precios. Recuperá su reporte o reintentá el mismo lote: los éxitos comprometidos no se repiten.", 503);
+    }
+  }
   if (modeRaw && modeRaw !== "CREATE_ONLY" && modeRaw !== "UPSERT") return jsonError("Elegí crear sólo nuevos o crear y actualizar.", 400);
   const importMode = modeRaw === "CREATE_ONLY" ? "CREATE_ONLY" as const : "UPSERT" as const;
 
