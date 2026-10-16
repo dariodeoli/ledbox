@@ -272,6 +272,6 @@ export function purgeStatusText(item: Pick<TrashItem, "purgeInDays" | "retained"
   if (item.anonymized) return null;
   if (item.retained) return "Conservado (contable)";
   if (item.purgeInDays === null || item.purgeInDays === undefined) return null;
-  if (item.purgeInDays === 0) return "Se borra hoy";
-  return item.purgeInDays === 1 ? "Se borra en 1 día" : `Se borra en ${item.purgeInDays} días`;
+  if (item.purgeInDays === 0) return "Plazo cumplido; pendiente de vaciado";
+  return item.purgeInDays === 1 ? "Elegible para vaciado en 1 día" : `Elegible para vaciado en ${item.purgeInDays} días`;
 }
