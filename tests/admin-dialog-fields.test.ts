@@ -111,13 +111,15 @@ test("ventana: encabezado, cuerpo con scroll propio y pie fijo", () => {
   assert.match(css, /\.admin-dialog-body \.admin-dialog-foot\s*\{[^}]*position:\s*sticky/, "los pies .admin-dialog-foot existentes quedan fijos igual");
 });
 
-test("ventana: tamaños 560 / 720 / ficha lateral y hoja completa en celular", () => {
+test("ventana: tamaños 560 / 720 / ficha amplia con el mismo marco centrado", () => {
   assert.match(css, /\.admin-dialog\s*\{[^}]*width:\s*min\(560px, 100%\)/);
   assert.match(css, /\.admin-dialog--wide\s*\{\s*width:\s*min\(720px, 100%\)/);
   assert.match(css, /\.admin-dialog--ficha\s*\{\s*width:\s*min\(1040px, 100%\)/);
-  assert.match(css, /\.admin-dialog-overlay--ficha\s*\{[^}]*place-items:\s*stretch end/);
-  assert.match(css, /\.admin-dialog-overlay--ficha \.admin-dialog--sheet\s*\{[^}]*height:\s*100dvh/);
-  assert.match(css, /@media \(max-width: 767px\) \{\s*[^{]*\.admin-dialog-overlay, \.admin-dialog-overlay--ficha \{[^}]*padding:\s*0/);
+  assert.match(rule(".admin-dialog-overlay"), /place-items:\s*center/);
+  assert.match(rule(".admin-dialog-overlay"), /--admin-dialog-gap:\s*16px/);
+  assert.match(rule(".admin-dialog"), /max-height:\s*calc\(var\(--admin-dialog-vh/);
+  assert.doesNotMatch(css, /\.admin-dialog-overlay--ficha\s*\{[^}]*place-items:\s*stretch end/);
+  assert.match(css, /@media \(max-width: 767px\) \{\s*\.admin-dialog-overlay \{[^}]*--admin-dialog-gap:\s*12px/);
   assert.match(css, /\.admin-dialog--xl\s*\{\s*width:\s*min\(960px, 100%\)/);
   assert.match(css, /\.admin-dialog-grid\s*\{[^}]*repeat\(12, minmax\(0, 1fr\)\)/, "grilla de 12 columnas");
 });

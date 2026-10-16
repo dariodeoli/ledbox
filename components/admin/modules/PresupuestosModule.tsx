@@ -1,6 +1,6 @@
 "use client";
 
-import { SEND_AVAILABILITY_NOTICE, SEND_AVAILABILITY_CONSENT, sendAvailabilityLabel } from "@/lib/budget-send-availability";
+import { SEND_AVAILABILITY_NOTICE, SEND_AVAILABILITY_CONSENT, sendAvailabilityLabel, sendAvailabilityLineLabel } from "@/lib/budget-send-availability";
 import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { budgetMailNotice, type BudgetMailReply } from "@/lib/budget-mail-receipt";
@@ -2074,7 +2074,15 @@ export function PresupuestosModule() {
             <AdminNote>{sendAvailabilityLabel(sendPreview.availability.state)}. {SEND_AVAILABILITY_NOTICE}</AdminNote>
             <p className="admin-dialog-text">Revisado: {formatDateTime(sendPreview.availability.checkedAt)}.</p>
             {sendPreview.availability.range ? <p className="admin-dialog-text">Rango comprobado: {formatDateTime(sendPreview.availability.range.startsAt)} → {formatDateTime(sendPreview.availability.range.endsAt)}.</p> : null}
-            {sendPreview.availability.warnings.map((warning, index) => <p className="admin-dialog-text" key={`${warning.code}-${warning.itemId ?? index}`}><strong>{warning.name}:</strong> {warning.message}</p>)}
+            <ul className="admin-overdue-list" aria-label="Disponibilidad de todas las líneas">
+              {sendPreview.availability.lines.map(line => <li key={line.itemId}>
+                <div><strong>{line.name}</strong>{line.sku ? ` · ${line.sku}` : ""} · {sendAvailabilityLineLabel(line.state)}</div>
+                <div className="admin-cell-sub">Pedido en esta línea: {formatNumber(line.requested)} · Capacidad para el grupo: {line.available === null ? "Por confirmar" : formatNumber(line.available)}{line.groupRequested !== null ? ` · Pedido del grupo: ${formatNumber(line.groupRequested)}` : ""}</div>
+                {line.sharedGroup ? <div className="admin-cell-sub">Comparte inventario: se usa la mayor cantidad del grupo (MAX), no su suma. No sumes la capacidad entre filas.</div> : null}
+                <div className="admin-cell-sub">{line.reason}</div>
+              </li>)}
+            </ul>
+            {sendPreview.availability.warnings.filter(warning => !warning.itemId).map((warning, index) => <p className="admin-dialog-text" key={`${warning.code}-${index}`}><strong>{warning.name}:</strong> {warning.message}</p>)}
             {sendPreview.availability.state !== "available" ? <CheckboxField text={SEND_AVAILABILITY_CONSENT} checked={sendAvailabilityAccepted} disabled={sendBusy || Boolean(sendAttemptId)} onChange={setSendAvailabilityAccepted} /> : null}
           </AdminDialogSection> : null}
           {sendPreview ? (

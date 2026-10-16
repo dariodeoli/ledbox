@@ -42,7 +42,7 @@ Responde: *¿qué eventos tengo y qué le falta a cada uno?*
    cronología, imprimir, WhatsApp, finalizar). El VIEWER no ve acciones de escritura.
 4. Celular (≤ 980 px): tarjetas con la fecha destacada, estado, preparación, lo
    primero que falta y la siguiente acción (44 px de alto táctil).
-5. Detalle: panel lateral (`AdminDialog size="ficha"`, abre también con
+5. Detalle: diálogo centrado amplio (`AdminDialog size="ficha"`, abre también con
    `?evento=<id>`, que es lo que enlaza la etapa «Evento» del presupuesto). Arriba la
    franja **Qué falta** (cada ítem lleva a su pestaña); pestañas Resumen (datos,
    responsable, presupuesto vinculado con `StageTrail` y seña), Checklist, Equipos
