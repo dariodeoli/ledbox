@@ -2247,7 +2247,7 @@ export function PresupuestosModule() {
 
           {resolution.decision === "accept" && resolution.request.kind === "items" ? (
             <AdminDialogSection title="Contra-oferta" stack>
-            <div className="admin-dialog-table" role="table" aria-label="Contra-oferta de ítems">
+            <div className="admin-dialog-table admin-dialog-table--editable" role="table" aria-label="Contra-oferta de ítems">
               <div className="admin-dialog-table-head" role="row">
                 <span role="columnheader">Ítem</span>
                 <span role="columnheader">Actual</span>
@@ -2262,10 +2262,10 @@ export function PresupuestosModule() {
                 return (
                   <div className="admin-dialog-table-row" role="row" key={item.id}>
                     <span role="cell">{item.name}</span>
-                    <span role="cell">
+                    <span role="cell" data-label="Actual">
                       {formatNumber(item.quantity)} × {originalCounterofferDraft(item).days} d
                     </span>
-                    <span role="cell" className="admin-dialog-counter">
+                    <span role="cell" className="admin-dialog-counter" data-label="Propuesto">
                       <CheckboxField checked={Boolean(proposed.excluded)} onChange={(checked) => setCounterItems((rows) => ({ ...rows, [item.id]: counterofferDraftExclusion(item, proposed, checked) }))} text="Retirado / no incluido" />
                       <NumberField strictInteger
                         disabled={Boolean(proposed.excluded)}
@@ -2294,7 +2294,7 @@ export function PresupuestosModule() {
                       />
                       <span aria-hidden="true">d</span>
                     </span>
-                    <span role="cell" className="admin-dialog-num">
+                    <span role="cell" className="admin-dialog-num" data-label="Subtotal">
                       {subtotal === null ? "Completá cantidad y días" : formatMoney(subtotal)}
                     </span>
                   </div>
