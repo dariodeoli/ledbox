@@ -114,7 +114,7 @@ test("links: el host del portal se decide en un solo lugar (public-config)", () 
 test("correo simulado: la ruta de envío y la de recordatorios devuelven la vista previa y el panel la muestra", () => {
   const send = src("app/api/admin/budgets/send/route.ts");
   assert.match(send, /result\.simulated/);
-  assert.match(send, /preview: result\.preview \?\? null/);
+  assert.match(send, /preview: attempt\.preview \?\? null/);
   const reminders = src("app/api/admin/reminders/route.ts");
   assert.match(reminders, /outcome\.simulated/);
   assert.match(reminders, /!emailConfigured\(\) && !auth\.context\.sandbox/, "en la demo falte o no el proveedor, el recordatorio se simula");
