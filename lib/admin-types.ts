@@ -2461,6 +2461,8 @@ export type AdminCalendarItemKind =
   | "task";
 
 export type AdminCalendarItem = {
+  /** Live commercial identity only; no private contact fields or historical snapshots. */
+  client?: Pick<AdminClientRef, "id" | "name" | "company" | "tradeName" | "legalName" | "contactName" | "type" | "logoUpdatedAt">;
   id: string;
   kind: AdminCalendarItemKind;
   /** Día de Asunción del hecho (`YYYY-MM-DD`); es la clave con la que agrupa la vista. */

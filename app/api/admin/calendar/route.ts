@@ -1,10 +1,11 @@
+import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
+import { clientPresentation, type ClientPresentationInput } from "@/lib/client-identity";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
 import {
   DAY_MS,
   calendarAlerts,
-  clientLabel,
   dayKeyOf,
   dayStart,
   isValidDayKey,
@@ -75,7 +76,7 @@ type CalendarEvent = {
   endsAt: Date | null;
   strikeAt: Date | null;
   status: string;
-  client: { name: string; company: string | null };
+  client: ClientPresentationInput & { id: string; type: string; company: string | null; logo?: { updatedAt: Date } | null };
 };
 
 function eventItem(
@@ -95,7 +96,8 @@ function eventItem(
     endAt: duration && event.endsAt ? event.endsAt.toISOString() : null,
     endDate: duration && event.endsAt ? dayKeyOf(event.endsAt) : null,
     title: event.name,
-    subtitle: joinParts([event.client.company || event.client.name, placeLabel(event.location, event.city)]),
+    subtitle: placeLabel(event.location, event.city),
+    client: clientIdentityDTO(event.client),
     href: "/eventos",
     tone: kind === "strike" ? "warn" : kind === "event" ? "accent" : "info",
     tag: event.status,
@@ -153,7 +155,7 @@ export async function GET(request: Request) {
         endsAt: true,
         strikeAt: true,
         status: true,
-        client: { select: { name: true, company: true } },
+        client: { select: CLIENT_IDENTITY_SELECT },
       },
     }),
     db.eventTask.findMany({
@@ -171,7 +173,7 @@ export async function GET(request: Request) {
       orderBy: { paidAt: "asc" },
       take: 300,
       include: {
-        client: { select: { name: true, company: true } },
+        client: { select: CLIENT_IDENTITY_SELECT },
         budget: { select: { title: true } },
       },
     }),
@@ -180,7 +182,7 @@ export async function GET(request: Request) {
       orderBy: { dueAt: "asc" },
       take: 300,
       include: {
-        client: { select: { name: true, company: true } },
+        client: { select: CLIENT_IDENTITY_SELECT },
         budget: { select: { title: true } },
       },
     }),
@@ -232,7 +234,7 @@ export async function GET(request: Request) {
         returnedQuantity: true,
         missingQuantity: true,
         inventory: { select: { bufferBeforeMin: true, bufferAfterMin: true } },
-        event: { select: { id: true, name: true, location: true, city: true, setupAt: true, startsAt: true, endsAt: true, strikeAt: true, status: true, client: { select: { name: true, company: true } } } },
+        event: { select: { id: true, name: true, location: true, city: true, setupAt: true, startsAt: true, endsAt: true, strikeAt: true, status: true, client: { select: CLIENT_IDENTITY_SELECT } } },
       },
     }),
     loadRentalSettings(organizationId),
@@ -267,7 +269,8 @@ export async function GET(request: Request) {
       at: payment.paidAt.toISOString(),
       endAt: null,
       endDate: null,
-      title: clientLabel(payment.client),
+      title: clientPresentation(payment.client).primary,
+      client: clientIdentityDTO(payment.client),
       subtitle: joinParts([payment.budget?.title, payment.method]),
       href: "/finanzas",
       tone: "ok",
@@ -287,7 +290,8 @@ export async function GET(request: Request) {
       at: payment.dueAt.toISOString(),
       endAt: null,
       endDate: null,
-      title: clientLabel(payment.client),
+      title: clientPresentation(payment.client).primary,
+      client: clientIdentityDTO(payment.client),
       subtitle: joinParts([
         payment.budget?.title,
         payment.method,
@@ -405,9 +409,9 @@ export async function GET(request: Request) {
       endAt: null,
       endDate: null,
       title: group.event.name,
+      client: clientIdentityDTO(group.event.client),
       subtitle: joinParts([
         `${group.lines} ítem${group.lines === 1 ? "" : "s"} · ${group.units} u.`,
-        group.event.client.company || group.event.client.name,
       ]),
       href: "/eventos",
       tone: late ? "danger" : group.state === "DONE" ? "ok" : group.state === "PARTIAL" ? "warn" : "info",
