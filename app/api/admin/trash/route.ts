@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * con tipo, nombre, quién y cuándo lo eliminó, motivo y bloqueos del borrado definitivo.
  * Si la empresa configuró el vaciado automático (`trashPurgeDays`), antes de listar borra de forma
  * definitiva lo vencido que no tiene bloqueos (hasta 50 por apertura, en menos de 3 s y como máximo un barrido cada 10 min por empresa); lo contable queda «Conservado».
- * Lista las 7 entidades: Evento, Producto, Cliente, Oportunidad, Proveedor, Promotora y Presupuesto.
+ * Lista las entidades: Evento, Producto, Familia, Cliente, Oportunidad, Proveedor, Promotora y Presupuesto.
  */
 export async function GET() {
   const auth = await requireAdminContext("trash.manage");

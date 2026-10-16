@@ -58,6 +58,8 @@ export type BudgetMailInput = {
   budget: BudgetMailBudget;
   /** Mensaje corto escrito por el equipo en el diálogo de envío (opcional). */
   message?: string | null;
+  /** Aviso operativo derivado por el servidor; no cambia aprobación ni reservas. */
+  availabilityNotice?: string;
   /** Empresa sandbox de la demo: el link del portal usa el host de la demo (en `clientes.` daría 404). */
   sandbox?: boolean;
 };
@@ -152,6 +154,7 @@ export function buildBudgetMail(input: BudgetMailInput): BudgetMailContent | nul
       : `Presupuesto · ${budget.title}`,
     intro: [
       `Hola ${clientLabel(budget.client)},`,
+      ...(input.availabilityNotice ? [input.availabilityNotice] : []),
       `Compartimos el presupuesto «${budget.title}» de ${input.organizationName} para que puedas revisarlo y decidir con toda la información a mano.`,
       ...(message ? [message] : []),
     ],

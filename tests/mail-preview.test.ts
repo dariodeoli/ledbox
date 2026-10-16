@@ -20,7 +20,7 @@ const unsafe = '<script>alert("x")</script> & Ana';
  * (DB, session, transport, audit) are doubles. No PG/client generation/provider. */
 function fixture(secret: string | undefined = "offline-preview-secret-not-a-real-credential") {
   const state = { organizationId: "tenant", actorId: "actor", denied: false, from: "EventOS <offline@example.invalid>",
-    queries: 0, sent: [] as Record<string, any>[], audits: [] as Record<string, any>[], outcome: "sent" };
+    availabilityCalls: 0, throwAvailability: false, availabilityState: "available", availabilityRevision: "revision-1", queries: 0, sent: [] as Record<string, any>[], audits: [] as Record<string, any>[], outcome: "sent" };
   const budget = { id: "budget", organizationId: "tenant", title: unsafe, publicToken: "ABCD-EFGH-JKLM-NPQR-STUV", status: "SENT",
     updatedAt: new Date("2026-10-10T12:00:00Z"), archivedAt: null, deletedAt: null,
     subtotal: 100000, discount: 0, total: 100000, advanceAmount: 0, paymentTerms: null, installmentsJson: [],
@@ -65,6 +65,14 @@ function fixture(secret: string | undefined = "offline-preview-secret-not-a-real
   };
   const modules: Record<string, unknown> = {
     "lib/server/db.ts": { db: database },
+    "lib/server/budget-send-availability.ts": {
+      SendAvailabilityChangedError: class extends Error {},
+      checkBudgetSendAvailability: async () => {
+        state.availabilityCalls++;
+        if (state.throwAvailability) throw new Error("Offline calculation failure");
+        return { review: { state: state.availabilityState, revision: state.availabilityRevision, checkedAt: new Date().toISOString(), range: null, checkedLines: 1, unlinkedLines: 0, warnings: [] }, fingerprint: `${state.availabilityState}-${state.availabilityRevision}` };
+      },
+    },
     "lib/server/tenancy.ts": { requireAdminContext: async (capability: string) => {
       assert.equal(capability, "budgets.write");
       return state.denied ? { ok: false, response: Response.json({ error: "Forbidden" }, { status: 403 }) }
@@ -232,8 +240,41 @@ test("real adopted preview component isolates HTML and escapes envelope/plain te
   assert.ok(html.includes("Alternativa en texto plano")); assert.ok(!html.includes("opaque"));
   const source = readFileSync(join(root, "components/admin/modules/PresupuestosModule.tsx"), "utf8");
   assert.match(source, /<AdminMailPreview preview=\{sendPreview\}/);
-  assert.match(source, /sendPreview \? \{ confirm: true, confirmationToken: sendPreview\.confirmationToken \} : \{ preview: true \}/);
+  assert.match(source, /sendPreview \? \{ confirm: true, confirmationToken: sendPreview\.confirmationToken, acceptAvailabilityWarnings: sendAvailabilityAccepted \} : \{ preview: true \}/);
   assert.match(source, /mailInFlight\.current = true/);
   assert.match(source, /setSendTo\(value\);\s*setSendPreview\(null\)/);
   assert.match(source, /setSendMessage\(value\);\s*setSendPreview\(null\)/);
+});
+
+
+test("availability errors block sends; new warnings/revisions invalidate consent and replay skips calculation", async () => {
+  const f = fixture();
+  f.state.availabilityState = "error";
+  const failedReview = await f.request({ preview: true });
+  assert.equal(failedReview.response.status, 503);
+  assert.match(failedReview.data.error, /Esta comprobación no intentó enviar el correo/);
+  assert.doesNotMatch(failedReview.data.error, /no se envió ningún correo/);
+  f.state.throwAvailability = true;
+  const thrownReview = await f.request({ preview: true });
+  assert.equal(thrownReview.response.status, 503);
+  assert.equal(thrownReview.data.error, failedReview.data.error, "ambas ramas conservan el mensaje acotado a esta comprobación");
+  f.state.throwAvailability = false;
+  assert.equal(f.state.sent.length, 0);
+  f.state.availabilityState = "available";
+  const { data: initial } = await f.request({ preview: true });
+  f.state.availabilityState = "shortage";
+  assert.equal((await f.request({ confirm: true, confirmationToken: initial.confirmationToken, acceptAvailabilityWarnings: true })).response.status, 409);
+  const { data: warned } = await f.request({ preview: true });
+  assert.equal(warned.availability.state, "shortage"); assert.match(warned.text, /disponibilidad por confirmar/);
+  assert.equal((await f.request({ confirm: true, confirmationToken: warned.confirmationToken })).response.status, 409);
+  f.state.availabilityRevision = "revision-2";
+  assert.equal((await f.request({ confirm: true, confirmationToken: warned.confirmationToken, acceptAvailabilityWarnings: true })).response.status, 409);
+  const { data: fresh } = await f.request({ preview: true });
+  const confirmed = await f.request({ confirm: true, confirmationToken: fresh.confirmationToken, acceptAvailabilityWarnings: true });
+  assert.equal(confirmed.response.status, 200); assert.equal(f.state.sent.length, 1);
+  const calls = f.state.availabilityCalls;
+  f.state.availabilityState = "error";
+  assert.equal((await f.request({ confirm: true, confirmationToken: fresh.confirmationToken })).response.status, 200);
+  assert.equal((await f.request({ receiptOnly: true, attemptId: fresh.attemptId })).response.status, 200);
+  assert.equal(f.state.availabilityCalls, calls); assert.equal(f.state.sent.length, 1);
 });

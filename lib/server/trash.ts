@@ -1,3 +1,4 @@
+import { familyCodeTaken, skuEqualsCode, trashFamily } from "./inventory-families";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AuditEntity } from "@/lib/admin-types";
 import { db, dbWithDeleted } from "./db";
@@ -54,6 +55,7 @@ type Delegate = {
 const DELEGATES: Record<TrashModel, string> = {
   Event: "event",
   InventoryItem: "inventoryItem",
+  InventoryFamily: "inventoryFamily",
   Client: "client",
   Lead: "lead",
   Supplier: "supplier",
@@ -64,6 +66,7 @@ const DELEGATES: Record<TrashModel, string> = {
 const LABELS: Record<TrashModel, string> = {
   Event: "El evento",
   InventoryItem: "El ítem de inventario",
+  InventoryFamily: "La familia de variantes",
   Client: "El cliente",
   Lead: "La oportunidad",
   Supplier: "El proveedor",
@@ -86,6 +89,10 @@ export async function assertLive(model: TrashModel, id: string, organizationId: 
 }
 
 async function existsIncludingDeleted(model: TrashModel, id: string, organizationId: string, client: Tx | PrismaClient) {
+  if (model === "InventoryFamily") {
+    const row = await client.inventoryFamily.findFirst({ where: { id, organizationId, ...anyState }, select: { id: true, archivedAt: true, deletedAt: true } });
+    return row ? { ...row, anonymizedAt: null } : null;
+  }
   return delegate(client, model).findFirst({ where: { id, organizationId, ...anyState }, select: { id: true, archivedAt: true, deletedAt: true, anonymizedAt: true } });
 }
 
@@ -113,7 +120,7 @@ export async function archive(model: TrashModel, id: string, context: AuditConte
     const now = new Date();
     const result = await delegate(tx, model).updateMany({
       where: { id, organizationId: context.organizationId, deletedAt: null, archivedAt: null },
-      data: { archivedAt: now, archivedById: context.user.id },
+      data: { archivedAt: now, ...(model === "InventoryFamily" ? {} : { archivedById: context.user.id }) },
     });
     if (result.count === 0) {
       const row = await existsIncludingDeleted(model, id, context.organizationId, tx);
@@ -129,7 +136,7 @@ export async function unarchive(model: TrashModel, id: string, context: AuditCon
   await run(options, async (tx) => {
     const result = await delegate(tx, model).updateMany({
       where: { id, organizationId: context.organizationId, deletedAt: null, archivedAt: { not: null } },
-      data: { archivedAt: null, archivedById: null },
+      data: { archivedAt: null, ...(model === "InventoryFamily" ? {} : { archivedById: null }) },
     });
     if (result.count === 0) {
       const row = await existsIncludingDeleted(model, id, context.organizationId, tx);
@@ -154,6 +161,12 @@ export async function trash(
 ): Promise<void> {
   await run(options, async (tx) => {
     await options?.guard?.(tx);
+    if (model === "InventoryFamily") {
+      const result = await trashFamily(tx, context.organizationId, id, context.user.id, reason);
+      if (!result.ok) throw new TrashError(result.error, result.status as 400 | 404 | 409);
+      await recordAudit({ context, action: "trash", entity: model, entityId: id, summary: auditSummary("Eliminó", model, id, result.name), detail: { fields: { desvinculados: result.unlinked } } }, tx);
+      return;
+    }
     const result = await delegate(tx, model).updateMany({
       where: { id, organizationId: context.organizationId, archivedAt: { not: null }, deletedAt: null },
       data: { deletedAt: new Date(), deletedById: context.user.id, deleteReason: reason?.trim().slice(0, 200) || null },
@@ -166,6 +179,10 @@ export async function trash(
 /** Restaurar desde la papelera: limpia lo eliminado y deja la fila ARCHIVADA. Lo anonimizado no se restaura. */
 export async function restore(model: TrashModel, id: string, context: AuditContext, options?: TrashActionOptions): Promise<void> {
   await run(options, async (tx) => {
+    if (model === "InventoryFamily") {
+      await restoreInventoryFamily(tx, id, context, options?.label);
+      return;
+    }
     const result = await delegate(tx, model).updateMany({
       where: { id, organizationId: context.organizationId, deletedAt: { not: null }, anonymizedAt: null },
       data: { deletedAt: null, deletedById: null, deleteReason: null },
@@ -179,12 +196,31 @@ export async function restore(model: TrashModel, id: string, context: AuditConte
   });
 }
 
+/** La familia no reagrupa productos al restaurar; el código pudo reutilizarse. */
+async function restoreInventoryFamily(tx: Tx, id: string, context: AuditContext, label?: string) {
+  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "InventoryFamily" WHERE "id" = ${id} AND "organizationId" = ${context.organizationId} FOR UPDATE`;
+  if (!rows.length) throw new TrashError("La familia no existe.", 404);
+  const row = await tx.inventoryFamily.findFirst({ where: { id, organizationId: context.organizationId, deletedAt: { not: null } } });
+  if (!row) throw new TrashError("La familia no está en la papelera.", 409);
+  if (await familyCodeTaken(tx, context.organizationId, row.code, id) || await skuEqualsCode(tx, context.organizationId, row.code)) {
+    throw new TrashError(`El código «${row.code}» ya lo usa otra familia o producto. Cambiá ese código antes de restaurar esta familia.`, 409);
+  }
+  try {
+    await tx.inventoryFamily.update({ where: { id }, data: { deletedAt: null, deletedById: null, deleteReason: null, archivedAt: row.archivedAt ?? new Date() } });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2002") throw new TrashError("El código de la familia acaba de reutilizarse. Elegí otro código antes de restaurarla.", 409);
+    throw error;
+  }
+  await recordAudit({ context, action: "restore", entity: "InventoryFamily", entityId: id, summary: auditSummary("Restauró de la papelera", "InventoryFamily", id, label ?? row.name) }, tx);
+}
+
 // ── Bloqueos del borrado definitivo ──────────────────────────────────────────
 
 /** Tabla de cada entidad para el `SELECT … FOR UPDATE` (nombres de modelo, sin @@map). */
 const TABLES = {
   Event: '"Event"',
   InventoryItem: '"InventoryItem"',
+  InventoryFamily: '"InventoryFamily"',
   Client: '"Client"',
   Lead: '"Lead"',
   Supplier: '"Supplier"',
@@ -232,6 +268,10 @@ export async function blockersFor(model: TrashModel, id: string, organizationId:
         ),
         { invoices: "invoices", expenses: "expenses", supplierJobs: "supplierJobs", incidents: "incidents" },
       ).concat(await paymentsViaBudget(id, tx));
+    case "InventoryFamily": {
+      const count = await tx.inventoryItem.count({ where: { organizationId, familyId: id, ...anyState } });
+      return count ? [{ kind: "familyVariants", count }] : [];
+    }
     case "InventoryItem":
       return pick(
         await count(tx.inventoryItem.findFirst({ where, select: { _count: { select: { assignments: true, incidents: true, usedInCombos: true } } } }) as never),
@@ -359,6 +399,7 @@ const ANON_NAME: Partial<Record<TrashModel, string>> = {
  * No se puede deshacer; la ruta exige `trash.manage`, nombre exacto y motivo.
  */
 export async function anonymize(model: TrashModel, id: string, context: AuditContext, options?: TrashActionOptions): Promise<void> {
+  if (model === "InventoryFamily") throw new TrashError("Una familia de variantes no se anonimiza: restaurala o desvinculá sus variantes para borrarla definitivamente.", 409);
   if (model === "Budget") throw new TrashError("Un presupuesto no se anonimiza: su documento y snapshot se conservan o se borra el borrador sin historial.", 409);
   if (model === "InventoryItem") throw new TrashError(`Anonimizar ${LABELS[model].toLowerCase()} todavía no está disponible.`, 501);
   await run(options, async (tx) => {

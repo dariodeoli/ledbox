@@ -54,6 +54,7 @@ export const TRASH_ENTITIES = {
   Supplier: { label: "proveedor", typeLabel: "Proveedor", icon: "suppliers", apiBase: "/api/admin/suppliers", anonymizable: true, demonstrative: "este proveedor" },
   Promoter: { label: "promotora", typeLabel: "Promotora", icon: "promoters", apiBase: "/api/admin/promoters", anonymizable: true, demonstrative: "esta promotora" },
   Budget: { label: "presupuesto", typeLabel: "Presupuesto", icon: "budgets", apiBase: "/api/admin/budgets", anonymizable: false, demonstrative: "este presupuesto" },
+  InventoryFamily: { label: "familia de variantes", typeLabel: "Familia", icon: "inventory", apiBase: "/api/admin/inventory/families", anonymizable: false, demonstrative: "esta familia" },
   InventoryItem: { label: "producto", typeLabel: "Producto", icon: "inventory", apiBase: "/api/admin/inventory", anonymizable: false, demonstrative: "este producto" },
 } as const satisfies Record<string, TrashEntityConfig>;
 
@@ -114,6 +115,7 @@ const BLOCKER_TEXT: Record<string, (count: number) => string> = {
   assignments: (n) => (n === 1 ? "Tiene 1 reserva sin devolver" : `Tiene ${n} reservas sin devolver`),
   incidents: (n) => (n === 1 ? "Tiene 1 incidente abierto" : `Tiene ${n} incidentes abiertos`),
   usedInCombos: (n) => (n === 1 ? "Es componente de 1 combo" : `Es componente de ${n} combos`),
+  familyVariants: (n) => `Conserva ${plural(n, "variante vinculada", "variantes vinculadas")}; desvinculalas antes de borrar la familia`,
   budgetItems: (n) => (n === 1 ? "Está en 1 ítem de presupuesto" : `Está en ${n} ítems de presupuesto`),
   payments: (n) => `Tiene ${plural(n, "cobro", "cobros")}`,
   paymentProofs: (n) => `Tiene ${plural(n, "comprobante", "comprobantes")}`,

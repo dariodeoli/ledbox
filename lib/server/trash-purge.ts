@@ -2,7 +2,7 @@ import type { AuditContext } from "./audit";
 import { dbWithDeleted } from "./db";
 import { TrashError, type TrashModel } from "./trash";
 import { CRM_MODELS, purgeCrm, type CrmModel } from "./trash-crm";
-import { purgeEvent, purgeInventoryItem } from "./trash-ops";
+import { purgeEvent, purgeInventoryItem, purgeInventoryFamily } from "./trash-ops";
 import { trashPurgeCutoff } from "../trash-shared";
 
 /**
@@ -41,6 +41,11 @@ function named(type: TrashModel, find: (args: object) => Promise<{ id: string; n
 
 const PAGERS: Page[] = [
   named("Event", (a) => dbWithDeleted.event.findMany(a as never) as never),
+  named("InventoryFamily", (a) => {
+    const args = a as { where: Record<string, unknown> };
+    const { anonymizedAt: _unsupported, ...where } = args.where;
+    return dbWithDeleted.inventoryFamily.findMany({ ...a, where } as never) as never;
+  }),
   named("InventoryItem", (a) => dbWithDeleted.inventoryItem.findMany(a as never) as never),
   named("Client", (a) => dbWithDeleted.client.findMany(a as never) as never),
   named("Lead", (a) => dbWithDeleted.lead.findMany(a as never) as never),
@@ -65,12 +70,13 @@ function nextPage(pager: Page, organizationId: string, cutoff: Date, cursor: Cur
 async function purgeOne(candidate: Candidate, days: number, context: AuditContext): Promise<void> {
   const input = { confirmName: candidate.name, reason: autoPurgeReason(days) };
   if (candidate.type === "Event") return purgeEvent(candidate.id, input, context);
+  if (candidate.type === "InventoryFamily") return purgeInventoryFamily(candidate.id, input, context);
   if (candidate.type === "InventoryItem") return purgeInventoryItem(candidate.id, input, context);
   if (CRM_MODELS.includes(candidate.type as CrmModel)) return purgeCrm(candidate.type as CrmModel, candidate.id, input, context);
   throw new TrashError("Tipo desconocido.", 404);
 }
 
-/** Barrido acotado: reparte entre los 7 tipos (round-robin con cursor) y corta por borrados o por tiempo. */
+/** Barrido acotado: reparte entre los tipos (round-robin con cursor) y corta por borrados o por tiempo. */
 async function sweep(organizationId: string, days: number, now: Date): Promise<PurgeSweepResult> {
   const result: PurgeSweepResult = { skipped: false, purged: 0, retained: 0, failed: 0 };
   const context: AuditContext = { organizationId, user: SYSTEM_PURGE_USER };

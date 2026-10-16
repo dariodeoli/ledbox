@@ -1,3 +1,4 @@
+import { checkBudgetSendAvailability, SendAvailabilityChangedError } from "@/lib/server/budget-send-availability";
 import { emailValid, normalizeEmail } from "@/lib/field-rules";
 import { stableOrderBudgetItems } from "@/lib/budget-item-order";
 import { missingPriceMessage, missingPriceNames } from "@/lib/budget-price-gate";
@@ -89,6 +90,15 @@ export async function POST(request: Request) {
     return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
   }
 
+  let availability: Awaited<ReturnType<typeof checkBudgetSendAvailability>>;
+  try {
+    availability = await checkBudgetSendAvailability({ organizationId, budgetId, expectedUpdatedAt: budget.updatedAt, context: auth.context });
+  } catch (error) {
+    if (error instanceof SendAvailabilityChangedError) return jsonError(error.message, 409, "availability_preview_required");
+    return jsonError("No pudimos comprobar la disponibilidad. Esta comprobación no intentó enviar el correo; consultá el resultado del intento antes de preparar otro.", 503, "availability_preview_required");
+  }
+  if (availability.review.state === "error") return jsonError("No pudimos comprobar la disponibilidad. Esta comprobación no intentó enviar el correo; consultá el resultado del intento antes de preparar otro.", 503, "availability_preview_required");
+
   const identity = await mailIdentityFor(organizationId);
   const content = buildBudgetMail({
     organizationName: budget.organization.name,
@@ -96,26 +106,32 @@ export async function POST(request: Request) {
     paymentDetails: budget.organization.paymentDetails,
     budget: { ...budget, items: stableOrderBudgetItems(budget.items) },
     message,
+    availabilityNotice: availability.review.state === "available"
+      ? "Disponibilidad indicativa comprobada en este momento. Este envío no aprueba ni reserva inventario."
+      : "Propuesta con disponibilidad por confirmar. Este envío no aprueba ni reserva inventario.",
     sandbox: auth.context.sandbox,
   });
   if (!content) return jsonError("Este presupuesto todavía no tiene link del portal: generá el link antes de enviarlo.", 409);
 
   const sendable = { from: identity.from, to, subject: content.subject, html: content.html, text: content.text };
-  const scope = { organizationId, actorId: auth.context.user.id, entity: "Budget", entityId: budget.id };
+  const scope = { organizationId, actorId: auth.context.user.id, entity: "Budget", entityId: budget.id, reviewFingerprint: availability.fingerprint };
   try {
     if (preview) {
       // Read-only: no send, MailLog, audit, portal token generation or budget mutation.
       const result = await createMailPreview(sendable, scope);
-      return Response.json({ ...result, attemptId: budgetMailAttemptId(result.confirmationToken) }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ ...result, availability: availability.review, attemptId: budgetMailAttemptId(result.confirmationToken) }, { headers: { "Cache-Control": "no-store" } });
     }
     if (!await verifyMailPreviewConfirmation(body.confirmationToken as string, sendable, scope)) {
-      return jsonError("La vista previa venció o cambió el correo. Previsualizá nuevamente antes de enviarlo.", 409);
+      return jsonError("La vista previa venció o cambió el correo, el presupuesto o su disponibilidad. Previsualizá nuevamente antes de enviarlo.", 409, "availability_preview_required");
     }
   } catch (error) {
     if (error instanceof MailPreviewUnavailableError) return jsonError(error.message, 503);
     throw error;
   }
 
+  if (availability.review.state !== "available" && body.acceptAvailabilityWarnings !== true) {
+    return jsonError("Confirmá explícitamente que se envía como propuesta con disponibilidad por confirmar.", 409, "availability_consent_required");
+  }
   const clientLabel = clientDisplayName(budget.client);
   let attempt: Awaited<ReturnType<typeof sendBudgetMailAttempt>>;
   try {
@@ -160,6 +176,9 @@ export async function POST(request: Request) {
         attemptId: result.attemptId,
         commercialState: result.commercialState,
         portalCode: content.code,
+        availabilityState: availability.review.state,
+        availabilityRevision: availability.review.revision,
+        availabilityConditioned: availability.review.state !== "available",
         ...(result.error ? { error: result.error } : {}),
       },
     },

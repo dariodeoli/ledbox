@@ -11,7 +11,7 @@ const globalForPrisma = globalThis as unknown as Globals;
 export const dbWithDeleted: PrismaClient = globalForPrisma.prismaBase ?? new PrismaClient();
 
 /**
- * Cliente del producto. Extiende al base para que las lecturas de Event, InventoryItem,
+ * Cliente del producto. Extiende al base para que las lecturas de Event, InventoryItem, InventoryFamily,
  * Client, Lead, Supplier, Promoter y Budget agreguen `deletedAt: null` (docs/PAPELERA.md)
  * salvo que el `where` ya mencione `deletedAt`. `$transaction` del cliente extendido
  * entrega un cliente de transacción también extendido. Los `include`/`select` anidados y

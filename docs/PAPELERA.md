@@ -52,3 +52,9 @@ Menú «•••» (AdminActionsMenu) con Archivar/Restaurar/Eliminar en filas 
 
 ## Vuelta atrás
 Columnas aditivas y nulas: quitar la extensión y la UI vuelve a mostrar todo sin pérdida. Irreversible solo el definitivo y la anonimización (OWNER/ADMIN, nombre, motivo, auditado; respaldo diario de 30 días).
+
+## Familias de variantes (#205)
+
+InventoryFamily forma parte de Eliminados y del filtro vivo compartido. Su modelo no necesita anonymizedAt ni archivedById: no admite anonimización. La eliminación existente desvincula variantes, preservando nombre, stock, precios y unidades. Restaurar conserva archivedAt (o la archiva si una eliminación histórica no lo tenía), limpia la marca de eliminación y **no vuelve a vincular variantes ni portada**. Si el código ya pertenece a otra familia o SKU vivo, responde409 sin renombrar ni sobrescribir. Se cambia ese código antes de recuperar la familia.
+
+Restaurar y borrar definitivamente exigen trash.manage (OWNER/ADMIN), empresa activa y fila bloqueada. El definitivo requiere nombre exacto y motivo; conserva la familia si aún tiene variantes, incluidas las eliminadas. No las desvincula por cascada. El vaciado automático usa la misma guardia. Familias eliminadas históricamente aparecen con autor y motivo cuando fueron registrados.

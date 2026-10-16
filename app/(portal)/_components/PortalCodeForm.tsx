@@ -14,9 +14,9 @@ const DEMO_UNAVAILABLE = "El presupuesto de ejemplo no está disponible en este 
  * el link completo y el portal lo lleva al presupuesto. La normalización es la
  * misma que usa el API, así que un código válido siempre resuelve.
  *
- * Suma la entrada al ejemplo (issue #29): «Ver un ejemplo» y el envío vacío
- * abren el presupuesto demo con datos simulados (`GET /api/portal/demo`, que
- * responde JSON `{ code, path }`); sin código no hay error, se va al ejemplo.
+ * La entrada explícita «Ver un ejemplo» abre el presupuesto demo con datos
+ * simulados (`GET /api/portal/demo`, JSON `{ code, path }`). El envío del
+ * formulario requiere un código; nunca elige la demo por el visitante.
  * `demoUnavailable` avisa cuando el endpoint volvió a la portada sin demo.
  */
 export function PortalCodeForm({ demoUnavailable = false }: { demoUnavailable?: boolean }) {
@@ -49,10 +49,10 @@ export function PortalCodeForm({ demoUnavailable = false }: { demoUnavailable?: 
     event.preventDefault();
     const code = normalizeBudgetCode(value);
     if (!code) {
-      // Sin código no hay error: el visitante entra al ejemplo (issue #29).
-      // Con un código con forma inválida se sigue pidiendo revisarlo.
-      if (!value.trim()) void openDemo();
-      else setError("Revisá el código: son 20 caracteres en grupos de 4, como ABCD-EFGH-JKMN-PQRS-TUVW.");
+      setDemoError("");
+      setError(!value.trim()
+        ? "Ingresá el código de tu presupuesto. Para probar el portal, elegí Ver un ejemplo."
+        : "Revisá el código: son 20 caracteres en grupos de 4, como ABCD-EFGH-JKMN-PQRS-TUVW.");
       return;
     }
     setError("");
@@ -67,6 +67,7 @@ export function PortalCodeForm({ demoUnavailable = false }: { demoUnavailable?: 
         <SharedInput
           id="portal-code"
           name="code"
+          required
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="ABCD-EFGH-JKMN-PQRS-TUVW"

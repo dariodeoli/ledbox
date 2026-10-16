@@ -119,7 +119,7 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-test("todas las rutas que mutan familias exigen inventory.write y las lecturas no piden capacidad especial", () => {
+test("rutas de familias exigen inventory.write; recuperación y purga exigen trash.manage", () => {
   const routes = sourceFiles("app/api/admin/inventory/families");
   assert.ok(routes.length >= 4, "rutas de familias");
   for (const file of routes) {
@@ -127,7 +127,10 @@ test("todas las rutas que mutan familias exigen inventory.write y las lecturas n
     for (const match of source.matchAll(/export async function (GET|POST|PATCH|DELETE)\(/g)) {
       const body = source.slice(match.index!, source.indexOf("\n}\n", match.index!));
       if (match[1] === "GET") assert.match(body, /requireAdminContext\(\)/, `${file} GET`);
-      else assert.match(body, /requireAdminContext\("inventory\.write"\)/, `${file} ${match[1]}`);
+      else if (file === "app/api/admin/inventory/families/[id]/[action]/route.ts") {
+        assert.equal(match[1], "POST");
+        assert.match(body, /requireAdminContext\("trash\.manage"\)/, `${file} recuperación restringida a OWNER/ADMIN`);
+      } else assert.match(body, /requireAdminContext\("inventory\.write"\)/, `${file} ${match[1]}`);
     }
   }
 });

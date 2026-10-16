@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { MailPreview } from "@/lib/mail-preview";
 
-type PreviewScope = { organizationId: string; actorId: string; entity: string; entityId: string };
+type PreviewScope = { organizationId: string; actorId: string; entity: string; entityId: string; reviewFingerprint?: string };
 type PreviewContent = Pick<MailPreview, "from" | "to" | "subject" | "html" | "text">;
 const ISSUER = "ledbox:mail-preview";
 const AUDIENCE = "ledbox:mail-confirmation";
@@ -46,6 +46,6 @@ export async function verifyMailPreviewConfirmation(
     });
     return payload.organizationId === scope.organizationId && payload.actorId === scope.actorId
       && payload.entity === scope.entity && payload.entityId === scope.entityId
-      && payload.fingerprint === fingerprint(content);
+      && payload.fingerprint === fingerprint(content) && payload.reviewFingerprint === scope.reviewFingerprint;
   } catch { return false; }
 }

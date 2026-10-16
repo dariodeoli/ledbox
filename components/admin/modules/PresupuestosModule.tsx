@@ -1,4 +1,6 @@
 "use client";
+
+import { SEND_AVAILABILITY_NOTICE, SEND_AVAILABILITY_CONSENT, sendAvailabilityLabel } from "@/lib/budget-send-availability";
 import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { budgetMailNotice, type BudgetMailReply } from "@/lib/budget-mail-receipt";
@@ -231,7 +233,7 @@ function portalSummary(budget: AdminBudgetRow): string {
   return `Pendiente de aprobación · ${link}`;
 }
 
-/** Qué pide una solicitud del portal, en una línea, con el antes → después. */
+/** Contrasta el presupuesto actual con lo pedido; no reconstruye el original histórico. */
 function requestDelta(request: AdminBudgetRequestRow): string {
   if (request.kind === "items") {
     const items = request.payload.items ?? [];
@@ -240,8 +242,8 @@ function requestDelta(request: AdminBudgetRequestRow): string {
       .map((row) => {
         const current = request.budget.items.find((item) => item.id === row.id);
         const name = current?.name ?? "Ítem";
-        const from = current ? `${formatNumber(current.quantity)} × ${formatNumber(current.days)} d` : "—";
-        return `${name}: ${from} → ${row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}`;
+        const from = current ? `${formatNumber(current.quantity)} × ${formatNumber(Number(originalCounterofferDraft(current).days))} d` : "—";
+        return `${name}: actual ${from} · cliente pidió ${row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}`;
       })
       .join(" · ");
   }
@@ -254,18 +256,18 @@ function requestDelta(request: AdminBudgetRequestRow): string {
 }
 
 /**
- * Comparación original vs propuesta del cliente (issue #143): lo que el
- * presupuesto tiene hoy al lado de lo que pidió el portal, ítem por ítem o en
- * el descuento. La usan la tarjeta de la solicitud y el diálogo de conversación.
+ * Presupuesto actual vs pedido del cliente (issue #143). No hay un snapshot
+ * del presupuesto original en la solicitud: una resolución o edición posterior
+ * puede cambiarlo. La etiqueta no debe presentar el dato vivo como histórico.
  */
 function RequestComparison({ request }: { request: AdminBudgetRequestRow }) {
   if (request.kind === "items") {
     const items = request.payload.items ?? [];
     return (
-      <div className="admin-dialog-table admin-dialog-table--compare" role="table" aria-label="Comparación: original vs propuesta del cliente">
+      <div className="admin-dialog-table admin-dialog-table--compare" role="table" aria-label="Comparación: presupuesto actual y propuesta del cliente">
         <div className="admin-dialog-table-head" role="row">
           <span role="columnheader">Ítem</span>
-          <span role="columnheader">Original</span>
+          <span role="columnheader">Presupuesto actual</span>
           <span role="columnheader">Propuesta del cliente</span>
         </div>
         {items.length === 0 ? (
@@ -280,7 +282,7 @@ function RequestComparison({ request }: { request: AdminBudgetRequestRow }) {
             return (
               <div className="admin-dialog-table-row" role="row" key={row.id}>
                 <span role="cell">{current?.name ?? "Ítem"}</span>
-                <span role="cell">{current ? `${formatNumber(current.quantity)} × ${formatNumber(current.days)} d` : "—"}</span>
+                <span role="cell">{current ? `${formatNumber(current.quantity)} × ${formatNumber(Number(originalCounterofferDraft(current).days))} d` : "—"}</span>
                 <span role="cell">
                   <strong>
                     {row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}
@@ -756,6 +758,7 @@ export function PresupuestosModule() {
   const [sendMessage, setSendMessage] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendPreview, setSendPreview] = useState<MailPreview | null>(null);
+  const [sendAvailabilityAccepted, setSendAvailabilityAccepted] = useState(false);
   const [sendAttemptId, setSendAttemptId] = useState<string | null>(null);
   const [newSendAttempt, setNewSendAttempt] = useState(false);
   /** Demo: correo que no salió, con su vista previa. */
@@ -1328,14 +1331,18 @@ export function PresupuestosModule() {
         budgetId: sendBudget.id,
         to,
         message: sendMessage.trim() || undefined,
-        ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken } : { preview: true }),
+        ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken, acceptAvailabilityWarnings: sendAvailabilityAccepted } : { preview: true }),
       });
       if (!result.ok) {
+        // Conservar el recibo: otra pestaña puede haber reclamado este token
+        // entre el lookup inicial y un conflicto de disponibilidad. Consultar
+        // primero; preparar otro intento sigue requiriendo la acción explícita.
         if (!sendAttemptId && !sendPreview?.attemptId) setSendPreview(null);
         setSendError(result.error);
         return;
       }
       if (result.data.status === "preview" && "confirmationToken" in result.data) {
+        setSendAvailabilityAccepted(false);
         setSendPreview(result.data);
         return;
       }
@@ -1724,8 +1731,7 @@ export function PresupuestosModule() {
               : "Sin pendientes"
           }
         >
-          {/* Conversación comparativa (issue #143): el pedido del cliente al lado
-              de la propuesta original, con la respuesta del equipo. */}
+          {/* Conversación: presupuesto actual y pedido del cliente, sin inferir un original histórico. */}
           <ul className="admin-request-list" aria-label="Solicitudes del portal">
             {requestRows.map((request) => {
               const clientLabel = clientDisplayName(request.budget.client);
@@ -1990,7 +1996,7 @@ export function PresupuestosModule() {
                 type="button"
                 busy={sendBusy}
                 busyLabel={sendAttemptId ? "Consultando…" : sendPreview ? "Enviando…" : "Preparando…"}
-                disabled={(!sendAttemptId && (!sendBudget.publicToken || !emailValid(sendTo) || sendDatesDirty)) || linkBusy || sendDatesBusy}
+                disabled={(!sendAttemptId && (!sendBudget.publicToken || !emailValid(sendTo) || sendDatesDirty)) || linkBusy || sendDatesBusy || (!sendAttemptId && Boolean(sendPreview?.availability && sendPreview.availability.state !== "available") && !sendAvailabilityAccepted)}
                 onClick={() => void sendBudgetMail()}
               >
                 {sendAttemptId ? "Consultar resultado" : sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
@@ -2064,6 +2070,13 @@ export function PresupuestosModule() {
 
           </AdminDialogSection>
 
+          {sendPreview?.availability ? <AdminDialogSection title="Disponibilidad antes de enviar" stack>
+            <AdminNote>{sendAvailabilityLabel(sendPreview.availability.state)}. {SEND_AVAILABILITY_NOTICE}</AdminNote>
+            <p className="admin-dialog-text">Revisado: {formatDateTime(sendPreview.availability.checkedAt)}.</p>
+            {sendPreview.availability.range ? <p className="admin-dialog-text">Rango comprobado: {formatDateTime(sendPreview.availability.range.startsAt)} → {formatDateTime(sendPreview.availability.range.endsAt)}.</p> : null}
+            {sendPreview.availability.warnings.map((warning, index) => <p className="admin-dialog-text" key={`${warning.code}-${warning.itemId ?? index}`}><strong>{warning.name}:</strong> {warning.message}</p>)}
+            {sendPreview.availability.state !== "available" ? <CheckboxField text={SEND_AVAILABILITY_CONSENT} checked={sendAvailabilityAccepted} disabled={sendBusy || Boolean(sendAttemptId)} onChange={setSendAvailabilityAccepted} /> : null}
+          </AdminDialogSection> : null}
           {sendPreview ? (
             <AdminDialogSection title="Vista previa" stack>
               <AdminMailPreview preview={sendPreview} />

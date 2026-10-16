@@ -86,7 +86,7 @@ export function isUniqueViolation(error: unknown): boolean {
 
 /** `true` si algún producto vivo de la empresa usa ese SKU (sin distinguir mayúsculas). */
 export async function skuEqualsCode(tx: Pick<Tx, "inventoryItem">, organizationId: string, code: string): Promise<boolean> {
-  const hit = await tx.inventoryItem.findFirst({ where: { organizationId, sku: { equals: code, mode: "insensitive" } }, select: { id: true } });
+  const hit = await tx.inventoryItem.findFirst({ where: { organizationId, deletedAt: null, sku: { equals: code, mode: "insensitive" } }, select: { id: true } });
   return Boolean(hit);
 }
 

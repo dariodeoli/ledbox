@@ -776,3 +776,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Se corrigió el rechazo «El presupuesto cambió» al aceptar una contraoferta sin cambios concurrentes. La comparación usa los mismos campos y conserva la protección ante una edición real del precio congelado.
 - La fila editable de contraoferta se reorganiza en celular para mostrar completos los campos de cantidad y días, sin columnas cortadas.
 - Al borrar la ciudad en el carrito también se limpia el departamento derivado. Seleccionar otra ciudad actualiza ambos datos y no se modifica una selección que no se editó.
+
+## v2.1.141 — 2026-10-16
+
+- Antes de enviar un presupuesto se comprueban fechas y stock sin reservar: se muestran faltantes y datos pendientes. Para cotizar con disponibilidad por confirmar se pide una elección explícita y el correo lo aclara. Si cambia la disponibilidad desde la vista previa, hay que revisarla nuevamente.
+- Las familias de productos eliminadas aparecen en Ajustes → Eliminados. Se pueden recuperar sin alterar productos, precios ni existencias; los códigos reutilizados y las variantes todavía vinculadas protegen la recuperación y el borrado definitivo.
+- La papelera aprovecha mejor el ancho: acciones compactas en computadora y botones con texto en celular.
+- El portal pide un código cuando el campo está vacío; el ejemplo se abre sólo con su botón. Los enlaces inexistentes ofrecen WhatsApp clickeable.
+- Los diagnósticos de conexión ocultan más formatos de direcciones internas y credenciales.
+- Las solicitudes del cliente distinguen el presupuesto actual de la propuesta recibida y muestran los días reales de las tarifas por duración, sin inventar un original histórico.

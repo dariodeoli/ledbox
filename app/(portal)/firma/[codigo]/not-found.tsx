@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { publicConfig } from "@/lib/public-config";
+import { PortalSupportLink } from "@/app/(portal)/_components/PortalSupportLink";
 
 /** 404 del portal de firma (issue #79): código inválido o inexistente. */
 export default function FirmaNotFound() {
@@ -11,7 +11,7 @@ export default function FirmaNotFound() {
       </h1>
       <p className="portal-lead">
         El código puede estar mal escrito o el link ya no existe. Revisá el enlace que te compartieron o escribinos por
-        WhatsApp al {publicConfig.whatsappNumber.replace(/^(\d{3})(\d+)/, "+$1 $2")} y te enviamos uno nuevo.
+        WhatsApp al <PortalSupportLink /> y te enviamos uno nuevo.
       </p>
       <Link className="portal-btn portal-btn--primary" href="/portal">
         Volver al portal

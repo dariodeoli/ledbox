@@ -83,9 +83,9 @@ test("el detalle es un panel lateral con todo y ?detalle=<id> lo abre", () => {
 });
 
 test("solicitudes del portal como conversación comparativa", () => {
-  assert.match(module, /function RequestComparison/, "falta la comparación original vs propuesta");
-  assert.match(module, /Comparación: original vs propuesta del cliente/);
-  assert.match(module, /<span role="columnheader">Original<\/span>/, "falta la columna original");
+  assert.match(module, /function RequestComparison/, "falta la comparación actual vs propuesta");
+  assert.match(module, /Comparación: presupuesto actual y propuesta del cliente/);
+  assert.match(module, /<span role="columnheader">Presupuesto actual<\/span>/, "falta la columna del presupuesto actual");
   assert.match(module, /<span role="columnheader">Propuesta del cliente<\/span>/, "falta la columna propuesta");
   assert.match(module, /setTalkRequest\(request\)/, "las solicitudes no abren la conversación");
   assert.match(module, /title=\{`Conversación · \$\{talkRequest\.budget\.title\}`\}/, "falta el diálogo de conversación");

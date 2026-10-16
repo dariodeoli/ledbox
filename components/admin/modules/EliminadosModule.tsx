@@ -127,27 +127,29 @@ function EliminadosView() {
       <span className="admin-actions">
         <AdminButton
           icon="refresh"
+          size={compact ? "md" : "sm"}
           busy={busy}
           disabled={Boolean(busyKey) && !busy}
           title={`Restaurar ${item.name}: vuelve a archivados`}
           aria-label={`Restaurar ${item.name}`}
           onClick={() => void restore(item)}
         >
-          Restaurar
+          {compact ? "Restaurar" : null}
         </AdminButton>
         {hasBlockers && anonymizable ? (
-          <AdminButton icon="user" title={`Anonimizar ${item.name}: ${blockersText(item)}`} aria-label={`Anonimizar ${item.name}`} onClick={() => setTarget({ mode: "anonymize", item, type: entityType })}>
-            Anonimizar
+          <AdminButton icon="user" size={compact ? "md" : "sm"} title={`Anonimizar ${item.name}: ${blockersText(item)}`} aria-label={`Anonimizar ${item.name}`} onClick={() => setTarget({ mode: "anonymize", item, type: entityType })}>
+            {compact ? "Anonimizar" : null}
           </AdminButton>
         ) : (
           <AdminButton
             icon="trash"
+            size={compact ? "md" : "sm"}
             disabled={hasBlockers}
             title={hasBlockers ? `No se puede eliminar definitivamente: ${blockersText(item)}` : `Eliminar definitivamente ${item.name}`}
             aria-label={`Eliminar definitivamente ${item.name}`}
             onClick={() => setTarget({ mode: "purge", item, type: entityType })}
           >
-            Eliminar
+            {compact ? "Eliminar" : null}
           </AdminButton>
         )}
       </span>
@@ -177,12 +179,13 @@ function EliminadosView() {
   }));
 
   return (
-    <div className="admin-module-page">
+    <div className="admin-module-page admin-trash-page">
       <AdminKpis state={kpiState(trash)} label="Indicadores de la papelera">
         <AdminKpi label="Eliminados" icon="trash" value={formatNumber(all.length)} note={filtersActive ? `${formatNumber(rows.length)} según los filtros` : "en la papelera"} tone="accent" />
         <AdminKpi label="Con bloqueos" icon="alert" value={formatNumber(all.filter((item) => item.blockers.length > 0).length)} note="no se pueden borrar de forma definitiva" />
       </AdminKpis>
 
+      <div className="admin-trash-toolbar">
       <AdminToolbar>
         <SelectField
           label="Vaciar automáticamente"
@@ -209,6 +212,7 @@ function EliminadosView() {
           Actualizar
         </AdminButton>
       </AdminToolbar>
+      </div>
 
       {message ? <AdminNote tone={message.tone}>{message.text}</AdminNote> : null}
 
@@ -219,7 +223,7 @@ function EliminadosView() {
         empty={all.length === 0}
         emptyTitle="La papelera está vacía"
         emptyIcon="trash"
-        emptyHint="Lo que elimines (eventos, inventario, clientes, leads, proveedores, promotoras o presupuestos) aparece acá, donde se puede restaurar."
+        emptyHint="Lo que elimines (eventos, productos y familias de inventario, clientes, leads, proveedores, promotoras o presupuestos) aparece acá, donde se puede restaurar."
         rows={5}
       >
         {rows.length === 0 ? (

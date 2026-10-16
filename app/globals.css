@@ -2210,7 +2210,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(7rem, 1.6fr) minmax(6.5rem, 1.2fr) 6rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 20.5rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 /* Ajustes → Eliminados (papelera): tipo, nombre, quién, fecha, motivo, bloqueos y acciones. */
-.admin-table--eliminados { --trash-cols: 6.5rem minmax(8rem, 1.4fr) minmax(6rem, 0.9fr) 9rem minmax(4.5rem, 0.7fr) minmax(7.5rem, 1.3fr) 8.5rem 17.25rem; --admin-cols: var(--trash-cols); --admin-table-min: 64rem; }
+.admin-table--eliminados { --trash-cols: 4.25rem minmax(0, 1.7fr) minmax(0, .85fr) 7.5rem minmax(0, .7fr) minmax(0, .9fr) minmax(0, .8fr) 4.25rem; --admin-cols: var(--trash-cols); --admin-table-min: 0; width: 100%; }
+.admin-trash-page { min-width: 0; }
+.admin-trash-toolbar .admin-toolbar > .admin-field,
+.admin-trash-toolbar .admin-toolbar > .admin-field--filter { flex: 0 1 9rem; min-width: 0; width: 9rem; }
+.admin-trash-toolbar .admin-toolbar > [data-oc-select]:has(> .admin-filter) { flex: 1 1 8rem; min-width: 0; max-width: 12rem; }
+.admin-trash-toolbar .admin-toolbar > .admin-btn { flex: 0 0 auto; margin-left: 0; }
+.admin-trash-page .admin-cards-foot > .admin-actions { flex-wrap: wrap; }
+@media (max-width: 720px) {
+  .admin-trash-toolbar .admin-toolbar > .admin-field,
+  .admin-trash-toolbar .admin-toolbar > .admin-field--filter,
+  .admin-trash-toolbar .admin-toolbar > [data-oc-select]:has(> .admin-filter) { flex: 1 1 8rem; max-width: 100%; }
+}
 .admin-trash-type { display: inline-flex; align-items: center; gap: 6px; }
 /* Aviso de bloqueos del borrado: un renglón por motivo, el mismo en diálogos, fichas y tarjetas. */
 .admin-trash-blockers { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--a-danger); border-radius: 8px; background: var(--a-danger-surface); color: var(--a-danger-text); }
