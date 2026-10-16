@@ -94,7 +94,7 @@ function EliminadosView() {
       setMessage({ tone: "error", text: result.error });
       return;
     }
-    setMessage({ tone: "ok", text: value === "" ? "El vaciado automático quedó apagado." : `Lo eliminado se vaciará automáticamente a los ${value} días.` });
+    setMessage({ tone: "ok", text: value === "" ? "El vaciado automático quedó apagado." : `Lo eliminado será elegible para vaciado a los ${value} días; se revisa al abrir Eliminados, sin adelantar el plazo.` });
     trash.reload();
   }
 
@@ -189,7 +189,7 @@ function EliminadosView() {
       <AdminToolbar>
         <SelectField
           label="Vaciar automáticamente"
-          help="Al abrir esta pantalla se borra de forma definitiva lo eliminado hace más de ese tiempo. Lo que tiene historial contable se conserva."
+          help="El plazo corre desde la eliminación. Al abrir esta pantalla se revisan los vencidos en lotes; no hay un horario garantizado. Los bloqueados y el historial contable se conservan. Nunca mantiene el vaciado apagado."
           value={purgeDays === null ? "" : String(purgeDays)}
           onChange={(value) => void savePurgeDays(value)}
           disabled={savingPurge || trash.loading}

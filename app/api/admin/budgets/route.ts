@@ -1,3 +1,4 @@
+import { readBulkSelection, bulkSelectionErrorResponse } from "@/lib/server/bulk-selection";
 import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
 import { withQuoteCommercialEdit, QuoteComparisonError } from "@/lib/server/quote-comparison";
 import { randomUUID } from "node:crypto";
@@ -84,16 +85,18 @@ const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true,
  * (issue #14) con su presupuesto embebido, para que el módulo muestre la cola
  * de pendientes sin una segunda llamada.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
-  const [rental, budgets, budgetRequests] = await Promise.all([
+  let bulk;
+  try { bulk = await readBulkSelection(request, auth.context, "Budget"); } catch (error) { const response = bulkSelectionErrorResponse(error); if (response) return response; throw error; }
+  const [rental, fetchedBudgets, budgetRequests] = await Promise.all([
     getRentalSettings(organizationId),
     db.budget.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
+      where: { organizationId, ...bulk?.where },
+      orderBy: bulk ? { id: "asc" } : { createdAt: "desc" },
+      take: bulk ? bulk.limit + 1 : 200,
       include: {
         client: { include: { logo: { select: { updatedAt: true } } } },
         event: true,
@@ -111,7 +114,7 @@ export async function GET() {
         },
       },
     }),
-    db.budgetChangeRequest.findMany({
+    bulk ? Promise.resolve([]) : db.budgetChangeRequest.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 200,
@@ -131,8 +134,10 @@ export async function GET() {
       },
     }),
   ]);
+  const bulkPage = bulk ? await bulk.finish(fetchedBudgets, bulk.total ?? await db.budget.count({ where: { organizationId, ...bulk.watermark } })) : null;
+  const budgets = bulkPage?.items ?? fetchedBudgets;
   const returns = await equipmentReturnByEvent(organizationId, [...new Set(budgets.flatMap((budget) => (budget.eventId && budget.securityDeposit ? [budget.eventId] : [])))]);
-  return Response.json({ rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault, securityDepositMode: rental.securityDepositMode, securityDepositCalc: rental.securityDepositCalc, securityDepositPercent: rental.securityDepositPercent }, budgets: budgets.map((budget) => {
+  return Response.json({ ...(bulkPage ? { bulkSelection: bulkPage.meta } : {}), rentalDefaults: { depositPercent: rental.depositPercent, securityDepositDefault: rental.securityDepositDefault, securityDepositMode: rental.securityDepositMode, securityDepositCalc: rental.securityDepositCalc, securityDepositPercent: rental.securityDepositPercent }, budgets: budgets.map((budget) => {
     const { logo, ...client } = budget.client;
     const { _count, ...row } = budget;
     return { ...row, inventoryLinksLocked: Boolean(budget.approvedAt || budget.status === "APPROVED" || _count.signatureRequests), equipmentReturn: budget.eventId ? returns.get(budget.eventId) ?? null : null, client: { ...client, logoUpdatedAt: logo?.updatedAt.toISOString() ?? null }, items: stableOrderBudgetItems(budget.items) };

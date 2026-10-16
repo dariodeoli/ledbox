@@ -25,6 +25,9 @@ import {
   type AdminSupplierRow,
 } from "@/lib/admin-types";
 import { useTrashFlow } from "../TrashDialogs";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
+import { filterSupplierSelection, supplierBulkRow } from "@/lib/admin-crm-selection";
 import { useAdminSession } from "../AdminShell";
 import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, useAdminNarrowViewport, type AdminBoardCardData, type AdminBoardColumn } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
@@ -204,7 +207,7 @@ function jobFormFromRow(job: JobRow): JobForm {
 }
 
 export function ProveedoresModule() {
-  const { role } = useAdminSession();
+  const { role, organization } = useAdminSession();
   const suppliersResource = useAdminResource("/api/admin/suppliers", (payload) => payload.suppliers ?? []);
   const jobsResource = useAdminResource(
     "/api/admin/suppliers/jobs?fields=panel",
@@ -252,9 +255,17 @@ export function ProveedoresModule() {
   const trash = useTrashFlow("Supplier", { onChanged: suppliersResource.reload });
   const liveSuppliers = useMemo(() => suppliers.filter((supplier) => !supplier.archivedAt), [suppliers]);
   const supplierRows = useMemo(
-    () => suppliers.filter((supplier) => (supplierScope === "ARCHIVED" ? Boolean(supplier.archivedAt) : !supplier.archivedAt)).filter((supplier) => matchesQuery(query, [supplier.name, supplier.company, supplier.category, supplier.phone, supplier.email])),
+    () => filterSupplierSelection(suppliers, { query, supplierScope }),
     [suppliers, supplierScope, query],
   );
+
+  const bulk = useBulkTrash({
+    type: "Supplier", organizationId: organization?.id ?? "", enabled: writable,
+    scopeKey: JSON.stringify({ query, supplierScope }),
+    visibleRows: supplierRows.map(supplierBulkRow),
+    loadAllRows: async () => filterSupplierSelection(await loadBulkTrashRows<AdminSupplierRow>("/api/admin/suppliers", "suppliers"), { query, supplierScope }).map(supplierBulkRow),
+    onChanged: suppliersResource.reload,
+  });
 
   /** Búsqueda compartida por lista, tarjetas y tablero. */
   const searchedJobs = useMemo(
@@ -436,7 +447,7 @@ export function ProveedoresModule() {
         ];
         return {
           id: supplier.id,
-          title: supplier.name,
+          title: <>{writable ? <BulkRowCheck bulk={bulk} row={supplierBulkRow(supplier)} /> : null}{supplier.name}</>,
           titleTooltip: `${supplier.name} · ${formatNumber(jobCount)} trabajos`,
           subtitle: supplier.company || null,
           badges: [
@@ -464,7 +475,7 @@ export function ProveedoresModule() {
           ),
         };
       }),
-    [supplierRows, writable, trash],
+    [supplierRows, writable, trash, bulk],
   );
 
   const totals = useMemo(() => {
@@ -1042,6 +1053,7 @@ export function ProveedoresModule() {
       >
         {supplierError && supplierForm === null ? <AdminNote tone="error">{supplierError}</AdminNote> : null}
         {trash.note}
+        {writable ? <BulkTrashControls bulk={bulk} /> : null}
         {writable ? trash.dialog : null}
 
         {writable && supplierForm ? (
@@ -1166,6 +1178,7 @@ export function ProveedoresModule() {
                 return (
                   <AdminRow key={supplier.id}>
                     <AdminCell title={`${supplier.name} · ${formatNumber(jobCount)} trabajos`}>
+                      {writable ? <BulkRowCheck bulk={bulk} row={supplierBulkRow(supplier)} /> : null}
                       <strong>{supplier.name}</strong>
                       <span className="admin-cell-sub"> · {formatNumber(jobCount)}</span>
                     </AdminCell>

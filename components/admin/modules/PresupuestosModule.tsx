@@ -1,4 +1,6 @@
 "use client";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
 
 import { SEND_AVAILABILITY_NOTICE, SEND_AVAILABILITY_CONSENT, sendAvailabilityLabel, sendAvailabilityLineLabel } from "@/lib/budget-send-availability";
 import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
@@ -828,12 +830,18 @@ export function PresupuestosModule() {
   const showRequests = vistaParam === "solicitudes" && requestRows.length > 0;
   const pendingRequests = useMemo(() => requestRows.filter((request) => request.status === "pending"), [requestRows]);
 
-  const rows = useMemo(() => {
-    return (archivedView ? archivedBudgetRows : budgetRows)
-      .filter((budget) => archivedView || matchesPipelineFilter(budgetPipelineStage(budget), stageFilter))
-      .filter((budget) => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name, budgetReference(budget.id)]))
+  function filterBulkBudgets(source: AdminBudgetRow[]) {
+    return source.filter(budget => archivedView ? Boolean(budget.archivedAt) : !budget.archivedAt)
+      .filter(budget => archivedView || matchesPipelineFilter(budgetPipelineStage(budget), stageFilter))
+      .filter(budget => matchesQuery(query, [budget.title, budget.client.company, budget.client.name, budget.event?.name, budgetReference(budget.id)]))
       .sort(compareBudgetUrgency);
-  }, [budgetRows, archivedBudgetRows, archivedView, query, stageFilter]);
+  }
+  const rows = useMemo(() => filterBulkBudgets(allBudgetRows), [allBudgetRows, archivedView, query, stageFilter]);
+  const toBulkBudget = (budget: AdminBudgetRow) => ({ id: budget.id, name: budget.title, archivedAt: budget.archivedAt ?? null, archiveBlockedReason: budgetArchiveBlockedReason(budget.status) });
+  const bulk = useBulkTrash({ type: "Budget", organizationId: activeOrganization?.id ?? "", scopeKey: JSON.stringify({ archivedView, query, stageFilter }), enabled: writable && !showRequests,
+    visibleRows: rows.map(toBulkBudget), onChanged: budgetsResource.reload,
+    loadAllRows: async () => filterBulkBudgets(await loadBulkTrashRows<AdminBudgetRow>("/api/admin/budgets", "budgets")).map(toBulkBudget),
+  });
 
   /** Cantidad y monto por etapa para los KPIs-filtro. */
   const stageTotals = useMemo(() => {
@@ -886,6 +894,7 @@ export function PresupuestosModule() {
     const primary = menuOnly ? null : primaryOf(budget);
     return (
       <span className="admin-actions">
+        <BulkRowCheck bulk={bulk} row={toBulkBudget(budget)} />
         {primary ? (
           <AdminButton
             size="sm"
@@ -1806,6 +1815,7 @@ export function PresupuestosModule() {
         </AdminPanel>
       ) : null}
 
+      {!showRequests ? <BulkTrashControls bulk={bulk} /> : null}
       {showRequests ? null : (
       <AdminDataState
         loading={budgetsResource.loading}

@@ -24,6 +24,7 @@ export type InventoryListProps = {
   from: string;
   to: string;
   bulkIds: string[];
+  selectionBusy?: boolean;
   archiveBusyId: string;
   onToggleBulk: (id: string) => void;
   onOpen: (id: string) => void;
@@ -107,7 +108,7 @@ export function InventoryList(props: InventoryListProps) {
   /** Un clic abre la ficha; Ctrl/Cmd/Shift-clic suma o quita el producto de la selección (sin abrirla). */
   function activate(item: AdminInventoryGridRow, event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
     if (writable && (event.ctrlKey || event.metaKey || event.shiftKey)) {
-      if (bulkIds.length < 100 || bulkIds.includes(item.id)) props.onToggleBulk(item.id);
+      props.onToggleBulk(item.id);
       return;
     }
     props.onOpen(item.id);
@@ -190,7 +191,7 @@ export function InventoryList(props: InventoryListProps) {
                 {writable ? (
                   <RowCheck
                     checked={bulkIds.includes(item.id)}
-                    disabled={bulkIds.length >= 100 && !bulkIds.includes(item.id)}
+                    disabled={props.selectionBusy}
                     label={`Seleccionar producto ${item.name}`}
                     onToggle={() => props.onToggleBulk(item.id)}
                   />
@@ -232,7 +233,7 @@ export function InventoryList(props: InventoryListProps) {
               {writable ? (
                 <RowCheck
                   checked={bulkIds.includes(item.id)}
-                  disabled={bulkIds.length >= 100 && !bulkIds.includes(item.id)}
+                  disabled={props.selectionBusy}
                   label={`Seleccionar producto ${item.name}`}
                   onToggle={() => props.onToggleBulk(item.id)}
                 />

@@ -12,9 +12,12 @@ import {
   promoterAvailabilityTone,
   whatsappHref,
 } from "@/lib/admin-format";
-import { canWriteOperations, matchesQuery } from "@/lib/admin-policy";
+import { canWriteOperations } from "@/lib/admin-policy";
 import { PROMOTER_AVAILABILITIES, type AdminPromoterRow } from "@/lib/admin-types";
 import { useTrashFlow } from "../TrashDialogs";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
+import { filterPromoterSelection, promoterBulkRow } from "@/lib/admin-crm-selection";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminViewSwitch, useAdminModuleView } from "../AdminBoard";
@@ -63,7 +66,7 @@ const MAX_AVAILABILITY_NOTE = 300;
 const PROMOTORAS_VIEWS = ["list", "grid"] as const;
 
 export function PromotorasModule() {
-  const { role } = useAdminSession();
+  const { role, organization } = useAdminSession();
   // El catálogo combinado trae proveedores, inventario y promotoras; esta
   // pantalla solo muestra promotoras, así que pide nada más ese slice (issue #62).
   const resources = useAdminResource("/api/admin/resources?only=promoters", (payload) => ({
@@ -110,14 +113,16 @@ export function PromotorasModule() {
   const promoters = useMemo(() => (archivedView ? archivedResource.data?.promoters ?? [] : activePromoters), [archivedView, archivedResource.data, activePromoters]);
 
   const rows = useMemo(
-    () =>
-      promoters
-        .filter((promoter) => (availabilityFilter === "ALL" || archivedView ? true : promoter.availability === availabilityFilter))
-        .filter((promoter) =>
-          matchesQuery(query, [promoter.name, promoter.specialties, promoter.phone, promoter.email]),
-        ),
-    [promoters, query, availabilityFilter, archivedView],
+    () => filterPromoterSelection(promoters, { query, availabilityFilter }),
+    [promoters, query, availabilityFilter],
   );
+  const bulk = useBulkTrash({
+    type: "Promoter", organizationId: organization?.id ?? "", enabled: writable,
+    scopeKey: JSON.stringify({ query, availabilityFilter }),
+    visibleRows: rows.map(promoterBulkRow),
+    loadAllRows: async () => filterPromoterSelection(await loadBulkTrashRows<AdminPromoterRow>(`/api/admin/resources?only=promoters${archivedView ? "&archived=1" : ""}`, "promoters"), { query, availabilityFilter }).map(promoterBulkRow),
+    onChanged: reloadAll,
+  });
 
   const totals = useMemo(
     () => ({
@@ -246,6 +251,7 @@ export function PromotorasModule() {
 
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {trash.note}
+      {writable ? <BulkTrashControls bulk={bulk} /> : null}
       {writable ? trash.dialog : null}
 
       {writable && showForm ? (
@@ -379,6 +385,7 @@ export function PromotorasModule() {
               id: promoter.id,
               title: (
                 <>
+                  {writable ? <BulkRowCheck bulk={bulk} row={promoterBulkRow(promoter)} /> : null}
                   <AdminAvatar name={promoter.name} src={promoter.photoUrl} size={22} />
                   <span className="admin-item-name">{promoter.name}</span>
                 </>
@@ -454,6 +461,7 @@ export function PromotorasModule() {
                 <AdminRow key={promoter.id}>
                   <AdminCell title={promoter.name}>
                     <span className="admin-identity">
+                      {writable ? <BulkRowCheck bulk={bulk} row={promoterBulkRow(promoter)} /> : null}
                       <AdminAvatar name={promoter.name} src={promoter.photoUrl} size={22} />
                       <strong>{promoter.name}</strong>
                     </span>

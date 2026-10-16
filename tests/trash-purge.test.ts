@@ -40,9 +40,9 @@ test("el PATCH de ajustes valida trashPurgeDays y permite apagarlo", () => {
 });
 
 test("textos de la columna Vaciado", () => {
-  assert.equal(purgeStatusText({ purgeInDays: 12, retained: false, anonymized: false }), "Se borra en 12 días");
-  assert.equal(purgeStatusText({ purgeInDays: 1, retained: false, anonymized: false }), "Se borra en 1 día");
-  assert.equal(purgeStatusText({ purgeInDays: 0, retained: false, anonymized: false }), "Se borra hoy");
+  assert.equal(purgeStatusText({ purgeInDays: 12, retained: false, anonymized: false }), "Elegible para vaciado en 12 días");
+  assert.equal(purgeStatusText({ purgeInDays: 1, retained: false, anonymized: false }), "Elegible para vaciado en 1 día");
+  assert.equal(purgeStatusText({ purgeInDays: 0, retained: false, anonymized: false }), "Plazo cumplido; pendiente de vaciado");
   assert.equal(purgeStatusText({ purgeInDays: null, retained: true, anonymized: false }), "Conservado (contable)");
   assert.equal(purgeStatusText({ purgeInDays: null, retained: false, anonymized: false }), null);
   assert.equal(purgeStatusText({ purgeInDays: null, retained: true, anonymized: true }), null);

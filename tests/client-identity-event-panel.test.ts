@@ -4,6 +4,7 @@ import { runInNewContext } from "node:vm";
 import { test } from "node:test";
 import ts from "typescript";
 import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "../lib/server/client-identity";
+import { readBulkSelection, bulkSelectionErrorResponse } from "../lib/server/bulk-selection";
 import { clientPresentation } from "../lib/client-identity";
 
 /** Real GET + real canonical projection/DTO; session/DB boundaries are doubles.
@@ -20,7 +21,7 @@ function fixture(denied = false) {
  } } };
  const path = "app/api/admin/event-ops/route.ts", sf = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
  const declarations = sf.statements.filter(node => ts.isFunctionDeclaration(node) && ["GET", "withCleaning"].includes(node.name?.text ?? "") || ts.isVariableStatement(node) && node.declarationList.declarations.some(d => d.name.getText(sf) === "promoterSelect")).map(node => node.getText(sf).replace(/^export /, "")).join("\n");
- const get = runInNewContext(ts.transpileModule(declarations + ";GET;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, { db, CLIENT_IDENTITY_SELECT, clientIdentityDTO, URL, Response, Date, requireAdminContext: async () => denied ? { ok: false, response: Response.json({}, { status: 403 }) } : { ok: true, context: { organizationId: "tenant" } }, loadRentalSettings: async () => ({}), resolveRentalBuffers: () => ({ afterMin: 0 }) });
+ const get = runInNewContext(ts.transpileModule(declarations + ";GET;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, { db, readBulkSelection, bulkSelectionErrorResponse, CLIENT_IDENTITY_SELECT, clientIdentityDTO, URL, Response, Date, requireAdminContext: async () => denied ? { ok: false, response: Response.json({}, { status: 403 }) } : { ok: true, context: { organizationId: "tenant" } }, loadRentalSettings: async () => ({}), resolveRentalBuffers: () => ({ afterMin: 0 }) });
  return { get, queries: () => queries };
 }
 

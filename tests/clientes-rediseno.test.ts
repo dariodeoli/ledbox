@@ -113,7 +113,7 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   assert.ok(legacy.includes("Este cliente ya no es mayorista pero tiene un link activo: revocalo si no corresponde."));
   assert.match(ficha, /tabId=\{\(key\) => `ficha-tab-\$\{key\}`\}[\s\S]{0,120}panelId=\{\(\) => "ficha-panel"\}/, "cada pestaña (AdminTabs) con su id y aria-controls");
   const route = repoFile("app/api/admin/clients/route.ts");
-  assert.match(route, /take: CLIENT_LIST_LIMIT \+ 1/);
+  assert.match(route, /take: \(bulk\?\.limit \?\? CLIENT_LIST_LIMIT\) \+ 1/);
   assert.match(route, /Response\.json\(\{ clients: rows, truncated \}\)/);
   assert.ok(repoFile("components/admin/modules/ClientesModule.tsx").includes("Mostrando hasta 200 coincidencias: los indicadores corresponden a estos resultados. La búsqueda consulta toda la cartera."));
   assert.match(ficha, /canWriteClients\(role\)/);
@@ -121,4 +121,35 @@ test("ficha: acción principal, franja de indicadores, links a presupuesto/event
   assert.match(css, /\.admin-kpis\.admin-kpis--ficha \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/, "la franja de la ficha son cinco indicadores en una fila");
   assert.match(css, /\.admin-ficha-main > \.admin-subtabs \{ flex-wrap: nowrap; overflow-x: auto; \}/, "las pestañas se desplazan en móvil");
   assert.match(css, /\.admin-ficha-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/, "la columna lateral pasa debajo");
+});
+
+
+test("GET real de Clientes conserva tope/truncated normal y usa el límite acreditado sólo en modo bulk", async () => {
+  const ts = (await import("typescript")).default;
+  const { runInNewContext } = await import("node:vm");
+  for (const scenario of [{ bulk: false, total: 201, expected: 200, truncated: true }, { bulk: false, total: 2, expected: 2, truncated: false }, { bulk: true, total: 18, expected: 17, truncated: false }]) {
+    const queries: any[] = [];
+    const rows = Array.from({ length: scenario.total }, (_, index) => ({ id: String(index), name: `Cliente ${index}`, logo: null }));
+    const meta = { total: 30, nextCursor: "signed", complete: false, snapshotAt: "2026-10-16T12:00:00Z" };
+    const exports: any = {};
+    runInNewContext(ts.transpileModule(repoFile("app/api/admin/clients/route.ts"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
+      exports, Request, Response, URL, Set,
+      require(name: string) {
+        if (name.endsWith("/tenancy")) return { requireAdminContext: async () => ({ ok: true, context: { organizationId: "own" } }) };
+        if (name.endsWith("/bulk-selection")) return { readBulkSelection: async () => scenario.bulk ? { limit: 17, where: { id: { gt: "cursor" } }, watermark: {}, total: 30, finish: async () => ({ meta }) } : null };
+        if (name.endsWith("/db")) return { db: { client: { findMany: async (query: any) => { queries.push(query); return rows; } }, budget: { findMany: async () => [] }, clientPayment: { findMany: async () => [] }, event: { findMany: async () => [] }, catalogAccessToken: { groupBy: async () => [] } } };
+        if (name === "./metrics") return { factsByClient: () => new Map(), clientMetrics: () => ({}) };
+        if (name.endsWith("/trash-filter")) return { live: { deletedAt: null } };
+        return {};
+      },
+    });
+    const response = await exports.GET(new Request(`https://local.invalid/api/admin/clients?q=Ana${scenario.bulk ? "&fields=bulk-selection" : ""}`));
+    const body = await response.json();
+    assert.equal(response.status, 200); assert.equal(body.clients.length, scenario.expected); assert.equal(body.truncated, scenario.truncated);
+    assert.equal(queries[0].take, scenario.bulk ? 18 : 201);
+    assert.equal(queries[0].where.organizationId, "own");
+    assert.equal(queries[0].where.OR[0].name.contains, "Ana", "la búsqueda se filtra antes del límite");
+    assert.equal(body.bulkSelection?.nextCursor, scenario.bulk ? "signed" : undefined);
+    assert.equal(queries[0].where.id?.gt, scenario.bulk ? "cursor" : undefined);
+  }
 });

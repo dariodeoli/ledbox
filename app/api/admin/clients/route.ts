@@ -1,3 +1,4 @@
+import { readBulkSelection, bulkSelectionErrorResponse } from "@/lib/server/bulk-selection";
 import { listClientSelector } from "@/lib/server/client-selector";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -37,6 +38,8 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const params = new URL(request.url).searchParams;
+  let bulk;
+  try { bulk = await readBulkSelection(request, auth.context, "Client"); } catch (error) { const response = bulkSelectionErrorResponse(error); if (response) return response; throw error; }
   if (params.get("fields") === "selector") {
     const query = (params.get("q") ?? "").trim();
     if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
@@ -50,14 +53,14 @@ export async function GET(request: Request) {
   const search = query ? { OR: searchFields.map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
   // Se pide uno de más para saber, sin contar, si la lista quedó truncada.
   const fetched = await db.client.findMany({
-    where: { organizationId, ...search },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: CLIENT_LIST_LIMIT + 1,
+    where: { organizationId, ...search, ...bulk?.where },
+    orderBy: bulk ? [{ id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+    take: (bulk?.limit ?? CLIENT_LIST_LIMIT) + 1,
     include: { _count: { select: { events: { where: live }, budgets: { where: live } } }, logo: { select: { updatedAt: true } } },
   });
 
-  const truncated = fetched.length > CLIENT_LIST_LIMIT;
-  const clients = fetched.slice(0, CLIENT_LIST_LIMIT);
+  const truncated = fetched.length > (bulk?.limit ?? CLIENT_LIST_LIMIT);
+  const clients = fetched.slice(0, bulk?.limit ?? CLIENT_LIST_LIMIT);
 
   // Solo los hechos de los clientes listados: nada de otra empresa y nada de
   // un cliente que no viaja en la respuesta.
@@ -103,6 +106,11 @@ export async function GET(request: Request) {
     };
   });
 
+  if (bulk) {
+    const total = bulk.total ?? await db.client.count({ where: { organizationId, ...search, ...bulk.watermark } });
+    const page = await bulk.finish(fetched, total);
+    return Response.json({ clients: rows, truncated: false, bulkSelection: page.meta });
+  }
   return Response.json({ clients: rows, truncated });
 }
 

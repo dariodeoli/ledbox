@@ -1,3 +1,4 @@
+import { readBulkSelection, bulkSelectionErrorResponse } from "@/lib/server/bulk-selection";
 import { InventoryOriginError, validatedStockOrigin } from "@/lib/server/inventory-stock-origin";
 import { readBillingUnit } from "@/lib/quote-sharing";
 import { skuClashesWithFamilyCode } from "@/lib/server/inventory-families";
@@ -120,6 +121,11 @@ export async function GET(request: Request) {
     .map((value) => value.trim())
     .filter((value): value is ResourceKind => (RESOURCE_KINDS as readonly string[]).includes(value));
   const selector = url.searchParams.get("fields") === "selector";
+  const bulkType = only.length === 1 && only[0] === "suppliers" ? "Supplier" : only.length === 1 && only[0] === "promoters" ? "Promoter" : null;
+  if (url.searchParams.get("fields") === "bulk-selection" && !bulkType) return jsonError("Seleccioná un único tipo de registros para el lote.", 400);
+  let bulk;
+  try { bulk = bulkType ? await readBulkSelection(request, auth.context, bulkType) : null; } catch (error) { const response = bulkSelectionErrorResponse(error); if (response) return response; throw error; }
+  const promoterWhere = url.searchParams.get("archived") === "1" ? { organizationId, OR: [{ archivedAt: { not: null } }, { active: false }] } : { organizationId, active: true };
   const wanted = (kind: ResourceKind) => only.length === 0 || only.includes(kind);
   // El inventario se pide con su forma completa (sin el binario de la foto,
   // issue #109) o con el mínimo del selector; en paralelo con los demás. La
@@ -150,9 +156,9 @@ export async function GET(request: Request) {
   const [suppliers, inventory, promoters] = await Promise.all([
     wanted("suppliers")
       ? db.supplier.findMany({
-          where: { organizationId },
-          orderBy: { name: "asc" },
-          take: 200,
+          where: { organizationId, ...bulk?.where },
+          orderBy: bulk ? { id: "asc" } : { name: "asc" },
+          take: bulk ? bulk.limit + 1 : 200,
           ...(selector ? { select: SELECTOR_FIELDS.suppliers } : {}),
         })
       : [],
@@ -161,13 +167,18 @@ export async function GET(request: Request) {
       ? db.promoter.findMany({
           // `archived=1` (Promotoras → «Archivadas»): las archivadas y las inactivas de antes de la papelera
           // (active=false sin archivedAt), para que ninguna quede invisible; si no, las activas de siempre.
-          where: url.searchParams.get("archived") === "1" ? { organizationId, OR: [{ archivedAt: { not: null } }, { active: false }] } : { organizationId, active: true },
-          orderBy: { name: "asc" },
-          take: 200,
+          where: { ...promoterWhere, ...bulk?.where },
+          orderBy: bulk ? { id: "asc" } : { name: "asc" },
+          take: bulk ? bulk.limit + 1 : 200,
           ...(selector ? { select: SELECTOR_FIELDS.promoters } : {}),
         })
       : [],
   ]);
+  if (bulk) {
+    const total = bulk.total ?? (bulkType === "Supplier" ? await db.supplier.count({ where: { organizationId, ...bulk.watermark } }) : await db.promoter.count({ where: { ...promoterWhere, ...bulk.watermark } }));
+    const page = await bulk.finish<{ id: string }>(bulkType === "Supplier" ? suppliers : promoters, total);
+    return Response.json({ suppliers: bulkType === "Supplier" ? page.items : [], inventory: [], promoters: bulkType === "Promoter" ? page.items : [], bulkSelection: page.meta });
+  }
   return Response.json({ suppliers, inventory, promoters });
 }
 
