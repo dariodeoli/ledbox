@@ -95,3 +95,25 @@ test("volver a enfocar/usar atajos refresca el reloj sin cambiar la fecha del fo
   for (const action of ["onFocusCapture", "onPointerEnter", "onPointerDownCapture", "onKeyDownCapture"]) tree.props[action]();
   assert.equal(refreshes, 4); assert.equal(changes.length, 0);
 });
+
+test("sólo teclado puede refrescar atajos todos fuera de rango al cruzar medianoche", () => {
+  let clock = "2026-10-15T02:59:59.999Z";
+  let state: Date | undefined;
+  class ClockDate extends Date { constructor() { super(clock); } }
+  const changes: string[] = [];
+  const render = actual("DateShortcuts", {
+    Date: ClockDate,
+    dateShortcuts,
+    useState: (initial: () => Date) => { state ??= initial(); return [state, (next: Date) => { state = next; }]; },
+  });
+  const props = { kind: "date", value: "", min: "2026-10-17", label: "Fecha del evento", onChange: (next: string) => changes.push(next) };
+  let tree = render(props);
+  assert.equal(tree.props.tabIndex, 0); assert.ok(all(tree).filter(n => n.type === "button").every(n => n.props.disabled));
+  clock = "2026-10-15T03:00:00.001Z";
+  tree.props.onFocusCapture(); tree = render(props);
+  assert.equal(tree.props.tabIndex, undefined);
+  const buttons = all(tree).filter(n => n.type === "button");
+  assert.equal(buttons[2].props.disabled, false); assert.equal(changes.length, 0);
+  buttons[2].props.onClick(); assert.deepEqual(changes, ["2026-10-17"]);
+  const disabled = render({ ...props, disabled: true }); assert.equal(disabled.props.tabIndex, undefined);
+});

@@ -904,8 +904,11 @@ function DateShortcuts({ kind, value, min, max, disabled, label, onChange }: {
 }) {
   const [clock, setClock] = useState(() => new Date());
   const refresh = () => setClock(new Date());
-  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`} onFocusCapture={refresh} onPointerEnter={refresh} onPointerDownCapture={refresh} onKeyDownCapture={refresh}>
-    {dateShortcuts({ kind, value, min, max, now: clock }).map(choice => {
+  const choices = dateShortcuts({ kind, value, min, max, now: clock });
+  // A keyboard user can refresh a page left open across midnight even when every old choice was out of range.
+  const refreshable = !disabled && choices.every(choice => !choice.allowed);
+  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`} tabIndex={refreshable ? 0 : undefined} onFocusCapture={refresh} onPointerEnter={refresh} onPointerDownCapture={refresh} onKeyDownCapture={refresh}>
+    {choices.map(choice => {
       const detail = `${choice.label}, ${choice.dateLabel}${kind === "datetime-local" ? ` a las ${choice.value.split("T")[1]}` : ""}`;
       return <button key={choice.offset} type="button" disabled={disabled || !choice.allowed} aria-label={detail} title={choice.allowed ? detail : `${detail} · Fuera del rango permitido`} aria-pressed={value === choice.value} onClick={() => {
         // Recheck civil day and bounds at activation, including a page left open across midnight.
