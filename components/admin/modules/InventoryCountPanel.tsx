@@ -9,7 +9,7 @@ export function InventoryCountPanel({ id, registered, writable, onChanged }: { i
   const [total, setTotal] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  async function confirm() {
+  async function confirmCount() {
     const quantity = Number(total);
     if (!total.trim() || !Number.isSafeInteger(quantity) || quantity < 0 || quantity > 100_000) { setError("Ingresá un total entero de 0 a 100.000, incluyendo cero si no hay unidades."); return; }
     setBusy(true); setError("");
@@ -22,7 +22,7 @@ export function InventoryCountPanel({ id, registered, writable, onChanged }: { i
     <AdminNote tone="warn">Pendiente conteo. Hay {registered} unidades registradas; el total todavía es desconocido. No se promete disponibilidad hasta confirmar el total. Una compra o una unidad nueva no confirma el total.</AdminNote>
     {writable ? <>
       <NumberField label="Total contado" value={total} onChange={setTotal} strictInteger maxLength={6} size="sm" disabled={busy} error={error || undefined} hint="Confirmar agrega las unidades que falten. No elimina unidades ni modifica reservas, estados o precios." />
-      <AdminButton onClick={() => void confirm()} disabled={busy || !total.trim()}>{busy ? "Confirmando…" : "Confirmar conteo"}</AdminButton>
+      <AdminButton onClick={() => void confirmCount()} disabled={busy || !total.trim()}>{busy ? "Confirmando…" : "Confirmar conteo"}</AdminButton>
     </> : null}
   </div>;
 }
