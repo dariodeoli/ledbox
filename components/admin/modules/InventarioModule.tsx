@@ -13,6 +13,7 @@ import { useAdminSession } from "../AdminShell";
 import {
   AdminActionsMenu,
   AdminButton,
+  AdminButtonLink,
   AdminDataState,
   AdminDialog,
   AdminDisclosure,
@@ -344,6 +345,9 @@ export function InventarioModule() {
           Incidentes{incidentCount == null ? "" : ` (${formatNumber(incidentCount)})`}
         </AdminButton>
         <span className="admin-inv-actions-end admin-export">
+          <AdminButtonLink icon="download" href="/api/admin/inventory/export" download title="Todas las unidades físicas de la empresa, una fila por unidad con su depósito y ubicación; incluye retiradas y productos archivados">
+            Unidades por depósito
+          </AdminButtonLink>
           <AdminButton icon="download" onClick={exportInventory} title="Exportar el inventario filtrado a CSV" aria-label="Exportar el inventario filtrado a CSV">
             Exportar CSV
           </AdminButton>
