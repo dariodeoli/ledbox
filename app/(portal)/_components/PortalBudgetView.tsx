@@ -1217,8 +1217,8 @@ export function PortalBudgetView({
             <span className="portal-pay-label">Falta transferir · {transferNow.label}</span>
             <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
           </div>
-          <span className="portal-pay-total portal-num">
-            {balance !== transferNow.amount ? `Saldo del presupuesto: ${formatMoney(balance)} · ` : ""}Total: {formatMoney(budget.total)}
+          <span className="portal-pay-total">
+            {balance !== transferNow.amount ? <>Saldo del presupuesto: <span className="portal-num">{formatMoney(balance)}</span> · </> : null}Total: <span className="portal-num">{formatMoney(budget.total)}</span>
           </span>
         </div>
       ) : stage === "settled" ? (
