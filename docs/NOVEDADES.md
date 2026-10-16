@@ -785,3 +785,10 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - El portal pide un código cuando el campo está vacío; el ejemplo se abre sólo con su botón. Los enlaces inexistentes ofrecen WhatsApp clickeable.
 - Los diagnósticos de conexión ocultan más formatos de direcciones internas y credenciales.
 - Las solicitudes del cliente distinguen el presupuesto actual de la propuesta recibida y muestran los días reales de las tarifas por duración, sin inventar un original histórico.
+
+## v2.1.142 — 2026-10-16
+
+- Las fichas y ventanas del panel se abren centradas, con margen visible y altura ajustada al contenido. En celular el cuerpo se desplaza y las acciones quedan visibles; se conserva la protección de cambios sin guardar.
+- El resumen del producto usa indicadores más chicos. Precios, tarifas y costos quedan en una sola grilla compacta, sin cortar sus condiciones; la foto y los estados aprovechan mejor el espacio en celular.
+- Antes de enviar un presupuesto se muestra cada línea con su cantidad y capacidad comprobada para las fechas del evento. Las líneas que comparten inventario explican el pedido máximo; los datos desconocidos y los movimientos pendientes quedan por confirmar.
+- Si falla la comprobación de inventario, no se presenta disponibilidad acreditada ni se registra una auditoría de aprobación. Consultar disponibilidad sigue sin reservar unidades ni enviar correos.
