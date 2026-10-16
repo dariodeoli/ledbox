@@ -104,15 +104,15 @@ test("stock count confirmation persists knowledge, units and reservation gates",
       for (const unit of before) assert.deepEqual(after.units.find(next => next.id === unit.id), unit, "existing unit is not silently moved");
       const added = after.units.filter(unit => !before.some(old => old.id === unit.id)); assert.equal(added.length, 2); assert(added.every(unit => unit.warehouseId === secondary.id && unit.location === "E3-B2"));
     });
-    await t.test("new zero/null imports retain default placement for future count confirmation", async () => {
+    await t.test("new zero/null/positive imports retain default placement for future units", async () => {
       const warehouse = await db.warehouse.create({ data: { id: randomUUID(), organizationId: org, name: "Empty item warehouse", code: `C${randomUUID().slice(0, 5).toUpperCase()}` } });
-      for (const cantidad of [0, null]) {
+      for (const cantidad of [0, null, 2]) {
         const sku = `D-${randomUUID()}`;
         const parsed = normalizeCatalog({ productos: [{ codigo: sku, nombre: "Empty placed product", cantidad, deposito: warehouse.code, ubicacion: "E4-B2" }] }); assert(parsed.ok);
         const result = await applyCatalog(ctx, { products: parsed.value.doc.productos, parseProblems: parsed.value.problems, photos: null, photoProblems: [], lote: randomUUID() }); assert.deepEqual(result.fallidos, []);
         const item = await db.inventoryItem.findFirstOrThrow({ where: { organizationId: org, sku } });
-        assert.equal(item.defaultWarehouseId, warehouse.id); assert.equal(item.defaultLocation, "E4-B2"); assert.equal(await db.inventoryUnit.count({ where: { inventoryId: item.id } }), 0);
-        await confirm(item.id, 1); const units = (await reload(item.id)).units; assert.equal(units.length, 1); assert.equal(units[0].warehouseId, warehouse.id); assert.equal(units[0].location, "E4-B2");
+        assert.equal(item.defaultWarehouseId, warehouse.id); assert.equal(item.defaultLocation, "E4-B2"); assert.equal(await db.inventoryUnit.count({ where: { inventoryId: item.id } }), cantidad ?? 0);
+        await confirm(item.id, (cantidad ?? 0) + 1); const units = (await reload(item.id)).units; assert.equal(units.length, (cantidad ?? 0) + 1); assert(units.every(unit => unit.warehouseId === warehouse.id && unit.location === "E4-B2"));
       }
     });
   } finally {
