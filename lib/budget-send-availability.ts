@@ -1,6 +1,6 @@
 /** Revisión indicativa del envío: nunca acredita una reserva ni aprobación. */
 export type SendAvailabilityWarning = {
-  code: "dates" | "manual" | "pending_count" | "incomplete_game" | "external" | "shortage" | "no_items";
+  code: "dates" | "manual" | "pending_count" | "incomplete_game" | "external" | "shortage" | "no_items" | "operational";
   itemId: string | null;
   inventoryId?: string;
   name: string;
@@ -9,7 +9,18 @@ export type SendAvailabilityWarning = {
   /** null significa desconocido; cero sólo se usa con un conteo confirmado. */
   available?: number | null;
 };
+export type BudgetSendAvailabilityLine = {
+  itemId: string; inventoryId: string | null; sku: string | null; name: string; requested: number;
+  state: "available" | "shortage" | "unverified" | "incomplete" | "excluded";
+  /** Capacidad para el grupo calculado, no stock libre adicional ni reserva guardada. */
+  available: number | null;
+  covered: number | null;
+  groupId: string | null; groupRequested: number | null; sharedGroup: boolean;
+  reason: string;
+  range: { startsAt: string; endsAt: string } | null;
+};
 export type BudgetSendAvailability = {
+  lines: BudgetSendAvailabilityLine[];
   state: "available" | "shortage" | "unverified" | "incomplete" | "error";
   checkedAt: string;
   revision: string;
@@ -26,4 +37,8 @@ export const sendAvailabilityLabel = (state: BudgetSendAvailability["state"]): s
   unverified: "Disponibilidad por confirmar",
   incomplete: "Hay juegos por completar",
   error: "No pudimos comprobar la disponibilidad",
+})[state];
+
+export const sendAvailabilityLineLabel = (state: BudgetSendAvailabilityLine["state"]): string => ({
+  available: "Alcanza para el grupo", shortage: "Faltante en el grupo", unverified: "Por confirmar", incomplete: "Juego incompleto", excluded: "Excluido",
 })[state];

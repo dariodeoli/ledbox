@@ -1081,7 +1081,16 @@ async function comboShortageParts(organizationId: string, comboId: string, quant
   }
 }
 
+/** Capacidad calculada por el motor para un grupo MAX; nunca una reserva persistida. */
+export type DryRunInventoryGroup = {
+  inventoryId: string; itemIds: string[]; requested: number;
+  available: number | null; covered: number | null;
+  state: "available" | "shortage" | "unverified";
+  reason: "capacity" | "movement" | "conflict" | "kept" | "not_checked";
+};
 export type BudgetReservation = {
+  /** Sólo solicitado por dryRunDetails; una fila explícita por grupo calculado. */
+  dryRunGroups?: DryRunInventoryGroup[];
   eventId: string | null;
   eventName: string | null;
   range: { startsAt: Date; endsAt: Date } | null;
@@ -1210,6 +1219,8 @@ export async function reserveBudgetInventory(options: {
    * y SIEMPRE deshace la transacción. No reserva, no audita. `blocked` indica faltante.
    */
   dryRun?: boolean;
+  /** Proyección completa de lectura; sólo tiene efecto junto con dryRun. */
+  dryRunDetails?: boolean;
 }): Promise<BudgetReservation> {
   if (options.dryRun) options = { ...options, strict: true };
   try {
@@ -1260,7 +1271,8 @@ export async function reserveBudgetInventory(options: {
     const outcomes: ReservationOutcome[] = [];
     // Sin rango no hay cálculo ni transacción que revertir. El modo de prueba
     // debe salir antes del circuito de auditorías de una aprobación real.
-    if (options.dryRun && (!event || !range)) return { ...EMPTY_RESERVATION, eventId: event?.id ?? null, eventName: event?.name ?? null, range, requested };
+    const uncheckedGroups = (): DryRunInventoryGroup[] => groups.map(group => ({ inventoryId: group.inventory.id, itemIds: group.itemIds, requested: group.quantity, available: null, covered: null, state: "unverified", reason: "not_checked" }));
+    if (options.dryRun && (!event || !range)) return { ...EMPTY_RESERVATION, eventId: event?.id ?? null, eventName: event?.name ?? null, range, requested, ...(options.dryRunDetails ? { dryRunGroups: uncheckedGroups() } : {}) };
 
     // Fase atómica: lock de los ítems, disponibilidad recalculada con el cliente
     // de la transacción y escritura. Dos aprobaciones (o una aprobación y una
@@ -1269,6 +1281,9 @@ export async function reserveBudgetInventory(options: {
     type GroupCommit = {
       existing: { id: string; quantity: number; startsAt: Date | null; endsAt: Date | null } | null;
       movement: boolean;
+      /** Capacidad para este grupo, descontando piezas de combos; no incluye kept como stock libre. */
+      projectedAvailable?: number | null;
+      projectionMovement?: boolean;
       availability: RangeAvailability | null;
       reserved: number;
       /** Unidades totales de la fila después de la operación (incluye la parte de combos). */
@@ -1276,6 +1291,7 @@ export async function reserveBudgetInventory(options: {
       assignment: AssignmentWrite | null;
     };
     const commits = new Map<string, GroupCommit>();
+    let dryRunGroups: DryRunInventoryGroup[] = [];
     let atomicPhaseFailed = false;
     let strictBlocked = false;
     if (event && range) {
@@ -1317,6 +1333,7 @@ export async function reserveBudgetInventory(options: {
                 commits.set(group.inventory.id, {
                   existing: comboRow,
                   movement: false,
+                  projectedAvailable: committed.capacity ?? null,
                   availability: comboAvailability(group.inventory, capacity, range, []),
                   reserved: committed.assignment.quantity,
                   total: committed.assignment.quantity,
@@ -1324,7 +1341,7 @@ export async function reserveBudgetInventory(options: {
                     comboRow && comboRow.quantity === committed.assignment.quantity && !comboRow.holdExpiresAt && !comboRow.releasedAt ? null : committed.assignment,
                 });
               } else if (committed.reason === "insufficient") {
-                commits.set(group.inventory.id, { existing: comboRow, movement: false, availability: committed.availability, reserved: 0, total: 0, assignment: null });
+                commits.set(group.inventory.id, { existing: comboRow, movement: false, availability: committed.availability, projectedAvailable: committed.availability.available, reserved: 0, total: 0, assignment: null });
               } else if (committed.reason === "conflict") {
                 commits.set(group.inventory.id, { existing: comboRow, movement: true, availability: null, reserved: comboRow?.quantity ?? 0, total: comboRow?.quantity ?? 0, assignment: null });
               }
@@ -1366,7 +1383,7 @@ export async function reserveBudgetInventory(options: {
               },
             });
             if (existing && inMovement(existing)) {
-              commits.set(fresh.id, { existing, movement: true, availability: null, reserved: existing.quantity, total: existing.quantity, assignment: null });
+              commits.set(fresh.id, { existing, movement: true, projectionMovement: true, availability: null, reserved: existing.quantity, total: existing.quantity, assignment: null });
               continue;
             }
 
@@ -1388,7 +1405,8 @@ export async function reserveBudgetInventory(options: {
             const comboPart = existing && !stale ? existing.comboQuantity : 0;
             const kept = existing && !stale ? existing.quantity - comboPart : 0;
             const target = Math.max(group.quantity, kept);
-            const reserved = Math.max(kept, Math.min(target, Math.max(0, availability.available - comboPart)));
+            const projectedAvailable = Math.max(0, availability.available - comboPart);
+            const reserved = Math.max(kept, Math.min(target, projectedAvailable));
             const rangeChanged = existing
               ? existing.startsAt?.getTime() !== range.startsAt.getTime() || existing.endsAt?.getTime() !== range.endsAt.getTime()
               : false;
@@ -1429,12 +1447,21 @@ export async function reserveBudgetInventory(options: {
             commits.set(fresh.id, {
               existing: existing ? { id: existing.id, quantity: existing.quantity, startsAt: existing.startsAt, endsAt: existing.endsAt } : null,
               movement: false,
+              projectedAvailable,
               availability,
               reserved,
               total: reserved + comboPart,
               assignment,
             });
           }
+          if (options.dryRun && options.dryRunDetails) dryRunGroups = groups.map(group => {
+            const commit = commits.get(group.inventory.id);
+            const available = commit?.projectedAvailable ?? null;
+            const base = { inventoryId: group.inventory.id, itemIds: group.itemIds, requested: group.quantity, available, covered: commit?.reserved ?? null };
+            if (!commit || commit.movement || available === null) return { ...base, available: null, state: "unverified" as const, reason: commit?.projectionMovement ? "movement" as const : "conflict" as const };
+            if (available < group.quantity && commit.reserved >= group.quantity) return { ...base, state: "unverified" as const, reason: "kept" as const };
+            return { ...base, state: available >= group.quantity && commit.reserved >= group.quantity ? "available" as const : "shortage" as const, reason: "capacity" as const };
+          });
           if (options.strict) {
             const short = groups.some((group) => {
               const commit = commits.get(group.inventory.id);
@@ -1451,7 +1478,7 @@ export async function reserveBudgetInventory(options: {
       );
       } catch (error) {
         if (error instanceof DryRunRollback) {
-          return { eventId: event.id, eventName: event.name, range, outcomes: [], requested, reserved: 0, conflicts: 0, failed: false };
+          return { eventId: event.id, eventName: event.name, range, outcomes: [], requested, reserved: 0, conflicts: 0, failed: false, ...(options.dryRunDetails ? { dryRunGroups } : {}) };
         }
         if (error instanceof StrictStockShortage) {
           strictBlocked = true;
@@ -1466,6 +1493,10 @@ export async function reserveBudgetInventory(options: {
       }
     }
 
+    if (strictBlocked && event && range && options.dryRun && options.dryRunDetails) return {
+      eventId: event.id, eventName: event.name, range, outcomes: [], requested, reserved: 0,
+      conflicts: dryRunGroups.filter(group => group.state !== "available").length, failed: false, blocked: true, dryRunGroups,
+    };
     if (strictBlocked && event && range) {
       const shortOutcomes: ReservationOutcome[] = [];
       for (const group of groups) {

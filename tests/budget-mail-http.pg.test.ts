@@ -59,7 +59,7 @@ test("budget mail HTTP uses real local provider, persists receipt and never disp
     const input = { budgetId: budget.id, to: "qa250@example.invalid" };
     mode = "accepted";
     const before = deliveries;
-    const preview = await (await call({ ...input, preview: true })).json(); assert.equal(preview.availability.state, "available");
+    const preview = await (await call({ ...input, preview: true })).json(); assert.equal(preview.availability.state, "available"); assert.equal(preview.availability.lines.length, 1); assert.equal(preview.availability.lines[0].available, 2);
     assert.equal(await db.eventInventory.count({ where: { eventId: event.id } }), 0);
     const viewer = await cookie("VIEWER"); assert.equal((await call({ ...input, preview: true }, viewer)).status, 403);
     const foreignOrg = randomUUID();
@@ -68,11 +68,14 @@ test("budget mail HTTP uses real local provider, persists receipt and never disp
       const foreign = await cookie("OWNER", foreignOrg); assert.equal((await call({ ...input, preview: true }, foreign)).status, 404);
     } finally { await db.organization.delete({ where: { id: foreignOrg } }); }
     const competing = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "PRIVATE_COMPETITOR", startsAt: start, endsAt: end } });
-    await db.eventInventory.create({ data: { id: randomUUID(), organizationId: org, eventId: competing.id, inventoryId: stock.id, quantity: 2, startsAt: start, endsAt: end } });
+    const competingRow = await db.eventInventory.create({ data: { id: randomUUID(), organizationId: org, eventId: competing.id, inventoryId: stock.id, quantity: 1, startsAt: start, endsAt: end } });
+    assert.equal((await call({ ...input, confirm: true, confirmationToken: preview.confirmationToken })).status, 409, "una capacidad nueva invalida incluso si todavía alcanza");
+    const stillAvailable = await (await call({ ...input, preview: true })).json(); assert.equal(stillAvailable.availability.state, "available"); assert.equal(stillAvailable.availability.lines[0].available, 1);
+    await db.eventInventory.update({ where: { id: competingRow.id }, data: { quantity: 2 } });
     const assignments = await db.eventInventory.findMany({ where: { event: { organizationId: org } }, orderBy: { id: "asc" } });
-    assert.equal((await call({ ...input, confirm: true, confirmationToken: preview.confirmationToken, acceptAvailabilityWarnings: true })).status, 409);
+    assert.equal((await call({ ...input, confirm: true, confirmationToken: stillAvailable.confirmationToken, acceptAvailabilityWarnings: true })).status, 409);
     assert.equal(deliveries, before); assert.equal(await db.idempotencyKey.count({ where: { organizationId: org, key: preview.attemptId } }), 0);
-    const shortage = await (await call({ ...input, preview: true })).json(); assert.equal(shortage.availability.state, "shortage"); assert.doesNotMatch(JSON.stringify(shortage.availability), /PRIVATE_COMPETITOR/);
+    const shortage = await (await call({ ...input, preview: true })).json(); assert.equal(shortage.availability.state, "shortage"); assert.equal(shortage.availability.lines.length, 1); assert.equal(shortage.availability.lines[0].available, 0); assert.doesNotMatch(JSON.stringify(shortage.availability), /PRIVATE_COMPETITOR/);
     assert.equal((await call({ ...input, confirm: true, confirmationToken: shortage.confirmationToken })).status, 409);
     assert.equal(deliveries, before);
     const confirmed = await call({ ...input, confirm: true, confirmationToken: shortage.confirmationToken, acceptAvailabilityWarnings: true }); assert.equal(confirmed.status, 200); assert.equal((await confirmed.json()).status, "sent");
