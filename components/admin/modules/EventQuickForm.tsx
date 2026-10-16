@@ -29,8 +29,8 @@ export function EventQuickFields({ values, onChange, autoFocus, moreOpen = false
   };
   const name = <TextField label="Nombre del evento" required autoFocus={autoFocus} maxLength={200}
       value={values.name} onChange={(name) => onChange({ name })} placeholder="Ej.: Lanzamiento Samsung" />;
-  const starts = <DateTimeField label="Inicio" hint="Opcional · fecha y hora del evento" value={values.startsAt} onChange={(startsAt) => onChange({ startsAt })} />;
-  const ends = <DateTimeField label="Fin" value={values.endsAt} onChange={(endsAt) => onChange({ endsAt })} />;
+  const starts = <DateTimeField label="Inicio" shortcuts hint="Opcional · fecha y hora del evento" value={values.startsAt} onChange={(startsAt) => onChange({ startsAt })} />;
+  const ends = <DateTimeField label="Fin" shortcuts value={values.endsAt} onChange={(endsAt) => onChange({ endsAt })} />;
   const venue = <Combobox label="Lugar / recinto" value={values.location} allowCustomValue onChange={(location) => {
           // El texto nuevo se guarda de inmediato; seleccionar una sugerencia aplica su ficha.
           onChange({ location });

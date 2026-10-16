@@ -1,4 +1,5 @@
 "use client";
+import { dateShortcuts, type DateShortcutKind } from "@/lib/date-shortcuts";
 import { normalizeHex } from "@/lib/storefront-theme";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -896,6 +897,24 @@ export function SerialField({
   );
 }
 
+/** Opt-in: the field keeps its normal exact-date input; shortcuts only act on explicit selection. */
+function DateShortcuts({ kind, value, min, max, disabled, label, onChange }: {
+  kind: DateShortcutKind; value: string; min?: string; max?: string; disabled?: boolean;
+  label: string; onChange: (value: string) => void;
+}) {
+  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`}>
+    {dateShortcuts({ kind, value, min, max }).map(choice => {
+      const detail = `${choice.label}, ${choice.dateLabel}${kind === "datetime-local" ? ` a las ${choice.value.split("T")[1]}` : ""}`;
+      return <button key={choice.offset} type="button" disabled={disabled || !choice.allowed} aria-label={detail} title={choice.allowed ? detail : `${detail} · Fuera del rango permitido`} aria-pressed={value === choice.value} onClick={() => {
+        // Recheck civil day and bounds at activation, including a page left open across midnight.
+        const current = dateShortcuts({ kind, value, min, max })[choice.offset];
+        if (!disabled && current.allowed) onChange(current.value);
+      }}>{choice.label}</button>;
+    })}
+    {kind === "datetime-local" ? <small>Conserva la hora; vacío usa 00:00.</small> : null}
+  </div>;
+}
+
 function DateLikeField({
   type,
   label,
@@ -914,6 +933,7 @@ function DateLikeField({
   id,
   className,
   title,
+  shortcuts = false,
 }: {
   type: "date" | "time" | "datetime-local";
   label?: string;
@@ -934,6 +954,8 @@ function DateLikeField({
   id?: string;
   className?: string;
   title?: string;
+  /** Hoy/Mañana/Pasado mañana; sólo para fechas operativas, nunca automático. */
+  shortcuts?: boolean;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
@@ -954,6 +976,7 @@ function DateLikeField({
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(error, hint, hintId, errorId)}
       />
+      {shortcuts && type !== "time" ? <DateShortcuts kind={type} value={value} min={min} max={max} disabled={disabled} label={label ?? ariaLabel ?? "Fecha"} onChange={(next) => { if (next !== value) onChange(next); }} /> : null}
     </FieldChrome>
   );
 }
@@ -962,7 +985,7 @@ export function DateField(props: Omit<React.ComponentProps<typeof DateLikeField>
   return <DateLikeField {...props} type="date" />;
 }
 
-export function TimeField(props: Omit<React.ComponentProps<typeof DateLikeField>, "type">) {
+export function TimeField(props: Omit<React.ComponentProps<typeof DateLikeField>, "type" | "shortcuts">) {
   return <DateLikeField {...props} type="time" />;
 }
 
@@ -994,6 +1017,7 @@ export function DayField({
   disabled,
   className,
   title,
+  shortcuts = false,
   id,
 }: {
   label?: string;
@@ -1015,6 +1039,8 @@ export function DayField({
   disabled?: boolean;
   className?: string;
   title?: string;
+  /** Hoy/Mañana/Pasado mañana; sólo para fechas operativas, nunca automático. */
+  shortcuts?: boolean;
   id?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
@@ -1068,6 +1094,7 @@ export function DayField({
         aria-invalid={message ? true : undefined}
         aria-describedby={describedBy(message, hint, hintId, errorId)}
       />
+      {shortcuts ? <DateShortcuts kind="date" value={value} min={min} max={max} disabled={disabled} label={label ?? ariaLabel ?? "Fecha"} onChange={(next) => { setText(dayInputText(next)); setRangeError(""); if (next !== value) onChange(next); }} /> : null}
     </FieldChrome>
   );
 }

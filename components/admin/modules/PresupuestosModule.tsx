@@ -1994,8 +1994,8 @@ export function PresupuestosModule() {
           </dl>
 
           {canCreateEvent ? <><AdminDialogSection title="Fechas del evento (opcional)">
-            <DateTimeField label="Inicio del evento" size="md" value={sendStartsAt} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
-            <DateTimeField label="Fin del evento" size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
+            <DateTimeField label="Inicio del evento" shortcuts size="md" value={sendStartsAt} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
+            <DateTimeField label="Fin del evento" shortcuts size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
             <AdminButton icon="check" type="button" busy={sendDatesBusy} busyLabel="Guardando…" disabled={!sendDatesDirty || sendBusy || linkBusy} onClick={() => void saveSendDates()}>Guardar fechas</AdminButton>
           </AdminDialogSection><AdminNote>Guardar fechas no aprueba el presupuesto ni reserva inventario.</AdminNote></> : null}
 

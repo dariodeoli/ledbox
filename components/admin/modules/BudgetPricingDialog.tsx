@@ -410,13 +410,13 @@ export function BudgetPricingDialog({
         <section className="quote-document-section quote-document-section--conditions" aria-labelledby="quote-editor-conditions">
           <h3 id="quote-editor-conditions" className="quote-document-subtitle">Condiciones y fechas</h3>
           <div className="admin-dialog-grid">
-            <DateField
+            <DateField shortcuts
               label="Vigencia de la oferta"
               value={draft.validUntil}
               disabled={approved || closed}
               onChange={(value) => setDraft({ ...draft, validUntil: value })}
             />
-            <DateField
+            <DateField shortcuts
               label="Fecha de entrega"
               value={draft.deliveryAt}
               disabled={approved || closed}

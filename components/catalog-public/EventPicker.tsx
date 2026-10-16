@@ -86,7 +86,7 @@ export function EventPicker({ slug, range, variant = "hero", restore = false, on
   return (
     <Root className="cp-event cp-fields" data-variant={variant} {...(embedded ? { role: "group" } : { onSubmit: submit })} aria-label={title ?? "Fecha del evento"} data-testid="event-picker">
       <div className="cp-event-fields">
-        <div className="cp-event-date"><AdminIcon name="calendar" size={18} /><DayField label="Fecha del evento" value={from} min={today} size="full" required onChange={(value) => { setFrom(value); setMessage(""); }} /></div>
+        <div className="cp-event-date"><AdminIcon name="calendar" size={18} /><DayField label="Fecha del evento" shortcuts value={from} min={today} size="full" required onChange={(value) => { setFrom(value); setMessage(""); }} /></div>
         <div className="cp-event-days"><SelectField label="Días de alquiler" value={days} size="full" onChange={setDays} options={Array.from({ length: MAX_RENTAL_DAYS }, (_, index) => ({ value: String(index + 1), label: `${index + 1} ${index === 0 ? "día" : "días"}` }))} /></div>
         <div className="cp-event-guests"><NumberField label="Invitados" value={guests} size="full" maxLength={5} placeholder="Ej.: 80" onChange={(value) => setGuests(value.replace(/\D/g, ""))} /></div>
         {variant !== "drawer" && variant !== "panel" ? <button className="cp-btn cp-btn--primary cp-event-go" type="submit">Ver disponibilidad</button> : null}

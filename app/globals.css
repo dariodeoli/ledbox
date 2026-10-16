@@ -5617,3 +5617,11 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .admin-root [data-oc-select]:has(> .admin-filter) { max-width: 100%; }
   .admin-root [data-oc-select] > .admin-filter { min-height: 44px; }
 }
+/* Kit de fechas: atajos operativos opt-in, sin alterar el input de fecha exacta. */
+.admin-date-shortcuts { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
+.admin-date-shortcuts button { padding: 4px 0; min-height: 32px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--a-accent, var(--color-primary)); font: inherit; font-size: 11px; cursor: pointer; }
+.admin-date-shortcuts button[aria-pressed="true"] { border-bottom-color: currentColor; font-weight: 700; }
+.admin-date-shortcuts button:disabled { color: var(--a-muted, var(--color-muted)); cursor: default; }
+.admin-date-shortcuts button:focus-visible { outline: 2px solid var(--a-accent, var(--color-primary)); outline-offset: 2px; }
+.admin-date-shortcuts small { flex-basis: 100%; color: var(--a-muted, var(--color-muted)); font-size: 10px; }
+@media (pointer: coarse) { .admin-date-shortcuts button { min-height: 44px; } }
