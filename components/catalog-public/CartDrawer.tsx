@@ -281,7 +281,7 @@ export function CartDrawer(props: {
                     <TextField label="Nombre y apellido" required value={name} onChange={setName} minLength={2} maxLength={120} autoComplete="name" autoFocus />
                     <PhoneField label="WhatsApp" required value={phone} onChange={setPhone} />
                     <EmailField label="Correo" required value={email} onChange={setEmail} />
-                    <CityField label="Ciudad" required value={city} onChange={setCity} onSelect={(selected, dept) => { setCity(selected); setDepartment(dept); }} />
+                    <CityField label="Ciudad" required value={city} onChange={(value) => { setCity(value); setDepartment(""); }} onSelect={(selected, dept) => { setCity(selected); setDepartment(dept); }} />
                     <TextField label="Lugar del evento" required={!city.trim()} value={place} onChange={setPlace} maxLength={160} autoComplete="street-address" placeholder="Dirección, salón o referencia" hint={department ? `Departamento: ${department}` : undefined} />
                     <TextAreaField label="Comentarios" optional wide value={notes} onChange={setNotes} maxLength={1000} rows={3} />
                   </div>
