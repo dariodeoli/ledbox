@@ -22,6 +22,7 @@ import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
 import { addItemsToCollection, COLLECTION_PHOTO_WIDTH, upsertCollectionByName } from "@/lib/server/collections";
 import { prepareImage } from "@/lib/server/covers";
 import { collectionSlug } from "@/lib/collections";
+import { categoryPathKey } from "@/lib/inventory-categories";
 import { prepareCategoryPhoto, setCategoryImage } from "@/lib/server/category-image";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
@@ -463,21 +464,22 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     const { category } = entry;
     const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
     try {
+      if (input.importMode === "CREATE_ONLY" && await db.inventoryCategory.findFirst({ where: { organizationId, key: categoryPathKey(category.categoria, category.subcategoria) }, select: { id: true } })) continue;
       let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
       const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
       if (bytes) {
         prepared = await prepareCategoryPhoto(bytes);
-        if (!prepared.ok) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${prepared.error}` });
       }
       const saved = await db.$transaction(async (tx) => {
         const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria }, { preserveExisting: input.importMode === "CREATE_ONLY" });
         if (!resolved) throw new Error("No se pudo resolver la categoría.");
-        if (input.importMode === "CREATE_ONLY" && !resolved.created) return false;
+        if (input.importMode === "CREATE_ONLY" && !resolved.created) return { changed: false, photoError: null };
         if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
-        if (prepared?.ok) return setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
-        return false;
+        const changed = prepared?.ok ? await setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo) : false;
+        return { changed, photoError: prepared && !prepared.ok ? prepared.error : null };
       });
-      if (saved) categoryPhotos += 1;
+      if (saved.changed) categoryPhotos += 1;
+      if (saved.photoError) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${saved.photoError}` });
     } catch (error) {
       console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
@@ -628,11 +630,11 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   }
   for (const entry of plan.collections) {
     try {
+      const preserveMetadata = input.importMode === "CREATE_ONLY" && Boolean(await db.collection.findFirst({ where: { organizationId, slug: collectionSlug(entry.nombre) }, select: { id: true } }));
       let prepared: Awaited<ReturnType<typeof prepareImage>> | null = null;
-      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      const bytes = !preserveMetadata && entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
       if (bytes) {
         prepared = await prepareImage(bytes, COLLECTION_PHOTO_WIDTH);
-        if (!prepared.ok) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${prepared.error}` });
       }
       const changed = await db.$transaction(async (tx) => {
         const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden }, { preserveExisting: input.importMode === "CREATE_ONLY" });
@@ -641,9 +643,11 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
           await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
           collectionPhotos += 1;
         }
-        return input.importMode !== "CREATE_ONLY" || row.created || added > 0;
+        const canChangeMetadata = input.importMode !== "CREATE_ONLY" || row.created;
+        return { changed: canChangeMetadata || added > 0, photoError: canChangeMetadata && prepared && !prepared.ok ? prepared.error : null };
       });
-      if (changed) collectionsTouched += 1;
+      if (changed.changed) collectionsTouched += 1;
+      if (changed.photoError) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${changed.photoError}` });
     } catch (error) {
       console.error(`[import-catalogo] colección ${entry.nombre}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `colección ${entry.nombre}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la colección." });

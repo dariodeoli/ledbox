@@ -43,3 +43,18 @@ test('actual preview row renders pending count separately from confirmed zero',(
  const row=runInNewContext(ts.transpileModule(target!.getText(src)+';',{compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2022}}).outputText,{React,modulo:{id:'productos'},fila:{detalle:'Unidad',stockCountStatus:status,countBefore:before,countAfter:after}});assert.ok(renderToStaticMarkup(row).includes(expected as string));
  }
 });
+
+test('preserving an existing pending SKU precedes all count-confirmation validation',()=>{
+ const stored:ExistingItem={id:'existing',name:'Legacy pending',isCombo:false,inTrash:false,units:4,activeUnits:4,stockCountStatus:'PENDING_COUNT'};
+ const kept=plan([{...existingRow,cantidad:2}],'CREATE_ONLY',stored);assert.equal(kept.items[0].accion,'omitir');assert.equal(kept.items[0].stockCountStatus,'PENDING_COUNT');assert.equal(kept.problems.filter(x=>x.nivel==='error').length,0);assert.ok(kept.problems.some(x=>x.tipo==='existente-conservado'));
+ assert.ok(plan([{...existingRow,cantidad:2}],'UPSERT',stored).problems.some(x=>x.tipo==='cantidad-invalida'));
+});
+test('ignored malformed category/collection photos are never prepared and never reported as failed',async()=>{
+ let prepared=0;
+ const apply=actual('lib/server/import-catalog.ts','applyCatalog',{previewCatalog:async()=>({items:[],categories:[{category:{categoria:'Sillas',subcategoria:null,foto:'bad',orden:99},foto:'bad'}],collections:[{nombre:'Actual',descripcion:'Changed',foto:'bad',orden:99}],summary:{omitidos:1},problems:[]}),db:{inventoryCategory:{findFirst:async()=>({id:'cat'})},collection:{findFirst:async()=>({id:'collection'})},$transaction:async(cb:any)=>cb({})},categoryPathKey,collectionSlug,upsertCollectionByName:async()=>({id:'collection',created:false}),addItemsToCollection:async()=>0,prepareCategoryPhoto:async()=>{prepared++;return{ok:false,error:'malformed'}},prepareImage:async()=>{prepared++;return{ok:false,error:'malformed'}},recordAudit:async()=>{},ADJUSTABLE_STATES:['MAINTENANCE','DAMAGED','LOST'],BLOCK_SIZE:25});
+ const result=await apply({organizationId:'org'},{lote:'fixture',photos:new Map([['bad',new Uint8Array([1,2,3])]]),importMode:'CREATE_ONLY'});assert.equal(prepared,0);assert.equal(result.fallidos.length,0);assert.equal(result.fotosCategoria,0);assert.equal(result.fotosColeccion,0);assert.equal(result.colecciones,0);
+});
+test('preserved preview count renders Sin cambios without future arrows',()=>{
+ const src=ts.createSourceFile('panel.tsx',readFileSync('components/admin/AdminImportPanel.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let target:ts.Node|undefined;const visit=(n:ts.Node)=>{if(ts.isJsxElement(n)&&n.getText(src).startsWith('<span')&&n.getText(src).includes('fila.countBefore'))target=n;ts.forEachChild(n,visit)};visit(src);assert.ok(target);
+ const row=runInNewContext(ts.transpileModule(target!.getText(src)+';',{compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2022}}).outputText,{React,modulo:{id:'productos'},fila:{detalle:'Sin cambios',conservado:true,stockCountStatus:'CONFIRMED',countBefore:4,countAfter:99}});const html=renderToStaticMarkup(row);assert.ok(html.includes('Sin cambios'));assert.ok(html.includes('Stock: 4'));assert.ok(!html.includes('→'));assert.ok(!html.includes('99'));
+});

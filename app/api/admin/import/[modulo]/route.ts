@@ -217,11 +217,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         codigo: item.product.codigo,
         nombre: item.product.nombre,
         accion: item.accion,
+        conservado: input.importMode === "CREATE_ONLY" && Boolean(item.existingId) && item.accion === "omitir",
         esCombo: item.esCombo,
         stockCountStatus: item.stockCountStatus,
         countBefore: item.countBefore,
         countAfter: item.countAfter,
-        detalle: [
+        detalle: input.importMode === "CREATE_ONLY" && item.existingId && item.accion === "omitir" ? "Sin cambios" : [
           item.incompleto ? "Juego incompleto (sin piezas)" : item.esCombo ? `Juego de ${item.product.componentes.length} componente${item.product.componentes.length === 1 ? "" : "s"}` : "Unidad",
           item.convertir ? "unidad que pasa a juego" : null,
           item.product.precio ? `Gs ${item.product.precio.toLocaleString("es-PY")}` : "precio a consultar",

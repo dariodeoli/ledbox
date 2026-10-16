@@ -17,7 +17,7 @@ import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } fr
 
 type Tarjeta = { clave: string; etiqueta: string; valor: number };
 type Problema = { nivel: "error" | "aviso"; tipo: string; codigo: string | null; mensaje: string; motivo?: string };
-type Fila = { esCombo?: boolean; stockCountStatus?: "CONFIRMED" | "PENDING_COUNT"; countBefore?: number | null; countAfter?: number | null; codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
+type Fila = { conservado?: boolean; esCombo?: boolean; stockCountStatus?: "CONFIRMED" | "PENDING_COUNT"; countBefore?: number | null; countAfter?: number | null; codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
 type Preview = { importMode?: CatalogImportMode; catalogo: unknown; estados?: string | null; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
 type Resultado = {
   lote: string;
@@ -306,11 +306,11 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
             <ul className="admin-import-rows">
               {preview.filas.map((fila) => (
                 <li key={fila.codigo}>
-                  <AdminBadge tone={ACCION_TONO[fila.accion]}>{ACCION_TEXTO[fila.accion]}</AdminBadge>
+                  <AdminBadge tone={fila.conservado ? "neutral" : ACCION_TONO[fila.accion]}>{fila.conservado ? "Conservar" : ACCION_TEXTO[fila.accion]}</AdminBadge>
                   <span className="admin-import-row-main">
                     <strong>{fila.codigo}</strong> {fila.nombre}
                   </span>
-                  <span className="admin-field-hint">{fila.detalle}{modulo.id === "productos" && !fila.esCombo && fila.stockCountStatus ? ` · Stock: ${fila.countBefore === null ? "desconocido" : fila.countBefore ?? "—"} → ${fila.stockCountStatus === "PENDING_COUNT" ? "pendiente de conteo" : fila.countAfter ?? "—"}` : ""}</span>
+                  <span className="admin-field-hint">{fila.detalle}{modulo.id === "productos" && !fila.esCombo && fila.stockCountStatus ? fila.conservado ? ` · Stock: ${fila.stockCountStatus === "PENDING_COUNT" ? "pendiente de conteo" : fila.countBefore ?? "—"}` : ` · Stock: ${fila.countBefore === null ? "desconocido" : fila.countBefore ?? "—"} → ${fila.stockCountStatus === "PENDING_COUNT" ? "pendiente de conteo" : fila.countAfter ?? "—"}` : ""}</span>
                 </li>
               ))}
             </ul>

@@ -903,16 +903,17 @@ export function planCatalog(options: {
       estados: null,
     };
     const errors: ImportProblem[] = [];
-    if (existing?.stockCountStatus === "PENDING_COUNT" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
-      problems.push(problem("error", "cantidad-invalida", product.codigo, product.fila, `${product.nombre}: el conteo es menor que las unidades registradas. Revisá sus estados o retiros antes de confirmar; no se elimina ninguna unidad.`));
-      return { ...base, accion: "omitir", stockCountStatus: "PENDING_COUNT", countAfter: null };
-    }
-
     if (existing && options.importMode === "CREATE_ONLY") {
       problems.push(problem("aviso", "existente-conservado", product.codigo, product.fila, `${product.nombre}: el código ya existe; se conserva sin modificar stock, tarifas, datos ni fotos.`));
       const count = existing.stockCountStatus === "PENDING_COUNT" || existingIsGame ? null : existing.activeUnits ?? existing.units;
       return { ...base, accion: "omitir", esCombo: existingIsGame, incompleto: Boolean(existing.incompleto), stockCountStatus: existing.stockCountStatus ?? "CONFIRMED", countBefore: count, countAfter: count };
     }
+
+    if (existing?.stockCountStatus === "PENDING_COUNT" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
+      problems.push(problem("error", "cantidad-invalida", product.codigo, product.fila, `${product.nombre}: el conteo es menor que las unidades registradas. Revisá sus estados o retiros antes de confirmar; no se elimina ninguna unidad.`));
+      return { ...base, accion: "omitir", stockCountStatus: "PENDING_COUNT", countAfter: null };
+    }
+
 
     if (product.tipo === "juego" && !hasComponents(product)) {
       problems.push(
