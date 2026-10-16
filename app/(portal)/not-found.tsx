@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { publicConfig } from "@/lib/public-config";
+import { PortalSupportLink } from "@/app/(portal)/_components/PortalSupportLink";
 
 /** 404 del portal (issue #12): código inválido, revocado o presupuesto inexistente. */
 export default function PortalNotFound() {
@@ -11,7 +11,7 @@ export default function PortalNotFound() {
       </h1>
       <p className="portal-lead">
         El código puede estar mal escrito, o el link fue revocado por el equipo de LedBox. Revisá el código del QR o
-        pedí un link nuevo por WhatsApp al {publicConfig.whatsappNumber.replace(/^(\d{3})(\d+)/, "+$1 $2")}.
+        pedí un link nuevo por WhatsApp al <PortalSupportLink />.
       </p>
       <Link className="portal-btn portal-btn--primary" href="/portal">
         Probar con otro código
