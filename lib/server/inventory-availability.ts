@@ -1258,6 +1258,9 @@ export async function reserveBudgetInventory(options: {
     const groups = groupLinkedItems(linked);
     const requested = groups.reduce((sum, group) => sum + group.quantity, 0);
     const outcomes: ReservationOutcome[] = [];
+    // Sin rango no hay cálculo ni transacción que revertir. El modo de prueba
+    // debe salir antes del circuito de auditorías de una aprobación real.
+    if (options.dryRun && (!event || !range)) return { ...EMPTY_RESERVATION, eventId: event?.id ?? null, eventName: event?.name ?? null, range, requested };
 
     // Fase atómica: lock de los ítems, disponibilidad recalculada con el cliente
     // de la transacción y escritura. Dos aprobaciones (o una aprobación y una
@@ -1455,6 +1458,7 @@ export async function reserveBudgetInventory(options: {
         } else {
         // La aprobación nunca se rompe: sin la fase atómica no se reservó nada
         // (la transacción hizo rollback) y todo queda pendiente de reservar.
+        if (options.dryRun) return { ...EMPTY_RESERVATION, eventId: event.id, eventName: event.name, range, requested, failed: true };
         atomicPhaseFailed = true;
         commits.clear();
         console.error("[reserva] Falló la fase atómica de la reserva; queda pendiente:", error instanceof Error ? error.message : error);
