@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatGs, type BillingUnit } from "@/lib/catalog";
 import { whatsappUrl } from "@/lib/public-config";
 
+import { Stepper } from "@/components/catalog-public/Stepper";
 import type { CartItem } from "@/lib/public-cart";
 import { mountCartDialogFocus } from "./cart-dialog-focus";
 
@@ -39,8 +40,8 @@ export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; on
         {!items.length && <p className="f-note">Agregá productos para preparar tu cotización.</p>}
         {items.map(item => <div className="cart-item" key={item.product.id}>
           <div><strong>{item.product.name}</strong><small>{formatGs(item.product.price)} · {item.product.unitLabel}</small>
-            <div className="cart-controls"><label>Cantidad <input type="number" min="1" max="99" value={item.quantity} onChange={e => update(item.product.id, { quantity: Math.max(1, Number(e.target.value) || 1) })} /></label>
-              {item.product.unit !== "event" && <label>Días <input type="number" min="1" max="90" value={item.duration} onChange={e => update(item.product.id, { duration: Math.max(1, Number(e.target.value) || 1) })} /></label>}
+            <div className="cart-controls"><div className="cart-control"><span>Cantidad</span><Stepper editable variant="cart" label={`Cantidad de ${item.product.name}`} min={1} max={99} value={item.quantity} onChange={quantity => update(item.product.id, { quantity })} /></div>
+              {item.product.unit !== "event" && <div className="cart-control"><span>Días</span><Stepper editable variant="cart" label={`Días de ${item.product.name}`} min={1} max={90} value={item.duration} onChange={duration => update(item.product.id, { duration })} /></div>}
             </div>
           </div><button className="cart-remove" type="button" aria-label={`Quitar ${item.product.name}`} onClick={() => remove(item.product.id)}>×</button>
         </div>)}

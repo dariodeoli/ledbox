@@ -1,5 +1,6 @@
 "use client";
 import { dateShortcuts, type DateShortcutKind } from "@/lib/date-shortcuts";
+import { integerDraft } from "@/lib/quantity-control";
 import { normalizeHex } from "@/lib/storefront-theme";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -556,6 +557,10 @@ export function NumberField({
   error,
   wide, size,
   disabled,
+  readOnly,
+  onBlur,
+  onKeyDown,
+  strictInteger,
   name,
   id,
   className,
@@ -577,6 +582,11 @@ export function NumberField({
   /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
   size?: FieldSize;
   disabled?: boolean;
+  readOnly?: boolean;
+  onBlur?: () => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  /** Rechaza signos, decimales y exponentes; conserva el borrador vacío. */
+  strictInteger?: boolean;
   name?: string;
   id?: string;
   className?: string;
@@ -597,7 +607,13 @@ export function NumberField({
         type="text"
         inputMode="numeric"
         value={value}
-        onChange={(event) => onChange(digitsOnly(event.target.value).replace(/^0+(?=\d)/, ""))}
+        onChange={(event) => {
+          const next = strictInteger ? integerDraft(event.target.value) : digitsOnly(event.target.value).replace(/^0+(?=\d)/, "");
+          if (next !== null) onChange(next);
+        }}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        readOnly={readOnly}
         maxLength={maxLength}
         required={required}
         placeholder={placeholder}
