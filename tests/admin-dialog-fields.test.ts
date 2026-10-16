@@ -124,8 +124,9 @@ test("ventana: tamaños 560 / 720 / ficha lateral y hoja completa en celular", (
 
 test("ventana: foco, Esc, aria-modal, trampa de Tab y confirmación sin window.confirm", () => {
   assert.match(dialog, /aria-modal="true"/);
-  assert.match(dialog, /event\.key === "Escape"/);
-  assert.match(dialog, /event\.key !== "Tab"/);
+  assert.match(dialog, /useModalBehavior\(sectionRef/);
+  assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /event\.key === 'Escape'/);
+  assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /event\.key !== 'Tab'/);
   assert.match(dialog, /requestClose/);
   assert.match(dialog, /¿Descartar los cambios\?/);
   assert.doesNotMatch(dialog, /window\.confirm|confirm\(/);

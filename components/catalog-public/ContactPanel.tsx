@@ -22,7 +22,18 @@ export function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { s
   const [result, setResult] = useState<{ url: string; share: { whatsapp: string | null; mailto: string | null } } | null>(null);
   const [copied, setCopied] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
-  useModalBehavior(panel, onClose);
+  const focusScope = useRef<Element | null>(null);
+  useModalBehavior(panel, onClose, { fallbackFocus: () => {
+    // Saving replaces the cart drawer, so its opener may have unmounted.
+    // Resolve a current, visible trigger within this store (also safe in previews).
+    const candidates = [...focusScope.current?.querySelectorAll<HTMLElement>("[data-store-cart-trigger]") ?? []]
+      .filter((node) => node.getClientRects().length > 0 && !node.matches(":disabled") && !node.closest('[hidden],[inert],[aria-hidden="true"]'));
+    return candidates.find((node) => {
+      const box = node.getBoundingClientRect();
+      const viewport = node.ownerDocument.defaultView;
+      return box.bottom > 0 && box.right > 0 && box.top < (viewport?.innerHeight ?? 0) && box.left < (viewport?.innerWidth ?? 0);
+    }) ?? candidates[0] ?? null;
+  } });
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -62,7 +73,7 @@ export function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { s
 
   return (
     <div className="cp-overlay cp-overlay--contact" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cp-drawer cp-drawer--narrow cp-contact" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={panel} tabIndex={-1} data-testid="save-cart-dialog">
+      <div className="cp-drawer cp-drawer--narrow cp-contact" role="dialog" aria-modal="true" aria-labelledby="contacto-carrito" ref={(node) => { panel.current = node; if (node) focusScope.current = node.closest(".cp-theme"); }} tabIndex={-1} data-testid="save-cart-dialog">
         {result ? (
           <>
             <header className="cp-drawer-head">

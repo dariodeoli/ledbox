@@ -73,6 +73,12 @@ Nunca un `<input>` suelto. Un objeto canónico por tipo:
 - Envío single-flight: deshabilitar mientras guarda, evitar dobles clics.
 - Nada de `alert()`/`confirm()` nativos: diálogos propios.
 
+### Ventanas y foco
+
+`lib/overlay-lifecycle.ts` es la única base de overlays: stack por documento, foco/Tab/Escape, fondo inert, bloqueo de scroll y retorno de foco. React usa `components/overlays/useModalBehavior.ts`; ThemePortal conserva su reexport para tienda. AdminDialog/Confirm, drawers de tienda, consulta lead, carrito landing y sidebar mobile la adoptan. Menús portados de AdminMenu se registran como ramas del diálogo propietario: conservan flechas/cierre de menú sin escapar de su foco.
+
+PublicNav conserva `dialog.showModal()` y cancelación nativa (no se duplica su teclado); comparte stack, bloqueo y limpieza. Popovers no modales (menú de enlaces de tienda, avisos, selectores/listbox) conservan navegación propia sin bloquear fondo. AdminLockScreen reemplaza el shell entero: no hay fondo al cual volver ni Escape para eludir el bloqueo.
+
 ## 6. Estados y avisos
 
 - Un objeto por concepto: toast de éxito, toast de error, estado vacío, alerta inline. No inventar variantes.

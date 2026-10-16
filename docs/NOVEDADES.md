@@ -736,3 +736,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Fechas de eventos y presupuestos: atajos Hoy, Mañana y Pasado mañana con fecha exacta, límites y hora conservada. Los formularios históricos conservan su selección exacta sin sugerencias que no corresponden.
 - Campos compartidos adoptados en formularios públicos, portal y plataforma. Los montos conservan el valor pegado con «Gs.» y las rebajas del portal usan el mismo campo de monto y porcentaje que el panel.
 - Recintos: libreta independiente con contactos y ubicación predeterminados para próximos eventos; guardar o actualizar es explícito y no cambia eventos anteriores. La ficha sobrevive al borrado del evento.
+
+## v2.1.136 — 2026-10-15
+
+- Cantidades y días comparten un control compacto en tienda, carrito y portal. Conserva los límites de cada contexto, permite borrar mientras se escribe y admite flechas del teclado.
+- Consentimientos, opciones de aprobación y comprobantes usan el kit común. El comprobante conserva selección, obligatoriedad, compresión y validación existentes.
+- Ventanas de panel, tienda, carrito y consulta comparten foco, Tab, Escape, bloqueo del fondo y retorno al botón de origen, incluso con ventanas anidadas y menús. El menú móvil nativo conserva el comportamiento del navegador.
+- La nota de rechazo de propuesta y el selector del reporte usan los mismos campos compartidos. Una revisión automática de toda la app impide introducir controles visibles nativos fuera del kit.
+
+- Los selectores de opciones respetan su tamaño indicado y no invaden el campo de al lado dentro de grillas compactas.

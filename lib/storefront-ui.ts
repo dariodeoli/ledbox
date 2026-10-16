@@ -1,3 +1,4 @@
+import { stepQuantity } from "./quantity-control";
 import type { PriceMode } from "./appearance";
 
 /**
@@ -24,7 +25,7 @@ export function quantityStep(priceMode: PriceMode, isPackage: boolean): number {
 }
 
 export const MAX_QUANTITY = 99;
-export const nextQuantity = (current: number, step: number, direction: 1 | -1) => Math.max(0, Math.min(MAX_QUANTITY, current + direction * step));
+export const nextQuantity = (current: number, step: number, direction: 1 | -1) => stepQuantity(current, direction * step, 0, MAX_QUANTITY);
 
 /** Dato corto de la tarjeta de categoría: «Desde Gs. X» si hay precios, y siempre «N productos». Nunca inventa un precio. */
 export function categoryDatum(entry: { count: number; minUnit: number | null }, showPrices: boolean, priceMode: PriceMode): string {

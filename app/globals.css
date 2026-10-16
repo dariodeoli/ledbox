@@ -1505,7 +1505,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 @media (max-width: 720px) { .admin-field[data-size] { max-width: none; } }
 
 /* ── Segmentado: una fila, opciones parejas (nunca parte en dos líneas) ── */
-.admin-field .admin-segmented { flex-wrap: nowrap; }
+.admin-field > [role="group"] { min-width: 0; }
+.admin-field .admin-segmented { flex-wrap: nowrap; max-width: 100%; }
 /* El panel no carga el preflight de Tailwind: sin este reset el <button> nativo se ve como tecla gris con borde. */
 .admin-field .admin-segmented > button { flex: 1 1 0; min-width: 0; min-height: calc(var(--a-field-h) - 10px); padding-inline: 8px; border: 0; background: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-field .admin-segmented > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
@@ -3243,6 +3244,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   height: 34px; padding: 0 8px; border: 1px solid #c7d3da; border-radius: 8px;
   background: #fff; color: #16232a; font: 600 12px/1 var(--font-body); min-width: 12rem;
 }
+.lbprint-select-wrap [data-oc-select] { min-width: 12rem; }
+.lbprint-select-wrap .oc-select-chevron { color: #16232a; }
 .lbprint-terms { margin: 0 0 6px; white-space: pre-line; }
 .lbprint-terms-title { margin: 6px 0 2px; font-weight: 600; }
 .lbprint-list { margin: 0; padding-left: 18px; }
@@ -5625,3 +5628,22 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-date-shortcuts button:focus-visible { outline: 2px solid var(--a-accent, var(--color-primary)); outline-offset: 2px; }
 .admin-date-shortcuts small { flex-basis: 100%; color: var(--a-muted, var(--color-muted)); font-size: 10px; }
 @media (pointer: coarse) { .admin-date-shortcuts button { min-height: 44px; } }
+
+/* Editable quantity controls reuse NumberField; layout belongs to the shared
+   stepper instead of a separate number-input skin in each cart. */
+.quantity-stepper--editable { --quantity-input-width: 5ch; display: inline-grid; grid-template-columns: 32px minmax(0, var(--quantity-input-width)) 32px; width: max-content; align-items: center; gap: 0; max-width: 100%; }
+.quantity-stepper--editable > input { box-sizing: border-box; width: 100%; min-width: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.cart-controls { flex-wrap: wrap; }
+.cart-control { display: grid; gap: 5px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.cart-stepper { border: 1px solid var(--line-control); border-radius: 8px; overflow: hidden; }
+.cart-stepper > button { display: grid; place-items: center; width: 32px; height: 36px; padding: 0; border: 0; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.cart-stepper > button:disabled { opacity: .4; cursor: not-allowed; }
+.cart-controls .cart-stepper > input { width: 100%; height: 36px; padding: 0 3px; border: 0; border-inline: 1px solid var(--line-control); border-radius: 0; }
+.cart-stepper:focus-within { outline: 2px solid var(--led); outline-offset: 2px; }
+.portal-table--items .quantity-stepper--editable { grid-template-columns: 30px minmax(0, var(--quantity-input-width)) 30px; }
+.portal-table--items .quantity-stepper--editable > input { width: 100%; }
+@media (pointer: coarse) {
+  .quantity-stepper--editable, .portal-table--items .quantity-stepper--editable { grid-template-columns: 44px minmax(0, var(--quantity-input-width)) 44px; }
+  .cart-stepper > button, .cart-controls .cart-stepper > input { height: 44px; }
+  .cart-stepper > button { width: 44px; }
+}

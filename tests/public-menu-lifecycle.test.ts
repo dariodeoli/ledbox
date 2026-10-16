@@ -1,3 +1,4 @@
+import { overlayDocument } from "./helpers/overlay-dom";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { openPublicMenu } from "../components/public/public-menu-lifecycle";
@@ -5,10 +6,14 @@ import { openPublicMenu } from "../components/public/public-menu-lifecycle";
 function fixture(desktop = false) {
   const callbacks = new Set<() => void>();
   const media = { matches: desktop, addEventListener: (_: string, cb: () => void) => callbacks.add(cb), removeEventListener: (_: string, cb: () => void) => callbacks.delete(cb) };
-  const doc = { body: { style: { overflow: "auto" } }, documentElement: { style: { overflow: "clip" } }, defaultView: { matchMedia: () => media } };
+  const f = overlayDocument();
+  const doc = f.doc;
+  doc.defaultView.matchMedia = () => media;
   let closed = 0, focused = 0, shown = 0;
-  const dialog = { ownerDocument: doc, open: false, showModal() { shown++; this.open = true; }, close() { this.open = false; } };
-  const trigger = { isConnected: true, focus() { focused++; } };
+  const dialog = f.el('DIALOG'); doc.body.append(dialog);
+  dialog.showModal = () => { shown++; dialog.open = true; };
+  const trigger = f.opener;
+  trigger.focus = () => { focused++; doc.activeElement = trigger; };
   const release = openPublicMenu(dialog as unknown as HTMLDialogElement, trigger as unknown as HTMLButtonElement, () => closed++);
   return { doc, dialog, media, callbacks, trigger, release, counts: () => ({ closed, focused, shown }) };
 }
@@ -35,7 +40,7 @@ test("desktop activation never locks scrolling or opens a modal", () => {
 test("resizing to desktop closes the mobile menu and releases resources", () => {
   const f = fixture(); f.media.matches = true;
   for (const cb of f.callbacks) cb();
-  assert.equal(f.counts().closed, 1); f.trigger.isConnected = false; f.release();
+  assert.equal(f.counts().closed, 1); f.trigger.remove(); f.release();
   assert.equal(f.callbacks.size, 0); assert.equal(f.counts().focused, 0);
   assert.equal(f.doc.documentElement.style.overflow, "clip");
 });

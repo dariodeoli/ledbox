@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { mountOverlayBranch } from "@/lib/overlay-lifecycle";
+import { useModalBehavior } from "@/components/overlays/useModalBehavior";
 import { Button as SharedButton, Select as SharedSelect } from "owncoding-ui";
 import type { KpiState } from "@/components/admin/kpi-state";
 import { createPortal } from "react-dom";
@@ -294,7 +296,9 @@ export function AdminActionsMenu({
 
   useEffect(() => {
     if (!open || !pos) return;
+    const release = buttonRef.current && popRef.current ? mountOverlayBranch(buttonRef.current, popRef.current) : undefined;
     popRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    return release;
   }, [open, Boolean(pos)]);
 
   useEffect(() => {
@@ -933,52 +937,10 @@ export function AdminDialog({
   }, []);
 
   const ready = host !== null;
-  useEffect(() => {
-    if (!ready) return;
-    const token = Symbol("dialog");
-    DIALOG_STACK.push(token);
-    const opener = openerRef.current;
-    // Si un campo del diálogo ya tomó el foco al montar (`autoFocus`), se
-    // respeta: el botón de cerrar es solo el respaldo (issue #106).
-    const active = document.activeElement;
-    const ownsFocus = active instanceof HTMLElement && Boolean(active.closest(".admin-dialog"));
-    if (!ownsFocus) closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      // Con diálogos apilados, Escape y Tab son del que está arriba.
-      if (DIALOG_STACK[DIALOG_STACK.length - 1] !== token) return;
-      if (event.key === "Escape" && !event.defaultPrevented) {
-        if (latest.current.confirming) setConfirming(false);
-        else requestClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const root = sectionRef.current;
-      if (!root) return;
-      const current = document.activeElement;
-      if (current instanceof HTMLElement && document.body.contains(current) && !root.contains(current) && current !== document.body) return;
-      const focusables = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((node) => node.offsetParent !== null || node === current);
-      if (focusables.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (event.shiftKey && (current === first || !root.contains(current))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (current === last || !root.contains(current))) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      const at = DIALOG_STACK.indexOf(token);
-      if (at >= 0) DIALOG_STACK.splice(at, 1);
-      if (opener && document.body.contains(opener)) opener.focus();
-    };
-  }, [requestClose, ready]);
+  useModalBehavior(sectionRef, () => {
+    if (latest.current.confirming) setConfirming(false);
+    else requestClose();
+  }, { enabled: ready, initialFocus: closeRef, opener: openerRef });
 
   useEffect(() => {
     if (confirming) keepRef.current?.focus();
@@ -1081,11 +1043,6 @@ export function AdminDialog({
     </>
   );
 }
-
-/** Pila de diálogos abiertos: el teclado es del último. */
-const DIALOG_STACK: symbol[] = [];
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Sección de un diálogo: título chico en mayúsculas con un separador sutil y una

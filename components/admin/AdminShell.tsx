@@ -1,4 +1,5 @@
 "use client";
+import { mountOverlay } from "@/lib/overlay-lifecycle";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -569,56 +570,10 @@ export function AdminShell({
     const sidebar = sidebarRef.current;
     const desktop = window.matchMedia("(min-width: 981px)");
     if (desktop.matches) { setMenuOpen(false); return; }
-    const overflow = document.body.style.overflow;
-    const background: Array<{ element: HTMLElement; inert: boolean }> = [];
-    // Aislar todos los hermanos del camino hasta body, incluido el pie global.
-    // El backdrop sigue clickeable pero no participa en el recorrido de foco.
-    for (let branch: HTMLElement = sidebar; branch.parentElement; branch = branch.parentElement) {
-      for (const sibling of branch.parentElement.children) {
-        if (!(sibling instanceof HTMLElement) || sibling === branch || sibling.classList.contains("admin-sidebar-backdrop")) continue;
-        background.push({ element: sibling, inert: sibling.inert });
-        sibling.inert = true;
-      }
-      if (branch.parentElement === document.body) break;
-    }
-    const focusable = () => Array.from(sidebar.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]'))
-      .filter((element) => element.tabIndex >= 0 && !element.matches(":disabled") && !element.closest("[inert]") && element.getClientRects().length > 0);
-    const initialFocus = () => (sidebar.querySelector<HTMLElement>(".admin-sidebar-close") ?? focusable()[0] ?? sidebar).focus({ preventScroll: true });
-    function containFocus(event: KeyboardEvent) {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setMenuOpen(false); return; }
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      const index = items.indexOf(document.activeElement as HTMLElement);
-      if (!items.length) { event.preventDefault(); sidebar.focus(); return; }
-      if (index < 0 || (!event.shiftKey && index === items.length - 1) || (event.shiftKey && index === 0)) {
-        event.preventDefault();
-        (event.shiftKey ? items[items.length - 1] : items[0]).focus();
-      }
-    }
-    function recoverFocus(event: FocusEvent) {
-      if (event.target instanceof Node && !sidebar.contains(event.target)) initialFocus();
-    }
+    const release = mountOverlay(sidebar, { opener: menuOpenerRef.current, fallbackFocus: () => sidebar.querySelector<HTMLElement>(".admin-brand"), initialFocus: () => sidebar.querySelector<HTMLElement>(".admin-sidebar-close"), onClose: () => setMenuOpen(false), backdrop: ".admin-sidebar-backdrop" });
     const onResize = () => { if (desktop.matches) setMenuOpen(false); };
-    document.addEventListener("keydown", containFocus, true);
-    document.addEventListener("focusin", recoverFocus);
     desktop.addEventListener("change", onResize);
-    document.body.style.overflow = "hidden";
-    initialFocus();
-    return () => {
-      document.removeEventListener("keydown", containFocus, true);
-      document.removeEventListener("focusin", recoverFocus);
-      desktop.removeEventListener("change", onResize);
-      for (const { element, inert } of background) element.inert = inert;
-      document.body.style.overflow = overflow;
-      const opener = menuOpenerRef.current;
-      // Esperar el commit/actualización de inert antes de devolver el foco.
-      // Una reapertura rápida no debe recibir un callback de cierre anterior.
-      window.requestAnimationFrame(() => {
-        if (sidebar.classList.contains("is-open")) return;
-        if (opener?.isConnected && opener.getClientRects().length) opener.focus({ preventScroll: true });
-        else sidebar.querySelector<HTMLElement>(".admin-brand")?.focus({ preventScroll: true });
-      });
-    };
+    return () => { desktop.removeEventListener("change", onResize); release(); };
   }, [menuOpen]);
 
   // ── Bloqueo por PIN y auto-bloqueo por inactividad (issue #21) ──────────────

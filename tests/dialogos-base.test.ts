@@ -33,9 +33,9 @@ test("AdminDialog: tamaños sm / md / lg con alias y pie sticky con error arriba
 
 test("AdminDialog: botón cerrar de 44 px y foco en el primer campo", () => {
   assert.match(css, /\.admin-dialog-close\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/);
-  assert.match(dialog, /ownsFocus/, "se respeta el campo con autoFocus");
+  assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /!contains\(entry, doc.activeElement\)/, "se respeta autoFocus dentro del diálogo");
   assert.match(dialog, /aria-modal="true"/);
-  assert.match(dialog, /event\.key !== "Tab"/, "trampa de foco");
+  assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /event\.key !== 'Tab'/, "trampa de foco compartida");
 });
 
 test("AdminDialog: en celular (0-767 px) es una hoja a pantalla completa sobre el teclado", () => {
@@ -57,7 +57,8 @@ test("AdminDialog: «Guardando…» desde el botón y cierre con confirmación p
   assert.match(ui, /busyLabel\?: string/);
   assert.match(ui, /busy && busyLabel \? busyLabel : children/);
   assert.match(dialog, /¿Descartar los cambios\?/);
-  assert.match(dialog, /event\.key === "Escape"/);
+  assert.match(dialog, /useModalBehavior\(sectionRef/);
+  assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /event\.key === 'Escape'/);
   assert.match(dialog, /event\.target === event\.currentTarget/, "clic afuera");
 });
 

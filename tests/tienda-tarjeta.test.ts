@@ -147,7 +147,10 @@ test("vista rápida y cajones: URL ?p=, atrás cierra, portal por encima del enc
   assert.match(css, /\.cp-btn--primary\[disabled\]/);
   const portal = read("components/catalog-public/ThemePortal.tsx");
   assert.match(portal, /closest\("\.cp-theme"\)/);
-  assert.match(portal, /key === "Escape"/);
+  assert.match(portal, /export \{ useModalBehavior \} from "@\/components\/overlays\/useModalBehavior"/);
+  assert.match(read("components/overlays/useModalBehavior.ts"), /return mountOverlay\(panel.current/);
+  assert.match(read("lib/overlay-lifecycle.ts"), /event\.key === 'Escape'/);
+  assert.match(quick, /useModalBehavior\(panel/);
 });
 
 test("vista rápida: el endpoint público filtra por empresa, limita intentos y no devuelve costos", () => {

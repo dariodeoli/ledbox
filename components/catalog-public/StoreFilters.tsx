@@ -69,13 +69,17 @@ export function FiltersPanel({ filters, onChange, capacities, tags, collections,
 }
 
 /** Botón «Filtrar» (solo celular) y cajón con los filtros. */
-export function FiltersDrawer({ props, onClose, onClear }: { props: Props; onClose: () => void; onClear: () => void }) {
+type DrawerProps = { props: Props; onClose: () => void; onClear: () => void };
+export function FiltersDrawer(props: DrawerProps) {
+  // The lifecycle must mount with its DOM, after ThemePortal resolves its host.
+  return <ThemePortal><FiltersDrawerContent {...props} /></ThemePortal>;
+}
+function FiltersDrawerContent({ props, onClose, onClear }: DrawerProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   useModalBehavior(dialog, onClose, { initialFocus: close });
   const active = activeFilterCount(props.filters);
   return (
-    <ThemePortal>
       <div className="cp-overlay cp-overlay--drawer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="cp-drawer cp-drawer--narrow" role="dialog" aria-modal="true" aria-labelledby="filtros-titulo" ref={dialog} tabIndex={-1} data-testid="filters-drawer">
           <header className="cp-drawer-head">
@@ -91,6 +95,5 @@ export function FiltersDrawer({ props, onClose, onClear }: { props: Props; onClo
           </footer>
         </div>
       </div>
-    </ThemePortal>
   );
 }

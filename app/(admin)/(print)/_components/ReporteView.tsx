@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Select as SharedSelect } from "owncoding-ui";
 import { useRouter } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
 import { formatCalendarMonth, formatMoney, formatNumber } from "@/lib/admin-format";
@@ -112,7 +113,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
       <PrintToolbar backHref="/finanzas" backLabel="Volver a Finanzas">
         <label className="lbprint-select-wrap">
           <span className="lbprint-label">Mes del reporte</span>
-          <select
+          <SharedSelect
             className="lbprint-select"
             value={report.month}
             title="Elegir el mes del reporte"
@@ -124,7 +125,7 @@ export function ReporteView({ report }: { report: AdminMonthlyReport }) {
                 {formatCalendarMonth(`${month}-01`)}
               </option>
             ))}
-          </select>
+          </SharedSelect>
         </label>
         <button
           type="button"

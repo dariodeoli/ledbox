@@ -14,7 +14,7 @@ export function OrderBar({ count, productCount, text, names, confirmation, onOpe
         {text ? <span data-testid="order-amount">{text}</span> : null}
         {confirmation ? <span key={confirmation.key} className="cp-bar-confirmation" role="status" data-testid="order-confirmation"><XIcon name="check" size={16} /><span title={confirmation.text}>{confirmation.text}</span></span> : <span className="cp-bar-product-names" title={names.join(" · ")}>{summary}</span>}
       </div>
-      <button type="button" className="cp-btn cp-btn--primary" onClick={onOpen}>{PREORDER_COPY.open}</button>
+      <button type="button" data-store-cart-trigger className="cp-btn cp-btn--primary" onClick={onOpen}>{PREORDER_COPY.open}</button>
     </aside>
   );
 }

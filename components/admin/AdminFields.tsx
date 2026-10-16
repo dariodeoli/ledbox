@@ -1,5 +1,6 @@
 "use client";
 import { dateShortcuts, type DateShortcutKind } from "@/lib/date-shortcuts";
+import { integerDraft } from "@/lib/quantity-control";
 import { normalizeHex } from "@/lib/storefront-theme";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -556,6 +557,10 @@ export function NumberField({
   error,
   wide, size,
   disabled,
+  readOnly,
+  onBlur,
+  onKeyDown,
+  strictInteger,
   name,
   id,
   className,
@@ -577,6 +582,11 @@ export function NumberField({
   /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
   size?: FieldSize;
   disabled?: boolean;
+  readOnly?: boolean;
+  onBlur?: () => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  /** Rechaza signos, decimales y exponentes; conserva el borrador vacío. */
+  strictInteger?: boolean;
   name?: string;
   id?: string;
   className?: string;
@@ -597,7 +607,13 @@ export function NumberField({
         type="text"
         inputMode="numeric"
         value={value}
-        onChange={(event) => onChange(digitsOnly(event.target.value).replace(/^0+(?=\d)/, ""))}
+        onChange={(event) => {
+          const next = strictInteger ? integerDraft(event.target.value) : digitsOnly(event.target.value).replace(/^0+(?=\d)/, "");
+          if (next !== null) onChange(next);
+        }}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        readOnly={readOnly}
         maxLength={maxLength}
         required={required}
         placeholder={placeholder}
@@ -1542,6 +1558,11 @@ export function SwitchField({
  * "no incluido", tareas). Para ajustes con efecto inmediato se usa
  * `SwitchField`. El control real queda oculto y el dibujo es `.admin-check-box`.
  */
+/** Native exclusive-choice control. The surrounding rich label/fieldset belongs to its consumer. */
+export function RadioControl(props: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">) {
+  return <input {...props} type="radio" />;
+}
+
 export function CheckboxField({
   checked,
   onChange,
@@ -1884,7 +1905,7 @@ export function SegmentedField({
     </span>
   ) : null;
   return (
-    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-size={wide ? "full" : (size ?? options.length > 3 ? "full" : "lg")}>
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-size={wide ? "full" : (size ?? (options.length > 3 ? "full" : "lg"))}>
       {label ? (
         help ? <span className="admin-field-heading">
           <span className="admin-field-label" id={labelId}>{label}</span>
@@ -2038,6 +2059,11 @@ export function FileField({
   file,
   onSelect,
   id,
+  name,
+  required,
+  inputRef: externalRef,
+  ariaDescribedBy,
+  preserveNativeSelection = Boolean(name || required),
 }: {
   label: string;
   help?: string;
@@ -2047,40 +2073,59 @@ export function FileField({
   /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
   size?: FieldSize;
   accept?: string;
-  maxBytes: number;
+  /** Raw-file cap; null explicitly delegates the cap to a validated preparation/compression flow. */
+  maxBytes: number | null;
   disabled?: boolean;
   file: File | null;
   onSelect: (file: File | null) => void;
   id?: string;
+  name?: string;
+  required?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
+  ariaDescribedBy?: string;
+  /** Keep native FileList for required/FormData; defaults on when named or required. */
+  preserveNativeSelection?: boolean;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [localError, setLocalError] = useState("");
   const shown = error || localError || null;
+  useEffect(() => {
+    if (preserveNativeSelection && !file && inputRef.current) inputRef.current.value = "";
+  }, [file, preserveNativeSelection]);
+
+  function assignInput(node: HTMLInputElement | null) {
+    inputRef.current = node;
+    if (typeof externalRef === "function") externalRef(node);
+    else if (externalRef) (externalRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
+  }
 
   function pick(next: File | null) {
     setLocalError("");
     if (next && next.size === 0) return setLocalError("El archivo está vacío; probá con otro.");
-    if (next && next.size > maxBytes) return setLocalError(`El archivo supera los ${Math.round(maxBytes / (1024 * 1024))} MB.`);
+    if (next && typeof maxBytes === "number" && next.size > maxBytes) return setLocalError(`El archivo supera los ${Math.round(maxBytes / (1024 * 1024))} MB.`);
     onSelect(next);
+    return true;
   }
 
   return (
-    <FieldChrome label={label} help={help} hint={hint} error={shown} wide={wide} size={size ?? "full"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <FieldChrome required={required} label={label} help={help} hint={hint} error={shown} wide={wide} size={size ?? "full"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <span className="admin-attachment">
         <input
           id={fieldId}
-          ref={inputRef}
+          ref={assignInput}
           className="sr-only"
           type="file"
+          name={name}
+          required={required}
           accept={accept}
           disabled={disabled}
           onChange={(event) => {
-            pick(event.target.files?.[0] ?? null);
-            event.target.value = "";
+            const accepted = pick(event.target.files?.[0] ?? null);
+            if (!preserveNativeSelection || !accepted) event.target.value = "";
           }}
           aria-invalid={shown ? true : undefined}
-          aria-describedby={describedBy(shown, hint, hintId, errorId)}
+          aria-describedby={[describedBy(shown, hint, hintId, errorId), ariaDescribedBy].filter(Boolean).join(" ") || undefined}
         />
         <button className="admin-btn admin-btn--ghost" type="button" disabled={disabled} onClick={() => inputRef.current?.click()} aria-label={`Elegir archivo: ${label}`}>
           <AdminIcon name="upload" size={15} />
@@ -2089,7 +2134,7 @@ export function FileField({
         {file ? (
           <span className="admin-import-file">
             {file.name} · {(file.size / 1024 / 1024 >= 1 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`)}
-            <button className="admin-btn admin-btn--ghost admin-btn--only-icon" type="button" disabled={disabled} onClick={() => onSelect(null)} aria-label={`Quitar ${file.name}`}>
+            <button className="admin-btn admin-btn--ghost admin-btn--only-icon" type="button" disabled={disabled} onClick={() => { if (inputRef.current) inputRef.current.value = ""; setLocalError(""); onSelect(null); }} aria-label={`Quitar ${file.name}`}>
               <AdminIcon name="close" size={14} />
             </button>
           </span>

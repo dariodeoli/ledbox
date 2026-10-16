@@ -1,7 +1,8 @@
 "use client";
-import { Input as SharedInput } from "owncoding-ui";
+import { Checkbox as SharedCheckbox, Input as SharedInput } from "owncoding-ui";
 
 import { useState } from "react";
+import { RadioControl } from "@/components/admin/AdminFields";
 import type { PublicQuoteComparison } from "@/lib/server/quote-comparison-view";
 import { formatMoney, formatDate } from "@/lib/admin-format";
 import { AdminImageBox } from "@/components/admin/AdminImageBox";
@@ -47,14 +48,14 @@ export function PortalComparisonView({ initial, token }: { initial: PublicQuoteC
           {quote.attachments.length || quote.referenceLinks.length ? <h3>Documentos y referencias</h3> : null}
           {quote.attachments.map((file) => <div className="portal-quote-resource" key={file.id}><strong>{file.name}</strong><a href={`${quote.resourcePath}/pdf/${file.id}`} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Ver PDF</a><a href={`${quote.resourcePath}/pdf/${file.id}?download=1`} referrerPolicy="no-referrer">Descargar</a></div>)}
           {quote.referenceLinks.map((link, i) => <p key={i}><a href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{link.label} ↗</a></p>)}
-          {!group.selectedBudgetId ? <label className="portal-comparison-select"><input type="radio" name="alternative" value={quote.id} checked={choice === quote.id} onChange={() => setChoice(quote.id)} disabled={busy} required /> Elegir {quote.label}</label> : null}
+          {!group.selectedBudgetId ? <label className="portal-comparison-select"><RadioControl name="alternative" value={quote.id} checked={choice === quote.id} onChange={() => setChoice(quote.id)} disabled={busy} required /> Elegir {quote.label}</label> : null}
         </section>)}
       </div>
       </fieldset>
       {!group.selectedBudgetId ? <section className="portal-card">
         <h2>Confirmar una alternativa</h2>
         <label className="portal-field">Nombre y apellido<SharedInput value={name} onChange={(e) => setName(e.target.value)} minLength={3} maxLength={120} required disabled={busy} autoComplete="name" /></label>
-        <label className="portal-comparison-select"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required disabled={busy} /> Confirmo que apruebo únicamente la alternativa elegida y sus condiciones.</label>
+        <SharedCheckbox className="portal-comparison-select" checked={consent} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setConsent(event.target.checked)} required disabled={busy} label="Confirmo que apruebo únicamente la alternativa elegida y sus condiciones." />
         <button className="portal-btn" disabled={busy || !choice || !consent}>{busy ? "Registrando…" : "Aprobar alternativa elegida"}</button>
       </section> : null}
       {error ? <p className="portal-card" role="alert">{error}</p> : null}

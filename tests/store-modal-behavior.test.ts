@@ -1,34 +1,11 @@
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { runInNewContext } from "node:vm";
-import { test } from "node:test";
-import ts from "typescript";
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {test} from 'node:test';
+import ts from 'typescript';
+import {runInNewContext} from 'node:vm';
+import {mountOverlay} from '../lib/overlay-lifecycle';
+import {overlayDocument} from './helpers/overlay-dom';
+test('store uses common hook; keeps initial focus, scroll and return contracts',()=>{assert.match(readFileSync('components/catalog-public/ThemePortal.tsx','utf8'),/export \{ useModalBehavior \} from "@\/components\/overlays\/useModalBehavior"/);assert.match(readFileSync('components/overlays/useModalBehavior.ts','utf8'),/return mountOverlay\(panel.current/);const f=overlayDocument(),p=f.panel();const release=mountOverlay(p.root as any,{initialFocus:()=>p.last as any});assert.equal(f.doc.activeElement,p.last);assert.equal(f.doc.body.style.overflow,'hidden');release();assert.equal(f.doc.activeElement,f.opener);assert.equal(f.doc.body.style.overflow,'auto');});
+test('store cart under another scope cannot close or steal focus on Escape',()=>{const f=overlayDocument(),a=f.panel();let closed=0;const one=mountOverlay(a.root as any,{onClose:()=>closed++});const b=f.panel(),two=mountOverlay(b.root as any);f.key('Escape');assert.equal(closed,0);two();f.key('Escape');assert.equal(closed,1);one();});
 
-function modal() {
-  const source = ts.createSourceFile("ThemePortal.tsx", readFileSync("components/catalog-public/ThemePortal.tsx", "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const fn = source.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "useModalBehavior")!;
-  const selector = source.statements.find(n => ts.isVariableStatement(n) && n.getText(source).startsWith("const FOCUSABLE"))!;
-  const events = new Map<string, Function>();
-  let cleanup: Function = () => {}, closed = 0, restored = 0;
-  const previous = { focus: () => { restored++; document.activeElement = previous; } };
-  const panel = { focus: () => { document.activeElement = panel; }, contains: (node: unknown) => node === panel, querySelectorAll: () => [] };
-  let stack: unknown[] = [panel];
-  const document = { activeElement: previous as unknown, body: { style: { overflow: "auto" } }, querySelectorAll: () => stack,
-    addEventListener: (name: string, callback: Function) => events.set(name, callback), removeEventListener: (name: string) => events.delete(name) };
-  const hook = runInNewContext(ts.transpileModule(selector.getText(source) + "\n" + fn.getText(source).replace(/^export /, "") + "\nuseModalBehavior;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
-    document, useRef: (value: unknown) => ({ current: value }), useEffect: (callback: Function) => { cleanup = callback(); },
-  });
-  hook({ current: panel }, () => { closed++; });
-  return { document, panel, previous, setStack: (next: unknown[]) => { stack = next; }, closed: () => closed, restored: () => restored,
-    key: (key: string) => { let prevented = false; events.get("keydown")!({ key, preventDefault: () => { prevented = true; }, stopPropagation() {} }); return prevented; }, cleanup: () => cleanup() };
-}
-
-test("modal tienda conserva foco de origen, bloquea scroll y lo restaura al cerrar", () => {
-  const m = modal(); assert.equal(m.document.activeElement, m.panel); assert.equal(m.document.body.style.overflow, "hidden");
-  assert.equal(m.key("Tab"), true); m.cleanup();
-  assert.equal(m.document.activeElement, m.previous); assert.equal(m.restored(), 1); assert.equal(m.document.body.style.overflow, "auto");
-});
-test("Escape sólo cierra el modal superior, incluido carrito bajo otro diálogo", () => {
-  const m = modal(); m.setStack([m.panel, {}]); m.key("Escape"); assert.equal(m.closed(), 0);
-  m.setStack([m.panel]); m.key("Escape"); assert.equal(m.closed(), 1); m.cleanup();
-});
+test('hook remembers actual opener before child autoFocus, including a persistent closed→open drawer',()=>{const f=overlayDocument();const refs:any[]=[];let at=0,effect=()=>{},cleanup=()=>{};const source=ts.createSourceFile('hook.ts',readFileSync('components/overlays/useModalBehavior.ts','utf8'),ts.ScriptTarget.Latest,true);const fn=source.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='useModalBehavior')!;const hook=runInNewContext(ts.transpileModule(fn.getText(source).replace(/^export /,'')+';useModalBehavior;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,{document:f.doc,mountOverlay,useRef:(v:any)=>{const i=at++;return refs[i]??(refs[i]={current:v})},useLayoutEffect:(cb:any)=>effect=cb});const p=f.panel();at=0;hook({current:p.root},()=>{},{enabled:false});effect();f.opener.focus();at=0;hook({current:p.root},()=>{},{enabled:true});p.last.focus();cleanup=effect() as any;assert.equal(f.doc.activeElement,p.last);cleanup();assert.equal(f.doc.activeElement,f.opener);});

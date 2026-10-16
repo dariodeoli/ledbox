@@ -1,5 +1,5 @@
 "use client";
-import { Input as SharedInput, Textarea as SharedTextarea } from "owncoding-ui";
+import { Checkbox as SharedCheckbox, Input as SharedInput, Textarea as SharedTextarea } from "owncoding-ui";
 
 
 import { useState } from "react";
@@ -299,15 +299,7 @@ export function SignaturePortalView({ request }: { request: PortalSignatureReque
               </p>
 
               <form className="portal-form" onSubmit={(event) => void submitSignature(event)}>
-                <label className="portal-consent">
-                  <input
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(event) => setConsent(event.target.checked)}
-                    aria-describedby="firma-consent-purpose"
-                  />
-                  <span>Confirmo que revisé el documento y deseo firmarlo electrónicamente.</span>
-                </label>
+                <SharedCheckbox className="portal-consent" checked={consent} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setConsent(event.target.checked)} aria-describedby="firma-consent-purpose" label="Confirmo que revisé el documento y deseo firmarlo electrónicamente." />
                 {/* Finalidad en texto claro + política (issue #93): la firma y su
                     evidencia ya quedan auditadas; acá solo se informa. */}
                 <p className="portal-consent-purpose" id="firma-consent-purpose">

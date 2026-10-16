@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Textarea as SharedTextarea } from "owncoding-ui";
 
 /**
  * Aprobar o rechazar la propuesta de la empresa desde el seguimiento del pedido. Single-flight:
@@ -47,7 +48,7 @@ export function ProposalActions({ token }: { token: string }) {
       {declining ? (
         <div className="cp-field">
           <label htmlFor="proposal-note">Contanos por qué (opcional)</label>
-          <textarea id="proposal-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} rows={2} />
+          <SharedTextarea id="proposal-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} rows={2} />
           <button type="button" className="cp-btn" disabled={busy !== null} onClick={() => void send("decline")}>
             {busy === "decline" ? "Enviando…" : "Rechazar la propuesta"}
           </button>

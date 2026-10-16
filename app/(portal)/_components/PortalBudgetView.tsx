@@ -1,5 +1,7 @@
 "use client";
-import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
+import { Stepper } from "@/components/catalog-public/Stepper";
+import { stepQuantity } from "@/lib/quantity-control";
+import { Checkbox as SharedCheckbox, Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
 
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
@@ -11,7 +13,7 @@ import { PortalQuoteResources } from "./PortalQuoteResources";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
-import { MoneyField, PercentField } from "@/components/admin/AdminFields";
+import { FileField, MoneyField, PercentField, RadioControl } from "@/components/admin/AdminFields";
 import {
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
@@ -144,12 +146,6 @@ function proofUploadHint(budget: PortalBudget): string | null {
     : budget.proofUpload.reason;
 }
 
-function clampInt(value: string, max: number): number {
-  const digits = value.replace(/\D/g, "");
-  if (!digits) return 1;
-  return Math.min(max, Math.max(1, Number(digits)));
-}
-
 /** Fecha corta de una clave `YYYY-MM-DD` o de un ISO, sin corrimiento de zona. */
 function dueLabel(dueAt: string | null): string {
   if (!dueAt) return "Sin fecha";
@@ -263,8 +259,7 @@ function PortalDecisionOptions({
           const helperId = `portal-decision-${option.value}-help`;
           return (
             <label className="portal-decision-option" data-active={active ? "true" : undefined} key={option.value}>
-              <input
-                type="radio"
+              <RadioControl
                 name="portal-action-mode"
                 value={option.value}
                 checked={active}
@@ -285,55 +280,6 @@ function PortalDecisionOptions({
         })}
       </div>
     </fieldset>
-  );
-}
-
-function Stepper({
-  value,
-  max,
-  label,
-  onStep,
-  onType,
-}: {
-  value: number;
-  max: number;
-  label: string;
-  /** Suma o resta uno (el valor final lo decide quien guarda el borrador). */
-  onStep: (delta: number) => void;
-  /** Texto tipeado a mano: se normaliza al rango 1..max. */
-  onType: (text: string) => void;
-}) {
-  return (
-    <span className="portal-stepper">
-      <button
-        type="button"
-        className="portal-step"
-        onClick={() => onStep(-1)}
-        disabled={value <= 1}
-        aria-label={`Restar uno a ${label}`}
-        title={`Restar uno a ${label}`}
-      >
-        −
-      </button>
-      <SharedInput
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={String(value)}
-        onChange={(event) => onType(event.target.value)}
-        aria-label={`${label} (1 a ${max})`}
-      />
-      <button
-        type="button"
-        className="portal-step"
-        onClick={() => onStep(1)}
-        disabled={value >= max}
-        aria-label={`Sumar uno a ${label}`}
-        title={`Sumar uno a ${label}`}
-      >
-        +
-      </button>
-    </span>
   );
 }
 
@@ -953,7 +899,7 @@ export function PortalBudgetView({
       if (!item) return current;
       const base = current[id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
       const max = field === "quantity" ? MAX_QUANTITY : MAX_DAYS;
-      return { ...current, [id]: { ...base, [field]: Math.min(max, Math.max(1, Math.round(next))) } };
+      return { ...current, [id]: { ...base, [field]: stepQuantity(next, 0, 1, max) } };
     });
   }
 
@@ -964,14 +910,9 @@ export function PortalBudgetView({
       if (!item) return current;
       const base = current[id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
       const max = field === "quantity" ? MAX_QUANTITY : MAX_DAYS;
-      const next = Math.min(max, Math.max(1, base[field] + delta));
+      const next = stepQuantity(base[field], delta, 1, max);
       return { ...current, [id]: { ...base, [field]: next } };
     });
-  }
-
-  /** Texto tipeado: se limpia a dígitos y se acota al rango del campo. */
-  function setDraftField(id: string, field: "quantity" | "days", text: string) {
-    updateDraft(id, field, clampInt(text, field === "quantity" ? MAX_QUANTITY : MAX_DAYS));
   }
 
   function resetDraft() {
@@ -1276,8 +1217,8 @@ export function PortalBudgetView({
             <span className="portal-pay-label">Falta transferir · {transferNow.label}</span>
             <strong className="portal-pay-amount portal-num">{formatMoney(transferNow.amount)}</strong>
           </div>
-          <span className="portal-pay-total portal-num">
-            {balance !== transferNow.amount ? `Saldo del presupuesto: ${formatMoney(balance)} · ` : ""}Total: {formatMoney(budget.total)}
+          <span className="portal-pay-total">
+            {balance !== transferNow.amount ? <>Saldo del presupuesto: <span className="portal-num">{formatMoney(balance)}</span> · </> : null}Total: <span className="portal-num">{formatMoney(budget.total)}</span>
           </span>
         </div>
       ) : stage === "settled" ? (
@@ -1403,23 +1344,11 @@ export function PortalBudgetView({
                   : `Escribí quién hizo la transferencia en nombre de ${clientLabel}.`}
               </span>
             </label>
-            <label className="portal-field" htmlFor="portal-proof-file">
-              <span className="portal-field-label">Comprobante</span>
-              <input
-                ref={proofInputRef}
-                id="portal-proof-file"
-                name="proof-file"
-                type="file"
-                accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
-                onChange={(event) => {
-                  setProofFile(event.target.files?.[0] ?? null);
-                  setProofError("");
-                  setProofSent(false);
-                }}
-                aria-describedby="portal-proof-hint"
-                required
-              />
-            </label>
+            <div className="portal-field">
+              <FileField label="Comprobante" id="portal-proof-file" name="proof-file" inputRef={proofInputRef} file={proofFile} maxBytes={null} preserveNativeSelection required
+                accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`} ariaDescribedBy="portal-proof-hint"
+                onSelect={(file) => { setProofFile(file); setProofError(""); setProofSent(false); }} />
+            </div>
           </div>
           <p className="portal-help" id="portal-proof-hint">
             El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
@@ -1631,10 +1560,10 @@ export function PortalBudgetView({
                               </span>
                             </span>
                           <div className="budget-client-quantity">
-                            <span className="portal-quantity-group"><span className="portal-quantity-label">Cantidad</span>
-                            {canEdit && !current.excluded ? <Stepper value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onType={(text) => setDraftField(item.id, "quantity", text)} /> : <span>{formatNumber(item.quantity)}</span>}
-                            </span>
-                            {item.usesDays || item.days > 1 ? <span className="portal-quantity-group"><span className="portal-quantity-label">Días</span>{canEdit && !current.excluded ? <Stepper value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onType={(text) => setDraftField(item.id, "days", text)} /> : <span>{formatNumber(item.days)}</span>}</span> : null}
+                            <div className="portal-quantity-group"><span className="portal-quantity-label">Cantidad</span>
+                            {canEdit && !current.excluded ? <Stepper editable variant="portal" min={1} value={current.quantity} max={MAX_QUANTITY} label={`Cantidad de ${item.name}`} onStep={(delta) => stepDraft(item.id, "quantity", delta)} onChange={(value) => updateDraft(item.id, "quantity", value)} /> : <span>{formatNumber(item.quantity)}</span>}
+                            </div>
+                            {item.usesDays || item.days > 1 ? <div className="portal-quantity-group"><span className="portal-quantity-label">Días</span>{canEdit && !current.excluded ? <Stepper editable variant="portal" min={1} value={current.days} max={MAX_DAYS} label={`Días de ${item.name}`} onStep={(delta) => stepDraft(item.id, "days", delta)} onChange={(value) => updateDraft(item.id, "days", value)} /> : <span>{formatNumber(item.days)}</span>}</div> : null}
                           </div>
                           </td>
                           <td className="portal-num" data-label="Precio unitario">{formatMoney(shown.unitPrice)}{shown.periodTotal ? <small className="portal-item-note">total por {formatNumber(current.days)} {current.days === 1 ? "día" : "días"}</small> : null}</td>
@@ -1954,20 +1883,12 @@ export function PortalBudgetView({
 
                 {actionMode === "authorize" ? (
                   <>
-                    <label className="portal-consent" htmlFor="portal-consent">
-                      <input
-                        id="portal-consent"
-                        type="checkbox"
-                        checked={consent}
-                        onChange={(event) => setConsent(event.target.checked)}
-                        aria-describedby="portal-consent-hint portal-consent-purpose"
-                        required
-                      />
+                    <SharedCheckbox className="portal-consent" id="portal-consent" checked={consent} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setConsent(event.target.checked)} aria-describedby="portal-consent-hint portal-consent-purpose" required label={
                       <span id="portal-consent-hint">
                         {itemsChanged || pendingRequests.some((request) => request.kind === "items") ? "Confirmo que solicito revisar esta selección propuesta por " : "Confirmo que revisé el detalle, los montos y las condiciones, y autorizo este presupuesto por "}
                         <strong className="portal-num">{formatMoney(actionTotal)}</strong> en nombre de {clientLabel}.
                       </span>
-                    </label>
+                    } />
                     {/* Finalidad en texto claro + política (issue #93): el consentimiento
                         ya queda auditado con nombre, fecha/hora e IP; acá solo se informa. */}
                     <p className="portal-consent-purpose" id="portal-consent-purpose">
