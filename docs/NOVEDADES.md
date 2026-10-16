@@ -732,3 +732,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Un laboratorio interno permite probar la presentación de la landing de Ledbox con catálogo y carrito, usando una finalización simulada.
 - OwnData: el botón Extraer consulta explícitamente el RUC, permite revisar la razón social antes de aplicarla y descarta respuestas de ediciones anteriores. La conexión real requiere configurar OwnData en el servidor.
 - El carrito reutiliza la gestión compartida de foco y teclado de las ventanas de tienda; Escape responde sólo a la ventana superior.
+
+- Fechas de eventos y presupuestos: atajos Hoy, Mañana y Pasado mañana con fecha exacta, límites y hora conservada. Los formularios históricos conservan su selección exacta sin sugerencias que no corresponden.
+- Campos compartidos adoptados en formularios públicos, portal y plataforma. Los montos conservan el valor pegado con «Gs.» y las rebajas del portal usan el mismo campo de monto y porcentaje que el panel.
+- Recintos: libreta independiente con contactos y ubicación predeterminados para próximos eventos; guardar o actualizar es explícito y no cambia eventos anteriores. La ficha sobrevive al borrado del evento.
