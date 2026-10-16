@@ -887,8 +887,10 @@ export function InventoryFicha({
                         onToggle={() => toggleUnit(unit.id)}
                       />
                     ) : null}
-                    <span className="admin-code">{unit.code}</span>
-                    <small className="admin-cell-sub">{unit.stockOrigin ? STOCK_ORIGIN_LABELS[unit.stockOrigin as StockOrigin] : "Origen sin revisar"}{unit.ownerSupplierId ? ` · ${taxonomy.suppliers.find(supplier => supplier.id === unit.ownerSupplierId)?.name ?? "Dueño guardado"}` : ""}</small>
+                    <span className="admin-cell-stack">
+                      <span className="admin-code">{unit.code}</span>
+                      <small className="admin-cell-sub">{unit.stockOrigin ? STOCK_ORIGIN_LABELS[unit.stockOrigin as StockOrigin] : "Origen sin revisar"}{unit.ownerSupplierId ? ` · ${taxonomy.suppliers.find(supplier => supplier.id === unit.ownerSupplierId)?.name ?? "Dueño guardado"}` : ""}</small>
+                    </span>
                   </AdminCell>
                   <AdminCell title={writable ? `Cambiar estado de ${unit.code}` : inventoryStatusLabel(unit.status)}>
                     {writable ? (
