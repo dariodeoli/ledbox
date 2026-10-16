@@ -768,3 +768,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Enviar presupuestos guarda un recibo antes de contactar al proveedor. Consultar o repetir el mismo intento no reenvía; la aceptación pasa un borrador sin cambios a Enviado y refresca el panel. Un resultado incierto queda visible y exige revisar antes de crear otro intento.
 - Identidad compartida de cliente en calendario, facturación viva, comparaciones y selector de precios: avatar, nombre comercial, responsable y segmento. Los documentos fiscales e históricos mantienen sus snapshots.
 - Las propuestas de ciudad por IA exigen una opción del catálogo; los formularios históricos conservan valores anteriores.
+
+## v2.1.140 — 2026-10-16
+
+- Cantidades y días de formularios comerciales y operativos usan la validación compartida de enteros. Pegar signos, decimales o exponentes ya no los transforma en otra cantidad; se conserva el borrado mientras se edita. Los campos con otros contratos mantienen su comportamiento.
+- Las contraofertas permiten borrar y volver a escribir cantidades y días. Una fila incompleta impide aplicar; los cálculos respetan tarifas por paquete, precios manuales y por evento, con el contexto de precios de la solicitud.
+- Se corrigió el rechazo «El presupuesto cambió» al aceptar una contraoferta sin cambios concurrentes. La comparación usa los mismos campos y conserva la protección ante una edición real del precio congelado.
+- La fila editable de contraoferta se reorganiza en celular para mostrar completos los campos de cantidad y días, sin columnas cortadas.
+- Al borrar la ciudad en el carrito también se limpia el departamento derivado. Seleccionar otra ciudad actualiza ambos datos y no se modifica una selección que no se editó.
