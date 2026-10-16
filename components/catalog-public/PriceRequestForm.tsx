@@ -1,5 +1,6 @@
 "use client";
-import { MoneyInput, Textarea as SharedTextarea } from "owncoding-ui";
+import { Textarea as SharedTextarea } from "owncoding-ui";
+import { MoneyField } from "@/components/admin/AdminFields";
 
 
 import { PREORDER_COPY } from "@/lib/storefront-ui";
@@ -62,10 +63,9 @@ export function PriceRequestForm({ token, total }: { token: string; total: numbe
         <span>¿Por qué lo pedís?</span>
         <SharedTextarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={PRICE_COMMENT_MAX} rows={3} required placeholder="Ej.: somos clientes frecuentes, es para un evento grande." />
       </label>
-      <label className="cp-field">
-        <span>Monto que proponés, en Gs. (opcional)</span>
-        <MoneyInput currency="PYG" integerOnly max={PRICE_AMOUNT_MAX} value={amount} onValueChange={(value) => setAmount(String(value))} placeholder="Ej.: 1.200.000" />
-      </label>
+      <div className="cp-fields">
+        <MoneyField label="Monto que proponés, en Gs. (opcional)" value={amount} onChange={setAmount} limit={PRICE_AMOUNT_MAX} size="full" placeholder="Ej.: 1.200.000" />
+      </div>
       <p className="cp-hint">Es solo un pedido: la empresa te responde con su propuesta y el precio no cambia hasta que apruebes la versión final.</p>
       {error ? <p className="cp-error" role="alert">{error}</p> : null}
       <div className="cp-row">
