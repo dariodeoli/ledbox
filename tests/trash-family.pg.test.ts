@@ -35,7 +35,8 @@ test("papelera de familias: recuperación aislada, códigos, variantes conservad
   await t.test("código reutilizado impide restaurar sin sobrescribir otra familia o SKU", async () => {
    const stamp = new Date("2020-01-01T00:00:00Z"); await raw.inventoryFamily.update({ where: { id: family }, data: { deletedAt: new Date(), archivedAt: stamp } });
    const other = randomUUID(); const code = `F-${family}`; await createFamily(other, org, { code }); await rejects(restore("InventoryFamily", family, context), 409); await raw.inventoryFamily.delete({ where: { id: other } });
-   const sku = randomUUID(); await raw.inventoryItem.create({ data: { id: sku, organizationId: org, name: "Código ocupado", category: "QA", sku: code, quantity: 0 } }); await rejects(restore("InventoryFamily", family, context), 409); await raw.inventoryItem.delete({ where: { id: sku } });
+   const sku = randomUUID(); await raw.inventoryItem.create({ data: { id: sku, organizationId: org, name: "Código ocupado", category: "QA", sku: code, quantity: 0 } }); await rejects(restore("InventoryFamily", family, context), 409);
+   await raw.inventoryItem.update({ where: { id: sku }, data: { deletedAt: new Date(), archivedAt: new Date() } });
    await restore("InventoryFamily", family, context); assert.equal((await raw.inventoryFamily.findUniqueOrThrow({ where: { id: family } })).archivedAt!.toISOString(), stamp.toISOString());
   });
   await t.test("definitivo no desvincula variantes vivas ni eliminadas y valida confirmación", async () => {
