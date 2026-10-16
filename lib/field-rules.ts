@@ -180,8 +180,13 @@ export function personNameError(value: string | null | undefined): string | null
  * miles (`1.234.567`), no deja letras y en PYG descarta la cola decimal. El
  * campo dibuja el valor con `moneyInputDisplay`.
  */
+function pygInputText(value: string): string {
+  // El punto de «Gs.» es del símbolo, no un separador decimal del importe.
+  return value.trimStart().replace(/^(?:Gs\.?|PYG|₲)(?=[\s\d.,]|$)\s*/i, "");
+}
+
 export function amountInput(value: string): string {
-  return normalizarMontoInput(value, "PYG", { integerOnly: true });
+  return normalizarMontoInput(pygInputText(value), "PYG", { integerOnly: true });
 }
 
 /**
@@ -217,7 +222,7 @@ export function caretAfterDigits(display: string, digits: number): number {
  */
 export function parseAmount(value: string): number | null {
   if (!amountInput(value)) return null;
-  const amount = parseGsInput(value);
+  const amount = parseGsInput(pygInputText(value));
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
