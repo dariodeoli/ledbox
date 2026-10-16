@@ -12,9 +12,10 @@ test("unit export preserves physical warehouse split, retirement and tenant isol
   await db.organization.createMany({ data: [org, foreign].map(id => ({ id, name: "Export QA", slug: `export-${id}` })) });
   try {
     const [d1, d2] = await Promise.all(["D1", "D2"].map(code => db.warehouse.create({ data: { id: randomUUID(), organizationId: org, code, name: code } })));
+    const owner = await db.supplier.create({ data: { id: randomUUID(), organizationId: org, name: "Consignante QA", email: "do-not-export@example.invalid" } });
     const item = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "=UnsafeName", sku: "EXPORT-1", category: "QA", quantity: 1, stockCountStatus: "PENDING_COUNT" } });
     const other = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: foreign, name: "FOREIGN-SECRET", category: "QA", quantity: 1 } });
-    for (const [index, warehouse] of [d1, d2].entries()) await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId: org, inventoryId: item.id, code: `EXPORT-U${index}`, warehouseId: warehouse.id, location: `E${index}-B2`, status: index ? "RETIRED" : "AVAILABLE", purchaseCost: 1234567 } });
+    for (const [index, warehouse] of [d1, d2].entries()) await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId: org, inventoryId: item.id, code: `EXPORT-U${index}`, warehouseId: warehouse.id, location: `E${index}-B2`, status: index ? "RETIRED" : "AVAILABLE", purchaseCost: 1234567, stockOrigin: index ? "CONSIGNED" : "OWNED", ownerSupplierId: index ? owner.id : null } });
     await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId: foreign, inventoryId: other.id, code: "FOREIGN-UNIT" } });
     // Empty and external/pending catalog entries must not become fictitious physical rows.
     await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "EMPTY-NO-UNITS", category: "QA", quantity: 0, defaultWarehouseId: d1.id } });
@@ -26,7 +27,8 @@ test("unit export preserves physical warehouse split, retirement and tenant isol
     assert.match(csv, /D1;D1;E0-B2/); assert.match(csv, /D2;D2;E1-B2/);
     assert.match(csv, /RETIRED/); assert.match(csv, /Pendiente conteo/);
     assert.match(csv, /'=UnsafeName/);
-    assert.doesNotMatch(csv, /FOREIGN|EMPTY-NO-UNITS|1234567|Costo|Proveedor/);
+    assert.match(csv, /Propio;propio/); assert.match(csv, /Consignado en mis depósitos;consignado/); assert.ok(csv.includes(owner.id)); assert.match(csv, /Consignante QA/);
+    assert.doesNotMatch(csv, /FOREIGN|EMPTY-NO-UNITS|1234567|Costo|Proveedor|do-not-export/);
   } finally {
     await db.organization.deleteMany({ where: { id: { in: [org, foreign] } } });
     await db.$disconnect();
