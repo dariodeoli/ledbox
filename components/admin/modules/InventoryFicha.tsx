@@ -196,7 +196,7 @@ function AvailabilityTimeline({ item }: { item: AdminInventoryItemRow }) {
 }
 
 /**
- * Ficha del producto: panel lateral con las secciones Resumen, Disponibilidad,
+ * Ficha del producto: diálogo centrado con las secciones Resumen, Disponibilidad,
  * Unidades, Precios, Tienda web, Combos, Incidentes e Historial. Toda la lógica
  * de unidades (alta, estado, edición, lote) vive acá; la edición del producto y
  * el archivado los resuelve el módulo con el mismo contrato de siempre.
@@ -535,7 +535,7 @@ export function InventoryFicha({
               <div>
                 <dt>{rangeActive ? "Libres en el rango" : "Libres hoy"}</dt>
                 <dd>
-                  <StockMeter summary={summary} combo={isCombo} large />
+                  <StockMeter summary={summary} combo={isCombo} />
                   {!rangeActive && !isCombo ? <SegmentedMeter visual={visual} /> : null}
                 </dd>
               </div>
@@ -963,8 +963,6 @@ export function InventoryFicha({
             <dt>Mínimo</dt>
             <dd>{priceText(item.minimumPrice)}</dd>
           </div>
-        </dl>
-        <dl className="admin-item-prices">
           {showCosts ? (
             <>
               <div>

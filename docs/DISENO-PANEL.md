@@ -539,9 +539,12 @@ contrastes de texto ≥ 4,5 y de borde ≥ 3 desde `globals.css`.
   `.admin-dialog-foot` dentro de los hijos se estilizan igual y quedan pegados
   abajo (sticky), así que los usos existentes no cambian. Si el botón vive fuera
   del `<form>`, se enlaza con `form={id}`.
-- Tamaños: default 560 px, `wide` 720 px, `ficha` = panel lateral derecho de alto
-  completo (máx. 1040 px). A ≤ 720 px las tres son una hoja a pantalla completa
-  con el pie fijo (`100dvh`, safe-area).
+- Tamaños: default 560 px, `wide` 720 px, `xl` 960 px y `ficha` 1040 px.
+  Todos son diálogos centrados de altura natural: marco visible de 16 px en
+  escritorio y 12 px en móvil, ampliado por safe-area. El máximo de altura usa
+  `visualViewport` (incluye teclado y desplazamiento); el cuerpo desplaza y el
+  pie queda fuera de ese scroll. `ficha` sólo cambia el ancho, nunca fuerza un
+  panel lateral o una hoja de alto completo (pedido #264, 16-10-2026).
 - `dirty`: cerrar con X, Esc o clic afuera pide confirmación dentro del mismo
   diálogo («Seguir editando» / «Descartar»); Esc dentro de la confirmación
   vuelve a editar. Sin `window.confirm`.
@@ -625,7 +628,7 @@ sueltos en `components/admin` y `app/(admin)`; los componentes de la biblioteca 
 | `AdminIconButton` / `AdminIconLink` | `icon` o `iconNode`, `iconSize`, `label` (obligatorio: es el `aria-label` y el `title`), `children` (contador) | Cerrar, menú, ayuda, abrir/copiar en una fila |
 | `AdminBadge` | `tone` (neutral · accent · ok · warn · danger · info), `icon`, `size` md · sm, `emphasis`, `label` | Estados, etiquetas y contadores. Los estados del inventario (`lib/inventory-visual-state.ts`) pasan por `StateChip`, que lo reutiliza. El color nunca es el único canal: ícono o texto |
 | `AdminTabs` | `items` (`key`, `label`, `icon`, `count`, `href`), `value`/`onChange`, `tabId`/`panelId`, `filters`, `compact` | Con `href` en todos los ítems: subnavegación entre rutas. Con `value`/`onChange`: pestañas de una ficha (`tablist`, flechas, Inicio, Fin). Con `filters`: filtros de una lista (`aria-pressed`) |
-| `AdminDialog` | `size` sm 440 · md 560 · lg 720 · xl 960 · ficha (panel lateral); `icon`, `title`, `description`, `footer`, `error`/`warning`, `dirty` | Toda ventana. En celular es una hoja de pantalla completa con el pie pegado abajo |
+| `AdminDialog` | `size` sm 440 · md 560 · lg 720 · xl 960 · ficha 1040; `icon`, `title`, `description`, `footer`, `error`/`warning`, `dirty` | Toda ventana centrada con margen visible y máximo visualViewport; cuerpo con scroll y pie visible |
 | `AdminDialogSection` | `title`, `columns` 1–4, `stack`, `collapsible` + `defaultOpen` + `hint` | Agrupar campos con título y un separador sutil. Cuerpo = grilla de 12 columnas |
 | `AdminCol` | `span` 2–10 o 12 | Ancho propio de un campo suelto dentro de la grilla del diálogo |
 | `AdminConfirmDialog` | `title`, `message`, `confirmLabel`, `danger`, `busy` | Acciones destructivas o irreversibles (nunca `confirm()`) |
@@ -685,3 +688,13 @@ su tope, falla.
 - Widgets propios en la allowlist: se migran cuando la biblioteca tenga el equivalente
   (tarjeta clicable, celda de calendario).
 - Sitio público y portal del cliente (`cp-chip`, `portal-field`) tienen otra piel.
+
+### Densidad de hechos y métricas en diálogos (#264, 16-10-2026)
+
+Las grillas compartidas `admin-ficha-stats` y `admin-item-prices` alinean cada
+celda al inicio y sus filas al contenido; una cifra no crece para igualar la
+altura de una descripción o foto vecina. Importes y escalones se muestran
+completos con ajuste de línea. Inventario usa una sola grilla (cuatro columnas en escritorio, dos en móvil
+y una hasta 340 px) para precios, costos permitidos y tiempos; conserva permisos, fuentes y todas las etiquetas.
+Las pestañas mantienen el componente AdminTabs y su teclado/foco; el cambio de
+geometría no modifica portales, cierre, confirmación de cambios ni stack modal.

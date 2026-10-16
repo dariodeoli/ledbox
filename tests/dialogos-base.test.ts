@@ -38,14 +38,17 @@ test("AdminDialog: botón cerrar de 44 px y foco en el primer campo", () => {
   assert.match(readFileSync("lib/overlay-lifecycle.ts", "utf8"), /event\.key !== 'Tab'/, "trampa de foco compartida");
 });
 
-test("AdminDialog: en celular (0-767 px) es una hoja a pantalla completa sobre el teclado", () => {
-  const start = css.search(/@media \(max-width: 767px\) \{\s*\.admin-dialog-overlay, \.admin-dialog-overlay--ficha/);
-  assert.ok(start >= 0, "falta la hoja de celular");
+test("AdminDialog: marco centrado en todos los tamaños y alto limitado al viewport visible", () => {
+  const start = css.search(/@media \(max-width: 767px\) \{\s*\.admin-dialog-overlay/);
+  assert.ok(start >= 0, "falta el marco de celular");
   const block = css.slice(start, css.indexOf("\n}\n", start));
-  assert.match(block, /height:\s*100dvh/);
-  assert.match(block, /var\(--admin-dialog-vh, 100dvh\)/, "alto visible con el teclado abierto");
-  assert.match(block, /env\(safe-area-inset-top\)/);
-  assert.match(block, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /\.admin-dialog-overlay \{[^}]*place-items: center/);
+  assert.match(css, /height: var\(--admin-dialog-vh, 100dvh\)/, "alto visible con el teclado abierto");
+  assert.match(css, /max-height: calc\(var\(--admin-dialog-vh, 100dvh\) - var\(--admin-dialog-pad-top/);
+  assert.match(css, /env\(safe-area-inset-top\)/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(block, /--admin-dialog-gap: 12px/, "margen visible también en fichas");
+  assert.doesNotMatch(block, /height:\s*100dvh|max-height:\s*none|padding:\s*0/, "ninguna variante vuelve a pantalla completa");
   assert.match(block, /grid-template-columns:\s*minmax\(0, 1fr\)/, "una columna");
   assert.match(block, /overflow-x:\s*hidden/, "sin scroll horizontal");
   assert.match(block, /min-height:\s*44px/, "botones del pie de 44 px");

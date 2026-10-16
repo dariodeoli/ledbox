@@ -873,12 +873,12 @@ export function AdminDisclosure({
  *   confirmación dentro del mismo diálogo.
  * - `size`: `sm` (440 px), `md` (560 px, por defecto), `lg` (720 px) y `xl`
  *   (960 px, grilla de tres columnas); `default` y `wide` siguen valiendo como
- *   alias de `md` y `lg`. `ficha` es el panel lateral.
+ *   alias de `md` y `lg`. `ficha` amplía el ancho a 1040 px con el mismo marco centrado.
  * - `error` / `warning`: franja entre el cuerpo y el pie (siempre visible, no
  *   se pierde al desplazar el formulario).
- * - Celular (0-767 px): formularios con altura natural y máximo según
- *   `visualViewport`; fichas de alto completo. Safe-area arriba y abajo; el
- *   cuerpo largo se desplaza y el pie queda encima del teclado.
+ * - Todos los tamaños conservan altura natural y margen visible, también ficha.
+ *   `visualViewport` y safe-area limitan la hoja al abrir el teclado: el cuerpo
+ *   largo se desplaza y el pie queda dentro del área visible.
  */
 export function AdminDialog({
   title,
@@ -949,9 +949,8 @@ export function AdminDialog({
     if (confirming) keepRef.current?.focus();
   }, [confirming]);
 
-  // Teclado en pantalla (celular): la hoja toma el alto visible de `visualViewport`
-  // para que el pie quede pegado encima del teclado. En escritorio no hace nada
-  // (el CSS solo usa la variable dentro del breakpoint de la hoja).
+  // El marco centrado usa el alto y desplazamiento del viewport visible:
+  // conserva su margen y mantiene el pie accesible también con teclado abierto.
   useEffect(() => {
     if (!ready) return;
     const viewport = window.visualViewport;
