@@ -745,3 +745,13 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - La nota de rechazo de propuesta y el selector del reporte usan los mismos campos compartidos. Una revisión automática de toda la app impide introducir controles visibles nativos fuera del kit.
 
 - Los selectores de opciones respetan su tamaño indicado y no invaden el campo de al lado dentro de grillas compactas.
+
+## v2.1.137 — 2026-10-16
+
+- Inventario: cero confirmado y pendiente de conteo son estados distintos. Un catálogo sin cantidad no crea existencias ficticias ni promete disponibilidad. El conteo se confirma explícitamente y conserva reservas, retiradas e historial.
+- Importación: el resultado cuenta los estados que realmente se guardaron, incluso si aparecen reservas después de la vista previa. Las unidades nuevas conservan el depósito y ubicación elegidos.
+- Crear sólo productos nuevos conserva los códigos existentes, sus tarifas, unidades y fotos; también conserva las categorías y colecciones existentes. La vista previa distingue conservar de omitir por error y muestra el conteo antes/después.
+- Conversión a combo: los rechazos revierten las escrituras y conservan las unidades. Los datos de compra, depósito, incidentes e historial impiden una conversión destructiva.
+- Origen separado de compra: propio, consignado físico y alquiler externo por evento. El dueño se registra por unidad y los defaults sólo se proponen a las altas nuevas; los históricos quedan sin revisar. Un pedido externo no crea stock permanente ni confirma cobertura de un proveedor.
+- Exportación de unidades por depósito: código de unidad, estado, depósito, ubicación y propietario en un CSV de consulta; no reemplaza el respaldo restaurable completo.
+
