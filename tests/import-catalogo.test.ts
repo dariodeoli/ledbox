@@ -342,9 +342,11 @@ test("la aplicación responde en NDJSON con progreso y la vista previa filtra du
 
 // ── Pendientes de la carga real (juego incompleto, unidad → juego, precio a consultar, categorías) ──
 
-test("cantidad null sigue creando 1 unidad (decisión del dueño)", () => {
+test("cantidad null nueva no fabrica unidades y queda pendiente de conteo", () => {
   const result = plan({ productos: [{ codigo: "A1", nombre: "Plato", cantidad: null }] });
-  assert.equal(result.items[0].unidades, 1);
+  assert.equal(result.items[0].unidades, 0);
+  assert.equal(result.items[0].stockCountStatus, "PENDING_COUNT");
+  assert.equal(result.items[0].countAfter, null);
   assert.equal(result.items[0].esCombo, false);
 });
 

@@ -41,7 +41,7 @@ type ResourceKind = (typeof RESOURCE_KINDS)[number];
 /** Campos mínimos de cada catálogo para los selectores (`fields=selector`). */
 const SELECTOR_FIELDS = {
   suppliers: { id: true, name: true },
-  inventory: { id: true, name: true, sku: true },
+  inventory: { id: true, name: true, sku: true, stockCountStatus: true },
   promoters: { id: true, name: true, availability: true, availabilityNote: true, unavailableUntil: true },
 } as const;
 
@@ -217,7 +217,8 @@ export async function POST(request: Request) {
     // Precio por días: escalones opcionales de cada frente (`[{ audience, fromDays, mode, price }]`).
     const tiers = readAudienceTiers(body.priceTiers);
     if (!tiers.ok) return jsonError(tiers.error, 400);
-    const quantity = typeof body.quantity === "number" && Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
+    const quantity = body.quantity === undefined ? 1 : body.quantity;
+    if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 0 || quantity > 100_000) return jsonError("La cantidad debe ser un entero de 0 a 100.000.", 400);
     if (body.category !== undefined && typeof body.category !== "string") return jsonError("La categoría no es válida.", 400);
     if (body.subcategory !== undefined && body.subcategory !== null && typeof body.subcategory !== "string") return jsonError("La subcategoría no es válida.", 400);
     // Depósito y ubicación que se proponen para las unidades, proveedor, compra y garantía (todo validado contra la empresa).
@@ -252,7 +253,7 @@ export async function POST(request: Request) {
             billingUnit: readBillingUnit(body.billingUnit) ?? "DAILY",
           },
         });
-        await createInventoryUnits(tx, {
+        if (quantity > 0) await createInventoryUnits(tx, {
           organizationId: auth.context.organizationId,
           inventoryId: created.id,
           name: created.name,

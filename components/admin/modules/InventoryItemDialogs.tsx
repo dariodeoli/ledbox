@@ -337,7 +337,7 @@ export function InventoryCreateDialog({
       warrantyUntil: form.warrantyUntil || undefined,
       sku: sku || undefined,
       inventoryKind: form.inventoryKind,
-      quantity: Number(form.quantity) || 1,
+      quantity: form.quantity.trim() === "" ? 1 : Number(form.quantity),
       catalogAudience: form.catalogAudience,
       imageUrl: image,
       billingUnit: form.billingUnit,

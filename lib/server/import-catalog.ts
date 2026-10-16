@@ -1,3 +1,4 @@
+import { confirmInventoryCount } from "./inventory-stock-count";
 /**
  * «Importar catálogo»: vista previa y aplicación contra la base.
  *
@@ -146,7 +147,7 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
   const rows = codes.length
     ? await dbWithDeleted.inventoryItem.findMany({
         where: { organizationId, sku: { in: codes } },
-        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, _count: { select: { components: true, units: true, assignments: true } } },
+        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, stockCountStatus: true, quantity: true, _count: { select: { components: true, units: true, assignments: true } } },
       })
     : [];
   // Unidades con historial (fuera de servicio, retiradas, perdidas o con incidentes): decide si una unidad se puede convertir en juego.
@@ -180,6 +181,8 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
                 isCombo: row._count.components > 0,
                 inTrash: row.deletedAt !== null,
                 units: row._count.units,
+                activeUnits: row.quantity,
+                stockCountStatus: row.stockCountStatus,
                 incompleto: row.comboIncomplete,
                 reservas: row._count.assignments,
                 unidadesConHistorial: historyById.get(row.id) ?? 0,
@@ -284,17 +287,18 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
     if (!locked.has(planned.existingId)) throw new Error("El producto ya no existe en esta empresa.");
     const current = await tx.inventoryItem.findFirst({
       where: { id: planned.existingId, organizationId },
-      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, comboIncomplete: true, _count: { select: { components: true } } },
+      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, stockCountStatus: true, comboIncomplete: true, _count: { select: { components: true } } },
     });
     if (!current) throw new Error("El producto ya no existe en esta empresa.");
     if (current._count.components > 0 || current.comboIncomplete) throw new Error("Ahora es un juego en el inventario; no se cambia el tipo por importación.");
+    if (current.stockCountStatus === "PENDING_COUNT" && product.cantidad !== null && product.cantidad < current.quantity) throw new Error("El conteo es menor que las unidades registradas: revisá sus estados o retiros antes de confirmar.");
     const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
     await tx.inventoryItem.update({
       where: { id: planned.existingId },
       data: { ...baseData, ...visibilityData(current), ...(photoChanged ? { imageData: photo!.data, imageMime: photo!.mime } : {}) },
     });
     // Nunca se retiran unidades: solo se completan hasta la cantidad del archivo.
-    if (product.cantidad !== null && current.quantity < product.cantidad) {
+    if (current.stockCountStatus !== "PENDING_COUNT" && product.cantidad !== null && current.quantity < product.cantidad) {
       await createInventoryUnits(tx, {
         organizationId,
         inventoryId: planned.existingId,
@@ -304,6 +308,7 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
         ...(product.ubicacion ? { location: product.ubicacion } : {}),
       });
     }
+    if (product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad);
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     const targets = stateTargetsOf(product);
     const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, planned.existingId, product.nombre, targets) : undefined;
@@ -317,13 +322,14 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
       sku: product.codigo,
       kind: "REUSABLE",
       quantity: planned.unidades,
+      stockCountStatus: product.cantidad === null ? "PENDING_COUNT" : "CONFIRMED",
       ...baseData,
       listPrice: product.precio ?? 0,
       ...visibilityData(null),
       ...(photo ? { imageData: photo.data, imageMime: photo.mime } : {}),
     },
   });
-  await createInventoryUnits(tx, {
+  if (planned.unidades > 0) await createInventoryUnits(tx, {
     organizationId,
     inventoryId: id,
     name: product.nombre,

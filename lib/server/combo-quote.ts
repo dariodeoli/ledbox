@@ -65,7 +65,7 @@ export type ComboQuote = {
 };
 
 const COMPONENT_AVAILABILITY_SELECT = {
-  id: true, name: true, sku: true, category: true, quantity: true, status: true,
+  id: true, name: true, sku: true, category: true, quantity: true, stockCountStatus: true, status: true,
   bufferBeforeMin: true, bufferAfterMin: true, incidentHold: true,
   _count: { select: MAINTENANCE_UNITS_SELECT },
 } as const;

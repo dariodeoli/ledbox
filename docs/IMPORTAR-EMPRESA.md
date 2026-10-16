@@ -165,11 +165,11 @@ Tres campos enteros ≥ 0 por producto: `en_mantenimiento`, `danadas` y `perdida
 | Combo con composición completa | null | La disponibilidad depende de sus componentes. |
 | Juego con composición incompleta | null | componentes: []; anotar piezas faltantes. |
 
-Cambio posterior: **cantidad null sigue creando 1 unidad por defecto**; es una decisión del dueño y no cambió.
+Cambio #245: **cantidad null/ausente en un producto nuevo queda Pendiente conteo y no crea unidades; cantidad0 es cero confirmado**. En productos existentes, null conserva el conteo y las unidades.
 
 No confundir «capacidad 8 personas», «incluye 8 sillas» y «stock de 8 juegos». No poner 1, 0 ni un número grande para rellenar stock desconocido.
 
-Comportamiento v2.1.121: cantidad null creaba 1 unidad por defecto (en La Vajilla, 304 productos; el panel mostró 1833 unidades que no acreditan existencias reales). El dueño decidió conservarlas hasta el conteo, y ese comportamiento se mantiene.
+Comportamiento v2.1.121: cantidad null creaba 1 unidad por defecto (en La Vajilla, 304 productos; el panel mostró 1833 unidades que no acreditan existencias reales). Las unidades históricas se conservan hasta revisión explícita; la migración #245 no las borra ni las reclasifica. Las altas nuevas ya no fabrican esa unidad por defecto.
 
 ## 6. Precios y moneda
 

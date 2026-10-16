@@ -1,3 +1,4 @@
+import { pendingStockCount, type StockCountStatus } from "./stock-count";
 import type { AdminIconName } from "./admin-types";
 
 /**
@@ -12,7 +13,7 @@ import type { AdminIconName } from "./admin-types";
 export type InventoryStateTone = "ok" | "warn" | "danger" | "info" | "accent" | "neutral";
 
 /** Estados en orden de precedencia: el primero que se cumple manda. */
-export const INVENTORY_STATE_KEYS = ["archived", "out-of-service", "overdue", "rented", "damaged", "maintenance", "available", "empty"] as const;
+export const INVENTORY_STATE_KEYS = ["archived", "out-of-service", "pending-count", "overdue", "rented", "damaged", "maintenance", "available", "empty"] as const;
 export type InventoryStateKey = (typeof INVENTORY_STATE_KEYS)[number];
 
 export type InventoryStateEntry = {
@@ -29,6 +30,7 @@ export type InventoryStateEntry = {
 };
 
 export const INVENTORY_STATES: Record<InventoryStateKey, InventoryStateEntry> = {
+  "pending-count": { key: "pending-count", tone: "warn", icon: "inventory", label: "Pendiente conteo", hint: "El total de unidades todavía no está confirmado; no se promete disponibilidad." },
   archived: { key: "archived", tone: "neutral", icon: "archive", label: "Archivado", hint: "Fuera de las listas activas; conserva sus datos." },
   "out-of-service": { key: "out-of-service", tone: "info", icon: "wrench", label: "Fuera de servicio", hint: "El producto está en mantenimiento o retirado." },
   overdue: {
@@ -85,6 +87,7 @@ export type InventoryStateAvailability = {
 };
 
 export type InventoryStateInput = {
+  stockCountStatus?: StockCountStatus;
   archivedAt?: string | null;
   /** Estado del producto (`InventoryStatus`). */
   status: string;
@@ -113,6 +116,7 @@ export function inventoryStateKey(input: InventoryStateInput): InventoryStateKey
   const { availability } = input;
   if (input.archivedAt) return "archived";
   if (input.status === "MAINTENANCE" || input.status === "RETIRED") return "out-of-service";
+  if (pendingStockCount(input)) return "pending-count";
   if (num(availability.overduePending) > 0) return "overdue";
   const freeNow = num(availability.availableNow);
   if (freeNow === 0 && num(availability.committedNow) > 0) return "rented";
@@ -145,7 +149,7 @@ export type InventoryVisualState = {
 export function inventoryVisualState(input: InventoryStateInput, options: { combo?: boolean } = {}): InventoryVisualState {
   const { availability } = input;
   const state = INVENTORY_STATES[inventoryStateKey(input)];
-  const free = num(availability.availableNow);
+  const free = pendingStockCount(input) ? 0 : num(availability.availableNow);
   const total = options.combo ? 0 : Math.max(0, input.quantity);
   const nextAt = availability.nextCommittedAt ?? null;
   const reserved = nextAt ? { ...RESERVED_STATE, at: nextAt, label: `Reservado desde ${formatReservedDay(nextAt)}` } : null;
@@ -167,14 +171,14 @@ export function inventoryVisualState(input: InventoryStateInput, options: { comb
   const ordered = (["free", "rented", "damaged", "maintenance"] as const)
     .map((key): InventorySegment => ({ key, tone: rawSegments.find((entry) => entry.key === key)!.tone, count: clamped.get(key) ?? 0, label: labels[key] }))
     .filter((segment) => segment.count > 0);
-  const partial = total > 0 && ordered.length > 1;
+  const partial = !pendingStockCount(input) && total > 0 && ordered.length > 1;
   return {
     state,
     reserved,
     free,
     total,
-    fraction: total > 0 ? `${free}/${total}` : null,
-    segments: total > 0 ? ordered : [],
+    fraction: !pendingStockCount(input) && total > 0 ? `${free}/${total}` : null,
+    segments: !pendingStockCount(input) && total > 0 ? ordered : [],
     partial,
   };
 }

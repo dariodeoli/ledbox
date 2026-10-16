@@ -1,4 +1,5 @@
 "use client";
+import { InventoryCountPanel } from "./InventoryCountPanel";
 
 import { tierLabel, tierPreview, previewDays, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -537,7 +538,7 @@ export function InventoryFicha({
               ) : (
                 <>
                   <div>
-                    <dt>Unidades</dt>
+                    <dt>{item.stockCountStatus === "PENDING_COUNT" ? "Unidades registradas · total pendiente" : "Unidades"}</dt>
                     <dd>{formatNumber(item.quantity)}</dd>
                   </div>
                   <div>
@@ -572,6 +573,7 @@ export function InventoryFicha({
       <TabPanel active={tab === "datos"} id={panelId("datos")} tab={tabId("datos")}>
 <AdminDialogSection title="Datos" stack>
         <ProductDataSection item={item} taxonomy={taxonomy} />
+        {item.stockCountStatus === "PENDING_COUNT" && !isCombo ? <InventoryCountPanel key={item.id} id={item.id} registered={item.quantity} writable={writable} onChanged={onChanged} /> : null}
       </AdminDialogSection>
       <ProductStorefrontPanel itemId={item.id} name={item.name} mainImageUrl={item.imageUrl ?? null} writable={writable} onChanged={onChanged} />
 </TabPanel>
@@ -634,10 +636,10 @@ export function InventoryFicha({
           ) : (
             <>
               <AdminNote tone={rangeAvailability && rangeAvailability.available === 0 ? "error" : undefined}>
-                {rangeAvailability
+                {rangeAvailability?.stockCountStatus === "PENDING_COUNT" ? "Pendiente conteo: no se puede prometer disponibilidad hasta confirmar las unidades." : rangeAvailability
                   ? `${inventoryAvailabilityLabel(rangeAvailability.available, "free", true)} de ${formatNumber(rangeAvailability.total)} entre ${dayRangeLabel(from, to)}.`
                   : "Sin datos de disponibilidad para el rango."}
-                {rangeAvailability?.blocked
+                {rangeAvailability?.blocked && rangeAvailability.stockCountStatus !== "PENDING_COUNT"
                   ? ` «${rangeAvailability.name}» está ${rangeAvailability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
                   : ""}
                 {rangeAvailability && rangeAvailability.conflicts.length > 0
@@ -1021,8 +1023,8 @@ export function InventoryFicha({
                     <small className="admin-cell-sub"> · {component.category}</small>
                   </AdminCell>
                   <AdminCell end>{formatNumber(component.quantity)}</AdminCell>
-                  <AdminCell end>{formatNumber(component.available)}</AdminCell>
-                  <AdminCell end>{formatNumber(component.canMake)}</AdminCell>
+                  <AdminCell end>{component.stockCountStatus === "PENDING_COUNT" ? "Pendiente conteo" : formatNumber(component.available)}</AdminCell>
+                  <AdminCell end>{component.stockCountStatus === "PENDING_COUNT" ? "—" : formatNumber(component.canMake)}</AdminCell>
                 </AdminRow>
               ))}
             </AdminTable>

@@ -121,7 +121,7 @@ Reglas:
 3. "deposito" y "ubicacion": dejalos en null salvo que el catálogo diga dónde se guarda el producto ("deposito" es el código del depósito, por ejemplo "D1"; "ubicacion" es estante y nivel, por ejemplo "E3-B2").
 4. "tipo": "unidad" para un producto suelto; "juego" para un conjunto armado con otros productos del catálogo (ej. un living con sofá y mesas).
 5. Juegos y componentes: un juego lleva en "componentes" la lista { "codigo", "cantidad" } de los productos que lo forman. Cada código de componente tiene que existir también como producto en el catálogo. Un juego NO puede ser componente de otro juego. Una unidad lleva "componentes": [].
-6. "cantidad": entero con el stock si el catálogo lo dice; si no, null. En los juegos va null (la capacidad sale de los componentes).
+6. "cantidad": entero de0 o más con el stock si el catálogo lo dice;0 sólo si está confirmado sin existencias. Si no se conoce, null (Pendiente conteo, no crea unidades). En los juegos va null (la capacidad sale de los componentes).
 7. "precio": guaraníes (PYG) como número entero, sin puntos, sin "Gs" y sin decimales (660000, no "660.000"). Si el catálogo no trae precio, null. Nunca conviertas otras monedas: dejá null y anotalo en "dudas".
 8. "cobro": "dia" (precio por día de alquiler) salvo que el catálogo diga que el precio es total por evento (entonces "evento").
 8b. "precios_dias": solo si el catálogo trae un precio especial por cantidad de días (ej. "5 días por 300.000"): lista de { "desde_dias": 5, "modo": "total", "precio": 300000 }. "modo": "dia" si el precio es por cada día, "total" si es el total del período. Si no hay, [] o null.

@@ -1,0 +1,5 @@
+DO $$ BEGIN
+  CREATE TYPE "StockCountStatus" AS ENUM ('CONFIRMED', 'PENDING_COUNT');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+ALTER TABLE "InventoryItem" ADD COLUMN IF NOT EXISTS "stockCountStatus" "StockCountStatus" NOT NULL DEFAULT 'CONFIRMED';

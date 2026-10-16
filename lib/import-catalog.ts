@@ -244,6 +244,12 @@ function parseWholeNumber(raw: unknown): number | null | false {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 100_000 ? value : false;
 }
 
+/** Stock: zero is confirmed empty; null/absent remains unknown. Components stay positive. */
+export function parseCatalogQuantity(raw: unknown): number | null | false {
+  if (raw === 0 || (typeof raw === "string" && /^0+$/.test(raw.trim()))) return 0;
+  return parseWholeNumber(raw);
+}
+
 /** Cantidad de unidades en un estado: entero ≥ 0. `null` = campo ausente; `false` = inválido. */
 export function parseStateCount(raw: unknown): number | null | false {
   if (raw === null || raw === undefined) return null;
@@ -471,9 +477,9 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
     problems.push(problem("error", "precios-dias-invalido", codigo, fila, `Código ${codigo}: ${preciosDias.error}`));
     return null;
   }
-  const cantidad = parseWholeNumber(row.cantidad);
+  const cantidad = parseCatalogQuantity(row.cantidad);
   if (cantidad === false) {
-    problems.push(problem("error", "cantidad-invalida", codigo, fila, `Código ${codigo}: la cantidad debe ser un entero de 1 o más (o null).`));
+    problems.push(problem("error", "cantidad-invalida", codigo, fila, `Código ${codigo}: la cantidad debe ser un entero de 0 o más (o null para pendiente de conteo).`));
     return null;
   }
   const estados = {
@@ -699,6 +705,8 @@ export type ExistingItem = {
   isCombo: boolean;
   inTrash: boolean;
   units: number;
+  activeUnits?: number;
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   /** Juego importado sin piezas (combo incompleto): es un juego aunque todavía no tenga componentes. */
   incompleto?: boolean;
   /** Asignaciones a eventos del producto (cualquier estado): una unidad con reservas no se convierte en juego. */
@@ -770,6 +778,9 @@ export function planUnitStates(options: { counts: UnitStateCounts; nuevas: numbe
 }
 
 export type PlannedProduct = {
+  stockCountStatus: "CONFIRMED" | "PENDING_COUNT";
+  countBefore: number | null;
+  countAfter: number | null;
   product: CatalogProduct;
   accion: "crear" | "actualizar" | "omitir";
   /** Se carga como juego (combo): con piezas, o incompleto si el archivo no las trae. */
@@ -873,6 +884,9 @@ export function planCatalog(options: {
     const incompleto = esCombo && !hasComponents(product) && !existing?.isCombo;
     const base: PlannedProduct = {
       product,
+      stockCountStatus: esCombo ? "CONFIRMED" : product.cantidad === null ? existing?.stockCountStatus ?? (existing ? "CONFIRMED" : "PENDING_COUNT") : "CONFIRMED",
+      countBefore: existing ? existing.activeUnits ?? existing.units : null,
+      countAfter: esCombo ? null : product.cantidad === null ? existing ? existing.stockCountStatus === "PENDING_COUNT" ? null : existing.activeUnits ?? existing.units : null : Math.max(existing?.activeUnits ?? existing?.units ?? 0, product.cantidad),
       accion: existing ? "actualizar" : "crear",
       esCombo,
       incompleto,
@@ -880,7 +894,7 @@ export function planCatalog(options: {
       foto: null,
       fotosExtra: null,
       publicDescription: null,
-      unidades: esCombo ? 0 : product.cantidad ?? 1,
+      unidades: esCombo ? 0 : product.cantidad ?? 0,
       existingId: existing?.id ?? null,
       estados: null,
     };
@@ -948,7 +962,7 @@ export function planCatalog(options: {
       } else {
         const counts = existing?.estados ?? { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
         const active = counts.AVAILABLE + counts.MAINTENANCE + counts.DAMAGED + counts.LOST;
-        const total = existing ? Math.max(active, product.cantidad ?? active) : product.cantidad ?? 1;
+        const total = existing ? Math.max(active, product.cantidad ?? active) : product.cantidad ?? 0;
         const requested = (targets.MAINTENANCE ?? 0) + (targets.DAMAGED ?? 0) + (targets.LOST ?? 0);
         if (requested > total) {
           problems.push(problem("error", "estado-excede", product.codigo, product.fila, `${product.nombre}: en mantenimiento + dañadas + perdidas suman ${requested} y el producto tiene ${total} unidad${total === 1 ? "" : "es"}. La suma no puede superar la cantidad.`));

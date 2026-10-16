@@ -1,3 +1,5 @@
+import { confirmInventoryCount } from "@/lib/server/inventory-stock-count";
+import { pendingStockCount } from "@/lib/stock-count";
 import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
@@ -295,16 +297,18 @@ export async function GET(request: Request) {
       const capacities = await comboCapacitiesForRange({ organizationId, comboIds: [item.id], startsAt, endsAt });
       const capacity = capacities.get(item.id);
       const definition = (await loadComboDefinitions(organizationId, [item.id])).get(item.id);
+      const pending = Boolean(definition?.components.some(pendingStockCount));
       return Response.json({
         availability: {
           inventoryId: item.id,
           name: item.name,
           status: item.status,
           total: capacity?.capacity ?? 0,
+          stockCountStatus: pending ? "PENDING_COUNT" : "CONFIRMED",
           committed: 0,
           maintenance: 0,
-          available: BLOCKED_INVENTORY_STATUSES.includes(item.status) ? 0 : (capacity?.capacity ?? 0),
-          blocked: BLOCKED_INVENTORY_STATUSES.includes(item.status),
+          available: pending || BLOCKED_INVENTORY_STATUSES.includes(item.status) ? 0 : (capacity?.capacity ?? 0),
+          blocked: pending || BLOCKED_INVENTORY_STATUSES.includes(item.status),
           startsAt,
           endsAt,
           conflicts: [],
@@ -342,6 +346,7 @@ export async function GET(request: Request) {
         kind: true,
         status: true,
         quantity: true,
+        stockCountStatus: true,
         incidentHold: true,
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
@@ -367,7 +372,7 @@ export async function GET(request: Request) {
       const committedNow = rows
         .filter((row) => row.inventoryId === item.id && assignmentIsActiveNow(row, now))
         .reduce((sum, row) => sum + row.quantity, 0);
-      const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+      const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
       const maintenanceNow = maintenanceUnits(item);
       const usable = Math.max(0, item.quantity - maintenanceNow);
       return {
@@ -473,7 +478,7 @@ export async function GET(request: Request) {
     const rows = assignments.filter((assignment) => assignment.inventoryId === item.id);
     const activeNow = rows.filter((row) => assignmentIsActiveNow(row, now));
     const committedNow = activeNow.reduce((sum, row) => sum + row.quantity, 0);
-    const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+    const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
     const maintenanceNow = maintenanceUnits(item);
     const usable = Math.max(0, item.quantity - maintenanceNow);
     const rangeAvailability = range
@@ -645,6 +650,18 @@ export async function POST(request: Request) {
       });
     }
     return Response.json({ inventory });
+  }
+
+  if (kind === "item-confirm-count") {
+    const id = typeof body.id === "string" ? body.id : "";
+    const quantity = typeof body.quantity === "number" ? body.quantity : NaN;
+    if (!id || !Number.isSafeInteger(quantity) || quantity < 0 || quantity > 100_000) return jsonError("Indicá el producto y un conteo entero de 0 a 100.000.", 400);
+    try {
+      const inventory = await db.$transaction((tx) => confirmInventoryCount(tx, auth.context, id, quantity));
+      return Response.json({ inventory });
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : "No se pudo confirmar el conteo.", 409);
+    }
   }
 
   if (kind === "item") {

@@ -57,10 +57,10 @@ function item(overrides: Partial<AdminInventoryItemRow> & { id: string }): Admin
 
 const unit = (id: string, status: string) => ({ id, code: id, status, purchaseCost: 0, notes: null, updatedAt: at(0) });
 
-test("las pestañas del inventario son las cinco pedidas y cada una filtra lo que dice", () => {
+test("las pestañas del inventario son las operativas y datos por completar y cada una filtra lo que dice", () => {
   assert.deepEqual(
     INVENTORY_TABS.map((tab) => tab.label),
-    ["Todos", "Combos", "Con incidentes", "Publicados en tienda", "Ocultos"],
+    ["Todos", "Combos", "Datos por completar", "Con incidentes", "Publicados en tienda", "Ocultos"],
   );
   const combo = item({ id: "combo", combo: { capacity: 3, limiting: null, components: [] } });
   const published = item({ id: "pub", catalogAudience: "WHOLESALE", visibleOnWeb: true });
@@ -69,7 +69,7 @@ test("las pestañas del inventario son las cinco pedidas y cada una filtra lo qu
   const flagged = item({ id: "inc" });
   const items = [combo, published, hidden, broken, flagged];
   const ctx = { openIncidentIds: new Set(["inc"]), now: NOW };
-  assert.deepEqual(tabCounts(items, ctx), { all: 5, combos: 1, incidents: 2, published: 1, hidden: 4 });
+  assert.deepEqual(tabCounts(items, ctx), { all: 5, combos: 1, incidents: 2, published: 1, hidden: 4, incomplete: 0 });
   assert.equal(itemInFocus(combo, "combos", ctx), true);
   assert.equal(itemInFocus(published, "hidden", ctx), false);
   assert.equal(hasIncident(broken, ctx.openIncidentIds), true, "una unidad dañada cuenta como incidente aunque no haya un registro abierto");

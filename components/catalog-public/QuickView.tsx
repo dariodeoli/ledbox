@@ -167,7 +167,7 @@ export function QuickView({ item, items, showPrices, priceOf, productApi, slug, 
               {slug ? <EventPicker slug={slug} range={range} variant="panel" onApply={onApplyRange} title="Fechas del alquiler" emptyNote="Elegí las fechas para consultar la disponibilidad." /> : null}
               {range ? (
                 <p className="cp-avail" data-tone={item.availability ?? "CONSULT"} data-testid="quick-availability">
-                  {item.availability === "AVAILABLE" ? "Disponible para tu fecha" : item.availability === "LOW" ? AVAILABILITY_HINT_LABEL.LOW : "Consultar disponibilidad"}
+                  {item.stockCountStatus === "PENDING_COUNT" ? "Consultar disponibilidad · pendiente de conteo" : item.availability === "AVAILABLE" ? "Disponible para tu fecha" : item.availability === "LOW" ? AVAILABILITY_HINT_LABEL.LOW : "Consultar disponibilidad"}
                 </p>
               ) : null}
               <p className="cp-hint">La disponibilidad es indicativa y se confirma al cotizar.{showPrices ? " Los precios son de referencia y se confirman en la cotización." : ""}</p>

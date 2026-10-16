@@ -1712,6 +1712,7 @@ export function supplierJobBalance(job: { total: number; advance: number; status
 }
 
 export type AdminInventoryRow = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   /** Archivo organizacional independiente del estado operativo (#161). */
   archivedAt: string | null;
   id: string;
@@ -1788,7 +1789,7 @@ export type AdminInventoryCombo = {
   /** Combos que se pueden armar (ahora o en el rango pedido). */
   capacity: number;
   limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
-  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string }>;
+  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string; stockCountStatus?: "CONFIRMED" | "PENDING_COUNT" }>;
   /** Juego sin piezas cargadas: no se puede reservar hasta completarlo. */
   incomplete?: boolean;
 };
@@ -1804,6 +1805,7 @@ export type AdminInventoryAssignmentRow = AdminEventAssignmentMovement & {
 };
 
 export type AdminInventoryAvailability = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   inventoryId: string;
   name: string;
   status: string;
@@ -1825,6 +1827,7 @@ export type AdminInventoryAvailability = {
 
 /** Artículo del inventario vinculado a un ítem del presupuesto (issue #18). */
 export type AdminInventoryLink = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   imageUrl?: string | null;
   imageMime?: string | null;
   updatedAt?: string;

@@ -51,7 +51,7 @@ function InventoryTile({ item, writable, rangeActive, selected, selectionFull, o
         </span>
         </span>
         <StateChips visual={visual} incomplete={Boolean(item.combo?.incomplete)} compact />
-        {rangeActive || item.combo ? (
+        {item.stockCountStatus === "PENDING_COUNT" ? <small>Total pendiente de conteo</small> : rangeActive || item.combo ? (
           <StockMeter summary={stockSummary(item, rangeActive)} combo={Boolean(item.combo)} />
         ) : (
           <span className="admin-meter admin-inv-stock">

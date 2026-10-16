@@ -1873,6 +1873,11 @@ model BankStatementRow {
   @@index([movementId])
 }
 
+enum StockCountStatus {
+  CONFIRMED
+  PENDING_COUNT
+}
+
 model InventoryItem {
   id                 String               @id
   organizationId     String
@@ -1900,6 +1905,8 @@ model InventoryItem {
   /// Cantidad = unidades activas (issue #112): se sincroniza con `units`
   /// (las retiradas no cuentan) para no romper los contratos existentes.
   quantity           Int                  @default(1)
+  /// Explicit knowledge of the count; zero does not mean unknown.
+  stockCountStatus   StockCountStatus     @default(CONFIRMED)
   replacementCost    Int                  @default(0)
   dailyCost          Int                  @default(0)
   /// Precios de venta en guaraníes (issues #90 y #110). Cada frente tiene su

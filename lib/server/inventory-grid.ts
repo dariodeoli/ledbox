@@ -1,3 +1,4 @@
+import { pendingStockCount } from "@/lib/stock-count";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { inventoryImageUrl } from "./inventory-images";
@@ -281,7 +282,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
     const { imageMime, _count, priceTiers, ...row } = item;
     const mine = assignments.filter((assignment) => assignment.inventoryId === item.id);
     const committedNow = mine.filter((assignment) => assignmentIsActiveNow(assignment, now)).reduce((sum, assignment) => sum + assignment.quantity, 0);
-    const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+    const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
     const maintenanceNow = maintenanceUnits(item);
     const usable = Math.max(0, item.quantity - maintenanceNow);
     const rangeAvailability = range

@@ -1,3 +1,4 @@
+import { pendingStockCount, type StockCountStatus } from "../stock-count";
 import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryStatus } from "@prisma/client";
 import { db } from "./db";
@@ -71,6 +72,7 @@ const COMPONENT_ITEM_SELECT = {
   category: true,
   categoryId: true,
   quantity: true,
+  stockCountStatus: true,
   status: true,
   bufferBeforeMin: true,
   bufferAfterMin: true,
@@ -233,6 +235,7 @@ export async function commitComboInTx(tx: Tx, options: ComboCommitOptions, locke
       excludeId: existing?.id ?? null,
       client: tx,
     });
+    if (pendingStockCount(item)) return { ok: false, reason: "conflict", message: `«${item.name}» está pendiente de conteo: confirmá sus unidades antes de reservar el combo.` };
     const canMake = Math.floor(Math.max(0, availability.available - other) / row.quantity);
     plans.push({ definitionId: row.definitionId, item, per: row.quantity, existing, counted, other, otherCombo, availability, canMake });
   }
@@ -644,7 +647,7 @@ export async function substituteComboComponent(options: {
 
 export type ComboDefinition = {
   id: string;
-  components: Array<ComboComponentDef & { category: string; status: InventoryStatus }>;
+  components: Array<ComboComponentDef & { category: string; status: InventoryStatus; stockCountStatus?: StockCountStatus }>;
 };
 
 /** Definiciones de combos de la empresa (todas o las pedidas). Los ajenos no aparecen. */
@@ -652,12 +655,12 @@ export async function loadComboDefinitions(organizationId: string, comboIds?: Re
   const rows = await db.inventoryComponent.findMany({
     where: { organizationId, parent: live, ...(comboIds ? { parentId: { in: [...comboIds] } } : {}) },
     orderBy: [{ parentId: "asc" }, { component: { name: "asc" } }],
-    select: { parentId: true, componentId: true, quantity: true, component: { select: { name: true, category: true, status: true } } },
+    select: { parentId: true, componentId: true, quantity: true, component: { select: { name: true, category: true, status: true, stockCountStatus: true } } },
   });
   const map = new Map<string, ComboDefinition>();
   for (const row of rows) {
     const entry = map.get(row.parentId) ?? { id: row.parentId, components: [] };
-    entry.components.push({ componentId: row.componentId, name: row.component.name, quantity: row.quantity, category: row.component.category, status: row.component.status });
+    entry.components.push({ componentId: row.componentId, name: row.component.name, quantity: row.quantity, category: row.component.category, status: row.component.status, stockCountStatus: row.component.stockCountStatus });
     map.set(row.parentId, entry);
   }
   // Juegos incompletos (importados sin piezas): son combos sin componentes, sin stock propio.
@@ -872,7 +875,7 @@ export type ComboView = {
   /** Combos que se pueden armar ahora (o en el rango pedido). */
   capacity: number;
   limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
-  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: InventoryStatus }>;
+  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: InventoryStatus; stockCountStatus?: StockCountStatus }>;
   /** Juego sin piezas cargadas: no se puede reservar hasta completarlo. */
   incomplete?: boolean;
 };
@@ -903,11 +906,12 @@ export function withComboAvailability<T extends ListedRow>(
   return rows.map((row) => {
     const definition = definitions.get(row.id);
     if (!definition) return row;
+    const pending = definition.components.some(pendingStockCount);
     const capacityNow = comboCapacity(definition.components, availableNow);
     const range = rangeCapacities?.get(row.id) ?? null;
     const shown = range ?? capacityNow;
     const view: ComboView = {
-      capacity: shown.capacity,
+      capacity: pending ? 0 : shown.capacity,
       limiting: shown.limiting
         ? { componentId: shown.limiting.componentId, name: shown.limiting.name, available: shown.limiting.available, perCombo: shown.limiting.quantity }
         : null,
@@ -918,22 +922,24 @@ export function withComboAvailability<T extends ListedRow>(
         quantity: component.quantity,
         available: component.available,
         canMake: component.canMake,
+        stockCountStatus: definition.components.find((entry) => entry.componentId === component.componentId)?.stockCountStatus,
         status: definition.components.find((entry) => entry.componentId === component.componentId)?.status ?? "AVAILABLE",
       })),
       ...(definition.components.length === 0 ? { incomplete: true } : {}),
     };
     return {
       ...row,
+      stockCountStatus: pending ? "PENDING_COUNT" as const : "CONFIRMED" as const,
       availability: {
         ...row.availability,
         committedNow: 0,
-        availableNow: capacityNow.capacity,
+        availableNow: pending ? 0 : capacityNow.capacity,
         overcommittedNow: false,
         maintenanceNow: 0,
         ...(row.availability.range !== undefined
           ? {
               range: row.availability.range
-                ? { ...row.availability.range, committed: 0, overcommitted: false, available: range ? range.capacity : row.availability.range.available }
+                ? { ...row.availability.range, committed: 0, overcommitted: false, available: pending ? 0 : range ? range.capacity : row.availability.range.available }
                 : null,
             }
           : {}),
