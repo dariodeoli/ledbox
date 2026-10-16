@@ -1,5 +1,5 @@
 import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
-import { rememberedVenues } from "@/lib/event-venues";
+import { loadEventVenues } from "@/lib/server/event-venues";
 import { EventRescheduleError, guardEventReschedule, lockEventForEdit } from "@/lib/server/event-reschedule";
 import { guardEventNameChange } from "@/lib/server/event-name";
 import { QuoteComparisonError } from "@/lib/server/quote-comparison";
@@ -52,13 +52,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const url = new URL(request.url);
   if (url.searchParams.get("fields") === "venues") {
-    // Proyección propia: no depende del tope del listado ni expone clientes/responsables.
-    const rows = await db.event.findMany({
-      where: { organizationId: auth.context.organizationId, location: { not: null } },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: { location: true, city: true, department: true, address: true, addressReference: true, locationUrl: true, venueContactName: true, venueContactPhone: true, venueContactEmail: true },
-    });
-    return Response.json({ venues: rememberedVenues(rows) });
+    return Response.json({ venues: await loadEventVenues(auth.context.organizationId) });
   }
   if (url.searchParams.get("fields") === "selector") {
     const events = await db.event.findMany({

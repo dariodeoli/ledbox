@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
@@ -26,14 +27,23 @@ test("recintos guardados, ciudad estricta y aislamiento por empresa", { skip: !e
       { id: randomUUID(), organizationId: org, clientId: client.id, name: "Antiguo", location: "Salón QA", address: "Dirección anterior", venueContactName: "Antiguo", updatedAt: new Date("2020-01-01"), createdAt: new Date("2020-01-01") },
       ...Array.from({ length: 205 }, (_, index) => ({ id: randomUUID(), organizationId: org, clientId: client.id, name: `Histórico ${index}`, location: `Recinto ${index}`, updatedAt: new Date("2021-01-01"), createdAt: new Date("2021-01-01") })),
     ] });
+    // Ensaya la migración real sólo sobre las fixtures históricas de esta empresa.
+    const migration = readFileSync("prisma/migrations/202611040001_event_venue_directory/migration.sql", "utf8");
+    const backfill = migration.slice(migration.indexOf("WITH source AS")).replace('WHERE e."deletedAt" IS NULL', 'WHERE e."organizationId" = $1 AND e."deletedAt" IS NULL');
+    await db.$executeRawUnsafe(backfill, org);
     let eventId = "";
     await t.test("texto libre de recinto se guarda con contacto y dirección completos", async () => {
       const response = await request("/api/admin/events", "POST", { clientId: client.id, name: "Nuevo evento", location: "Salón QA", city: "asuncion", address: "Nueva dirección", addressReference: "Portón azul", locationUrl: "https://maps.example.invalid/qa", venueContactName: "Ana", venueContactPhone: "+595 981123456", venueContactEmail: "ANA@FIXTURES.TEST", responsibleName: "Responsable privado" });
       assert.equal(response.status, 201, await response.clone().text());
       const event = (await response.json()).event; eventId = event.id;
       assert.equal(event.location, "Salón QA"); assert.equal(event.city, "Asunción"); assert.equal(event.venueContactEmail, "ana@fixtures.test");
+      const defaults = (await (await request("/api/admin/events?fields=venues")).json()).venues.find((row: { location: string }) => row.location === "Salón QA");
+      assert.equal(defaults.venueContactName, "Antiguo", "guardar evento no reemplaza datos predeterminados");
+      const save = await request("/api/admin/venues", "POST", { ...event, id: defaults.id, expectedRevision: defaults.revision });
+      assert.equal(save.status, 200, await save.clone().text());
+
     });
-    await t.test("libreta supera listado de 200; última ficha, sin papelera ni otras empresas ni responsables", async () => {
+    await t.test("libreta supera listado de 200; defaults explícitos, sin papelera ni otras empresas ni responsables", async () => {
       const response = await request("/api/admin/events?fields=venues"); assert.equal(response.status, 200);
       const { venues } = await response.json();
       assert.equal(venues.length, 206);

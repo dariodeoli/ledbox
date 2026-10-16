@@ -204,6 +204,7 @@ model Organization {
   demoReady             Boolean                     @default(true)
   inventoryCategories   InventoryCategory[]
   inventoryFamilies     InventoryFamily[]
+  eventVenues           EventVenue[]
   warehouses            Warehouse[]
 
   @@index([active, createdAt])
@@ -3104,4 +3105,29 @@ model OrganizationSlug {
   createdAt      DateTime @default(now())
 
   @@index([organizationId])
+}
+
+/// Libreta de recintos por empresa; los eventos conservan snapshots independientes.
+model EventVenue {
+  id                String   @id
+  organizationId    String
+  key               String
+  location          String
+  city              String?
+  department        String?
+  address           String?
+  addressReference  String?
+  locationUrl       String?
+  venueContactName  String?
+  venueContactPhone String?
+  venueContactEmail String?
+  revision          Int      @default(0)
+  /// Backfill recuperó ficha anterior para conservar contacto; confirmar defaults la limpia.
+  needsReview       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, location])
 }
