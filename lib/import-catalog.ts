@@ -899,6 +899,10 @@ export function planCatalog(options: {
       estados: null,
     };
     const errors: ImportProblem[] = [];
+    if (existing?.stockCountStatus === "PENDING_COUNT" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
+      problems.push(problem("error", "cantidad-invalida", product.codigo, product.fila, `${product.nombre}: el conteo es menor que las unidades registradas. Revisá sus estados o retiros antes de confirmar; no se elimina ninguna unidad.`));
+      return { ...base, accion: "omitir", stockCountStatus: "PENDING_COUNT", countAfter: null };
+    }
 
     if (product.tipo === "juego" && !hasComponents(product)) {
       problems.push(

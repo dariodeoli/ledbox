@@ -28,6 +28,8 @@ test("existing null preserves count knowledge, numeric count never advertises re
   const known = plan({ cantidad: null }, new Map([["SC1", item]])).items[0]; assert.equal(known.countAfter, 10); assert.equal(known.stockCountStatus, "CONFIRMED");
   const pending = plan({ cantidad: null }, new Map([["SC1", { ...item, stockCountStatus: "PENDING_COUNT" }]])).items[0]; assert.equal(pending.countAfter, null); assert.equal(pending.stockCountStatus, "PENDING_COUNT");
   assert.equal(plan({ cantidad: 0 }, new Map([["SC1", item]])).items[0].countAfter, 10);
+  const lowerPending = plan({ cantidad: 2 }, new Map([["SC1", { ...item, stockCountStatus: "PENDING_COUNT" }]])).items[0];
+  assert.equal(lowerPending.accion, "omitir"); assert.equal(lowerPending.stockCountStatus, "PENDING_COUNT"); assert.equal(lowerPending.countAfter, null);
 });
 test("canonical availability blocks pending even with units registered; confirmed zero stays known", () => {
   const item = { id: "id", name: "Silla", quantity: 4, status: "AVAILABLE" as const, maintenance: 0 };
