@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApiGet, adminApiUpload, clearAdminApiCache } from "@/lib/admin-api";
 import { IMPORT_MODULES, type ImportModuleId } from "@/lib/import-modules";
 import { CATALOG_LIMITS, DUDA_MOTIVO_LABEL } from "@/lib/import-catalog";
+import type { PhotoResult } from "@/lib/import-photo-results";
 import type { CatalogImportMode } from "@/lib/import-catalog";
 import { AdminButtonLink, AdminBadge, AdminButton, AdminDialog } from "./AdminUI";
 import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } from "./AdminFields";
@@ -25,6 +26,7 @@ type Resultado = {
   actualizados: number;
   juegos: number;
   fotos: number;
+  resultadoFotos?: { destinos: PhotoResult[] };
   omitidos: number;
   fallidos: Array<{ codigo: string; mensaje: string }>;
   /** Módulos con tarjetas propias (eventos): reemplazan a las del catálogo. */
@@ -223,6 +225,15 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               </div>
             ))}
           </div>
+          {resultado.resultadoFotos ? (
+            <details>
+              <summary>Resultado de las fotos por destino</summary>
+              <p>Cada ficha, categoría o colección cuenta como un destino. Las fotos adicionales cuentan como una galería completa. Cero cambios no significa que el catálogo no tenga fotos.</p>
+              <ul className="admin-import-problems" aria-label="Resultado de fotos">
+                {resultado.resultadoFotos.destinos.map(row => <li key={`${row.alcance}:${row.codigo}`}><strong>{row.codigo} · {row.alcance}</strong>: {row.estado === "sin_archivo" ? "sin archivo aportado" : row.estado}. {row.motivo}{row.estado === "fallida" && row.cambioAplicado ? " Hubo cambios parciales guardados." : ""}</li>)}
+              </ul>
+            </details>
+          ) : null}
           {resultado.fallidos.length > 0 ? (
             <ul className="admin-import-problems" aria-label="Lo que no se pudo importar">
               {resultado.fallidos.map((fallo, index) => (
@@ -245,6 +256,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
         </div>
       ) : preview ? (
         <div className="admin-import">
+          {moduloId === "productos" ? <p>Las fotos encontradas aún no están aplicadas ni comparadas con las guardadas. El resultado final distingue cambios, conservación y fallos.</p> : null}
           <div className="admin-import-cards" role="list">
             {preview.tarjetas.map((tarjeta) => (
               <div key={tarjeta.clave} className="admin-import-card" role="listitem">

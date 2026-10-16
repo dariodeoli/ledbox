@@ -1,3 +1,4 @@
+import * as photoResults from "../lib/import-photo-results";
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
@@ -51,7 +52,7 @@ test('preserving an existing pending SKU precedes all count-confirmation validat
 });
 test('ignored malformed category/collection photos are never prepared and never reported as failed',async()=>{
  let prepared=0;
- const apply=actual('lib/server/import-catalog.ts','applyCatalog',{previewCatalog:async()=>({items:[],categories:[{category:{categoria:'Sillas',subcategoria:null,foto:'bad',orden:99},foto:'bad'}],collections:[{nombre:'Actual',descripcion:'Changed',foto:'bad',orden:99}],summary:{omitidos:1},problems:[]}),db:{inventoryCategory:{findFirst:async()=>({id:'cat'})},collection:{findFirst:async()=>({id:'collection'})},$transaction:async(cb:any)=>cb({})},categoryPathKey,collectionSlug,upsertCollectionByName:async()=>({id:'collection',created:false}),addItemsToCollection:async()=>0,prepareCategoryPhoto:async()=>{prepared++;return{ok:false,error:'malformed'}},prepareImage:async()=>{prepared++;return{ok:false,error:'malformed'}},recordAudit:async()=>{},ADJUSTABLE_STATES:['MAINTENANCE','DAMAGED','LOST'],BLOCK_SIZE:25});
+ const apply=actual('lib/server/import-catalog.ts','applyCatalog',{...photoResults,previewCatalog:async()=>({items:[],categories:[{category:{categoria:'Sillas',subcategoria:null,foto:'bad',orden:99},foto:'bad'}],collections:[{nombre:'Actual',descripcion:'Changed',foto:'bad',orden:99}],summary:{omitidos:1},problems:[]}),db:{inventoryCategory:{findFirst:async()=>({id:'cat'})},collection:{findFirst:async()=>({id:'collection'})},$transaction:async(cb:any)=>cb({})},categoryPathKey,collectionSlug,upsertCollectionByName:async()=>({id:'collection',created:false}),addItemsToCollection:async()=>0,prepareCategoryPhoto:async()=>{prepared++;return{ok:false,error:'malformed'}},prepareImage:async()=>{prepared++;return{ok:false,error:'malformed'}},recordAudit:async()=>{},ADJUSTABLE_STATES:['MAINTENANCE','DAMAGED','LOST'],BLOCK_SIZE:25});
  const result=await apply({organizationId:'org'},{lote:'fixture',photos:new Map([['bad',new Uint8Array([1,2,3])]]),importMode:'CREATE_ONLY'});assert.equal(prepared,0);assert.equal(result.fallidos.length,0);assert.equal(result.fotosCategoria,0);assert.equal(result.fotosColeccion,0);assert.equal(result.colecciones,0);
 });
 test('preserved preview count renders Sin cambios without future arrows',()=>{
