@@ -21,6 +21,21 @@ export type BulkTrashOutcome = {
   status: "success" | "blocked" | "failed" | "unknown";
   message: string;
 };
+
+/** Bloque CSV descargable del resultado del lote, compatible con el exportador común. */
+export function bulkTrashReportBlock(report: BulkTrashOutcome[]) {
+  const statusLabel: Record<BulkTrashOutcome["status"], string> = {
+    success: "Confirmado",
+    blocked: "Bloqueado",
+    failed: "Fallido",
+    unknown: "Por confirmar",
+  };
+  return {
+    header: ["ID", "Registro", "Resultado", "Detalle"],
+    rows: report.map((result) => [result.row.id, result.row.name, statusLabel[result.status], result.message]),
+  };
+}
+
 export type BulkTrashOptions = {
   type: TrashEntityType;
   organizationId: string;

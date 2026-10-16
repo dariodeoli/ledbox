@@ -1,8 +1,9 @@
 "use client";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { type BulkTrashAction, type BulkTrashOptions, type BulkTrashOutcome, type BulkTrashRow } from "@/lib/bulk-trash";
+import { bulkTrashReportBlock, type BulkTrashAction, type BulkTrashOptions, type BulkTrashOutcome, type BulkTrashRow } from "@/lib/bulk-trash";
 import { performBulkTrash } from "@/lib/admin-bulk-trash";
 import { formatNumber } from "@/lib/admin-format";
+import { csvFilename, downloadCsv } from "@/lib/admin-export";
 import { TRASH_ENTITIES } from "@/lib/trash-shared";
 import { TextAreaField } from "./AdminFields";
 import { AdminButton, AdminDialog, AdminNote } from "./AdminUI";
@@ -101,5 +102,5 @@ export function BulkTrashControls({ bulk, children }: { bulk: BulkTrashControlle
   </>;
 }
 function BulkTrashReport({ report }: { report: BulkTrashOutcome[] }) {
-  return <div role="region" aria-label="Resultado del lote"><AdminNote>{report.filter(row => row.status === "success").length} confirmados · {report.filter(row => row.status === "blocked").length} bloqueados · {report.filter(row => row.status === "failed").length} fallidos · {report.filter(row => row.status === "unknown").length} por confirmar</AdminNote><ul className="admin-overdue-list">{report.map(result => <li key={result.row.id}><strong>{result.row.name}:</strong> {result.message}</li>)}</ul></div>;
+  return <div role="region" aria-label="Resultado del lote"><AdminNote>{report.filter(row => row.status === "success").length} confirmados · {report.filter(row => row.status === "blocked").length} bloqueados · {report.filter(row => row.status === "failed").length} fallidos · {report.filter(row => row.status === "unknown").length} por confirmar</AdminNote><AdminButton onClick={() => downloadCsv(csvFilename("resultado-lote"), [bulkTrashReportBlock(report)])}>Descargar informe CSV</AdminButton><ul className="admin-overdue-list">{report.map(result => <li key={result.row.id}><strong>{result.row.name}:</strong> {result.message}</li>)}</ul></div>;
 }
