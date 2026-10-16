@@ -1,3 +1,4 @@
+import { readBulkSelection, bulkSelectionErrorResponse } from "@/lib/server/bulk-selection";
 import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -47,6 +48,8 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const fields = new URL(request.url).searchParams.get("fields");
+  let bulk;
+  try { bulk = await readBulkSelection(request, auth.context, "Event"); } catch (error) { const response = bulkSelectionErrorResponse(error); if (response) return response; throw error; }
 
   if (fields === "checklist") {
     const events = await db.event.findMany({
@@ -65,18 +68,19 @@ export async function GET(request: Request) {
     return Response.json({ events });
   }
 
-  if (fields === "panel") {
+  if (fields === "panel" || bulk) {
     const events = await db.event.findMany({
-      where: { organizationId },
-      orderBy: { startsAt: "asc" },
-      take: 200,
+      where: { organizationId, ...bulk?.where },
+      orderBy: bulk ? { id: "asc" } : { startsAt: "asc" },
+      take: bulk ? bulk.limit + 1 : 200,
       include: {
         client: { select: { ...CLIENT_IDENTITY_SELECT, phone: true } },
         tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
-        assignments: { include: { inventory: { include: { _count: { select: { components: true } } } } } },
+        assignments: { include: { inventory: { ...(bulk ? { omit: { imageData: true } } : {}), include: { _count: { select: { components: true } } } } } },
       },
     });
-    return Response.json({ events: await withCleaning(organizationId, events.map(event => ({ ...event, client: clientIdentityDTO(event.client) }))) });
+    const page = bulk ? await bulk.finish(events, bulk.total ?? await db.event.count({ where: { organizationId, ...bulk.watermark } })) : null;
+    return Response.json({ events: await withCleaning(organizationId, (page?.items ?? events).map(event => ({ ...event, client: clientIdentityDTO(event.client) }))), ...(page ? { bulkSelection: page.meta } : {}) });
   }
 
   const events = await db.event.findMany({

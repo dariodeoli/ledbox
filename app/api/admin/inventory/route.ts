@@ -1,3 +1,4 @@
+import { readBulkSelection as readBulkSelectionPage, bulkSelectionErrorResponse } from "@/lib/server/bulk-selection";
 import { InventoryOriginError, validatedStockOrigin, newPhysicalUnitOrigin, assertOriginExpected } from "@/lib/server/inventory-stock-origin";
 import { confirmInventoryCount } from "@/lib/server/inventory-stock-count";
 import { pendingStockCount } from "@/lib/stock-count";
@@ -391,11 +392,12 @@ export async function GET(request: Request) {
     return Response.json({ inventory: withComboAvailability(inventory, definitions) });
   }
 
-  if (url.searchParams.get("fields") === "grid") {
+  if (["grid", "bulk-selection"].includes(url.searchParams.get("fields") ?? "")) {
     // Payload liviano de la pantalla (rediseño E2): sin unidades ni asignaciones, paginado por cursor.
     const unitMatch = url.searchParams.get("unitMatch");
     try {
-      if (unitMatch !== null) return Response.json({ matchedIds: await matchInventoryByUnitCode(organizationId, unitMatch) });
+      const bulk = await readBulkSelectionPage(request, auth.context, "InventoryItem");
+      if (!bulk && unitMatch !== null) return Response.json({ matchedIds: await matchInventoryByUnitCode(organizationId, unitMatch) });
       const gridStart = parseDate(url.searchParams.get("startsAt"));
       const gridEnd = parseDate(url.searchParams.get("endsAt"));
       const query = (url.searchParams.get("q") ?? "").trim();
@@ -403,12 +405,20 @@ export async function GET(request: Request) {
       const page = await listInventoryGrid({
         query,
         organizationId,
-        cursor: url.searchParams.get("cursor"),
-        limit: readGridLimit(url.searchParams.get("limit")),
+        cursor: bulk?.after ?? (bulk ? null : url.searchParams.get("cursor")),
+        createdBefore: bulk?.at,
+        limit: bulk?.limit ?? readGridLimit(url.searchParams.get("limit")),
         range: gridStart && gridEnd && gridEnd.getTime() >= gridStart.getTime() ? { start: gridStart, end: gridEnd } : null,
       });
-      return Response.json({ ...page, inventory: page.inventory.map((row) => stripInventoryCosts(row, auth.context)) });
+      const bulkPage = bulk ? await bulk.finishKnown(page.inventory, bulk.total ?? page.total ?? 0, page.nextCursor) : null;
+      const unitQuery = (url.searchParams.get("unitQuery") ?? "").trim();
+      if (unitQuery.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
+      const incidents = bulk ? await db.inventoryIncident.groupBy({ by: ["inventoryId"], where: { organizationId, inventoryId: { in: page.inventory.map(row => row.id) }, status: { in: ["OPEN", "IN_REPAIR"] } } }) : [];
+      const incidentIds = new Set(incidents.map(row => row.inventoryId));
+      const matches = new Set(bulk && unitQuery ? await matchInventoryByUnitCode(organizationId, unitQuery, page.inventory.map(row => row.id)) : []);
+      return Response.json({ ...page, inventory: page.inventory.map((row) => ({ ...stripInventoryCosts(row, auth.context), ...(bulk ? { bulkUnitMatch: matches.has(row.id), bulkOpenIncident: incidentIds.has(row.id) } : {}) })), ...(bulkPage ? { bulkSelection: bulkPage.meta } : {}) });
     } catch (error) {
+      const bulkError = bulkSelectionErrorResponse(error); if (bulkError) return bulkError;
       if (error instanceof GridCursorError) return jsonError(error.message, 400);
       console.error("[inventory/grid] no se pudo leer", error);
       return jsonError("No pudimos leer el inventario.", 500);

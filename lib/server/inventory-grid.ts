@@ -192,6 +192,8 @@ export type GridPageOptions = {
   /** Rango opcional de «Disponible desde/hasta»: suma la disponibilidad de ese rango. */
   range?: { start: Date; end: Date } | null;
   now?: Date;
+  /** Descubrimiento de selección masiva: excluir filas creadas después de la primera página. */
+  createdBefore?: Date;
 };
 
 export class GridCursorError extends Error {}
@@ -233,6 +235,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
       where: {
         organizationId,
         AND: [search],
+        ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}),
         ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -243,7 +246,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
     }),
-    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId, ...search } }),
+    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId, ...search, ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}) } }),
   ]);
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
@@ -341,14 +344,14 @@ export async function listInventoryGrid(options: GridPageOptions) {
 }
 
 /** Productos de la empresa con alguna unidad cuyo código contiene el texto (búsqueda por código de unidad). */
-export async function matchInventoryByUnitCode(organizationId: string, text: string): Promise<string[]> {
+export async function matchInventoryByUnitCode(organizationId: string, text: string, itemIds?: readonly string[]): Promise<string[]> {
   const query = text.trim();
-  if (query.length < 2) return [];
+  if (query.length < 2 || itemIds?.length === 0) return [];
   const rows = await db.inventoryUnit.findMany({
-    where: { organizationId, code: { contains: query, mode: "insensitive" } },
+    where: { organizationId, ...(itemIds ? { inventoryId: { in: [...itemIds] } } : {}), code: { contains: query, mode: "insensitive" } },
     distinct: ["inventoryId"],
     select: { inventoryId: true },
-    take: UNIT_MATCH_CAP,
+    take: itemIds ? itemIds.length : UNIT_MATCH_CAP,
   });
   return rows.map((row) => row.inventoryId);
 }
