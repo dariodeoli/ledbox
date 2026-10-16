@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type BulkTrashAction, type BulkTrashOptions, type BulkTrashOutcome, type BulkTrashRow } from "@/lib/bulk-trash";
 import { performBulkTrash } from "@/lib/admin-bulk-trash";
 import { formatNumber } from "@/lib/admin-format";
@@ -35,7 +35,7 @@ export function useBulkTrash(options: BulkTrashOptions) {
     if (items.has(row.id)) setExcluded(previous => { const next = new Set(previous); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; });
     else if (!selectionScopeChanged) { setPinnedScope(options.scopeKey); setItems(previous => new Map(previous).set(row.id, row)); }
   }
-  function selectVisible() { if (!options.enabled || busy) return; generation.current++; setPinnedScope(options.scopeKey); setItems(new Map(options.visibleRows.map(row => [row.id, row]))); setExcluded(new Set()); setError(""); }
+  function selectVisible() { if (!options.enabled || busy) return; generation.current++; setLoadingAll(false); setPinnedScope(options.scopeKey); setItems(new Map(options.visibleRows.map(row => [row.id, row]))); setExcluded(new Set()); setError(""); }
   async function selectAll() {
     if (!options.enabled || busy || loadingAll) return;
     const captured = options, run = ++generation.current; setLoadingAll(true); setError("");
@@ -57,8 +57,8 @@ export function useBulkTrash(options: BulkTrashOptions) {
         if (!mounted.current || run !== generation.current || captured.organizationId !== current.current.organizationId || !current.current.enabled) break;
         persistReport([...results, { row, status: "unknown", message: "Intento iniciado; consultar estado si se perdió la respuesta. No se reanudará automáticamente." }]);
         const result = await performBulkTrash(captured.type, row, capturedAction, reason);
-        results.push(result); persistReport(results); if (result.status === "unknown") setUncertainIds(previous => new Set(previous).add(row.id)); if (mounted.current && captured.organizationId === current.current.organizationId) setReport([...results]);
-        if (result.status === "success" && mounted.current) setItems(previous => { const next = new Map(previous); next.delete(row.id); return next; });
+        results.push(result); persistReport(results); if (result.status === "unknown" && mounted.current && captured.organizationId === current.current.organizationId) setUncertainIds(previous => new Set(previous).add(row.id)); if (mounted.current && captured.organizationId === current.current.organizationId) setReport([...results]);
+        if (result.status === "success" && mounted.current && captured.organizationId === current.current.organizationId) setItems(previous => { const next = new Map(previous); next.delete(row.id); return next; });
         if (result.status === "unknown") break;
       }
     } finally {
@@ -67,19 +67,20 @@ export function useBulkTrash(options: BulkTrashOptions) {
     }
   }
   return { options, count, selected, excludedCount: excluded.size, selectionScopeChanged, loadingAll, busy, error, action, reason, report,
-    isKnown: (id: string) => items.has(id), hasUncertainSelection: selected.some(row => uncertainIds.has(row.id)), isSelected: (id: string) => items.has(id) && !excluded.has(id), toggle, clear, selectVisible, selectAll, apply, setAction, setReason };
+    isKnown: (id: string) => items.has(id), hasUncertainSelection: selected.some(row => uncertainIds.has(row.id)), isSelected: (id: string) => items.has(id) && !excluded.has(id), toggle, clear, selectVisible, selectAll, apply, replaceSelection: (rows: BulkTrashRow[]) => { if (!running.current) { setItems(new Map(rows.map(row => [row.id, row]))); setExcluded(new Set()); setPinnedScope(options.scopeKey); } }, setAction, setReason };
 }
 export type BulkTrashController = ReturnType<typeof useBulkTrash>;
 export function BulkRowCheck({ bulk, row }: { bulk: BulkTrashController; row: BulkTrashRow }) {
   if (!bulk.options.enabled) return null;
   return <span onClick={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()} onDragStart={event => event.preventDefault()}><RowCheck checked={bulk.isSelected(row.id)} disabled={bulk.busy || bulk.loadingAll || (bulk.selectionScopeChanged && !bulk.isKnown(row.id))} label={`Seleccionar ${row.name}`} onToggle={() => bulk.toggle(row)} /></span>;
 }
-export function BulkTrashControls({ bulk }: { bulk: BulkTrashController }) {
+export function BulkTrashControls({ bulk, children }: { bulk: BulkTrashController; children?: ReactNode }) {
   if (!bulk.options.enabled) return null;
   return <>
     <div className="admin-bulkbar" role="region" aria-label="Selección y acciones en lote">
       <strong>{formatNumber(bulk.count)} seleccionados · {formatNumber(bulk.options.visibleRows.length)} visibles</strong>
       <span className="admin-bulkbar-actions">
+        {children}
         <AdminButton disabled={bulk.busy || bulk.loadingAll} onClick={bulk.selectVisible}>{bulk.selectionScopeChanged ? "Reemplazar por esta página" : "Seleccionar esta página"}</AdminButton>
         <AdminButton busy={bulk.loadingAll} disabled={bulk.busy} onClick={() => void bulk.selectAll()}>{bulk.selectionScopeChanged ? "Reemplazar por todos los filtrados" : "Seleccionar todos los filtrados"}</AdminButton>
         <AdminButton disabled={!bulk.count || bulk.busy || bulk.loadingAll || bulk.hasUncertainSelection} onClick={() => bulk.setAction("archive")}>Archivar seleccionados</AdminButton>

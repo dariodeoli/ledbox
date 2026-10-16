@@ -21,18 +21,19 @@ type TileProps = {
   writable: boolean;
   rangeActive: boolean;
   bulkIds: string[];
+  selectionBusy?: boolean;
   onToggleBulk: (id: string) => void;
   onOpen: (id: string) => void;
 };
 
-function InventoryTile({ item, writable, rangeActive, selected, selectionFull, onToggleBulk, onOpen }: Omit<TileProps, "rows" | "bulkIds"> & { item: AdminInventoryGridRow; selected: boolean; selectionFull: boolean }) {
+function InventoryTile({ item, writable, rangeActive, selected, selectionFull, selectionBusy, onToggleBulk, onOpen }: Omit<TileProps, "rows" | "bulkIds"> & { item: AdminInventoryGridRow; selected: boolean; selectionFull: boolean }) {
   const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
   const code = item.sku ? item.sku : item.combo ? "Combo" : "Sin código";
   return (
     <li className="admin-inv-tile" data-selected={selected ? "true" : undefined} data-state={visual.state.key}>
       {writable ? (
         <span className="admin-inv-tile-check">
-          <RowCheck checked={selected} disabled={selectionFull && !selected} label={`Seleccionar producto ${item.name}`} onToggle={() => onToggleBulk(item.id)} />
+          <RowCheck checked={selected} disabled={selectionBusy || (selectionFull && !selected)} label={`Seleccionar producto ${item.name}`} onToggle={() => onToggleBulk(item.id)} />
         </span>
       ) : null}
       <button type="button" className="admin-inv-tile-open" title={`Abrir la ficha de ${item.name}`} aria-label={`Abrir la ficha de ${item.name}`} onClick={(event) => {
@@ -69,7 +70,7 @@ function InventoryTile({ item, writable, rangeActive, selected, selectionFull, o
 }
 
 /** Cuadrícula de tarjetas compactas. */
-export function InventoryCompactGrid({ rows, writable, rangeActive, bulkIds, onToggleBulk, onOpen, label = "Inventario" }: TileProps & { label?: string }) {
+export function InventoryCompactGrid({ rows, writable, rangeActive, bulkIds, selectionBusy, onToggleBulk, onOpen, label = "Inventario" }: TileProps & { label?: string }) {
   return (
     <ul className="admin-inv-grid" aria-label={label}>
       {rows.map((item) => (
@@ -79,7 +80,8 @@ export function InventoryCompactGrid({ rows, writable, rangeActive, bulkIds, onT
           writable={writable}
           rangeActive={rangeActive}
           selected={bulkIds.includes(item.id)}
-          selectionFull={bulkIds.length >= 100}
+          selectionFull={false}
+          selectionBusy={selectionBusy}
           onToggleBulk={onToggleBulk}
           onOpen={onOpen}
         />

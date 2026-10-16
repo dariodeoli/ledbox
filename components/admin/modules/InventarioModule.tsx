@@ -1,4 +1,7 @@
 "use client";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
+import type { BulkTrashRow } from "@/lib/bulk-trash";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -69,7 +72,7 @@ function syncProductParam(id: string) {
 const AdminImportPanel = dynamic(() => import("../AdminImportPanel").then((mod) => mod.AdminImportPanel), { ssr: false });
 
 export function InventarioModule() {
-  const { role, demo } = useAdminSession();
+  const { role, demo, organization } = useAdminSession();
   const searchParams = useSearchParams();
   const productParam = searchParams.get("producto")?.trim() ?? "";
   const handledProductParam = useRef("");
@@ -92,7 +95,6 @@ export function InventarioModule() {
   const [archiveBusyId, setArchiveBusyId] = useState("");
   /** Producto que se está por mandar a la papelera (diálogo de eliminar). */
   const [trashTarget, setTrashTarget] = useState<Pick<AdminInventoryRow, "id" | "name"> | null>(null);
-  const [bulkItemIds, setBulkItemIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   /** Productos que se están por agrupar en una familia (acción masiva o desde la pestaña «Variantes»). */
   const [groupItems, setGroupItems] = useState<GroupableItem[] | null>(null);
@@ -188,6 +190,23 @@ export function InventarioModule() {
   const showingArchived = filters.state === "archived";
   const baseRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all" }, filterContext, { archived: showingArchived }), [inventory, filters, filterContext, showingArchived]);
   const rows = useMemo(() => baseRows.filter((item) => itemInFocus(item, filters.focus, filterContext)), [baseRows, filters.focus, filterContext]);
+  const toBulkRow = (item: Pick<AdminInventoryGridRow, "id" | "name" | "archivedAt">): BulkTrashRow => ({ id: item.id, name: item.name, archivedAt: item.archivedAt ?? null });
+  const bulk = useBulkTrash({ type: "InventoryItem", organizationId: organization?.id ?? "", scopeKey: JSON.stringify({ filters, from, to }), enabled: writable,
+    visibleRows: rows.map(toBulkRow), onChanged: reloadAll,
+    loadAllRows: async () => {
+      const params = new URLSearchParams({ unitQuery: filters.query });
+      if (from && to) { params.set("startsAt", `${from}T00:00`); params.set("endsAt", `${to}T23:59`); }
+      const all = await loadBulkTrashRows<AdminInventoryGridRow & { bulkUnitMatch?: boolean; bulkOpenIncident?: boolean }>(`/api/admin/inventory?${params}`, "inventory");
+      if (filters.state === "overdue" && all.some(item => item.availability.overdueTruncated)) throw new Error("El cálculo de atrasos está incompleto. Afiná los filtros antes de seleccionar todos.");
+      const context = { ...filterContext, unitMatchIds: new Set(all.filter(item => item.bulkUnitMatch).map(item => item.id)), openIncidentIds: new Set(all.filter(item => item.bulkOpenIncident).map(item => item.id)) };
+      return applyInventoryFilters(all, filters, context, { archived: showingArchived }).map(toBulkRow);
+    },
+  });
+  const bulkItemIds = bulk.selected.map(row => row.id);
+  function setBulkItemIds(next: string[] | ((ids: string[]) => string[])) {
+    const ids = typeof next === "function" ? next(bulkItemIds) : next;
+    bulk.replaceSelection(ids.flatMap(id => { const row = bulk.selected.find(item => item.id === id) ?? inventory.find(item => item.id === id); return row ? [toBulkRow(row)] : []; }));
+  }
   const archivedRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all", state: "ALL" }, filterContext, { archived: true }), [inventory, filters, filterContext]);
   const counts = useMemo(() => tabCounts(baseRows, filterContext), [baseRows, filterContext]);
   const filtersActive = activeFilterCount(filters, rangeActive);
@@ -219,7 +238,7 @@ export function InventarioModule() {
   );
 
   function toggleBulk(id: string) {
-    setBulkItemIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : current.length < BULK_LIMIT ? [...current, id] : current));
+    const row = inventory.find(item => item.id === id); if (row) bulk.toggle(toBulkRow(row));
   }
 
   function toggleFocus(next: InventoryFocus) {
@@ -497,15 +516,15 @@ export function InventarioModule() {
       {from && !to ? <AdminNote>Elegí «Hasta» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
       {!from && to ? <AdminNote>Elegí «Disponible desde» para ver la disponibilidad en el rango (mientras tanto se muestra la de hoy).</AdminNote> : null}
 
+      <BulkTrashControls bulk={bulk}>
       {writable && bulkItemIds.length ? (
-        <div className="admin-bulkbar" role="region" aria-label="Productos seleccionados">
-          <strong>{formatNumber(bulkItemIds.length)} seleccionados</strong>
-          <span className="admin-bulkbar-actions">
-            <AdminButton variant="primary" icon="edit" onClick={() => setBulkOpen(true)} title="Editar en lote los productos seleccionados">
+        <>
+            <AdminButton variant="primary" icon="edit" disabled={bulkItemIds.length > BULK_LIMIT || bulk.busy} onClick={() => setBulkOpen(true)} title="Editar en lote los productos seleccionados">
               Editar en lote
             </AdminButton>
             <AdminButton
               icon="inventory"
+              disabled={bulkItemIds.length > BULK_LIMIT || bulk.busy}
               onClick={() =>
                 setGroupItems(
                   bulkItemIds.flatMap((id) => {
@@ -519,19 +538,10 @@ export function InventarioModule() {
             >
               Agrupar en familia
             </AdminButton>
-            <AdminButton
-              icon="check"
-              onClick={() => setBulkItemIds(rows.slice(0, BULK_LIMIT).map((item) => item.id))}
-              title={`Seleccionar los productos visibles (hasta ${BULK_LIMIT})`}
-            >
-              Seleccionar visibles
-            </AdminButton>
-            <AdminButton icon="close" onClick={() => setBulkItemIds([])} title="Quitar la selección">
-              Quitar selección
-            </AdminButton>
-          </span>
-        </div>
+            {bulkItemIds.length > BULK_LIMIT ? <span>Editar/agrupar admite hasta {BULK_LIMIT}; archivar y papelera mantienen toda la selección.</span> : null}
+        </>
       ) : null}
+      </BulkTrashControls>
 
       {resources.loading && resources.data ? (
         <AdminNote>
@@ -553,9 +563,9 @@ export function InventarioModule() {
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro término de búsqueda, otra pestaña o cambiá los filtros." />
         ) : view === "grid" ? (
-          <InventoryCompactGrid rows={rows} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} onToggleBulk={toggleBulk} onOpen={openFicha} />
+          <InventoryCompactGrid rows={rows} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} selectionBusy={bulk.busy || bulk.loadingAll} onToggleBulk={toggleBulk} onOpen={openFicha} />
         ) : view === "category" ? (
-          <InventoryByCategory rows={rows} tree={taxonomy.tree} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} onToggleBulk={toggleBulk} onOpen={openFicha} />
+          <InventoryByCategory rows={rows} tree={taxonomy.tree} writable={writable} rangeActive={rangeActive} bulkIds={bulkItemIds} selectionBusy={bulk.busy || bulk.loadingAll} onToggleBulk={toggleBulk} onOpen={openFicha} />
         ) : (
           <InventoryList
             rows={rows}
@@ -565,7 +575,7 @@ export function InventarioModule() {
             rangeActive={rangeActive}
             from={from}
             to={to}
-            bulkIds={bulkItemIds}
+            bulkIds={bulkItemIds} selectionBusy={bulk.busy || bulk.loadingAll}
             archiveBusyId={archiveBusyId}
             onToggleBulk={toggleBulk}
             onOpen={openFicha}
@@ -583,7 +593,7 @@ export function InventarioModule() {
             label="Productos archivados"
             cards={archivedRows.map((item) => ({
               id: item.id,
-              title: item.name,
+              title: <><BulkRowCheck bulk={bulk} row={toBulkRow(item)} />{item.name}</>,
               subtitle: item.category,
               fields: [
                 { label: "Archivado", value: formatDateShort(item.archivedAt) },

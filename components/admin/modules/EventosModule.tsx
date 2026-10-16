@@ -1,4 +1,6 @@
 "use client";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 
@@ -70,7 +72,7 @@ import { ClientQuickDialog } from "./ClientQuickForm";
 import { EMPTY_EVENT_QUICK, EventQuickFields, eventQuickError, eventQuickPayload } from "./EventQuickForm";
 import { Combobox, SearchField, TextAreaField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
 import { eventArchiveBlockedReason } from "@/lib/trash-shared";
 import { TrashDialog, runTrashAction, trashMenuItems } from "../TrashDialogs";
 import { useOfflineQueue } from "../AdminOffline";
@@ -139,7 +141,7 @@ function compareEventUrgency(a: EventItem, b: EventItem): number {
 const AdminImportPanel = dynamic(() => import("../AdminImportPanel").then((mod) => mod.AdminImportPanel), { ssr: false });
 
 export function EventosModule() {
-  const { role, demo } = useAdminSession();
+  const { role, demo, organization } = useAdminSession();
   const { actions: queuedActions } = useOfflineQueue();
   const operations = useAdminResource(
     "/api/admin/event-ops?fields=panel",
@@ -286,15 +288,23 @@ export function EventosModule() {
   );
 
   /** Búsqueda compartida por lista y tarjetas; el estado y el indicador tocado aplican a las dos. */
-  const rows = useMemo(
-    () =>
-      items
-        .filter(({ event }) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status]))
-        .filter(({ event }) => (status === "ARCHIVED" ? Boolean(event.archivedAt) : !event.archivedAt && (status === "ALL" || event.status === status)))
-        .filter((item) => (focus ? matchesFocus(item.event, focus, item.readiness) : true))
-        .sort(compareEventUrgency),
-    [items, query, status, focus],
-  );
+  function filterBulkEvents(source: EventItem[]) {
+    return source.filter(({ event }) => matchesQuery(query, [event.name, event.location, event.city, clientDisplayName(event.client), clientLegalName(event.client), event.client.company, event.client.name, event.status]))
+      .filter(({ event }) => status === "ARCHIVED" ? Boolean(event.archivedAt) : !event.archivedAt && (status === "ALL" || event.status === status))
+      .filter(item => focus ? matchesFocus(item.event, focus, item.readiness) : true).sort(compareEventUrgency);
+  }
+  const rows = useMemo(() => filterBulkEvents(items), [items, query, status, focus]);
+  const toBulkEvent = (event: EventRow) => ({ id: event.id, name: event.name, archivedAt: event.archivedAt ?? null, archiveBlockedReason: eventArchiveBlockedReason(event.status) });
+  const bulk = useBulkTrash({ type: "Event", organizationId: organization?.id ?? "", scopeKey: JSON.stringify({ query, status, focus }), enabled: writable,
+    visibleRows: rows.map(item => toBulkEvent(item.event)), onChanged: operations.reload,
+    loadAllRows: async () => {
+      const [all, readiness] = await Promise.all([loadBulkTrashRows<EventRow>("/api/admin/event-ops", "events"), adminApiGet<{ readiness: EventBudgetSummary[] }>("/api/admin/events/readiness", { fresh: true })]);
+      if (!readiness.ok) throw new Error(readiness.error);
+      const budgets = new Map(readiness.data.readiness.filter(row => row.hasBudget).map(row => [row.eventId, row]));
+      const items = all.map(event => { const budget = budgets.get(event.id); const prep = budget ? { advanceAmount: budget.advanceAmount, collected: budget.collected } : null; return { event, readiness: eventReadiness(event, { deposit: depositState(prep, true), queued }) }; });
+      return filterBulkEvents(items).map(item => toBulkEvent(item.event));
+    },
+  });
 
   const taskEntries = useMemo(() => pendingTaskEntries(events), [events]);
   const overdueTaskCount = useMemo(() => taskEntries.filter(({ task }) => taskInScope(task, "overdue")).length, [taskEntries]);
@@ -545,6 +555,7 @@ export function EventosModule() {
   function rowActions(item: EventItem) {
     return (
       <span className="admin-actions admin-events-actions">
+        <BulkRowCheck bulk={bulk} row={toBulkEvent(item.event)} />
         {writable ? <NextActionButton item={item} onRun={runNext} busy={closeBusyId === item.event.id} /> : null}
         <AdminActionsMenu label={`Más acciones del evento ${item.event.name}`} items={menuItemsFor(item, false)} />
       </span>
@@ -813,6 +824,8 @@ export function EventosModule() {
           <CalendarioModule hideKpis events={events} eventsLoading={operations.loading} eventsError={operations.error} onRetryEvents={operations.reload} />
         </div>
       ) : (
+      <>
+      <BulkTrashControls bulk={bulk} />
       <AdminDataState
         loading={operations.loading}
         error={operations.error}
@@ -873,6 +886,7 @@ export function EventosModule() {
           </AdminTable>
         )}
       </AdminDataState>
+      </>
       )}
 
       {ficha ? (
