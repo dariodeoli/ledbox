@@ -874,6 +874,7 @@
 
 @media (max-width: 767px) {
   .cp-theme .cp-event-fields { gap: var(--sp-2); }
+  .cp-theme .cp-event-fields .admin-field-label { min-height: 2.6em; }
   .cp-theme .cp-event-date { flex-basis: 140px; width: 140px; }
   .cp-theme .cp-event-days { flex-basis: 80px; width: 80px; }
   .cp-theme .cp-event-guests { flex-basis: 76px; width: 76px; }
@@ -882,7 +883,6 @@
 @media (max-width: 380px) {
   .cp-theme .cp-event-date { flex-basis: 132px; width: 132px; }
   .cp-theme .cp-event-days, .cp-theme .cp-event-guests { flex-basis: 72px; width: 72px; }
-  .cp-theme .cp-event-fields .admin-field-label { min-height: 2.6em; }
 }
 
 /* Categorías compactas opcionales: mismas fotos, tokens y productos en todos los temas. */
