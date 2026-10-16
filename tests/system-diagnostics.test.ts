@@ -109,3 +109,17 @@ test("#169: libpq quoted hosts, IPv4/IPv6, separate ports and authentication det
   }
   assert.equal(sanitizeDiagnosticMessage("Última corrida a las 12:30:45, tardó 5 s."), "Última corrida a las 12:30:45, tardó 5 s.");
 });
+
+
+test("#169 authorization consumes the complete credential, not just its scheme", () => {
+  for (const raw of [
+    'request failed Authorization: Basic dXNlcjpwYXNz',
+    'request failed Authorization: Digest username="internal_user", realm="private_realm", nonce="hidden_nonce", response="hidden_response"',
+    'request failed Proxy-Authorization: Basic dXNlcjpwYXNz',
+    '{"Authorization":"Basic dXNlcjpwYXNz", "error":"Access denied"}',
+    'Authorization: Bearer hidden-token',
+  ]) {
+    const clean = sanitizeDiagnosticMessage(raw); assert.ok(clean);
+    assert.doesNotMatch(clean, /dXNlcjpwYXNz|internal_user|private_realm|hidden_nonce|hidden_response|hidden-token/, raw);
+  }
+});

@@ -34,6 +34,9 @@ export function sanitizeDiagnosticMessage(raw: string | null | undefined): strin
   // libpq/pg_dump también separan host, dirección y puerto. No dependen de
   // que el diagnóstico use el formato abreviado host:puerto.
   text = text.replace(/\b(?:server at|host(?: name)?|hostname|servidor en)\s+["'`][^"'`\r\n]+["'`](?:\s*\([^)]*\))?/gi, REDACTED_HOST);
+  // Authorization sin comillas es un encabezado completo (Basic, Digest,
+  // Bearer u otro esquema): consumir sólo el esquema deja viva la credencial.
+  text = text.replace(/\bauthorization["'`]?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]+)/gi, "credencial omitida");
   text = text.replace(/\bBearer\s+[^\s;,]+/gi, "credencial omitida");
   text = text.replace(/\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH)\s+(?:getaddrinfo\s+)?[^\s;,]+/gi, "$1 el servidor");
   // DSN de libpq y campos de diagnóstico: valores con espacios/escapes o sin
