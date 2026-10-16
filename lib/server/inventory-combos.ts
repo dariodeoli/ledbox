@@ -716,6 +716,18 @@ export type SaveComboResult =
   | { ok: true; created: boolean; combo: { id: string; name: string; category: string }; components: ComboComponentInput[]; before: ComboComponentInput[] }
   | { ok: false; reason: "invalid" | "not-found" | "component-missing" | "nested" | "has-reservations" | "duplicate-sku"; message: string };
 
+
+/** A domain failure inside a transaction must roll back too: lock cleanup and
+ * category resolution can write before the final combo mutation. */
+class ComboSaveRejected extends Error {
+  constructor(readonly result: Extract<SaveComboResult, { ok: false }>) {
+    super(result.message);
+  }
+}
+function rejectComboSave(result: Extract<SaveComboResult, { ok: false }>): never {
+  throw new ComboSaveRejected(result);
+}
+
 export type ComboItemData = {
   name: string;
   /** Categoría o ruta («Combos», «Mobiliario / Sofás»); el helper único resuelve el id y el espejo. */
@@ -752,56 +764,59 @@ export async function saveCombo(options: {
   try {
     return await db.$transaction(
       async (tx): Promise<SaveComboResult> => {
-        let comboId = options.id ?? null;
-        let created = false;
+        const created = !options.id;
+        const comboId = options.id || randomUUID();
+        const componentIds = parsed.components.map((component) => component.componentId);
+        // Topology edits lock parent and proposed pieces together in the same
+        // ordered lock as stock writers. Concurrent A→B / B→A cannot both pass.
+        const lockedIds = await lockInventoryItems(tx, organizationId, [comboId, ...componentIds]);
         let before: ComboComponentInput[] = [];
-        if (comboId) {
-          const lockedIds = await lockInventoryItems(tx, organizationId, [comboId]);
-          if (!lockedIds.has(comboId)) return { ok: false, reason: "not-found", message: "El combo no existe en esta empresa." };
+        let removeCleanUnits = false;
+        if (!created) {
+          if (!lockedIds.has(comboId)) rejectComboSave({ ok: false, reason: "not-found", message: "El combo no existe en esta empresa." });
           const existing = await tx.inventoryItem.findFirst({ where: { id: comboId, organizationId }, select: { id: true, comboIncomplete: true, _count: { select: { units: true } } } });
-          if (!existing) return { ok: false, reason: "not-found", message: "El combo no existe en esta empresa." };
+          if (!existing) rejectComboSave({ ok: false, reason: "not-found", message: "El combo no existe en esta empresa." });
           before = (await tx.inventoryComponent.findMany({ where: { parentId: comboId, organizationId }, select: { componentId: true, quantity: true } })).map((row) => ({ componentId: row.componentId, quantity: row.quantity }));
           // Un juego incompleto (sin piezas) se puede completar; una unidad solo si la importación la convierte.
           if (before.length === 0 && !existing.comboIncomplete) {
-            if (!options.convertFromUnit) return { ok: false, reason: "invalid", message: "Ese ítem no es un combo." };
+            if (!options.convertFromUnit) rejectComboSave({ ok: false, reason: "invalid", message: "Ese ítem no es un combo." });
             const reservations = await tx.eventInventory.count({ where: { inventoryId: comboId, event: { organizationId } } });
-            if (reservations > 0) return { ok: false, reason: "has-reservations", message: "El producto tiene reservas: no se puede convertir en juego." };
+            if (reservations > 0) rejectComboSave({ ok: false, reason: "has-reservations", message: "El producto tiene reservas: no se puede convertir en juego." });
             const withHistory = await tx.inventoryUnit.count({
               where: { inventoryId: comboId, organizationId, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
             });
-            if (withHistory > 0) return { ok: false, reason: "invalid", message: "El producto tiene unidades con historial (mantenimiento, daños o retiros): no se puede convertir en juego." };
-            await tx.inventoryUnit.deleteMany({ where: { inventoryId: comboId, organizationId } });
+            if (withHistory > 0) rejectComboSave({ ok: false, reason: "invalid", message: "El producto tiene unidades con historial (mantenimiento, daños o retiros): no se puede convertir en juego." });
+            removeCleanUnits = true;
           }
           const active = await tx.eventInventory.count({ where: { inventoryId: comboId, ...committedAssignmentWhere(organizationId) } });
           if (active > 0) {
-            return { ok: false, reason: "has-reservations", message: "El combo tiene reservas activas: liberalas antes de cambiar sus componentes." };
+            rejectComboSave({ ok: false, reason: "has-reservations", message: "El combo tiene reservas activas: liberalas antes de cambiar sus componentes." });
           }
-        } else {
-          comboId = randomUUID();
-          created = true;
         }
 
-        const componentIds = parsed.components.map((component) => component.componentId);
-        if (componentIds.includes(comboId)) return { ok: false, reason: "nested", message: "Un combo no puede contenerse a sí mismo." };
-        const items = await tx.inventoryItem.findMany({ where: { id: { in: componentIds }, organizationId }, select: { id: true, name: true } });
+        if (componentIds.includes(comboId)) rejectComboSave({ ok: false, reason: "nested", message: "Un combo no puede contenerse a sí mismo." });
+        const items = await tx.inventoryItem.findMany({ where: { id: { in: componentIds }, organizationId }, select: { id: true, name: true, comboIncomplete: true } });
         if (items.length !== componentIds.length) {
-          return { ok: false, reason: "component-missing", message: "Algún componente no existe en esta empresa." };
+          rejectComboSave({ ok: false, reason: "component-missing", message: "Algún componente no existe en esta empresa." });
         }
+        // An incomplete game is still a combo, even before it has edges.
+        const incomplete = items.find((item) => item.comboIncomplete);
+        if (incomplete) rejectComboSave({ ok: false, reason: "nested", message: `«${incomplete.name}» es un juego incompleto: un combo no puede contener otro combo.` });
         // Sin combos dentro de combos: ni un componente que sea combo ni un combo que ya sea componente.
         const nestedComponent = await tx.inventoryComponent.findFirst({ where: { organizationId, parentId: { in: componentIds } }, select: { parentId: true } });
         if (nestedComponent) {
           const name = items.find((item) => item.id === nestedComponent.parentId)?.name ?? "un componente";
-          return { ok: false, reason: "nested", message: `«${name}» es un combo: un combo no puede contener otro combo.` };
+          rejectComboSave({ ok: false, reason: "nested", message: `«${name}» es un combo: un combo no puede contener otro combo.` });
         }
         if (!created) {
           const usedAsComponent = await tx.inventoryComponent.count({ where: { organizationId, componentId: comboId } });
           if (usedAsComponent > 0) {
-            return { ok: false, reason: "nested", message: "Este ítem ya es componente de otro combo: no puede ser a la vez un combo." };
+            rejectComboSave({ ok: false, reason: "nested", message: "Este ítem ya es componente de otro combo: no puede ser a la vez un combo." });
           }
         }
 
         const resolvedCategory = await resolveInventoryCategory(tx, organizationId, { category: options.data.category, subcategory: options.data.subcategory });
-        if (!resolvedCategory) return { ok: false, reason: "invalid", message: "La categoría no es válida." };
+        if (!resolvedCategory) rejectComboSave({ ok: false, reason: "invalid", message: "La categoría no es válida." });
         const itemData = {
           name: options.data.name,
           ...categoryWriteData(resolvedCategory),
@@ -810,6 +825,9 @@ export async function saveCombo(options: {
           ...(options.data.imageUrl !== undefined ? { imageUrl: options.data.imageUrl } : {}),
           ...(options.data.prices ?? {}),
         };
+        // All domain validation is complete. Physical units are removed only
+        // now; any later database/write failure rejects and rolls back the tx.
+        if (removeCleanUnits) await tx.inventoryUnit.deleteMany({ where: { inventoryId: comboId, organizationId } });
         if (created) {
           await tx.inventoryItem.create({ data: { id: comboId, organizationId, quantity: 0, ...itemData } });
         } else {
@@ -826,6 +844,7 @@ export async function saveCombo(options: {
       { timeout: 20_000 },
     );
   } catch (error) {
+    if (error instanceof ComboSaveRejected) return error.result;
     if (isUniqueConstraintError(error)) return { ok: false, reason: "duplicate-sku", message: await skuConflictMessage(organizationId, options.data.sku) };
     throw error;
   }
