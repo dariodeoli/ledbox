@@ -1,5 +1,6 @@
 "use client";
 
+import { pendingStockCount } from "@/lib/stock-count";
 import { useId, useMemo, useState } from "react";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatMoney, formatNumber } from "@/lib/admin-format";
@@ -466,16 +467,18 @@ export function InventoryVariantsTab({ itemId, itemName, itemSku, familyId, isCo
   if (resource.loading && !family) return <AdminNote>Cargando las variantes…</AdminNote>;
   if (!family) return <AdminNote tone="error">{resource.error || "No encontramos la familia de este producto."}</AdminNote>;
 
+  const pendingCounts = family.variants.filter(pendingStockCount).length;
   const totalUnits = family.variants.reduce((sum, variant) => sum + variant.quantity, 0);
   const totalFree = family.variants.reduce((sum, variant) => sum + (free.get(variant.id) ?? 0), 0);
-  const knownFree = family.variants.every((variant) => free.has(variant.id));
+  const knownFree = pendingCounts === 0 && family.variants.every((variant) => free.has(variant.id));
   const colorAxis = family.axes.find((axis) => axis.key === "color");
 
   return (
     <>
       <AdminDialogSection title={`Familia «${family.name}»`} stack>
         <p className="admin-fam-preview">
-          Código <span className="admin-code">{family.code}</span> · {formatNumber(family.variants.length)} {family.variants.length === 1 ? "variante" : "variantes"} · {formatNumber(totalUnits)} unidades
+          Código <span className="admin-code">{family.code}</span> · {formatNumber(family.variants.length)} {family.variants.length === 1 ? "variante" : "variantes"} · {formatNumber(totalUnits)} {pendingCounts > 0 ? "unidades registradas" : "unidades"}
+          {pendingCounts > 0 ? ` · ${formatNumber(pendingCounts)} ${pendingCounts === 1 ? "variante pendiente" : "variantes pendientes"} de conteo` : ""}
           {knownFree ? ` (${formatNumber(totalFree)} libres hoy)` : ""}
         </p>
         {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
@@ -519,8 +522,8 @@ export function InventoryVariantsTab({ itemId, itemName, itemSku, familyId, isCo
                 <AdminCell title={variant.sku ?? "Sin SKU"}>
                   <span className="admin-code">{variant.sku ?? "—"}</span>
                 </AdminCell>
-                <AdminCell end title={libres === undefined ? `${variant.quantity} unidades` : `${libres} libres hoy de ${variant.quantity}`}>
-                  {libres === undefined ? formatNumber(variant.quantity) : `${formatNumber(libres)} / ${formatNumber(variant.quantity)}`}
+                <AdminCell end title={pendingStockCount(variant) ? `Total pendiente de conteo · ${variant.quantity} unidades registradas` : libres === undefined ? `${variant.quantity} unidades` : `${libres} libres hoy de ${variant.quantity}`}>
+                  {pendingStockCount(variant) ? <><span>Pendiente de conteo</span><small className="admin-cell-sub">{formatNumber(variant.quantity)} {variant.quantity === 1 ? "registrada" : "registradas"}</small></> : libres === undefined ? formatNumber(variant.quantity) : `${formatNumber(libres)} / ${formatNumber(variant.quantity)}`}
                 </AdminCell>
                 <AdminCell end title={variant.ownPrice ? "Precio propio: «Mismo precio para todas» no lo pisa" : "Sigue el precio de la familia"}>
                   {variant.listPrice > 0 ? formatMoney(variant.listPrice) : "A consultar"}

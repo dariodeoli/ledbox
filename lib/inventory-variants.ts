@@ -1,3 +1,4 @@
+import type { StockCountStatus } from "./stock-count";
 import { inventorySkuValid, normalizeInventorySku } from "./field-rules";
 
 /**
@@ -222,6 +223,7 @@ export type FamilyView = {
     name: string;
     sku: string | null;
     quantity: number;
+    stockCountStatus: StockCountStatus;
     options: VariantOptions;
     ownPrice: boolean;
     sortOrder: number;

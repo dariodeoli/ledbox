@@ -1,6 +1,6 @@
 {
   "name": "ledbox",
-  "version": "2.1.137",
+  "version": "2.1.138",
   "private": true,
   "scripts": {
     "dev": "next dev",

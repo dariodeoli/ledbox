@@ -1,3 +1,4 @@
+import type { StockCountStatus } from "../stock-count";
 import { randomUUID } from "node:crypto";
 import { Prisma, type BillingUnit } from "@prisma/client";
 import type { AudiencePriceTier } from "@/lib/price-tiers";
@@ -65,6 +66,7 @@ type VariantRow = {
   sku: string | null;
   categoryId: string | null;
   quantity: number;
+  stockCountStatus: StockCountStatus;
   variantOptions: Prisma.JsonValue | null;
   variantOwnPrice: boolean;
   variantSortOrder: number;
@@ -119,6 +121,7 @@ const VARIANT_SELECT = {
   sku: true,
   categoryId: true,
   quantity: true,
+  stockCountStatus: true,
   variantOptions: true,
   variantOwnPrice: true,
   variantSortOrder: true,
@@ -583,6 +586,7 @@ function toView(family: FamilyRow, variants: readonly VariantRow[]): FamilyView 
       name: variant.name,
       sku: variant.sku,
       quantity: variant.quantity,
+      stockCountStatus: variant.stockCountStatus,
       options: optionsFromJson(variant.variantOptions),
       ownPrice: variant.variantOwnPrice,
       sortOrder: variant.variantSortOrder,

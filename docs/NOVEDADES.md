@@ -755,3 +755,8 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Origen separado de compra: propio, consignado físico y alquiler externo por evento. El dueño se registra por unidad y los defaults sólo se proponen a las altas nuevas; los históricos quedan sin revisar. Un pedido externo no crea stock permanente ni confirma cobertura de un proveedor.
 - Exportación de unidades por depósito: código de unidad, estado, depósito, ubicación y propietario en un CSV de consulta; no reemplaza el respaldo restaurable completo.
 
+## v2.1.138 — 2026-10-16
+
+- Las variantes y su resumen distinguen pendiente de conteo de cero confirmado. Si falta contar alguna variante, no se muestra una disponibilidad total como si estuviera completa.
+- La importación separa fotos modificadas, conservadas, fallidas y archivos no aportados. El detalle identifica producto, galería, categoría o colección; una galería parcialmente aplicada avisa qué ocurrió.
+- Las fotos idénticas de categorías y colecciones se conservan sin reescribir. Los contadores del resultado reflejan cambios guardados; la vista previa aclara que sólo encontró archivos, todavía sin aplicarlos.

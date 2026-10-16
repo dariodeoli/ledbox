@@ -1,3 +1,4 @@
+import { initialPhotoResult, photoResult, summarizePhotoResults, type PhotoResult, type PhotoScope } from "../import-photo-results";
 import { readImportStockOrigin, type OriginPair } from "../inventory-stock-origin";
 import { validatedStockOrigin } from "./inventory-stock-origin";
 import { confirmInventoryCount } from "./inventory-stock-count";
@@ -248,6 +249,7 @@ export type ApplyResult = {
   actualizados: number;
   juegos: number;
   fotos: number;
+  resultadoFotos: { resumen: ReturnType<typeof summarizePhotoResults>; destinos: PhotoResult[] };
   /** Fotos de categoría guardadas. */
   fotosCategoria: number;
   /** Fotos extra de producto guardadas, colecciones tocadas (creadas o actualizadas) y fotos de colección guardadas. */
@@ -456,6 +458,31 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   const created: ApplyResult["creados"] = [];
   const idByCode = new Map<string, string>();
   const planned = plan.items.filter((item) => item.accion !== "omitir");
+  const photoResults = new Map<string, PhotoResult>();
+  const photoKey = (scope: PhotoScope, code: string) => `${scope}:${code}`;
+  const seedPhoto = (scope: PhotoScope, code: string, declared: boolean, resolved: boolean) => {
+    photoResults.set(photoKey(scope, code), initialPhotoResult(scope, code, declared, resolved, input.photos !== null));
+  };
+  const reportPhoto = (scope: PhotoScope, code: string, changed: boolean, error?: string | null) => {
+    const key = photoKey(scope, code), initial = photoResults.get(key);
+    if (initial) photoResults.set(key, photoResult(initial, changed, error));
+  };
+  const preservePhoto = (scope: PhotoScope, code: string) => {
+    const key = photoKey(scope, code), initial = photoResults.get(key);
+    if (initial) photoResults.set(key, { ...initial, estado: "conservada", motivo: "Crear sólo nuevos: destino existente conservado." });
+  };
+  for (const item of plan.items) {
+    seedPhoto("producto", item.product.codigo, Boolean(item.product.foto), Boolean(item.foto));
+    if (item.product.fotos !== null) seedPhoto("adicionales", item.product.codigo, true, item.fotosExtra !== null);
+    if (input.importMode === "CREATE_ONLY" && item.existingId && item.accion === "omitir") {
+      preservePhoto("producto", item.product.codigo); preservePhoto("adicionales", item.product.codigo);
+    } else if (item.accion === "omitir") {
+      if (item.product.foto) reportPhoto("producto", item.product.codigo, false, "El producto fue omitido; no se aplicó su foto.");
+      if (item.product.fotos !== null) reportPhoto("adicionales", item.product.codigo, false, "El producto fue omitido; no se aplicó su galería.");
+    }
+  }
+  for (const entry of plan.categories) seedPhoto("categoria", `${entry.category.categoria}${entry.category.subcategoria ? ` › ${entry.category.subcategoria}` : ""}`, Boolean(entry.category.foto), Boolean(entry.foto));
+  for (const entry of plan.collections) seedPhoto("coleccion", entry.nombre, Boolean(input.collections?.find(c => collectionSlug(c.nombre) === collectionSlug(entry.nombre))?.foto), Boolean(entry.foto));
   let updated = 0;
   let photosSaved = 0;
   let combosDone = 0;
@@ -468,11 +495,12 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   };
   // Fichas que comparten foto: se procesa una vez y cada producto guarda su copia.
   const prepared = new Map<string, Promise<PreparedPhoto | null>>();
+  const invalidPhotos = new Set<string>();
   const photoOf = (item: PlannedProduct): Promise<PreparedPhoto | null> => {
     if (!item.foto || !input.photos) return Promise.resolve(null);
     let promise = prepared.get(item.foto);
     if (!promise) {
-      promise = photoFor(item, input.photos, failures);
+      promise = photoFor(item, input.photos, failures).then(photo => { if (!photo) invalidPhotos.add(item.foto!); return photo; });
       prepared.set(item.foto, promise);
     }
     return promise;
@@ -486,6 +514,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     if (outcome.created) created.push({ id: outcome.id, etiqueta: label(item) });
     else updated += 1;
     if (outcome.photo) photosSaved += 1;
+    if (item.foto) reportPhoto("producto", item.product.codigo, outcome.photo, invalidPhotos.has(item.foto) ? "La foto no se pudo procesar; se conserva lo existente." : null);
   };
 
   let categoryPhotos = 0;
@@ -495,7 +524,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     const { category } = entry;
     const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
     try {
-      if (input.importMode === "CREATE_ONLY" && await db.inventoryCategory.findFirst({ where: { organizationId, key: categoryPathKey(category.categoria, category.subcategoria) }, select: { id: true } })) continue;
+      if (input.importMode === "CREATE_ONLY" && await db.inventoryCategory.findFirst({ where: { organizationId, key: categoryPathKey(category.categoria, category.subcategoria) }, select: { id: true } })) { preservePhoto("categoria", name); continue; }
       let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
       const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
       if (bytes) {
@@ -504,14 +533,24 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       const saved = await db.$transaction(async (tx) => {
         const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria }, { preserveExisting: input.importMode === "CREATE_ONLY" });
         if (!resolved) throw new Error("No se pudo resolver la categoría.");
-        if (input.importMode === "CREATE_ONLY" && !resolved.created) return { changed: false, photoError: null };
+        if (input.importMode === "CREATE_ONLY" && !resolved.created) return { changed: false, photoError: null, preserved: true };
         if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
-        const changed = prepared?.ok ? await setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo) : false;
-        return { changed, photoError: prepared && !prepared.ok ? prepared.error : null };
+        let changed = false;
+        if (prepared?.ok) {
+          const current = await tx.inventoryCategory.findFirst({ where: { id: resolved.categoryId, organizationId }, select: { imageData: true } });
+          if (!sameBytes(current?.imageData, prepared.photo.data)) {
+            changed = await setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
+            if (!changed) throw new Error("La categoría ya no existe en esta empresa.");
+          }
+        }
+        return { changed, photoError: prepared && !prepared.ok ? prepared.error : null, preserved: false };
       });
       if (saved.changed) categoryPhotos += 1;
+      if (saved.preserved) preservePhoto("categoria", name);
+      else if (entry.foto) reportPhoto("categoria", name, saved.changed, saved.photoError);
       if (saved.photoError) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${saved.photoError}` });
     } catch (error) {
+      if (entry.foto) reportPhoto("categoria", name, false, "No se pudo guardar la foto de categoría.");
       console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
     }
@@ -612,6 +651,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         combosDone += 1;
         if (!isNew) updated += 1;
         if (photoChanged) photosSaved += 1;
+        if (item.foto) reportPhoto("producto", code, photoChanged, photo ? null : "La foto no se pudo procesar; se conserva lo existente.");
       } catch (error) {
         console.error(`[import-catalogo] juego ${code}:`, error instanceof Error ? error.message : error);
         failures.push({ codigo: code, mensaje: error instanceof Error ? error.message : "No se pudo importar el juego." });
@@ -632,6 +672,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     if (!itemId || failedProducts.has(code) || item.fotosExtra === null || !input.photos) continue;
     try {
       const ready: PreparedPhoto[] = [];
+      let invalid = 0;
       for (const name of item.fotosExtra) {
         let promise = preparedExtra.get(name);
         if (!promise) {
@@ -641,10 +682,14 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         }
         const photo = await promise;
         if (photo) ready.push(photo);
-        else failures.push({ codigo: code, mensaje: `La foto extra «${name}» no se pudo procesar; se importó sin ella.` });
+        else { invalid++; failures.push({ codigo: code, mensaje: `La foto extra «${name}» no se pudo procesar; se importó sin ella.` }); }
       }
-      if (await writeExtraPhotos(organizationId, itemId, ready)) extraPhotosSaved += ready.length;
+      const changed = await writeExtraPhotos(organizationId, itemId, ready);
+      if (changed) extraPhotosSaved += ready.length;
+      const missing = Math.max(0, (item.product.fotos?.length ?? 0) - item.fotosExtra.length);
+      reportPhoto("adicionales", code, changed, invalid + missing ? `${invalid + missing} archivo(s) ausente(s) o inválido(s); la galería aplicada puede ser parcial.` : null);
     } catch (error) {
+      reportPhoto("adicionales", code, false, "No se pudo guardar la galería adicional.");
       console.error(`[import-catalogo] fotos extra de ${code}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: code, mensaje: error instanceof Error ? error.message : "No se pudieron guardar las fotos extra." });
     }
@@ -664,22 +709,29 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       const preserveMetadata = input.importMode === "CREATE_ONLY" && Boolean(await db.collection.findFirst({ where: { organizationId, slug: collectionSlug(entry.nombre) }, select: { id: true } }));
       let prepared: Awaited<ReturnType<typeof prepareImage>> | null = null;
       const bytes = !preserveMetadata && entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      if (preserveMetadata) preservePhoto("coleccion", entry.nombre);
       if (bytes) {
         prepared = await prepareImage(bytes, COLLECTION_PHOTO_WIDTH);
       }
       const changed = await db.$transaction(async (tx) => {
         const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden }, { preserveExisting: input.importMode === "CREATE_ONLY" });
         const added = await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
+        let photoChanged = false;
         if (prepared?.ok && (input.importMode !== "CREATE_ONLY" || row.created)) {
-          await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
-          collectionPhotos += 1;
+          const current = await tx.collection.findFirst({ where: { id: row.id, organizationId }, select: { imageData: true } });
+          photoChanged = !sameBytes(current?.imageData, prepared.data);
+          if (photoChanged) await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
         }
         const canChangeMetadata = input.importMode !== "CREATE_ONLY" || row.created;
-        return { changed: canChangeMetadata || added > 0, photoError: canChangeMetadata && prepared && !prepared.ok ? prepared.error : null };
+        return { changed: canChangeMetadata || added > 0, photoChanged, preserved: !canChangeMetadata, photoError: canChangeMetadata && prepared && !prepared.ok ? prepared.error : null };
       });
       if (changed.changed) collectionsTouched += 1;
+      if (changed.photoChanged) collectionPhotos += 1;
+      if (changed.preserved) preservePhoto("coleccion", entry.nombre);
+      else if (entry.foto) reportPhoto("coleccion", entry.nombre, changed.photoChanged, changed.photoError);
       if (changed.photoError) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${changed.photoError}` });
     } catch (error) {
+      if (entry.foto) reportPhoto("coleccion", entry.nombre, false, "No se pudo guardar la foto de colección.");
       console.error(`[import-catalogo] colección ${entry.nombre}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `colección ${entry.nombre}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la colección." });
     }
@@ -692,17 +744,28 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   for (const row of estadosAplicados) if (row.noAplicados) problems.push({ nivel: "aviso", tipo: "estado-incompleto", codigo: row.codigo, fila: null,
     mensaje: `${row.codigo}: no se pudieron aplicar ${row.noAplicados} cambios de estado. ${row.motivo}` });
   const summary = { ...plan.summary,
+    fotos: photosSaved,
+    fotosCategoria: categoryPhotos,
+    fotosExtra: extraPhotosSaved,
+    fotosColeccion: collectionPhotos,
     estadosMantenimiento: estadosAplicados.reduce((sum, row) => sum + row.aplicados.MAINTENANCE, 0),
     estadosDanadas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.DAMAGED, 0),
     estadosPerdidas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.LOST, 0),
     estadosDisponibles: estadosAplicados.reduce((sum, row) => sum + ADJUSTABLE_STATES.reduce((total, state) => total + row.devueltos[state], 0), 0),
   };
+  for (const item of planned) if (failedProducts.has(item.product.codigo)) {
+    if (item.foto) reportPhoto("producto", item.product.codigo, false, "El producto no se pudo aplicar; su foto no se guardó.");
+    if (item.fotosExtra !== null) reportPhoto("adicionales", item.product.codigo, false, "El producto no se pudo aplicar; su galería no se guardó.");
+  }
+  const destinosFotos = [...photoResults.values()];
+  const resumenFotos = summarizePhotoResults(destinosFotos);
   const result: ApplyResult = {
     lote: input.lote,
     creados: created,
     actualizados: updated,
     juegos: combosDone,
     fotos: photosSaved,
+    resultadoFotos: { resumen: resumenFotos, destinos: destinosFotos },
     fotosCategoria: categoryPhotos,
     fotosExtra: extraPhotosSaved,
     colecciones: collectionsTouched,
@@ -714,7 +777,11 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     estadosAplicados,
     tarjetas: [
       { etiqueta: "Creados", valor: created.length }, { etiqueta: "Actualizados", valor: updated },
-      { etiqueta: "Juegos", valor: combosDone }, { etiqueta: "Fotos", valor: photosSaved },
+      { etiqueta: "Juegos", valor: combosDone },
+      { etiqueta: "Destinos de fotos modificados", valor: resumenFotos.modificadas },
+      { etiqueta: "Destinos de fotos conservados", valor: resumenFotos.conservadas },
+      { etiqueta: "Destinos de fotos fallidos", valor: resumenFotos.fallidas },
+      { etiqueta: "Destinos sin archivo", valor: resumenFotos.sinArchivo },
       { etiqueta: "Omitidos", valor: plan.summary.omitidos + failedProducts.size },
       { etiqueta: "A mantenimiento", valor: summary.estadosMantenimiento }, { etiqueta: "Dañadas", valor: summary.estadosDanadas },
       { etiqueta: "Perdidas", valor: summary.estadosPerdidas }, { etiqueta: "A disponible", valor: summary.estadosDisponibles },
@@ -737,6 +804,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         actualizados: updated,
         juegos: combosDone,
         fotos: photosSaved,
+        resultadoFotos: resumenFotos,
         fotosCategoria: categoryPhotos,
         fotosExtra: extraPhotosSaved,
         colecciones: collectionsTouched,
