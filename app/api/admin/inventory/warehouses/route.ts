@@ -8,6 +8,7 @@ import {
   deleteWarehouse,
   listWarehouses,
   moveUnitsBetweenWarehouses,
+  relocateUnitsWithinWarehouse,
   WarehouseMoveConflict,
   setDefaultWarehouse,
   updateWarehouse,
@@ -38,7 +39,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = (await readJson(request)) as Record<string, unknown>;
   const kind = typeof body.kind === "string" ? body.kind : "";
-  const auth = await requireAdminContext(kind === "move-units" ? "inventory.write" : "org.manage");
+  const auth = await requireAdminContext(kind === "move-units" || kind === "relocate-units" ? "inventory.write" : "org.manage");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const id = typeof body.id === "string" ? body.id : "";
@@ -75,6 +76,29 @@ export async function POST(request: Request) {
     });
     if (!result.ok) return jsonError(result.error, result.status);
     await recordAudit({ context: auth.context, action: "update", entity: "InventoryItem", entityId: item.id, summary: `Movió ${result.moved} unidad${result.moved === 1 ? "" : "es"} de «${item.name}» entre depósitos`, detail: { fields: { unidades: result.moved, desde: body.fromWarehouseId as string, hasta: body.toWarehouseId as string } } });
+    return Response.json({ ok: true, moved: result.moved });
+  }
+
+  if (kind === "relocate-units") {
+    const inventoryId = typeof body.inventoryId === "string" ? body.inventoryId : "";
+    const warehouseId = typeof body.warehouseId === "string" ? body.warehouseId : "";
+    const item = inventoryId ? await db.inventoryItem.findFirst({ where: { id: inventoryId, organizationId }, select: { id: true, name: true } }) : null;
+    if (!item) return jsonError("El producto no existe en esta empresa.", 404);
+    const warehouse = warehouseId ? await db.warehouse.findFirst({ where: { id: warehouseId, organizationId }, select: { code: true } }) : null;
+    const location = readInventoryLocation(body.location, warehouse?.code);
+    if (location === false) return jsonError(FIELD_MESSAGES.location, 400);
+    if (!Array.isArray(body.unitIds) || body.unitIds.some((unitId) => typeof unitId !== "string")) return jsonError("Seleccioná las unidades que querés reubicar.", 400);
+    const unitIds = body.unitIds as string[];
+    const result = await db.$transaction(async (tx) => {
+      const moved = await relocateUnitsWithinWarehouse(tx, { organizationId, inventoryId: item.id, warehouseId, unitIds, location });
+      if (!moved.ok) return moved;
+      await recordAudit({ context: auth.context, action: "update", entity: "InventoryItem", entityId: item.id, summary: `Reubicó ${moved.moved} unidad${moved.moved === 1 ? "" : "es"} de «${item.name}» dentro de ${warehouse?.code ?? "un depósito"}`, detail: { fields: { unidades: moved.moved, codigos: unitIds, deposito: warehouseId, ubicacion: location } } }, tx);
+      return moved;
+    }).catch((error: unknown) => {
+      if (error instanceof WarehouseMoveConflict) return { ok: false as const, status: 409 as const, error: error.message };
+      throw error;
+    });
+    if (!result.ok) return jsonError(result.error, result.status);
     return Response.json({ ok: true, moved: result.moved });
   }
 
