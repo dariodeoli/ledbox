@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
 import { formatDateTime, formatNumber } from "@/lib/admin-format";
 import type { AdminClientRucSnapshot } from "@/lib/admin-types";
 import type { OwnDataResult } from "@/lib/server/ruc-owndata";
-import { AdminButton, AdminDialog, AdminNote } from "../AdminUI";
+import { AdminButton, AdminNote } from "../AdminUI";
 import { RucField, TextField } from "../AdminFields";
 
 type RucProposal = OwnDataResult & { lookedUpAt: string; confirmationToken: string };
@@ -30,30 +30,37 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
   confirmed: boolean;
   onChange: (patch: FiscalPatch) => void;
 }) {
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [proposal, setProposal] = useState<RucProposal | null>(null);
+  const inFlight = useRef(false);
+  const revision = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const currentRuc = useRef(ruc);
   currentRuc.current = ruc;
 
   function manual(patch: FiscalPatch) {
+    revision.current++;
     setProposal(null);
     setError("");
     onChange({ ...patch, rucConfirmationToken: "", rucSnapshot: null });
   }
 
   async function lookup() {
-    if (busy) return;
+    if (inFlight.current || !ruc.trim()) return;
+    inFlight.current = true;
     const requested = ruc;
+    const requestedRevision = revision.current;
     setBusy(true);
     setError("");
     setProposal(null);
     const result = await adminSend<RucProposal>("/api/admin/clients/ruc", { numero: requested.trim(), confirmLookup: true });
+    inFlight.current = false;
+    if (!mounted.current) return;
     setBusy(false);
-    setConsent(false);
     // Una respuesta de otra edición del campo no puede proponer identidad fiscal.
-    if (currentRuc.current !== requested) return;
+    if (currentRuc.current !== requested || revision.current !== requestedRevision) return;
     if (!result.ok) {
       setError(`${result.error} Podés completar RUC y razón social a mano.`);
       return;
@@ -68,7 +75,8 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
   const source = proposal?.ownData.provenance ?? snapshot?.provenance;
   return <>
     <RucField label="RUC / CI" maxLength={30} value={ruc} onChange={(value) => manual({ ruc: value })} />
-    <AdminButton type="button" icon="search" disabled={!ruc.trim() || busy} busy={busy} onClick={() => setConsent(true)}>Consultar RUC en OwnData</AdminButton>
+    <AdminButton type="button" icon="search" disabled={!ruc.trim() || busy} busy={busy} onClick={() => void lookup()}>Extraer datos del RUC</AdminButton>
+    <AdminNote>Consulta en OwnData al pulsar Extraer; puede consumir tu cuota. Revisá el resultado antes de aplicarlo.</AdminNote>
     <TextField label="Razón social oficial" maxLength={300} value={legalName} onChange={(value) => manual({ legalName: value })}
       hint="Entrada manual disponible. La consulta solo propone RUC y razón social; no cambia fantasía ni contactos." />
     {error ? <AdminNote tone="error">{error}</AdminNote> : null}
@@ -92,12 +100,6 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
       <div><dt>Consultado</dt><dd>{formatDateTime(proposal?.lookedUpAt ?? snapshot?.lookedUpAt)}</dd></div>
       {snapshot?.confirmedAt ? <div><dt>Confirmado</dt><dd>{formatDateTime(snapshot.confirmedAt)}</dd></div> : null}
     </dl> : <AdminNote>Sin snapshot oficial confirmado. Los datos fiscales pueden cargarse manualmente.</AdminNote>}
-    {consent ? <AdminDialog title="Confirmar consulta OwnData" onClose={() => { if (!busy) setConsent(false); }}>
-      <p className="admin-dialog-text">Consultar el RUC {ruc} puede consumir cuota del proveedor. El costo monetario no está informado. El resultado se revisa antes de aplicarlo.</p>
-      <div className="admin-dialog-foot">
-        <AdminButton type="button" disabled={busy} onClick={() => setConsent(false)}>Cancelar</AdminButton>
-        <AdminButton type="button" variant="primary" busy={busy} onClick={() => void lookup()}>Confirmar consulta</AdminButton>
-      </div>
-    </AdminDialog> : null}
+
   </>;
 }
