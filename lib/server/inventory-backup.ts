@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { INVENTORY_BACKUP_FIELDS } from "../inventory-backup-fields";
 import { Prisma } from "@prisma/client";
-import { strFromU8, strToU8, zipSync, unzipSync } from "fflate";
+import { strFromU8, strToU8, zipSync } from "fflate";
 import { dbWithDeleted } from "./db";
-import { assertSafeEntryName } from "./import-photos";
+import { readBoundedBackupZip } from "./inventory-backup-zip";
 import { detectInventoryImageMime } from "@/lib/admin-types";
 import { SANDBOX_FILE_QUOTA_BYTES } from "./demo-sandbox";
 
@@ -51,16 +51,9 @@ function fail(message: string): never { throw new BackupError(message); }
 function object(value: unknown): value is Row { return !!value && typeof value === "object" && !Array.isArray(value); }
 export function readInventoryBackup(bytes: Uint8Array): BackupPackage {
   if (bytes.byteLength > BACKUP_LIMITS.archive) fail("El ZIP supera 20 MiB.");
-  let count = 0, inflated = 0; const names = new Set<string>(); let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(bytes, { filter(file) {
-      assertSafeEntryName(file.name);
-      if (file.name !== "manifest.json" && file.name !== "data.json" && !/^assets\/[a-f0-9]{64}$/.test(file.name)) fail("Ruta fuera del formato de respaldo.");
-      if (names.has(file.name)) fail("El ZIP tiene rutas duplicadas."); names.add(file.name);
-      if (++count > BACKUP_LIMITS.entries || (inflated += file.originalSize) > BACKUP_LIMITS.inflated) fail("El contenido del ZIP supera los límites del respaldo.");
-      return true;
-    } });
-  } catch (error) { throw new BackupError(error instanceof Error ? error.message : "ZIP inválido."); }
+  let entries: Record<string, Uint8Array>;
+  try { entries = readBoundedBackupZip(bytes, BACKUP_LIMITS); }
+  catch (error) { throw new BackupError(error instanceof Error ? error.message : "ZIP inválido."); }
   const parse = (path: string) => { try { return JSON.parse(strFromU8(entries[path] ?? new Uint8Array())); } catch { return fail(`No se pudo leer ${path}.`); } };
   const manifest = parse("manifest.json");
   if (!object(manifest) || manifest.format !== "ledbox-inventory-backup" || manifest.version !== 1 || !Array.isArray(manifest.files)) fail("Formato o versión de respaldo no compatible.");
