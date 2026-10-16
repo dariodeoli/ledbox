@@ -84,7 +84,15 @@ export async function lookupOwnData(ruc: string, options: {
     const e = error as { code?: string; status?: number; retryAfter?: number };
     const code = typeof e?.code === "string" && /^[A-Z_]{1,80}$/.test(e.code) ? e.code : "OWNDATA_TRANSPORT_ERROR";
     const status = e?.status === 404 ? 404 : e?.status === 429 ? 429 : e?.status === 400 ? 400 : e?.status === 503 || e?.status === 401 || e?.status === 403 ? 503 : 502;
-    const message = status === 404 ? "No encontramos este RUC. Completá los datos a mano." : status === 429 ? "Se alcanzó la cuota OwnData. Completá los datos a mano; no se reintentó la consulta." : "OwnData no está disponible para esta consulta. Completá los datos a mano.";
+    const providerMessages: Record<string, string> = {
+      COMMERCIAL_API_DISABLED: "OwnData todavía no habilitó la API comercial. Completá los datos a mano.",
+      FREE_API_DISABLED: "La API gratuita de OwnData está deshabilitada. Completá los datos a mano.",
+      API_KEY_INVALID: "Revisá la configuración de OwnData en el servidor. Completá los datos a mano.",
+      API_KEY_REVOKED: "La clave de OwnData fue revocada. Actualizá la configuración del servidor.",
+      API_KEY_EXPIRED: "La clave de OwnData venció. Actualizá la configuración del servidor.",
+      PLAN_REQUIRED: "La cuenta de OwnData necesita un cupo activo. Completá los datos a mano.",
+    };
+    const message = providerMessages[code] ?? (status === 404 ? "No encontramos este RUC. Completá los datos a mano." : status === 429 ? "Se alcanzó la cuota OwnData. Completá los datos a mano; no se reintentó la consulta." : "OwnData no está disponible para esta consulta. Completá los datos a mano.");
     throw new OwnDataLookupError(code, status, message, code === "DAILY_QUOTA_REACHED" && Number.isSafeInteger(e.retryAfter) && e.retryAfter! >= 0 ? e.retryAfter : undefined);
   }
 }
