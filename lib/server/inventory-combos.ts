@@ -753,6 +753,7 @@ export async function saveCombo(options: {
   organizationId: string;
   id?: string | null;
   data: ComboItemData;
+  preserveExistingCategory?: boolean;
   components: unknown;
   /**
    * Importación: convierte una unidad existente en combo. Solo si no tiene reservas (ninguna
@@ -834,7 +835,7 @@ export async function saveCombo(options: {
           }
         }
 
-        const resolvedCategory = await resolveInventoryCategory(tx, organizationId, { category: options.data.category, subcategory: options.data.subcategory });
+        const resolvedCategory = await resolveInventoryCategory(tx, organizationId, { category: options.data.category, subcategory: options.data.subcategory }, { preserveExisting: options.preserveExistingCategory });
         if (!resolvedCategory) rejectComboSave({ ok: false, reason: "invalid", message: "La categoría no es válida." });
         const itemData = {
           name: options.data.name,

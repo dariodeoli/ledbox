@@ -163,6 +163,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   // Eventos con productos: validación y aplicación propias (lib/server/import-eventos*.ts).
   if (module.id === "eventos") return importarEventos(module, context, form, accion);
 
+  const modeRaw = textOf(form, "modo");
+  if (modeRaw && modeRaw !== "CREATE_ONLY" && modeRaw !== "UPSERT") return jsonError("Elegí crear sólo nuevos o crear y actualizar.", 400);
+  const importMode = modeRaw === "CREATE_ONLY" ? "CREATE_ONLY" as const : "UPSERT" as const;
+
   const source = await readSource(module, form, accion, context);
   if (!source.ok) return source.response;
 
@@ -182,11 +186,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       throw error;
     }
   }
-  const input: ImportInput = { products: source.products, categories: source.categories, collections: source.collections, parseProblems: source.problems, photos, photoProblems };
+  const input: ImportInput = { products: source.products, categories: source.categories, collections: source.collections, parseProblems: source.problems, photos, photoProblems, importMode };
 
   if (accion === "preview") {
     const plan = await previewCatalog(organizationId, input);
     return Response.json({
+      importMode,
       catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
@@ -212,6 +217,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         codigo: item.product.codigo,
         nombre: item.product.nombre,
         accion: item.accion,
+        esCombo: item.esCombo,
+        stockCountStatus: item.stockCountStatus,
+        countBefore: item.countBefore,
+        countAfter: item.countAfter,
         detalle: [
           item.incompleto ? "Juego incompleto (sin piezas)" : item.esCombo ? `Juego de ${item.product.componentes.length} componente${item.product.componentes.length === 1 ? "" : "s"}` : "Unidad",
           item.convertir ? "unidad que pasa a juego" : null,

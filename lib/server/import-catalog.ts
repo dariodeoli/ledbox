@@ -197,6 +197,7 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
 }
 
 export type ImportInput = {
+  importMode?: import("@/lib/import-catalog").CatalogImportMode;
   products: CatalogProduct[];
   parseProblems: ImportProblem[];
   /** Fotos del ZIP por clave; `null` si no se subió ZIP. */
@@ -213,6 +214,7 @@ export async function previewCatalog(organizationId: string, input: ImportInput)
   const existing = await loadExisting(organizationId, codesToLookUp(input.products));
   const warehouses = await db.warehouse.findMany({ where: { organizationId, archivedAt: null }, select: { code: true } });
   return planCatalog({
+    importMode: input.importMode,
     warehouseCodes: new Set(warehouses.map((warehouse) => warehouse.code)),
     products: input.products,
     parseProblems: input.parseProblems,
@@ -265,11 +267,11 @@ const specData = (product: Parameters<typeof catalogSpecs>[0]) => {
 };
 
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
-async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
+async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<Outcome> {
   const { organizationId } = context;
   const { product } = planned;
   // Categoría y subcategoría: se crean o se asocian con el helper único (sin duplicar padre ni hija).
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   const warehouse = product.deposito ? await findWarehouseByCode(tx, organizationId, product.deposito) : null;
   const baseData = {
@@ -346,9 +348,9 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
 }
 
 /** Alta de un juego sin piezas: combo incompleto, sin stock propio ni unidades. Los datos finos los completa `writeComboMeta`. */
-async function createIncompleteGame(tx: Tx, organizationId: string, planned: PlannedProduct): Promise<string> {
+async function createIncompleteGame(tx: Tx, organizationId: string, planned: PlannedProduct, preserveExisting = false): Promise<string> {
   const { product } = planned;
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   const id = randomUUID();
   await tx.inventoryItem.create({
@@ -358,12 +360,12 @@ async function createIncompleteGame(tx: Tx, organizationId: string, planned: Pla
 }
 
 /** Actualiza los datos propios de un combo (nombre, precio, descripción, visibilidad, foto). */
-async function writeComboMeta(tx: Tx, organizationId: string, id: string, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<boolean> {
+async function writeComboMeta(tx: Tx, organizationId: string, id: string, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<boolean> {
   const { product } = planned;
   const current = await tx.inventoryItem.findFirst({ where: { id, organizationId }, select: { catalogAudience: true, visibleOnWeb: true, imageData: true } });
   if (!current) throw new Error("El juego ya no existe en esta empresa.");
   const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   await tx.inventoryItem.update({
     where: { id },
@@ -454,6 +456,37 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     if (outcome.photo) photosSaved += 1;
   };
 
+  let categoryPhotos = 0;
+  const applyCategories = async () => {
+  // Categorías declaradas: se crean si faltan, `orden` llena sortOrder y la foto se guarda por nombre normalizado.
+  for (const entry of plan.categories) {
+    const { category } = entry;
+    const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
+    try {
+      let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
+      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      if (bytes) {
+        prepared = await prepareCategoryPhoto(bytes);
+        if (!prepared.ok) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${prepared.error}` });
+      }
+      const saved = await db.$transaction(async (tx) => {
+        const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria }, { preserveExisting: input.importMode === "CREATE_ONLY" });
+        if (!resolved) throw new Error("No se pudo resolver la categoría.");
+        if (input.importMode === "CREATE_ONLY" && !resolved.created) return false;
+        if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
+        if (prepared?.ok) return setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
+        return false;
+      });
+      if (saved) categoryPhotos += 1;
+    } catch (error) {
+      console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
+      failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
+    }
+  }
+
+  };
+  if (input.importMode === "CREATE_ONLY") await applyCategories();
+
   // Fase 1: productos-unidad, en bloques. Las fotos se procesan fuera de la transacción.
   const units = planned.filter((item) => !item.esCombo);
   for (let start = 0; start < units.length; start += BLOCK_SIZE) {
@@ -467,7 +500,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       const outcomes = await db.$transaction(
         async (tx) => {
           const list: Array<[PlannedProduct, Outcome]> = [];
-          for (const item of block) list.push([item, await writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null)]);
+          for (const item of block) list.push([item, await writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null, input.importMode === "CREATE_ONLY")]);
           return list;
         },
         { timeout: 60_000, maxWait: 10_000 },
@@ -477,7 +510,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       console.error("[import-catalogo] Bloque revertido, se reintenta producto por producto:", blockError instanceof Error ? blockError.message : blockError);
       for (const item of block) {
         try {
-          const outcome = await db.$transaction((tx) => writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null), { timeout: 30_000 });
+          const outcome = await db.$transaction((tx) => writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
           note(outcome, item);
         } catch (error) {
           const message = isUniqueConstraintError(error) ? `Ya existe un producto con el código ${item.product.codigo}.` : error instanceof Error ? error.message : "No se pudo importar.";
@@ -507,7 +540,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         if (item.product.componentes.length === 0) {
           // Juego sin piezas en el archivo: nuevo = juego incompleto; existente = solo se actualizan sus datos.
           if (!item.existingId) {
-            comboId = await db.$transaction((tx) => createIncompleteGame(tx, organizationId, item), { timeout: 30_000 });
+            comboId = await db.$transaction((tx) => createIncompleteGame(tx, organizationId, item, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
             isNew = true;
             idByCode.set(code, comboId);
             created.push({ id: comboId, etiqueta: label(item) });
@@ -527,6 +560,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
               data: { name: item.product.nombre, category: item.product.categoria, subcategory: item.product.subcategoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
               components,
               convertFromUnit: item.convertir,
+              preserveExistingCategory: input.importMode === "CREATE_ONLY",
             });
             if (!saved.ok) {
               failures.push({ codigo: code, mensaje: saved.message });
@@ -540,7 +574,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
           }
         }
         const photo = await photoOf(item);
-        const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo), { timeout: 30_000 });
+        const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
         idByCode.set(code, comboId!);
         combosDone += 1;
         if (!isNew) updated += 1;
@@ -554,31 +588,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     }
   }
 
-  // Categorías declaradas: se crean si faltan, `orden` llena sortOrder y la foto se guarda por nombre normalizado.
-  let categoryPhotos = 0;
-  for (const entry of plan.categories) {
-    const { category } = entry;
-    const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
-    try {
-      let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
-      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
-      if (bytes) {
-        prepared = await prepareCategoryPhoto(bytes);
-        if (!prepared.ok) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${prepared.error}` });
-      }
-      const saved = await db.$transaction(async (tx) => {
-        const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria });
-        if (!resolved) throw new Error("No se pudo resolver la categoría.");
-        if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
-        if (prepared?.ok) return setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
-        return false;
-      });
-      if (saved) categoryPhotos += 1;
-    } catch (error) {
-      console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
-      failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
-    }
-  }
+  if (input.importMode !== "CREATE_ONLY") await applyCategories();
 
   // Fotos extra: después de los productos (necesitan su id). Cada foto se procesa una vez aunque la compartan varios.
   let extraPhotosSaved = 0;
@@ -624,15 +634,16 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         prepared = await prepareImage(bytes, COLLECTION_PHOTO_WIDTH);
         if (!prepared.ok) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${prepared.error}` });
       }
-      await db.$transaction(async (tx) => {
-        const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden });
-        await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
-        if (prepared?.ok) {
+      const changed = await db.$transaction(async (tx) => {
+        const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden }, { preserveExisting: input.importMode === "CREATE_ONLY" });
+        const added = await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
+        if (prepared?.ok && (input.importMode !== "CREATE_ONLY" || row.created)) {
           await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
           collectionPhotos += 1;
         }
+        return input.importMode !== "CREATE_ONLY" || row.created || added > 0;
       });
-      collectionsTouched += 1;
+      if (changed) collectionsTouched += 1;
     } catch (error) {
       console.error(`[import-catalogo] colección ${entry.nombre}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `colección ${entry.nombre}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la colección." });

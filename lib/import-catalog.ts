@@ -52,6 +52,7 @@ export const CATALOG_LIMITS = {
 } as const;
 
 export type CatalogComponent = { codigo: string; cantidad: number };
+export type CatalogImportMode = "CREATE_ONLY" | "UPSERT";
 
 export type CatalogProduct = {
   codigo: string;
@@ -143,6 +144,7 @@ export type ProblemKind =
   | "estado-excede"
   | "estado-incompleto"
   | "estado-ignorado"
+  | "existente-conservado"
   | "componente-inexistente"
   | "componente-invalido"
   | "juego-anidado"
@@ -845,6 +847,8 @@ export type CatalogPlan = { items: PlannedProduct[]; categories: PlannedCategory
  * `null` si no se subió ZIP).
  */
 export function planCatalog(options: {
+  /** CREATE_ONLY conserva enteros los productos existentes; ausencia = contrato anterior. */
+  importMode?: CatalogImportMode;
   products: ReadonlyArray<CatalogProduct>;
   parseProblems?: ReadonlyArray<ImportProblem>;
   existing: ReadonlyMap<string, ExistingItem>;
@@ -885,7 +889,7 @@ export function planCatalog(options: {
     const base: PlannedProduct = {
       product,
       stockCountStatus: esCombo ? "CONFIRMED" : product.cantidad === null ? existing?.stockCountStatus ?? (existing ? "CONFIRMED" : "PENDING_COUNT") : "CONFIRMED",
-      countBefore: existing ? existing.activeUnits ?? existing.units : null,
+      countBefore: existing && existing.stockCountStatus !== "PENDING_COUNT" ? existing.activeUnits ?? existing.units : null,
       countAfter: esCombo ? null : product.cantidad === null ? existing ? existing.stockCountStatus === "PENDING_COUNT" ? null : existing.activeUnits ?? existing.units : null : Math.max(existing?.activeUnits ?? existing?.units ?? 0, product.cantidad),
       accion: existing ? "actualizar" : "crear",
       esCombo,
@@ -902,6 +906,12 @@ export function planCatalog(options: {
     if (existing?.stockCountStatus === "PENDING_COUNT" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
       problems.push(problem("error", "cantidad-invalida", product.codigo, product.fila, `${product.nombre}: el conteo es menor que las unidades registradas. Revisá sus estados o retiros antes de confirmar; no se elimina ninguna unidad.`));
       return { ...base, accion: "omitir", stockCountStatus: "PENDING_COUNT", countAfter: null };
+    }
+
+    if (existing && options.importMode === "CREATE_ONLY") {
+      problems.push(problem("aviso", "existente-conservado", product.codigo, product.fila, `${product.nombre}: el código ya existe; se conserva sin modificar stock, tarifas, datos ni fotos.`));
+      const count = existing.stockCountStatus === "PENDING_COUNT" || existingIsGame ? null : existing.activeUnits ?? existing.units;
+      return { ...base, accion: "omitir", esCombo: existingIsGame, incompleto: Boolean(existing.incompleto), stockCountStatus: existing.stockCountStatus ?? "CONFIRMED", countBefore: count, countAfter: count };
     }
 
     if (product.tipo === "juego" && !hasComponents(product)) {
@@ -926,7 +936,7 @@ export function planCatalog(options: {
           errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: un juego no puede contenerse a sí mismo.`));
           continue;
         }
-        const inside = inFile(component.codigo);
+        const inside = options.importMode === "CREATE_ONLY" && options.existing.has(component.codigo) ? undefined : inFile(component.codigo);
         const stored = options.existing.get(component.codigo);
         if (inside) {
           if (isGameInFile(inside)) errors.push(problem("error", "juego-anidado", product.codigo, product.fila, `${product.nombre}: el componente ${component.codigo} es otro juego; un juego no puede contener juegos.`));
@@ -1015,7 +1025,7 @@ export function planCatalog(options: {
     changed = false;
     for (const item of items) {
       if (item.accion === "omitir" || !item.esCombo || item.product.componentes.length === 0) continue;
-      const blocked = item.product.componentes.find((component) => items.find((other) => other.product.codigo === component.codigo)?.accion === "omitir");
+      const blocked = item.product.componentes.find((component) => items.find((other) => other.product.codigo === component.codigo)?.accion === "omitir" && !(options.importMode === "CREATE_ONLY" && options.existing.has(component.codigo)));
       if (!blocked) continue;
       item.accion = "omitir";
       item.foto = null;
