@@ -723,3 +723,12 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 
 - Ajustes queda fijo al pie del menú, justo encima de Empresa. Estado se abre desde Ajustes, con Sistema y Auditoría y sus permisos habituales.
 - Entrar a Ajustes compacta el menú de escritorio; se puede expandir manualmente sin que otra pestaña de Ajustes lo vuelva a cerrar. Entrar a Inventario u otro módulo lo abre. El botón de expandir queda debajo de EventOS cuando está compacto. En celular se conserva el menú desplegable habitual.
+
+- Ajustes aprovecha mejor el espacio: navegación interna fija, horarios de atención en columnas y políticas de alquiler agrupadas.
+- Apariencia funciona como editor: vista previa lateral con selector computadora/celular, selector visual de color, fotos compactas y una indicación de dónde queda cada módulo antes de soltarlo.
+- Las plantillas de mensajes quedan en Clientes. Bancos y datos de pago se administran desde Finanzas con el mismo formulario compartido.
+- Se puede cambiar el identificador de empresa conservando enlaces anteriores. Los identificadores históricos quedan protegidos frente a su reasignación a otra empresa.
+- Las solicitudes de planes superiores aparecen en el panel superadministrador sin conceder el plan automáticamente.
+- Un laboratorio interno permite probar la presentación de la landing de Ledbox con catálogo y carrito, usando una finalización simulada.
+- OwnData: el botón Extraer consulta explícitamente el RUC, permite revisar la razón social antes de aplicarla y descarta respuestas de ediciones anteriores. La conexión real requiere configurar OwnData en el servidor.
+- El carrito reutiliza la gestión compartida de foco y teclado de las ventanas de tienda; Escape responde sólo a la ventana superior.
