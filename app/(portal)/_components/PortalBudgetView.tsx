@@ -1,7 +1,7 @@
 "use client";
 import { Stepper } from "@/components/catalog-public/Stepper";
 import { stepQuantity } from "@/lib/quantity-control";
-import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
+import { Checkbox as SharedCheckbox, Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
 
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
@@ -13,7 +13,7 @@ import { PortalQuoteResources } from "./PortalQuoteResources";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
-import { MoneyField, PercentField } from "@/components/admin/AdminFields";
+import { FileField, MoneyField, PercentField, RadioControl } from "@/components/admin/AdminFields";
 import {
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
@@ -259,8 +259,7 @@ function PortalDecisionOptions({
           const helperId = `portal-decision-${option.value}-help`;
           return (
             <label className="portal-decision-option" data-active={active ? "true" : undefined} key={option.value}>
-              <input
-                type="radio"
+              <RadioControl
                 name="portal-action-mode"
                 value={option.value}
                 checked={active}
@@ -1345,23 +1344,11 @@ export function PortalBudgetView({
                   : `Escribí quién hizo la transferencia en nombre de ${clientLabel}.`}
               </span>
             </label>
-            <label className="portal-field" htmlFor="portal-proof-file">
-              <span className="portal-field-label">Comprobante</span>
-              <input
-                ref={proofInputRef}
-                id="portal-proof-file"
-                name="proof-file"
-                type="file"
-                accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`}
-                onChange={(event) => {
-                  setProofFile(event.target.files?.[0] ?? null);
-                  setProofError("");
-                  setProofSent(false);
-                }}
-                aria-describedby="portal-proof-hint"
-                required
-              />
-            </label>
+            <div className="portal-field">
+              <FileField label="Comprobante" id="portal-proof-file" name="proof-file" inputRef={proofInputRef} file={proofFile} maxBytes={null} preserveNativeSelection required
+                accept={`${PAYMENT_PROOF_MIMES.join(",")},.jpg,.jpeg,.png,.webp,.pdf`} ariaDescribedBy="portal-proof-hint"
+                onSelect={(file) => { setProofFile(file); setProofError(""); setProofSent(false); }} />
+            </div>
           </div>
           <p className="portal-help" id="portal-proof-hint">
             El archivo no se publica: solo lo ve el equipo de LedBox con su sesión del panel.
@@ -1896,20 +1883,12 @@ export function PortalBudgetView({
 
                 {actionMode === "authorize" ? (
                   <>
-                    <label className="portal-consent" htmlFor="portal-consent">
-                      <input
-                        id="portal-consent"
-                        type="checkbox"
-                        checked={consent}
-                        onChange={(event) => setConsent(event.target.checked)}
-                        aria-describedby="portal-consent-hint portal-consent-purpose"
-                        required
-                      />
+                    <SharedCheckbox className="portal-consent" id="portal-consent" checked={consent} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setConsent(event.target.checked)} aria-describedby="portal-consent-hint portal-consent-purpose" required label={
                       <span id="portal-consent-hint">
                         {itemsChanged || pendingRequests.some((request) => request.kind === "items") ? "Confirmo que solicito revisar esta selección propuesta por " : "Confirmo que revisé el detalle, los montos y las condiciones, y autorizo este presupuesto por "}
                         <strong className="portal-num">{formatMoney(actionTotal)}</strong> en nombre de {clientLabel}.
                       </span>
-                    </label>
+                    } />
                     {/* Finalidad en texto claro + política (issue #93): el consentimiento
                         ya queda auditado con nombre, fecha/hora e IP; acá solo se informa. */}
                     <p className="portal-consent-purpose" id="portal-consent-purpose">

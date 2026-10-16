@@ -1,5 +1,7 @@
 "use client";
 
+import { Checkbox as SharedCheckbox } from "owncoding-ui";
+
 import { useRef, useState, type FormEvent } from "react";
 import { CityField, EmailField, MoneyField, PhoneField, SelectField, TextAreaField, TextField } from "@/components/admin/AdminFields";
 import { deliveryExtraApplies, deliveryRateText } from "@/lib/delivery-zones";
@@ -257,10 +259,7 @@ export function CartDrawer(props: {
                   <p className="cp-hint">{PREORDER_COPY.notice}</p>
                   {showPrices ? (
                     <div className="cp-price-ask" data-testid="price-ask">
-                      <label className="cp-check">
-                        <input type="checkbox" checked={askPrice} onChange={(e) => setAskPrice(e.target.checked)} aria-controls="mejor-precio" />
-                        <span>Pedir un mejor precio</span>
-                      </label>
+                      <SharedCheckbox className="cp-check" checked={askPrice} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setAskPrice(event.target.checked)} aria-controls="mejor-precio" label="Pedir un mejor precio" />
                       {askPrice ? (
                         <div id="mejor-precio" className="cp-price-ask-fields cp-fields">
                           <TextAreaField label="¿Por qué lo pedís?" size="full" value={priceComment} onChange={setPriceComment} maxLength={PRICE_COMMENT_MAX} rows={2} required placeholder="Ej.: somos clientes frecuentes" />
