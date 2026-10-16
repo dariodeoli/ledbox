@@ -1,4 +1,5 @@
 "use client";
+import { InventoryOriginFields } from "./InventoryOriginFields";
 
 import { useId, useMemo, useState } from "react";
 import { formatNumber } from "@/lib/admin-format";
@@ -58,6 +59,8 @@ const EMPTY_FORM = {
   sku: "",
   inventoryKind: "REUSABLE",
   quantity: "1",
+  defaultStockOrigin: "OWNED",
+  defaultSourceSupplierId: "",
   /** Alcance en la tienda web: arranca oculto, nada se publica solo. */
   catalogAudience: "HIDDEN" as CatalogAudience,
   imageUrl: "",
@@ -82,6 +85,8 @@ const EMPTY_PRICES = {
 
 /** Ítem completo en edición (issue #111): datos, costos, notas, foto y precios. */
 const EMPTY_EDIT = {
+  defaultStockOrigin: "",
+  defaultSourceSupplierId: "",
   name: "",
   category: "",
   subcategory: "",
@@ -113,6 +118,8 @@ type InventoryEditForm = typeof EMPTY_EDIT;
 function editFormFromItem(item: InventoryEditable): InventoryEditForm {
   return {
     name: item.name,
+    defaultStockOrigin: item.defaultStockOrigin ?? "",
+    defaultSourceSupplierId: item.defaultSourceSupplierId ?? "",
     // El espejo de texto trae «Categoría › Subcategoría»: se parte para los dos campos.
     ...categoryFormFromText(item.category),
     defaultWarehouseId: item.defaultWarehouseId ?? "",
@@ -337,7 +344,9 @@ export function InventoryCreateDialog({
       warrantyUntil: form.warrantyUntil || undefined,
       sku: sku || undefined,
       inventoryKind: form.inventoryKind,
-      quantity: form.quantity.trim() === "" ? 1 : Number(form.quantity),
+      defaultStockOrigin: form.defaultStockOrigin || null,
+      defaultSourceSupplierId: form.defaultSourceSupplierId || null,
+      quantity: form.defaultStockOrigin === "EXTERNAL_RENTAL" ? 0 : form.quantity.trim() === "" ? 1 : Number(form.quantity),
       catalogAudience: form.catalogAudience,
       imageUrl: image,
       billingUnit: form.billingUnit,
@@ -450,15 +459,19 @@ export function InventoryCreateDialog({
           />
           <NumberField
             label="Cantidad"
+            disabled={busy || form.defaultStockOrigin === "EXTERNAL_RENTAL"}
             help="Crea esta cantidad de unidades físicas con códigos automáticos; después se gestiona por unidad."
             required
             maxLength={6}
-            value={form.quantity}
+            value={form.defaultStockOrigin === "EXTERNAL_RENTAL" ? "0" : form.quantity}
             onChange={(value) => setForm({ ...form, quantity: value })}
             hint="Se crean las unidades con código automático."
           />
         </AdminDialogSection>
 
+        <AdminDialogSection title="Origen y propiedad" hint="separado del proveedor de compra">
+          <InventoryOriginFields origin={form.defaultStockOrigin} supplierId={form.defaultSourceSupplierId} suppliers={taxonomy.suppliers} disabled={busy} onChange={next => setForm(current => ({ ...current, defaultStockOrigin: next.origin, defaultSourceSupplierId: next.supplierId }))} />
+        </AdminDialogSection>
         <AdminDialogSection title="Depósito y compra" collapsible hint="dónde se guarda, proveedor y garantía">
           <ProductTraceFields taxonomy={taxonomy} value={form} onChange={(next) => setForm((current) => ({ ...current, ...next }))} disabled={busy} />
         </AdminDialogSection>
@@ -653,6 +666,10 @@ export function InventoryEditDialog({
     // Datos del ítem (issue #111) y después precios (issues #90 y #110).
     const itemResult = await adminSend<{ inventory?: { id?: string } }>("/api/admin/inventory", {
       kind: "item",
+      defaultStockOrigin: editForm.defaultStockOrigin || null,
+      defaultSourceSupplierId: editForm.defaultSourceSupplierId || null,
+      expectedDefaultStockOrigin: item.defaultStockOrigin ?? null,
+      expectedDefaultSourceSupplierId: item.defaultSourceSupplierId ?? null,
       id: item.id,
       name: editForm.name,
       category: editForm.category || "General",
@@ -888,6 +905,7 @@ export function InventoryEditDialog({
               </AdminButton>
             )}
           </p>
+          <InventoryOriginFields origin={editForm.defaultStockOrigin} supplierId={editForm.defaultSourceSupplierId} suppliers={taxonomy.suppliers} disabled={editBusy} onChange={next => setEditForm(current => ({ ...current, defaultStockOrigin: next.origin, defaultSourceSupplierId: next.supplierId }))} />
           <ProductTraceFields part="location" taxonomy={taxonomy} value={editForm} onChange={(next) => setEditForm((current) => ({ ...current, ...next }))} disabled={editBusy} />
           <SelectField
             label="Estado"

@@ -1,4 +1,6 @@
 "use client";
+import { InventoryOriginFields } from "./InventoryOriginFields";
+import { STOCK_ORIGIN_LABELS, type StockOrigin } from "@/lib/inventory-stock-origin";
 import { InventoryCountPanel } from "./InventoryCountPanel";
 
 import { tierLabel, tierPreview, previewDays, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
@@ -122,6 +124,8 @@ export type InventoryRangeControls = {
 
 /** Formulario de una unidad: código, estado, costo, notas y, desde el rediseño E1, depósito, ubicación, condición y compra. */
 const EMPTY_UNIT_FORM = {
+  stockOrigin: "",
+  ownerSupplierId: "",
   code: "",
   status: "AVAILABLE",
   purchaseCost: "",
@@ -328,7 +332,7 @@ export function InventoryFicha({
   /** Alta inline sin abandonar la ficha ni los cambios pendientes del producto. */
   function addInventoryUnit() {
     setUnitDialog(null);
-    setUnitForm({ ...EMPTY_UNIT_FORM, warehouseId: item.defaultWarehouseId ?? "", location: item.defaultLocation ?? "" });
+    setUnitForm({ ...EMPTY_UNIT_FORM, stockOrigin: item.defaultStockOrigin === "EXTERNAL_RENTAL" ? "" : item.defaultStockOrigin ?? "", ownerSupplierId: item.defaultStockOrigin === "CONSIGNED" ? item.defaultSourceSupplierId ?? "" : "", warehouseId: item.defaultWarehouseId ?? "", location: item.defaultLocation ?? "" });
     setUnitDialogError("");
     setUnitEditorOpen(true);
   }
@@ -356,6 +360,8 @@ export function InventoryFicha({
     setUnitEditorOpen(true);
     setUnitForm({
       code: unit.code,
+      stockOrigin: unit.stockOrigin ?? "",
+      ownerSupplierId: unit.ownerSupplierId ?? "",
       status: unit.status,
       purchaseCost: (unit.purchaseCost ?? 0) > 0 ? String(unit.purchaseCost) : "",
       notes: unit.notes ?? "",
@@ -389,6 +395,9 @@ export function InventoryFicha({
       ...(unitDialog ? { id: unitDialog.id } : { inventoryId: item.id }),
       ...(code ? { code } : {}),
       status: unitForm.status,
+      stockOrigin: unitForm.stockOrigin || null,
+      ownerSupplierId: unitForm.ownerSupplierId || null,
+      ...(unitDialog ? { expectedStockOrigin: unitDialog.stockOrigin ?? null, expectedOwnerSupplierId: unitDialog.ownerSupplierId ?? null } : {}),
       purchaseCost: cost ?? 0,
       notes: unitForm.notes,
       // Depósito (siempre tiene uno), ubicación, condición, proveedor y fechas: vacío en una unidad que se edita = quitar.
@@ -752,6 +761,7 @@ export function InventoryFicha({
           {unitError ? <AdminNote tone="error">{unitError}</AdminNote> : null}
           {writable && unitEditorOpen ? (
             <form className="admin-form" aria-label={unitDialog ? `Editar unidad ${unitDialog.code}` : "Agregar unidad"} onSubmit={(event) => void submitUnitDialog(event)}>
+              <InventoryOriginFields physicalUnit origin={unitForm.stockOrigin} supplierId={unitForm.ownerSupplierId} suppliers={taxonomy.suppliers} disabled={unitDialogBusy} onChange={next => setUnitForm(current => ({ ...current, stockOrigin: next.origin, ownerSupplierId: next.supplierId }))} />
               <TextField
                 label="Código de unidad"
                 help={INVENTORY_FIELD_HELP.code}
@@ -878,6 +888,7 @@ export function InventoryFicha({
                       />
                     ) : null}
                     <span className="admin-code">{unit.code}</span>
+                    <small className="admin-cell-sub">{unit.stockOrigin ? STOCK_ORIGIN_LABELS[unit.stockOrigin as StockOrigin] : "Origen sin revisar"}{unit.ownerSupplierId ? ` · ${taxonomy.suppliers.find(supplier => supplier.id === unit.ownerSupplierId)?.name ?? "Dueño guardado"}` : ""}</small>
                   </AdminCell>
                   <AdminCell title={writable ? `Cambiar estado de ${unit.code}` : inventoryStatusLabel(unit.status)}>
                     {writable ? (

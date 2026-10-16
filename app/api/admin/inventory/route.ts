@@ -530,9 +530,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  try {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
+  try {
   const { organizationId } = auth.context;
   const body = await readJson(request);
   if (!isJsonObject(body)) return jsonError("Los datos deben ser un objeto JSON.", 400);
@@ -713,9 +713,11 @@ export async function POST(request: Request) {
     const trace = await readInventoryTrace(body, { organizationId, currentWarehouseCode: existing.defaultWarehouse?.code, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
     if (!trace.ok) return jsonError(trace.error, trace.status);
     const { location: defaultLocation, ...traceRest } = trace.values;
+    let auditBefore: Record<string, unknown> = existing;
     const inventory = await db.$transaction(async (tx) => {
       await lockInventoryItems(tx, organizationId, [existing.id]);
-      const fresh = await tx.inventoryItem.findFirstOrThrow({ where: { id: existing.id, organizationId }, select: { defaultStockOrigin: true, defaultSourceSupplierId: true } });
+      const fresh = await tx.inventoryItem.findFirstOrThrow({ where: { id: existing.id, organizationId }, omit: { imageData: true } });
+      auditBefore = fresh;
       const currentOrigin = { origin: fresh.defaultStockOrigin, supplierId: fresh.defaultSourceSupplierId };
       const origin = await validatedStockOrigin(tx, organizationId, body, "item", currentOrigin);
       if (origin.changed) assertOriginExpected(body, currentOrigin, origin.value, "item");
@@ -731,7 +733,7 @@ export async function POST(request: Request) {
     });
     if (!inventory) return jsonError("La categoría no existe en esta empresa.", 404);
     if (inventory === "family-category") return jsonError("La categoría de una variante la define su familia: cambiala desde la pestaña «Variantes».", 409);
-    const changes = auditChanges(existing, inventory, INVENTORY_ITEM_FIELDS);
+    const changes = auditChanges(auditBefore, inventory, INVENTORY_ITEM_FIELDS);
     if (changes) {
       await recordAudit({
         context: auth.context,
@@ -871,13 +873,21 @@ export async function POST(request: Request) {
     }
 
     let unit;
+    let auditBefore: Record<string, unknown> = existing;
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
-        const fresh = await tx.inventoryUnit.findFirstOrThrow({ where: { id: existing.id, organizationId }, select: { stockOrigin: true, ownerSupplierId: true } });
+        const fresh = await tx.inventoryUnit.findFirstOrThrow({ where: { id: existing.id, organizationId } });
+        auditBefore = fresh;
         const currentOrigin = { origin: fresh.stockOrigin, supplierId: fresh.ownerSupplierId };
         const origin = await validatedStockOrigin(tx, organizationId, body, "unit", currentOrigin);
-        if (origin.changed) assertOriginExpected(body, currentOrigin, origin.value, "unit");
+        if (origin.changed) {
+          assertOriginExpected(body, currentOrigin, origin.value, "unit");
+          // Reservations identify a product pool, never a particular physical unit.
+          // Reclassifying its owner while committed would rewrite that pool ambiguously.
+          const committed = await tx.eventInventory.count({ where: { inventoryId: existing.inventoryId, ...committedAssignmentWhere(organizationId) } });
+          if (committed > 0) throw new InventoryOriginError("No se puede cambiar el dueño de una unidad con reservas activas del producto. Liberá o completá esas reservas primero.", 409);
+        }
         if (origin.changed) Object.assign(data, { stockOrigin: origin.value.origin, ownerSupplierId: origin.value.supplierId });
         await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
         const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } });
@@ -890,7 +900,7 @@ export async function POST(request: Request) {
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }
-    const changes = auditChanges(existing, unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
+    const changes = auditChanges(auditBefore, unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
     if (changes) {
       await recordAudit({
         context: auth.context,

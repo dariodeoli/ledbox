@@ -86,3 +86,31 @@ test("ownership API updates require fresh expected pair while unrelated edits pr
   const unchanged = await f.helpers.validatedStockOrigin(f.tx, "org", {}, "unit", current);
   assert.equal(unchanged.changed, false); assert.equal(unchanged.value.supplierId, "owner");
 });
+
+// Execute the actual locked update blocks with a row changed between pre-read and lock.
+// A notes-only request must never claim somebody else's concurrent owner edit in its audit.
+test("item and unit audit use the locked row, not the stale pre-lock ownership snapshot", async () => {
+  const route = readFileSync("app/api/admin/inventory/route.ts", "utf8");
+  for (const target of ["item", "unit"] as const) {
+    const item = target === "item";
+    const fresh: any = item
+      ? { id: "i", name: "Mesa", notes: "old", defaultStockOrigin: "OWNED", defaultSourceSupplierId: null }
+      : { id: "u", inventoryId: "i", code: "U1", notes: "old", stockOrigin: "OWNED", ownerSupplierId: null };
+    const existing = { ...fresh, ...(item ? { defaultStockOrigin: "CONSIGNED", defaultSourceSupplierId: "previous" } : { stockOrigin: "CONSIGNED", ownerSupplierId: "previous" }), inventory: { name: "Mesa" } };
+    const start = item ? route.indexOf("    let auditBefore:") : route.indexOf("    let unit;", route.indexOf('if (kind === "unit-update")'));
+    const end = route.indexOf("    if (changes) {", start);
+    const block = route.slice(start, end);
+    let audited: any; let lock = false;
+    const delegate = { findFirstOrThrow: async () => { assert.equal(lock, true); return { ...fresh }; }, update: async ({ data }: any) => ({ ...fresh, ...data }) };
+    const tx = { inventoryItem: delegate, inventoryUnit: delegate, eventInventory: { count: async () => 0 } };
+    const run = runInNewContext(ts.transpileModule(`(async () => { ${block}; return true; })`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
+      existing, organizationId: "org", body: {}, data: { notes: "new" }, update: { data: { notes: "new" } }, traceRest: {}, defaultLocation: undefined,
+      db: { $transaction: (fn: any) => fn(tx) }, lockInventoryItems: async () => { lock = true; },
+      validatedStockOrigin: async () => ({ changed: false, value: {} }), assertOriginExpected() {}, resolveInventoryCategory() {}, categoryWriteData() {},
+      assertUnitsAvailableWithoutIncidents: async () => {}, syncInventoryQuantity: async () => {},
+      INVENTORY_ITEM_FIELDS: [], auditChanges: (before: any) => { audited = before; return null; },
+      InventoryUnitIncidentConflict: class extends Error {}, isUniqueConstraintError: () => false,
+    });
+    await run(); assert.deepEqual(audited, fresh); assert.notDeepEqual(audited, existing);
+  }
+});
