@@ -55,7 +55,7 @@ export function PriceTiersEditor({
       {rows.length === 0 ? <p className="admin-field-hint">Sin escalones: se cobra el precio normal por cada día. Agregá una fila para un precio especial desde cierta cantidad de días (por ejemplo 5 días por 300.000 en total).</p> : null}
       {rows.map((row, index) => (
         <div className="admin-tier-row" key={index}>
-          <NumberField label={`Desde (días) · fila ${index + 1}`} maxLength={3} value={row.fromDays} disabled={disabled} onChange={(fromDays) => update(index, { fromDays })} />
+          <NumberField strictInteger label={`Desde (días) · fila ${index + 1}`} maxLength={3} value={row.fromDays} disabled={disabled} onChange={(fromDays) => update(index, { fromDays })} />
           <SegmentedField label={`Se cobra · fila ${index + 1}`} value={row.mode} disabled={disabled} onChange={(mode) => update(index, { mode: mode === "TOTAL" ? "TOTAL" : "PER_DAY" })} options={MODE_OPTIONS} />
           <MoneyField label={row.mode === "TOTAL" ? `Total del período · fila ${index + 1}` : `Precio por día · fila ${index + 1}`} value={row.price} disabled={disabled} onChange={(price) => update(index, { price })} />
           <AdminButton type="button" icon="trash" disabled={disabled} aria-label={`Quitar la fila ${index + 1} de ${title}`} onClick={() => onChange(rows.filter((_, position) => position !== index))}>Quitar</AdminButton>

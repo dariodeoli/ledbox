@@ -667,7 +667,7 @@ function EquiposTab(props: EventoFichaProps) {
             disabled={Boolean(editingId)}
             options={inventoryChoices}
           />
-          <NumberField
+          <NumberField strictInteger
             ariaLabel="Cantidad de unidades"
             title="Cantidad de unidades"
             className="admin-qty-input"

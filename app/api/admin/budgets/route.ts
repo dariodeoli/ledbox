@@ -125,7 +125,7 @@ export async function GET() {
             discount: true,
             total: true,
             client: { select: CLIENT_IDENTITY_SELECT },
-            items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, freeOnPurpose: true } },
+            items: { select: { id: true, sortOrder: true, name: true, quantity: true, days: true, unitPrice: true, excluded: true, freeOnPurpose: true, pricingSnapshot: true, inventory: { select: { billingUnit: true } } } },
           },
         },
       },

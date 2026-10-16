@@ -172,7 +172,7 @@ export function ComboDialog({
                 emptyLabel="Sin ítems que coincidan."
                 disabled={busy}
               />
-              <NumberField label="Cantidad por combo" required maxLength={4} value={row.quantity} onChange={(value) => patchRow(row.key, { quantity: value })} disabled={busy} />
+              <NumberField strictInteger label="Cantidad por combo" required maxLength={4} value={row.quantity} onChange={(value) => patchRow(row.key, { quantity: value })} disabled={busy} />
               <AdminButton
                 icon="trash"
                 type="button"

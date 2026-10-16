@@ -2372,6 +2372,17 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-dialog-counter .admin-check > label { font-weight: 400; letter-spacing: normal; }
 .admin-dialog-counter input:not([type=checkbox]) { width: 3.4rem; min-height: 30px; padding: 4px 8px; border: 1px solid var(--a-line-control); border-radius: 8px; background: var(--a-bg-2); color: var(--a-text); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
 .admin-dialog-counter input:not([type=checkbox]):focus { outline: none; border-color: var(--a-accent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.admin-dialog-table--editable .admin-dialog-counter { flex-wrap: wrap; overflow: visible; white-space: normal; }
+.admin-dialog-table--editable .admin-dialog-counter > .admin-check { flex-basis: 100%; }
+@media (max-width: 600px) {
+  .admin-dialog-table--editable .admin-dialog-table-head { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); }
+  .admin-dialog-table--editable .admin-dialog-table-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 12px; align-items: start; }
+  .admin-dialog-table--editable .admin-dialog-table-row > span { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+  .admin-dialog-table--editable .admin-dialog-table-row > span:first-child { grid-column: 1 / -1; color: var(--a-text); font-weight: 600; }
+  .admin-dialog-table--editable .admin-dialog-counter { grid-column: 1 / -1; grid-row: 3; }
+  .admin-dialog-table--editable .admin-dialog-num { grid-column: 2; grid-row: 2; }
+  .admin-dialog-table--editable [data-label]::before { content: attr(data-label); display: block; flex-basis: 100%; margin-bottom: 4px; color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+}
 
 /* ── Comprobantes de pago (issue #17) ──
    Visor del panel: cada comprobante se sirve con sesión desde

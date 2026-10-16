@@ -70,8 +70,8 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
           <AdminImageBox imageUrl={item.inventory?.imageUrl} size={40} />
           <TextField label={`Ítem ${index + 1}`} required value={item.name} maxLength={160} disabled={disabled || item.excluded} onChange={(name) => update(index, { name })} />
           <MoneyField label="Precio unitario" required limit={BUDGET_INT_MAX} value={item.unitPrice} disabled={disabled || item.excluded} onChange={(unitPrice) => update(index, { unitPrice })} />
-          <NumberField label="Cantidad" required maxLength={4} value={item.quantity} disabled={disabled || item.excluded} onChange={(quantity) => update(index, { quantity })} />
-          {usesDays ? <NumberField label="Días" required maxLength={4} value={item.rentalDays ?? item.days} disabled={disabled || item.excluded} onChange={(days) => changeDays(index, days)} /> : <span className="admin-muted">{perEvent ? "Por evento" : "Servicio / pago único"}</span>}
+          <NumberField strictInteger label="Cantidad" required maxLength={4} value={item.quantity} disabled={disabled || item.excluded} onChange={(quantity) => update(index, { quantity })} />
+          {usesDays ? <NumberField strictInteger label="Días" required maxLength={4} value={item.rentalDays ?? item.days} disabled={disabled || item.excluded} onChange={(days) => changeDays(index, days)} /> : <span className="admin-muted">{perEvent ? "Por evento" : "Servicio / pago único"}</span>}
           <strong className="admin-nowrap" aria-label={`Total del ítem ${index + 1}`}>{formatMoney(item.excluded ? 0 : numeric.quantity * numeric.days * numeric.unitPrice)}</strong>
           <AdminActionsMenu label={`Acciones del ítem ${index + 1}`} items={[
             { label: "Buscar producto", icon: "search", disabled: disabled || item.excluded, onClick: () => setPicker(index) },

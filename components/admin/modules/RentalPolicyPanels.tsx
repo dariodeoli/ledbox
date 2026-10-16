@@ -202,7 +202,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
           ) : (
             <MoneyField label="Monto fijo" value={form.lateValue} onChange={(value) => patch({ lateValue: value })} limit={BUDGET_INT_MAX} disabled={disabled} hint="Por cada unidad de demora. Ej.: 100.000 o 200.000." />
           )}
-          <NumberField label="Tolerancia (minutos)" value={form.lateGrace} onChange={(value) => patch({ lateGrace: value })} maxLength={4} disabled={disabled} hint="Hasta este tiempo de demora no se cobra nada." />
+          <NumberField strictInteger label="Tolerancia (minutos)" value={form.lateGrace} onChange={(value) => patch({ lateGrace: value })} maxLength={4} disabled={disabled} hint="Hasta este tiempo de demora no se cobra nada." />
         </div>
         <AdminDisclosure title="Probar recargo" hint="Ejemplo, no se guarda"><div className="rental-preview admin-settings-grid" aria-live="polite">
           {form.lateKind === "PERCENT" ? <MoneyField label="Alquiler de ejemplo" value={sample.rental} limit={BUDGET_INT_MAX} onChange={(rental) => setSample({ ...sample, rental })} /> : null}
@@ -217,7 +217,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
           <NumberField label="% del costo de reposición" value={form.damagePercent} onChange={(value) => patch({ damagePercent: value })} maxLength={3} disabled={disabled} hint="100 = el costo completo. Cada cargo se puede editar antes de aplicarlo." />
         </div>
         <AdminDisclosure title="Probar roturas y faltantes" hint="Ejemplo, no se guarda"><div className="rental-preview admin-settings-grid" aria-live="polite">
-          <NumberField label="Piezas de ejemplo" value={sample.pieces} maxLength={4} onChange={(pieces) => setSample({ ...sample, pieces })} />
+          <NumberField strictInteger label="Piezas de ejemplo" value={sample.pieces} maxLength={4} onChange={(pieces) => setSample({ ...sample, pieces })} />
           <MoneyField label="Costo de reposición de ejemplo" value={sample.replacement} limit={BUDGET_INT_MAX} onChange={(replacement) => setSample({ ...sample, replacement })} />
           <p className="rental-preview-result"><strong>{num(sample.pieces)} × {formatMoney(damage.unitAmount)} = {formatMoney(damage.amount)}</strong></p>
         </div></AdminDisclosure>
@@ -243,7 +243,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
         <div className="rental-rows">
           {form.tiers.map((tier, index) => (
             <div className="rental-row admin-settings-grid" key={index}>
-              <NumberField label={`Desde (días antes) · tramo ${index + 1}`} value={tier.days} maxLength={3} disabled={disabled} onChange={(days) => patch({ tiers: form.tiers.map((row, i) => (i === index ? { ...row, days } : row)) })} hint={tier.days === "0" ? "Último tramo: menos días que el anterior." : undefined} />
+              <NumberField strictInteger label={`Desde (días antes) · tramo ${index + 1}`} value={tier.days} maxLength={3} disabled={disabled} onChange={(days) => patch({ tiers: form.tiers.map((row, i) => (i === index ? { ...row, days } : row)) })} hint={tier.days === "0" ? "Último tramo: menos días que el anterior." : undefined} />
               <NumberField label={`Se retiene (% de la seña) · tramo ${index + 1}`} value={tier.percent} maxLength={3} disabled={disabled} onChange={(percent) => patch({ tiers: form.tiers.map((row, i) => (i === index ? { ...row, percent } : row)) })} />
               <AdminButton type="button" icon="trash" disabled={disabled || form.tiers.length <= 1} aria-label={`Quitar el tramo ${index + 1}`} onClick={() => patch({ tiers: form.tiers.filter((_, i) => i !== index) })} />
             </div>
@@ -256,7 +256,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
         <AdminDisclosure title="Probar cancelación" hint="Ejemplo, no se guarda"><div className="rental-preview" aria-live="polite">
           {tiersValid ? <ul className="rental-policy-lines">{cancellationPolicyLines(policy).map((line) => <li key={line}>{line}</li>)}</ul> : <p className="admin-field-hint">Completá los días y el porcentaje de cada tramo.</p>}
           <div className="admin-settings-grid">
-            <NumberField label="Cancelación de ejemplo (días antes)" value={sample.cancelDays} maxLength={3} onChange={(cancelDays) => setSample({ ...sample, cancelDays })} />
+            <NumberField strictInteger label="Cancelación de ejemplo (días antes)" value={sample.cancelDays} maxLength={3} onChange={(cancelDays) => setSample({ ...sample, cancelDays })} />
             <MoneyField label="Seña de ejemplo" value={sample.advance} limit={BUDGET_INT_MAX} onChange={(advance) => setSample({ ...sample, advance })} />
           </div>
           {tiersValid ? <p className="rental-preview-result"><strong>Con {num(sample.cancelDays)} días: se propone retener {formatMoney(cancel.retained)} ({cancel.percent} %) y devolver {formatMoney(cancel.refundable)}.</strong> Solo es una propuesta: nunca se reembolsa solo.</p> : null}

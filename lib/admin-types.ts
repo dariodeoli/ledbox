@@ -597,7 +597,7 @@ export type AdminBudgetRequestRow = {
     total: number;
     /** Identidad comercial mínima; sin notas ni bytes de imagen. */
     client: Pick<AdminClientRef, "id" | "name" | "company" | "tradeName" | "legalName" | "contactName" | "type" | "logoUpdatedAt">;
-    items: Array<Pick<AdminBudgetItem, "id" | "name" | "quantity" | "days" | "unitPrice" | "excluded">>;
+    items: Array<Pick<AdminBudgetItem, "id" | "name" | "quantity" | "days" | "unitPrice" | "excluded" | "pricingSnapshot"> & { inventory?: { billingUnit: string } | null }>;
   };
 };
 

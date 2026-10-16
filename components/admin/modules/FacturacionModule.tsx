@@ -1590,7 +1590,7 @@ export function FacturacionModule() {
                         maxLength={160}
                         placeholder="Alquiler de pantalla LED"
                       />
-                      <NumberField label="Cantidad" required value={item.quantity} onChange={(value) => updateItem(item.key, { quantity: value })} maxLength={6} />
+                      <NumberField strictInteger label="Cantidad" required value={item.quantity} onChange={(value) => updateItem(item.key, { quantity: value })} maxLength={6} />
                       <MoneyField label="Precio unitario" required value={item.unitPrice} onChange={(value) => updateItem(item.key, { unitPrice: value })} hint="IVA incluido" />
                       <SelectField label="IVA" value={item.taxType} onChange={(value) => updateItem(item.key, { taxType: value as InvoiceTaxTypeValue })} options={TAX_OPTIONS} />
                       <div className="admin-fiscal-line-sum">

@@ -162,7 +162,7 @@ export function DeliveryZonesPanel() {
           <form id="delivery-zone-form" className="admin-form-grid" onSubmit={(event) => void save(event)}>
             <TextField label="Zona" required maxLength={80} value={form.name} onChange={(name) => setForm({ ...form, name })} hint="Por ejemplo: Asunción, Gran Asunción, Interior." />
             <MoneyField label="Flete base" required limit={BUDGET_INT_MAX} value={form.basePrice} onChange={(basePrice) => setForm({ ...form, basePrice })} hint="Guaraníes, para cualquier cantidad de piezas." />
-            <NumberField label="Recargo desde (piezas)" maxLength={6} value={form.volumeThreshold} onChange={(volumeThreshold) => setForm({ ...form, volumeThreshold })} hint="Si el pedido tiene MÁS piezas que este número, se suma el recargo. Vacío = sin recargo." />
+            <NumberField strictInteger label="Recargo desde (piezas)" maxLength={6} value={form.volumeThreshold} onChange={(volumeThreshold) => setForm({ ...form, volumeThreshold })} hint="Si el pedido tiene MÁS piezas que este número, se suma el recargo. Vacío = sin recargo." />
             <MoneyField label="Recargo por volumen" limit={BUDGET_INT_MAX} value={form.extraPrice} onChange={(extraPrice) => setForm({ ...form, extraPrice })} hint="Se suma al flete base cuando se supera el umbral." />
             <TextAreaField label="Notas internas" maxLength={300} value={form.notes} onChange={(notes) => setForm({ ...form, notes })} />
             {preview ? (

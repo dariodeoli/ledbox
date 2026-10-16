@@ -1515,7 +1515,7 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
                         onChange={(categoria) => actualizarProducto(producto.clave, { categoria })}
                         disabled={!producto.incluir}
                       />
-                      <NumberField
+                      <NumberField strictInteger
                         label="Cantidad"
                         value={producto.cantidad}
                         onChange={(cantidad) => actualizarProducto(producto.clave, { cantidad })}
