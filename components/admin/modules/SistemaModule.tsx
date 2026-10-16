@@ -1,4 +1,5 @@
 "use client";
+import { InventoryBackupPanel } from "./InventoryBackupPanel";
 
 import { useAdminResource } from "@/lib/admin-api";
 import { formatBytes, formatDateTime, formatNumber, formatSince, type AdminTone } from "@/lib/admin-format";
@@ -85,6 +86,7 @@ function SistemaView() {
 
   return (
     <div className="admin-module-page">
+      <InventoryBackupPanel />
       {issue ? (
         <AdminNote tone="error" variant="alert">
           {issue.detail}

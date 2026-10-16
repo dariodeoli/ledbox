@@ -192,7 +192,7 @@ async function withSeedSlot<T>(work: () => Promise<T>): Promise<T> {
  * Crea una sandbox lista para usar. Llena: purga las vencidas y, si sigue llena, la más ociosa (>30 min sin uso);
  * si aun así no hay lugar devuelve `full`. Si el seed falla queda `demoReady=false` para la purga.
  */
-export async function createSandbox(input: { ip: string; now?: Date }): Promise<CreateSandboxResult> {
+export async function createSandbox(input: { ip: string; now?: Date; emptyForInventoryRestore?: boolean }): Promise<CreateSandboxResult> {
   const now = input.now ?? new Date();
   let reservation = await reserve(input.ip, now);
   if (!reservation.ok && reservation.reason === "full") {
@@ -207,8 +207,10 @@ export async function createSandbox(input: { ip: string; now?: Date }): Promise<
   // Que ninguna sandbox recién creada pase por empresa real por una caché vieja.
   clearSandboxCache(ids.organizationId);
   try {
-    await withSeedSlot(() => seedSandboxData(ids.organizationId, ns));
-    await db.organization.update({ where: { id: ids.organizationId }, data: { demoReady: true, demoLastSeenAt: new Date() } });
+    if (!input.emptyForInventoryRestore) {
+      await withSeedSlot(() => seedSandboxData(ids.organizationId, ns));
+      await db.organization.update({ where: { id: ids.organizationId }, data: { demoReady: true, demoLastSeenAt: new Date() } });
+    }
   } catch (error) {
     console.error("demo: no se pudo preparar la sandbox", ids.organizationId, error);
     clearSandboxCache(ids.organizationId);
