@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { db } from "./db";
 import { withIdempotency, requestHashOf } from "./idempotency";
 import { lockInventoryItems } from "./inventory-availability";
-import { markOwnPrice, lockInventoryFamily } from "./inventory-families";
+import { markOwnPrice, lockInventoryFamily, VARIANT_PRICE_IDENTITY_SELECT, variantPriceIdentity } from "./inventory-families";
 import { replaceAudienceTiers } from "./price-tier-store";
 import { recordAudit, type AuditContext } from "./audit";
 import { readSelectedPrices, selectedPriceValue, type SelectedPriceRow, type SelectedPriceResult, type SelectedPriceField } from "../import-selected-prices";
@@ -12,7 +12,7 @@ const MANIFEST_SCOPE = "import:selected-prices:manifest:v1";
 const ROW_SCOPE = "import:selected-prices:row:v1";
 const ISSUER = "ledbox:import-price-preview";
 const AUDIENCE = "ledbox:import-price-apply";
-const selection = { id: true, sku: true, name: true, archivedAt: true, familyId: true, variantOwnPrice: true, listPrice: true, wholesalePrice: true, minimumPrice: true, comboIncomplete: true, _count: { select: { components: true } } } as const;
+const selection = { id: true, sku: true, name: true, archivedAt: true, ...VARIANT_PRICE_IDENTITY_SELECT, listPrice: true, wholesalePrice: true, minimumPrice: true, comboIncomplete: true, _count: { select: { components: true } } } as const;
 type Expectation = { fila: number; id: string; familyId: string | null; fingerprint: string; };
 type Manifest = {
     lote: string;
@@ -39,7 +39,7 @@ async function snapshot(client: Pick<typeof db, "inventoryItem" | "inventoryPric
     const values: Record<string, unknown> = {};
     for (const [field] of changedFields(row))
         values[field] = field === "tarifasFinal" ? tiersForAudience(tiers, "RETAIL") : field === "tarifasMayorista" ? tiersForAudience(tiers, "WHOLESALE") : item[field];
-    const fingerprint = requestHashOf({ id: item.id, sku: item.sku, familyId: item.familyId, variantOwnPrice: item.variantOwnPrice, comboIncomplete: item.comboIncomplete, components: item._count.components, values });
+    const fingerprint = requestHashOf({ id: item.id, sku: item.sku, ...variantPriceIdentity(item), comboIncomplete: item.comboIncomplete, components: item._count.components, values });
     return { item, values, fingerprint };
 }
 function differences(row: SelectedPriceRow, before: Record<string, unknown>): Array<{
