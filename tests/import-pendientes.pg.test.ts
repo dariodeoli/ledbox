@@ -52,7 +52,7 @@ test("importación: juego incompleto, unidad → juego, precio a consultar y fot
       for (let i = 0; i < 2; i++) execFileSync("psql", [url.toString(), "-v", "ON_ERROR_STOP=1", "-q", "-f", file], { stdio: "pipe" });
     });
 
-    await t.test("cantidad null sigue creando 1 unidad; juego vacío se importa como juego incompleto (sin stock, sin precio inventado)", async () => {
+    await t.test("cantidad null queda pendiente sin inventar unidades; juego vacío se importa como juego incompleto (sin stock, sin precio inventado)", async () => {
       const result = await applyCatalog(ctx, {
         ...(await input({
           productos: [
@@ -65,7 +65,9 @@ test("importación: juego incompleto, unidad → juego, precio a consultar y fot
       assert.equal(result.fallidos.length, 0, JSON.stringify(result.fallidos));
       assert.equal(result.summary.incompletos, 1);
       const unit = await bySku(A.id, "U-NULL");
-      assert.equal(unit.units.length, 1, "cantidad null sigue creando 1 unidad (decisión del dueño)");
+      assert.equal(unit.units.length, 0, "cantidad null no crea disponibilidad ficticia");
+      assert.equal(unit.quantity, 0);
+      assert.equal(unit.stockCountStatus, "PENDING_COUNT");
       assert.equal(unit.listPrice, 0, "precio null queda en 0 = «Consultar»");
       const game = await bySku(A.id, "PK-1");
       assert.equal(game.comboIncomplete, true);
@@ -122,7 +124,7 @@ test("importación: juego incompleto, unidad → juego, precio a consultar y fot
 
     await t.test("reimportar unidad → combo: sin reservas ni historial se convierte; con historial o reservas es bloqueante y no cambia nada", async () => {
       await applyCatalog(ctx, {
-        ...(await input({ productos: [{ codigo: "C-1", nombre: "Copa", cantidad: 10 }, { codigo: "U-OK", nombre: "Set limpio", cantidad: 3 }, { codigo: "U-HIST", nombre: "Set con daño", cantidad: 3 }, { codigo: "U-RES", nombre: "Set reservado", cantidad: 3 }] })),
+        ...(await input({ productos: [{ codigo: "C-1", nombre: "Copa", cantidad: 10 }, { codigo: "U-OK", nombre: "Set limpio sin unidades", cantidad: 0 }, { codigo: "U-META", nombre: "Set con depósito", cantidad: 3 }, { codigo: "U-HIST", nombre: "Set con daño", cantidad: 3 }, { codigo: "U-RES", nombre: "Set reservado", cantidad: 3 }] })),
         lote: randomUUID(),
       });
       const hist = await bySku(A.id, "U-HIST");
@@ -132,10 +134,10 @@ test("importación: juego incompleto, unidad → juego, precio a consultar y fot
       await db.event.create({ data: { id: eventId, organizationId: A.id, clientId: A.client, name: "Evento 2", setupAt: day(20), startsAt: day(21), endsAt: day(22), strikeAt: day(23), status: "CONFIRMED" } });
       await db.eventInventory.create({ data: { id: randomUUID(), eventId, inventoryId: reserved.id, quantity: 1 } as never });
 
-      const asGames = await input({ productos: ["U-OK", "U-HIST", "U-RES"].map((codigo) => ({ codigo, nombre: codigo, tipo: "juego", componentes: [{ codigo: "C-1", cantidad: 2 }] })) });
+      const asGames = await input({ productos: ["U-OK", "U-META", "U-HIST", "U-RES"].map((codigo) => ({ codigo, nombre: codigo, tipo: "juego", componentes: [{ codigo: "C-1", cantidad: 2 }] })) });
       const plan = await previewCatalog(A.id, asGames);
       assert.equal(plan.summary.convertidos, 1);
-      assert.equal(plan.problems.filter((p) => p.tipo === "juego-no-convertible" && p.nivel === "error").length, 2);
+      assert.equal(plan.problems.filter((p) => p.tipo === "juego-no-convertible" && p.nivel === "error").length, 3);
       assert.ok(plan.problems.some((p) => p.tipo === "juego-convertido"));
 
       const result = await applyCatalog(ctx, { ...asGames, lote: randomUUID() });
@@ -145,7 +147,7 @@ test("importación: juego incompleto, unidad → juego, precio a consultar y fot
       assert.equal(ok.units.length, 0, "sus unidades limpias se retiraron");
       assert.equal(ok.quantity, 0);
       assert.equal(ok.comboIncomplete, false);
-      for (const sku of ["U-HIST", "U-RES"]) {
+      for (const sku of ["U-META", "U-HIST", "U-RES"]) {
         const untouched = await bySku(A.id, sku);
         assert.equal(untouched.components.length, 0);
         assert.equal(untouched.units.length, 3, "sigue siendo una unidad con sus unidades");

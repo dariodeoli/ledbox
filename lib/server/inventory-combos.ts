@@ -1,4 +1,5 @@
 import { pendingStockCount, type StockCountStatus } from "../stock-count";
+import { UNIT_CONVERSION_METADATA } from "./inventory-unit-conversion";
 import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryStatus } from "@prisma/client";
 import { db } from "./db";
@@ -795,14 +796,7 @@ export async function saveCombo(options: {
             const withDetails = await tx.inventoryUnit.findFirst({
               where: {
                 inventoryId: comboId, organizationId,
-                OR: [
-                  { purchaseCost: { not: 0 } }, { notes: { not: null } },
-                  { stockOrigin: { not: null } }, { ownerSupplierId: { not: null } },
-                  { warehouseId: { not: null } }, { location: { not: null } },
-                  { conditionScore: { not: null } }, { supplierId: { not: null } },
-                  { purchasedAt: { not: null } }, { warrantyUntil: { not: null } },
-                  { incidentCycle: { not: 0 } },
-                ],
+                OR: UNIT_CONVERSION_METADATA,
               },
               select: { code: true },
             });

@@ -1,4 +1,5 @@
 import { confirmInventoryCount } from "./inventory-stock-count";
+import { UNIT_CONVERSION_METADATA } from "./inventory-unit-conversion";
 /**
  * «Importar catálogo»: vista previa y aplicación contra la base.
  *
@@ -155,7 +156,7 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
   const history = rows.length
     ? await dbWithDeleted.inventoryUnit.groupBy({
         by: ["inventoryId"],
-        where: { organizationId, inventoryId: { in: rows.map((row) => row.id) }, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
+        where: { organizationId, inventoryId: { in: rows.map((row) => row.id) }, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }, ...UNIT_CONVERSION_METADATA] },
         _count: { _all: true },
       })
     : [];

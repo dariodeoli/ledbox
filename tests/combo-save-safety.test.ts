@@ -5,6 +5,7 @@ import { test } from "node:test";
 import ts from "typescript";
 import { packageSummary } from "../lib/price-tiers";
 import { readComboComponents } from "../lib/inventory-combos";
+import { UNIT_CONVERSION_METADATA } from "../lib/server/inventory-unit-conversion";
 
 /** Execute the actual service against a transactional double: resolved callbacks
  * commit, rejected callbacks roll back, including lock/category helper writes. */
@@ -32,7 +33,7 @@ function fixture(mode = "ok") {
   const source = ts.createSourceFile("combo.ts", readFileSync("lib/server/inventory-combos.ts", "utf8"), ts.ScriptTarget.Latest, true);
   const declarations = source.statements.filter(node => (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && ["saveCombo", "rejectComboSave", "ComboSaveRejected"].includes(node.name?.text ?? "")).map(node => node.getText(source).replace(/^export /, "")).join("\n");
   const save = runInNewContext(ts.transpileModule(declarations + ";saveCombo;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
-    db, readComboComponents, randomUUID: () => "new-id",
+    db, readComboComponents, UNIT_CONVERSION_METADATA, randomUUID: () => "new-id",
     lockInventoryItems: async (_tx: any, _org: string, ids: string[]) => { locked = ids; state.settled++; return new Set(ids); },
     committedAssignmentWhere: () => ({}),
     resolveInventoryCategory: async () => { state.categories++; return mode === "category" ? null : { text: "Muebles", categoryId: "category" }; },

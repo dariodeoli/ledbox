@@ -958,11 +958,11 @@ export function planCatalog(options: {
       const reservas = existing.reservas ?? 0;
       const historial = existing.unidadesConHistorial ?? 0;
       if (reservas > 0 || historial > 0) {
-        const motivos = [reservas > 0 ? `${reservas} reserva${reservas === 1 ? "" : "s"}` : null, historial > 0 ? `${historial} unidad${historial === 1 ? "" : "es"} con historial (mantenimiento, daños o retiros)` : null].filter(Boolean).join(" y ");
+        const motivos = [reservas > 0 ? `${reservas} reserva${reservas === 1 ? "" : "s"}` : null, historial > 0 ? `${historial} unidad${historial === 1 ? "" : "es"} con historial o datos propios (origen, compra o depósito)` : null].filter(Boolean).join(" y ");
         errors.push(problem("error", "juego-no-convertible", product.codigo, product.fila, `${product.nombre}: hoy es una unidad con ${motivos}; no se puede convertir en juego. Dejalo como unidad o armá un juego nuevo con otro código.`));
       } else {
         base.convertir = true;
-        problems.push(problem("aviso", "juego-convertido", product.codigo, product.fila, `${product.nombre}: hoy es una unidad sin reservas ni historial; se convierte en juego y se retiran sus ${existing.units} unidad${existing.units === 1 ? "" : "es"} (un juego no tiene unidades propias).`));
+        problems.push(problem("aviso", "juego-convertido", product.codigo, product.fila, `${product.nombre}: hoy es una unidad sin reservas, historial ni datos propios por unidad; se convierte en juego y se retiran sus ${existing.units} unidad${existing.units === 1 ? "" : "es"} (un juego no tiene unidades propias).`));
       }
     }
     if (errors.length > 0) {
