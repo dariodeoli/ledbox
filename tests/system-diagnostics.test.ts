@@ -87,3 +87,25 @@ test("#169: la pantalla de Sistema no expone el motor y avisa dónde está el de
   assert.match(ui, /Base de datos · Prisma/);
   assert.match(ui, /logs del servidor/);
 });
+
+
+test("#169: libpq quoted hosts, IPv4/IPv6, separate ports and authentication details never reach the UI", () => {
+  const cases = [
+    'pg_dump: error: connection to server at "db-interno-coolify-01" (10.0.0.5), port 5432 failed: Connection refused',
+    'getaddrinfo ENOTFOUND db-interno-coolify-01',
+    'connect ECONNREFUSED 10.0.0.5:5432',
+    'could not translate host name "db-interno-coolify-01" to address: Name does not resolve',
+    'connection to server at "::1", port 5432 failed: Connection refused',
+    'host=db-interno-coolify-01 hostaddr=10.0.0.5 port=5432 dbname=tenant_db user=internal_user password=topsecret',
+    `host='db-interno-coolify-01' password='secret with spaces' PGPASSWORD="escaped\\\"secret"`,
+    'address [2001:db8::7]:5432 unavailable; server version: 18.6',
+    'password authentication failed for user "internal_user"; database "tenant_db" unavailable',
+    '{"password":"topsecret", "access_token":"hidden-token", "host":"db-interno-coolify-01"}',
+    'Authorization: Bearer hidden-token; api_key=private-key',
+  ];
+  for (const raw of cases) {
+    const clean = sanitizeDiagnosticMessage(raw); assert.ok(clean);
+    assert.doesNotMatch(clean, /db-interno|10\.0\.0\.5|5432|::1|2001:db8|internal_user|tenant_db|topsecret|secret with spaces|escaped|hidden-token|private-key|18\.6/i, raw);
+  }
+  assert.equal(sanitizeDiagnosticMessage("Última corrida a las 12:30:45, tardó 5 s."), "Última corrida a las 12:30:45, tardó 5 s.");
+});

@@ -31,6 +31,15 @@ export function sanitizeDiagnosticMessage(raw: string | null | undefined): strin
 
   // URLs de conexión (pueden traer usuario y contraseña).
   text = text.replace(/\b(?:postgres(?:ql)?|psql|pg|mysql|mongodb(?:\+srv)?):\/\/[^\s)"']+/gi, REDACTED_DATABASE);
+  // libpq/pg_dump también separan host, dirección y puerto. No dependen de
+  // que el diagnóstico use el formato abreviado host:puerto.
+  text = text.replace(/\b(?:server at|host(?: name)?|hostname|servidor en)\s+["'`][^"'`\r\n]+["'`](?:\s*\([^)]*\))?/gi, REDACTED_HOST);
+  text = text.replace(/\bBearer\s+[^\s;,]+/gi, "credencial omitida");
+  text = text.replace(/\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH)\s+(?:getaddrinfo\s+)?[^\s;,]+/gi, "$1 el servidor");
+  // DSN de libpq y campos de diagnóstico: valores con espacios/escapes o sin
+  // comillas. Se ocultan también claves de autenticación fuera de una URL.
+  text = text.replace(/\b(?:PGHOSTADDR|PGHOST|PGPORT|PGUSER|PGPASSWORD|PGDATABASE|hostaddr|hostname|host|port|user|username|password|passwd|pwd|dbname|database|sslkey|passfile|servicefile|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|authorization)["'`]?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s;,]+)/gi, "dato de conexión omitido");
+  text = text.replace(/\b(?:port|puerto)\s+\d{1,5}\b/gi, "puerto interno");
   // Coordenadas `usuario@host:puerto/base` (el formato del error de pg_dump).
   text = text.replace(/\b[\w.+-]+@[\w.-]+:\d{3,5}(?:\/[\w.-]+)?/g, REDACTED_DATABASE);
   // `host:puerto` suelto (nombres con letra o IPv4; nunca un horario HH:MM).
@@ -38,6 +47,12 @@ export function sanitizeDiagnosticMessage(raw: string | null | undefined): strin
     /\b(?:[a-zA-Z][\w-]*(?:\.[\w-]+)*|\d{1,3}(?:\.\d{1,3}){3}):\d{3,5}\b/g,
     REDACTED_HOST,
   );
+  // IPv4 e IPv6 pueden venir solas o entre paréntesis/corchetes.
+  text = text.replace(/\[[a-f\d]*:[a-f\d:]+(?:%[\w.-]+)?\](?::\d{1,5})?/gi, REDACTED_HOST);
+  text = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, REDACTED_HOST);
+  text = text.replace(/\[?[a-f\d]*(?::[a-f\d]*){2,}(?:%[\w.-]+)?\]?/gi, value =>
+    value.includes("::") || (value.match(/:/g)?.length ?? 0) >= 7 ? REDACTED_HOST : value);
+  text = text.replace(/\b(?:user|database)\s+["'`][^"'`\r\n]+["'`]/gi, "dato de conexión omitido");
   // Versiones del motor y del cliente (`server version: 18.6`, `pg_dump version: 15.4`).
   text = text.replace(
     /\b(?:server|client|pg_dump|psql|postgres(?:ql)?)\s*version\s*[:=]?\s*\d+(?:\.\d+){0,3}/gi,
