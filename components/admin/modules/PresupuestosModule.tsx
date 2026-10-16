@@ -231,7 +231,7 @@ function portalSummary(budget: AdminBudgetRow): string {
   return `Pendiente de aprobación · ${link}`;
 }
 
-/** Qué pide una solicitud del portal, en una línea, con el antes → después. */
+/** Contrasta el presupuesto actual con lo pedido; no reconstruye el original histórico. */
 function requestDelta(request: AdminBudgetRequestRow): string {
   if (request.kind === "items") {
     const items = request.payload.items ?? [];
@@ -241,7 +241,7 @@ function requestDelta(request: AdminBudgetRequestRow): string {
         const current = request.budget.items.find((item) => item.id === row.id);
         const name = current?.name ?? "Ítem";
         const from = current ? `${formatNumber(current.quantity)} × ${formatNumber(current.days)} d` : "—";
-        return `${name}: ${from} → ${row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}`;
+        return `${name}: actual ${from} · cliente pidió ${row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}`;
       })
       .join(" · ");
   }
@@ -254,18 +254,18 @@ function requestDelta(request: AdminBudgetRequestRow): string {
 }
 
 /**
- * Comparación original vs propuesta del cliente (issue #143): lo que el
- * presupuesto tiene hoy al lado de lo que pidió el portal, ítem por ítem o en
- * el descuento. La usan la tarjeta de la solicitud y el diálogo de conversación.
+ * Presupuesto actual vs pedido del cliente (issue #143). No hay un snapshot
+ * del presupuesto original en la solicitud: una resolución o edición posterior
+ * puede cambiarlo. La etiqueta no debe presentar el dato vivo como histórico.
  */
 function RequestComparison({ request }: { request: AdminBudgetRequestRow }) {
   if (request.kind === "items") {
     const items = request.payload.items ?? [];
     return (
-      <div className="admin-dialog-table admin-dialog-table--compare" role="table" aria-label="Comparación: original vs propuesta del cliente">
+      <div className="admin-dialog-table admin-dialog-table--compare" role="table" aria-label="Comparación: presupuesto actual y propuesta del cliente">
         <div className="admin-dialog-table-head" role="row">
           <span role="columnheader">Ítem</span>
-          <span role="columnheader">Original</span>
+          <span role="columnheader">Presupuesto actual</span>
           <span role="columnheader">Propuesta del cliente</span>
         </div>
         {items.length === 0 ? (
@@ -1724,8 +1724,7 @@ export function PresupuestosModule() {
               : "Sin pendientes"
           }
         >
-          {/* Conversación comparativa (issue #143): el pedido del cliente al lado
-              de la propuesta original, con la respuesta del equipo. */}
+          {/* Conversación: presupuesto actual y pedido del cliente, sin inferir un original histórico. */}
           <ul className="admin-request-list" aria-label="Solicitudes del portal">
             {requestRows.map((request) => {
               const clientLabel = clientDisplayName(request.budget.client);
