@@ -743,3 +743,5 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Consentimientos, opciones de aprobación y comprobantes usan el kit común. El comprobante conserva selección, obligatoriedad, compresión y validación existentes.
 - Ventanas de panel, tienda, carrito y consulta comparten foco, Tab, Escape, bloqueo del fondo y retorno al botón de origen, incluso con ventanas anidadas y menús. El menú móvil nativo conserva el comportamiento del navegador.
 - La nota de rechazo de propuesta y el selector del reporte usan los mismos campos compartidos. Una revisión automática de toda la app impide introducir controles visibles nativos fuera del kit.
+
+- Los selectores de opciones respetan su tamaño indicado y no invaden el campo de al lado dentro de grillas compactas.
