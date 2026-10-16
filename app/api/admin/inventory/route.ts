@@ -1,3 +1,4 @@
+import { InventoryOriginError, validatedStockOrigin, newPhysicalUnitOrigin, assertOriginExpected } from "@/lib/server/inventory-stock-origin";
 import { confirmInventoryCount } from "@/lib/server/inventory-stock-count";
 import { pendingStockCount } from "@/lib/stock-count";
 import { readBillingUnit } from "@/lib/quote-sharing";
@@ -121,6 +122,7 @@ const INVENTORY_ITEM_FIELDS = [
   "categoryId",
   "defaultWarehouseId",
   "defaultLocation",
+  "defaultStockOrigin", "defaultSourceSupplierId",
   "supplierId",
   "purchasedAt",
   "warrantyUntil",
@@ -528,6 +530,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  try {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
@@ -692,6 +695,7 @@ export async function POST(request: Request) {
         billingUnit: true,
         defaultWarehouseId: true,
         defaultLocation: true,
+        defaultStockOrigin: true, defaultSourceSupplierId: true,
         supplierId: true,
         purchasedAt: true,
         warrantyUntil: true,
@@ -710,13 +714,18 @@ export async function POST(request: Request) {
     if (!trace.ok) return jsonError(trace.error, trace.status);
     const { location: defaultLocation, ...traceRest } = trace.values;
     const inventory = await db.$transaction(async (tx) => {
+      await lockInventoryItems(tx, organizationId, [existing.id]);
+      const fresh = await tx.inventoryItem.findFirstOrThrow({ where: { id: existing.id, organizationId }, select: { defaultStockOrigin: true, defaultSourceSupplierId: true } });
+      const currentOrigin = { origin: fresh.defaultStockOrigin, supplierId: fresh.defaultSourceSupplierId };
+      const origin = await validatedStockOrigin(tx, organizationId, body, "item", currentOrigin);
+      if (origin.changed) assertOriginExpected(body, currentOrigin, origin.value, "item");
       // Categoría + espejo de texto: solo el helper único las escribe.
       const resolved = update.taxonomy ? await resolveInventoryCategory(tx, organizationId, update.taxonomy) : undefined;
       if (resolved === null) return null;
       if (existing.familyId && resolved && resolved.categoryId !== existing.categoryId) return "family-category" as const;
       return tx.inventoryItem.update({
         where: { id: existing.id },
-        data: { ...update.data, ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
+        data: { ...update.data, ...(origin.changed ? { defaultStockOrigin: origin.value.origin, defaultSourceSupplierId: origin.value.supplierId } : {}), ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
         omit: { imageData: true },
       });
     });
@@ -767,6 +776,7 @@ export async function POST(request: Request) {
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [item.id]);
+        const origin = await newPhysicalUnitOrigin(tx, organizationId, item.id, body);
         const code = requestedCode || (await nextInventoryUnitCode(tx, organizationId, item.name));
         // Toda unidad nace con depósito: el pedido, el del producto o el principal de la empresa.
         const placement = await resolveUnitPlacement(tx, organizationId, item.id, { warehouseId: trace.values.warehouseId, location: trace.values.location });
@@ -777,6 +787,7 @@ export async function POST(request: Request) {
             inventoryId: item.id,
             code,
             status,
+            ...origin,
             purchaseCost: purchaseCost ?? 0,
             notes: notes || null,
             warehouseId: placement.warehouseId,
@@ -802,7 +813,7 @@ export async function POST(request: Request) {
       entity: "InventoryUnit",
       entityId: unit.id,
       summary: `Agregó la unidad «${unit.code}» a «${item.name}»`,
-      detail: { fields: auditPick(unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId"]) },
+      detail: { fields: auditPick(unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId"]) },
     });
     return Response.json({ unit }, { status: 201 });
   }
@@ -816,6 +827,7 @@ export async function POST(request: Request) {
         id: true,
         inventoryId: true,
         code: true,
+        stockOrigin: true, ownerSupplierId: true,
         status: true,
         purchaseCost: true,
         notes: true,
@@ -862,6 +874,11 @@ export async function POST(request: Request) {
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
+        const fresh = await tx.inventoryUnit.findFirstOrThrow({ where: { id: existing.id, organizationId }, select: { stockOrigin: true, ownerSupplierId: true } });
+        const currentOrigin = { origin: fresh.stockOrigin, supplierId: fresh.ownerSupplierId };
+        const origin = await validatedStockOrigin(tx, organizationId, body, "unit", currentOrigin);
+        if (origin.changed) assertOriginExpected(body, currentOrigin, origin.value, "unit");
+        if (origin.changed) Object.assign(data, { stockOrigin: origin.value.origin, ownerSupplierId: origin.value.supplierId });
         await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
         const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
@@ -873,7 +890,7 @@ export async function POST(request: Request) {
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }
-    const changes = auditChanges(existing, unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
+    const changes = auditChanges(existing, unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
     if (changes) {
       await recordAudit({
         context: auth.context,
@@ -912,6 +929,7 @@ export async function POST(request: Request) {
           inventoryId: item.id,
           name: item.name,
           quantity,
+          stockOrigin: "OWNED", ownerSupplierId: null,
           purchaseCost: unitCost ?? 0,
           warehouseId: trace.values.warehouseId,
           location: trace.values.location,
@@ -1243,4 +1261,8 @@ export async function POST(request: Request) {
   }
 
   return jsonError("Operación de inventario desconocida.", 400);
+  } catch (error) {
+    if (error instanceof InventoryOriginError) return jsonError(error.message, error.status);
+    throw error;
+  }
 }

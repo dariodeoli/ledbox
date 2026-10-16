@@ -797,6 +797,7 @@ export async function saveCombo(options: {
                 inventoryId: comboId, organizationId,
                 OR: [
                   { purchaseCost: { not: 0 } }, { notes: { not: null } },
+                  { stockOrigin: { not: null } }, { ownerSupplierId: { not: null } },
                   { warehouseId: { not: null } }, { location: { not: null } },
                   { conditionScore: { not: null } }, { supplierId: { not: null } },
                   { purchasedAt: { not: null } }, { warrantyUntil: { not: null } },
@@ -805,7 +806,7 @@ export async function saveCombo(options: {
               },
               select: { code: true },
             });
-            if (withDetails) rejectComboSave({ ok: false, reason: "invalid", message: `La unidad «${withDetails.code}» conserva datos propios de compra, costo, notas, ubicación o condición. No se puede convertir en combo sin perderlos; no se modificó el producto ni sus unidades.` });
+            if (withDetails) rejectComboSave({ ok: false, reason: "invalid", message: `La unidad «${withDetails.code}» conserva datos propios de origen, dueño, compra, costo, notas, ubicación o condición. No se puede convertir en combo sin perderlos; no se modificó el producto ni sus unidades.` });
             removeCleanUnits = true;
           }
           const active = await tx.eventInventory.count({ where: { inventoryId: comboId, ...committedAssignmentWhere(organizationId) } });

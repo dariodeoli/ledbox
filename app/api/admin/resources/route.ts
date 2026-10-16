@@ -1,3 +1,4 @@
+import { InventoryOriginError, validatedStockOrigin } from "@/lib/server/inventory-stock-origin";
 import { readBillingUnit } from "@/lib/quote-sharing";
 import { skuClashesWithFamilyCode } from "@/lib/server/inventory-families";
 import { readAudienceInput, visibleOnWebFor } from "@/lib/catalog-audience";
@@ -217,7 +218,9 @@ export async function POST(request: Request) {
     // Precio por días: escalones opcionales de cada frente (`[{ audience, fromDays, mode, price }]`).
     const tiers = readAudienceTiers(body.priceTiers);
     if (!tiers.ok) return jsonError(tiers.error, 400);
-    const quantity = body.quantity === undefined ? 1 : body.quantity;
+    const externalOrigin = body.defaultStockOrigin === "EXTERNAL_RENTAL";
+    if (externalOrigin && body.quantity !== undefined && body.quantity !== 0) return jsonError("El alquiler externo por evento no crea stock físico: la cantidad debe ser 0.", 400);
+    const quantity = externalOrigin ? 0 : body.quantity === undefined ? 1 : body.quantity;
     if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 0 || quantity > 100_000) return jsonError("La cantidad debe ser un entero de 0 a 100.000.", 400);
     if (body.category !== undefined && typeof body.category !== "string") return jsonError("La categoría no es válida.", 400);
     if (body.subcategory !== undefined && body.subcategory !== null && typeof body.subcategory !== "string") return jsonError("La subcategoría no es válida.", 400);
@@ -228,6 +231,7 @@ export async function POST(request: Request) {
     let inventory;
     try {
       inventory = await db.$transaction(async (tx) => {
+        const origin = await validatedStockOrigin(tx, auth.context.organizationId, body, "item");
         // Categoría y espejo de texto: solo el helper único las escribe.
         const resolved = await resolveInventoryCategory(tx, auth.context.organizationId, { category: body.category, subcategory: body.subcategory });
         if (!resolved) throw new Error("No se pudo resolver la categoría.");
@@ -236,6 +240,8 @@ export async function POST(request: Request) {
             id: randomUUID(),
             organizationId: auth.context.organizationId,
             name: itemName,
+            defaultStockOrigin: origin.value.origin,
+            defaultSourceSupplierId: origin.value.supplierId,
             ...categoryWriteData(resolved),
             defaultWarehouseId: trace.values.defaultWarehouseId ?? null,
             defaultLocation: trace.values.location ?? null,
@@ -263,6 +269,7 @@ export async function POST(request: Request) {
         return created;
       });
     } catch (error) {
+      if (error instanceof InventoryOriginError) return jsonError(error.message, error.status);
       // El SKU es único por empresa: mismo criterio que el código de unidad.
       if (skuRaw && isUniqueConstraintError(error)) {
         return jsonError(await skuConflictMessage(auth.context.organizationId, skuRaw), 409);
@@ -283,7 +290,7 @@ export async function POST(request: Request) {
           "defaultWarehouseId",
           "supplierId",
           "kind",
-          "quantity",
+          "quantity", "defaultStockOrigin", "defaultSourceSupplierId",
           "status",
           "visibleOnWeb",
           "catalogAudience",

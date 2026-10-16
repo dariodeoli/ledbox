@@ -1,3 +1,4 @@
+import type { StockOriginValue } from "./inventory-stock-origin";
 /**
  * Tipos del panel: reflejan el contrato real de `/api/admin/*` (handlers en `app/api/admin/`).
  * Se declaran solo los campos que la UI consume; los payloads traen el resto de los escalares.
@@ -1712,6 +1713,8 @@ export function supplierJobBalance(job: { total: number; advance: number; status
 }
 
 export type AdminInventoryRow = {
+  defaultStockOrigin?: StockOriginValue;
+  defaultSourceSupplierId?: string | null;
   stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   /** Archivo organizacional independiente del estado operativo (#161). */
   archivedAt: string | null;
@@ -1894,6 +1897,8 @@ export type InventoryUnitStatusValue = (typeof INVENTORY_UNIT_STATUSES)[number];
 
 /** Unidad física del ítem, tal como la sirve `/api/admin/inventory` (issue #112). */
 export type AdminInventoryUnitRow = {
+  stockOrigin?: StockOriginValue;
+  ownerSupplierId?: string | null;
   id: string;
   /** Código de inventario único por empresa (`KIO-01`), editable. */
   code: string;
